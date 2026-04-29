@@ -15,6 +15,7 @@ import {
   Search,
   Mail,
   BrainCircuit,
+  Settings2,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -43,7 +44,13 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ModelSelect } from "@/components/agents/ModelSelect";
+import {
+  listContextProviders,
+  type ContextProviderSummary,
+} from "@/lib/context-engine-api";
 import {
   AgentTemplateDetailQuery,
   CreateAgentTemplateMutation,
@@ -97,6 +104,7 @@ const CATEGORIES = [
 // ---------------------------------------------------------------------------
 
 type JsonRecord = Record<string, unknown>;
+type MemoryQueryMode = "recall" | "reflect";
 
 function parseJsonRecord(value: unknown): JsonRecord {
   if (!value) return {};
@@ -129,6 +137,18 @@ function stableJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function providerIdsFromConfig(value: JsonRecord): string[] | null {
+  const providers = parseJsonRecord(value.providers);
+  if (!Array.isArray(providers.ids)) return null;
+  return providers.ids.filter((id): id is string => typeof id === "string");
+}
+
+function memoryModeFromConfig(value: JsonRecord): MemoryQueryMode {
+  const options = parseJsonRecord(value.providerOptions);
+  const memory = parseJsonRecord(options.memory);
+  return memory.queryMode === "recall" ? "recall" : "reflect";
 }
 
 function TemplateEditorPage() {
@@ -173,6 +193,19 @@ function TemplateEditorPage() {
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [sendEmailEnabled, setSendEmailEnabled] = useState(true);
   const [contextEngineEnabled, setContextEngineEnabled] = useState(true);
+  const [contextEngineProviderIds, setContextEngineProviderIds] = useState<
+    string[] | null
+  >(null);
+  const [contextEngineMemoryQueryMode, setContextEngineMemoryQueryMode] =
+    useState<MemoryQueryMode>("reflect");
+  const [contextEngineDialogOpen, setContextEngineDialogOpen] = useState(false);
+  const [contextProviders, setContextProviders] = useState<
+    ContextProviderSummary[]
+  >([]);
+  const [contextProvidersLoading, setContextProvidersLoading] = useState(true);
+  const [contextProvidersError, setContextProvidersError] = useState<
+    string | null
+  >(null);
 
   // State -- MCP servers
   const [templateMcpServers, setTemplateMcpServers] = useState<
@@ -214,6 +247,40 @@ function TemplateEditorPage() {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    setContextProvidersLoading(true);
+    listContextProviders()
+      .then((providers) => {
+        if (cancelled) return;
+        setContextProviders(providers);
+        const enabledProviderIds = new Set(
+          providers
+            .filter((provider) => provider.enabled !== false)
+            .map((provider) => provider.id),
+        );
+        setContextEngineProviderIds((current) =>
+          current
+            ? current.filter((id) => enabledProviderIds.has(id))
+            : current,
+        );
+        setContextProvidersError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setContextProvidersError(
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setContextProvidersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const currentSnapshot = useMemo(
     () =>
       stableJson({
@@ -232,6 +299,8 @@ function TemplateEditorPage() {
         webSearchEnabled,
         sendEmailEnabled,
         contextEngineEnabled,
+        contextEngineProviderIds,
+        contextEngineMemoryQueryMode,
       }),
     [
       name,
@@ -249,6 +318,8 @@ function TemplateEditorPage() {
       webSearchEnabled,
       sendEmailEnabled,
       contextEngineEnabled,
+      contextEngineProviderIds,
+      contextEngineMemoryQueryMode,
     ],
   );
   const isDirty = isNew || initialSnapshot !== currentSnapshot;
@@ -331,7 +402,17 @@ function TemplateEditorPage() {
       const nextContextEngineEnabled = !!(
         contextEngine && contextEngine.enabled === true
       );
+      const nextContextEngineProviderIds =
+        contextEngine && typeof contextEngine === "object"
+          ? providerIdsFromConfig(contextEngine as JsonRecord)
+          : null;
+      const nextContextEngineMemoryQueryMode =
+        contextEngine && typeof contextEngine === "object"
+          ? memoryModeFromConfig(contextEngine as JsonRecord)
+          : "reflect";
       setContextEngineEnabled(nextContextEngineEnabled);
+      setContextEngineProviderIds(nextContextEngineProviderIds);
+      setContextEngineMemoryQueryMode(nextContextEngineMemoryQueryMode);
       setInitialSnapshot(
         stableJson({
           name: t.name,
@@ -349,6 +430,8 @@ function TemplateEditorPage() {
           webSearchEnabled: nextWebSearchEnabled,
           sendEmailEnabled: nextSendEmailEnabled,
           contextEngineEnabled: nextContextEngineEnabled,
+          contextEngineProviderIds: nextContextEngineProviderIds,
+          contextEngineMemoryQueryMode: nextContextEngineMemoryQueryMode,
         }),
       );
     }
@@ -429,6 +512,22 @@ function TemplateEditorPage() {
   const unassignedMcpServers = availableMcpServers.filter(
     (s) => !templateMcpServers.some((ts) => ts.mcp_server_id === s.id),
   );
+  const defaultContextProviderIds = contextProviders
+    .filter((provider) => provider.enabled !== false && provider.defaultEnabled)
+    .map((provider) => provider.id);
+  const effectiveContextProviderIds =
+    contextEngineProviderIds ?? defaultContextProviderIds;
+  const effectiveContextProviders = effectiveContextProviderIds.map((id) => {
+    const provider = contextProviders.find((candidate) => candidate.id === id);
+    return provider?.displayName ?? id;
+  });
+  const contextMemorySelected = effectiveContextProviderIds.includes("memory");
+  const contextProviderOptions = contextProviders
+    .filter((provider) => provider.enabled !== false)
+    .map((provider) => ({
+      label: provider.displayName,
+      value: provider.id,
+    }));
 
   const addMcpServer = async (serverId: string) => {
     if (!templateId || isNew) return;
@@ -473,8 +572,25 @@ function TemplateEditorPage() {
     const sendEmailJson = sendEmailEnabled
       ? JSON.stringify({ enabled: true })
       : JSON.stringify(null);
+    const contextEngineConfig: JsonRecord = { enabled: true };
+    const allowedContextEngineProviderIds =
+      contextEngineProviderIds?.filter((id) =>
+        contextProviders.some(
+          (provider) => provider.id === id && provider.enabled !== false,
+        ),
+      ) ?? null;
+    if (contextEngineProviderIds !== null) {
+      contextEngineConfig.providers = {
+        ids: allowedContextEngineProviderIds ?? [],
+      };
+      if (allowedContextEngineProviderIds?.includes("memory")) {
+        contextEngineConfig.providerOptions = {
+          memory: { queryMode: contextEngineMemoryQueryMode },
+        };
+      }
+    }
     const contextEngineJson = contextEngineEnabled
-      ? JSON.stringify({ enabled: true })
+      ? JSON.stringify(contextEngineConfig)
       : JSON.stringify(null);
     const config = JSON.stringify(templateConfig);
 
@@ -794,7 +910,7 @@ function TemplateEditorPage() {
                     />
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
                   <div className="space-y-1">
                     <Label
                       htmlFor="context-engine-enabled"
@@ -808,6 +924,48 @@ function TemplateEditorPage() {
                       search.
                     </p>
                   </div>
+                  {contextEngineEnabled && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {effectiveContextProviders.length > 0 ? (
+                          effectiveContextProviders.map((label) => (
+                            <Badge
+                              key={label}
+                              variant="outline"
+                              className="text-[10px]"
+                            >
+                              {label}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            No adapters selected
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {contextEngineProviderIds === null
+                            ? "Using global defaults"
+                            : "Template override"}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setContextEngineDialogOpen(true)}
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                          Configure
+                        </Button>
+                      </div>
+                      {contextProvidersError && (
+                        <p className="text-xs text-destructive">
+                          {contextProvidersError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1017,6 +1175,94 @@ function TemplateEditorPage() {
           />
         )}
       </div>
+
+      <Dialog
+        open={contextEngineDialogOpen}
+        onOpenChange={setContextEngineDialogOpen}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Context Engine Configuration</DialogTitle>
+            <DialogDescription>
+              Choose the adapters this template should use when it injects{" "}
+              <code>query_context</code>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Enabled adapters</Label>
+                {contextEngineProviderIds === null && (
+                  <Badge variant="secondary" className="text-xs">
+                    Global defaults
+                  </Badge>
+                )}
+              </div>
+              <MultiSelect
+                options={contextProviderOptions}
+                defaultValue={effectiveContextProviderIds}
+                onValueChange={setContextEngineProviderIds}
+                placeholder={
+                  contextProvidersLoading
+                    ? "Loading adapters..."
+                    : "Select adapters..."
+                }
+                searchable
+                hideSelectAll
+                disabled={contextProvidersLoading}
+                maxCount={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                Removing an adapter here prevents this template's default{" "}
+                <code>query_context</code> calls from using it.
+              </p>
+            </div>
+
+            {contextMemorySelected && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Hindsight Memory</p>
+                  <p className="text-xs text-muted-foreground">
+                    Choose whether memory uses raw recall or reflect synthesis.
+                  </p>
+                </div>
+                <ToggleGroup
+                  type="single"
+                  value={contextEngineMemoryQueryMode}
+                  onValueChange={(value) =>
+                    value &&
+                    setContextEngineMemoryQueryMode(value as MemoryQueryMode)
+                  }
+                  variant="outline"
+                >
+                  <ToggleGroupItem value="recall" className="px-3 text-xs">
+                    recall
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="reflect" className="px-3 text-xs">
+                    reflect
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            )}
+
+            <div className="flex justify-between gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setContextEngineProviderIds(null)}
+              >
+                Use global defaults
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setContextEngineDialogOpen(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Template → Agent sync prompt (shown after Save when agents are linked) */}
       <TemplateSyncDialog

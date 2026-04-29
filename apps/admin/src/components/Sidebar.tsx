@@ -13,11 +13,9 @@ import {
   Puzzle,
   Brain,
   FileText,
-  Network,
   Webhook,
   Shield,
   CalendarClock,
-  BookOpen,
   LayoutTemplate,
   ShieldCheck,
 } from "lucide-react";
@@ -219,9 +217,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
-    { to: "/memory", icon: Brain, label: "Memory" },
-    { to: "/wiki", icon: Network, label: "Wiki Pages" },
-    { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
+    { to: "/knowledge", icon: Brain, label: "Knowledge" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];

@@ -100,6 +100,18 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "tenantSkills.tenant_id",
     skill_id: "tenantSkills.skill_id",
   },
+  tenantContextProviderSettings: {
+    tenant_id: "tenantContextProviderSettings.tenant_id",
+    provider_id: "tenantContextProviderSettings.provider_id",
+    family: "tenantContextProviderSettings.family",
+    enabled: "tenantContextProviderSettings.enabled",
+    default_enabled: "tenantContextProviderSettings.default_enabled",
+    config: "tenantContextProviderSettings.config",
+    last_tested_at: "tenantContextProviderSettings.last_tested_at",
+    last_test_state: "tenantContextProviderSettings.last_test_state",
+    last_test_latency_ms: "tenantContextProviderSettings.last_test_latency_ms",
+    last_test_error: "tenantContextProviderSettings.last_test_error",
+  },
   users: { id: "users.id", tenant_id: "users.tenant_id" },
   agentKnowledgeBases: {
     agent_id: "agentKnowledgeBases.agent_id",
@@ -245,6 +257,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.guardrailConfig).toBeUndefined();
     expect(cfg.browserAutomationEnabled).toBe(false);
     expect(cfg.contextEngineEnabled).toBe(true);
+    expect(cfg.contextEngineConfig).toEqual({ enabled: true });
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
     // Default script skills stay present; send_email is injected as a direct tool.
@@ -408,6 +421,66 @@ describe("resolveAgentRuntimeConfig", () => {
       agentId: AGENT_ID,
     });
     expect(cfg.contextEngineEnabled).toBe(false);
+    expect(cfg.contextEngineConfig).toBeUndefined();
+  });
+
+  it("returns template Context Engine adapter configuration", async () => {
+    stageAgentRow();
+    stageTemplateRow({
+      context_engine: {
+        enabled: true,
+        providers: { ids: ["memory", "wiki"] },
+        providerOptions: { memory: { queryMode: "reflect" } },
+      },
+    });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([]); // tenant context provider settings
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.contextEngineConfig).toEqual({
+      enabled: true,
+      providers: { ids: ["memory", "wiki"] },
+      providerOptions: { memory: { queryMode: "reflect" } },
+    });
+  });
+
+  it("removes tenant-disabled Context Engine adapters from runtime overrides", async () => {
+    stageAgentRow();
+    stageTemplateRow({
+      context_engine: {
+        enabled: true,
+        providers: { ids: ["memory", "wiki"] },
+        providerOptions: { memory: { queryMode: "reflect" } },
+      },
+    });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([
+      {
+        providerId: "memory",
+        family: "memory",
+        enabled: false,
+        defaultEnabled: false,
+        config: {},
+      },
+    ]); // tenant context provider settings
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.contextEngineConfig).toEqual({
+      enabled: true,
+      providers: { ids: ["wiki"] },
+    });
   });
 
   it("does not register Context Engine when blocked_tools includes query_context", async () => {

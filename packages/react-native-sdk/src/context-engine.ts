@@ -62,6 +62,11 @@ export interface QueryContextArgs {
     ids?: string[];
     families?: ContextProviderFamily[];
   };
+  providerOptions?: {
+    memory?: {
+      queryMode?: "recall" | "reflect";
+    };
+  };
 }
 
 export async function queryContext(args: QueryContextArgs): Promise<ContextEngineResponse> {
@@ -86,6 +91,7 @@ export async function queryContext(args: QueryContextArgs): Promise<ContextEngin
           depth: args.depth ?? "quick",
           limit: args.limit,
           providers: args.providers,
+          providerOptions: args.providerOptions,
         },
       },
     }),

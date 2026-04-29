@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { BookOpen, Plus } from "lucide-react";
@@ -19,6 +19,12 @@ import { relativeTime } from "@/lib/utils";
 export const Route = createFileRoute(
   "/_authed/_tenant/knowledge-bases/",
 )({
+  beforeLoad: () => {
+    throw redirect({
+      to: "/knowledge/knowledge-bases",
+      replace: true,
+    });
+  },
   component: KnowledgeBasesPage,
 });
 
@@ -86,13 +92,23 @@ const columns: ColumnDef<KbRow>[] = [
   },
 ];
 
-function KnowledgeBasesPage() {
+type KnowledgeBasesPageProps = {
+  embedded?: boolean;
+  detailBase?: "/knowledge-bases/$kbId" | "/knowledge/knowledge-bases/$kbId";
+  breadcrumbs?: Parameters<typeof useBreadcrumbs>[0];
+};
+
+export function KnowledgeBasesPage({
+  embedded = false,
+  detailBase = "/knowledge-bases/$kbId",
+  breadcrumbs = [{ label: "Knowledge Bases" }],
+}: KnowledgeBasesPageProps = {}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
-  useBreadcrumbs([{ label: "Knowledge Bases" }]);
+  useBreadcrumbs(breadcrumbs);
 
   const [result, reexecute] = useQuery({
     query: KnowledgeBasesListQuery,
@@ -127,28 +143,22 @@ function KnowledgeBasesPage() {
 
   if (result.fetching && !result.data) return <PageSkeleton />;
 
-  return (
-    <PageLayout
-      header={
-        <>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Knowledge Bases</h1>
-              <p className="text-xs text-muted-foreground">Manage document-backed knowledge for your agents</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New KB
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4">
-            <FilterBarSearch value={search} onChange={setSearch} placeholder="Search..." />
-          </div>
-        </>
-      }
-    >
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <FilterBarSearch
+        value={search}
+        onChange={setSearch}
+        placeholder="Search..."
+      />
+      <Button onClick={() => setCreateOpen(true)}>
+        <Plus className="h-4 w-4" />
+        New KB
+      </Button>
+    </div>
+  );
+
+  const content = (
+    <>
       {rows.length === 0 && !search ? (
         <EmptyState
           icon={BookOpen}
@@ -165,7 +175,7 @@ function KnowledgeBasesPage() {
           data={rows}
           onRowClick={(row) =>
             navigate({
-              to: "/knowledge-bases/$kbId",
+              to: detailBase,
               params: { kbId: row.id },
             })
           }
@@ -177,6 +187,21 @@ function KnowledgeBasesPage() {
         onOpenChange={setCreateOpen}
         onSaved={handleCreated}
       />
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full min-w-0 flex-col">
+        <div className="shrink-0 pb-4">{header}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
+      </div>
+    );
+  }
+
+  return (
+    <PageLayout header={header}>
+      {content}
     </PageLayout>
   );
 }

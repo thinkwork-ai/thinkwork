@@ -1,5 +1,11 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
 import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Trash2, Brain, Search, X, ArrowLeft } from "lucide-react";
@@ -55,6 +61,13 @@ function isMemoryView(v: unknown): v is MemoryView {
 }
 
 export const Route = createFileRoute("/_authed/_tenant/memory/")({
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      to: "/knowledge/memory",
+      search: search as any,
+      replace: true,
+    });
+  },
   component: MemoryPage,
   validateSearch: (
     search: Record<string, unknown>,
@@ -63,6 +76,12 @@ export const Route = createFileRoute("/_authed/_tenant/memory/")({
     ...(isMemoryView(search.view) ? { view: search.view } : {}),
   }),
 });
+
+type MemoryPageProps = {
+  routeBase?: "/memory" | "/knowledge/memory";
+  embedded?: boolean;
+  breadcrumbs?: Parameters<typeof useBreadcrumbs>[0];
+};
 
 /** Parse <topic name="...">content</topic> tags into structured sections.
  *  Handles both closed and unclosed topic tags. */
@@ -162,9 +181,16 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
 }
 
 
-function MemoryPage() {
+export function MemoryPage({
+  routeBase = "/memory",
+  embedded = false,
+  breadcrumbs = [{ label: "Memories" }],
+}: MemoryPageProps = {}) {
   const { tenantId } = useTenant();
-  const { agent, view: viewParam } = Route.useSearch();
+  const { agent, view: viewParam } = useSearch({ strict: false }) as {
+    agent?: string;
+    view?: MemoryView;
+  };
   const navigate = useNavigate();
   const selectedAgentId = agent ?? "all";
   const view: MemoryView = viewParam ?? "memories";
@@ -175,7 +201,7 @@ function MemoryPage() {
   const updateFilters = useCallback(
     (next: { agent?: string; view?: MemoryView }) => {
       navigate({
-        to: "/memory",
+        to: routeBase,
         search: {
           ...(next.agent && next.agent !== "all" ? { agent: next.agent } : {}),
           ...(next.view && next.view !== "memories" ? { view: next.view } : {}),
@@ -183,7 +209,7 @@ function MemoryPage() {
         replace: true,
       });
     },
-    [navigate],
+    [navigate, routeBase],
   );
   const setSelectedAgentId = useCallback(
     (nextAgent: string) => updateFilters({ agent: nextAgent, view }),
@@ -362,7 +388,7 @@ function MemoryPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useBreadcrumbs([{ label: "Memory" }]);
+  useBreadcrumbs(breadcrumbs);
 
   const mapRecord = (r: any): MemoryRow => ({
     memoryRecordId: r.memoryRecordId,
@@ -486,40 +512,22 @@ function MemoryPage() {
       ? multiFetching && multiRecords === null
       : memoryResult.fetching && !memoryResult.data;
 
-  const memoryCount = isAllAgents ? userScopes.length + " users" : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`;
-
   return (
-    <div className="flex flex-col -m-6 h-[calc(100%+48px)] min-w-0">
-      <div className="shrink-0 px-4 pt-3 pb-3 relative z-10">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold">Memory</h1>
-            <p className="text-xs text-muted-foreground">{memoryCount}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {hindsightEnabled && (
-              <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
-                <ToggleGroupItem value="memories" className="px-3 text-xs">Table</ToggleGroupItem>
-                <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
-              </ToggleGroup>
-            )}
-            <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select user" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {userScopes.map((scope) => (
-                  <SelectItem key={scope.userId} value={scope.userId}>{scope.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 pb-3 px-4 shrink-0 relative z-10">
-        <div className="relative" style={{ width: "16rem" }}>
+    <div
+      className={
+        embedded
+          ? "flex h-full min-w-0 flex-col"
+          : "flex flex-col -m-6 h-[calc(100%+48px)] min-w-0"
+      }
+    >
+      <div
+        className={
+          embedded
+            ? "relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 pb-3"
+            : "relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 pb-3"
+        }
+      >
+        <div className="relative w-80 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search memories..."
@@ -537,9 +545,39 @@ function MemoryPage() {
             </button>
           )}
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {hindsightEnabled && (
+            <ToggleGroup
+              type="single"
+              value={view}
+              onValueChange={(v) => v && setView(v as "memories" | "graph")}
+              variant="outline"
+            >
+              <ToggleGroupItem value="memories" className="px-3 text-xs">
+                Table
+              </ToggleGroupItem>
+              <ToggleGroupItem value="graph" className="px-3 text-xs">
+                Graph
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
+          <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Select user" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Users</SelectItem>
+              {userScopes.map((scope) => (
+                <SelectItem key={scope.userId} value={scope.userId}>
+                  {scope.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 px-4">
+      <div className={embedded ? "min-h-0 flex-1" : "min-h-0 flex-1 px-4"}>
         {view === "graph" ? (
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
             <MemoryGraph

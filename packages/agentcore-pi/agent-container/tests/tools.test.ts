@@ -224,6 +224,52 @@ describe("Pi runtime tools", () => {
     expect(result.content[0]?.text).toBe("Found context");
   });
 
+  it("passes template Context Engine adapter config to query_context", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: { content: [{ type: "text", text: "Configured context" }] },
+        }),
+      ),
+    );
+    const tool = buildContextEngineTool({
+      context_engine_enabled: true,
+      context_engine_config: {
+        providers: { ids: ["memory", "wiki"] },
+        providerOptions: { memory: { queryMode: "reflect" } },
+      },
+      thinkwork_api_url: "https://api.test",
+      thinkwork_api_secret: "secret",
+      tenant_id: "tenant-1",
+      user_id: "user-1",
+    });
+
+    await tool?.execute("tool-1", { query: "Paris" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test/mcp/context-engine",
+      expect.objectContaining({
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "pi-query_context",
+          method: "tools/call",
+          params: {
+            name: "query_context",
+            arguments: {
+              query: "Paris",
+              mode: "results",
+              scope: "auto",
+              depth: "quick",
+              limit: 10,
+              providers: { ids: ["memory", "wiki"] },
+              providerOptions: { memory: { queryMode: "reflect" } },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it("registers split Context Engine tools for memory and wiki", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

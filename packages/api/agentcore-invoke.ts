@@ -303,6 +303,9 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.context_engine_enabled) {
       payload.context_engine_enabled = body.context_engine_enabled;
     }
+    if (body.context_engine_config) {
+      payload.context_engine_config = body.context_engine_config;
+    }
     if (body.blocked_tools) payload.blocked_tools = body.blocked_tools;
     if (body.browser_automation_enabled) {
       payload.browser_automation_enabled = body.browser_automation_enabled;

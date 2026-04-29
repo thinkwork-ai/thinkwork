@@ -9,8 +9,8 @@ Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Adm
 
 ## The list view
 
-**Route:** `/knowledge/knowledge-bases`  
-**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`  
+**Route:** `/knowledge/knowledge-bases`
+**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`
 **Tab implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
 
 The legacy `/knowledge-bases` route redirects to this tab.
@@ -29,8 +29,8 @@ A "Create KB" button in the header fires a creation flow (not deeply visible in 
 
 ## The detail view
 
-**Route:** `/knowledge/knowledge-bases/:kbId`  
-**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`  
+**Route:** `/knowledge/knowledge-bases/:kbId`
+**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`
 **Detail implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
 
 The detail page is a two-column grid: Documents on the left, Sync on the right, with a header showing the KB name, slug, status badges, and a delete confirmation flow.

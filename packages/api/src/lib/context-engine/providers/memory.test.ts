@@ -69,4 +69,97 @@ describe("memory context provider", () => {
       },
     });
   });
+
+  it("lets request options override the server memory query mode", async () => {
+    vi.stubEnv("CONTEXT_ENGINE_MEMORY_QUERY_MODE", "recall");
+    reflectMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "reflection-override",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          kind: "reflection",
+          sourceType: "system_reflection",
+          status: "active",
+          content: {
+            summary: "Override reflection",
+            text: "Reflect was selected for this test run.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-04-29T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 1,
+        backend: "hindsight",
+      },
+    ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "Smoke Tests 27 April 2026",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "reflect" } },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(reflectMock).toHaveBeenCalledTimes(1);
+    expect(recallMock).not.toHaveBeenCalled();
+    expect(result.hits[0]?.provenance.metadata).toMatchObject({
+      mode: "reflect",
+    });
+  });
+
+  it("uses recall when request options override a reflect server default", async () => {
+    vi.stubEnv("CONTEXT_ENGINE_MEMORY_QUERY_MODE", "reflect");
+    recallMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "memory-override",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          kind: "semantic",
+          sourceType: "conversation",
+          status: "active",
+          content: {
+            summary: "Favorite restaurant",
+            text: "Auberge Bressane is a favorite restaurant in Paris.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-04-29T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 0.8,
+        backend: "hindsight",
+      },
+    ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "favorite restaurant in paris",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(recallMock).toHaveBeenCalledTimes(1);
+    expect(reflectMock).not.toHaveBeenCalled();
+    expect(result.hits[0]).toMatchObject({
+      id: "memory:memory-override",
+      title: "Favorite restaurant",
+      snippet: "Favorite restaurant",
+      provenance: {
+        metadata: expect.objectContaining({ mode: "recall" }),
+      },
+    });
+  });
 });

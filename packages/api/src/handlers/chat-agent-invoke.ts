@@ -388,6 +388,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
         ? { ...runtimeConfig.sendEmailConfig, threadId }
         : undefined,
       context_engine_enabled: runtimeConfig.contextEngineEnabled || undefined,
+      context_engine_config: runtimeConfig.contextEngineConfig,
       runtime_type: runtimeType,
       model: agentModel,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,

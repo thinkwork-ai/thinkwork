@@ -1,5 +1,10 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  redirect,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
 import { useQuery, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Search, X, Sparkles } from "lucide-react";
@@ -39,6 +44,13 @@ function isWikiView(v: unknown): v is WikiView {
 }
 
 export const Route = createFileRoute("/_authed/_tenant/wiki/")({
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      to: "/knowledge/wiki",
+      search: search as any,
+      replace: true,
+    });
+  },
   component: WikiPage,
   validateSearch: (
     search: Record<string, unknown>,
@@ -47,6 +59,12 @@ export const Route = createFileRoute("/_authed/_tenant/wiki/")({
     ...(isWikiView(search.view) ? { view: search.view } : {}),
   }),
 });
+
+type WikiPageProps = {
+  routeBase?: "/wiki" | "/knowledge/wiki";
+  embedded?: boolean;
+  breadcrumbs?: Parameters<typeof useBreadcrumbs>[0];
+};
 
 type WikiRow = {
   id: string;
@@ -87,9 +105,16 @@ function PageTypeBadge({ type }: { type: WikiPageType }) {
   );
 }
 
-function WikiPage() {
+export function WikiPage({
+  routeBase = "/wiki",
+  embedded = false,
+  breadcrumbs = [{ label: "Wiki Pages" }],
+}: WikiPageProps = {}) {
   const { tenantId } = useTenant();
-  const { agent, view: viewParam } = Route.useSearch();
+  const { agent, view: viewParam } = useSearch({ strict: false }) as {
+    agent?: string;
+    view?: WikiView;
+  };
   const navigate = useNavigate();
   const selectedAgentId = agent ?? "all";
   const view: WikiView = viewParam ?? "pages";
@@ -100,7 +125,7 @@ function WikiPage() {
   const updateFilters = useCallback(
     (next: { agent?: string; view?: WikiView }) => {
       navigate({
-        to: "/wiki",
+        to: routeBase,
         search: {
           ...(next.agent && next.agent !== "all" ? { agent: next.agent } : {}),
           ...(next.view && next.view !== "pages" ? { view: next.view } : {}),
@@ -108,7 +133,7 @@ function WikiPage() {
         replace: true,
       });
     },
-    [navigate],
+    [navigate, routeBase],
   );
   const setSelectedAgentId = useCallback(
     (nextAgent: string) => updateFilters({ agent: nextAgent, view }),
@@ -261,7 +286,7 @@ function WikiPage() {
     pause: !activeSearch || !tenantId || !searchUserId,
   });
 
-  useBreadcrumbs([{ label: "Wiki Pages" }]);
+  useBreadcrumbs(breadcrumbs);
 
   const toRow = (p: any, userId: string, userName: string): WikiRow => ({
     id: p.id,
@@ -362,45 +387,22 @@ function WikiPage() {
       ? multiFetching && multiPages === null
       : listResult.fetching && !listResult.data;
 
-  const headerCount = isAllAgents
-    ? `${userScopes.length} user${userScopes.length === 1 ? "" : "s"}`
-    : `${rows.length} page${rows.length !== 1 ? "s" : ""}`;
-
   return (
-    <div className="flex flex-col -m-6 h-[calc(100%+48px)] min-w-0">
-      <div className="shrink-0 px-4 pt-3 pb-3 relative z-10">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold">Wiki Pages</h1>
-            <p className="text-xs text-muted-foreground">{headerCount}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(v) => v && setView(v as "pages" | "graph")}
-              variant="outline"
-            >
-              <ToggleGroupItem value="pages" className="px-3 text-xs">Table</ToggleGroupItem>
-              <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
-            </ToggleGroup>
-            <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select user" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {userScopes.map((scope) => (
-                  <SelectItem key={scope.userId} value={scope.userId}>{scope.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 pb-3 px-4 shrink-0 relative z-10">
-        <div className="relative" style={{ width: "16rem" }}>
+    <div
+      className={
+        embedded
+          ? "flex h-full min-w-0 flex-col"
+          : "flex flex-col -m-6 h-[calc(100%+48px)] min-w-0"
+      }
+    >
+      <div
+        className={
+          embedded
+            ? "relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 pb-3"
+            : "relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 pb-3"
+        }
+      >
+        <div className="relative w-80 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search pages..."
@@ -421,9 +423,37 @@ function WikiPage() {
             </button>
           )}
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as "pages" | "graph")}
+            variant="outline"
+          >
+            <ToggleGroupItem value="pages" className="px-3 text-xs">
+              Table
+            </ToggleGroupItem>
+            <ToggleGroupItem value="graph" className="px-3 text-xs">
+              Graph
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Select user" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Users</SelectItem>
+              {userScopes.map((scope) => (
+                <SelectItem key={scope.userId} value={scope.userId}>
+                  {scope.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 px-4">
+      <div className={embedded ? "min-h-0 flex-1" : "min-h-0 flex-1 px-4"}>
         {view === "graph" ? (
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
             <WikiGraph
