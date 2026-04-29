@@ -775,7 +775,9 @@ function ServerDetailDialog({
                               : "text-[10px] text-muted-foreground"
                           }
                         >
-                          read-only
+                          {tool.declaredReadOnly
+                            ? "read-only"
+                            : "not read-only"}
                         </Badge>
                         <Badge
                           variant={
@@ -787,7 +789,9 @@ function ServerDetailDialog({
                               : "text-[10px] text-muted-foreground"
                           }
                         >
-                          search-safe
+                          {tool.declaredSearchSafe
+                            ? "search-safe"
+                            : "not search-safe"}
                         </Badge>
                       </div>
                       <label className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-2 py-1.5 sm:justify-center sm:bg-transparent sm:p-0">
