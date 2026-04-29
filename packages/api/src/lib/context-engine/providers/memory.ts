@@ -6,6 +6,9 @@ import type {
 } from "../types.js";
 
 const MEMORY_LIMIT = 20;
+const MEMORY_TIMEOUT_MS = Number(
+	process.env.CONTEXT_ENGINE_MEMORY_TIMEOUT_MS || 15_000,
+);
 
 export function createMemoryContextProvider(): ContextProviderDescriptor {
 	return {
@@ -13,6 +16,9 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
 		family: "memory",
 		displayName: "Hindsight Memory",
 		defaultEnabled: true,
+		timeoutMs: Number.isFinite(MEMORY_TIMEOUT_MS)
+			? MEMORY_TIMEOUT_MS
+			: 15_000,
 		supportedScopes: ["personal", "auto"],
 		async query(request): Promise<ContextProviderResult> {
 			if (!request.caller.userId) {
