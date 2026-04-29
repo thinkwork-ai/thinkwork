@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSubscription } from "urql";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, BrainCircuit, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   ThreadTurnsQuery,
   ThreadsListQuery,
@@ -15,12 +14,6 @@ import { mapRuns, mapThreads, type ActivityItem } from "@/lib/activity-utils";
 import { AgentMetrics } from "@/components/agents/AgentMetrics";
 import { AgentActivity } from "@/components/agents/AgentActivity";
 import { AgentDetailChrome } from "@/components/agents/AgentDetailChrome";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  getAgentContextPolicy,
-  type AgentContextPolicy,
-} from "@/lib/context-engine-api";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId")({
   component: AgentDetailPage,
@@ -136,8 +129,6 @@ function AgentDetailPage() {
             chats={agentChats}
           />
 
-          <AgentContextPolicyCard agentId={agentId} />
-
           <AgentActivity
             items={agentActivityItems}
             onRefresh={refreshActivity}
@@ -147,138 +138,5 @@ function AgentDetailPage() {
         </div>
       )}
     </AgentDetailChrome>
-  );
-}
-
-function AgentContextPolicyCard({ agentId }: { agentId: string }) {
-  const [policy, setPolicy] = useState<AgentContextPolicy | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    getAgentContextPolicy(agentId)
-      .then((next) => {
-        if (cancelled) return;
-        setPolicy(next);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <BrainCircuit className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm">Context Engine Policy</CardTitle>
-          </div>
-          {policy && (
-            <Badge variant={policy.enabled ? "secondary" : "outline"}>
-              {policy.enabled ? "enabled" : "disabled"}
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading policy...
-          </div>
-        ) : error ? (
-          <div className="flex items-start gap-2 text-sm text-muted-foreground">
-            <AlertCircle className="mt-0.5 h-4 w-4 text-yellow-500" />
-            <p>
-              {error.includes("Unknown tool")
-                ? "Effective policy is unavailable until the Context Engine API deploy includes the admin policy tool."
-                : error}
-            </p>
-          </div>
-        ) : policy ? (
-          <div className="grid gap-3 md:grid-cols-3">
-            <PolicyColumn
-              title="Tenant defaults"
-              providers={policy.tenantDefaults}
-            />
-            <PolicyColumn
-              title={
-                policy.templateOverride.mode === "inherit"
-                  ? "Template override"
-                  : "Template selection"
-              }
-              providers={
-                policy.templateOverride.mode === "inherit"
-                  ? []
-                  : policy.finalProviders
-              }
-              empty={
-                policy.templateOverride.mode === "inherit"
-                  ? "Inherits tenant defaults"
-                  : "No adapters selected"
-              }
-            />
-            <PolicyColumn
-              title="Final providers"
-              providers={policy.finalProviders}
-              empty={
-                policy.enabled
-                  ? "No adapters will run"
-                  : "Context Engine disabled"
-              }
-            />
-            {policy.providerOptions &&
-              Object.keys(policy.providerOptions).length > 0 && (
-                <div className="md:col-span-3 rounded-md border p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Provider options
-                  </p>
-                  <pre className="mt-2 overflow-auto rounded bg-muted p-2 text-xs">
-                    {JSON.stringify(policy.providerOptions, null, 2)}
-                  </pre>
-                </div>
-              )}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PolicyColumn({
-  title,
-  providers,
-  empty = "None",
-}: {
-  title: string;
-  providers: AgentContextPolicy["finalProviders"];
-  empty?: string;
-}) {
-  return (
-    <div className="rounded-md border p-3">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">{title}</p>
-      {providers.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {providers.map((provider) => (
-            <Badge key={provider.id} variant="outline" className="text-[11px]">
-              {provider.displayName}
-            </Badge>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">{empty}</p>
-      )}
-    </div>
   );
 }
