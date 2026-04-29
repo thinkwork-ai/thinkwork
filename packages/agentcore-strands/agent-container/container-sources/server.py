@@ -1027,7 +1027,6 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 import hindsight_usage_capture
 
                 hindsight_usage_capture.install_loop_fix()
-                hindsight_usage_capture.install()
                 hindsight_usage_capture.reset()
             except Exception as ucap_err:
                 logger.warning("hindsight_usage_capture install failed: %s", ucap_err)
@@ -1774,6 +1773,69 @@ def _error_response(message: str) -> dict:
     }
 
 
+def _build_full_thread_transcript(
+    history_payload, message: str, response_text: str
+) -> list:
+    """Construct the per-turn transcript for retain_full_thread.
+
+    Mirrors the history filtering used in ``_execute_agent_turn`` so the
+    transcript shape sent to the Lambda matches what the agent actually
+    saw. Filters out non-user/assistant roles and empty content; the
+    Lambda's longest-suffix-prefix merge will reconcile against the DB.
+    """
+    transcript: list = []
+    if isinstance(history_payload, list):
+        for hmsg in history_payload:
+            if not isinstance(hmsg, dict):
+                continue
+            role = hmsg.get("role")
+            content = hmsg.get("content")
+            if (
+                role in ("user", "assistant")
+                and isinstance(content, str)
+                and content
+            ):
+                transcript.append({"role": role, "content": content})
+    if message:
+        transcript.append({"role": "user", "content": message})
+    if response_text:
+        transcript.append({"role": "assistant", "content": response_text})
+    return transcript
+
+
+def _fire_retain_full_thread(
+    client_module,
+    ticket_id: str,
+    message: str,
+    response_text: str,
+    history_payload,
+    tenant_id: str,
+    user_id: str,
+) -> None:
+    """Per-turn retain seam: build the transcript and fire-and-forget.
+
+    The single seam between the chat handler and ``api_memory_client``;
+    keeping the helper extracted lets the contract test exercise the
+    transcript-building + invoke contract without needing to spin up
+    BaseHTTPRequestHandler.
+    """
+    transcript = _build_full_thread_transcript(history_payload, message, response_text)
+    if not transcript:
+        return
+    resolved_user_id = (
+        user_id
+        or os.environ.get("USER_ID")
+        or os.environ.get("CURRENT_USER_ID")
+        or ""
+    )
+    client_module.retain_full_thread(
+        thread_id=ticket_id,
+        transcript=transcript,
+        tenant_id=tenant_id,
+        user_id=resolved_user_id,
+    )
+
+
 def _audit_response(tenant_id: str, response_text: str, allowed_tools: list) -> None:
     """Scan response for tool usage and log any violations."""
     tool_pattern = r'\b(shell|browser|file_write|code_execution|install_skill|load_extension|eval)\b'
@@ -2180,22 +2242,29 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 _audit_response(tenant_id, response_text, allowed)
 
                 # Auto-retain this turn through the API's normalized memory
-                # layer. The memory-retain Lambda invokes the active
-                # engine's adapter.retainTurn() — Hindsight POSTs the turn
-                # to /memories for its own LLM extraction; AgentCore fires
-                # CreateEvent so the background semantic / preferences /
-                # summaries / episodes strategies pick it up. Engine
-                # selection lives entirely in the API layer; the runtime is
-                # engine-agnostic. Async invoke (InvocationType=Event), so
-                # this never blocks the response. Best-effort — failures
-                # log and move on.
+                # layer. The memory-retain Lambda fetches the canonical
+                # transcript from the messages table, merges with the tail
+                # we send here (longest-suffix-prefix overlap), and calls
+                # adapter.retainConversation — Hindsight produces one
+                # document per thread keyed by threadId with replace
+                # semantics; AgentCore fires CreateEvent so the background
+                # strategies pick it up. Engine selection lives entirely
+                # in the API layer; the runtime is engine-agnostic. Async
+                # invoke (InvocationType=Event), so this never blocks the
+                # response. Best-effort — failures log and move on. Sub-
+                # agent isolation (R6): this call site is in do_POST, NOT
+                # in _execute_agent_turn, so sub-agents that run inside
+                # _execute_agent_turn do not see this code path.
                 try:
                     import api_memory_client
-                    api_memory_client.retain_turn_pair(
-                        thread_id=ticket_id,
-                        user_message=message,
-                        assistant_response=response_text,
+                    _fire_retain_full_thread(
+                        api_memory_client,
+                        ticket_id=ticket_id,
+                        message=message,
+                        response_text=response_text,
+                        history_payload=payload.get("messages_history"),
                         tenant_id=tenant_id,
+                        user_id=user_id,
                     )
                 except Exception as retain_err:
                     logger.warning("auto-retain failed thread=%s: %s",

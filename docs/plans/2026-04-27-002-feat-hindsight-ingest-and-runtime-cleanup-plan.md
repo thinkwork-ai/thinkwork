@@ -3,6 +3,7 @@ title: "feat: Hindsight ingest reshape + daily workspace memory + Strands runtim
 type: feat
 status: active
 date: 2026-04-27
+deepened: 2026-04-28
 origin: docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md
 supersedes:
   - docs/plans/2026-04-24-001-refactor-user-scope-memory-and-hindsight-ingest-plan.md
@@ -13,11 +14,12 @@ supersedes:
 
 ## Overview
 
-Three coordinated changes to how the Strands AgentCore runtime feeds Hindsight:
+Two coordinated changes to how the AgentCore runtimes (Strands + Pi) feed Hindsight:
 
-1. **Per-turn full-transcript upsert** — replace today's per-message fragmented retain with one full-transcript upsert per root turn, keyed by `document_id=threadId` with `update_mode=replace`. Sub-agent transcripts are not auto-retained.
-2. **Daily workspace memory channel** — agent writes `memory/daily/YYYY-MM-DD.md` via the existing `write_memory` tool; runtime rolls over on the first turn of a new date and posts the prior day's file to Hindsight as a separate document.
-3. **Strands runtime tool cleanup** — replace `hindsight_usage_capture.install()` module-level monkey-patches with custom `@tool` wrappers that capture Bedrock usage in-body via `_push(...)`. Keep `install_loop_fix()` as-is (vendor SDK bug workaround on a separate axis).
+1. **Per-turn full-transcript upsert (Strands + Pi)** — replace today's per-message fragmented retain (Strands) and absent auto-retain (Pi) with one full-transcript upsert per root turn, keyed by `document_id=threadId` with `update_mode=replace`. Both runtimes converge on the same `memory-retain` Lambda path so the DB-fetch-and-merge logic is shared. Sub-agent transcripts are not auto-retained.
+2. **Strands runtime tool cleanup** — replace `hindsight_usage_capture.install()` module-level monkey-patches with custom `@tool` wrappers that capture Bedrock usage in-body via `_push(...)`. Keep `install_loop_fix()` as-is (vendor SDK bug workaround on a separate axis). Pi already has no equivalent monkey-patches; structurally already in the cleaned-up state.
+
+**Daily workspace memory channel split to a follow-up plan** (Q0 resolved 2026-04-28). The original Phase B (`memory/daily/YYYY-MM-DD.md` convention + activity-triggered rollover) is preserved as design notes in `## Implementation Units` for the follow-up plan to absorb, but does NOT ship in this PR. Premise weakness ("agent has no convention" rather than evidenced incident) and three substantive open questions on the design (write-path bifurcation, timezone plumbing, multi-day rollover semantics) made shipping it in v1 the wrong call.
 
 Plus a one-shot wipe-and-reload migration that drops the legacy fragmented Hindsight items so the new shape is the only shape after deployment.
 
@@ -27,11 +29,12 @@ This plan supersedes both predecessor plans (`docs/plans/2026-04-24-001-refactor
 
 ## Problem Frame
 
-The Strands runtime currently retains memory in three broken ways that compound (see origin `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md`):
+The Strands runtime currently retains memory in three broken ways that compound, and the Pi runtime has a fourth gap (see origin `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md`):
 
-1. **Per-turn fragmentation with no `document_id`.** Every turn becomes its own Hindsight document via `retain_turn_pair` → `retainTurn` (per-message split at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:190-200`). Hindsight's docs explicitly require a full conversation as a single item; the current behavior creates N documents per thread, charges N retain-LLM extractions, and prevents cross-turn extraction context.
+1. **Per-turn fragmentation with no `document_id` (Strands).** Every turn becomes its own Hindsight document via `retain_turn_pair` → `retainTurn` (per-message split at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:190-200`). Hindsight's docs explicitly require a full conversation as a single item; the current behavior creates N documents per thread, charges N retain-LLM extractions, and prevents cross-turn extraction context.
 2. **No daily working memory channel.** The agent has no convention for distilling "what mattered today" into Hindsight as a high-signal document. The existing topic-based `memory/lessons.md` etc. files never close a daily loop.
-3. **Vendored monkey-patches.** `hindsight_usage_capture.install()` patches four `Hindsight` methods at module scope to capture Bedrock token usage. This is structural debt: it fights the Strands SDK's tool-wrapper extension model and will silently break on a `hindsight-client` upgrade.
+3. **Vendored monkey-patches (Strands).** `hindsight_usage_capture.install()` patches four `Hindsight` methods at module scope to capture Bedrock token usage. This is structural debt: it fights the Strands SDK's tool-wrapper extension model and will silently break on a `hindsight-client` upgrade.
+4. **No auto-retain at all (Pi).** Pi exports `retainHindsightTurn` (`packages/agentcore-pi/agent-container/src/runtime/tools/hindsight.ts:147`) but never calls it from `runPiAgent` (verified — only test invocations reference it). Pi threads produce zero Hindsight documents today unless the agent calls `hindsight_retain` explicitly via the agent-callable tool. After v1, Pi sees no thread-level memory at all, putting it on a different memory-quality axis from Strands. Pi parity is needed in this plan, not deferred.
 
 Adapter-side machinery for the right shapes already exists (`retainConversation`, `retainDailyMemory`, `user_${userId}` bank resolution — verified in research). The runtime hasn't switched to using them, the daily-memory writer hasn't been built, and the monkey-patches haven't been retired.
 
@@ -51,23 +54,24 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - **R6.** Sub-agent invocations do not trigger thread upsert — addressed by U3 (call site stays in `do_POST`, not `_execute_agent_turn`).
 - **R7.** Upsert failure does not block the agent response — addressed by U2 (fire-and-forget Event invoke), U3.
 - **R8.** Meaningful `context` literals + metadata — addressed by U1 (adapter already does this).
-- **R9.** `memory/daily/YYYY-MM-DD.md` convention via `write_memory` — addressed by U4, U5.
-- **R10.** "Daily working memory" `MEMORY_GUIDE.md` section — addressed by U5.
-- **R11.** Activity-triggered rollover hook against `memory/daily/latest.txt` — addressed by U6, U7.
-- **R12.** Idempotent rollover (replace-in-place, empty no-op, crash-safe) — addressed by U6, U7.
-- **R13.** User-scoped S3 prefix for `memory/daily/*` — addressed by U4 (write path) and U6 (rollover read path).
+- **R9.** `memory/daily/YYYY-MM-DD.md` convention via `write_memory` — **deferred to follow-up plan** (Q0 split decision 2026-04-28). U4/U5 design preserved below for the follow-up to absorb.
+- **R10.** "Daily working memory" `MEMORY_GUIDE.md` section — **deferred to follow-up plan**.
+- **R11.** Activity-triggered rollover hook against `memory/daily/latest.txt` — **deferred to follow-up plan**. U6/U7 design preserved below.
+- **R12.** Idempotent rollover (replace-in-place, empty no-op, crash-safe) — **deferred to follow-up plan**.
+- **R13.** User-scoped S3 prefix for `memory/daily/*` — **deferred to follow-up plan**.
 - **R14.** Bedrock usage from agent-driven retain via Strands hooks (not module-level patch) — addressed by U8 with the in-body wrapper variant chosen over `AfterToolInvocationEvent`. See Key Technical Decisions.
 - **R15.** Bedrock usage from runtime-driven retain captured at the call site — addressed by U2 / U3 (Lambda owns the cost-events sink as today; no per-turn-upsert usage rises into the runtime).
 - **R16.** `hindsight_usage` shape `[{phase, model, input_tokens, output_tokens}]` unchanged — addressed by U8, U9, U10.
 - **R17.** `install()` removed; `install_loop_fix()` kept — addressed by U10.
 - **R18.** User-scoped retain payloads + `user_${userId}` bank — already shipped on the adapter side; verified by U3 manual smoke check.
 - **R19.** Wipe-and-reload migration drops legacy fragmented items — addressed by U11.
-- **R20.** `api_memory_client.py` stops calling per-message retain — addressed by U2 (replaces / removes `retain_turn_pair`).
-- **R21.** Operator can map `thread_id` → 0 or 1 Hindsight document — addressed by U3 verification.
+- **R20.** `api_memory_client.py` stops calling per-message retain — addressed by U2 (replaces / removes `retain_turn_pair`); Pi parity addressed by U2-Pi (replaces direct-HTTP `retainHindsightTurn` with Lambda invoke).
+- **R21.** Operator can map `thread_id` → 0 or 1 Hindsight document — addressed by U3 + U3-Pi verification.
 - **R22.** Agent-callable `retain` tool kept — addressed by U8 (custom wrapper preserves the agent surface).
 - **R23.** `recall` and `reflect` wrappers unchanged in shape — addressed by U9 (only adds usage push to reflect; doesn't change behavior).
+- **R24 (new).** Pi runtime parity for per-turn full-transcript upsert — addressed by U2-Pi (Lambda bridge in TS) and U3-Pi (wire into `runPiAgent`). Pi converges on the same `memory-retain` Lambda path as Strands so U1's DB-fetch-and-merge applies uniformly.
 
-**Origin actors:** A1 (Strands runtime — root, `_execute_agent_turn`), A2 (Strands runtime — sub-agent), A3 (Agent model), A4 (`memory-retain` Lambda), A5 (Hindsight service), A6 (Human user — rollover boundary frame).
+**Origin actors:** A1 (Strands runtime — root, `_execute_agent_turn`), A2 (Strands runtime — sub-agent), A3 (Agent model), A4 (`memory-retain` Lambda), A5 (Hindsight service), A6 (Human user — rollover boundary frame), A7 (Pi runtime — `runPiAgent`).
 
 **Origin flows:** F1 (per-turn thread upsert), F2 (daily workspace memory rollover), F3 (agent-driven explicit retain), F4 (sub-agent isolation).
 
@@ -80,7 +84,7 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - **Not flipping the broader user-scope schema.** The 4/24 plan's wiki FK flip, `threads.user_id` dual-key, `users.wiki_compile_external_enabled` flag, GraphQL/admin/mobile user-scope cascade are **out of scope** for this plan. Hindsight bank derivation is already user-scoped via the legacy `agents.human_pair_id` fallback (verified in research at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:437`), so the ingest reshape doesn't depend on the schema flip. See `### Deferred to Follow-Up Work`.
 - **Not introducing buffering, idle thresholds, or boundary flush.** Per-turn upsert is the simplification (origin R4). Cost premium accepted; pre-vetted mitigations (sampled checkpoints, append-mode hybrid) are on file in origin Dependencies.
 - **Not changing AgentCore managed memory.** Separate engine adapter, different semantics, not broken.
-- **Not preserving today's per-message Hindsight items.** The wipe-and-reload migration drops them (U11).
+- **Not preserving today's per-message Hindsight items.** The wipe-and-reload migration drops them (U11). Pi documents pre-cutover (truncated single-pair content under `document_id=threadId` with `context="thinkwork_thread"`) are NOT wiped by U11's filter (which targets `document_id is null OR context == "thread_turn"`); they are overwritten in place by the next Pi turn under U3-Pi via Hindsight `replace`.
 - **Not adding runtime auto-distill for daily memory.** Agent writes the file or nothing does. No new runtime LLM cost.
 - **Not adding scheduled rollover (cron / EventBridge).** Activity-triggered only.
 - **Not introducing per-thread-per-day documents.** A thread is one document for its lifetime.
@@ -88,11 +92,12 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - **Not building hierarchical daily → weekly → monthly promotion.** That's `docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md`.
 - **Not refactoring `recall`, the agent-callable `retain` tool semantics, or the `_run_async` loop fix.** `install_loop_fix()` stays in `hindsight_usage_capture.py` (origin R17).
 - **Not touching `chat-agent-invoke` or `cost_events` schema.** R16 freezes the `hindsight_usage` contract.
-- **Not touching the Pi parallel-substrate runtime** (`project_pi_runtime_parallel_decision`). Pi ships its own retain integration.
+- **Pi runtime is in scope for Phase A only.** U2-Pi + U3-Pi mirror U2 + U3 for the Pi runtime, converging both runtimes on the same `memory-retain` Lambda path so U1's DB-fetch-and-merge applies uniformly. Pi's `retainHindsightTurn` exists in `packages/agentcore-pi/agent-container/src/runtime/tools/hindsight.ts:147` but is **not called from `runPiAgent` today** (verified — only test invocations reference it); Pi has no auto-retain. Phase B (daily memory) and Phase C (Strands-specific monkey-patch cleanup) remain Strands-only — Pi parity for daily memory is deferred to a follow-up; Pi has no equivalent monkey-patches so Phase C does not apply.
 - **Not re-evaluating Hindsight as the brain.** The 2026-04-27 brain-engine session settled on stay-and-watch.
 
 ### Deferred to Follow-Up Work
 
+- **Daily workspace memory channel** (Phase B — U4, U5, U6, U7) — split to a follow-up plan per Q0 decision on 2026-04-28. Premise weakness (no evidenced incident driving the channel) plus three substantive open design questions (write-path bifurcation between `write_memory`'s API-composer path vs a new direct-S3-PUT path; runtime timezone plumbing for date-boundary computation; single-prior-date vs multi-day-walk rollover semantics for inactive users) made it wrong to ship in v1. The U4/U5/U6/U7 design notes below are preserved verbatim as the starting point for the follow-up; the follow-up plan should resolve the three questions before re-activating these units. R9–R13 carry forward to the follow-up.
 - **Broader user-scope schema cascade** (originally 4/24 plan U1–U7 + U9a): Postgres migration to flip wiki FKs to `users`, dual-key `threads` with `user_id`, add `users.wiki_compile_external_enabled`; GraphQL schema + resolver + clients to user-scope; mobile + admin UI flip; in-container Hindsight bank unification. **Why deferred:** Hindsight bank derivation is already user-scoped via the existing legacy fallback, so the ingest reshape works without it. **What changes for the 4/24 plan:** rather than supersede in full, this plan supersedes only the daily-memory + retain-reshape + wipe pieces. The 4/24 plan's frontmatter flips to `status: paused` (not `superseded`) with a re-evaluation trigger: "revisit when `agents.human_pair_id` fallback is the next refactor target, or when `wiki_*` tables need a multi-agent overhaul, or by 2026-Q3, whichever comes first." This prevents the schema cascade from silently dying. **Concretely:** edit the 4/24 plan's frontmatter to `status: paused`, add a `paused-by-plan: docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md` field, and add the trigger note at the top.
 - **Thread deletion lifecycle in Hindsight** (new — surfaced by adversarial review): Today's per-message Hindsight items had no deletion hook from `threads` deletion (user-initiated delete, retention policy, GDPR request). After this plan ships, a 50-turn thread document hangs around in Hindsight indefinitely keyed by `threadId`. Out of scope here; explicitly listed as a follow-up. Triggered by the first GDPR/retention-policy request that needs Hindsight cleanup.
 - **`hindsight-client` SDK upgrade to retire `install_loop_fix()`.** Separate dependency-upgrade PR (origin R17).
@@ -117,6 +122,9 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - `packages/agentcore-strands/agent-container/container-sources/write_memory_tool.py:59-62, 176` — `write_memory` tool definition and allowlist regex; allowlist needs extension for `memory/daily/YYYY-MM-DD.md`.
 - `packages/api/src/handlers/chat-agent-invoke.ts:617-656` — Hindsight cost-events sink reads `hindsight_usage` and writes to `cost_events`. R16 contract.
 - `packages/database-pg/src/schema/core.ts:203` — `users.timezone` (nullable IANA string). Available for U6 rollover boundary.
+- `packages/agentcore-pi/agent-container/src/runtime/pi-loop.ts:198-209` — `runPiAgent` entry point, where the Pi auto-retain wires in (U3-Pi). Today there is no retain call after `agent.prompt(userMessage)`.
+- `packages/agentcore-pi/agent-container/src/runtime/tools/hindsight.ts:147-209` — Pi's `retainHindsightTurn` (currently exported but uncalled in production); U2-Pi replaces it with `retainFullThread` that Event-invokes the `memory-retain` Lambda.
+- `packages/agentcore-pi/agent-container/tests/tools.test.ts:74,279` — Pi retain test pattern, the only consumer of `retainHindsightTurn` today.
 - `packages/workspace-defaults/files/MEMORY_GUIDE.md` — canonical guide; new "Daily working memory" section lands here in U5. **Note:** package is `workspace-defaults`, not `system-workspace` (CLAUDE.md is stale on this name).
 - `packages/workspace-defaults/src/index.ts` — inlined string constants must be updated whenever the `.md` files change (per learning, see below).
 - `packages/database-pg/drizzle/` — highest existing migration `0043`; next is `0044`.
@@ -175,6 +183,23 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - Whether `retain_turn_pair` is deleted or kept as deprecated (U2). Default: delete after U3 swap is verified.
 - Whether `messages_history`'s 30-turn cap in `chat-agent-invoke.ts` should be lifted or left as-is. Default: leave; the Lambda's full-thread fetch (U1) provides the canonical transcript independently of `messages_history`.
 
+### From 2026-04-28 review — U11 Hindsight delete API surface — RESOLVED 2026-04-28
+
+**Resolution:** Q4 picked **raw SQL on `hindsight.memory_units`**. The U11 design has been updated in place: count phase first, per-bank batched DELETE in transactions (no HTTP rate-limit pause needed), follows the existing pattern at `hindsight-adapter.ts:332-336`. The HTTP `/documents` API path was rejected because no caller exists in the codebase and platform-team confirmation hadn't happened.
+
+### From 2026-04-28 review — Daily memory channel re-evaluation — RESOLVED 2026-04-28
+
+**Resolution:** Q0 picked **split to a follow-up plan**. U4–U7 are deferred; the design notes are preserved in-place in `## Implementation Units → ### Phase B` (with `[DEFERRED]` markers on each unit header) for the follow-up plan to absorb. Before re-activating these units, the follow-up must answer the three open design questions captured in the Phase B header note (write-path bifurcation, timezone plumbing, multi-day rollover semantics). R9–R13 carry forward to the follow-up.
+
+### Original questions (preserved for the follow-up plan to absorb)
+
+Review surfaced that Phase B's premise is hypothetical: the brief states "the agent has no convention for distilling 'what mattered today'" without citing an incident, eval failure, or operator complaint, while Phase A's broken behaviors are file:line evidenced. Three Phase B implementation gaps were also flagged whose concerns dissolve if Phase B is dropped or restructured. Decide before starting Phase B work:
+
+- **Daily memory premise (root):** Cite a concrete pain — an incident, eval result, or thread/operator complaint — that demands a daily memory channel, OR split Phase B into a separate plan that ships only after Phase A's data shows a gap daily memory would fill. Default if neither: drop U4–U7 from this plan and re-scope as a follow-up.
+- **U4 write path (dependent):** "Mirroring the knowledge-pack pattern" implies a direct boto3 PUT from the runtime container, but `write_memory` today routes via the API composer with `agentId`-required PUT and `user_storage.py` has only read helpers. If Phase B proceeds, decide: extend the composer to accept a user-scoped write (new API surface, not currently in any unit's File list), or accept that daily-memory writes diverge from every other memory write and document the cache/snapshot consequence.
+- **U6 timezone plumbing (dependent):** "Read users.timezone via existing identity resolution" — the chat-agent-invoke payload has no timezone field, the runtime has no DB connection, and no API endpoint surfaces it. If Phase B proceeds, decide: extend the invoke payload (touches `chat-agent-invoke.ts:351-380`), add a new API endpoint, or always-UTC and accept rollover at unexpected boundaries for non-UTC users.
+- **Activity-triggered rollover silent data loss (dependent):** U6's algorithm reads "the prior-day file" (singular) while the risk-table mitigation describes "rollover fires for the most recent prior date" — multi-day inactive gaps silently lose intermediate-day content. If Phase B proceeds, decide: walk all dates between `latest.txt` and today, ingesting each non-empty file, OR explicitly document single-prior-date semantics with an acknowledgement that intermediate-day content is not promoted.
+
 ---
 
 ## High-Level Technical Design
@@ -223,7 +248,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ## Implementation Units
 
-### Phase A — Lambda + Strands runtime ingest swap
+### Phase A — Lambda + runtime ingest swap (Strands + Pi)
 
 - U1. **Lambda full-thread fetch in `memory-retain`**
 
@@ -239,7 +264,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 **Approach:**
 - After resolving `tenantId` / `userId` / `threadId` and the active engine adapter, if the adapter implements `retainConversation` AND `threadId` is present, call a new helper `fetchThreadTranscript(db, tenantId, threadId)` that returns `Array<{role, content, createdAt}>` in ASC order. **The SQL query MUST filter on BOTH `tenant_id` AND `thread_id`** to prevent confused-deputy attacks via forged `threadId`.
-- Merge DB rows (canonical for committed turns) with `event.transcript` tail entries that aren't already in the DB rows. **Match by order-preserving `(role, content)` suffix overlap, not by timestamp.** Rationale: `createdAt` differs between runtime-stamped event entries and DB-writer-stamped rows; including timestamp in the dedup key produces phantom duplicates over long threads. Algorithm: walk the event tail; for each entry, if its `(role, content)` matches the next-expected position after the DB tail, consume it. Stop at the first non-match; append the rest. This is a strict suffix merge, not a set dedup. Closes the messages-commit-vs-Lambda-fire race without a stable message id.
+- Merge DB rows (canonical for committed turns) with `event.transcript` tail entries that aren't already in the DB rows. **Match by order-preserving `(role, content)` longest-suffix-of-DB equals prefix-of-event overlap, not by timestamp.** Rationale: `createdAt` differs between runtime-stamped event entries and DB-writer-stamped rows; including timestamp in the dedup key produces phantom duplicates over long threads. **Algorithm: find the largest `k` such that `event.transcript[0..k-1]` equals `DB.tail[-k..]` (compared by `(role, content)` only). Append `event.transcript[k..]` after the DB rows; the first `k` event entries are the overlap and are dropped. If no `k > 0` matches (no overlap), append the full `event.transcript` after the DB rows.** This is a strict longest-suffix-prefix merge, not a set dedup, and handles both shapes the runtime sends: `event.transcript = [latest_pair_only]` (small `k`, append the new pair) and `event.transcript = messages_history + [user, assistant]` (large `k`, append only the genuinely new turns). Closes the messages-commit-vs-Lambda-fire race without a stable message id.
 - `retainConversation` already implements `document_id=threadId`, `update_mode=replace`, role/timestamp-prefixed lines, `context="thinkwork_thread"`, full metadata — no adapter change needed.
 - Zero rows after merge → no-op return `{ ok: false, error: "no_content" }`.
 - `kind: "daily"` events bypass the fetch; route to `retainDailyMemory` as today.
@@ -255,6 +280,9 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 - Happy path (merge race): DB has 30 msgs (turns 1-15), `event.transcript` has the latest pair (turn 16 not yet committed) → merged transcript is 32 messages.
 - Happy path (dedup): DB has 32 msgs including the latest pair, `event.transcript` repeats it (same `role` + `content`, different `createdAt`) → merged stays 32. No double counting. **Pins the timestamp-agnostic suffix-match contract.**
 - Happy path (timestamp skew regression): DB and event tail have the same final `(role, content)` pair but timestamps drift by 50ms → suffix match still consumes the event entry. Document does not grow duplicates over a 30-turn run.
+- **Happy path (full-history overlap):** event.transcript carries `messages_history + [user, assistant]` (32 entries) and DB has 30 rows that match event[0..29] by `(role, content)` → algorithm picks `k=30`, appends only event[30..31] (the new pair). Merged length = 32, NOT 62. Pins the longest-suffix-prefix-overlap contract for the U3 transcript shape.
+- **Happy path (no overlap):** brand-new thread: DB has 0 rows, event.transcript has 2 entries → `k=0`, append all of event.transcript. Merged length = 2.
+- **Edge case (partial overlap):** DB has 30 rows, event.transcript carries the last 5 DB messages + 2 new ones (7 entries total) → `k=5`, append event[5..6]. Merged length = 32.
 - Edge case (legitimate user repetition): user types "ok" three times across three turns → DB has all three; if event tail repeats the third `("user", "ok")`, suffix match catches it; assistant responses between them prevent collapse of legitimate repeats earlier in the thread.
 - Happy path (new thread): event with `threadId` and 0 DB rows but non-empty `event.transcript` → adapter receives event tail; warning logged.
 - **Tenant-scope rejection (security regression guard):** `threadId=T-X` belongs to tenant B but event carries `tenantId=A` → `fetchThreadTranscript` returns zero rows due to the WHERE filter. Falls through to event tail (which has A's content). No cross-tenant leak.
@@ -356,9 +384,95 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-### Phase B — Daily workspace memory channel
+- U2-Pi. **Pi runtime `retainFullThread` via `memory-retain` Lambda**
 
-- U4. **Extend `write_memory` allowlist + user-scoped routing for `memory/daily/*`**
+**Goal:** Add a Pi-side TypeScript bridge that builds the full transcript and Event-invokes `memory-retain`, mirroring U2 for the Pi runtime. Replaces the existing direct-HTTP `retainHindsightTurn` (which posts only the latest user+assistant pair to Hindsight, bypassing the Lambda and the U1 DB-fetch-and-merge entirely).
+
+**Requirements:** R1, R4, R5, R7, R20, R24 (Pi parity).
+
+**Dependencies:** U1 (so the Lambda-side merge is correct when U3-Pi flips the seam).
+
+**Files:**
+- Modify: `packages/agentcore-pi/agent-container/src/runtime/tools/hindsight.ts`
+- Modify: `packages/agentcore-pi/agent-container/package.json` (add `@aws-sdk/client-lambda` if not already present)
+- Test: extend `packages/agentcore-pi/agent-container/tests/tools.test.ts`
+
+**Approach:**
+- Add `retainFullThread(payload, transcript, env): Promise<{ retained: boolean; error?: string }>` in `hindsight.ts`. Snapshot env at entry (mirror Strands `feedback_completion_callback_snapshot_pattern`): capture `MEMORY_RETAIN_FN_NAME`, AWS region, tenant id, user id from `payload` / `env` immediately, then operate on the snapshot.
+- Reject early (return `{ retained: false }`) if any required field is missing (function name, tenant id, user id, thread id, non-empty transcript).
+- Payload `{ tenantId, userId, threadId, transcript: list }` — identical shape to Strands U2 so the Lambda doesn't need to branch on caller runtime.
+- Use `LambdaClient.invoke({ FunctionName, InvocationType: "Event", Payload: ... })`. Wrap in `try/catch`; return `{ retained: false, error }`. Never throw.
+- **Decision:** Replace the existing `retainHindsightTurn` with `retainFullThread` (the direct-HTTP path is uncalled in production — verified). Delete `retainHindsightTurn` after U3-Pi swap is verified. Decisive over hybrid (mirrors U2's rename decision).
+
+**Execution note:** Test-first. Land the function with passing tests in this unit; `runPiAgent` does not yet call any retain, so this is purely additive until U3-Pi.
+
+**Patterns to follow:**
+- Strands `retain_full_thread` (U2) for payload shape and InvocationType.
+- Existing Pi tool pattern in `hindsight.ts` (env handling, never-throws contract, error string in return shape).
+- `@aws-sdk/client-s3` usage in `pi-loop.ts:103` for AWS SDK client construction style.
+
+**Test scenarios:**
+- *Covers AE1, R24.* Happy path: env populated, valid 5-msg transcript → `LambdaClient.invoke` called once with `InvocationType: "Event"`, payload matches the Strands shape exactly. Returns `{ retained: true }`.
+- Happy path (large): 50-msg transcript → no truncation.
+- Edge case: `threadId` empty → returns `{ retained: false }`, no Lambda call.
+- Edge case: `transcript` empty → returns `{ retained: false }`.
+- Edge case: `MEMORY_RETAIN_FN_NAME` unset → returns `{ retained: false }`.
+- *Covers AE5.* Error path: Lambda SDK throws → returns `{ retained: false, error }`; never propagates.
+- Snapshot regression: env mutated between snapshot and Lambda invoke → snapshot value used.
+- Cross-runtime payload parity: `retainFullThread`'s payload shape equals the Strands `retain_full_thread` payload shape (assert by structural equality on a fixture).
+
+**Verification:**
+- `pnpm --filter @thinkwork/agentcore-pi test` passes.
+- **Before deletion of `retainHindsightTurn`:** `grep -rn "retainHindsightTurn" packages/agentcore-pi/` enumerates ALL call sites; verify each is either swapped (U3-Pi) or in test files. Mirrors U2's deletion safeguard.
+
+---
+
+- U3-Pi. **Wire `retainFullThread` into `runPiAgent`**
+
+**Goal:** Auto-retain on every Pi turn after the assistant response is built. Mirrors U3's `do_POST` swap for the Pi runtime entry point. Live behavior change: Pi threads, which produce zero Hindsight documents today, will produce one document per thread keyed by `threadId`.
+
+**Requirements:** R1, R4, R5, R6, R7, R20, R24 (Pi parity).
+
+**Dependencies:** U1, U2-Pi.
+
+**Files:**
+- Modify: `packages/agentcore-pi/agent-container/src/runtime/pi-loop.ts` (around lines 198-209, after `content = textFromAssistant(assistant)` and before the `return`)
+- Test: extend `packages/agentcore-pi/agent-container/tests/pi-loop.test.ts` with a focused contract test mocking `retainFullThread`
+
+**Approach:**
+- After `agent.prompt(userMessage)` completes and `content` is set, build `transcript = [...normalizeHistory(payload.messages_history), { role: "user", content: userMessage }, { role: "assistant", content }]`.
+- Call `void retainFullThread(payload, transcript, env)` — fire-and-forget; do NOT `await`. The Lambda invoke is itself `InvocationType: "Event"`, but not awaiting the Promise keeps even the SDK serialization off the response path.
+- Wrap in a defensive `try/catch` that logs a warning (mirrors the existing `bootstrapWorkspace` failure pattern at lines 111-116). Pi response must not be blocked or fail because of retain.
+- **Sub-agent-equivalent isolation (R6):** Pi has no Strands-style sub-agents, but if `runPiAgent` is ever invoked from within a delegate context (e.g., from a Strands sub-agent path), the call site at `runPiAgent` is the OUTER entry point — same isolation principle. Document this in a one-line code comment so future delegate-style integrations don't move the call.
+- Skill-dispatch path: Pi today routes skill runs via `runPiAgent` itself (no separate `run_skill_dispatch` analogue); when a skill-dispatch path is added (origin Skill-Run Dispatcher plan), it must NOT call `retainFullThread` — same rule as Strands' `run_skill_dispatch.py:454`.
+
+**Execution note:** Land alongside a mock-based contract test asserting exact `(payload, transcript, env)` arguments to `retainFullThread`. Don't rely on existing `pi-loop.test.ts` catching this.
+
+**Patterns to follow:**
+- Strands U3 call-site pattern (transcript construction order, fire-and-forget).
+- Existing Pi `try/catch` pattern (`bootstrapWorkspace` failure handling at `pi-loop.ts:111-116`).
+
+**Test scenarios:**
+- *Covers AE1.* Happy path: 3-turn `messages_history` → `retainFullThread` called with transcript length 6, correct ordering (history first, then user, then assistant).
+- Happy path: brand-new thread (history empty) → transcript length 2.
+- Edge case: empty `content` (assistant produced no text) → still calls retain with the user message.
+- Edge case: non-user/assistant roles in history → `normalizeHistory` already filters; transcript only contains user/assistant.
+- *Covers AE5.* Error path: `retainFullThread` rejects → outer try/catch logs warning; response still returned successfully.
+- *Covers AE3 (Pi parity).* Sub-agent-equivalent regression: future delegate-style invocation of `runPiAgent` → `retainFullThread` called exactly ONCE per outer turn. (Codified now even though the delegate path doesn't exist yet, to lock in the call-site choice.)
+- Skill-run path equivalent: when the Pi skill-dispatch path is added (separate plan), it does NOT trigger retain.
+
+**Verification:**
+- `pnpm --filter @thinkwork/agentcore-pi test` passes.
+- `grep -rn "retainHindsightTurn" packages/agentcore-pi/agent-container/src/` returns zero hits (assuming U2-Pi deletion).
+- *Covers AE8 (Pi parity).* Manual dev smoke: 5-turn Pi thread → exactly one Hindsight document for that thread keyed by `threadId`, `bank_id="user_<userId>"`, full transcript content present, `runtime: "pi"` retained in metadata.
+
+---
+
+### Phase B — Daily workspace memory channel — DEFERRED TO FOLLOW-UP PLAN (2026-04-28)
+
+> **Status: not shipping in this PR.** Phase B was split to a follow-up plan per the Q0 decision during the 2026-04-28 ce-doc-review walk-through. The four units below (U4, U5, U6, U7) are preserved as design notes for the follow-up plan to absorb. Before re-activating these units, the follow-up must resolve: (a) U4 write-path bifurcation between the existing `write_memory` API-composer flow (PUT `/api/workspaces/files`) and a new direct-S3-PUT flow for user-scoped daily files; (b) U6 runtime timezone plumbing (extend invoke payload, new endpoint, or always-UTC); (c) U6 multi-day rollover semantics (walk all dates between `latest.txt` and today, or single-prior-date with intermediate-day content not promoted). The original Phase B PR boundary collapses into "do not ship".
+
+- U4. **[DEFERRED] Extend `write_memory` allowlist + user-scoped routing for `memory/daily/*`**
 
 **Goal:** Permit the agent to write `memory/daily/YYYY-MM-DD.md` via the existing `write_memory` tool. Route `memory/daily/*` writes to the user-scoped S3 prefix (mirroring the knowledge-pack pattern), keeping other `memory/*.md` writes agent-scoped as today.
 
@@ -396,7 +510,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U5. **`MEMORY_GUIDE.md` "Daily working memory" section + TS parity**
+- U5. **[DEFERRED] `MEMORY_GUIDE.md` "Daily working memory" section + TS parity**
 
 **Goal:** Add a new "Daily working memory" section to `MEMORY_GUIDE.md` instructing the agent when to write to `memory/daily/<date>.md` and what NOT to capture there (no per-turn journaling). Update the inlined TS constant to match.
 
@@ -428,7 +542,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U6. **Daily-memory rollover hook in Strands runtime**
+- U6. **[DEFERRED] Daily-memory rollover hook in Strands runtime**
 
 **Goal:** On the first turn of a new calendar date (per user timezone), read the prior day's `memory/daily/YYYY-MM-DD.md`, post it to Hindsight via `retain_daily`, and advance `memory/daily/latest.txt`.
 
@@ -474,7 +588,9 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U7. **`retain_daily` Strands client method (or surface existing)**
+- U7. **[DEFERRED] `retain_daily` Strands client method (or surface existing)**
+
+> *Note: the `retain_daily` flip from `RequestResponse` to `Event` invocation that U7 specifies was already landed in U2 (commit `c8882583`). The remaining `retain_daily` work — verifying it from the rollover hook — depends on U6 and is part of the deferred Phase B scope.*
 
 **Goal:** Ensure `api_memory_client.py` exposes `retain_daily(date, content, tenant_id, user_id)` that invokes `memory-retain` with `kind:"daily"` payload. Existing function may already meet this need; verify, adjust if needed.
 
@@ -622,50 +738,51 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 - U11. **`scripts/wipe-external-memory-stores.ts` for legacy fragmented Hindsight items**
 
-**Goal:** One-shot script that iterates all `bank_id` matching `user_*`, lists Hindsight documents, and deletes those that lack `document_id` or carry the legacy `context="thread_turn"` literal. Runs once during deploy of this plan.
+**Goal:** One-shot script that runs raw SQL on `hindsight.memory_units` to delete legacy fragmented memory units — those whose `bank_id` matches `user_%` AND (`metadata->>'document_id' IS NULL` OR `context = 'thread_turn'`). Runs once during deploy of this plan.
+
+**Storage layer (Q4 resolution 2026-04-28):** raw SQL on `hindsight.memory_units`, NOT the Hindsight HTTP `/documents` API. The HTTP path was deferred during the 2026-04-28 ce-doc-review walk-through because no caller exists in the codebase today and the existence/auth of a delete endpoint was unverified. The SQL path is consistent with the existing pattern at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:332-336` which already runs raw SQL against `hindsight.memory_units`.
 
 **Requirements:** R19.
 
-**Dependencies:** Phase A and B units shipped (U1–U7) so the new shape is the ONLY shape ingested after wipe.
+**Dependencies:** Phase A units shipped (U1, U2, U3, U2-Pi, U3-Pi) so the new shape is the ONLY shape ingested after wipe. Phase B units (U4–U7) are deferred and do NOT block U11; daily-memory items don't exist in this plan's deploy so the wipe filter only targets thread fragments.
 
 **Files:**
 - Create: `packages/api/scripts/wipe-external-memory-stores.ts`
-- Test: `packages/api/scripts/wipe-external-memory-stores.test.ts` (mock-based — Hindsight HTTP responses faked)
+- Test: `packages/api/scripts/wipe-external-memory-stores.test.ts` (mock-based — Postgres `db.execute` faked via `vi.hoisted` per existing pattern)
 
 **Approach:**
-- CLI args: `--stage <dev|prod>`, `--dry-run` (default true), `--user <userId>` (optional scope; default all), `--surveyed-on <YYYY-MM-DD>` (REQUIRED for live run).
-- **`--surveyed-on` enforcement:** If `--dry-run=false`, the script rejects (exit non-zero, error to stderr) when `--surveyed-on` is missing OR the supplied date is more than 7 days old. This codifies the pre-flight consumer survey as a runtime contract, not a docstring (per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`). Future operators running the script in a new stage MUST re-survey and pass a fresh date.
+- CLI args: `--stage <dev|prod>`, `--dry-run` (default true), `--user <userId>` (optional scope; default all `user_%` banks), `--tenant <tenantId>` (optional scope; default all tenants — see U11 security finding from doc-review), `--surveyed-on <YYYY-MM-DD>` (REQUIRED for live run).
+- **`--surveyed-on` enforcement:** If `--dry-run=false`, the script rejects (exit non-zero, error to stderr) when `--surveyed-on` is missing OR the supplied date is more than 7 days old. Codifies the pre-flight consumer survey as a runtime contract, not a docstring (per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`).
 - **Pre-flight consumer survey:** document the surveyed Hindsight readers (recall callsites, eval harness, mobile/admin renderers, wiki-compile) in the script's docstring AND in the PR body. Confirm none filter by the legacy `context="thread_turn"` literal.
-- For each in-scope `bank_id`:
-  1. Fetch documents via Hindsight `/documents` API.
-  2. Filter: items where `document_id` is null OR `context == "thread_turn"`.
-  3. If `--dry-run`: print summary `bank=<bank> would_delete=<n>`.
-  4. Else: **delete in batches of ≤100 per batch with a 30-second pause + per-batch summary log between batches. Abort the run (non-zero exit) if >1% of attempted deletes in any batch return non-2xx.**
-- Per-bank summary log (count, sample IDs prefix-truncated). Never log full content.
-- Return non-zero exit on any HTTP error (fails the deploy step).
-- **Recovery story:** Hindsight ECS holds its own backups; verify with platform team before live run. A consumer regression triggers Hindsight backup restore + targeted re-ingest from `messages` table (existing data flow once U1–U10 are live).
+- **SQL execution model:**
+  1. **Count phase (always runs first, even on live run).** `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id LIKE 'user_%' [AND bank_id = $user_filter] AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`. Print summary; abort with exit non-zero if the count is implausibly large (>1M default, override via `--max-deletes`).
+  2. **Per-bank batched DELETE in transactions.** Iterate distinct affected `bank_id`s. For each bank, run `BEGIN; DELETE FROM hindsight.memory_units WHERE bank_id = $bank AND (metadata->>'document_id' IS NULL OR context = 'thread_turn') AND id IN (SELECT id FROM ... LIMIT 1000) RETURNING id; COMMIT;` until no rows remain. Each transaction is atomic — the DB rolls back automatically on error. No artificial pause between batches (SQL doesn't need rate limiting; the `LIMIT` keeps lock duration bounded).
+  3. **Failure handling.** Any SQL error aborts the run (non-zero exit). The transaction model means partial state is impossible inside a batch — the only failure mode is "N completed batches, then aborted before batch N+1", which is safe to re-run since the filter only matches legacy items.
+- Per-bank summary log (count deleted, sample IDs prefix-truncated). Never log content/text columns.
+- Return non-zero exit on any SQL error (fails the deploy step).
+- **Recovery story:** Hindsight ECS holds its own Postgres backups; verify with platform team before live run. A consumer regression triggers Postgres backup restore + targeted re-ingest from `messages` table (existing data flow once U1–U3 + U2-Pi/U3-Pi are live). The wipe filter targets only legacy-shape items, so re-ingest of the same `threadId` regenerates a fresh document under `update_mode=replace`.
 
 **Patterns to follow:**
+- `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:332-336` — existing raw-SQL `hindsight.memory_units` pattern.
 - Existing `packages/api/scripts/*.ts` shape (CLI parsing, env resolution).
 - `ce-data-migration-expert` style: dry-run by default, explicit confirmation for destructive run.
 
 **Test scenarios:**
-- Happy path (dry-run): mock Hindsight returns 5 banks with mixed legacy + new items → script prints expected delete counts; no DELETE calls fired. `--surveyed-on` not required for dry-run.
-- Happy path (live, with valid survey): `--dry-run=false --surveyed-on 2026-04-25` (today is 2026-04-27) → expected DELETEs fired in batches of 100 with 30s pause between.
+- Happy path (dry-run): mock `db.execute` returns COUNT=42 for the legacy filter → script prints `would_delete=42`; no DELETE issued. `--surveyed-on` not required for dry-run.
+- Happy path (live with valid survey): `--dry-run=false --surveyed-on 2026-04-26` (today is 2026-04-28) → DELETE issued in batches; summary reports total rows deleted.
 - **Survey enforcement: missing flag** — `--dry-run=false` without `--surveyed-on` → exit non-zero with stderr error.
-- **Survey enforcement: stale date** — `--dry-run=false --surveyed-on 2026-04-15` (12 days old) → exit non-zero with stderr error.
-- **Batch abort threshold:** mock returns 200 documents to delete; 5 of them 5xx → script aborts after first batch (5/100 = 5% > 1%) with exit non-zero; remaining 100 not attempted.
-- **Batch happy path with isolated failures:** mock returns 200 documents; 1 of them 5xx (1/100 = 1%, exactly at threshold) → script continues; final summary shows 199 deleted, 1 failed.
-- **Pause between batches:** test asserts ≥30s between batch invocations (use a fake clock).
-- Edge case: bank with zero legacy items → no DELETEs, summary `would_delete=0`.
-- Edge case: empty bank list → script exits 0.
-- Error path: Hindsight 5xx on list → exit non-zero, partial work surfaces in logs.
-- Error path: DELETE returns 404 → continue (idempotent re-runs), log info.
-- Scoped run: `--user <userId>` → only that user's bank touched.
+- **Survey enforcement: stale date** — `--dry-run=false --surveyed-on 2026-04-15` (13 days old) → exit non-zero with stderr error.
+- **Max-deletes safeguard** — count returns 2,000,000 on dry-run → script aborts with stderr "implausibly large; pass --max-deletes to override".
+- **Per-bank batching** — mock returns 2,500 rows for one bank → script issues 3 DELETE batches (1000 + 1000 + 500); each in its own transaction.
+- Edge case: bank with zero legacy items in count → no DELETE issued, summary `would_delete=0`.
+- Edge case: empty bank list → script exits 0 with summary `bank_count=0`.
+- Error path: SQL error mid-run → exit non-zero, partial-work counts surface in logs (the completed batches stay deleted; the failed batch was rolled back inside its own transaction).
+- Scoped run: `--user <userId>` → WHERE clause includes `bank_id = 'user_<userId>'` (exact match), not `LIKE`.
+- Scoped run: `--tenant <tenantId>` → joins against `agents` / `users` to filter to that tenant's user banks (mirrors the security finding from doc-review on tenant-scope predicate).
 
 **Verification:**
 - `pnpm --filter @thinkwork/api test wipe-external-memory-stores` passes.
-- *Manual dev rehearsal:* dry-run against dev → numbers match expected by-eye inspection of Hindsight data; live run wipes legacy items; subsequent traffic creates only new-shape documents.
+- *Manual dev rehearsal:* dry-run against dev → COUNT matches by-eye inspection of `hindsight.memory_units`; live run wipes legacy items; subsequent traffic creates only new-shape documents.
 
 ---
 
@@ -682,13 +799,14 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 - Create: `docs/solutions/workflow-issues/hindsight-ingest-reshape-deploy-<date>.md` (post-deploy)
 
 **Approach:**
-- Runbook entry: when the PR carrying U1–U11 merges and Terraform applies, run `pnpm --filter @thinkwork/api ts-node scripts/wipe-external-memory-stores.ts --stage <stage> --dry-run` first; verify counts; then live run; then verify AgentCore runtime `containerUri` matches merged SHA via `aws bedrock-agentcore-control get-agent-runtime` (per `docs/solutions/workflow-issues/agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24.md`).
+- Runbook entry: when the PR carrying U1–U3, U2-Pi, U3-Pi, U8–U11 merges and Terraform applies, run `pnpm --filter @thinkwork/api ts-node scripts/wipe-external-memory-stores.ts --stage <stage> --dry-run` first; verify counts; then live run; then verify both runtime containers' `containerUri` matches merged SHA via `aws bedrock-agentcore-control get-agent-runtime` (per `docs/solutions/workflow-issues/agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24.md`). Both Strands and Pi runtimes need the repull check now that U2-Pi/U3-Pi land in the same image cycle.
 - Observability checks:
-  - `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id = 'user_<userId>' GROUP BY metadata->>'thread_id'` → one row per thread.
-  - Sample 20 retained items: `context ∈ {"thinkwork_thread", "thinkwork_workspace_daily", <vendor default>}`; never `"thread_turn"`.
-  - Daily files: `aws s3 ls tenants/<tid>/users/<uid>/workspace/memory/daily/` → date-named files for active days.
-  - Cost-events: `cost_events` rows continue to flow with `phase ∈ {retain, reflect}` and the new attribution; no schema change.
-- Write a `docs/solutions/` learning post-deploy capturing: what shipped, what got wiped, observed metrics (item count delta, recall quality if measurable), and whether any consumer surveyed in U11 surfaced an unexpected dependency on legacy shape.
+  - `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id = 'user_<userId>' AND metadata->>'document_id' IS NOT NULL GROUP BY metadata->>'document_id'` → one row per thread.
+  - Sample 20 retained items: `context = 'thinkwork_thread'` (never `'thread_turn'` after U11).
+  - Cost-events: `cost_events` rows continue to flow with `phase ∈ {retain, reflect}` and the new attribution from the in-body push pattern; no schema change. Sample one retain + one reflect to confirm tokens are captured.
+  - Pi parity: at least one `bank_id='user_<piUserId>'` document with `metadata->>'runtime' = 'pi'` after a Pi-served thread (verifies U2-Pi/U3-Pi end-to-end).
+  - Daily-memory observability is N/A in this PR (Phase B deferred).
+- Write a `docs/solutions/` learning post-deploy capturing: what shipped, what U11 wiped (row count + sample bank IDs), observed metrics (item count delta, recall quality if measurable), and whether any consumer surveyed in U11 surfaced an unexpected dependency on legacy shape.
 
 **Test scenarios:**
 - *Test expectation: none — runbook + doc writeup, no behavioral code.*
@@ -701,7 +819,8 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ## System-Wide Impact
 
-- **Interaction graph:** `do_POST` → `_execute_agent_turn` → `retain_full_thread` (Event) → `memory-retain` Lambda → `retainConversation` adapter → Hindsight POST. Daily rollover hook fires before retain in the same handler. Sub-agent paths (`delegate_to_workspace_tool`, `run_skill_dispatch`, `mode:agent`) explicitly do NOT trigger thread retain or rollover.
+- **Interaction graph (Strands):** `do_POST` runs `_execute_agent_turn` to produce `response_text`, then fires `retain_full_thread` (Event) → `memory-retain` Lambda → `retainConversation` adapter → Hindsight POST. Daily rollover hook fires before retain in the same handler. Sub-agent paths (`delegate_to_workspace_tool`, `run_skill_dispatch`, `mode:agent`) explicitly do NOT trigger thread retain or rollover.
+- **Interaction graph (Pi):** `runPiAgent` runs `agent.prompt(userMessage)` to produce `content`, then fires `retainFullThread` (Event) → same `memory-retain` Lambda → `retainConversation` adapter → Hindsight POST. No daily rollover hook in v1 (Phase B is Strands-only). The Pi runtime honors `payload.use_memory=false` as an opt-out (existing field, preserved from `retainHindsightTurn`).
 - **Error propagation:** Retain failures (Lambda invoke, adapter, Hindsight HTTP) log warnings and never block agent response. Rollover failures log warnings and leave `latest.txt` un-advanced so retry happens next turn. Wipe-script errors fail the deploy step (non-zero exit).
 - **State lifecycle risks:** `memory/daily/latest.txt` and `memory/daily/YYYY-MM-DD.md` are user-scoped S3 objects; a partial-write race during rollover (write file, fail to write marker) replays cleanly via Hindsight's `replace` idempotency. The `messages` table commit race vs. Lambda fire is closed by U1's tail merge.
 - **API surface parity:** Adapter `retainConversation` and `retainDailyMemory` are already in place; this plan does not change them. `chat-agent-invoke` cost-events sink contract is frozen at `[{phase, model, input_tokens, output_tokens}]`.
@@ -725,25 +844,28 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 | Wipe script (U11) runs partially or post-rollback leaves bank in an inconsistent state | Low-Medium | High | **Batched delete with abort threshold** (≤100 deletes per batch, 30s pause + summary log between batches; abort and exit non-zero if >1% of attempted deletes return non-2xx). **Pre-flight `--surveyed-on YYYY-MM-DD` flag enforced** (rejects when date is >7 days old, refuses to run live without it). **Recovery story:** Hindsight ECS holds its own backups (verify with platform team before live run); a regression triggers Hindsight backup restore + targeted re-ingest from `messages` table. Adding S3 export-before-delete is rejected as overkill given Hindsight's own backup story; revisit if the platform team confirms backups are insufficient. |
 | Env-shadowing in any new post-turn callback (rollover hook, custom retain tool) | Medium | Medium | Snapshot env at entry per `feedback_completion_callback_snapshot_pattern`; codified in U2, U6, U7 approach. Test scenarios assert snapshot regression in each. |
 | Confused-deputy attack on `memory-retain` via forged `threadId` | Low | High | U1 SQL filters by both `tenant_id` AND `thread_id`; defense-in-depth ERROR log on tenant anomaly. Test scenario in U1 pins the predicate. |
+| Pi runtime payload shape diverges from Strands payload shape after U2-Pi, breaking the Lambda's caller-agnostic assumption | Low-Medium | Medium | U2-Pi test scenario asserts structural payload parity against a fixture shared with the Strands U2 test. CI guard test in `packages/api/src/handlers/memory-retain.test.ts` accepts both `{tenantId, userId, threadId, transcript}` shapes (they are identical by design); a future divergence breaks the cross-runtime fixture parity check. |
+| Pi container's IAM role lacks `lambda:InvokeFunction` for `memory-retain`, blocking U3-Pi | Low | Medium | Verify the Pi Terraform module grants the same `lambda:InvokeFunction` permission that the Strands container has; if missing, U2-Pi's Verification step fails fast (Lambda invoke errors are caught and returned as `{ retained: false, error }`, which surfaces in the contract test before the live swap). Add to U2-Pi's pre-merge checklist. |
+| Pi auto-retain produces a behavior change for users who relied on Pi NOT auto-retaining (privacy / cost) | Low | Low-Medium | Pi previously had no auto-retain at all. Any user expectation of "Pi doesn't write to Hindsight" is implicit, not documented. The PR description must call out the behavior change explicitly so any tenant on Pi can opt out via `payload.use_memory=false` (existing field on `PiInvocationPayload` — `retainHindsightTurn` checks it; `retainFullThread` must honor it identically). |
 
 ---
 
 ## Phased Delivery
 
-### Phase A (PR 1) — Lambda + runtime ingest swap
+### Phase A (PR 1) — Lambda + runtime ingest swap (Strands + Pi)
 - U1 (Lambda full-thread fetch + tenant-scope predicate + tail merge)
-- U2 (`retain_full_thread` inert)
-- U3 (call site swap; live)
+- U2 (`retain_full_thread` inert — Strands)
+- U3 (Strands call site swap; live)
+- U2-Pi (`retainFullThread` inert — Pi)
+- U3-Pi (Pi call site swap; live)
 
-Outcome: per-turn upsert behavior is live; `retain_turn_pair` retired. Sub-agent isolation in place. Acceptance: AE1, AE2, AE3, AE5, AE8 all green.
+Outcome: per-turn upsert behavior is live for both runtimes; `retain_turn_pair` retired (Strands); `retainHindsightTurn` retired (Pi); both runtimes converge on the same `memory-retain` Lambda. Sub-agent isolation in place. Acceptance: AE1, AE2, AE3, AE5, AE8 all green for both runtimes.
 
-### Phase B (PR 2) — Daily workspace memory channel
-- U4 (write_memory allowlist + user-scoped routing)
-- U5 (MEMORY_GUIDE.md + TS parity)
-- U6 (rollover hook in server.py)
-- U7 (retain_daily client method verified)
+**Sequencing within Phase A:** U1 lands first (Lambda contract). U2 + U2-Pi can land in parallel (both inert). U3 + U3-Pi land last (call-site swaps); they can ship in the same PR or back-to-back since neither depends on the other once U1 + U2 + U2-Pi are in.
 
-Outcome: agent can write `memory/daily/<date>.md`; rollover ingests prior day on first turn of new date. Acceptance: AE6, AE7 green.
+### Phase B — DEFERRED to a follow-up plan (2026-04-28)
+
+Phase B (U4, U5, U6, U7) is split out per Q0. See `## Scope Boundaries → ### Deferred to Follow-Up Work`.
 
 ### Phase C (PR 3) — Strands runtime tool cleanup
 - U8 (custom retain @tool wrapper)
@@ -753,12 +875,12 @@ Outcome: agent can write `memory/daily/<date>.md`; rollover ingests prior day on
 Outcome: zero monkey-patches on the `Hindsight` integration. Acceptance: AE4 green; cost-events end-to-end unchanged.
 
 ### Phase D (PR 4) — Migration + verification
-- U11 (wipe-external-memory-stores.ts script)
+- U11 (wipe-external-memory-stores.ts script — raw SQL on hindsight.memory_units)
 - U12 (runbook + post-deploy learning doc)
 
 Outcome: legacy fragmented items dropped; observability codified.
 
-PR boundaries are coordination guidance — `/ce-work` may collapse adjacent phases into a single PR if iteration shows that's clearer. Phase D requires Phases A + B + C live.
+PR boundaries are coordination guidance — `/ce-work` may collapse adjacent phases into a single PR if iteration shows that's clearer. **Phase D requires Phases A + C live (Phase B was deferred to a follow-up plan, so it does not gate the wipe).**
 
 ---
 
@@ -791,6 +913,9 @@ PR boundaries are coordination guidance — `/ce-work` may collapse adjacent pha
   - `packages/agentcore-strands/agent-container/container-sources/hindsight_tools.py` (recall/reflect/retain wrappers)
   - `packages/agentcore-strands/agent-container/container-sources/hindsight_usage_capture.py` (in-body push helpers + loop fix)
   - `packages/agentcore-strands/agent-container/container-sources/write_memory_tool.py` (allowlist target)
+  - `packages/agentcore-pi/agent-container/src/runtime/pi-loop.ts` (Pi runtime entry — U3-Pi wires retain here)
+  - `packages/agentcore-pi/agent-container/src/runtime/tools/hindsight.ts` (Pi retain bridge — U2-Pi replaces `retainHindsightTurn` with `retainFullThread`)
+  - `packages/agentcore-pi/agent-container/tests/pi-loop.test.ts` + `tools.test.ts` (Pi test surface for U2-Pi / U3-Pi)
   - `packages/workspace-defaults/files/MEMORY_GUIDE.md` + `packages/workspace-defaults/src/index.ts` (parity pair)
 - **Institutional learnings:**
   - `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`

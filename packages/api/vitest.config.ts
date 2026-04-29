@@ -6,6 +6,11 @@ export default defineConfig({
 		environment: "node",
 		include: [
 			"src/**/*.test.ts",
+			// One-shot scripts that mutate prod data (backfills, wipes)
+			// live under scripts/ to keep them out of the normal API
+			// entry-point graph. Their logic is still unit-tested with
+			// mocked db.execute.
+			"scripts/**/*.test.ts",
 			// Unit 8 — integration tests for the skill-runs surface. They
 			// use the harness under test/integration/skill-runs/_harness/
 			// and never talk to real infra. See that directory's README.

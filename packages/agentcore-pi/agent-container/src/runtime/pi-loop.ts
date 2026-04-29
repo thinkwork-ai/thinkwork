@@ -11,6 +11,7 @@ import { bootstrapWorkspace } from "./bootstrap-workspace.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import type { RuntimeEnv } from "./env-snapshot.js";
 import { buildPiTools } from "./tools/registry.js";
+import { retainFullThread } from "./tools/hindsight.js";
 import {
   discoverWorkspaceSkills,
   formatWorkspaceSkills,
@@ -215,6 +216,30 @@ export async function runPiAgent(
       await cleanup();
     }
   }
+
+  // Per-turn auto-retain — fire-and-forget. The Lambda fetches the
+  // canonical transcript from the messages table and merges with this
+  // tail (longest-suffix-prefix overlap) before calling retainConversation.
+  // Best-effort: failures log and never block the response.
+  //
+  // Sub-agent-equivalent isolation (R6): Pi has no Strands-style
+  // sub-agents today, but if runPiAgent is ever invoked from within a
+  // delegate-style path, the call site here is the OUTER entry point —
+  // same isolation principle as Strands' do_POST. Future delegate
+  // integrations must NOT move this call.
+  void retainFullThread(payload, content, env).then(
+    (result) => {
+      if (!result.retained && result.error) {
+        console.warn(
+          "[agentcore-pi] retainFullThread failed (non-blocking)",
+          result.error,
+        );
+      }
+    },
+    (err) => {
+      console.warn("[agentcore-pi] retainFullThread unexpected error", err);
+    },
+  );
 
   const toolsCalled = [
     ...new Set(toolState.toolInvocations.map((invocation) => invocation.name)),
