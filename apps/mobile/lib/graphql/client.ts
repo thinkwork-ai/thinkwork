@@ -1,5 +1,6 @@
 import { Client, cacheExchange, fetchExchange, subscriptionExchange } from "urql";
 import { randomUUID } from "expo-crypto";
+import { setAuthToken as setSdkAuthToken } from "@thinkwork/react-native-sdk";
 
 // AppSync endpoint from environment
 const GRAPHQL_URL = process.env.EXPO_PUBLIC_GRAPHQL_URL || "";
@@ -15,6 +16,7 @@ let cachedToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
   cachedToken = token;
+  setSdkAuthToken(token);
 }
 
 // ---------------------------------------------------------------------------
