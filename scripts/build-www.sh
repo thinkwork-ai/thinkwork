@@ -18,14 +18,12 @@ REGION="${AWS_REGION:-us-east-1}"
 echo "▸ Reading Terraform outputs for stage=$STAGE ..."
 cd "$TF_DIR"
 
-tf_out() {
-  terraform output -raw "$1" 2>/dev/null || echo ""
-}
+source "$REPO_ROOT/scripts/lib/terraform-output.sh"
 
-WWW_BUCKET="$(tf_out www_bucket_name)"
-WWW_CF_ID="$(tf_out www_distribution_id)"
-API_ENDPOINT="$(tf_out api_endpoint)"
-API_DOMAIN="$(tf_out api_domain)"
+WWW_BUCKET="$(tf_output_raw www_bucket_name)"
+WWW_CF_ID="$(tf_output_raw www_distribution_id)"
+API_ENDPOINT="$(tf_output_raw api_endpoint)"
+API_DOMAIN="$(tf_output_raw api_domain)"
 
 if [[ -z "$WWW_BUCKET" || -z "$WWW_CF_ID" ]]; then
   echo "✗ Missing www_bucket_name or www_distribution_id in Terraform outputs." >&2
@@ -70,6 +68,6 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-WWW_URL="$(cd "$TF_DIR" && tf_out www_url)"
+WWW_URL="$(cd "$TF_DIR" && tf_output_raw www_url)"
 echo ""
 echo "✓ www deployed: ${WWW_URL:-https://<pending>}"
