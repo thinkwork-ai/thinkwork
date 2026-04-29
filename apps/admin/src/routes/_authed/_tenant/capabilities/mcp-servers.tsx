@@ -611,14 +611,14 @@ function ServerDetailDialog({
         if (!o) onClose();
       }}
     >
-      <DialogContent className="max-h-[min(90vh,760px)] max-w-3xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+      <DialogContent className="max-h-[min(90vh,760px)] max-w-3xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Cable className="h-5 w-5" />
             {server.name}
           </DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+        <div className="min-h-0 space-y-4 overflow-x-hidden overflow-y-auto pr-1">
           {/* Status + URL */}
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">

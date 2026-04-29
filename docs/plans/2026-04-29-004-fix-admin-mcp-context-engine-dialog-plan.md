@@ -1,7 +1,7 @@
 ---
 title: "fix: Admin MCP Context Engine dialog"
 date: 2026-04-29
-status: active
+status: completed
 origin:
   - docs/brainstorms/2026-04-28-context-engine-requirements.md
   - docs/brainstorms/2026-04-29-admin-memory-knowledge-center-requirements.md
