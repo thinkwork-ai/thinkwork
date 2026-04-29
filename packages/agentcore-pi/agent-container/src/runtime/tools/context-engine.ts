@@ -100,7 +100,7 @@ export function buildContextEngineTool(
     name: "query_context",
     label: "Query Context",
     description:
-      "Search Thinkwork Context Engine across memory, wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup.",
+      "Search Thinkwork Context Engine across fast default providers: wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup; use raw Hindsight Memory only when needed.",
     parameters: Type.Object({
       query: Type.String({ description: "Question or topic to search for." }),
       mode: Type.Optional(

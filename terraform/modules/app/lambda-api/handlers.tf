@@ -114,6 +114,10 @@ locals {
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
     }
+    "mcp-context-engine" = {
+      CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
+      CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
+    }
   }
 }
 
