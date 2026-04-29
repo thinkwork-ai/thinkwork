@@ -19,7 +19,7 @@ const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: wiki, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for raw Hindsight Memory.",
+      "Search permissioned Thinkwork context across fast default providers: wiki, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for Hindsight Memory synthesis.",
     inputSchema: {
       type: "object",
       properties: {
@@ -50,7 +50,7 @@ const TOOLS = [
   {
     name: "query_memory_context",
     description:
-      "Search only raw Thinkwork Hindsight Memory. This uses Hindsight recall directly and can be much slower than wiki/context search.",
+      "Search only Thinkwork Hindsight Memory. The memory provider may use Hindsight reflect for synthesized agent context, which is slower than wiki/context search but produces a grounded answer-style memory summary.",
     inputSchema: {
       type: "object",
       properties: {

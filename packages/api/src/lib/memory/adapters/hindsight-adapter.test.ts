@@ -53,6 +53,7 @@ describe("HindsightAdapter legacy user bank reads", () => {
 
     expect(result[0]?.score).toBe(0.73);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).not.toHaveBeenCalled();
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(body).toEqual({
       query: "Smoke Tests 27 April 2026",
@@ -62,6 +63,83 @@ describe("HindsightAdapter legacy user bank reads", () => {
       include: { entities: null },
     });
     expect(body).not.toHaveProperty("max_results");
+  });
+
+  it("only fans recall out to legacy banks when explicitly requested", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c",
+          slug: "fleet-caterpillar-456",
+          name: "Marco",
+        },
+      ],
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "legacy search",
+      hindsight: { includeLegacyBanks: true },
+    });
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/memories/recall`,
+      "https://hindsight.example/v1/default/banks/fleet-caterpillar-456/memories/recall",
+      "https://hindsight.example/v1/default/banks/marco/memories/recall",
+      "https://hindsight.example/v1/default/banks/c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c/memories/recall",
+      "https://hindsight.example/v1/default/banks/user_c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c/memories/recall",
+    ]);
+  });
+
+  it("maps Hindsight reflect responses into a synthesized memory hit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: "Smoke test activity on 27 April 2026 involved Codex and MCP checks.",
+        based_on: [{ id: "memory-1" }],
+        usage: { total_tokens: 123 },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const result = await adapter.reflect({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "Smoke Tests 27 April 2026",
+      depth: "quick",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/reflect`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      query: "Smoke Tests 27 April 2026",
+      budget: "low",
+      max_tokens: 500,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.record.kind).toBe("reflection");
+    expect(result[0]?.record.content.text).toContain("Smoke test activity");
+    expect(result[0]?.record.metadata).toMatchObject({
+      bankId: `user_${USER_ID}`,
+      basedOn: ["memory-1"],
+      usage: { total_tokens: 123 },
+    });
   });
 
   it("lists memories from the new user bank and paired legacy agent bank", async () => {

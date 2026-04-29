@@ -79,7 +79,11 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async recall(req: RecallRequest): Promise<RecallResult[]> {
-    const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
+    const primaryBankId = await this.resolveBankId(req.ownerId);
+    const bankIds =
+      req.hindsight?.includeLegacyBanks === true
+        ? await this.resolveReadBankIds(req.ownerId, req.tenantId)
+        : [primaryBankId];
     const limit = req.limit ?? 10;
     const quick = req.depth !== "deep";
     const maxTokens =
@@ -378,6 +382,80 @@ export class HindsightAdapter implements MemoryAdapter {
     );
   }
 
+  async reflect(req: RecallRequest): Promise<RecallResult[]> {
+    const bankId = await this.resolveBankId(req.ownerId);
+    const quick = req.depth !== "deep";
+    const maxTokens =
+      req.hindsight?.maxTokens ??
+      (quick
+        ? QUICK_RECALL_MAX_TOKENS
+        : (req.tokenBudget ?? DEEP_RECALL_MAX_TOKENS));
+    const body: Record<string, unknown> = {
+      query: req.query,
+      budget: req.hindsight?.budget ?? (quick ? "low" : "mid"),
+      max_tokens: Math.max(1, Math.floor(maxTokens)),
+    };
+    if (req.hindsight?.trace === true) {
+      body.trace = true;
+    }
+
+    let data: any;
+    try {
+      const resp = await fetch(
+        `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/reflect`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        console.warn(
+          `[hindsight-adapter] reflect ${resp.status} bank=${bankId} body=${errText.slice(0, 400)}`,
+        );
+        return [];
+      }
+      data = await resp.json();
+    } catch (err) {
+      console.warn(
+        `[hindsight-adapter] reflect threw bank=${bankId} message=${(err as Error)?.message}`,
+      );
+      return [];
+    }
+
+    const text = stringField(data?.text) ?? stringField(data?.answer);
+    if (!text) return [];
+
+    const referencedIds = Array.isArray(data?.based_on)
+      ? data.based_on
+          .map((item: any) => stringField(item?.id) ?? stringField(item))
+          .filter((id: string | undefined): id is string => Boolean(id))
+      : [];
+    const idSource = `${bankId}:${req.query}:${text.slice(0, 200)}`;
+    const record: ThinkWorkMemoryRecord = {
+      id: `hindsight-reflect:${hashString(idSource)}`,
+      tenantId: req.tenantId,
+      ownerType: req.ownerType,
+      ownerId: req.ownerId,
+      threadId: req.threadId,
+      kind: "reflection",
+      sourceType: "system_reflection",
+      status: "active",
+      content: { text, summary: "Hindsight reflection" },
+      backendRefs: [{ backend: "hindsight", ref: bankId }],
+      createdAt: new Date().toISOString(),
+      metadata: {
+        bankId,
+        basedOn: referencedIds,
+        structuredOutput: data?.structured_output ?? null,
+        usage: data?.usage ?? null,
+      },
+    };
+    return [{ record, score: 1, backend: "hindsight" }];
+  }
+
   async update(recordId: string, content: string): Promise<void> {
     await this.db.execute(sql`
 			UPDATE hindsight.memory_units
@@ -642,6 +720,19 @@ function numberField(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function hashString(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function toISO(value: any): string | null {

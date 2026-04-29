@@ -11,6 +11,10 @@ const MEMORY_TIMEOUT_MS = Number(
 );
 const MEMORY_DEFAULT_ENABLED =
   process.env.CONTEXT_ENGINE_MEMORY_DEFAULT_ENABLED === "true";
+const MEMORY_QUERY_MODE =
+  process.env.CONTEXT_ENGINE_MEMORY_QUERY_MODE === "reflect"
+    ? "reflect"
+    : "recall";
 
 export function createMemoryContextProvider(): ContextProviderDescriptor {
   return {
@@ -31,8 +35,8 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
         };
       }
 
-      const { recall } = getMemoryServices();
-      const hits = await recall.recall({
+      const services = getMemoryServices();
+      const recallRequest = {
         tenantId: request.caller.tenantId,
         ownerType: "user",
         ownerId: request.caller.userId,
@@ -44,7 +48,11 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
           maxTokens: request.depth === "deep" ? 2_000 : 500,
           includeEntities: false,
         },
-      });
+      } as const;
+      const hits =
+        MEMORY_QUERY_MODE === "reflect" && services.adapter.reflect
+          ? await services.adapter.reflect(recallRequest)
+          : await services.recall.recall(recallRequest);
 
       return {
         hits: hits.map((hit, index): ContextHit => {
@@ -64,6 +72,7 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
                 backend: hit.backend,
                 whyRecalled: hit.whyRecalled,
                 createdAt: hit.record.createdAt,
+                mode: MEMORY_QUERY_MODE,
               },
             },
             metadata: {

@@ -52,6 +52,7 @@ export type HindsightRecallOptions = {
   maxTokens?: number;
   types?: HindsightRecallFactType[];
   includeEntities?: boolean;
+  includeLegacyBanks?: boolean;
   trace?: boolean;
 };
 
