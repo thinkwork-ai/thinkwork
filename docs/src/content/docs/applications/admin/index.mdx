@@ -18,7 +18,7 @@ Tenant-level configuration (MCP servers, connector credentials, guardrails, budg
 Three rough personas:
 
 - **Platform operators** — the people who stood up ThinkWork in AWS and configure the tenant. They live under Threads, Connectors, Webhooks, Settings, and Observability.
-- **Agent authors** — the people building and iterating on agents, templates, skills, knowledge bases, and guardrails. They live under Agents, Agent Templates, Skills, Memory, and Security Center.
+- **Agent authors** — the people building and iterating on agents, templates, skills, knowledge bases, and guardrails. They live under Agents, Agent Templates, Skills, Knowledge, and Security Center.
 - **Audit / observability owners** — the people watching usage, cost, and safety. They live under Analytics, Security Center, Inbox, and the thread audit view.
 
 All three are tenant-scoped. The admin app is multi-tenant at the routing level: the `_authed/_tenant` layout enforces a tenant selection before loading any tenant data.
@@ -46,12 +46,11 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 - [Skills Catalog](/applications/admin/skills-catalog/) — the public catalog, tenant-installed skills, and the custom skill builder
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — registering MCP servers at the tenant level (user tokens are issued from mobile)
 - [Built-in Tools](/applications/admin/builtin-tools/) — platform-owned tools such as Web Search, Code Sandbox, Browser Automation, and Send Email
+- [Knowledge](/applications/admin/knowledge/) — Memory, Wiki, Knowledge Bases, and Context Engine verification/configuration in one tabbed surface
 - [Security Center](/applications/admin/security-center/) — guardrails, stats, template assignments, and the blocks audit
 
 ### Manage
 
-- [Memory](/applications/admin/memory/) — the memory corpus viewer with semantic search and an optional 3D knowledge-graph view
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — Bedrock KB management, document upload, and sync status
 - [Analytics](/applications/admin/analytics/) — Activity, Cost, and Performance views
 - [Webhooks](/applications/admin/webhooks/) — custom HTTP webhooks that fire agents or routines on external POSTs
 - [Artifacts](/applications/admin/artifacts/) — thread-generated reports, plans, notes, and digests

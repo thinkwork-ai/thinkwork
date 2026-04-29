@@ -5,10 +5,13 @@ description: Browse, search, edit, and visualize the memory corpus — AgentCore
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Memory page is the unified browser and editor for the tenant's memory corpus. It covers both AgentCore managed memory (the default, automatic per-turn retention backed by Aurora) and the optional Hindsight add-on (structured knowledge graph with entities and edges).
+The Memory tab in Admin Knowledge is the browser and editor for the tenant's memory corpus. It covers both AgentCore managed memory (the default, automatic per-turn retention backed by Aurora) and the optional Hindsight add-on (structured knowledge graph with entities and edges).
 
-**Route:** `/memory`  
-**File:** `apps/admin/src/routes/_authed/_tenant/memory/index.tsx`
+**Route:** `/knowledge/memory`  
+**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/memory.tsx`  
+**Tab implementation:** `apps/admin/src/routes/_authed/_tenant/memory/index.tsx`
+
+The legacy `/memory` route redirects to this tab.
 
 ## Layout
 
@@ -94,7 +97,7 @@ Search works across AgentCore and Hindsight uniformly — the backend resolver d
 
 ### Audit what an agent remembers
 
-1. Open `/memory`
+1. Open `/knowledge/memory`
 2. Pick the agent from the selector
 3. Scroll or search the record list
 4. Click a row to read the full content
@@ -139,7 +142,8 @@ Because delete is hard-delete, this is irreversible. For bulk sensitive-term red
 
 ## Related pages
 
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — the other context layer: manually-curated documents for retrieval
+- [Knowledge](/applications/admin/knowledge/) — the combined Admin surface for Memory, Wiki, Knowledge Bases, and Context Engine
+- [Knowledge Bases](/applications/admin/knowledge-bases/) — the Bedrock KB tab behavior: manually-curated documents for retrieval
 - [Agents — Memory tab](/applications/admin/agents/#memory) — the per-agent version of this page
 - [Memory (concept)](/concepts/knowledge/) — the product model
 - [Long-term Memory](/concepts/knowledge/memory/) — the memory lifecycle
