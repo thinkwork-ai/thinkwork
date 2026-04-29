@@ -1,6 +1,10 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "typebox";
-import { optionalString, type PiInvocationPayload } from "./types.js";
+import {
+  optionalBoolean,
+  optionalString,
+  type PiInvocationPayload,
+} from "./types.js";
 
 function paramsRecord(params: unknown): Record<string, unknown> {
   return params && typeof params === "object"
@@ -22,7 +26,8 @@ async function callContextEngine(payload: PiInvocationPayload, args: unknown) {
   const endpoint = optionalString(payload.thinkwork_api_url);
   const secret = optionalString(payload.thinkwork_api_secret);
   const tenantId =
-    optionalString(payload.tenant_id) ?? optionalString(payload.workspace_tenant_id);
+    optionalString(payload.tenant_id) ??
+    optionalString(payload.workspace_tenant_id);
   const userId = optionalString(payload.user_id);
   const agentId = optionalString(payload.assistant_id);
   if (!endpoint || !secret) {
@@ -38,26 +43,29 @@ async function callContextEngine(payload: PiInvocationPayload, args: unknown) {
     };
   }
 
-  const response = await fetch(`${endpoint.replace(/\/$/, "")}/mcp/context-engine`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${secret}`,
-      "x-tenant-id": tenantId,
-      "x-user-id": userId,
-      ...(agentId ? { "x-agent-id": agentId } : {}),
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "pi-query-context",
-      method: "tools/call",
-      params: {
-        name: "query_context",
-        arguments: args,
+  const response = await fetch(
+    `${endpoint.replace(/\/$/, "")}/mcp/context-engine`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${secret}`,
+        "x-tenant-id": tenantId,
+        "x-user-id": userId,
+        ...(agentId ? { "x-agent-id": agentId } : {}),
       },
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "pi-query-context",
+        method: "tools/call",
+        params: {
+          name: "query_context",
+          arguments: args,
+        },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    },
+  );
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
   if (!response.ok || data.error) {
@@ -82,6 +90,8 @@ function resultText(result: any): string {
 export function buildContextEngineTool(
   payload: PiInvocationPayload,
 ): AgentTool<any> | undefined {
+  if (!optionalBoolean(payload.context_engine_enabled)) return undefined;
+
   const endpoint = optionalString(payload.thinkwork_api_url);
   const secret = optionalString(payload.thinkwork_api_secret);
   if (!endpoint || !secret) return undefined;
@@ -93,11 +103,19 @@ export function buildContextEngineTool(
       "Search Thinkwork Context Engine across memory, wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup.",
     parameters: Type.Object({
       query: Type.String({ description: "Question or topic to search for." }),
-      mode: Type.Optional(Type.Union([Type.Literal("results"), Type.Literal("answer")])),
-      scope: Type.Optional(
-        Type.Union([Type.Literal("personal"), Type.Literal("team"), Type.Literal("auto")]),
+      mode: Type.Optional(
+        Type.Union([Type.Literal("results"), Type.Literal("answer")]),
       ),
-      depth: Type.Optional(Type.Union([Type.Literal("quick"), Type.Literal("deep")])),
+      scope: Type.Optional(
+        Type.Union([
+          Type.Literal("personal"),
+          Type.Literal("team"),
+          Type.Literal("auto"),
+        ]),
+      ),
+      depth: Type.Optional(
+        Type.Union([Type.Literal("quick"), Type.Literal("deep")]),
+      ),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
     }),
     execute: async (_toolCallId, params) => {
@@ -107,7 +125,11 @@ export function buildContextEngineTool(
       const args = {
         query,
         mode: enumValue(input.mode, ["results", "answer"] as const, "results"),
-        scope: enumValue(input.scope, ["personal", "team", "auto"] as const, "auto"),
+        scope: enumValue(
+          input.scope,
+          ["personal", "team", "auto"] as const,
+          "auto",
+        ),
         depth: enumValue(input.depth, ["quick", "deep"] as const, "quick"),
         limit: Math.max(1, Math.min(Number(input.limit ?? 10), 50)),
       };

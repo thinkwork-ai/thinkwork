@@ -2,6 +2,7 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
+import { validateTemplateContextEngine } from "../../../lib/templates/context-engine-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 import { validateTemplateSendEmail } from "../../../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
@@ -85,6 +86,11 @@ export async function updateAgentTemplate(
     const sendEmailResult = validateTemplateSendEmail(i.sendEmail);
     if (!sendEmailResult.ok) throw new Error(sendEmailResult.error);
     set.send_email = sendEmailResult.value;
+  }
+  if (i.contextEngine !== undefined) {
+    const contextEngineResult = validateTemplateContextEngine(i.contextEngine);
+    if (!contextEngineResult.ok) throw new Error(contextEngineResult.error);
+    set.context_engine = contextEngineResult.value;
   }
 
   const [row] = await db

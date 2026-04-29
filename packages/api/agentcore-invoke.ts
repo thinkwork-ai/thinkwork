@@ -25,7 +25,8 @@ interface LambdaResult {
 
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
-const AGENTCORE_RUNTIME_SSM_PREFIX = process.env.AGENTCORE_RUNTIME_SSM_PREFIX || "";
+const AGENTCORE_RUNTIME_SSM_PREFIX =
+  process.env.AGENTCORE_RUNTIME_SSM_PREFIX || "";
 
 /** Maps agent adapter_type → SSM runtime key suffix. SDK deprecated — all agents use Strands. */
 const ADAPTER_TO_RUNTIME: Record<string, string> = {
@@ -39,12 +40,17 @@ let cachedRuntimeIdsAt = 0;
 const RUNTIME_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function loadRuntimeIdsFromSsm(): Promise<Record<string, string>> {
-  if (cachedRuntimeIds && (Date.now() - cachedRuntimeIdsAt) < RUNTIME_CACHE_TTL_MS) {
+  if (
+    cachedRuntimeIds &&
+    Date.now() - cachedRuntimeIdsAt < RUNTIME_CACHE_TTL_MS
+  ) {
     return cachedRuntimeIds;
   }
 
   if (!AGENTCORE_RUNTIME_SSM_PREFIX) {
-    console.warn("AGENTCORE_RUNTIME_SSM_PREFIX not set, cannot load runtime IDs from SSM");
+    console.warn(
+      "AGENTCORE_RUNTIME_SSM_PREFIX not set, cannot load runtime IDs from SSM",
+    );
     return {};
   }
 
@@ -52,7 +58,9 @@ async function loadRuntimeIdsFromSsm(): Promise<Record<string, string>> {
   // params are named like /thinkwork/{stage}/agentcore/runtime-id-chat (not
   // /thinkwork/{stage}/agentcore/runtime-id/chat). Use individual GetParameter
   // calls for each known runtime type instead.
-  const { SSMClient, GetParameterCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, GetParameterCommand } = await import(
+    "@aws-sdk/client-ssm"
+  );
   const ssm = new SSMClient({ region: AWS_REGION });
 
   const runtimeKeys = ["sdk", "strands"];
@@ -62,7 +70,9 @@ async function loadRuntimeIdsFromSsm(): Promise<Record<string, string>> {
     runtimeKeys.map(async (key) => {
       try {
         const resp = await ssm.send(
-          new GetParameterCommand({ Name: `${AGENTCORE_RUNTIME_SSM_PREFIX}-${key}` }),
+          new GetParameterCommand({
+            Name: `${AGENTCORE_RUNTIME_SSM_PREFIX}-${key}`,
+          }),
         );
         if (resp.Parameter?.Value) {
           result[key] = resp.Parameter.Value;
@@ -77,7 +87,10 @@ async function loadRuntimeIdsFromSsm(): Promise<Record<string, string>> {
     }),
   );
 
-  console.log(`Loaded ${Object.keys(result).length} runtime IDs from SSM:`, Object.keys(result));
+  console.log(
+    `Loaded ${Object.keys(result).length} runtime IDs from SSM:`,
+    Object.keys(result),
+  );
   cachedRuntimeIds = result;
   cachedRuntimeIdsAt = Date.now();
   return result;
@@ -97,7 +110,10 @@ function checkAuth(headers?: Record<string, string | undefined>): boolean {
   if (!auth.startsWith("Bearer ")) return false;
   const token = auth.slice(7);
   try {
-    return timingSafeEqual(Buffer.from(token), Buffer.from(THINKWORK_API_SECRET));
+    return timingSafeEqual(
+      Buffer.from(token),
+      Buffer.from(THINKWORK_API_SECRET),
+    );
   } catch {
     return false;
   }
@@ -111,9 +127,17 @@ function checkAuth(headers?: Record<string, string | undefined>): boolean {
  * This lets chat and multiple triggers run concurrently on separate VMs,
  * while still reusing warm VMs within the same source.
  */
-function deriveSessionId(assistantId: string, tenantId: string, runtimeType: string = "", model: string = "", sessionKey: string = "chat"): string {
+function deriveSessionId(
+  assistantId: string,
+  tenantId: string,
+  runtimeType: string = "",
+  model: string = "",
+  sessionKey: string = "chat",
+): string {
   const key = assistantId || tenantId;
-  const parts = ["session", key, runtimeType, model, sessionKey].filter(Boolean);
+  const parts = ["session", key, runtimeType, model, sessionKey].filter(
+    Boolean,
+  );
   const raw = parts.join(":");
   return createHash("sha256").update(raw).digest("hex").slice(0, 64);
 }
@@ -126,7 +150,9 @@ async function resolveRuntimeArn(runtimeType: string): Promise<string> {
   const runtimeId = runtimeIds[ssmKey] || runtimeIds["sdk"];
 
   if (!runtimeId) {
-    throw new Error(`No AgentCore Runtime ID configured for type '${runtimeType}' (SSM key: ${ssmKey})`);
+    throw new Error(
+      `No AgentCore Runtime ID configured for type '${runtimeType}' (SSM key: ${ssmKey})`,
+    );
   }
 
   return `arn:aws:bedrock-agentcore:${AWS_REGION}:${process.env.AWS_ACCOUNT_ID || "487219502366"}:runtime/${runtimeId}`;
@@ -225,7 +251,13 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     const runtimeArn = await resolveRuntimeArn(runtimeType);
     const model = body.model ? String(body.model) : "";
     const sessionKey = String(body.session_key || "chat");
-    const sessionId = deriveSessionId(assistantId, sessionTenant, runtimeType, model, sessionKey);
+    const sessionId = deriveSessionId(
+      assistantId,
+      sessionTenant,
+      runtimeType,
+      model,
+      sessionKey,
+    );
 
     const payload: Record<string, unknown> = {
       sessionId: sessionTenant,
@@ -245,7 +277,8 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.mcp_base_url) payload.mcp_base_url = body.mcp_base_url;
     if (body.mcp_auth_secret) payload.mcp_auth_secret = body.mcp_auth_secret;
     if (body.gateway_url) payload.gateway_url = body.gateway_url;
-    if (body.gateway_mcp_servers) payload.gateway_mcp_servers = body.gateway_mcp_servers;
+    if (body.gateway_mcp_servers)
+      payload.gateway_mcp_servers = body.gateway_mcp_servers;
     if (body.mcp_configs) payload.mcp_configs = body.mcp_configs;
     if (body.agent_name) payload.agent_name = body.agent_name;
     if (body.human_name) payload.human_name = body.human_name;
@@ -255,7 +288,8 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.workspace_files) payload.workspace_files = body.workspace_files;
     // PRD-38: sub_agents removed — skills with mode:agent handle sub-agent creation in runtime
     if (body.guardrail_config) payload.guardrail_config = body.guardrail_config;
-    if (body.hindsight_endpoint) payload.hindsight_endpoint = body.hindsight_endpoint;
+    if (body.hindsight_endpoint)
+      payload.hindsight_endpoint = body.hindsight_endpoint;
     // Forward prior conversation history (loaded from Aurora `messages` by
     // chat-agent-invoke). Without this the Strands runtime falls back to a
     // single-turn invocation with no session memory.
@@ -266,12 +300,17 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.send_email_config) {
       payload.send_email_config = body.send_email_config;
     }
+    if (body.context_engine_enabled) {
+      payload.context_engine_enabled = body.context_engine_enabled;
+    }
     if (body.blocked_tools) payload.blocked_tools = body.blocked_tools;
     if (body.browser_automation_enabled) {
       payload.browser_automation_enabled = body.browser_automation_enabled;
     }
 
-    console.log(`AgentCore payload keys: ${Object.keys(payload).join(", ")} hindsight=${payload.hindsight_endpoint ? "YES" : "NO"} instance_id=${payload.instance_id || "EMPTY"} runtime_arn=${runtimeArn.split("/").pop()}`);
+    console.log(
+      `AgentCore payload keys: ${Object.keys(payload).join(", ")} hindsight=${payload.hindsight_endpoint ? "YES" : "NO"} instance_id=${payload.instance_id || "EMPTY"} runtime_arn=${runtimeArn.split("/").pop()}`,
+    );
     const result = await invokeAgentCore(payload, runtimeArn, sessionId);
 
     return json(200, {
@@ -281,9 +320,11 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
       response: result,
     });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : String(err);
-    console.error(`AgentCore invocation failed tenant_id=${tenantId}:`, message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `AgentCore invocation failed tenant_id=${tenantId}:`,
+      message,
+    );
     return json(502, { error: message });
   }
 }
