@@ -398,14 +398,13 @@ function ContextEnginePage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
                     disabled={providersLoading || providers.length === 0}
-                    className="h-10 justify-between gap-2 px-3 text-base sm:w-44"
+                    className="flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm font-normal whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50 sm:w-44 [&_svg]:pointer-events-none [&_svg]:shrink-0"
                   >
                     <span className="min-w-0 truncate">Adapters</span>
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5">
                       <Badge
                         variant="secondary"
                         className="h-5 px-1.5 text-[11px]"
@@ -414,7 +413,7 @@ function ContextEnginePage() {
                       </Badge>
                       <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                     </span>
-                  </Button>
+                  </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-72">
                   <DropdownMenuLabel>Context adapters</DropdownMenuLabel>

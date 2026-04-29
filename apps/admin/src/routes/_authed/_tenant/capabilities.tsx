@@ -4,7 +4,6 @@ import {
   Outlet,
   useLocation,
 } from "@tanstack/react-router";
-import { Puzzle } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -24,9 +23,8 @@ function CapabilitiesLayout() {
     <PageLayout
       header={
         <div className="grid grid-cols-3 items-center">
-          <div className="flex items-center gap-2">
-            <Puzzle className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight leading-tight text-foreground">
               Capabilities
             </h1>
           </div>

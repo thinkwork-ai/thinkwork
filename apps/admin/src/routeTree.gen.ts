@@ -8,1611 +8,1529 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as AuthedRouteImport } from './routes/_authed'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
-import { Route as InviteTokenRouteImport } from './routes/invite.$token'
-import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
-import { Route as AuthedTenantRouteImport } from './routes/_authed/_tenant'
-import { Route as AuthedTenantSettingsRouteImport } from './routes/_authed/_tenant/settings'
-import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/org'
-import { Route as AuthedTenantKnowledgeRouteImport } from './routes/_authed/_tenant/knowledge'
-import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
-import { Route as AuthedTenantCapabilitiesRouteImport } from './routes/_authed/_tenant/capabilities'
-import { Route as AuthedTenantBillingRouteImport } from './routes/_authed/_tenant/billing'
-import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_tenant/analytics'
-import { Route as AuthedTenantWorkspaceReviewsIndexRouteImport } from './routes/_authed/_tenant/workspace-reviews/index'
-import { Route as AuthedTenantWikiIndexRouteImport } from './routes/_authed/_tenant/wiki/index'
-import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
-import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
-import { Route as AuthedTenantSkillRunsIndexRouteImport } from './routes/_authed/_tenant/skill-runs/index'
-import { Route as AuthedTenantSecurityIndexRouteImport } from './routes/_authed/_tenant/security/index'
-import { Route as AuthedTenantScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/scheduled-jobs/index'
-import { Route as AuthedTenantRoutinesIndexRouteImport } from './routes/_authed/_tenant/routines/index'
-import { Route as AuthedTenantPeopleIndexRouteImport } from './routes/_authed/_tenant/people/index'
-import { Route as AuthedTenantMemoryIndexRouteImport } from './routes/_authed/_tenant/memory/index'
-import { Route as AuthedTenantKnowledgeIndexRouteImport } from './routes/_authed/_tenant/knowledge/index'
-import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from './routes/_authed/_tenant/knowledge-bases/index'
-import { Route as AuthedTenantInboxIndexRouteImport } from './routes/_authed/_tenant/inbox/index'
-import { Route as AuthedTenantEvaluationsIndexRouteImport } from './routes/_authed/_tenant/evaluations/index'
-import { Route as AuthedTenantCapabilitiesIndexRouteImport } from './routes/_authed/_tenant/capabilities/index'
-import { Route as AuthedTenantArtifactsIndexRouteImport } from './routes/_authed/_tenant/artifacts/index'
-import { Route as AuthedTenantAnalyticsIndexRouteImport } from './routes/_authed/_tenant/analytics/index'
-import { Route as AuthedTenantAgentsIndexRouteImport } from './routes/_authed/_tenant/agents/index'
-import { Route as AuthedTenantAgentTemplatesIndexRouteImport } from './routes/_authed/_tenant/agent-templates/index'
-import { Route as AuthedTenantWebhooksWebhookIdRouteImport } from './routes/_authed/_tenant/webhooks/$webhookId'
-import { Route as AuthedTenantThreadsThreadIdRouteImport } from './routes/_authed/_tenant/threads/$threadId'
-import { Route as AuthedTenantSkillRunsRunIdRouteImport } from './routes/_authed/_tenant/skill-runs/$runId'
-import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/scheduled-jobs/$scheduledJobId'
-import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_authed/_tenant/routines/$routineId'
-import { Route as AuthedTenantPeopleHumanIdRouteImport } from './routes/_authed/_tenant/people/$humanId'
-import { Route as AuthedTenantKnowledgeWikiRouteImport } from './routes/_authed/_tenant/knowledge/wiki'
-import { Route as AuthedTenantKnowledgeMemoryRouteImport } from './routes/_authed/_tenant/knowledge/memory'
-import { Route as AuthedTenantKnowledgeKnowledgeBasesRouteImport } from './routes/_authed/_tenant/knowledge/knowledge-bases'
-import { Route as AuthedTenantKnowledgeContextEngineRouteImport } from './routes/_authed/_tenant/knowledge/context-engine'
-import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
-import { Route as AuthedTenantInboxInboxItemIdRouteImport } from './routes/_authed/_tenant/inbox/$inboxItemId'
-import { Route as AuthedTenantEvaluationsRunIdRouteImport } from './routes/_authed/_tenant/evaluations/$runId'
-import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from './routes/_authed/_tenant/capabilities/mcp-servers'
-import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from './routes/_authed/_tenant/capabilities/builtin-tools'
-import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from './routes/_authed/_tenant/analytics/performance'
-import { Route as AuthedTenantAnalyticsCostRouteImport } from './routes/_authed/_tenant/analytics/cost'
-import { Route as AuthedTenantAnalyticsActivityRouteImport } from './routes/_authed/_tenant/analytics/activity'
-import { Route as AuthedTenantAgentsNewRouteImport } from './routes/_authed/_tenant/agents/new'
-import { Route as AuthedTenantAgentsInvitesRouteImport } from './routes/_authed/_tenant/agents/invites'
-import { Route as AuthedTenantAgentsAgentIdRouteImport } from './routes/_authed/_tenant/agents/$agentId'
-import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from './routes/_authed/_tenant/agent-templates/defaults'
-import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from './routes/_authed/_tenant/evaluations/studio/index'
-import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from './routes/_authed/_tenant/capabilities/skills/index'
-import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from './routes/_authed/_tenant/capabilities/plugins/index'
-import { Route as AuthedTenantAnalyticsSkillRunsIndexRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/index'
-import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.index'
-import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge/knowledge-bases/$kbId'
-import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from './routes/_authed/_tenant/evaluations/studio/new'
-import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/$testCaseId'
-import { Route as AuthedTenantCapabilitiesSkillsBuilderRouteImport } from './routes/_authed/_tenant/capabilities/skills/builder'
-import { Route as AuthedTenantCapabilitiesSkillsSlugRouteImport } from './routes/_authed/_tenant/capabilities/skills/$slug'
-import { Route as AuthedTenantCapabilitiesPluginsUploadIdRouteImport } from './routes/_authed/_tenant/capabilities/plugins/$uploadId'
-import { Route as AuthedTenantAnalyticsSkillRunsRunIdRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/$runId'
-import { Route as AuthedTenantAgentsAgentIdWorkspacesRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspaces'
-import { Route as AuthedTenantAgentsAgentIdWorkspaceRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspace'
-import { Route as AuthedTenantAgentsAgentIdSubAgentsRouteImport } from './routes/_authed/_tenant/agents/$agentId_.sub-agents'
-import { Route as AuthedTenantAgentsAgentIdSkillsRouteImport } from './routes/_authed/_tenant/agents/$agentId_.skills'
-import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from './routes/_authed/_tenant/agents/$agentId_.memory'
-import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from './routes/_authed/_tenant/agents/$agentId_.knowledge'
-import { Route as AuthedTenantAgentsAgentIdEditorRouteImport } from './routes/_authed/_tenant/agents/$agentId_.editor'
-import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId_.sync'
-import { Route as AuthedTenantAgentTemplatesTemplateIdTabRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.$tab'
-import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index'
-import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/edit.$testCaseId'
-import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as SignInRouteImport } from "./routes/sign-in";
+import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password";
+import { Route as AuthedRouteImport } from "./routes/_authed";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as OnboardingWelcomeRouteImport } from "./routes/onboarding/welcome";
+import { Route as InviteTokenRouteImport } from "./routes/invite.$token";
+import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
+import { Route as AuthedTenantRouteImport } from "./routes/_authed/_tenant";
+import { Route as AuthedTenantSettingsRouteImport } from "./routes/_authed/_tenant/settings";
+import { Route as AuthedTenantOrgRouteImport } from "./routes/_authed/_tenant/org";
+import { Route as AuthedTenantKnowledgeRouteImport } from "./routes/_authed/_tenant/knowledge";
+import { Route as AuthedTenantDashboardRouteImport } from "./routes/_authed/_tenant/dashboard";
+import { Route as AuthedTenantCapabilitiesRouteImport } from "./routes/_authed/_tenant/capabilities";
+import { Route as AuthedTenantBillingRouteImport } from "./routes/_authed/_tenant/billing";
+import { Route as AuthedTenantAnalyticsRouteImport } from "./routes/_authed/_tenant/analytics";
+import { Route as AuthedTenantWorkspaceReviewsIndexRouteImport } from "./routes/_authed/_tenant/workspace-reviews/index";
+import { Route as AuthedTenantWikiIndexRouteImport } from "./routes/_authed/_tenant/wiki/index";
+import { Route as AuthedTenantWebhooksIndexRouteImport } from "./routes/_authed/_tenant/webhooks/index";
+import { Route as AuthedTenantThreadsIndexRouteImport } from "./routes/_authed/_tenant/threads/index";
+import { Route as AuthedTenantSecurityIndexRouteImport } from "./routes/_authed/_tenant/security/index";
+import { Route as AuthedTenantScheduledJobsIndexRouteImport } from "./routes/_authed/_tenant/scheduled-jobs/index";
+import { Route as AuthedTenantRoutinesIndexRouteImport } from "./routes/_authed/_tenant/routines/index";
+import { Route as AuthedTenantPeopleIndexRouteImport } from "./routes/_authed/_tenant/people/index";
+import { Route as AuthedTenantMemoryIndexRouteImport } from "./routes/_authed/_tenant/memory/index";
+import { Route as AuthedTenantKnowledgeIndexRouteImport } from "./routes/_authed/_tenant/knowledge/index";
+import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from "./routes/_authed/_tenant/knowledge-bases/index";
+import { Route as AuthedTenantInboxIndexRouteImport } from "./routes/_authed/_tenant/inbox/index";
+import { Route as AuthedTenantEvaluationsIndexRouteImport } from "./routes/_authed/_tenant/evaluations/index";
+import { Route as AuthedTenantCapabilitiesIndexRouteImport } from "./routes/_authed/_tenant/capabilities/index";
+import { Route as AuthedTenantArtifactsIndexRouteImport } from "./routes/_authed/_tenant/artifacts/index";
+import { Route as AuthedTenantAnalyticsIndexRouteImport } from "./routes/_authed/_tenant/analytics/index";
+import { Route as AuthedTenantAgentsIndexRouteImport } from "./routes/_authed/_tenant/agents/index";
+import { Route as AuthedTenantAgentTemplatesIndexRouteImport } from "./routes/_authed/_tenant/agent-templates/index";
+import { Route as AuthedTenantWebhooksWebhookIdRouteImport } from "./routes/_authed/_tenant/webhooks/$webhookId";
+import { Route as AuthedTenantThreadsThreadIdRouteImport } from "./routes/_authed/_tenant/threads/$threadId";
+import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from "./routes/_authed/_tenant/scheduled-jobs/$scheduledJobId";
+import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from "./routes/_authed/_tenant/routines/$routineId";
+import { Route as AuthedTenantPeopleHumanIdRouteImport } from "./routes/_authed/_tenant/people/$humanId";
+import { Route as AuthedTenantKnowledgeWikiRouteImport } from "./routes/_authed/_tenant/knowledge/wiki";
+import { Route as AuthedTenantKnowledgeMemoryRouteImport } from "./routes/_authed/_tenant/knowledge/memory";
+import { Route as AuthedTenantKnowledgeKnowledgeBasesRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases";
+import { Route as AuthedTenantKnowledgeContextEngineRouteImport } from "./routes/_authed/_tenant/knowledge/context-engine";
+import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge-bases/$kbId";
+import { Route as AuthedTenantInboxInboxItemIdRouteImport } from "./routes/_authed/_tenant/inbox/$inboxItemId";
+import { Route as AuthedTenantEvaluationsRunIdRouteImport } from "./routes/_authed/_tenant/evaluations/$runId";
+import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from "./routes/_authed/_tenant/capabilities/mcp-servers";
+import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from "./routes/_authed/_tenant/capabilities/builtin-tools";
+import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from "./routes/_authed/_tenant/analytics/performance";
+import { Route as AuthedTenantAnalyticsCostRouteImport } from "./routes/_authed/_tenant/analytics/cost";
+import { Route as AuthedTenantAnalyticsActivityRouteImport } from "./routes/_authed/_tenant/analytics/activity";
+import { Route as AuthedTenantAgentsNewRouteImport } from "./routes/_authed/_tenant/agents/new";
+import { Route as AuthedTenantAgentsInvitesRouteImport } from "./routes/_authed/_tenant/agents/invites";
+import { Route as AuthedTenantAgentsAgentIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId";
+import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from "./routes/_authed/_tenant/agent-templates/defaults";
+import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from "./routes/_authed/_tenant/evaluations/studio/index";
+import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/skills/index";
+import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/plugins/index";
+import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId.index";
+import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases/$kbId";
+import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from "./routes/_authed/_tenant/evaluations/studio/new";
+import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/$testCaseId";
+import { Route as AuthedTenantCapabilitiesSkillsBuilderRouteImport } from "./routes/_authed/_tenant/capabilities/skills/builder";
+import { Route as AuthedTenantCapabilitiesSkillsSlugRouteImport } from "./routes/_authed/_tenant/capabilities/skills/$slug";
+import { Route as AuthedTenantCapabilitiesPluginsUploadIdRouteImport } from "./routes/_authed/_tenant/capabilities/plugins/$uploadId";
+import { Route as AuthedTenantAgentsAgentIdWorkspacesRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.workspaces";
+import { Route as AuthedTenantAgentsAgentIdWorkspaceRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.workspace";
+import { Route as AuthedTenantAgentsAgentIdSubAgentsRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.sub-agents";
+import { Route as AuthedTenantAgentsAgentIdSkillsRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.skills";
+import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.memory";
+import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.knowledge";
+import { Route as AuthedTenantAgentsAgentIdEditorRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.editor";
+import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId_.sync";
+import { Route as AuthedTenantAgentTemplatesTemplateIdTabRouteImport } from "./routes/_authed/_tenant/agent-templates/$templateId.$tab";
+import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index";
+import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/edit.$testCaseId";
+import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId";
 
 const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
+  id: "/sign-in",
+  path: "/sign-in",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+  id: "/forgot-password",
+  path: "/forgot-password",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AuthedRoute = AuthedRouteImport.update({
-  id: '/_authed',
+  id: "/_authed",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
-  id: '/onboarding/welcome',
-  path: '/onboarding/welcome',
+  id: "/onboarding/welcome",
+  path: "/onboarding/welcome",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const InviteTokenRoute = InviteTokenRouteImport.update({
-  id: '/invite/$token',
-  path: '/invite/$token',
+  id: "/invite/$token",
+  path: "/invite/$token",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
+  id: "/auth/callback",
+  path: "/auth/callback",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AuthedTenantRoute = AuthedTenantRouteImport.update({
-  id: '/_tenant',
+  id: "/_tenant",
   getParentRoute: () => AuthedRoute,
-} as any)
+} as any);
 const AuthedTenantSettingsRoute = AuthedTenantSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantOrgRoute = AuthedTenantOrgRouteImport.update({
-  id: '/org',
-  path: '/org',
+  id: "/org",
+  path: "/org",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantKnowledgeRoute = AuthedTenantKnowledgeRouteImport.update({
-  id: '/knowledge',
-  path: '/knowledge',
+  id: "/knowledge",
+  path: "/knowledge",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantDashboardRoute = AuthedTenantDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+  id: "/dashboard",
+  path: "/dashboard",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantCapabilitiesRoute =
   AuthedTenantCapabilitiesRouteImport.update({
-    id: '/capabilities',
-    path: '/capabilities',
+    id: "/capabilities",
+    path: "/capabilities",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantBillingRoute = AuthedTenantBillingRouteImport.update({
-  id: '/billing',
-  path: '/billing',
+  id: "/billing",
+  path: "/billing",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantAnalyticsRoute = AuthedTenantAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
+  id: "/analytics",
+  path: "/analytics",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantWorkspaceReviewsIndexRoute =
   AuthedTenantWorkspaceReviewsIndexRouteImport.update({
-    id: '/workspace-reviews/',
-    path: '/workspace-reviews/',
+    id: "/workspace-reviews/",
+    path: "/workspace-reviews/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantWikiIndexRoute = AuthedTenantWikiIndexRouteImport.update({
-  id: '/wiki/',
-  path: '/wiki/',
+  id: "/wiki/",
+  path: "/wiki/",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantWebhooksIndexRoute =
   AuthedTenantWebhooksIndexRouteImport.update({
-    id: '/webhooks/',
-    path: '/webhooks/',
+    id: "/webhooks/",
+    path: "/webhooks/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantThreadsIndexRoute =
   AuthedTenantThreadsIndexRouteImport.update({
-    id: '/threads/',
-    path: '/threads/',
+    id: "/threads/",
+    path: "/threads/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
-const AuthedTenantSkillRunsIndexRoute =
-  AuthedTenantSkillRunsIndexRouteImport.update({
-    id: '/skill-runs/',
-    path: '/skill-runs/',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantSecurityIndexRoute =
   AuthedTenantSecurityIndexRouteImport.update({
-    id: '/security/',
-    path: '/security/',
+    id: "/security/",
+    path: "/security/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantScheduledJobsIndexRoute =
   AuthedTenantScheduledJobsIndexRouteImport.update({
-    id: '/scheduled-jobs/',
-    path: '/scheduled-jobs/',
+    id: "/scheduled-jobs/",
+    path: "/scheduled-jobs/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantRoutinesIndexRoute =
   AuthedTenantRoutinesIndexRouteImport.update({
-    id: '/routines/',
-    path: '/routines/',
+    id: "/routines/",
+    path: "/routines/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantPeopleIndexRoute = AuthedTenantPeopleIndexRouteImport.update({
-  id: '/people/',
-  path: '/people/',
+  id: "/people/",
+  path: "/people/",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantMemoryIndexRoute = AuthedTenantMemoryIndexRouteImport.update({
-  id: '/memory/',
-  path: '/memory/',
+  id: "/memory/",
+  path: "/memory/",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantKnowledgeIndexRoute =
   AuthedTenantKnowledgeIndexRouteImport.update({
-    id: '/',
-    path: '/',
+    id: "/",
+    path: "/",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeBasesIndexRoute =
   AuthedTenantKnowledgeBasesIndexRouteImport.update({
-    id: '/knowledge-bases/',
-    path: '/knowledge-bases/',
+    id: "/knowledge-bases/",
+    path: "/knowledge-bases/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantInboxIndexRoute = AuthedTenantInboxIndexRouteImport.update({
-  id: '/inbox/',
-  path: '/inbox/',
+  id: "/inbox/",
+  path: "/inbox/",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantEvaluationsIndexRoute =
   AuthedTenantEvaluationsIndexRouteImport.update({
-    id: '/evaluations/',
-    path: '/evaluations/',
+    id: "/evaluations/",
+    path: "/evaluations/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesIndexRoute =
   AuthedTenantCapabilitiesIndexRouteImport.update({
-    id: '/',
-    path: '/',
+    id: "/",
+    path: "/",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantArtifactsIndexRoute =
   AuthedTenantArtifactsIndexRouteImport.update({
-    id: '/artifacts/',
-    path: '/artifacts/',
+    id: "/artifacts/",
+    path: "/artifacts/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAnalyticsIndexRoute =
   AuthedTenantAnalyticsIndexRouteImport.update({
-    id: '/',
-    path: '/',
+    id: "/",
+    path: "/",
     getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsIndexRoute = AuthedTenantAgentsIndexRouteImport.update({
-  id: '/agents/',
-  path: '/agents/',
+  id: "/agents/",
+  path: "/agents/",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantAgentTemplatesIndexRoute =
   AuthedTenantAgentTemplatesIndexRouteImport.update({
-    id: '/agent-templates/',
-    path: '/agent-templates/',
+    id: "/agent-templates/",
+    path: "/agent-templates/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantWebhooksWebhookIdRoute =
   AuthedTenantWebhooksWebhookIdRouteImport.update({
-    id: '/webhooks/$webhookId',
-    path: '/webhooks/$webhookId',
+    id: "/webhooks/$webhookId",
+    path: "/webhooks/$webhookId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantThreadsThreadIdRoute =
   AuthedTenantThreadsThreadIdRouteImport.update({
-    id: '/threads/$threadId',
-    path: '/threads/$threadId',
+    id: "/threads/$threadId",
+    path: "/threads/$threadId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
-const AuthedTenantSkillRunsRunIdRoute =
-  AuthedTenantSkillRunsRunIdRouteImport.update({
-    id: '/skill-runs/$runId',
-    path: '/skill-runs/$runId',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantScheduledJobsScheduledJobIdRoute =
   AuthedTenantScheduledJobsScheduledJobIdRouteImport.update({
-    id: '/scheduled-jobs/$scheduledJobId',
-    path: '/scheduled-jobs/$scheduledJobId',
+    id: "/scheduled-jobs/$scheduledJobId",
+    path: "/scheduled-jobs/$scheduledJobId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantRoutinesRoutineIdRoute =
   AuthedTenantRoutinesRoutineIdRouteImport.update({
-    id: '/routines/$routineId',
-    path: '/routines/$routineId',
+    id: "/routines/$routineId",
+    path: "/routines/$routineId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantPeopleHumanIdRoute =
   AuthedTenantPeopleHumanIdRouteImport.update({
-    id: '/people/$humanId',
-    path: '/people/$humanId',
+    id: "/people/$humanId",
+    path: "/people/$humanId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeWikiRoute =
   AuthedTenantKnowledgeWikiRouteImport.update({
-    id: '/wiki',
-    path: '/wiki',
+    id: "/wiki",
+    path: "/wiki",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeMemoryRoute =
   AuthedTenantKnowledgeMemoryRouteImport.update({
-    id: '/memory',
-    path: '/memory',
+    id: "/memory",
+    path: "/memory",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeKnowledgeBasesRoute =
   AuthedTenantKnowledgeKnowledgeBasesRouteImport.update({
-    id: '/knowledge-bases',
-    path: '/knowledge-bases',
+    id: "/knowledge-bases",
+    path: "/knowledge-bases",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeContextEngineRoute =
   AuthedTenantKnowledgeContextEngineRouteImport.update({
-    id: '/context-engine',
-    path: '/context-engine',
+    id: "/context-engine",
+    path: "/context-engine",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeBasesKbIdRoute =
   AuthedTenantKnowledgeBasesKbIdRouteImport.update({
-    id: '/knowledge-bases/$kbId',
-    path: '/knowledge-bases/$kbId',
+    id: "/knowledge-bases/$kbId",
+    path: "/knowledge-bases/$kbId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantInboxInboxItemIdRoute =
   AuthedTenantInboxInboxItemIdRouteImport.update({
-    id: '/inbox/$inboxItemId',
-    path: '/inbox/$inboxItemId',
+    id: "/inbox/$inboxItemId",
+    path: "/inbox/$inboxItemId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantEvaluationsRunIdRoute =
   AuthedTenantEvaluationsRunIdRouteImport.update({
-    id: '/evaluations/$runId',
-    path: '/evaluations/$runId',
+    id: "/evaluations/$runId",
+    path: "/evaluations/$runId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesMcpServersRoute =
   AuthedTenantCapabilitiesMcpServersRouteImport.update({
-    id: '/mcp-servers',
-    path: '/mcp-servers',
+    id: "/mcp-servers",
+    path: "/mcp-servers",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesBuiltinToolsRoute =
   AuthedTenantCapabilitiesBuiltinToolsRouteImport.update({
-    id: '/builtin-tools',
-    path: '/builtin-tools',
+    id: "/builtin-tools",
+    path: "/builtin-tools",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantAnalyticsPerformanceRoute =
   AuthedTenantAnalyticsPerformanceRouteImport.update({
-    id: '/performance',
-    path: '/performance',
+    id: "/performance",
+    path: "/performance",
     getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAnalyticsCostRoute =
   AuthedTenantAnalyticsCostRouteImport.update({
-    id: '/cost',
-    path: '/cost',
+    id: "/cost",
+    path: "/cost",
     getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAnalyticsActivityRoute =
   AuthedTenantAnalyticsActivityRouteImport.update({
-    id: '/activity',
-    path: '/activity',
+    id: "/activity",
+    path: "/activity",
     getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsNewRoute = AuthedTenantAgentsNewRouteImport.update({
-  id: '/agents/new',
-  path: '/agents/new',
+  id: "/agents/new",
+  path: "/agents/new",
   getParentRoute: () => AuthedTenantRoute,
-} as any)
+} as any);
 const AuthedTenantAgentsInvitesRoute =
   AuthedTenantAgentsInvitesRouteImport.update({
-    id: '/agents/invites',
-    path: '/agents/invites',
+    id: "/agents/invites",
+    path: "/agents/invites",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdRoute =
   AuthedTenantAgentsAgentIdRouteImport.update({
-    id: '/agents/$agentId',
-    path: '/agents/$agentId',
+    id: "/agents/$agentId",
+    path: "/agents/$agentId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentTemplatesDefaultsRoute =
   AuthedTenantAgentTemplatesDefaultsRouteImport.update({
-    id: '/agent-templates/defaults',
-    path: '/agent-templates/defaults',
+    id: "/agent-templates/defaults",
+    path: "/agent-templates/defaults",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantEvaluationsStudioIndexRoute =
   AuthedTenantEvaluationsStudioIndexRouteImport.update({
-    id: '/evaluations/studio/',
-    path: '/evaluations/studio/',
+    id: "/evaluations/studio/",
+    path: "/evaluations/studio/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesSkillsIndexRoute =
   AuthedTenantCapabilitiesSkillsIndexRouteImport.update({
-    id: '/skills/',
-    path: '/skills/',
+    id: "/skills/",
+    path: "/skills/",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesPluginsIndexRoute =
   AuthedTenantCapabilitiesPluginsIndexRouteImport.update({
-    id: '/plugins/',
-    path: '/plugins/',
+    id: "/plugins/",
+    path: "/plugins/",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
-const AuthedTenantAnalyticsSkillRunsIndexRoute =
-  AuthedTenantAnalyticsSkillRunsIndexRouteImport.update({
-    id: '/skill-runs/',
-    path: '/skill-runs/',
-    getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentTemplatesTemplateIdIndexRoute =
   AuthedTenantAgentTemplatesTemplateIdIndexRouteImport.update({
-    id: '/agent-templates/$templateId/',
-    path: '/agent-templates/$templateId/',
+    id: "/agent-templates/$templateId/",
+    path: "/agent-templates/$templateId/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantKnowledgeKnowledgeBasesKbIdRoute =
   AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport.update({
-    id: '/$kbId',
-    path: '/$kbId',
+    id: "/$kbId",
+    path: "/$kbId",
     getParentRoute: () => AuthedTenantKnowledgeKnowledgeBasesRoute,
-  } as any)
+  } as any);
 const AuthedTenantEvaluationsStudioNewRoute =
   AuthedTenantEvaluationsStudioNewRouteImport.update({
-    id: '/evaluations/studio/new',
-    path: '/evaluations/studio/new',
+    id: "/evaluations/studio/new",
+    path: "/evaluations/studio/new",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantEvaluationsStudioTestCaseIdRoute =
   AuthedTenantEvaluationsStudioTestCaseIdRouteImport.update({
-    id: '/evaluations/studio/$testCaseId',
-    path: '/evaluations/studio/$testCaseId',
+    id: "/evaluations/studio/$testCaseId",
+    path: "/evaluations/studio/$testCaseId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesSkillsBuilderRoute =
   AuthedTenantCapabilitiesSkillsBuilderRouteImport.update({
-    id: '/skills/builder',
-    path: '/skills/builder',
+    id: "/skills/builder",
+    path: "/skills/builder",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesSkillsSlugRoute =
   AuthedTenantCapabilitiesSkillsSlugRouteImport.update({
-    id: '/skills/$slug',
-    path: '/skills/$slug',
+    id: "/skills/$slug",
+    path: "/skills/$slug",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
+  } as any);
 const AuthedTenantCapabilitiesPluginsUploadIdRoute =
   AuthedTenantCapabilitiesPluginsUploadIdRouteImport.update({
-    id: '/plugins/$uploadId',
-    path: '/plugins/$uploadId',
+    id: "/plugins/$uploadId",
+    path: "/plugins/$uploadId",
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
-  } as any)
-const AuthedTenantAnalyticsSkillRunsRunIdRoute =
-  AuthedTenantAnalyticsSkillRunsRunIdRouteImport.update({
-    id: '/skill-runs/$runId',
-    path: '/skill-runs/$runId',
-    getParentRoute: () => AuthedTenantAnalyticsRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdWorkspacesRoute =
   AuthedTenantAgentsAgentIdWorkspacesRouteImport.update({
-    id: '/agents/$agentId_/workspaces',
-    path: '/agents/$agentId/workspaces',
+    id: "/agents/$agentId_/workspaces",
+    path: "/agents/$agentId/workspaces",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdWorkspaceRoute =
   AuthedTenantAgentsAgentIdWorkspaceRouteImport.update({
-    id: '/agents/$agentId_/workspace',
-    path: '/agents/$agentId/workspace',
+    id: "/agents/$agentId_/workspace",
+    path: "/agents/$agentId/workspace",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdSubAgentsRoute =
   AuthedTenantAgentsAgentIdSubAgentsRouteImport.update({
-    id: '/agents/$agentId_/sub-agents',
-    path: '/agents/$agentId/sub-agents',
+    id: "/agents/$agentId_/sub-agents",
+    path: "/agents/$agentId/sub-agents",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdSkillsRoute =
   AuthedTenantAgentsAgentIdSkillsRouteImport.update({
-    id: '/agents/$agentId_/skills',
-    path: '/agents/$agentId/skills',
+    id: "/agents/$agentId_/skills",
+    path: "/agents/$agentId/skills",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdMemoryRoute =
   AuthedTenantAgentsAgentIdMemoryRouteImport.update({
-    id: '/agents/$agentId_/memory',
-    path: '/agents/$agentId/memory',
+    id: "/agents/$agentId_/memory",
+    path: "/agents/$agentId/memory",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdKnowledgeRoute =
   AuthedTenantAgentsAgentIdKnowledgeRouteImport.update({
-    id: '/agents/$agentId_/knowledge',
-    path: '/agents/$agentId/knowledge',
+    id: "/agents/$agentId_/knowledge",
+    path: "/agents/$agentId/knowledge",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdEditorRoute =
   AuthedTenantAgentsAgentIdEditorRouteImport.update({
-    id: '/agents/$agentId_/editor',
-    path: '/agents/$agentId/editor',
+    id: "/agents/$agentId_/editor",
+    path: "/agents/$agentId/editor",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentTemplatesTemplateIdSyncRoute =
   AuthedTenantAgentTemplatesTemplateIdSyncRouteImport.update({
-    id: '/agent-templates/$templateId_/sync',
-    path: '/agent-templates/$templateId/sync',
+    id: "/agent-templates/$templateId_/sync",
+    path: "/agent-templates/$templateId/sync",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentTemplatesTemplateIdTabRoute =
   AuthedTenantAgentTemplatesTemplateIdTabRouteImport.update({
-    id: '/agent-templates/$templateId/$tab',
-    path: '/agent-templates/$templateId/$tab',
+    id: "/agent-templates/$templateId/$tab",
+    path: "/agent-templates/$templateId/$tab",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdScheduledJobsIndexRoute =
   AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport.update({
-    id: '/agents/$agentId_/scheduled-jobs/',
-    path: '/agents/$agentId/scheduled-jobs/',
+    id: "/agents/$agentId_/scheduled-jobs/",
+    path: "/agents/$agentId/scheduled-jobs/",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantEvaluationsStudioEditTestCaseIdRoute =
   AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport.update({
-    id: '/evaluations/studio/edit/$testCaseId',
-    path: '/evaluations/studio/edit/$testCaseId',
+    id: "/evaluations/studio/edit/$testCaseId",
+    path: "/evaluations/studio/edit/$testCaseId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 const AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute =
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport.update({
-    id: '/agents/$agentId_/scheduled-jobs/$scheduledJobId',
-    path: '/agents/$agentId/scheduled-jobs/$scheduledJobId',
+    id: "/agents/$agentId_/scheduled-jobs/$scheduledJobId",
+    path: "/agents/$agentId/scheduled-jobs/$scheduledJobId",
     getParentRoute: () => AuthedTenantRoute,
-  } as any)
+  } as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/auth/callback': typeof AuthCallbackRoute
-  '/invite/$token': typeof InviteTokenRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/analytics': typeof AuthedTenantAnalyticsRouteWithChildren
-  '/billing': typeof AuthedTenantBillingRoute
-  '/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
-  '/dashboard': typeof AuthedTenantDashboardRoute
-  '/knowledge': typeof AuthedTenantKnowledgeRouteWithChildren
-  '/org': typeof AuthedTenantOrgRoute
-  '/settings': typeof AuthedTenantSettingsRoute
-  '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
-  '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
-  '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
-  '/agents/new': typeof AuthedTenantAgentsNewRoute
-  '/analytics/activity': typeof AuthedTenantAnalyticsActivityRoute
-  '/analytics/cost': typeof AuthedTenantAnalyticsCostRoute
-  '/analytics/performance': typeof AuthedTenantAnalyticsPerformanceRoute
-  '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
-  '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
-  '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
-  '/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
-  '/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
-  '/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
-  '/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
-  '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
-  '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
-  '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
-  '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
-  '/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
-  '/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
-  '/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
-  '/agents/': typeof AuthedTenantAgentsIndexRoute
-  '/analytics/': typeof AuthedTenantAnalyticsIndexRoute
-  '/artifacts/': typeof AuthedTenantArtifactsIndexRoute
-  '/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
-  '/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
-  '/inbox/': typeof AuthedTenantInboxIndexRoute
-  '/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
-  '/knowledge/': typeof AuthedTenantKnowledgeIndexRoute
-  '/memory/': typeof AuthedTenantMemoryIndexRoute
-  '/people/': typeof AuthedTenantPeopleIndexRoute
-  '/routines/': typeof AuthedTenantRoutinesIndexRoute
-  '/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
-  '/security/': typeof AuthedTenantSecurityIndexRoute
-  '/skill-runs/': typeof AuthedTenantSkillRunsIndexRoute
-  '/threads/': typeof AuthedTenantThreadsIndexRoute
-  '/webhooks/': typeof AuthedTenantWebhooksIndexRoute
-  '/wiki/': typeof AuthedTenantWikiIndexRoute
-  '/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
-  '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
-  '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
-  '/agents/$agentId/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
-  '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
-  '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
-  '/agents/$agentId/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
-  '/agents/$agentId/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
-  '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
-  '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
-  '/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
-  '/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
-  '/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
-  '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
-  '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
-  '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
-  '/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
-  '/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
-  '/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
-  '/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
-  '/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
-  '/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
-  '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
-  '/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
-  '/agents/$agentId/scheduled-jobs/': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
+  "/": typeof IndexRoute;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/sign-in": typeof SignInRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/invite/$token": typeof InviteTokenRoute;
+  "/onboarding/welcome": typeof OnboardingWelcomeRoute;
+  "/analytics": typeof AuthedTenantAnalyticsRouteWithChildren;
+  "/billing": typeof AuthedTenantBillingRoute;
+  "/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
+  "/dashboard": typeof AuthedTenantDashboardRoute;
+  "/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
+  "/org": typeof AuthedTenantOrgRoute;
+  "/settings": typeof AuthedTenantSettingsRoute;
+  "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
+  "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
+  "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
+  "/agents/new": typeof AuthedTenantAgentsNewRoute;
+  "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
+  "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
+  "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
+  "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
+  "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
+  "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
+  "/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
+  "/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
+  "/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
+  "/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
+  "/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
+  "/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
+  "/scheduled-jobs/$scheduledJobId": typeof AuthedTenantScheduledJobsScheduledJobIdRoute;
+  "/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
+  "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
+  "/agent-templates/": typeof AuthedTenantAgentTemplatesIndexRoute;
+  "/agents/": typeof AuthedTenantAgentsIndexRoute;
+  "/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
+  "/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
+  "/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
+  "/inbox/": typeof AuthedTenantInboxIndexRoute;
+  "/knowledge-bases/": typeof AuthedTenantKnowledgeBasesIndexRoute;
+  "/knowledge/": typeof AuthedTenantKnowledgeIndexRoute;
+  "/memory/": typeof AuthedTenantMemoryIndexRoute;
+  "/people/": typeof AuthedTenantPeopleIndexRoute;
+  "/routines/": typeof AuthedTenantRoutinesIndexRoute;
+  "/scheduled-jobs/": typeof AuthedTenantScheduledJobsIndexRoute;
+  "/security/": typeof AuthedTenantSecurityIndexRoute;
+  "/threads/": typeof AuthedTenantThreadsIndexRoute;
+  "/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
+  "/wiki/": typeof AuthedTenantWikiIndexRoute;
+  "/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
+  "/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
+  "/agent-templates/$templateId/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
+  "/agents/$agentId/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
+  "/agents/$agentId/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
+  "/agents/$agentId/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
+  "/agents/$agentId/skills": typeof AuthedTenantAgentsAgentIdSkillsRoute;
+  "/agents/$agentId/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
+  "/agents/$agentId/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
+  "/agents/$agentId/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
+  "/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
+  "/capabilities/skills/$slug": typeof AuthedTenantCapabilitiesSkillsSlugRoute;
+  "/capabilities/skills/builder": typeof AuthedTenantCapabilitiesSkillsBuilderRoute;
+  "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
+  "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
+  "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/agent-templates/$templateId/": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
+  "/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
+  "/capabilities/skills/": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
+  "/agents/$agentId/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
+  "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
+  "/agents/$agentId/scheduled-jobs/": typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/auth/callback': typeof AuthCallbackRoute
-  '/invite/$token': typeof InviteTokenRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/billing': typeof AuthedTenantBillingRoute
-  '/dashboard': typeof AuthedTenantDashboardRoute
-  '/org': typeof AuthedTenantOrgRoute
-  '/settings': typeof AuthedTenantSettingsRoute
-  '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
-  '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
-  '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
-  '/agents/new': typeof AuthedTenantAgentsNewRoute
-  '/analytics/activity': typeof AuthedTenantAnalyticsActivityRoute
-  '/analytics/cost': typeof AuthedTenantAnalyticsCostRoute
-  '/analytics/performance': typeof AuthedTenantAnalyticsPerformanceRoute
-  '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
-  '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
-  '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
-  '/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
-  '/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
-  '/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
-  '/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
-  '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
-  '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
-  '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
-  '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
-  '/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
-  '/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
-  '/agent-templates': typeof AuthedTenantAgentTemplatesIndexRoute
-  '/agents': typeof AuthedTenantAgentsIndexRoute
-  '/analytics': typeof AuthedTenantAnalyticsIndexRoute
-  '/artifacts': typeof AuthedTenantArtifactsIndexRoute
-  '/capabilities': typeof AuthedTenantCapabilitiesIndexRoute
-  '/evaluations': typeof AuthedTenantEvaluationsIndexRoute
-  '/inbox': typeof AuthedTenantInboxIndexRoute
-  '/knowledge-bases': typeof AuthedTenantKnowledgeBasesIndexRoute
-  '/knowledge': typeof AuthedTenantKnowledgeIndexRoute
-  '/memory': typeof AuthedTenantMemoryIndexRoute
-  '/people': typeof AuthedTenantPeopleIndexRoute
-  '/routines': typeof AuthedTenantRoutinesIndexRoute
-  '/scheduled-jobs': typeof AuthedTenantScheduledJobsIndexRoute
-  '/security': typeof AuthedTenantSecurityIndexRoute
-  '/skill-runs': typeof AuthedTenantSkillRunsIndexRoute
-  '/threads': typeof AuthedTenantThreadsIndexRoute
-  '/webhooks': typeof AuthedTenantWebhooksIndexRoute
-  '/wiki': typeof AuthedTenantWikiIndexRoute
-  '/workspace-reviews': typeof AuthedTenantWorkspaceReviewsIndexRoute
-  '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
-  '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
-  '/agents/$agentId/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
-  '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
-  '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
-  '/agents/$agentId/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
-  '/agents/$agentId/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
-  '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
-  '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
-  '/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
-  '/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
-  '/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
-  '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
-  '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
-  '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
-  '/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
-  '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
-  '/analytics/skill-runs': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
-  '/capabilities/plugins': typeof AuthedTenantCapabilitiesPluginsIndexRoute
-  '/capabilities/skills': typeof AuthedTenantCapabilitiesSkillsIndexRoute
-  '/evaluations/studio': typeof AuthedTenantEvaluationsStudioIndexRoute
-  '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
-  '/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
-  '/agents/$agentId/scheduled-jobs': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
+  "/": typeof IndexRoute;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/sign-in": typeof SignInRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/invite/$token": typeof InviteTokenRoute;
+  "/onboarding/welcome": typeof OnboardingWelcomeRoute;
+  "/billing": typeof AuthedTenantBillingRoute;
+  "/dashboard": typeof AuthedTenantDashboardRoute;
+  "/org": typeof AuthedTenantOrgRoute;
+  "/settings": typeof AuthedTenantSettingsRoute;
+  "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
+  "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
+  "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
+  "/agents/new": typeof AuthedTenantAgentsNewRoute;
+  "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
+  "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
+  "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
+  "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
+  "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
+  "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
+  "/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
+  "/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
+  "/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
+  "/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
+  "/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
+  "/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
+  "/scheduled-jobs/$scheduledJobId": typeof AuthedTenantScheduledJobsScheduledJobIdRoute;
+  "/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
+  "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
+  "/agent-templates": typeof AuthedTenantAgentTemplatesIndexRoute;
+  "/agents": typeof AuthedTenantAgentsIndexRoute;
+  "/analytics": typeof AuthedTenantAnalyticsIndexRoute;
+  "/artifacts": typeof AuthedTenantArtifactsIndexRoute;
+  "/capabilities": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/evaluations": typeof AuthedTenantEvaluationsIndexRoute;
+  "/inbox": typeof AuthedTenantInboxIndexRoute;
+  "/knowledge-bases": typeof AuthedTenantKnowledgeBasesIndexRoute;
+  "/knowledge": typeof AuthedTenantKnowledgeIndexRoute;
+  "/memory": typeof AuthedTenantMemoryIndexRoute;
+  "/people": typeof AuthedTenantPeopleIndexRoute;
+  "/routines": typeof AuthedTenantRoutinesIndexRoute;
+  "/scheduled-jobs": typeof AuthedTenantScheduledJobsIndexRoute;
+  "/security": typeof AuthedTenantSecurityIndexRoute;
+  "/threads": typeof AuthedTenantThreadsIndexRoute;
+  "/webhooks": typeof AuthedTenantWebhooksIndexRoute;
+  "/wiki": typeof AuthedTenantWikiIndexRoute;
+  "/workspace-reviews": typeof AuthedTenantWorkspaceReviewsIndexRoute;
+  "/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
+  "/agent-templates/$templateId/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
+  "/agents/$agentId/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
+  "/agents/$agentId/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
+  "/agents/$agentId/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
+  "/agents/$agentId/skills": typeof AuthedTenantAgentsAgentIdSkillsRoute;
+  "/agents/$agentId/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
+  "/agents/$agentId/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
+  "/agents/$agentId/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
+  "/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
+  "/capabilities/skills/$slug": typeof AuthedTenantCapabilitiesSkillsSlugRoute;
+  "/capabilities/skills/builder": typeof AuthedTenantCapabilitiesSkillsBuilderRoute;
+  "/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
+  "/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
+  "/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/agent-templates/$templateId": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
+  "/capabilities/plugins": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
+  "/capabilities/skills": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/evaluations/studio": typeof AuthedTenantEvaluationsStudioIndexRoute;
+  "/agents/$agentId/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
+  "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
+  "/agents/$agentId/scheduled-jobs": typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/_authed': typeof AuthedRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/_authed/_tenant': typeof AuthedTenantRouteWithChildren
-  '/auth/callback': typeof AuthCallbackRoute
-  '/invite/$token': typeof InviteTokenRoute
-  '/onboarding/welcome': typeof OnboardingWelcomeRoute
-  '/_authed/_tenant/analytics': typeof AuthedTenantAnalyticsRouteWithChildren
-  '/_authed/_tenant/billing': typeof AuthedTenantBillingRoute
-  '/_authed/_tenant/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
-  '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
-  '/_authed/_tenant/knowledge': typeof AuthedTenantKnowledgeRouteWithChildren
-  '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
-  '/_authed/_tenant/settings': typeof AuthedTenantSettingsRoute
-  '/_authed/_tenant/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
-  '/_authed/_tenant/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
-  '/_authed/_tenant/agents/invites': typeof AuthedTenantAgentsInvitesRoute
-  '/_authed/_tenant/agents/new': typeof AuthedTenantAgentsNewRoute
-  '/_authed/_tenant/analytics/activity': typeof AuthedTenantAnalyticsActivityRoute
-  '/_authed/_tenant/analytics/cost': typeof AuthedTenantAnalyticsCostRoute
-  '/_authed/_tenant/analytics/performance': typeof AuthedTenantAnalyticsPerformanceRoute
-  '/_authed/_tenant/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
-  '/_authed/_tenant/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/_authed/_tenant/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/_authed/_tenant/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
-  '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
-  '/_authed/_tenant/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
-  '/_authed/_tenant/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
-  '/_authed/_tenant/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
-  '/_authed/_tenant/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
-  '/_authed/_tenant/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
-  '/_authed/_tenant/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
-  '/_authed/_tenant/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
-  '/_authed/_tenant/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
-  '/_authed/_tenant/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
-  '/_authed/_tenant/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
-  '/_authed/_tenant/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
-  '/_authed/_tenant/agents/': typeof AuthedTenantAgentsIndexRoute
-  '/_authed/_tenant/analytics/': typeof AuthedTenantAnalyticsIndexRoute
-  '/_authed/_tenant/artifacts/': typeof AuthedTenantArtifactsIndexRoute
-  '/_authed/_tenant/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
-  '/_authed/_tenant/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
-  '/_authed/_tenant/inbox/': typeof AuthedTenantInboxIndexRoute
-  '/_authed/_tenant/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
-  '/_authed/_tenant/knowledge/': typeof AuthedTenantKnowledgeIndexRoute
-  '/_authed/_tenant/memory/': typeof AuthedTenantMemoryIndexRoute
-  '/_authed/_tenant/people/': typeof AuthedTenantPeopleIndexRoute
-  '/_authed/_tenant/routines/': typeof AuthedTenantRoutinesIndexRoute
-  '/_authed/_tenant/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
-  '/_authed/_tenant/security/': typeof AuthedTenantSecurityIndexRoute
-  '/_authed/_tenant/skill-runs/': typeof AuthedTenantSkillRunsIndexRoute
-  '/_authed/_tenant/threads/': typeof AuthedTenantThreadsIndexRoute
-  '/_authed/_tenant/webhooks/': typeof AuthedTenantWebhooksIndexRoute
-  '/_authed/_tenant/wiki/': typeof AuthedTenantWikiIndexRoute
-  '/_authed/_tenant/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
-  '/_authed/_tenant/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
-  '/_authed/_tenant/agent-templates/$templateId_/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
-  '/_authed/_tenant/agents/$agentId_/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
-  '/_authed/_tenant/agents/$agentId_/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
-  '/_authed/_tenant/agents/$agentId_/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
-  '/_authed/_tenant/agents/$agentId_/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
-  '/_authed/_tenant/agents/$agentId_/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
-  '/_authed/_tenant/agents/$agentId_/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
-  '/_authed/_tenant/agents/$agentId_/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
-  '/_authed/_tenant/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
-  '/_authed/_tenant/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
-  '/_authed/_tenant/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
-  '/_authed/_tenant/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
-  '/_authed/_tenant/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
-  '/_authed/_tenant/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
-  '/_authed/_tenant/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
-  '/_authed/_tenant/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
-  '/_authed/_tenant/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
-  '/_authed/_tenant/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
-  '/_authed/_tenant/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
-  '/_authed/_tenant/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
-  '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
-  '/_authed/_tenant/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
-  '/_authed/_tenant/agents/$agentId_/scheduled-jobs/': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/_authed": typeof AuthedRouteWithChildren;
+  "/forgot-password": typeof ForgotPasswordRoute;
+  "/sign-in": typeof SignInRoute;
+  "/_authed/_tenant": typeof AuthedTenantRouteWithChildren;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/invite/$token": typeof InviteTokenRoute;
+  "/onboarding/welcome": typeof OnboardingWelcomeRoute;
+  "/_authed/_tenant/analytics": typeof AuthedTenantAnalyticsRouteWithChildren;
+  "/_authed/_tenant/billing": typeof AuthedTenantBillingRoute;
+  "/_authed/_tenant/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
+  "/_authed/_tenant/dashboard": typeof AuthedTenantDashboardRoute;
+  "/_authed/_tenant/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
+  "/_authed/_tenant/org": typeof AuthedTenantOrgRoute;
+  "/_authed/_tenant/settings": typeof AuthedTenantSettingsRoute;
+  "/_authed/_tenant/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
+  "/_authed/_tenant/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
+  "/_authed/_tenant/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
+  "/_authed/_tenant/agents/new": typeof AuthedTenantAgentsNewRoute;
+  "/_authed/_tenant/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
+  "/_authed/_tenant/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
+  "/_authed/_tenant/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
+  "/_authed/_tenant/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
+  "/_authed/_tenant/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/_authed/_tenant/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
+  "/_authed/_tenant/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
+  "/_authed/_tenant/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
+  "/_authed/_tenant/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
+  "/_authed/_tenant/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
+  "/_authed/_tenant/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/_authed/_tenant/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
+  "/_authed/_tenant/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
+  "/_authed/_tenant/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
+  "/_authed/_tenant/scheduled-jobs/$scheduledJobId": typeof AuthedTenantScheduledJobsScheduledJobIdRoute;
+  "/_authed/_tenant/threads/$threadId": typeof AuthedTenantThreadsThreadIdRoute;
+  "/_authed/_tenant/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
+  "/_authed/_tenant/agent-templates/": typeof AuthedTenantAgentTemplatesIndexRoute;
+  "/_authed/_tenant/agents/": typeof AuthedTenantAgentsIndexRoute;
+  "/_authed/_tenant/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
+  "/_authed/_tenant/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
+  "/_authed/_tenant/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/_authed/_tenant/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
+  "/_authed/_tenant/inbox/": typeof AuthedTenantInboxIndexRoute;
+  "/_authed/_tenant/knowledge-bases/": typeof AuthedTenantKnowledgeBasesIndexRoute;
+  "/_authed/_tenant/knowledge/": typeof AuthedTenantKnowledgeIndexRoute;
+  "/_authed/_tenant/memory/": typeof AuthedTenantMemoryIndexRoute;
+  "/_authed/_tenant/people/": typeof AuthedTenantPeopleIndexRoute;
+  "/_authed/_tenant/routines/": typeof AuthedTenantRoutinesIndexRoute;
+  "/_authed/_tenant/scheduled-jobs/": typeof AuthedTenantScheduledJobsIndexRoute;
+  "/_authed/_tenant/security/": typeof AuthedTenantSecurityIndexRoute;
+  "/_authed/_tenant/threads/": typeof AuthedTenantThreadsIndexRoute;
+  "/_authed/_tenant/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
+  "/_authed/_tenant/wiki/": typeof AuthedTenantWikiIndexRoute;
+  "/_authed/_tenant/workspace-reviews/": typeof AuthedTenantWorkspaceReviewsIndexRoute;
+  "/_authed/_tenant/agent-templates/$templateId/$tab": typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
+  "/_authed/_tenant/agent-templates/$templateId_/sync": typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
+  "/_authed/_tenant/agents/$agentId_/editor": typeof AuthedTenantAgentsAgentIdEditorRoute;
+  "/_authed/_tenant/agents/$agentId_/knowledge": typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
+  "/_authed/_tenant/agents/$agentId_/memory": typeof AuthedTenantAgentsAgentIdMemoryRoute;
+  "/_authed/_tenant/agents/$agentId_/skills": typeof AuthedTenantAgentsAgentIdSkillsRoute;
+  "/_authed/_tenant/agents/$agentId_/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
+  "/_authed/_tenant/agents/$agentId_/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
+  "/_authed/_tenant/agents/$agentId_/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
+  "/_authed/_tenant/capabilities/plugins/$uploadId": typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
+  "/_authed/_tenant/capabilities/skills/$slug": typeof AuthedTenantCapabilitiesSkillsSlugRoute;
+  "/_authed/_tenant/capabilities/skills/builder": typeof AuthedTenantCapabilitiesSkillsBuilderRoute;
+  "/_authed/_tenant/evaluations/studio/$testCaseId": typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
+  "/_authed/_tenant/evaluations/studio/new": typeof AuthedTenantEvaluationsStudioNewRoute;
+  "/_authed/_tenant/knowledge/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
+  "/_authed/_tenant/agent-templates/$templateId/": typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
+  "/_authed/_tenant/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
+  "/_authed/_tenant/capabilities/skills/": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/_authed/_tenant/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
+  "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
+  "/_authed/_tenant/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
+  "/_authed/_tenant/agents/$agentId_/scheduled-jobs/": typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
+  fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
-    | '/'
-    | '/forgot-password'
-    | '/sign-in'
-    | '/auth/callback'
-    | '/invite/$token'
-    | '/onboarding/welcome'
-    | '/analytics'
-    | '/billing'
-    | '/capabilities'
-    | '/dashboard'
-    | '/knowledge'
-    | '/org'
-    | '/settings'
-    | '/agent-templates/defaults'
-    | '/agents/$agentId'
-    | '/agents/invites'
-    | '/agents/new'
-    | '/analytics/activity'
-    | '/analytics/cost'
-    | '/analytics/performance'
-    | '/capabilities/builtin-tools'
-    | '/capabilities/mcp-servers'
-    | '/evaluations/$runId'
-    | '/inbox/$inboxItemId'
-    | '/knowledge-bases/$kbId'
-    | '/knowledge/context-engine'
-    | '/knowledge/knowledge-bases'
-    | '/knowledge/memory'
-    | '/knowledge/wiki'
-    | '/people/$humanId'
-    | '/routines/$routineId'
-    | '/scheduled-jobs/$scheduledJobId'
-    | '/skill-runs/$runId'
-    | '/threads/$threadId'
-    | '/webhooks/$webhookId'
-    | '/agent-templates/'
-    | '/agents/'
-    | '/analytics/'
-    | '/artifacts/'
-    | '/capabilities/'
-    | '/evaluations/'
-    | '/inbox/'
-    | '/knowledge-bases/'
-    | '/knowledge/'
-    | '/memory/'
-    | '/people/'
-    | '/routines/'
-    | '/scheduled-jobs/'
-    | '/security/'
-    | '/skill-runs/'
-    | '/threads/'
-    | '/webhooks/'
-    | '/wiki/'
-    | '/workspace-reviews/'
-    | '/agent-templates/$templateId/$tab'
-    | '/agent-templates/$templateId/sync'
-    | '/agents/$agentId/editor'
-    | '/agents/$agentId/knowledge'
-    | '/agents/$agentId/memory'
-    | '/agents/$agentId/skills'
-    | '/agents/$agentId/sub-agents'
-    | '/agents/$agentId/workspace'
-    | '/agents/$agentId/workspaces'
-    | '/analytics/skill-runs/$runId'
-    | '/capabilities/plugins/$uploadId'
-    | '/capabilities/skills/$slug'
-    | '/capabilities/skills/builder'
-    | '/evaluations/studio/$testCaseId'
-    | '/evaluations/studio/new'
-    | '/knowledge/knowledge-bases/$kbId'
-    | '/agent-templates/$templateId/'
-    | '/analytics/skill-runs/'
-    | '/capabilities/plugins/'
-    | '/capabilities/skills/'
-    | '/evaluations/studio/'
-    | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
-    | '/evaluations/studio/edit/$testCaseId'
-    | '/agents/$agentId/scheduled-jobs/'
-  fileRoutesByTo: FileRoutesByTo
+    | "/"
+    | "/forgot-password"
+    | "/sign-in"
+    | "/auth/callback"
+    | "/invite/$token"
+    | "/onboarding/welcome"
+    | "/analytics"
+    | "/billing"
+    | "/capabilities"
+    | "/dashboard"
+    | "/knowledge"
+    | "/org"
+    | "/settings"
+    | "/agent-templates/defaults"
+    | "/agents/$agentId"
+    | "/agents/invites"
+    | "/agents/new"
+    | "/analytics/activity"
+    | "/analytics/cost"
+    | "/analytics/performance"
+    | "/capabilities/builtin-tools"
+    | "/capabilities/mcp-servers"
+    | "/evaluations/$runId"
+    | "/inbox/$inboxItemId"
+    | "/knowledge-bases/$kbId"
+    | "/knowledge/context-engine"
+    | "/knowledge/knowledge-bases"
+    | "/knowledge/memory"
+    | "/knowledge/wiki"
+    | "/people/$humanId"
+    | "/routines/$routineId"
+    | "/scheduled-jobs/$scheduledJobId"
+    | "/threads/$threadId"
+    | "/webhooks/$webhookId"
+    | "/agent-templates/"
+    | "/agents/"
+    | "/analytics/"
+    | "/artifacts/"
+    | "/capabilities/"
+    | "/evaluations/"
+    | "/inbox/"
+    | "/knowledge-bases/"
+    | "/knowledge/"
+    | "/memory/"
+    | "/people/"
+    | "/routines/"
+    | "/scheduled-jobs/"
+    | "/security/"
+    | "/threads/"
+    | "/webhooks/"
+    | "/wiki/"
+    | "/workspace-reviews/"
+    | "/agent-templates/$templateId/$tab"
+    | "/agent-templates/$templateId/sync"
+    | "/agents/$agentId/editor"
+    | "/agents/$agentId/knowledge"
+    | "/agents/$agentId/memory"
+    | "/agents/$agentId/skills"
+    | "/agents/$agentId/sub-agents"
+    | "/agents/$agentId/workspace"
+    | "/agents/$agentId/workspaces"
+    | "/capabilities/plugins/$uploadId"
+    | "/capabilities/skills/$slug"
+    | "/capabilities/skills/builder"
+    | "/evaluations/studio/$testCaseId"
+    | "/evaluations/studio/new"
+    | "/knowledge/knowledge-bases/$kbId"
+    | "/agent-templates/$templateId/"
+    | "/capabilities/plugins/"
+    | "/capabilities/skills/"
+    | "/evaluations/studio/"
+    | "/agents/$agentId/scheduled-jobs/$scheduledJobId"
+    | "/evaluations/studio/edit/$testCaseId"
+    | "/agents/$agentId/scheduled-jobs/";
+  fileRoutesByTo: FileRoutesByTo;
   to:
-    | '/'
-    | '/forgot-password'
-    | '/sign-in'
-    | '/auth/callback'
-    | '/invite/$token'
-    | '/onboarding/welcome'
-    | '/billing'
-    | '/dashboard'
-    | '/org'
-    | '/settings'
-    | '/agent-templates/defaults'
-    | '/agents/$agentId'
-    | '/agents/invites'
-    | '/agents/new'
-    | '/analytics/activity'
-    | '/analytics/cost'
-    | '/analytics/performance'
-    | '/capabilities/builtin-tools'
-    | '/capabilities/mcp-servers'
-    | '/evaluations/$runId'
-    | '/inbox/$inboxItemId'
-    | '/knowledge-bases/$kbId'
-    | '/knowledge/context-engine'
-    | '/knowledge/knowledge-bases'
-    | '/knowledge/memory'
-    | '/knowledge/wiki'
-    | '/people/$humanId'
-    | '/routines/$routineId'
-    | '/scheduled-jobs/$scheduledJobId'
-    | '/skill-runs/$runId'
-    | '/threads/$threadId'
-    | '/webhooks/$webhookId'
-    | '/agent-templates'
-    | '/agents'
-    | '/analytics'
-    | '/artifacts'
-    | '/capabilities'
-    | '/evaluations'
-    | '/inbox'
-    | '/knowledge-bases'
-    | '/knowledge'
-    | '/memory'
-    | '/people'
-    | '/routines'
-    | '/scheduled-jobs'
-    | '/security'
-    | '/skill-runs'
-    | '/threads'
-    | '/webhooks'
-    | '/wiki'
-    | '/workspace-reviews'
-    | '/agent-templates/$templateId/$tab'
-    | '/agent-templates/$templateId/sync'
-    | '/agents/$agentId/editor'
-    | '/agents/$agentId/knowledge'
-    | '/agents/$agentId/memory'
-    | '/agents/$agentId/skills'
-    | '/agents/$agentId/sub-agents'
-    | '/agents/$agentId/workspace'
-    | '/agents/$agentId/workspaces'
-    | '/analytics/skill-runs/$runId'
-    | '/capabilities/plugins/$uploadId'
-    | '/capabilities/skills/$slug'
-    | '/capabilities/skills/builder'
-    | '/evaluations/studio/$testCaseId'
-    | '/evaluations/studio/new'
-    | '/knowledge/knowledge-bases/$kbId'
-    | '/agent-templates/$templateId'
-    | '/analytics/skill-runs'
-    | '/capabilities/plugins'
-    | '/capabilities/skills'
-    | '/evaluations/studio'
-    | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
-    | '/evaluations/studio/edit/$testCaseId'
-    | '/agents/$agentId/scheduled-jobs'
+    | "/"
+    | "/forgot-password"
+    | "/sign-in"
+    | "/auth/callback"
+    | "/invite/$token"
+    | "/onboarding/welcome"
+    | "/billing"
+    | "/dashboard"
+    | "/org"
+    | "/settings"
+    | "/agent-templates/defaults"
+    | "/agents/$agentId"
+    | "/agents/invites"
+    | "/agents/new"
+    | "/analytics/activity"
+    | "/analytics/cost"
+    | "/analytics/performance"
+    | "/capabilities/builtin-tools"
+    | "/capabilities/mcp-servers"
+    | "/evaluations/$runId"
+    | "/inbox/$inboxItemId"
+    | "/knowledge-bases/$kbId"
+    | "/knowledge/context-engine"
+    | "/knowledge/knowledge-bases"
+    | "/knowledge/memory"
+    | "/knowledge/wiki"
+    | "/people/$humanId"
+    | "/routines/$routineId"
+    | "/scheduled-jobs/$scheduledJobId"
+    | "/threads/$threadId"
+    | "/webhooks/$webhookId"
+    | "/agent-templates"
+    | "/agents"
+    | "/analytics"
+    | "/artifacts"
+    | "/capabilities"
+    | "/evaluations"
+    | "/inbox"
+    | "/knowledge-bases"
+    | "/knowledge"
+    | "/memory"
+    | "/people"
+    | "/routines"
+    | "/scheduled-jobs"
+    | "/security"
+    | "/threads"
+    | "/webhooks"
+    | "/wiki"
+    | "/workspace-reviews"
+    | "/agent-templates/$templateId/$tab"
+    | "/agent-templates/$templateId/sync"
+    | "/agents/$agentId/editor"
+    | "/agents/$agentId/knowledge"
+    | "/agents/$agentId/memory"
+    | "/agents/$agentId/skills"
+    | "/agents/$agentId/sub-agents"
+    | "/agents/$agentId/workspace"
+    | "/agents/$agentId/workspaces"
+    | "/capabilities/plugins/$uploadId"
+    | "/capabilities/skills/$slug"
+    | "/capabilities/skills/builder"
+    | "/evaluations/studio/$testCaseId"
+    | "/evaluations/studio/new"
+    | "/knowledge/knowledge-bases/$kbId"
+    | "/agent-templates/$templateId"
+    | "/capabilities/plugins"
+    | "/capabilities/skills"
+    | "/evaluations/studio"
+    | "/agents/$agentId/scheduled-jobs/$scheduledJobId"
+    | "/evaluations/studio/edit/$testCaseId"
+    | "/agents/$agentId/scheduled-jobs";
   id:
-    | '__root__'
-    | '/'
-    | '/_authed'
-    | '/forgot-password'
-    | '/sign-in'
-    | '/_authed/_tenant'
-    | '/auth/callback'
-    | '/invite/$token'
-    | '/onboarding/welcome'
-    | '/_authed/_tenant/analytics'
-    | '/_authed/_tenant/billing'
-    | '/_authed/_tenant/capabilities'
-    | '/_authed/_tenant/dashboard'
-    | '/_authed/_tenant/knowledge'
-    | '/_authed/_tenant/org'
-    | '/_authed/_tenant/settings'
-    | '/_authed/_tenant/agent-templates/defaults'
-    | '/_authed/_tenant/agents/$agentId'
-    | '/_authed/_tenant/agents/invites'
-    | '/_authed/_tenant/agents/new'
-    | '/_authed/_tenant/analytics/activity'
-    | '/_authed/_tenant/analytics/cost'
-    | '/_authed/_tenant/analytics/performance'
-    | '/_authed/_tenant/capabilities/builtin-tools'
-    | '/_authed/_tenant/capabilities/mcp-servers'
-    | '/_authed/_tenant/evaluations/$runId'
-    | '/_authed/_tenant/inbox/$inboxItemId'
-    | '/_authed/_tenant/knowledge-bases/$kbId'
-    | '/_authed/_tenant/knowledge/context-engine'
-    | '/_authed/_tenant/knowledge/knowledge-bases'
-    | '/_authed/_tenant/knowledge/memory'
-    | '/_authed/_tenant/knowledge/wiki'
-    | '/_authed/_tenant/people/$humanId'
-    | '/_authed/_tenant/routines/$routineId'
-    | '/_authed/_tenant/scheduled-jobs/$scheduledJobId'
-    | '/_authed/_tenant/skill-runs/$runId'
-    | '/_authed/_tenant/threads/$threadId'
-    | '/_authed/_tenant/webhooks/$webhookId'
-    | '/_authed/_tenant/agent-templates/'
-    | '/_authed/_tenant/agents/'
-    | '/_authed/_tenant/analytics/'
-    | '/_authed/_tenant/artifacts/'
-    | '/_authed/_tenant/capabilities/'
-    | '/_authed/_tenant/evaluations/'
-    | '/_authed/_tenant/inbox/'
-    | '/_authed/_tenant/knowledge-bases/'
-    | '/_authed/_tenant/knowledge/'
-    | '/_authed/_tenant/memory/'
-    | '/_authed/_tenant/people/'
-    | '/_authed/_tenant/routines/'
-    | '/_authed/_tenant/scheduled-jobs/'
-    | '/_authed/_tenant/security/'
-    | '/_authed/_tenant/skill-runs/'
-    | '/_authed/_tenant/threads/'
-    | '/_authed/_tenant/webhooks/'
-    | '/_authed/_tenant/wiki/'
-    | '/_authed/_tenant/workspace-reviews/'
-    | '/_authed/_tenant/agent-templates/$templateId/$tab'
-    | '/_authed/_tenant/agent-templates/$templateId_/sync'
-    | '/_authed/_tenant/agents/$agentId_/editor'
-    | '/_authed/_tenant/agents/$agentId_/knowledge'
-    | '/_authed/_tenant/agents/$agentId_/memory'
-    | '/_authed/_tenant/agents/$agentId_/skills'
-    | '/_authed/_tenant/agents/$agentId_/sub-agents'
-    | '/_authed/_tenant/agents/$agentId_/workspace'
-    | '/_authed/_tenant/agents/$agentId_/workspaces'
-    | '/_authed/_tenant/analytics/skill-runs/$runId'
-    | '/_authed/_tenant/capabilities/plugins/$uploadId'
-    | '/_authed/_tenant/capabilities/skills/$slug'
-    | '/_authed/_tenant/capabilities/skills/builder'
-    | '/_authed/_tenant/evaluations/studio/$testCaseId'
-    | '/_authed/_tenant/evaluations/studio/new'
-    | '/_authed/_tenant/knowledge/knowledge-bases/$kbId'
-    | '/_authed/_tenant/agent-templates/$templateId/'
-    | '/_authed/_tenant/analytics/skill-runs/'
-    | '/_authed/_tenant/capabilities/plugins/'
-    | '/_authed/_tenant/capabilities/skills/'
-    | '/_authed/_tenant/evaluations/studio/'
-    | '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId'
-    | '/_authed/_tenant/evaluations/studio/edit/$testCaseId'
-    | '/_authed/_tenant/agents/$agentId_/scheduled-jobs/'
-  fileRoutesById: FileRoutesById
+    | "__root__"
+    | "/"
+    | "/_authed"
+    | "/forgot-password"
+    | "/sign-in"
+    | "/_authed/_tenant"
+    | "/auth/callback"
+    | "/invite/$token"
+    | "/onboarding/welcome"
+    | "/_authed/_tenant/analytics"
+    | "/_authed/_tenant/billing"
+    | "/_authed/_tenant/capabilities"
+    | "/_authed/_tenant/dashboard"
+    | "/_authed/_tenant/knowledge"
+    | "/_authed/_tenant/org"
+    | "/_authed/_tenant/settings"
+    | "/_authed/_tenant/agent-templates/defaults"
+    | "/_authed/_tenant/agents/$agentId"
+    | "/_authed/_tenant/agents/invites"
+    | "/_authed/_tenant/agents/new"
+    | "/_authed/_tenant/analytics/activity"
+    | "/_authed/_tenant/analytics/cost"
+    | "/_authed/_tenant/analytics/performance"
+    | "/_authed/_tenant/capabilities/builtin-tools"
+    | "/_authed/_tenant/capabilities/mcp-servers"
+    | "/_authed/_tenant/evaluations/$runId"
+    | "/_authed/_tenant/inbox/$inboxItemId"
+    | "/_authed/_tenant/knowledge-bases/$kbId"
+    | "/_authed/_tenant/knowledge/context-engine"
+    | "/_authed/_tenant/knowledge/knowledge-bases"
+    | "/_authed/_tenant/knowledge/memory"
+    | "/_authed/_tenant/knowledge/wiki"
+    | "/_authed/_tenant/people/$humanId"
+    | "/_authed/_tenant/routines/$routineId"
+    | "/_authed/_tenant/scheduled-jobs/$scheduledJobId"
+    | "/_authed/_tenant/threads/$threadId"
+    | "/_authed/_tenant/webhooks/$webhookId"
+    | "/_authed/_tenant/agent-templates/"
+    | "/_authed/_tenant/agents/"
+    | "/_authed/_tenant/analytics/"
+    | "/_authed/_tenant/artifacts/"
+    | "/_authed/_tenant/capabilities/"
+    | "/_authed/_tenant/evaluations/"
+    | "/_authed/_tenant/inbox/"
+    | "/_authed/_tenant/knowledge-bases/"
+    | "/_authed/_tenant/knowledge/"
+    | "/_authed/_tenant/memory/"
+    | "/_authed/_tenant/people/"
+    | "/_authed/_tenant/routines/"
+    | "/_authed/_tenant/scheduled-jobs/"
+    | "/_authed/_tenant/security/"
+    | "/_authed/_tenant/threads/"
+    | "/_authed/_tenant/webhooks/"
+    | "/_authed/_tenant/wiki/"
+    | "/_authed/_tenant/workspace-reviews/"
+    | "/_authed/_tenant/agent-templates/$templateId/$tab"
+    | "/_authed/_tenant/agent-templates/$templateId_/sync"
+    | "/_authed/_tenant/agents/$agentId_/editor"
+    | "/_authed/_tenant/agents/$agentId_/knowledge"
+    | "/_authed/_tenant/agents/$agentId_/memory"
+    | "/_authed/_tenant/agents/$agentId_/skills"
+    | "/_authed/_tenant/agents/$agentId_/sub-agents"
+    | "/_authed/_tenant/agents/$agentId_/workspace"
+    | "/_authed/_tenant/agents/$agentId_/workspaces"
+    | "/_authed/_tenant/capabilities/plugins/$uploadId"
+    | "/_authed/_tenant/capabilities/skills/$slug"
+    | "/_authed/_tenant/capabilities/skills/builder"
+    | "/_authed/_tenant/evaluations/studio/$testCaseId"
+    | "/_authed/_tenant/evaluations/studio/new"
+    | "/_authed/_tenant/knowledge/knowledge-bases/$kbId"
+    | "/_authed/_tenant/agent-templates/$templateId/"
+    | "/_authed/_tenant/capabilities/plugins/"
+    | "/_authed/_tenant/capabilities/skills/"
+    | "/_authed/_tenant/evaluations/studio/"
+    | "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId"
+    | "/_authed/_tenant/evaluations/studio/edit/$testCaseId"
+    | "/_authed/_tenant/agents/$agentId_/scheduled-jobs/";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AuthedRoute: typeof AuthedRouteWithChildren
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  SignInRoute: typeof SignInRoute
-  AuthCallbackRoute: typeof AuthCallbackRoute
-  InviteTokenRoute: typeof InviteTokenRoute
-  OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
+  IndexRoute: typeof IndexRoute;
+  AuthedRoute: typeof AuthedRouteWithChildren;
+  ForgotPasswordRoute: typeof ForgotPasswordRoute;
+  SignInRoute: typeof SignInRoute;
+  AuthCallbackRoute: typeof AuthCallbackRoute;
+  InviteTokenRoute: typeof InviteTokenRoute;
+  OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authed': {
-      id: '/_authed'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding/welcome': {
-      id: '/onboarding/welcome'
-      path: '/onboarding/welcome'
-      fullPath: '/onboarding/welcome'
-      preLoaderRoute: typeof OnboardingWelcomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/invite/$token': {
-      id: '/invite/$token'
-      path: '/invite/$token'
-      fullPath: '/invite/$token'
-      preLoaderRoute: typeof InviteTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authed/_tenant': {
-      id: '/_authed/_tenant'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthedTenantRouteImport
-      parentRoute: typeof AuthedRoute
-    }
-    '/_authed/_tenant/settings': {
-      id: '/_authed/_tenant/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthedTenantSettingsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/org': {
-      id: '/_authed/_tenant/org'
-      path: '/org'
-      fullPath: '/org'
-      preLoaderRoute: typeof AuthedTenantOrgRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/knowledge': {
-      id: '/_authed/_tenant/knowledge'
-      path: '/knowledge'
-      fullPath: '/knowledge'
-      preLoaderRoute: typeof AuthedTenantKnowledgeRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/dashboard': {
-      id: '/_authed/_tenant/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthedTenantDashboardRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/capabilities': {
-      id: '/_authed/_tenant/capabilities'
-      path: '/capabilities'
-      fullPath: '/capabilities'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/billing': {
-      id: '/_authed/_tenant/billing'
-      path: '/billing'
-      fullPath: '/billing'
-      preLoaderRoute: typeof AuthedTenantBillingRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/analytics': {
-      id: '/_authed/_tenant/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AuthedTenantAnalyticsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/workspace-reviews/': {
-      id: '/_authed/_tenant/workspace-reviews/'
-      path: '/workspace-reviews'
-      fullPath: '/workspace-reviews/'
-      preLoaderRoute: typeof AuthedTenantWorkspaceReviewsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/wiki/': {
-      id: '/_authed/_tenant/wiki/'
-      path: '/wiki'
-      fullPath: '/wiki/'
-      preLoaderRoute: typeof AuthedTenantWikiIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/webhooks/': {
-      id: '/_authed/_tenant/webhooks/'
-      path: '/webhooks'
-      fullPath: '/webhooks/'
-      preLoaderRoute: typeof AuthedTenantWebhooksIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/threads/': {
-      id: '/_authed/_tenant/threads/'
-      path: '/threads'
-      fullPath: '/threads/'
-      preLoaderRoute: typeof AuthedTenantThreadsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/skill-runs/': {
-      id: '/_authed/_tenant/skill-runs/'
-      path: '/skill-runs'
-      fullPath: '/skill-runs/'
-      preLoaderRoute: typeof AuthedTenantSkillRunsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/security/': {
-      id: '/_authed/_tenant/security/'
-      path: '/security'
-      fullPath: '/security/'
-      preLoaderRoute: typeof AuthedTenantSecurityIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/scheduled-jobs/': {
-      id: '/_authed/_tenant/scheduled-jobs/'
-      path: '/scheduled-jobs'
-      fullPath: '/scheduled-jobs/'
-      preLoaderRoute: typeof AuthedTenantScheduledJobsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/routines/': {
-      id: '/_authed/_tenant/routines/'
-      path: '/routines'
-      fullPath: '/routines/'
-      preLoaderRoute: typeof AuthedTenantRoutinesIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/people/': {
-      id: '/_authed/_tenant/people/'
-      path: '/people'
-      fullPath: '/people/'
-      preLoaderRoute: typeof AuthedTenantPeopleIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/memory/': {
-      id: '/_authed/_tenant/memory/'
-      path: '/memory'
-      fullPath: '/memory/'
-      preLoaderRoute: typeof AuthedTenantMemoryIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/knowledge/': {
-      id: '/_authed/_tenant/knowledge/'
-      path: '/'
-      fullPath: '/knowledge/'
-      preLoaderRoute: typeof AuthedTenantKnowledgeIndexRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeRoute
-    }
-    '/_authed/_tenant/knowledge-bases/': {
-      id: '/_authed/_tenant/knowledge-bases/'
-      path: '/knowledge-bases'
-      fullPath: '/knowledge-bases/'
-      preLoaderRoute: typeof AuthedTenantKnowledgeBasesIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/inbox/': {
-      id: '/_authed/_tenant/inbox/'
-      path: '/inbox'
-      fullPath: '/inbox/'
-      preLoaderRoute: typeof AuthedTenantInboxIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/evaluations/': {
-      id: '/_authed/_tenant/evaluations/'
-      path: '/evaluations'
-      fullPath: '/evaluations/'
-      preLoaderRoute: typeof AuthedTenantEvaluationsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/capabilities/': {
-      id: '/_authed/_tenant/capabilities/'
-      path: '/'
-      fullPath: '/capabilities/'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesIndexRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/artifacts/': {
-      id: '/_authed/_tenant/artifacts/'
-      path: '/artifacts'
-      fullPath: '/artifacts/'
-      preLoaderRoute: typeof AuthedTenantArtifactsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/analytics/': {
-      id: '/_authed/_tenant/analytics/'
-      path: '/'
-      fullPath: '/analytics/'
-      preLoaderRoute: typeof AuthedTenantAnalyticsIndexRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/agents/': {
-      id: '/_authed/_tenant/agents/'
-      path: '/agents'
-      fullPath: '/agents/'
-      preLoaderRoute: typeof AuthedTenantAgentsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agent-templates/': {
-      id: '/_authed/_tenant/agent-templates/'
-      path: '/agent-templates'
-      fullPath: '/agent-templates/'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/webhooks/$webhookId': {
-      id: '/_authed/_tenant/webhooks/$webhookId'
-      path: '/webhooks/$webhookId'
-      fullPath: '/webhooks/$webhookId'
-      preLoaderRoute: typeof AuthedTenantWebhooksWebhookIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/threads/$threadId': {
-      id: '/_authed/_tenant/threads/$threadId'
-      path: '/threads/$threadId'
-      fullPath: '/threads/$threadId'
-      preLoaderRoute: typeof AuthedTenantThreadsThreadIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/skill-runs/$runId': {
-      id: '/_authed/_tenant/skill-runs/$runId'
-      path: '/skill-runs/$runId'
-      fullPath: '/skill-runs/$runId'
-      preLoaderRoute: typeof AuthedTenantSkillRunsRunIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/scheduled-jobs/$scheduledJobId': {
-      id: '/_authed/_tenant/scheduled-jobs/$scheduledJobId'
-      path: '/scheduled-jobs/$scheduledJobId'
-      fullPath: '/scheduled-jobs/$scheduledJobId'
-      preLoaderRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/routines/$routineId': {
-      id: '/_authed/_tenant/routines/$routineId'
-      path: '/routines/$routineId'
-      fullPath: '/routines/$routineId'
-      preLoaderRoute: typeof AuthedTenantRoutinesRoutineIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/people/$humanId': {
-      id: '/_authed/_tenant/people/$humanId'
-      path: '/people/$humanId'
-      fullPath: '/people/$humanId'
-      preLoaderRoute: typeof AuthedTenantPeopleHumanIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/knowledge/wiki': {
-      id: '/_authed/_tenant/knowledge/wiki'
-      path: '/wiki'
-      fullPath: '/knowledge/wiki'
-      preLoaderRoute: typeof AuthedTenantKnowledgeWikiRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeRoute
-    }
-    '/_authed/_tenant/knowledge/memory': {
-      id: '/_authed/_tenant/knowledge/memory'
-      path: '/memory'
-      fullPath: '/knowledge/memory'
-      preLoaderRoute: typeof AuthedTenantKnowledgeMemoryRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeRoute
-    }
-    '/_authed/_tenant/knowledge/knowledge-bases': {
-      id: '/_authed/_tenant/knowledge/knowledge-bases'
-      path: '/knowledge-bases'
-      fullPath: '/knowledge/knowledge-bases'
-      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeRoute
-    }
-    '/_authed/_tenant/knowledge/context-engine': {
-      id: '/_authed/_tenant/knowledge/context-engine'
-      path: '/context-engine'
-      fullPath: '/knowledge/context-engine'
-      preLoaderRoute: typeof AuthedTenantKnowledgeContextEngineRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeRoute
-    }
-    '/_authed/_tenant/knowledge-bases/$kbId': {
-      id: '/_authed/_tenant/knowledge-bases/$kbId'
-      path: '/knowledge-bases/$kbId'
-      fullPath: '/knowledge-bases/$kbId'
-      preLoaderRoute: typeof AuthedTenantKnowledgeBasesKbIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/inbox/$inboxItemId': {
-      id: '/_authed/_tenant/inbox/$inboxItemId'
-      path: '/inbox/$inboxItemId'
-      fullPath: '/inbox/$inboxItemId'
-      preLoaderRoute: typeof AuthedTenantInboxInboxItemIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/evaluations/$runId': {
-      id: '/_authed/_tenant/evaluations/$runId'
-      path: '/evaluations/$runId'
-      fullPath: '/evaluations/$runId'
-      preLoaderRoute: typeof AuthedTenantEvaluationsRunIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/capabilities/mcp-servers': {
-      id: '/_authed/_tenant/capabilities/mcp-servers'
-      path: '/mcp-servers'
-      fullPath: '/capabilities/mcp-servers'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesMcpServersRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/capabilities/builtin-tools': {
-      id: '/_authed/_tenant/capabilities/builtin-tools'
-      path: '/builtin-tools'
-      fullPath: '/capabilities/builtin-tools'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/analytics/performance': {
-      id: '/_authed/_tenant/analytics/performance'
-      path: '/performance'
-      fullPath: '/analytics/performance'
-      preLoaderRoute: typeof AuthedTenantAnalyticsPerformanceRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/analytics/cost': {
-      id: '/_authed/_tenant/analytics/cost'
-      path: '/cost'
-      fullPath: '/analytics/cost'
-      preLoaderRoute: typeof AuthedTenantAnalyticsCostRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/analytics/activity': {
-      id: '/_authed/_tenant/analytics/activity'
-      path: '/activity'
-      fullPath: '/analytics/activity'
-      preLoaderRoute: typeof AuthedTenantAnalyticsActivityRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/agents/new': {
-      id: '/_authed/_tenant/agents/new'
-      path: '/agents/new'
-      fullPath: '/agents/new'
-      preLoaderRoute: typeof AuthedTenantAgentsNewRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/invites': {
-      id: '/_authed/_tenant/agents/invites'
-      path: '/agents/invites'
-      fullPath: '/agents/invites'
-      preLoaderRoute: typeof AuthedTenantAgentsInvitesRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId': {
-      id: '/_authed/_tenant/agents/$agentId'
-      path: '/agents/$agentId'
-      fullPath: '/agents/$agentId'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agent-templates/defaults': {
-      id: '/_authed/_tenant/agent-templates/defaults'
-      path: '/agent-templates/defaults'
-      fullPath: '/agent-templates/defaults'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesDefaultsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/evaluations/studio/': {
-      id: '/_authed/_tenant/evaluations/studio/'
-      path: '/evaluations/studio'
-      fullPath: '/evaluations/studio/'
-      preLoaderRoute: typeof AuthedTenantEvaluationsStudioIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/capabilities/skills/': {
-      id: '/_authed/_tenant/capabilities/skills/'
-      path: '/skills'
-      fullPath: '/capabilities/skills/'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsIndexRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/capabilities/plugins/': {
-      id: '/_authed/_tenant/capabilities/plugins/'
-      path: '/plugins'
-      fullPath: '/capabilities/plugins/'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsIndexRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/analytics/skill-runs/': {
-      id: '/_authed/_tenant/analytics/skill-runs/'
-      path: '/skill-runs'
-      fullPath: '/analytics/skill-runs/'
-      preLoaderRoute: typeof AuthedTenantAnalyticsSkillRunsIndexRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/agent-templates/$templateId/': {
-      id: '/_authed/_tenant/agent-templates/$templateId/'
-      path: '/agent-templates/$templateId'
-      fullPath: '/agent-templates/$templateId/'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/knowledge/knowledge-bases/$kbId': {
-      id: '/_authed/_tenant/knowledge/knowledge-bases/$kbId'
-      path: '/$kbId'
-      fullPath: '/knowledge/knowledge-bases/$kbId'
-      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport
-      parentRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRoute
-    }
-    '/_authed/_tenant/evaluations/studio/new': {
-      id: '/_authed/_tenant/evaluations/studio/new'
-      path: '/evaluations/studio/new'
-      fullPath: '/evaluations/studio/new'
-      preLoaderRoute: typeof AuthedTenantEvaluationsStudioNewRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/evaluations/studio/$testCaseId': {
-      id: '/_authed/_tenant/evaluations/studio/$testCaseId'
-      path: '/evaluations/studio/$testCaseId'
-      fullPath: '/evaluations/studio/$testCaseId'
-      preLoaderRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/capabilities/skills/builder': {
-      id: '/_authed/_tenant/capabilities/skills/builder'
-      path: '/skills/builder'
-      fullPath: '/capabilities/skills/builder'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsBuilderRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/capabilities/skills/$slug': {
-      id: '/_authed/_tenant/capabilities/skills/$slug'
-      path: '/skills/$slug'
-      fullPath: '/capabilities/skills/$slug'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsSlugRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/capabilities/plugins/$uploadId': {
-      id: '/_authed/_tenant/capabilities/plugins/$uploadId'
-      path: '/plugins/$uploadId'
-      fullPath: '/capabilities/plugins/$uploadId'
-      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRouteImport
-      parentRoute: typeof AuthedTenantCapabilitiesRoute
-    }
-    '/_authed/_tenant/analytics/skill-runs/$runId': {
-      id: '/_authed/_tenant/analytics/skill-runs/$runId'
-      path: '/skill-runs/$runId'
-      fullPath: '/analytics/skill-runs/$runId'
-      preLoaderRoute: typeof AuthedTenantAnalyticsSkillRunsRunIdRouteImport
-      parentRoute: typeof AuthedTenantAnalyticsRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/workspaces': {
-      id: '/_authed/_tenant/agents/$agentId_/workspaces'
-      path: '/agents/$agentId/workspaces'
-      fullPath: '/agents/$agentId/workspaces'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/workspace': {
-      id: '/_authed/_tenant/agents/$agentId_/workspace'
-      path: '/agents/$agentId/workspace'
-      fullPath: '/agents/$agentId/workspace'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/sub-agents': {
-      id: '/_authed/_tenant/agents/$agentId_/sub-agents'
-      path: '/agents/$agentId/sub-agents'
-      fullPath: '/agents/$agentId/sub-agents'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/skills': {
-      id: '/_authed/_tenant/agents/$agentId_/skills'
-      path: '/agents/$agentId/skills'
-      fullPath: '/agents/$agentId/skills'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdSkillsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/memory': {
-      id: '/_authed/_tenant/agents/$agentId_/memory'
-      path: '/agents/$agentId/memory'
-      fullPath: '/agents/$agentId/memory'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdMemoryRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/knowledge': {
-      id: '/_authed/_tenant/agents/$agentId_/knowledge'
-      path: '/agents/$agentId/knowledge'
-      fullPath: '/agents/$agentId/knowledge'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/editor': {
-      id: '/_authed/_tenant/agents/$agentId_/editor'
-      path: '/agents/$agentId/editor'
-      fullPath: '/agents/$agentId/editor'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdEditorRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agent-templates/$templateId_/sync': {
-      id: '/_authed/_tenant/agent-templates/$templateId_/sync'
-      path: '/agent-templates/$templateId/sync'
-      fullPath: '/agent-templates/$templateId/sync'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agent-templates/$templateId/$tab': {
-      id: '/_authed/_tenant/agent-templates/$templateId/$tab'
-      path: '/agent-templates/$templateId/$tab'
-      fullPath: '/agent-templates/$templateId/$tab'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/scheduled-jobs/': {
-      id: '/_authed/_tenant/agents/$agentId_/scheduled-jobs/'
-      path: '/agents/$agentId/scheduled-jobs'
-      fullPath: '/agents/$agentId/scheduled-jobs/'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/evaluations/studio/edit/$testCaseId': {
-      id: '/_authed/_tenant/evaluations/studio/edit/$testCaseId'
-      path: '/evaluations/studio/edit/$testCaseId'
-      fullPath: '/evaluations/studio/edit/$testCaseId'
-      preLoaderRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId': {
-      id: '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId'
-      path: '/agents/$agentId/scheduled-jobs/$scheduledJobId'
-      fullPath: '/agents/$agentId/scheduled-jobs/$scheduledJobId'
-      preLoaderRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
+    "/sign-in": {
+      id: "/sign-in";
+      path: "/sign-in";
+      fullPath: "/sign-in";
+      preLoaderRoute: typeof SignInRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/forgot-password": {
+      id: "/forgot-password";
+      path: "/forgot-password";
+      fullPath: "/forgot-password";
+      preLoaderRoute: typeof ForgotPasswordRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/_authed": {
+      id: "/_authed";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof AuthedRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/onboarding/welcome": {
+      id: "/onboarding/welcome";
+      path: "/onboarding/welcome";
+      fullPath: "/onboarding/welcome";
+      preLoaderRoute: typeof OnboardingWelcomeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/invite/$token": {
+      id: "/invite/$token";
+      path: "/invite/$token";
+      fullPath: "/invite/$token";
+      preLoaderRoute: typeof InviteTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/auth/callback": {
+      id: "/auth/callback";
+      path: "/auth/callback";
+      fullPath: "/auth/callback";
+      preLoaderRoute: typeof AuthCallbackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/_authed/_tenant": {
+      id: "/_authed/_tenant";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof AuthedTenantRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
+    "/_authed/_tenant/settings": {
+      id: "/_authed/_tenant/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof AuthedTenantSettingsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/org": {
+      id: "/_authed/_tenant/org";
+      path: "/org";
+      fullPath: "/org";
+      preLoaderRoute: typeof AuthedTenantOrgRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/knowledge": {
+      id: "/_authed/_tenant/knowledge";
+      path: "/knowledge";
+      fullPath: "/knowledge";
+      preLoaderRoute: typeof AuthedTenantKnowledgeRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/dashboard": {
+      id: "/_authed/_tenant/dashboard";
+      path: "/dashboard";
+      fullPath: "/dashboard";
+      preLoaderRoute: typeof AuthedTenantDashboardRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/capabilities": {
+      id: "/_authed/_tenant/capabilities";
+      path: "/capabilities";
+      fullPath: "/capabilities";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/billing": {
+      id: "/_authed/_tenant/billing";
+      path: "/billing";
+      fullPath: "/billing";
+      preLoaderRoute: typeof AuthedTenantBillingRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/analytics": {
+      id: "/_authed/_tenant/analytics";
+      path: "/analytics";
+      fullPath: "/analytics";
+      preLoaderRoute: typeof AuthedTenantAnalyticsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/workspace-reviews/": {
+      id: "/_authed/_tenant/workspace-reviews/";
+      path: "/workspace-reviews";
+      fullPath: "/workspace-reviews/";
+      preLoaderRoute: typeof AuthedTenantWorkspaceReviewsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/wiki/": {
+      id: "/_authed/_tenant/wiki/";
+      path: "/wiki";
+      fullPath: "/wiki/";
+      preLoaderRoute: typeof AuthedTenantWikiIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/webhooks/": {
+      id: "/_authed/_tenant/webhooks/";
+      path: "/webhooks";
+      fullPath: "/webhooks/";
+      preLoaderRoute: typeof AuthedTenantWebhooksIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/threads/": {
+      id: "/_authed/_tenant/threads/";
+      path: "/threads";
+      fullPath: "/threads/";
+      preLoaderRoute: typeof AuthedTenantThreadsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/security/": {
+      id: "/_authed/_tenant/security/";
+      path: "/security";
+      fullPath: "/security/";
+      preLoaderRoute: typeof AuthedTenantSecurityIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/scheduled-jobs/": {
+      id: "/_authed/_tenant/scheduled-jobs/";
+      path: "/scheduled-jobs";
+      fullPath: "/scheduled-jobs/";
+      preLoaderRoute: typeof AuthedTenantScheduledJobsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/routines/": {
+      id: "/_authed/_tenant/routines/";
+      path: "/routines";
+      fullPath: "/routines/";
+      preLoaderRoute: typeof AuthedTenantRoutinesIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/people/": {
+      id: "/_authed/_tenant/people/";
+      path: "/people";
+      fullPath: "/people/";
+      preLoaderRoute: typeof AuthedTenantPeopleIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/memory/": {
+      id: "/_authed/_tenant/memory/";
+      path: "/memory";
+      fullPath: "/memory/";
+      preLoaderRoute: typeof AuthedTenantMemoryIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/knowledge/": {
+      id: "/_authed/_tenant/knowledge/";
+      path: "/";
+      fullPath: "/knowledge/";
+      preLoaderRoute: typeof AuthedTenantKnowledgeIndexRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge-bases/": {
+      id: "/_authed/_tenant/knowledge-bases/";
+      path: "/knowledge-bases";
+      fullPath: "/knowledge-bases/";
+      preLoaderRoute: typeof AuthedTenantKnowledgeBasesIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/inbox/": {
+      id: "/_authed/_tenant/inbox/";
+      path: "/inbox";
+      fullPath: "/inbox/";
+      preLoaderRoute: typeof AuthedTenantInboxIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/evaluations/": {
+      id: "/_authed/_tenant/evaluations/";
+      path: "/evaluations";
+      fullPath: "/evaluations/";
+      preLoaderRoute: typeof AuthedTenantEvaluationsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/capabilities/": {
+      id: "/_authed/_tenant/capabilities/";
+      path: "/";
+      fullPath: "/capabilities/";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesIndexRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/artifacts/": {
+      id: "/_authed/_tenant/artifacts/";
+      path: "/artifacts";
+      fullPath: "/artifacts/";
+      preLoaderRoute: typeof AuthedTenantArtifactsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/analytics/": {
+      id: "/_authed/_tenant/analytics/";
+      path: "/";
+      fullPath: "/analytics/";
+      preLoaderRoute: typeof AuthedTenantAnalyticsIndexRouteImport;
+      parentRoute: typeof AuthedTenantAnalyticsRoute;
+    };
+    "/_authed/_tenant/agents/": {
+      id: "/_authed/_tenant/agents/";
+      path: "/agents";
+      fullPath: "/agents/";
+      preLoaderRoute: typeof AuthedTenantAgentsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agent-templates/": {
+      id: "/_authed/_tenant/agent-templates/";
+      path: "/agent-templates";
+      fullPath: "/agent-templates/";
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/webhooks/$webhookId": {
+      id: "/_authed/_tenant/webhooks/$webhookId";
+      path: "/webhooks/$webhookId";
+      fullPath: "/webhooks/$webhookId";
+      preLoaderRoute: typeof AuthedTenantWebhooksWebhookIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/threads/$threadId": {
+      id: "/_authed/_tenant/threads/$threadId";
+      path: "/threads/$threadId";
+      fullPath: "/threads/$threadId";
+      preLoaderRoute: typeof AuthedTenantThreadsThreadIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/scheduled-jobs/$scheduledJobId": {
+      id: "/_authed/_tenant/scheduled-jobs/$scheduledJobId";
+      path: "/scheduled-jobs/$scheduledJobId";
+      fullPath: "/scheduled-jobs/$scheduledJobId";
+      preLoaderRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/routines/$routineId": {
+      id: "/_authed/_tenant/routines/$routineId";
+      path: "/routines/$routineId";
+      fullPath: "/routines/$routineId";
+      preLoaderRoute: typeof AuthedTenantRoutinesRoutineIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/people/$humanId": {
+      id: "/_authed/_tenant/people/$humanId";
+      path: "/people/$humanId";
+      fullPath: "/people/$humanId";
+      preLoaderRoute: typeof AuthedTenantPeopleHumanIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/knowledge/wiki": {
+      id: "/_authed/_tenant/knowledge/wiki";
+      path: "/wiki";
+      fullPath: "/knowledge/wiki";
+      preLoaderRoute: typeof AuthedTenantKnowledgeWikiRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge/memory": {
+      id: "/_authed/_tenant/knowledge/memory";
+      path: "/memory";
+      fullPath: "/knowledge/memory";
+      preLoaderRoute: typeof AuthedTenantKnowledgeMemoryRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge/knowledge-bases": {
+      id: "/_authed/_tenant/knowledge/knowledge-bases";
+      path: "/knowledge-bases";
+      fullPath: "/knowledge/knowledge-bases";
+      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge/context-engine": {
+      id: "/_authed/_tenant/knowledge/context-engine";
+      path: "/context-engine";
+      fullPath: "/knowledge/context-engine";
+      preLoaderRoute: typeof AuthedTenantKnowledgeContextEngineRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge-bases/$kbId": {
+      id: "/_authed/_tenant/knowledge-bases/$kbId";
+      path: "/knowledge-bases/$kbId";
+      fullPath: "/knowledge-bases/$kbId";
+      preLoaderRoute: typeof AuthedTenantKnowledgeBasesKbIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/inbox/$inboxItemId": {
+      id: "/_authed/_tenant/inbox/$inboxItemId";
+      path: "/inbox/$inboxItemId";
+      fullPath: "/inbox/$inboxItemId";
+      preLoaderRoute: typeof AuthedTenantInboxInboxItemIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/evaluations/$runId": {
+      id: "/_authed/_tenant/evaluations/$runId";
+      path: "/evaluations/$runId";
+      fullPath: "/evaluations/$runId";
+      preLoaderRoute: typeof AuthedTenantEvaluationsRunIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/capabilities/mcp-servers": {
+      id: "/_authed/_tenant/capabilities/mcp-servers";
+      path: "/mcp-servers";
+      fullPath: "/capabilities/mcp-servers";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesMcpServersRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/capabilities/builtin-tools": {
+      id: "/_authed/_tenant/capabilities/builtin-tools";
+      path: "/builtin-tools";
+      fullPath: "/capabilities/builtin-tools";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/analytics/performance": {
+      id: "/_authed/_tenant/analytics/performance";
+      path: "/performance";
+      fullPath: "/analytics/performance";
+      preLoaderRoute: typeof AuthedTenantAnalyticsPerformanceRouteImport;
+      parentRoute: typeof AuthedTenantAnalyticsRoute;
+    };
+    "/_authed/_tenant/analytics/cost": {
+      id: "/_authed/_tenant/analytics/cost";
+      path: "/cost";
+      fullPath: "/analytics/cost";
+      preLoaderRoute: typeof AuthedTenantAnalyticsCostRouteImport;
+      parentRoute: typeof AuthedTenantAnalyticsRoute;
+    };
+    "/_authed/_tenant/analytics/activity": {
+      id: "/_authed/_tenant/analytics/activity";
+      path: "/activity";
+      fullPath: "/analytics/activity";
+      preLoaderRoute: typeof AuthedTenantAnalyticsActivityRouteImport;
+      parentRoute: typeof AuthedTenantAnalyticsRoute;
+    };
+    "/_authed/_tenant/agents/new": {
+      id: "/_authed/_tenant/agents/new";
+      path: "/agents/new";
+      fullPath: "/agents/new";
+      preLoaderRoute: typeof AuthedTenantAgentsNewRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/invites": {
+      id: "/_authed/_tenant/agents/invites";
+      path: "/agents/invites";
+      fullPath: "/agents/invites";
+      preLoaderRoute: typeof AuthedTenantAgentsInvitesRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId": {
+      id: "/_authed/_tenant/agents/$agentId";
+      path: "/agents/$agentId";
+      fullPath: "/agents/$agentId";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agent-templates/defaults": {
+      id: "/_authed/_tenant/agent-templates/defaults";
+      path: "/agent-templates/defaults";
+      fullPath: "/agent-templates/defaults";
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesDefaultsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/evaluations/studio/": {
+      id: "/_authed/_tenant/evaluations/studio/";
+      path: "/evaluations/studio";
+      fullPath: "/evaluations/studio/";
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/capabilities/skills/": {
+      id: "/_authed/_tenant/capabilities/skills/";
+      path: "/skills";
+      fullPath: "/capabilities/skills/";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsIndexRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/capabilities/plugins/": {
+      id: "/_authed/_tenant/capabilities/plugins/";
+      path: "/plugins";
+      fullPath: "/capabilities/plugins/";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsIndexRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/agent-templates/$templateId/": {
+      id: "/_authed/_tenant/agent-templates/$templateId/";
+      path: "/agent-templates/$templateId";
+      fullPath: "/agent-templates/$templateId/";
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/knowledge/knowledge-bases/$kbId": {
+      id: "/_authed/_tenant/knowledge/knowledge-bases/$kbId";
+      path: "/$kbId";
+      fullPath: "/knowledge/knowledge-bases/$kbId";
+      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRoute;
+    };
+    "/_authed/_tenant/evaluations/studio/new": {
+      id: "/_authed/_tenant/evaluations/studio/new";
+      path: "/evaluations/studio/new";
+      fullPath: "/evaluations/studio/new";
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioNewRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/evaluations/studio/$testCaseId": {
+      id: "/_authed/_tenant/evaluations/studio/$testCaseId";
+      path: "/evaluations/studio/$testCaseId";
+      fullPath: "/evaluations/studio/$testCaseId";
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/capabilities/skills/builder": {
+      id: "/_authed/_tenant/capabilities/skills/builder";
+      path: "/skills/builder";
+      fullPath: "/capabilities/skills/builder";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsBuilderRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/capabilities/skills/$slug": {
+      id: "/_authed/_tenant/capabilities/skills/$slug";
+      path: "/skills/$slug";
+      fullPath: "/capabilities/skills/$slug";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsSlugRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/capabilities/plugins/$uploadId": {
+      id: "/_authed/_tenant/capabilities/plugins/$uploadId";
+      path: "/plugins/$uploadId";
+      fullPath: "/capabilities/plugins/$uploadId";
+      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRouteImport;
+      parentRoute: typeof AuthedTenantCapabilitiesRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/workspaces": {
+      id: "/_authed/_tenant/agents/$agentId_/workspaces";
+      path: "/agents/$agentId/workspaces";
+      fullPath: "/agents/$agentId/workspaces";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/workspace": {
+      id: "/_authed/_tenant/agents/$agentId_/workspace";
+      path: "/agents/$agentId/workspace";
+      fullPath: "/agents/$agentId/workspace";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/sub-agents": {
+      id: "/_authed/_tenant/agents/$agentId_/sub-agents";
+      path: "/agents/$agentId/sub-agents";
+      fullPath: "/agents/$agentId/sub-agents";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/skills": {
+      id: "/_authed/_tenant/agents/$agentId_/skills";
+      path: "/agents/$agentId/skills";
+      fullPath: "/agents/$agentId/skills";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdSkillsRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/memory": {
+      id: "/_authed/_tenant/agents/$agentId_/memory";
+      path: "/agents/$agentId/memory";
+      fullPath: "/agents/$agentId/memory";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdMemoryRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/knowledge": {
+      id: "/_authed/_tenant/agents/$agentId_/knowledge";
+      path: "/agents/$agentId/knowledge";
+      fullPath: "/agents/$agentId/knowledge";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/editor": {
+      id: "/_authed/_tenant/agents/$agentId_/editor";
+      path: "/agents/$agentId/editor";
+      fullPath: "/agents/$agentId/editor";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdEditorRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agent-templates/$templateId_/sync": {
+      id: "/_authed/_tenant/agent-templates/$templateId_/sync";
+      path: "/agent-templates/$templateId/sync";
+      fullPath: "/agent-templates/$templateId/sync";
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agent-templates/$templateId/$tab": {
+      id: "/_authed/_tenant/agent-templates/$templateId/$tab";
+      path: "/agent-templates/$templateId/$tab";
+      fullPath: "/agent-templates/$templateId/$tab";
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/scheduled-jobs/": {
+      id: "/_authed/_tenant/agents/$agentId_/scheduled-jobs/";
+      path: "/agents/$agentId/scheduled-jobs";
+      fullPath: "/agents/$agentId/scheduled-jobs/";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/evaluations/studio/edit/$testCaseId": {
+      id: "/_authed/_tenant/evaluations/studio/edit/$testCaseId";
+      path: "/evaluations/studio/edit/$testCaseId";
+      fullPath: "/evaluations/studio/edit/$testCaseId";
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId": {
+      id: "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId";
+      path: "/agents/$agentId/scheduled-jobs/$scheduledJobId";
+      fullPath: "/agents/$agentId/scheduled-jobs/$scheduledJobId";
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
   }
 }
 
 interface AuthedTenantAnalyticsRouteChildren {
-  AuthedTenantAnalyticsActivityRoute: typeof AuthedTenantAnalyticsActivityRoute
-  AuthedTenantAnalyticsCostRoute: typeof AuthedTenantAnalyticsCostRoute
-  AuthedTenantAnalyticsPerformanceRoute: typeof AuthedTenantAnalyticsPerformanceRoute
-  AuthedTenantAnalyticsIndexRoute: typeof AuthedTenantAnalyticsIndexRoute
-  AuthedTenantAnalyticsSkillRunsRunIdRoute: typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
-  AuthedTenantAnalyticsSkillRunsIndexRoute: typeof AuthedTenantAnalyticsSkillRunsIndexRoute
+  AuthedTenantAnalyticsActivityRoute: typeof AuthedTenantAnalyticsActivityRoute;
+  AuthedTenantAnalyticsCostRoute: typeof AuthedTenantAnalyticsCostRoute;
+  AuthedTenantAnalyticsPerformanceRoute: typeof AuthedTenantAnalyticsPerformanceRoute;
+  AuthedTenantAnalyticsIndexRoute: typeof AuthedTenantAnalyticsIndexRoute;
 }
 
 const AuthedTenantAnalyticsRouteChildren: AuthedTenantAnalyticsRouteChildren = {
@@ -1620,26 +1538,22 @@ const AuthedTenantAnalyticsRouteChildren: AuthedTenantAnalyticsRouteChildren = {
   AuthedTenantAnalyticsCostRoute: AuthedTenantAnalyticsCostRoute,
   AuthedTenantAnalyticsPerformanceRoute: AuthedTenantAnalyticsPerformanceRoute,
   AuthedTenantAnalyticsIndexRoute: AuthedTenantAnalyticsIndexRoute,
-  AuthedTenantAnalyticsSkillRunsRunIdRoute:
-    AuthedTenantAnalyticsSkillRunsRunIdRoute,
-  AuthedTenantAnalyticsSkillRunsIndexRoute:
-    AuthedTenantAnalyticsSkillRunsIndexRoute,
-}
+};
 
 const AuthedTenantAnalyticsRouteWithChildren =
   AuthedTenantAnalyticsRoute._addFileChildren(
     AuthedTenantAnalyticsRouteChildren,
-  )
+  );
 
 interface AuthedTenantCapabilitiesRouteChildren {
-  AuthedTenantCapabilitiesBuiltinToolsRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRoute
-  AuthedTenantCapabilitiesMcpServersRoute: typeof AuthedTenantCapabilitiesMcpServersRoute
-  AuthedTenantCapabilitiesIndexRoute: typeof AuthedTenantCapabilitiesIndexRoute
-  AuthedTenantCapabilitiesPluginsUploadIdRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
-  AuthedTenantCapabilitiesSkillsSlugRoute: typeof AuthedTenantCapabilitiesSkillsSlugRoute
-  AuthedTenantCapabilitiesSkillsBuilderRoute: typeof AuthedTenantCapabilitiesSkillsBuilderRoute
-  AuthedTenantCapabilitiesPluginsIndexRoute: typeof AuthedTenantCapabilitiesPluginsIndexRoute
-  AuthedTenantCapabilitiesSkillsIndexRoute: typeof AuthedTenantCapabilitiesSkillsIndexRoute
+  AuthedTenantCapabilitiesBuiltinToolsRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
+  AuthedTenantCapabilitiesMcpServersRoute: typeof AuthedTenantCapabilitiesMcpServersRoute;
+  AuthedTenantCapabilitiesIndexRoute: typeof AuthedTenantCapabilitiesIndexRoute;
+  AuthedTenantCapabilitiesPluginsUploadIdRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRoute;
+  AuthedTenantCapabilitiesSkillsSlugRoute: typeof AuthedTenantCapabilitiesSkillsSlugRoute;
+  AuthedTenantCapabilitiesSkillsBuilderRoute: typeof AuthedTenantCapabilitiesSkillsBuilderRoute;
+  AuthedTenantCapabilitiesPluginsIndexRoute: typeof AuthedTenantCapabilitiesPluginsIndexRoute;
+  AuthedTenantCapabilitiesSkillsIndexRoute: typeof AuthedTenantCapabilitiesSkillsIndexRoute;
 }
 
 const AuthedTenantCapabilitiesRouteChildren: AuthedTenantCapabilitiesRouteChildren =
@@ -1659,34 +1573,34 @@ const AuthedTenantCapabilitiesRouteChildren: AuthedTenantCapabilitiesRouteChildr
       AuthedTenantCapabilitiesPluginsIndexRoute,
     AuthedTenantCapabilitiesSkillsIndexRoute:
       AuthedTenantCapabilitiesSkillsIndexRoute,
-  }
+  };
 
 const AuthedTenantCapabilitiesRouteWithChildren =
   AuthedTenantCapabilitiesRoute._addFileChildren(
     AuthedTenantCapabilitiesRouteChildren,
-  )
+  );
 
 interface AuthedTenantKnowledgeKnowledgeBasesRouteChildren {
-  AuthedTenantKnowledgeKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
+  AuthedTenantKnowledgeKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute;
 }
 
 const AuthedTenantKnowledgeKnowledgeBasesRouteChildren: AuthedTenantKnowledgeKnowledgeBasesRouteChildren =
   {
     AuthedTenantKnowledgeKnowledgeBasesKbIdRoute:
       AuthedTenantKnowledgeKnowledgeBasesKbIdRoute,
-  }
+  };
 
 const AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren =
   AuthedTenantKnowledgeKnowledgeBasesRoute._addFileChildren(
     AuthedTenantKnowledgeKnowledgeBasesRouteChildren,
-  )
+  );
 
 interface AuthedTenantKnowledgeRouteChildren {
-  AuthedTenantKnowledgeContextEngineRoute: typeof AuthedTenantKnowledgeContextEngineRoute
-  AuthedTenantKnowledgeKnowledgeBasesRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
-  AuthedTenantKnowledgeMemoryRoute: typeof AuthedTenantKnowledgeMemoryRoute
-  AuthedTenantKnowledgeWikiRoute: typeof AuthedTenantKnowledgeWikiRoute
-  AuthedTenantKnowledgeIndexRoute: typeof AuthedTenantKnowledgeIndexRoute
+  AuthedTenantKnowledgeContextEngineRoute: typeof AuthedTenantKnowledgeContextEngineRoute;
+  AuthedTenantKnowledgeKnowledgeBasesRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
+  AuthedTenantKnowledgeMemoryRoute: typeof AuthedTenantKnowledgeMemoryRoute;
+  AuthedTenantKnowledgeWikiRoute: typeof AuthedTenantKnowledgeWikiRoute;
+  AuthedTenantKnowledgeIndexRoute: typeof AuthedTenantKnowledgeIndexRoute;
 }
 
 const AuthedTenantKnowledgeRouteChildren: AuthedTenantKnowledgeRouteChildren = {
@@ -1697,66 +1611,64 @@ const AuthedTenantKnowledgeRouteChildren: AuthedTenantKnowledgeRouteChildren = {
   AuthedTenantKnowledgeMemoryRoute: AuthedTenantKnowledgeMemoryRoute,
   AuthedTenantKnowledgeWikiRoute: AuthedTenantKnowledgeWikiRoute,
   AuthedTenantKnowledgeIndexRoute: AuthedTenantKnowledgeIndexRoute,
-}
+};
 
 const AuthedTenantKnowledgeRouteWithChildren =
   AuthedTenantKnowledgeRoute._addFileChildren(
     AuthedTenantKnowledgeRouteChildren,
-  )
+  );
 
 interface AuthedTenantRouteChildren {
-  AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRouteWithChildren
-  AuthedTenantBillingRoute: typeof AuthedTenantBillingRoute
-  AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren
-  AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
-  AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren
-  AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
-  AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute
-  AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute
-  AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute
-  AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute
-  AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute
-  AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute
-  AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute
-  AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute
-  AuthedTenantPeopleHumanIdRoute: typeof AuthedTenantPeopleHumanIdRoute
-  AuthedTenantRoutinesRoutineIdRoute: typeof AuthedTenantRoutinesRoutineIdRoute
-  AuthedTenantScheduledJobsScheduledJobIdRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRoute
-  AuthedTenantSkillRunsRunIdRoute: typeof AuthedTenantSkillRunsRunIdRoute
-  AuthedTenantThreadsThreadIdRoute: typeof AuthedTenantThreadsThreadIdRoute
-  AuthedTenantWebhooksWebhookIdRoute: typeof AuthedTenantWebhooksWebhookIdRoute
-  AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute
-  AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute
-  AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute
-  AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute
-  AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute
-  AuthedTenantKnowledgeBasesIndexRoute: typeof AuthedTenantKnowledgeBasesIndexRoute
-  AuthedTenantMemoryIndexRoute: typeof AuthedTenantMemoryIndexRoute
-  AuthedTenantPeopleIndexRoute: typeof AuthedTenantPeopleIndexRoute
-  AuthedTenantRoutinesIndexRoute: typeof AuthedTenantRoutinesIndexRoute
-  AuthedTenantScheduledJobsIndexRoute: typeof AuthedTenantScheduledJobsIndexRoute
-  AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute
-  AuthedTenantSkillRunsIndexRoute: typeof AuthedTenantSkillRunsIndexRoute
-  AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute
-  AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute
-  AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute
-  AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute
-  AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
-  AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
-  AuthedTenantAgentsAgentIdEditorRoute: typeof AuthedTenantAgentsAgentIdEditorRoute
-  AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute
-  AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute
-  AuthedTenantAgentsAgentIdSkillsRoute: typeof AuthedTenantAgentsAgentIdSkillsRoute
-  AuthedTenantAgentsAgentIdSubAgentsRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRoute
-  AuthedTenantAgentsAgentIdWorkspaceRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRoute
-  AuthedTenantAgentsAgentIdWorkspacesRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRoute
-  AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
-  AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute
-  AuthedTenantAgentTemplatesTemplateIdIndexRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
-  AuthedTenantEvaluationsStudioIndexRoute: typeof AuthedTenantEvaluationsStudioIndexRoute
-  AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
-  AuthedTenantEvaluationsStudioEditTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
-  AuthedTenantAgentsAgentIdScheduledJobsIndexRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
+  AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRouteWithChildren;
+  AuthedTenantBillingRoute: typeof AuthedTenantBillingRoute;
+  AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren;
+  AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute;
+  AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren;
+  AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute;
+  AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute;
+  AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute;
+  AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute;
+  AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute;
+  AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute;
+  AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute;
+  AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute;
+  AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute;
+  AuthedTenantPeopleHumanIdRoute: typeof AuthedTenantPeopleHumanIdRoute;
+  AuthedTenantRoutinesRoutineIdRoute: typeof AuthedTenantRoutinesRoutineIdRoute;
+  AuthedTenantScheduledJobsScheduledJobIdRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRoute;
+  AuthedTenantThreadsThreadIdRoute: typeof AuthedTenantThreadsThreadIdRoute;
+  AuthedTenantWebhooksWebhookIdRoute: typeof AuthedTenantWebhooksWebhookIdRoute;
+  AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute;
+  AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute;
+  AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute;
+  AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute;
+  AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute;
+  AuthedTenantKnowledgeBasesIndexRoute: typeof AuthedTenantKnowledgeBasesIndexRoute;
+  AuthedTenantMemoryIndexRoute: typeof AuthedTenantMemoryIndexRoute;
+  AuthedTenantPeopleIndexRoute: typeof AuthedTenantPeopleIndexRoute;
+  AuthedTenantRoutinesIndexRoute: typeof AuthedTenantRoutinesIndexRoute;
+  AuthedTenantScheduledJobsIndexRoute: typeof AuthedTenantScheduledJobsIndexRoute;
+  AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute;
+  AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute;
+  AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute;
+  AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute;
+  AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute;
+  AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute;
+  AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute;
+  AuthedTenantAgentsAgentIdEditorRoute: typeof AuthedTenantAgentsAgentIdEditorRoute;
+  AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute;
+  AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute;
+  AuthedTenantAgentsAgentIdSkillsRoute: typeof AuthedTenantAgentsAgentIdSkillsRoute;
+  AuthedTenantAgentsAgentIdSubAgentsRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
+  AuthedTenantAgentsAgentIdWorkspaceRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
+  AuthedTenantAgentsAgentIdWorkspacesRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
+  AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute;
+  AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute;
+  AuthedTenantAgentTemplatesTemplateIdIndexRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute;
+  AuthedTenantEvaluationsStudioIndexRoute: typeof AuthedTenantEvaluationsStudioIndexRoute;
+  AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
+  AuthedTenantEvaluationsStudioEditTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
+  AuthedTenantAgentsAgentIdScheduledJobsIndexRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
 }
 
 const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
@@ -1779,7 +1691,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantRoutinesRoutineIdRoute: AuthedTenantRoutinesRoutineIdRoute,
   AuthedTenantScheduledJobsScheduledJobIdRoute:
     AuthedTenantScheduledJobsScheduledJobIdRoute,
-  AuthedTenantSkillRunsRunIdRoute: AuthedTenantSkillRunsRunIdRoute,
   AuthedTenantThreadsThreadIdRoute: AuthedTenantThreadsThreadIdRoute,
   AuthedTenantWebhooksWebhookIdRoute: AuthedTenantWebhooksWebhookIdRoute,
   AuthedTenantAgentTemplatesIndexRoute: AuthedTenantAgentTemplatesIndexRoute,
@@ -1793,7 +1704,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantRoutinesIndexRoute: AuthedTenantRoutinesIndexRoute,
   AuthedTenantScheduledJobsIndexRoute: AuthedTenantScheduledJobsIndexRoute,
   AuthedTenantSecurityIndexRoute: AuthedTenantSecurityIndexRoute,
-  AuthedTenantSkillRunsIndexRoute: AuthedTenantSkillRunsIndexRoute,
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
@@ -1827,22 +1737,22 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
     AuthedTenantEvaluationsStudioEditTestCaseIdRoute,
   AuthedTenantAgentsAgentIdScheduledJobsIndexRoute:
     AuthedTenantAgentsAgentIdScheduledJobsIndexRoute,
-}
+};
 
 const AuthedTenantRouteWithChildren = AuthedTenantRoute._addFileChildren(
   AuthedTenantRouteChildren,
-)
+);
 
 interface AuthedRouteChildren {
-  AuthedTenantRoute: typeof AuthedTenantRouteWithChildren
+  AuthedTenantRoute: typeof AuthedTenantRouteWithChildren;
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedTenantRoute: AuthedTenantRouteWithChildren,
-}
+};
 
 const AuthedRouteWithChildren =
-  AuthedRoute._addFileChildren(AuthedRouteChildren)
+  AuthedRoute._addFileChildren(AuthedRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -1852,7 +1762,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   InviteTokenRoute: InviteTokenRoute,
   OnboardingWelcomeRoute: OnboardingWelcomeRoute,
-}
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();
