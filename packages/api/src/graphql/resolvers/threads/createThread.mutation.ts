@@ -5,16 +5,22 @@ import {
 	threadToCamel, invokeChatAgent,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 export const createThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
+	const createdByType = i.createdByType ?? "user";
+	const createdById =
+		createdByType === "user"
+			? (await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById
+			: i.createdById;
 
 	// PRD-09 §9.4.4: Agent-created thread validation
-	if (i.createdByType === "agent" && i.createdById) {
+	if (createdByType === "agent" && createdById) {
 		const [creatorAgent] = await db
 			.select({ tenant_id: agents.tenant_id })
 			.from(agents)
-			.where(eq(agents.id, i.createdById));
+			.where(eq(agents.id, createdById));
 		if (!creatorAgent || creatorAgent.tenant_id !== i.tenantId) {
 			throw new Error("Agent can only create threads in its own tenant");
 		}
@@ -66,8 +72,8 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 				assignee_type: i.assigneeType,
 				assignee_id: i.assigneeId,
 				billing_code: i.billingCode,
-				created_by_type: i.createdByType,
-				created_by_id: i.createdById,
+				created_by_type: createdByType,
+				created_by_id: createdById,
 				labels: i.labels ? JSON.parse(i.labels) : undefined,
 				metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
 				due_at: i.dueAt ? new Date(i.dueAt) : undefined,
@@ -83,8 +89,8 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 					tenant_id: i.tenantId,
 					role: "user",
 					content: i.firstMessage,
-					sender_type: i.createdByType ?? "user",
-					sender_id: i.createdById,
+					sender_type: createdByType,
+					sender_id: createdById,
 				})
 				.returning({ id: messages.id });
 			firstMsgId = msgRow?.id ?? null;
@@ -126,8 +132,8 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 						messageId: firstMessageId,
 						userMessage: i.firstMessage,
 					},
-					requested_by_actor_type: i.createdByType ?? "user",
-					requested_by_actor_id: i.createdById,
+					requested_by_actor_type: createdByType,
+					requested_by_actor_id: createdById,
 				});
 				console.log(`[createThread] Wakeup request queued (fallback) for thread=${row.id} agent=${row.agent_id}`);
 			} catch (wakeupErr) {

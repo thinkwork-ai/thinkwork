@@ -5,9 +5,15 @@ import {
 	messageToCamel, invokeChatAgent,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 export const sendMessage = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
+	const senderType = i.senderType ?? "user";
+	const senderId =
+		senderType === "user"
+			? (await resolveCallerFromAuth(ctx.auth)).userId ?? i.senderId
+			: i.senderId;
 	const [thread] = await db
 		.select({ tenant_id: threads.tenant_id, agent_id: threads.agent_id, title: threads.title, status: threads.status })
 		.from(threads)
@@ -21,8 +27,8 @@ export const sendMessage = async (_parent: any, args: any, ctx: GraphQLContext) 
 			tenant_id: thread.tenant_id,
 			role: i.role.toLowerCase(),
 			content: i.content,
-			sender_type: i.senderType,
-			sender_id: i.senderId,
+			sender_type: senderType,
+			sender_id: senderId,
 			tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
 			tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
 			metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
@@ -76,8 +82,8 @@ export const sendMessage = async (_parent: any, args: any, ctx: GraphQLContext) 
 						messageId: row.id,
 						userMessage: i.content,
 					},
-					requested_by_actor_type: i.senderType || "user",
-					requested_by_actor_id: i.senderId,
+					requested_by_actor_type: senderType,
+					requested_by_actor_id: senderId,
 				});
 				console.log(`[sendMessage] Wakeup request queued (fallback) for thread=${i.threadId} agent=${thread.agent_id}`);
 			} catch (wakeupErr) {

@@ -130,7 +130,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
         })
         .from(messages)
         .where(eq(messages.id, event.messageId));
-      if (msg?.sender_type === "human" && msg.sender_id) {
+      if (
+        (msg?.sender_type === "human" || msg?.sender_type === "user") &&
+        msg.sender_id
+      ) {
         currentUserId = msg.sender_id;
         const [u] = await db
           .select({ email: users.email })
