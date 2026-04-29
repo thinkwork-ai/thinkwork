@@ -4,7 +4,6 @@ import {
   Outlet,
   useLocation,
 } from "@tanstack/react-router";
-import { Brain } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -37,9 +36,8 @@ function KnowledgeLayout() {
     <PageLayout
       header={
         <div className="grid grid-cols-3 items-center gap-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <Brain className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-foreground">
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-foreground">
               Knowledge
             </h1>
           </div>
@@ -53,9 +51,7 @@ function KnowledgeLayout() {
                   <Link to="/knowledge/wiki">Wiki</Link>
                 </TabsTrigger>
                 <TabsTrigger value="knowledge-bases" asChild className="px-2">
-                  <Link to="/knowledge/knowledge-bases">
-                    Knowledge Bases
-                  </Link>
+                  <Link to="/knowledge/knowledge-bases">Knowledge Bases</Link>
                 </TabsTrigger>
                 <TabsTrigger value="context-engine" asChild className="px-2">
                   <Link to="/knowledge/context-engine">Context Engine</Link>
