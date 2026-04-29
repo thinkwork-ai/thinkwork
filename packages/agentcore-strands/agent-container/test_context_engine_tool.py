@@ -1,6 +1,6 @@
 import pytest
 
-from context_engine_tool import make_context_engine_tool
+from context_engine_tool import make_context_engine_tool, make_context_engine_tools
 
 
 def identity_tool(fn):
@@ -28,3 +28,13 @@ async def test_query_context_reports_disabled_when_api_env_missing(monkeypatch):
     result = await tool("Austin")
 
     assert "not enabled" in result
+
+
+def test_context_engine_registers_split_tools():
+    tools = make_context_engine_tools(identity_tool)
+
+    assert [tool.__name__ for tool in tools] == [
+        "query_context",
+        "query_memory_context",
+        "query_wiki_context",
+    ]

@@ -4,7 +4,13 @@ import type {
 } from "aws-lambda";
 import { handleCors, json } from "../lib/response.js";
 import { getContextEngineService } from "../lib/context-engine/service.js";
-import type { ContextEngineDepth, ContextEngineMode, ContextEngineScope } from "../lib/context-engine/types.js";
+import type {
+	ContextEngineDepth,
+	ContextEngineMode,
+	ContextEngineScope,
+	ContextProviderFamily,
+	ContextProviderSelection,
+} from "../lib/context-engine/types.js";
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
 
 const MAX_LIMIT = 50;
@@ -36,6 +42,40 @@ const TOOLS = [
 					},
 					additionalProperties: false,
 				},
+			},
+			required: ["query"],
+			additionalProperties: false,
+		},
+	},
+	{
+		name: "query_memory_context",
+		description:
+			"Search only Thinkwork Hindsight Memory. This is slower than wiki search and is intended for raw long-term memory recall.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				query: { type: "string" },
+				mode: { type: "string", enum: ["results", "answer"] },
+				scope: { type: "string", enum: ["personal", "auto"] },
+				depth: { type: "string", enum: ["quick", "deep"] },
+				limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+			},
+			required: ["query"],
+			additionalProperties: false,
+		},
+	},
+	{
+		name: "query_wiki_context",
+		description:
+			"Search only Thinkwork Compounding Wiki pages. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				query: { type: "string" },
+				mode: { type: "string", enum: ["results", "answer"] },
+				scope: { type: "string", enum: ["personal", "auto"] },
+				depth: { type: "string", enum: ["quick", "deep"] },
+				limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
 			},
 			required: ["query"],
 			additionalProperties: false,
@@ -144,20 +184,16 @@ async function handleToolCall(
 	const service = getContextEngineService();
 	switch (toolName) {
 		case "query_context": {
-			const query = stringArg(args.query);
-			if (!query) return jsonRpcError(request.id, -32602, "query is required");
-			const result = await service.query({
-				query,
-				mode: enumArg<ContextEngineMode>(args.mode, ["results", "answer"]) ?? "results",
-				scope: enumArg<ContextEngineScope>(args.scope, ["personal", "team", "auto"]) ?? "auto",
-				depth: enumArg<ContextEngineDepth>(args.depth, ["quick", "deep"]) ?? "quick",
-				limit: limitArg(args.limit),
-				providers: providersArg(args.providers),
-				caller,
+			return await queryContextTool(request.id, args, caller, providersArg(args.providers));
+		}
+		case "query_memory_context": {
+			return await queryContextTool(request.id, args, caller, {
+				families: ["memory"],
 			});
-			return jsonRpcResult(request.id, {
-				content: [{ type: "text", text: formatContextResponse(result) }],
-				structuredContent: result,
+		}
+		case "query_wiki_context": {
+			return await queryContextTool(request.id, args, caller, {
+				families: ["wiki"],
 			});
 		}
 		case "list_context_providers": {
@@ -184,6 +220,30 @@ async function handleToolCall(
 		default:
 			return jsonRpcError(request.id, -32601, `Unknown tool: ${toolName}`);
 	}
+}
+
+async function queryContextTool(
+	id: JsonRpcRequest["id"],
+	args: Record<string, unknown>,
+	caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
+	providers: ContextProviderSelection | undefined,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const query = stringArg(args.query);
+	if (!query) return jsonRpcError(id, -32602, "query is required");
+	const service = getContextEngineService();
+	const result = await service.query({
+		query,
+		mode: enumArg<ContextEngineMode>(args.mode, ["results", "answer"]) ?? "results",
+		scope: enumArg<ContextEngineScope>(args.scope, ["personal", "team", "auto"]) ?? "auto",
+		depth: enumArg<ContextEngineDepth>(args.depth, ["quick", "deep"]) ?? "quick",
+		limit: limitArg(args.limit),
+		providers,
+		caller,
+	});
+	return jsonRpcResult(id, {
+		content: [{ type: "text", text: formatContextResponse(result) }],
+		structuredContent: result,
+	});
 }
 
 async function resolveCaller(claims: Record<string, unknown>) {
@@ -224,7 +284,14 @@ async function resolveCaller(claims: Record<string, unknown>) {
 function formatContextResponse(result: {
 	hits: Array<{ title: string; snippet: string; family: string }>;
 	answer?: { text: string };
-	providers: Array<{ displayName: string; state: string; error?: string }>;
+	providers: Array<{
+		displayName: string;
+		state: string;
+		error?: string;
+		reason?: string;
+		durationMs?: number;
+		hitCount?: number;
+	}>;
 }): string {
 	const lines: string[] = [];
 	if (result.answer?.text) {
@@ -236,12 +303,20 @@ function formatContextResponse(result: {
 			lines.push(`${index + 1}. [${hit.family}] ${hit.title}: ${hit.snippet}`);
 		}
 	}
-	const degraded = result.providers.filter((provider) => provider.state !== "ok");
-	if (degraded.length > 0) {
+	if (result.providers.length > 0) {
 		lines.push("", "Provider status");
-		for (const provider of degraded) {
+		for (const provider of result.providers) {
+			const details = [
+				typeof provider.hitCount === "number"
+					? `${provider.hitCount} hits`
+					: null,
+				typeof provider.durationMs === "number"
+					? `${provider.durationMs}ms`
+					: null,
+				provider.error || provider.reason || null,
+			].filter(Boolean);
 			lines.push(
-				`- ${provider.displayName}: ${provider.state}${provider.error ? ` (${provider.error})` : ""}`,
+				`- ${provider.displayName}: ${provider.state}${details.length > 0 ? ` (${details.join(", ")})` : ""}`,
 			);
 		}
 	}
@@ -337,14 +412,16 @@ function limitArg(value: unknown): number | undefined {
 	return Math.min(numeric, MAX_LIMIT);
 }
 
-function providersArg(value: unknown) {
+function providersArg(value: unknown): ContextProviderSelection | undefined {
 	if (!isRecord(value)) return undefined;
 	return {
 		ids: Array.isArray(value.ids)
 			? value.ids.filter((item): item is string => typeof item === "string")
 			: undefined,
 		families: Array.isArray(value.families)
-			? value.families.filter((item): item is any => typeof item === "string")
+			? value.families.filter(
+					(item): item is ContextProviderFamily => typeof item === "string",
+				)
 			: undefined,
 	};
 }

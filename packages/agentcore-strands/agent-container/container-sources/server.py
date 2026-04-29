@@ -1093,10 +1093,12 @@ def _call_strands_agent(system_prompt: str, messages: list,
     if context_engine_enabled:
         try:
             from strands import tool as _context_engine_tool_decorator
-            from context_engine_tool import make_context_engine_tool
+            from context_engine_tool import make_context_engine_tools
 
-            tools.append(make_context_engine_tool(_context_engine_tool_decorator))
-            logger.info("Context Engine tool registered: query_context")
+            tools.extend(make_context_engine_tools(_context_engine_tool_decorator))
+            logger.info(
+                "Context Engine tools registered: query_context, query_memory_context, query_wiki_context",
+            )
         except Exception as e:
             logger.warning("Context Engine tool registration failed: %s", e)
 

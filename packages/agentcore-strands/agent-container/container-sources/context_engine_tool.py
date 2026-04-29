@@ -118,4 +118,91 @@ def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
     return query_context
 
 
-__all__ = ["make_context_engine_tool"]
+def make_context_engine_tools(strands_tool: Callable[[Any], Any]):
+    query_context = make_context_engine_tool(strands_tool)
+
+    @strands_tool
+    async def query_memory_context(
+        query: str,
+        mode: str = "results",
+        scope: str = "auto",
+        depth: str = "quick",
+        limit: int = 10,
+    ) -> str:
+        """Search only Thinkwork Hindsight Memory.
+
+        Use this when the user specifically asks for raw long-term memory
+        recall. This can be slower than wiki search because Hindsight may scan
+        a large personal memory bank.
+        """
+
+        clean_query = (query or "").strip()
+        if not clean_query:
+            return "query_memory_context requires a non-empty query."
+        result = await _json_rpc(
+            "tools/call",
+            {
+                "name": "query_memory_context",
+                "arguments": {
+                    "query": clean_query,
+                    "mode": mode if mode in ("results", "answer") else "results",
+                    "scope": scope if scope in ("personal", "team", "auto") else "auto",
+                    "depth": depth if depth in ("quick", "deep") else "quick",
+                    "limit": max(1, min(int(limit or 10), 50)),
+                },
+            },
+        )
+        if isinstance(result, str):
+            return result
+        content = result.get("content") or []
+        text = "\n".join(
+            item.get("text", "") for item in content if isinstance(item, dict)
+        ).strip()
+        if text:
+            return text
+        return json.dumps(result.get("structuredContent") or result, indent=2)
+
+    @strands_tool
+    async def query_wiki_context(
+        query: str,
+        mode: str = "results",
+        scope: str = "auto",
+        depth: str = "quick",
+        limit: int = 10,
+    ) -> str:
+        """Search only Thinkwork Compounding Wiki pages.
+
+        Use this for fast page, entity, topic, and decision lookup without
+        waiting on Hindsight Memory.
+        """
+
+        clean_query = (query or "").strip()
+        if not clean_query:
+            return "query_wiki_context requires a non-empty query."
+        result = await _json_rpc(
+            "tools/call",
+            {
+                "name": "query_wiki_context",
+                "arguments": {
+                    "query": clean_query,
+                    "mode": mode if mode in ("results", "answer") else "results",
+                    "scope": scope if scope in ("personal", "team", "auto") else "auto",
+                    "depth": depth if depth in ("quick", "deep") else "quick",
+                    "limit": max(1, min(int(limit or 10), 50)),
+                },
+            },
+        )
+        if isinstance(result, str):
+            return result
+        content = result.get("content") or []
+        text = "\n".join(
+            item.get("text", "") for item in content if isinstance(item, dict)
+        ).strip()
+        if text:
+            return text
+        return json.dumps(result.get("structuredContent") or result, indent=2)
+
+    return [query_context, query_memory_context, query_wiki_context]
+
+
+__all__ = ["make_context_engine_tool", "make_context_engine_tools"]
