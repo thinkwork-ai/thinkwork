@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -17,7 +18,10 @@ import {
   FilterBarSearch,
   FilterBarSort,
 } from "@/components/ui/data-table-filter-bar";
-import { AgentsListQuery, OnAgentStatusChangedSubscription } from "@/lib/graphql-queries";
+import {
+  AgentsListQuery,
+  OnAgentStatusChangedSubscription,
+} from "@/lib/graphql-queries";
 import { AgentRuntime } from "@/gql/graphql";
 import { useDialog } from "@/context/DialogContext";
 import { formatUsd, relativeTime } from "@/lib/utils";
@@ -68,7 +72,9 @@ const columns: ColumnDef<AgentRow>[] = [
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => (
-      <span className="whitespace-nowrap"><StatusBadge status={row.original.status.toLowerCase()} size="sm" /></span>
+      <span className="whitespace-nowrap">
+        <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
+      </span>
     ),
     size: 100,
   },
@@ -105,7 +111,9 @@ const columns: ColumnDef<AgentRow>[] = [
       row.original.humanPairName ? (
         <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
           <User className="h-3 w-3 shrink-0" />
-          <span className="truncate max-w-[120px]">{row.original.humanPairName}</span>
+          <span className="truncate max-w-[120px]">
+            {row.original.humanPairName}
+          </span>
         </span>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
@@ -116,7 +124,8 @@ const columns: ColumnDef<AgentRow>[] = [
     header: "Budget",
     cell: ({ row }) => {
       const { budgetLimitUsd } = row.original;
-      if (budgetLimitUsd == null) return <span className="text-xs text-muted-foreground">—</span>;
+      if (budgetLimitUsd == null)
+        return <span className="text-xs text-muted-foreground">—</span>;
       return (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatUsd(budgetLimitUsd, 0)}/mo
@@ -186,14 +195,18 @@ function AgentsPage() {
       adapterType: a.adapterType ?? null,
       isByob: !!a.adapterType && !SERVERLESS_ADAPTERS.has(a.adapterType),
       humanPairName: a.humanPair?.name ?? a.humanPair?.email ?? null,
-      budgetLimitUsd: (a as any).budgetPolicy?.limitUsd != null ? Number((a as any).budgetPolicy.limitUsd) : null,
+      budgetLimitUsd:
+        (a as any).budgetPolicy?.limitUsd != null
+          ? Number((a as any).budgetPolicy.limitUsd)
+          : null,
       lastHeartbeatAt: a.lastHeartbeatAt ?? null,
     }));
     const dir = sortDir === "asc" ? 1 : -1;
     mapped.sort((a, b) => {
       const av = a[sortField] ?? "";
       const bv = b[sortField] ?? "";
-      if (typeof av === "string" && typeof bv === "string") return dir * av.localeCompare(bv);
+      if (typeof av === "string" && typeof bv === "string")
+        return dir * av.localeCompare(bv);
       return dir * (Number(av) - Number(bv));
     });
     return mapped;
@@ -206,22 +219,25 @@ function AgentsPage() {
     <PageLayout
       header={
         <>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Agents</h1>
-              <p className="text-xs text-muted-foreground">Manage and monitor your agents</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => openNewAgent()}>
-                <Plus className="h-4 w-4" />
-                New Agent
-              </Button>
-              <Button variant="outline" onClick={() => navigate({ to: "/agents/invites" })}>
-                <UserPlus className="h-4 w-4" />
-                Invite BYOB
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title="Agents"
+            description="Manage and monitor your agents"
+            actions={
+              <>
+                <Button onClick={() => openNewAgent()}>
+                  <Plus className="h-4 w-4" />
+                  New Agent
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate({ to: "/agents/invites" })}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Invite BYOB
+                </Button>
+              </>
+            }
+          />
           <div className="flex items-center gap-2 mt-4">
             <FilterBarSearch
               value={search}
