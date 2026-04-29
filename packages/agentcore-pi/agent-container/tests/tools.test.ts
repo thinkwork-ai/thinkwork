@@ -73,10 +73,7 @@ import {
   buildContextEngineTool,
   buildContextEngineTools,
 } from "../src/runtime/tools/context-engine.js";
-import {
-  buildHindsightTools,
-  retainHindsightTurn,
-} from "../src/runtime/tools/hindsight.js";
+import { buildHindsightTools } from "../src/runtime/tools/hindsight.js";
 import { buildMcpTools } from "../src/runtime/tools/mcp.js";
 import { buildSendEmailTool } from "../src/runtime/tools/send-email.js";
 import { buildWebSearchTool } from "../src/runtime/tools/web-search.js";
@@ -388,37 +385,9 @@ describe("Pi runtime tools", () => {
     ).toEqual([]);
   });
 
-  it("retains the end of a Pi turn in Hindsight memory", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({})));
-
-    const result = await retainHindsightTurn(
-      {
-        use_memory: true,
-        hindsight_endpoint: "https://hindsight.test/",
-        thread_id: "thread-1",
-        user_id: "user-1",
-        message: "remember cobalt",
-      },
-      "I will remember cobalt.",
-    );
-
-    expect(result.retained).toBe(true);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "https://hindsight.test/v1/default/banks/user_user-1/memories",
-    );
-    expect(
-      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
-    ).toMatchObject({
-      items: [
-        {
-          document_id: "thread-1",
-          metadata: { source: "thinkwork-pi", runtime: "pi" },
-        },
-      ],
-    });
-  });
+  // retainHindsightTurn was removed in U2-Pi; per-turn retain now goes
+  // through the memory-retain Lambda via retainFullThread. Coverage for the
+  // new function lives in `tests/retain-full-thread.test.ts`.
 
   it("discovers and proxies configured MCP tools", async () => {
     mcpClose.mockResolvedValue(undefined);

@@ -1,11 +1,13 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "typebox";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {
   optionalBoolean,
   optionalString,
   type HindsightUsage,
   type PiInvocationPayload,
 } from "./types.js";
+import type { RuntimeEnv } from "../env-snapshot.js";
 
 function resolveBankId(payload: PiInvocationPayload): string | undefined {
   const userId = optionalString(payload.user_id);
@@ -146,65 +148,118 @@ export function buildHindsightTools(
   return [recallTool, reflectTool];
 }
 
-export async function retainHindsightTurn(
+// ---------------------------------------------------------------------------
+// Per-turn auto-retain (U2-Pi): fire-and-forget invoke of memory-retain.
+//
+// Replaces retainHindsightTurn (which posted directly to Hindsight with only
+// the latest user+assistant pair). Pi now converges on the same Lambda path
+// as Strands so U1's longest-suffix-prefix merge applies uniformly.
+// ---------------------------------------------------------------------------
+
+let _lambdaClient: LambdaClient | null = null;
+function getLambdaClient(region: string): LambdaClient {
+  if (!_lambdaClient) {
+    _lambdaClient = new LambdaClient({ region });
+  }
+  return _lambdaClient;
+}
+
+// Test seam — allows tests to inject a mocked LambdaClient without bringing
+// in the full aws-sdk-client-mock setup.
+export function __setLambdaClientForTest(client: LambdaClient | null): void {
+  _lambdaClient = client;
+}
+
+export interface RetainTranscriptEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Build the per-turn transcript: history (filtered to user/assistant with
+ * non-empty content) + [user message, assistant response]. Mirrors the
+ * Strands U3 helper; the Lambda does the longest-suffix-prefix merge
+ * against the canonical DB transcript.
+ */
+export function buildRetainTranscript(
   payload: PiInvocationPayload,
   assistantContent: string,
-): Promise<{
-  usage?: HindsightUsage;
-  retained?: boolean;
-  bank_id?: string;
-  error?: string;
-}> {
-  if (!optionalBoolean(payload.use_memory)) return {};
-  const endpoint = optionalString(payload.hindsight_endpoint);
-  const bankId = resolveBankId(payload);
-  const threadId = optionalString(payload.thread_id);
+): RetainTranscriptEntry[] {
+  const transcript: RetainTranscriptEntry[] = [];
+  const history = payload.messages_history;
+  if (Array.isArray(history)) {
+    for (const entry of history) {
+      if (!entry || typeof entry !== "object") continue;
+      const role = (entry as { role?: unknown }).role;
+      const content = (entry as { content?: unknown }).content;
+      if (
+        (role === "user" || role === "assistant") &&
+        typeof content === "string" &&
+        content.trim().length > 0
+      ) {
+        transcript.push({ role, content });
+      }
+    }
+  }
   const userMessage = optionalString(payload.message);
-  if (
-    !endpoint ||
-    !bankId ||
-    !threadId ||
-    !userMessage ||
-    !assistantContent.trim()
-  )
-    return {};
+  if (userMessage) transcript.push({ role: "user", content: userMessage });
+  if (assistantContent && assistantContent.trim().length > 0) {
+    transcript.push({ role: "assistant", content: assistantContent });
+  }
+  return transcript;
+}
 
-  const content = [
-    `user (${new Date().toISOString()}): ${userMessage}`,
-    `assistant (${new Date().toISOString()}): ${assistantContent}`,
-  ].join("\n");
+/**
+ * Fire-and-forget invoke of memory-retain with a full thread transcript.
+ *
+ * Honors ``payload.use_memory=false`` as an opt-out (preserved from the
+ * deprecated ``retainHindsightTurn``).
+ *
+ * Returns ``{ retained: false, error? }`` on any precondition or invoke
+ * failure; never throws — Pi response path must not block on retain.
+ */
+export async function retainFullThread(
+  payload: PiInvocationPayload,
+  assistantContent: string,
+  env: RuntimeEnv,
+  envOverrides?: Record<string, string | undefined>,
+): Promise<{ retained: boolean; error?: string }> {
+  if (!optionalBoolean(payload.use_memory)) return { retained: false };
+
+  // Snapshot env at entry; mirror feedback_completion_callback_snapshot_pattern.
+  const procEnv = envOverrides ?? process.env;
+  const fnName = procEnv.MEMORY_RETAIN_FN_NAME || "";
+  const region = env.awsRegion;
+  const tenantId = optionalString(payload.tenant_id);
+  const userId = optionalString(payload.user_id);
+  const threadId = optionalString(payload.thread_id);
+
+  if (!fnName) return { retained: false };
+  if (!tenantId || !userId || !threadId) return { retained: false };
+
+  const transcript = buildRetainTranscript(payload, assistantContent);
+  if (transcript.length === 0) return { retained: false };
+
+  const requestPayload = {
+    tenantId,
+    userId,
+    threadId,
+    transcript,
+  };
 
   try {
-    const data = await postJson(
-      endpoint,
-      `/v1/default/banks/${encodeURIComponent(bankId)}/memories`,
-      {
-        items: [
-          {
-            content,
-            document_id: threadId,
-            update_mode: "replace",
-            context: "thinkwork_thread",
-            metadata: {
-              tenantId: optionalString(payload.tenant_id),
-              userId: optionalString(payload.user_id),
-              threadId,
-              source: "thinkwork-pi",
-              runtime: "pi",
-            },
-          },
-        ],
-      },
+    const client = getLambdaClient(region);
+    await client.send(
+      new InvokeCommand({
+        FunctionName: fnName,
+        InvocationType: "Event",
+        Payload: new TextEncoder().encode(JSON.stringify(requestPayload)),
+      }),
     );
-    return {
-      retained: true,
-      bank_id: bankId,
-      usage: extractUsage(data, "retain"),
-    };
+    return { retained: true };
   } catch (err) {
     return {
       retained: false,
-      bank_id: bankId,
       error: err instanceof Error ? err.message : String(err),
     };
   }

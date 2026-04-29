@@ -1,9 +1,17 @@
 """Hindsight agent tool factory.
 
-Builds the vendor ``retain`` tool plus Thinkwork's custom
-``hindsight_recall`` and ``hindsight_reflect`` wrappers. The custom wrappers
-stay async, create a fresh Hindsight client per call, close it explicitly, and
-retry transient upstream failures.
+Builds Thinkwork's custom ``retain``, ``hindsight_recall`` and
+``hindsight_reflect`` async wrappers. Each wrapper creates a fresh
+Hindsight client per call, closes it explicitly, retries transient upstream
+failures, and pushes Bedrock token usage to ``hindsight_usage_capture``
+in-body — replacing the previous module-level monkey-patch.
+
+ARCHITECTURAL INVARIANT (load-bearing): every Hindsight retain/reflect
+call site must flow through ``make_hindsight_tools``. The in-body
+``_push`` pattern only fires for tools registered through this factory;
+direct ``hindsight_strands.tools.*`` imports or ad-hoc ``Hindsight``
+client instantiation outside this module silently bypasses cost
+attribution. PR review must flag any new path that does not route here.
 """
 
 from __future__ import annotations
@@ -11,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import os
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -47,13 +56,18 @@ def make_hindsight_tools(
     hs_bank: str,
     hs_tags: Sequence[str] | None = None,
     client_factory: Callable[[], Any] | None = None,
-    vendor_factory: Callable[..., Sequence[Any]] | None = None,
 ) -> tuple[Any, ...]:
     """Build Hindsight tools bound to one snapshotted bank.
 
     ``hs_endpoint`` and ``hs_bank`` are captured by the returned tool closures.
     Missing values return an empty tuple so callers can degrade gracefully.
-    ``client_factory`` and ``vendor_factory`` are test seams.
+    ``client_factory`` is the test seam.
+
+    Closure-captures retain/reflect Bedrock model IDs from
+    ``HINDSIGHT_API_RETAIN_LLM_MODEL`` / ``HINDSIGHT_API_REFLECT_LLM_MODEL``
+    at registration time. Subsequent env mutation does not affect the
+    captured values; that lockstep matches what the prior monkey-patch
+    install() did.
     """
 
     if not hs_endpoint or not hs_bank:
@@ -62,21 +76,13 @@ def make_hindsight_tools(
     if client_factory is None:
         client_factory = _make_client_factory(hs_endpoint)
 
-    if vendor_factory is None:
-        from hindsight_strands import create_hindsight_tools
+    # Snapshot the cost-attribution model IDs at registration time so
+    # they cannot drift mid-turn under env shadowing.
+    retain_model = os.environ.get("HINDSIGHT_API_RETAIN_LLM_MODEL", "openai.gpt-oss-20b-1:0")
+    reflect_model = os.environ.get("HINDSIGHT_API_REFLECT_LLM_MODEL", "openai.gpt-oss-120b-1:0")
 
-        vendor_factory = create_hindsight_tools
-
-    vendor_client = client_factory()
-    vendor_tools = tuple(
-        vendor_factory(
-            client=vendor_client,
-            bank_id=hs_bank,
-            tags=list(hs_tags or []),
-            enable_recall=False,
-            enable_reflect=False,
-        )
-    )
+    # Lazy import so test code can patch the module before it loads.
+    import hindsight_usage_capture
 
     async def _close_client(client: Any, *, tool_name: str) -> None:
         try:
@@ -88,6 +94,53 @@ def make_hindsight_tools(
                 await result
         except Exception as close_err:  # pragma: no cover - defensive log only
             logger.warning("%s aclose failed: %s", tool_name, close_err)
+
+    @strands_tool
+    async def retain(content: str) -> str:
+        """Save a fact, observation, or insight to long-term Hindsight memory.
+
+        Use this when the user shares information you should remember across
+        sessions: preferences, decisions, contacts, recurring projects, prior
+        work context. The content is sent verbatim to Hindsight; phrase it as
+        the durable fact you want preserved (e.g. "Marco prefers Slack over
+        email for code review pings").
+
+        Returns a confirmation string when the memory was stored, or an
+        error description if storage failed. Best-effort — failures do not
+        propagate.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            client = client_factory()
+            try:
+                response = await client.aretain_batch(
+                    bank_id=hs_bank,
+                    items=[{"content": content, "tags": list(hs_tags or [])}],
+                )
+                # Push Bedrock token usage in-body so cost_events keeps
+                # one row per retain call (matches the prior install()
+                # behavior). _push no-ops on missing/zero usage.
+                hindsight_usage_capture._push(
+                    "retain", retain_model, getattr(response, "usage", None)
+                )
+                return "Memory stored."
+            except Exception as err:
+                last_exc = err
+                if attempt < 2 and _is_transient_error(err):
+                    backoff = 1.0 * (2**attempt)
+                    logger.warning(
+                        "retain attempt %d/3 transient failure, retrying in %.1fs: %s",
+                        attempt + 1,
+                        backoff,
+                        str(err)[:200],
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                logger.error("retain failed (attempt %d/3): %s", attempt + 1, err)
+                return f"Memory storage failed: {err}"
+            finally:
+                await _close_client(client, tool_name="retain")
+        return f"Memory storage failed: {last_exc}"
 
     @strands_tool
     async def hindsight_recall(query: str) -> str:
@@ -212,6 +265,12 @@ def make_hindsight_tools(
                     query=query,
                     budget="mid",
                 )
+                # Push Bedrock token usage in-body (U9). _push no-ops on
+                # missing/zero usage so a cheap reflect with no Bedrock
+                # spend does not leak a row.
+                hindsight_usage_capture._push(
+                    "reflect", reflect_model, getattr(response, "usage", None)
+                )
                 return getattr(response, "text", None) or "No relevant memories found."
             except Exception as err:
                 last_exc = err
@@ -232,11 +291,11 @@ def make_hindsight_tools(
         return f"Memory reflect failed: {last_exc}"
 
     logger.info(
-        "Hindsight tools registered: retain (vendor) + custom hindsight_recall/reflect bank=%s tags=%s timeout=300s",
+        "Hindsight tools registered: custom retain + hindsight_recall/reflect bank=%s tags=%s timeout=300s",
         hs_bank,
         list(hs_tags or []),
     )
-    return (*vendor_tools, hindsight_recall, hindsight_reflect)
+    return (retain, hindsight_recall, hindsight_reflect)
 
 
 __all__ = ["make_hindsight_tools"]

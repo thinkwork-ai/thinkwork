@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LambdaClient } from "@aws-sdk/client-lambda";
+import { __setLambdaClientForTest } from "../src/runtime/tools/hindsight.js";
 
 type Subscriber = (event: {
   type: "tool_execution_start" | "tool_execution_end";
@@ -89,39 +91,107 @@ describe("runPiAgent", () => {
     expect(result.response.tool_invocations).toEqual(result.tool_invocations);
   });
 
-  it("does not auto-retain every turn in Hindsight", async () => {
-    subscribers.length = 0;
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({ retained: true })));
+  describe("U3-Pi auto-retain wiring", () => {
+    let mockLambda: LambdaClient;
+    // `send` is overloaded on the AWS SDK client; vi.spyOn's generic
+    // constraint on M doesn't model overloaded callable signatures.
+    // Type the spy loosely; runtime assertions pin the contract.
+    let lambdaSendSpy: ReturnType<typeof vi.fn>;
 
-    const result = await runPiAgent(
-      {
-        message: "remember cobalt",
-        model: "anthropic.test-model",
-        use_memory: true,
-        hindsight_endpoint: "https://hindsight.test",
-        thread_id: "thread-1",
-        user_id: "user-1",
-      },
-      {
-        awsRegion: "us-east-1",
-        gitSha: "sha",
-        buildTime: "now",
-        workspaceBucket: "",
-        workspaceDir: "/tmp/workspace",
-      },
-    );
+    beforeEach(() => {
+      subscribers.length = 0;
+      mockLambda = new LambdaClient({ region: "us-east-1" });
+      lambdaSendSpy = vi
+        .spyOn(mockLambda, "send" as never)
+        .mockResolvedValue({} as never) as unknown as ReturnType<typeof vi.fn>;
+      __setLambdaClientForTest(mockLambda);
+      process.env.MEMORY_RETAIN_FN_NAME = "memory-retain-dev";
+    });
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.tools_called).toEqual(["web_search"]);
-    expect(result.hindsight_usage).toEqual([]);
-    expect(result.tool_invocations).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "hindsight_retain" }),
-      ]),
-    );
+    afterEach(() => {
+      __setLambdaClientForTest(null);
+      lambdaSendSpy.mockRestore();
+      delete process.env.MEMORY_RETAIN_FN_NAME;
+    });
 
-    fetchMock.mockRestore();
+    it("AE1: fires retainFullThread once per turn after assistant response", async () => {
+      await runPiAgent(
+        {
+          message: "remember cobalt",
+          model: "anthropic.test-model",
+          use_memory: true,
+          tenant_id: "tenant-A",
+          thread_id: "thread-1",
+          user_id: "user-1",
+        },
+        {
+          awsRegion: "us-east-1",
+          gitSha: "sha",
+          buildTime: "now",
+          workspaceBucket: "",
+          workspaceDir: "/tmp/workspace",
+        },
+      );
+
+      // Wait a tick for the fire-and-forget promise to resolve.
+      await new Promise((r) => setImmediate(r));
+
+      expect(lambdaSendSpy).toHaveBeenCalledTimes(1);
+      const cmd = lambdaSendSpy.mock.calls[0]?.[0] as {
+        input: Record<string, unknown>;
+      };
+      expect(cmd.input.FunctionName).toBe("memory-retain-dev");
+      expect(cmd.input.InvocationType).toBe("Event");
+    });
+
+    it("opt-out: use_memory=false does not fire retain", async () => {
+      await runPiAgent(
+        {
+          message: "no retain please",
+          model: "anthropic.test-model",
+          use_memory: false,
+          tenant_id: "tenant-A",
+          thread_id: "thread-1",
+          user_id: "user-1",
+        },
+        {
+          awsRegion: "us-east-1",
+          gitSha: "sha",
+          buildTime: "now",
+          workspaceBucket: "",
+          workspaceDir: "/tmp/workspace",
+        },
+      );
+      await new Promise((r) => setImmediate(r));
+      expect(lambdaSendSpy).not.toHaveBeenCalled();
+    });
+
+    it("AE5: Lambda invoke failure does not surface to caller (fire-and-forget)", async () => {
+      lambdaSendSpy.mockRejectedValueOnce(new Error("network down"));
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await runPiAgent(
+        {
+          message: "remember cobalt",
+          model: "anthropic.test-model",
+          use_memory: true,
+          tenant_id: "tenant-A",
+          thread_id: "thread-1",
+          user_id: "user-1",
+        },
+        {
+          awsRegion: "us-east-1",
+          gitSha: "sha",
+          buildTime: "now",
+          workspaceBucket: "",
+          workspaceDir: "/tmp/workspace",
+        },
+      );
+      // Caller still gets a clean result; the failure logged but did not throw.
+      expect(result.runtime).toBe("pi");
+      await new Promise((r) => setImmediate(r));
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
   });
 });
