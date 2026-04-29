@@ -56,13 +56,16 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
 
       return {
         hits: hits.map((hit, index): ContextHit => {
-          const text = hit.record.content.summary || hit.record.content.text;
+          const text =
+            hit.record.kind === "reflection"
+              ? hit.record.content.text || hit.record.content.summary
+              : hit.record.content.summary || hit.record.content.text;
           return {
             id: `memory:${hit.record.id}`,
             providerId: "memory",
             family: "memory",
             title: hit.record.content.summary || "Memory",
-            snippet: text,
+            snippet: text || "Memory",
             score: hit.score ?? 1 / (index + 1),
             scope: request.scope,
             provenance: {
