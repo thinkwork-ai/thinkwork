@@ -10,6 +10,7 @@ STAGE="${STAGE:-dev}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 TF_DIR="$REPO_ROOT/terraform/examples/greenfield"
+source "$REPO_ROOT/scripts/lib/terraform-output.sh"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,7 +31,7 @@ if [[ -z "${WORKSPACE_BUCKET:-}" ]]; then
     cd "$TF_DIR"
     terraform init -input=false >/dev/null
     terraform workspace select "$STAGE" >/dev/null
-    terraform output -raw bucket_name
+    tf_output_raw bucket_name
   ) > /tmp/thinkwork-fat-folder-bucket
   export WORKSPACE_BUCKET="$(cat /tmp/thinkwork-fat-folder-bucket)"
   rm -f /tmp/thinkwork-fat-folder-bucket
@@ -42,4 +43,3 @@ if [[ -z "$WORKSPACE_BUCKET" ]]; then
 fi
 
 pnpm exec tsx packages/api/src/__smoke__/fat-folder-smoke.ts --stage="$STAGE"
-

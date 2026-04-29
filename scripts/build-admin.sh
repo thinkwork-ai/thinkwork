@@ -22,19 +22,17 @@ REGION="${AWS_REGION:-us-east-1}"
 echo "▸ Reading Terraform outputs for stage=$STAGE ..."
 cd "$TF_DIR"
 
-tf_out() {
-  terraform output -raw "$1" 2>/dev/null || echo ""
-}
+source "$REPO_ROOT/scripts/lib/terraform-output.sh"
 
-API_ENDPOINT="$(tf_out api_endpoint)"
-APPSYNC_API_URL="$(tf_out appsync_api_url)"
-APPSYNC_REALTIME_URL="$(tf_out appsync_realtime_url)"
-APPSYNC_API_KEY="$(tf_out appsync_api_key)"
-USER_POOL_ID="$(tf_out user_pool_id)"
-ADMIN_CLIENT_ID="$(tf_out admin_client_id)"
-AUTH_DOMAIN="$(tf_out auth_domain)"
-ADMIN_BUCKET="$(tf_out admin_bucket_name)"
-ADMIN_CF_ID="$(tf_out admin_distribution_id)"
+API_ENDPOINT="$(tf_output_raw api_endpoint)"
+APPSYNC_API_URL="$(tf_output_raw appsync_api_url)"
+APPSYNC_REALTIME_URL="$(tf_output_raw appsync_realtime_url)"
+APPSYNC_API_KEY="$(tf_output_raw appsync_api_key)"
+USER_POOL_ID="$(tf_output_raw user_pool_id)"
+ADMIN_CLIENT_ID="$(tf_output_raw admin_client_id)"
+AUTH_DOMAIN="$(tf_output_raw auth_domain)"
+ADMIN_BUCKET="$(tf_output_raw admin_bucket_name)"
+ADMIN_CF_ID="$(tf_output_raw admin_distribution_id)"
 
 # Construct full Cognito domain URL from the short domain prefix
 COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
@@ -76,6 +74,6 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-ADMIN_URL="$(cd "$TF_DIR" && tf_out admin_url)"
+ADMIN_URL="$(cd "$TF_DIR" && tf_output_raw admin_url)"
 echo ""
 echo "✓ Admin deployed: ${ADMIN_URL:-https://<pending>}"

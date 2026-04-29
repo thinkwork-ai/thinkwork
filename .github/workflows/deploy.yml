@@ -554,8 +554,9 @@ jobs:
         run: |
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-          echo "db_endpoint=$(terraform output -raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "db_secret_arn=$(terraform output -raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+          source ../../../scripts/lib/terraform-output.sh
+          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
 
       - name: Install psql
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
@@ -730,9 +731,10 @@ jobs:
         run: |
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-          echo "bucket=$(terraform output -raw bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "db_endpoint=$(terraform output -raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "db_secret_arn=$(terraform output -raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+          source ../../../scripts/lib/terraform-output.sh
+          echo "bucket=$(tf_output_raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
 
       - name: Run bootstrap
         run: |
@@ -834,22 +836,23 @@ jobs:
       - name: Show deployment URLs
         working-directory: terraform/examples/greenfield
         run: |
+          source ../../../scripts/lib/terraform-output.sh
           echo "╔══════════════════════════════════════════════════════════════╗"
           echo "║                    DEPLOYMENT SUMMARY                       ║"
           echo "╠══════════════════════════════════════════════════════════════╣"
           echo "║ Stage: ${{ env.STAGE }}"
           echo "║"
-          echo "║ Admin App:  $(terraform output -raw admin_url 2>/dev/null || echo 'N/A')"
-          echo "║ Docs Site:  $(terraform output -raw docs_url 2>/dev/null || echo 'N/A')"
-          echo "║ Www Site:   $(terraform output -raw www_url 2>/dev/null || echo 'N/A')"
-          echo "║ API:        $(terraform output -raw api_endpoint 2>/dev/null || echo 'N/A')"
-          echo "║ AppSync:    $(terraform output -raw appsync_api_url 2>/dev/null || echo 'N/A')"
-          echo "║ Hindsight:  $(terraform output -raw hindsight_endpoint 2>/dev/null || echo 'N/A')"
-          echo "║ S3 Bucket:  $(terraform output -raw bucket_name 2>/dev/null || echo 'N/A')"
-          echo "║ Database:   $(terraform output -raw db_cluster_endpoint 2>/dev/null || echo 'N/A')"
-          echo "║ ECR:        $(terraform output -raw ecr_repository_url 2>/dev/null || echo 'N/A')"
+          echo "║ Admin App:  $(tf_output_raw admin_url || echo 'N/A')"
+          echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
+          echo "║ Www Site:   $(tf_output_raw www_url || echo 'N/A')"
+          echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
+          echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
+          echo "║ Hindsight:  $(tf_output_raw hindsight_endpoint || echo 'N/A')"
+          echo "║ S3 Bucket:  $(tf_output_raw bucket_name || echo 'N/A')"
+          echo "║ Database:   $(tf_output_raw db_cluster_endpoint || echo 'N/A')"
+          echo "║ ECR:        $(tf_output_raw ecr_repository_url || echo 'N/A')"
           echo "║ Memory:     managed (always on)"
-          echo "║ Hindsight:  $(terraform output -raw hindsight_enabled 2>/dev/null || echo 'N/A')"
+          echo "║ Hindsight:  $(tf_output_raw hindsight_enabled || echo 'N/A')"
           echo "║"
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
