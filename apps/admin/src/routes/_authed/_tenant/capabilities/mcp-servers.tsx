@@ -10,6 +10,7 @@ import {
   TestTube,
   Cable,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -610,14 +611,14 @@ function ServerDetailDialog({
         if (!o) onClose();
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[min(90vh,760px)] max-w-3xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Cable className="h-5 w-5" />
             {server.name}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
           {/* Status + URL */}
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
@@ -713,73 +714,108 @@ function ServerDetailDialog({
             </div>
           )}
 
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Context Engine</div>
+          <div className="border-t pt-4">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  Context Engine
+                  {contextTools.length > 0 ? (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {contextTools.length} provider
+                      {contextTools.length === 1 ? "" : "s"}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
+                  Approve search-safe tools before they can participate in
+                  Context Engine. Default search controls whether approved tools
+                  are included automatically.
+                </p>
+              </div>
               {contextToolsLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
               ) : null}
             </div>
             {contextTools.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
+              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-xs text-muted-foreground">
                 No context providers discovered for this server.
-              </p>
+              </div>
             ) : (
-              <div className="max-h-56 overflow-y-auto space-y-2">
+              <div className="max-h-72 overflow-y-auto rounded-md border">
+                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_150px_112px_132px] gap-3 border-b bg-background/95 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur sm:grid">
+                  <div>Provider</div>
+                  <div>Eligibility</div>
+                  <div className="text-center">Approved</div>
+                  <div className="text-center">Default search</div>
+                </div>
                 {contextTools.map((tool) => {
                   const saving = contextToolSaving === tool.id;
                   return (
                     <div
                       key={tool.id}
-                      className="rounded-md border p-2.5 space-y-2"
+                      className="grid gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/25 sm:grid-cols-[minmax(0,1fr)_150px_112px_132px] sm:items-center"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">
-                            {tool.displayName || tool.toolName}
-                          </div>
-                          <div className="truncate text-xs font-mono text-muted-foreground">
-                            {tool.toolName}
-                          </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {tool.displayName || tool.toolName}
                         </div>
-                        <div className="flex flex-wrap justify-end gap-1">
-                          <Badge
-                            variant={
-                              tool.declaredReadOnly ? "secondary" : "outline"
-                            }
-                            className="text-[10px]"
-                          >
-                            read-only
-                          </Badge>
-                          <Badge
-                            variant={
-                              tool.declaredSearchSafe ? "secondary" : "outline"
-                            }
-                            className="text-[10px]"
-                          >
-                            search-safe
-                          </Badge>
+                        <div className="truncate font-mono text-xs text-muted-foreground">
+                          {tool.toolName}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <label className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1.5">
-                          <span>Approved</span>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge
+                          variant={
+                            tool.declaredReadOnly ? "secondary" : "outline"
+                          }
+                          className={
+                            tool.declaredReadOnly
+                              ? "text-[10px]"
+                              : "text-[10px] text-muted-foreground"
+                          }
+                        >
+                          read-only
+                        </Badge>
+                        <Badge
+                          variant={
+                            tool.declaredSearchSafe ? "secondary" : "outline"
+                          }
+                          className={
+                            tool.declaredSearchSafe
+                              ? "text-[10px]"
+                              : "text-[10px] text-muted-foreground"
+                          }
+                        >
+                          search-safe
+                        </Badge>
+                      </div>
+                      <label className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-2 py-1.5 sm:justify-center sm:bg-transparent sm:p-0">
+                        <span className="text-xs text-muted-foreground sm:sr-only">
+                          Approve {tool.displayName || tool.toolName}
+                        </span>
+                        <Switch
+                          size="sm"
+                          checked={tool.approved}
+                          disabled={saving}
+                          onCheckedChange={(checked) =>
+                            handleContextToolUpdate(tool, {
+                              approved: checked,
+                              defaultEnabled: checked
+                                ? tool.defaultEnabled
+                                : false,
+                            })
+                          }
+                        />
+                      </label>
+                      <div className="flex flex-col gap-1 sm:items-center">
+                        <label className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-2 py-1.5 sm:justify-center sm:bg-transparent sm:p-0">
+                          <span className="text-xs text-muted-foreground sm:sr-only">
+                            Include {tool.displayName || tool.toolName} in
+                            default search
+                          </span>
                           <Switch
-                            checked={tool.approved}
-                            disabled={saving}
-                            onCheckedChange={(checked) =>
-                              handleContextToolUpdate(tool, {
-                                approved: checked,
-                                defaultEnabled: checked
-                                  ? tool.defaultEnabled
-                                  : false,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1.5">
-                          <span>Default</span>
-                          <Switch
+                            size="sm"
                             checked={tool.defaultEnabled}
                             disabled={saving || !tool.approved}
                             onCheckedChange={(checked) =>
@@ -789,6 +825,11 @@ function ServerDetailDialog({
                             }
                           />
                         </label>
+                        {!tool.approved ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            approve first
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   );
