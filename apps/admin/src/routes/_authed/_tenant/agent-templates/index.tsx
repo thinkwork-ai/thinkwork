@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +56,9 @@ function AgentTemplatesPage() {
 
   const [search, setSearch] = useState("");
   const [useDialogOpen, setUseDialogOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(
+    null,
+  );
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentSlug, setNewAgentSlug] = useState("");
 
@@ -72,7 +75,8 @@ function AgentTemplatesPage() {
     console.error("Agent templates query error:", result.error.message);
   }
 
-  const templates: TemplateRow[] = (result.data?.agentTemplates ?? []) as TemplateRow[];
+  const templates: TemplateRow[] = (result.data?.agentTemplates ??
+    []) as TemplateRow[];
 
   // Filter by search
   const rows = search
@@ -102,7 +106,11 @@ function AgentTemplatesPage() {
     if (m.includes("opus")) return "Opus";
     if (m.includes("kimi")) return "Kimi K2.5";
     if (m.includes("nova")) return "Nova";
-    const short = model.replace(/^(us\.|eu\.)/, "").split(":")[0].split("/").pop();
+    const short = model
+      .replace(/^(us\.|eu\.)/, "")
+      .split(":")[0]
+      .split("/")
+      .pop();
     return short || model;
   };
 
@@ -130,7 +138,10 @@ function AgentTemplatesPage() {
       header: "Name",
       size: 180,
       cell: ({ row }) => (
-        <span className="font-medium whitespace-nowrap pl-3">{row.original.icon ? `${row.original.icon} ` : ""}{row.original.name}</span>
+        <span className="font-medium whitespace-nowrap pl-3">
+          {row.original.icon ? `${row.original.icon} ` : ""}
+          {row.original.name}
+        </span>
       ),
     },
     {
@@ -184,9 +195,16 @@ function AgentTemplatesPage() {
       size: 90,
       cell: ({ row }) =>
         row.original.source === "system" ? (
-          <Badge variant="secondary" className="text-[10px]">System</Badge>
+          <Badge variant="secondary" className="text-[10px]">
+            System
+          </Badge>
         ) : (
-          <Badge variant="outline" className="text-[10px] border-primary text-primary">Custom</Badge>
+          <Badge
+            variant="outline"
+            className="text-[10px] border-primary text-primary"
+          >
+            Custom
+          </Badge>
         ),
     },
     {
@@ -217,22 +235,27 @@ function AgentTemplatesPage() {
     <PageLayout
       header={
         <>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Templates</h1>
-              <p className="text-xs text-muted-foreground">Define capability and security boundaries for agents</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => navigate({ to: "/agent-templates/new" })}>
-                <Plus className="h-4 w-4" />
-                Create Template
-              </Button>
-              <Button variant="outline" onClick={() => navigate({ to: "/agent-templates/defaults" })}>
-                <FileText className="h-4 w-4" />
-                Default Workspace
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title="Templates"
+            description="Define capability and security boundaries for agents"
+            actions={
+              <>
+                <Button
+                  onClick={() => navigate({ to: "/agent-templates/new" })}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Template
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate({ to: "/agent-templates/defaults" })}
+                >
+                  <FileText className="h-4 w-4" />
+                  Default Workspace
+                </Button>
+              </>
+            }
+          />
           <div className="flex items-center gap-4 mt-4">
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -254,7 +277,10 @@ function AgentTemplatesPage() {
         scrollable
         tableClassName="table-fixed"
         onRowClick={(row) =>
-          navigate({ to: "/agent-templates/$templateId", params: { templateId: row.id } })
+          navigate({
+            to: "/agent-templates/$templateId",
+            params: { templateId: row.id },
+          })
         }
       />
 
