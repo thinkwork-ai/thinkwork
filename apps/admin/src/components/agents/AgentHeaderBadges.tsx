@@ -12,6 +12,7 @@ import {
 } from "@/lib/graphql-queries";
 import { AgentRuntime } from "@/gql/graphql";
 import { EmailAllowlistDialog } from "./EmailAllowlistDialog";
+import { AgentContextPolicyBadge } from "./AgentContextPolicyBadge";
 
 const HARNESS_OPTIONS = [
   { value: AgentRuntime.Strands, label: "Strands" },
@@ -96,6 +97,8 @@ export function AgentHeaderBadges({
           if (v) await onSaveRuntime(v as AgentRuntime);
         }}
       />
+
+      <AgentContextPolicyBadge agentId={agent.id} />
 
       {/* Budget */}
       <BadgeSelectorText
