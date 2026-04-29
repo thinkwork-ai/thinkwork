@@ -5,12 +5,15 @@ description: Create and manage Bedrock Knowledge Bases, upload documents via pre
 
 import { Aside } from '@astrojs/starlight/components';
 
-Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The admin UI lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
+Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Knowledge page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
 
 ## The list view
 
-**Route:** `/knowledge-bases`  
-**File:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
+**Route:** `/knowledge/knowledge-bases`  
+**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`  
+**Tab implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
+
+The legacy `/knowledge-bases` route redirects to this tab.
 
 A searchable `DataTable` with columns for:
 
@@ -26,8 +29,9 @@ A "Create KB" button in the header fires a creation flow (not deeply visible in 
 
 ## The detail view
 
-**Route:** `/knowledge-bases/:kbId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
+**Route:** `/knowledge/knowledge-bases/:kbId`  
+**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`  
+**Detail implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
 
 The detail page is a two-column grid: Documents on the left, Sync on the right, with a header showing the KB name, slug, status badges, and a delete confirmation flow.
 
@@ -150,7 +154,8 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 ## Related pages
 
 - [Agents — Knowledge tab](/applications/admin/agents/#knowledge) — where a KB gets attached to an agent
-- [Memory](/applications/admin/memory/) — the other context layer: stateful memory vs stateless documents
+- [Knowledge](/applications/admin/knowledge/) — the combined Admin surface for Memory, Wiki, Knowledge Bases, and Context Engine
+- [Memory](/applications/admin/memory/) — the Memory tab behavior: stateful memory vs stateless documents
 - [Document Knowledge (concept)](/concepts/knowledge/document-knowledge/) — the product model
 - [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
 - [Architecture](/architecture/) — the three-tier deployment including Bedrock and Aurora pgvector
