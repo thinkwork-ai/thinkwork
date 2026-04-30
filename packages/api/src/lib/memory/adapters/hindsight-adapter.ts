@@ -164,18 +164,24 @@ export class HindsightAdapter implements MemoryAdapter {
     const bankId = await this.resolveBankId(req.ownerId);
     const factType = resolveFactType(req);
 
-    const { fact_type_override: _omitOverride, ...callerMetadata } =
-      (req.metadata || {}) as Record<string, unknown>;
+    const {
+      fact_type_override: _omitOverride,
+      hindsight_async: retainAsync,
+      tags: callerTags,
+      ...callerMetadata
+    } = (req.metadata || {}) as Record<string, unknown>;
     const item: Record<string, unknown> = {
       content: req.content,
       context: req.sourceType,
     };
-    const mergedMetadata: Record<string, unknown> = {
+    const mergedMetadata = toHindsightMetadata({
       ...callerMetadata,
       fact_type: factType,
-    };
+    });
     if (req.role) mergedMetadata.role = req.role;
     item.metadata = mergedMetadata;
+    const tags = toHindsightTags(callerTags);
+    if (tags.length > 0) item.tags = tags;
 
     let data: any = null;
     try {
@@ -184,7 +190,12 @@ export class HindsightAdapter implements MemoryAdapter {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: [item] }),
+          body: JSON.stringify({
+            items: [item],
+            ...(retainAsync === true || retainAsync === "true"
+              ? { async: true }
+              : {}),
+          }),
           signal: AbortSignal.timeout(this.timeoutMs),
         },
       );
@@ -222,11 +233,11 @@ export class HindsightAdapter implements MemoryAdapter {
       .map((m) => ({
         content: m.content,
         context: "thread_turn",
-        metadata: {
+        metadata: toHindsightMetadata({
           ...(req.metadata || {}),
           role: m.role,
           thread_id: req.threadId,
-        },
+        }),
       }));
     if (items.length === 0) return;
 
@@ -266,14 +277,14 @@ export class HindsightAdapter implements MemoryAdapter {
       document_id: req.threadId,
       update_mode: "replace",
       context: "thinkwork_thread",
-      metadata: {
+      metadata: toHindsightMetadata({
         ...(req.metadata || {}),
         tenantId: req.tenantId,
         userId: req.ownerId,
         threadId: req.threadId,
         turnCount: lines.length,
         source: "thinkwork",
-      },
+      }),
     };
     await this.postItems(bankId, [item], "retainConversation");
     console.log(
@@ -291,13 +302,13 @@ export class HindsightAdapter implements MemoryAdapter {
       document_id: `workspace_daily:${req.ownerId}:${req.date}`,
       update_mode: "replace",
       context: "thinkwork_workspace_daily",
-      metadata: {
+      metadata: toHindsightMetadata({
         ...(req.metadata || {}),
         tenantId: req.tenantId,
         userId: req.ownerId,
         date: req.date,
         source: "thinkwork",
-      },
+      }),
     };
     await this.postItems(bankId, [item], "retainDailyMemory");
     console.log(
@@ -787,6 +798,31 @@ function resolveFactType(req: RetainRequest): string {
     return override;
   }
   return sourceTypeToFactType(req.sourceType);
+}
+
+function toHindsightMetadata(
+  metadata: Record<string, unknown>,
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string") {
+      normalized[key] = value;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      normalized[key] = String(value);
+    } else {
+      normalized[key] = JSON.stringify(value);
+    }
+  }
+  return normalized;
+}
+
+function toHindsightTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
+  );
 }
 
 function inferSourceType(unit: any): ThinkWorkMemoryRecord["sourceType"] {

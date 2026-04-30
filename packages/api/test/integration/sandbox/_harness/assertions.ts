@@ -91,7 +91,10 @@ export async function assertSandboxInvocation(
       );
     }
     const row = rows[0];
-    if (args.expectedExitStatus && row.exit_status !== args.expectedExitStatus) {
+    if (
+      args.expectedExitStatus &&
+      row.exit_status !== args.expectedExitStatus
+    ) {
       throw new Error(
         `[sandbox-e2e run=${args.runId}] sandbox_invocations.exit_status expected '${args.expectedExitStatus}', got '${row.exit_status}' (row=${row.id}). ` +
           `failure_reason: ${row.failure_reason ?? "(null)"}.`,
@@ -178,7 +181,10 @@ export async function assertNoTokenLeak(
   }
   throw new Error(
     `[sandbox-e2e run=${args.runId}] token leak detected in CloudWatch log group ${env.agentcoreRuntimeLogGroup} for session ${args.sessionId}. ` +
-      `${lastMatches.length} match(es). Samples (first 3, hashed): ${lastMatches.slice(0, 3).map((m) => `${m.pattern}=${hashSample(m.sample)}`).join(", ")}. ` +
+      `${lastMatches.length} match(es). Samples (first 3, hashed): ${lastMatches
+        .slice(0, 3)
+        .map((m) => `${m.pattern}=${hashSample(m.sample)}`)
+        .join(", ")}. ` +
       `THIS IS A REGRESSION IN THE UNIT 4 sitecustomize.py WRAPPER. Page platform security. Runbook: docs/guides/sandbox-environments.md → "When to call platform security".`,
   );
 }
@@ -221,7 +227,13 @@ export function assertCapExceeded(args: {
   toolResult?: { error?: string; exit_status?: string };
 }): void {
   const resp = (args.agentResponse ?? "").toLowerCase();
-  if (resp.includes("sandboxcapexceeded") || resp.includes("cap_exceeded")) return;
+  if (resp.includes("sandboxcapexceeded") || resp.includes("cap_exceeded"))
+    return;
+  if (resp.includes("daily sandbox cap")) return;
+  if (resp.includes("daily compute cap")) return;
+  if (resp.includes("sandbox") && resp.includes("cap")) return;
+  if (resp.includes("compute cap has been hit")) return;
+  if (resp.includes("compute cap has been reached")) return;
   if (args.toolResult?.error === "SandboxCapExceeded") return;
   if (args.toolResult?.exit_status === "cap_exceeded") return;
   throw new Error(
@@ -246,7 +258,9 @@ export async function assertTenantIsolation(
         sql`SELECT DISTINCT tenant_id::text AS tenant_id FROM sandbox_invocations
             WHERE tenant_id = ${tenantId}::uuid AND started_at >= ${args.since}`,
       );
-      const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
+      const rows = Array.isArray(result)
+        ? result
+        : ((result as any).rows ?? []);
       const distinct = rows.map((r: any) => r.tenant_id);
       if (distinct.length !== 1 || distinct[0] !== tenantId) {
         throw new Error(

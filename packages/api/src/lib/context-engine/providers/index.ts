@@ -12,8 +12,12 @@ import {
 } from "../admin-config.js";
 import type { ContextProviderDescriptor } from "../types.js";
 import { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
+import { createCatalogContextProvider } from "./catalog.js";
+import { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
+import { createErpCustomerContextProvider } from "./erp-customer.js";
 import { createMemoryContextProvider } from "./memory.js";
 import { createMcpToolContextProvider } from "./mcp-tool.js";
+import { createSupportCaseContextProvider } from "./support-case.js";
 import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 import { createWikiContextProvider } from "./wiki.js";
 
@@ -26,6 +30,10 @@ export function createCoreContextProviders(
     createWikiContextProvider(),
     createWorkspaceFilesContextProvider(),
     createBedrockKnowledgeBaseContextProvider(),
+    createErpCustomerContextProvider(),
+    createCrmOpportunityContextProvider(),
+    createSupportCaseContextProvider(),
+    createCatalogContextProvider(),
   ];
   return applyTenantContextProviderSettings(providers, settings);
 }
@@ -167,7 +175,12 @@ async function callTenantMcpTool(args: {
 }
 
 export { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
+export { createCatalogContextProvider } from "./catalog.js";
+export { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
+export { createErpCustomerContextProvider } from "./erp-customer.js";
 export { createMemoryContextProvider } from "./memory.js";
 export { createMcpToolContextProvider } from "./mcp-tool.js";
+export { createSupportCaseContextProvider } from "./support-case.js";
+export { createSubAgentContextProvider } from "./sub-agent-base.js";
 export { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 export { createWikiContextProvider } from "./wiki.js";

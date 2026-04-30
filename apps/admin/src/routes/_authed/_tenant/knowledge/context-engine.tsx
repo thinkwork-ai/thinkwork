@@ -10,6 +10,7 @@ import {
   HardDrive,
   Loader2,
   Network,
+  Bot,
   Settings2,
   Search,
   XCircle,
@@ -51,6 +52,7 @@ import {
 } from "@/lib/context-engine-api";
 import { useTenant } from "@/context/TenantContext";
 import { Switch } from "@/components/ui/switch";
+import { ContextEngineSubAgentPanel } from "@/components/ContextEngineSubAgentPanel";
 import {
   Select,
   SelectContent,
@@ -71,6 +73,7 @@ const FAMILY_ICONS = {
   "knowledge-base": FileText,
   workspace: HardDrive,
   mcp: Search,
+  "sub-agent": Bot,
 } as const;
 
 const FAMILY_LABELS: Record<string, string> = {
@@ -79,6 +82,7 @@ const FAMILY_LABELS: Record<string, string> = {
   "knowledge-base": "Knowledge Base",
   workspace: "Workspace",
   mcp: "MCP",
+  "sub-agent": "Sub-agent",
 };
 
 function statusClasses(state: ContextProviderStatus["state"] | "available") {
@@ -86,6 +90,7 @@ function statusClasses(state: ContextProviderStatus["state"] | "available") {
     return "bg-green-500/15 text-green-700 dark:text-green-400";
   }
   if (state === "skipped") return "bg-muted text-muted-foreground";
+  if (state === "stale") return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
   if (state === "timeout") {
     return "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400";
   }
@@ -95,6 +100,7 @@ function statusClasses(state: ContextProviderStatus["state"] | "available") {
 function StatusIcon({ state }: { state: ContextProviderStatus["state"] }) {
   if (state === "ok") return <CheckCircle2 className="h-3.5 w-3.5" />;
   if (state === "timeout") return <Clock className="h-3.5 w-3.5" />;
+  if (state === "stale") return <Clock className="h-3.5 w-3.5" />;
   if (state === "skipped") return <AlertCircle className="h-3.5 w-3.5" />;
   return <XCircle className="h-3.5 w-3.5" />;
 }
@@ -725,6 +731,11 @@ function ContextEnginePage() {
           })
         )}
       </div>
+
+      <ContextEngineSubAgentPanel
+        providers={providers}
+        statuses={result?.providers ?? []}
+      />
 
       <Dialog
         open={Boolean(resultDialog)}

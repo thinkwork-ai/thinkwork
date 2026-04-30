@@ -7,10 +7,10 @@
  *     during these calls is a regression.
  *  2. thread_turns writer replaces it, with kind='system_event' and a
  *     structured payload capturing actor, reason, and assignee transition.
- *  3. requireTenantAdmin is now the security gate. Cognito callers without
+ *  3. requireTenantAdmin is now the security gate. Callers without
  *     owner/admin role on the thread's tenant fail closed before any side
  *     effect. Cross-tenant access (caller admin in tenant A, thread in
- *     tenant B) surfaces as NOT_FOUND because the role lookup finds no
+ *     tenant B) surfaces as FORBIDDEN because the role lookup finds no
  *     membership row.
  *
  * These are the plan's explicit test scenarios for U2.
@@ -37,7 +37,10 @@ const {
   // thread_turns kind=system_event) and the table itself was dropped by
   // U5 (drizzle/0031_thread_cleanup_drops.sql). No regression-guard
   // assertion needed since the table no longer exists.
-  capturedInserts: { threadTurns: [] as any[], agentWakeupRequests: [] as any[] },
+  capturedInserts: {
+    threadTurns: [] as any[],
+    agentWakeupRequests: [] as any[],
+  },
 }));
 
 vi.mock("../graphql/utils.js", async (importOriginal) => {
@@ -75,8 +78,10 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
       })),
       insert: vi.fn((table: unknown) => ({
         values: (vals: any) => {
-          if (table === actual.threadTurns) capturedInserts.threadTurns.push(vals);
-          else if (table === actual.agentWakeupRequests) capturedInserts.agentWakeupRequests.push(vals);
+          if (table === actual.threadTurns)
+            capturedInserts.threadTurns.push(vals);
+          else if (table === actual.agentWakeupRequests)
+            capturedInserts.agentWakeupRequests.push(vals);
           return Promise.resolve();
         },
       })),
@@ -170,9 +175,17 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
     mockAgentRows.mockReturnValue([SUPERVISOR_AGENT]);
     mockUpdateReturning.mockReturnValue([UPDATED_THREAD]);
 
-    await escalateThread({}, {
-      input: { threadId: "thread-1", reason: "needs supervisor", agentId: "agent-original" },
-    }, cognitoCtx());
+    await escalateThread(
+      {},
+      {
+        input: {
+          threadId: "thread-1",
+          reason: "needs supervisor",
+          agentId: "agent-original",
+        },
+      },
+      cognitoCtx(),
+    );
 
     expect(capturedInserts.threadTurns).toHaveLength(1);
     const turn = capturedInserts.threadTurns[0];
@@ -201,13 +214,21 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
     mockThreadRows.mockReturnValue([THREAD_ROW]); // thread assigned to agent-original
     mockMemberRows.mockReturnValue([{ role: "admin" }]);
     mockAgentRows.mockReturnValue([selfSupAgent]);
-    mockUpdateReturning.mockReturnValue([{ ...UPDATED_THREAD, assignee_id: "agent-original" }]);
+    mockUpdateReturning.mockReturnValue([
+      { ...UPDATED_THREAD, assignee_id: "agent-original" },
+    ]);
 
-    await escalateThread({}, {
-      input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-    }, cognitoCtx());
+    await escalateThread(
+      {},
+      {
+        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
+      },
+      cognitoCtx(),
+    );
 
-    expect(capturedInserts.threadTurns[0].result_json.previous_assignee_id).toBeNull();
+    expect(
+      capturedInserts.threadTurns[0].result_json.previous_assignee_id,
+    ).toBeNull();
   });
 
   it("supervisor in different tenant → 'Thread not found' (new supervisor-tenant check, not the input-agent check)", async () => {
@@ -220,9 +241,17 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
       .mockReturnValueOnce([{ tenant_id: "tenant-B" }]);
 
     await expect(
-      escalateThread({}, {
-        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-      }, cognitoCtx()),
+      escalateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            reason: "x",
+            agentId: "agent-original",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
     expect(capturedInserts.agentWakeupRequests).toEqual([]);
@@ -231,9 +260,13 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
   it("thread row missing → 'Thread not found' before any side effect", async () => {
     mockThreadRows.mockReturnValue([]);
     await expect(
-      escalateThread({}, {
-        input: { threadId: "nope", reason: "x", agentId: "agent-original" },
-      }, cognitoCtx()),
+      escalateThread(
+        {},
+        {
+          input: { threadId: "nope", reason: "x", agentId: "agent-original" },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -243,9 +276,17 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
     mockMemberRows.mockReturnValue([{ role: "member" }]);
 
     await expect(
-      escalateThread({}, {
-        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-      }, cognitoCtx()),
+      escalateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            reason: "x",
+            agentId: "agent-original",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -255,32 +296,59 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
     mockMemberRows.mockReturnValue([]); // caller has no row on tenant-A
 
     await expect(
-      escalateThread({}, {
-        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-      }, cognitoCtx()),
+      escalateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            reason: "x",
+            agentId: "agent-original",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
     expect(capturedInserts.threadTurns).toEqual([]);
   });
 
-  it("apikey caller → FORBIDDEN (requireTenantAdmin only accepts cognito)", async () => {
+  it("apikey caller without a tenant admin membership → FORBIDDEN", async () => {
     mockThreadRows.mockReturnValue([THREAD_ROW]);
+    mockMemberRows.mockReturnValue([]);
 
     await expect(
-      escalateThread({}, {
-        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-      }, apikeyCtx()),
+      escalateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            reason: "x",
+            agentId: "agent-original",
+          },
+        },
+        apikeyCtx(),
+      ),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
   });
 
   it("supervisor agent in different tenant → 'Thread not found' (cross-tenant supervisor isolation)", async () => {
     mockThreadRows.mockReturnValue([THREAD_ROW]);
     mockMemberRows.mockReturnValue([{ role: "admin" }]);
-    mockAgentRows.mockReturnValue([{ ...SUPERVISOR_AGENT, tenant_id: "tenant-B" }]);
+    mockAgentRows.mockReturnValue([
+      { ...SUPERVISOR_AGENT, tenant_id: "tenant-B" },
+    ]);
 
     await expect(
-      escalateThread({}, {
-        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
-      }, cognitoCtx()),
+      escalateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            reason: "x",
+            agentId: "agent-original",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -297,16 +365,22 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
     mockMemberRows.mockReturnValue([{ role: "owner" }]);
     // delegateThread queries agents once for the assignee check
     mockAgentRows.mockReturnValue([{ tenant_id: "tenant-A" }]);
-    mockUpdateReturning.mockReturnValue([{ ...UPDATED_THREAD, assignee_id: "agent-new" }]);
+    mockUpdateReturning.mockReturnValue([
+      { ...UPDATED_THREAD, assignee_id: "agent-new" },
+    ]);
 
-    await delegateThread({}, {
-      input: {
-        threadId: "thread-1",
-        assigneeId: "agent-new",
-        reason: "handing off",
-        agentId: "agent-actor",
+    await delegateThread(
+      {},
+      {
+        input: {
+          threadId: "thread-1",
+          assigneeId: "agent-new",
+          reason: "handing off",
+          agentId: "agent-actor",
+        },
       },
-    }, cognitoCtx());
+      cognitoCtx(),
+    );
 
     expect(capturedInserts.threadTurns).toHaveLength(1);
     const turn = capturedInserts.threadTurns[0];
@@ -327,9 +401,18 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
   it("thread row missing → 'Thread not found' before auth or writes", async () => {
     mockThreadRows.mockReturnValue([]);
     await expect(
-      delegateThread({}, {
-        input: { threadId: "nope", assigneeId: "agent-new", reason: "x", agentId: "agent-actor" },
-      }, cognitoCtx()),
+      delegateThread(
+        {},
+        {
+          input: {
+            threadId: "nope",
+            assigneeId: "agent-new",
+            reason: "x",
+            agentId: "agent-actor",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -339,9 +422,18 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
     mockMemberRows.mockReturnValue([{ role: "member" }]);
 
     await expect(
-      delegateThread({}, {
-        input: { threadId: "thread-1", assigneeId: "agent-new", reason: "x", agentId: "agent-actor" },
-      }, cognitoCtx()),
+      delegateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            assigneeId: "agent-new",
+            reason: "x",
+            agentId: "agent-actor",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -352,9 +444,18 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
     mockAgentRows.mockReturnValue([{ tenant_id: "tenant-B" }]);
 
     await expect(
-      delegateThread({}, {
-        input: { threadId: "thread-1", assigneeId: "agent-new", reason: "x", agentId: "agent-actor" },
-      }, cognitoCtx()),
+      delegateThread(
+        {},
+        {
+          input: {
+            threadId: "thread-1",
+            assigneeId: "agent-new",
+            reason: "x",
+            agentId: "agent-actor",
+          },
+        },
+        cognitoCtx(),
+      ),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
   });
@@ -363,11 +464,21 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
     mockThreadRows.mockReturnValue([THREAD_ROW]);
     mockMemberRows.mockReturnValue([{ role: "admin" }]);
     mockAgentRows.mockReturnValue([{ tenant_id: "tenant-A" }]);
-    mockUpdateReturning.mockReturnValue([{ ...UPDATED_THREAD, assignee_id: "agent-new" }]);
+    mockUpdateReturning.mockReturnValue([
+      { ...UPDATED_THREAD, assignee_id: "agent-new" },
+    ]);
 
-    await delegateThread({}, {
-      input: { threadId: "thread-1", assigneeId: "agent-new", agentId: "agent-actor" },
-    }, cognitoCtx());
+    await delegateThread(
+      {},
+      {
+        input: {
+          threadId: "thread-1",
+          assigneeId: "agent-new",
+          agentId: "agent-actor",
+        },
+      },
+      cognitoCtx(),
+    );
 
     expect(capturedInserts.threadTurns[0].result_json.reason).toBeNull();
   });

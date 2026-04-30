@@ -24,13 +24,14 @@ export type ContextProviderStatus = {
   providerId: string;
   family: string;
   displayName: string;
-  state: "ok" | "skipped" | "error" | "timeout";
+  state: "ok" | "skipped" | "error" | "timeout" | "stale";
   scope: string;
   durationMs?: number;
   hitCount?: number;
   error?: string;
   reason?: string;
   defaultEnabled?: boolean;
+  freshness?: { asOf: string; ttlSeconds: number };
 };
 
 export type ContextHit = {
@@ -49,6 +50,7 @@ export type ContextHit = {
     metadata?: Record<string, unknown>;
   };
   metadata?: Record<string, unknown>;
+  freshness?: { asOf: string; ttlSeconds: number };
 };
 
 export type ContextQueryResult = {

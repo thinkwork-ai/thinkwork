@@ -97,7 +97,9 @@ def make_context_engine_tool(
         """Search Thinkwork Context Engine across fast default providers.
 
         Use this first for ordinary agent context lookup across wiki,
-        workspace files, knowledge bases, and approved search-safe MCP tools.
+        workspace files, knowledge bases, sub-agent providers, and approved
+        search-safe MCP tools. Prefer higher-trust Brain facets in this order:
+        operational, relationship, compiled, kb_sourced/activity, external.
         Use query_memory_context only when raw Hindsight Memory is needed.
         """
 

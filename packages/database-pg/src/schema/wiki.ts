@@ -33,6 +33,7 @@ import {
 	primaryKey,
 	uniqueIndex,
 	index,
+	check,
 	type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -70,6 +71,7 @@ export const wikiPages = pgTable(
 			.references(() => users.id)
 			.notNull(), // v1: every page is user-scoped
 		type: text("type").notNull(), // 'entity' | 'topic' | 'decision' — shape, not scope
+		entity_subtype: text("entity_subtype"),
 		slug: text("slug").notNull(),
 		title: text("title").notNull(),
 		summary: text("summary"),
@@ -125,6 +127,9 @@ export const wikiPages = pgTable(
 		),
 		index("idx_wiki_pages_owner").on(table.owner_id),
 		index("idx_wiki_pages_last_compiled").on(table.last_compiled_at),
+		index("idx_wiki_pages_entity_subtype")
+			.on(table.entity_subtype)
+			.where(sql`${table.entity_subtype} IS NOT NULL`),
 		// Full-text search: GIN on the generated tsvector column.
 		index("idx_wiki_pages_search_tsv").using("gin", table.search_tsv),
 		// Fast lookup of child pages for hierarchy navigation.
@@ -293,6 +298,7 @@ export const wikiUnresolvedMentions = pgTable(
 			.default(sql`now()`),
 		sample_contexts: jsonb("sample_contexts").notNull().default([]), // array of { quote, source_ref, seen_at }, capped at 5
 		suggested_type: text("suggested_type"), // 'entity' | 'topic' | 'decision'
+		entity_subtype: text("entity_subtype"),
 		status: text("status").notNull().default("open"), // 'open' | 'promoted' | 'ignored'
 		promoted_page_id: uuid("promoted_page_id").references(() => wikiPages.id),
 		updated_at: timestamp("updated_at", { withTimezone: true })
@@ -314,6 +320,10 @@ export const wikiUnresolvedMentions = pgTable(
 		index("idx_wiki_unresolved_mentions_status_last_seen").on(
 			table.status,
 			table.last_seen_at,
+		),
+		check(
+			"wiki_unresolved_mentions_entity_subtype_allowed",
+			sql`${table.entity_subtype} IS NULL OR ${table.entity_subtype} IN ('customer','opportunity','order','person','concept','reflection')`,
 		),
 	],
 );

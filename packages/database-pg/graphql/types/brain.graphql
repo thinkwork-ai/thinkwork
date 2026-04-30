@@ -1,0 +1,45 @@
+type TenantEntitySection {
+  id: ID!
+  sectionSlug: String!
+  heading: String!
+  bodyMd: String!
+  position: Int!
+  facetType: String
+  status: String!
+  lastSourceAt: AWSDateTime
+  updatedAt: AWSDateTime!
+}
+
+type TenantEntityPage {
+  id: ID!
+  tenantId: ID!
+  type: String!
+  entitySubtype: String!
+  slug: String!
+  title: String!
+  summary: String
+  bodyMd: String
+  status: String!
+  updatedAt: AWSDateTime!
+  sections: [TenantEntitySection!]!
+}
+
+type TenantEntityFacetEdge {
+  node: TenantEntitySection!
+  cursor: String!
+}
+
+type TenantEntityFacetConnection {
+  edges: [TenantEntityFacetEdge!]!
+  pageInfo: PageInfo!
+}
+
+extend type Query {
+  tenantEntityPage(tenantId: ID!, pageId: ID!): TenantEntityPage
+  tenantEntityFacets(pageId: ID!, limit: Int = 20, cursor: String): TenantEntityFacetConnection!
+}
+
+extend type Mutation {
+  editTenantEntityFact(factId: ID!, content: String!): TenantEntitySection!
+  rejectTenantEntityFact(factId: ID!, reason: String): TenantEntitySection!
+}
