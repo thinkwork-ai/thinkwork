@@ -16,6 +16,23 @@ export type ContextProviderSummary = {
   config?: Record<string, unknown>;
   subAgent?: {
     promptRef: string;
+    prompt?: {
+      title: string;
+      summary: string;
+      instructions?: string[];
+    };
+    resources?: Array<{
+      id: string;
+      label: string;
+      type: string;
+      description: string;
+      access: "read" | "write" | "read-write";
+    }>;
+    skills?: Array<{
+      id: string;
+      label: string;
+      description: string;
+    }>;
     toolAllowlist: string[];
     depthCap: number;
     processModel: string;

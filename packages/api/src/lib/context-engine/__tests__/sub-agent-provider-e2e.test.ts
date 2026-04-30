@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createContextEngineRouter } from "../router.js";
 import { createSubAgentContextProvider } from "../providers/sub-agent-base.js";
-import { createWikiSourceAgentContextProvider } from "../providers/wiki-source-agent.js";
+import {
+  createWikiSourceAgentContextProvider,
+  planWikiSourceAgentQueries,
+} from "../providers/wiki-source-agent.js";
 
 describe("Context Engine sub-agent provider E2E seam", () => {
   it("routes an explicit sub-agent provider through its live seam and returns normalized hits", async () => {
@@ -86,6 +89,24 @@ describe("Context Engine sub-agent provider E2E seam", () => {
     });
   });
 
+  it("plans multiple wiki navigation paths instead of issuing one top-k search", () => {
+    expect(planWikiSourceAgentQueries("favorite restarant in Paris")).toEqual([
+      {
+        query: "favorite restarant in Paris",
+        purpose: "original",
+      },
+      {
+        query: "favorite restaurant in Paris",
+        purpose: "repaired",
+        repairs: [{ from: "restarant", to: "restaurant" }],
+      },
+      {
+        query: "favorite restaurant paris",
+        purpose: "focused",
+      },
+    ]);
+  });
+
   it("runs the Company Brain page agent through the wiki retrieval seam", async () => {
     const seen: Array<{ tenantId: string; userId: string; query: string }> = [];
     const provider = createWikiSourceAgentContextProvider({
@@ -134,6 +155,16 @@ describe("Context Engine sub-agent provider E2E seam", () => {
         userId: "user-1",
         query: "favorite restarant in Paris",
       },
+      {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        query: "favorite restaurant in Paris",
+      },
+      {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        query: "favorite restaurant paris",
+      },
     ]);
     expect(result.hits).toEqual([
       expect.objectContaining({
@@ -143,10 +174,27 @@ describe("Context Engine sub-agent provider E2E seam", () => {
         title: "Auberge Bressane",
         provenance: expect.objectContaining({
           metadata: expect.objectContaining({
-            retrievalStrategy: "hybrid-lexical",
+            retrievalStrategy: "agentic-hybrid-wiki-navigation",
+            sourceQuery: "favorite restaurant in Paris",
+            sourceQueryPurpose: "repaired",
             toolAllowlist: [
               "company-brain.pages.search",
               "company-brain.pages.read",
+            ],
+          }),
+        }),
+        metadata: expect.objectContaining({
+          sourceAgent: expect.objectContaining({
+            retrievalStrategy: "agentic-hybrid-wiki-navigation",
+            inspectedPageCount: 1,
+            plan: [
+              { query: "favorite restarant in Paris", purpose: "original" },
+              {
+                query: "favorite restaurant in Paris",
+                purpose: "repaired",
+                repairs: [{ from: "restarant", to: "restaurant" }],
+              },
+              { query: "favorite restaurant paris", purpose: "focused" },
             ],
           }),
         }),
@@ -158,6 +206,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
         family: "sub-agent",
         state: "ok",
         hitCount: 1,
+        reason: "searched 3 query paths; inspected 1 compiled page",
       }),
     ]);
     expect(provider.subAgent).toMatchObject({
