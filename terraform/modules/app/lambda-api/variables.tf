@@ -252,6 +252,12 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
+variable "company_brain_source_agent_model_id" {
+  description = "Bedrock model id the GraphQL context-engine Company Brain source-agent runtime uses for JSON tool/action turns. Kept separate from the high-throughput wiki compiler model so source agents can use a model tuned for reliable action JSON."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). Pipeline stops after leaf compile when this is off and never populates hub rollups. Stored as a string because the Lambda reads it verbatim from env; must be 'true' / '1' / 'yes' to enable."
   type        = string

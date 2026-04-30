@@ -163,6 +163,16 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
+variable "company_brain_source_agent_model_id" {
+  description = <<-EOT
+    Bedrock model id the GraphQL Company Brain source-agent runtime uses
+    for JSON tool/action turns. Defaults to Claude Haiku 4.5 for reliable
+    action JSON while wiki compile can stay on gpt-oss for throughput.
+  EOT
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -279,10 +289,11 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  wiki_compile_model_id              = var.wiki_compile_model_id
-  wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
-  google_places_api_key              = var.google_places_api_key
+  wiki_compile_model_id               = var.wiki_compile_model_id
+  company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
+  wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
+  google_places_api_key               = var.google_places_api_key
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
   stripe_price_ids_json = var.stripe_price_ids_json
