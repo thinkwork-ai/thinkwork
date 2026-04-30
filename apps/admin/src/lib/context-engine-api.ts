@@ -56,6 +56,7 @@ export type ContextProviderStatus = {
   reason?: string;
   defaultEnabled?: boolean;
   freshness?: { asOf: string; ttlSeconds: number };
+  metadata?: Record<string, unknown>;
 };
 
 export type ContextHit = {
