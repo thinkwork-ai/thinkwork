@@ -14,6 +14,13 @@ export type ContextProviderSummary = {
   enabled?: boolean;
   defaultEnabled: boolean;
   config?: Record<string, unknown>;
+  subAgent?: {
+    promptRef: string;
+    toolAllowlist: string[];
+    depthCap: number;
+    processModel: string;
+    seamState?: "inert" | "live";
+  } | null;
   lastTestedAt?: string | null;
   lastTestState?: string | null;
   lastTestLatencyMs?: number | null;
@@ -114,9 +121,7 @@ async function callContextTool<T>(
     });
 
     if (response.error) {
-      throw new Error(
-        response.error.message || "Company Brain request failed",
-      );
+      throw new Error(response.error.message || "Company Brain request failed");
     }
     const structured = response.result?.structuredContent;
     if (!structured)

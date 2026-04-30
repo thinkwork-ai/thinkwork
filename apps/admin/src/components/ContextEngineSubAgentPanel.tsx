@@ -9,10 +9,17 @@ type Props = {
   statuses?: ContextProviderStatus[];
 };
 
-export function ContextEngineSubAgentPanel({ providers, statuses = [] }: Props) {
-  const subAgents = providers.filter((provider) => provider.family === "sub-agent");
+export function ContextEngineSubAgentPanel({
+  providers,
+  statuses = [],
+}: Props) {
+  const subAgents = providers.filter(
+    (provider) => provider.family === "sub-agent",
+  );
   if (subAgents.length === 0) return null;
-  const statusById = new Map(statuses.map((status) => [status.providerId, status]));
+  const statusById = new Map(
+    statuses.map((status) => [status.providerId, status]),
+  );
 
   return (
     <section className="space-y-2 rounded-md border p-3">
@@ -34,7 +41,11 @@ export function ContextEngineSubAgentPanel({ providers, statuses = [] }: Props) 
               <div className="min-w-0">
                 <p className="truncate font-medium">{provider.displayName}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {status?.reason || status?.error || "inert seam (v0)"}
+                  {status?.reason ||
+                    status?.error ||
+                    (provider.subAgent?.seamState === "live"
+                      ? provider.subAgent.processModel
+                      : "inert seam (v0)")}
                 </p>
               </div>
               <span className="text-xs text-muted-foreground">
@@ -46,7 +57,7 @@ export function ContextEngineSubAgentPanel({ providers, statuses = [] }: Props) 
                   : "no recent query"}
               </span>
               <Badge variant="outline" className="w-fit text-[11px]">
-                {state}
+                {provider.subAgent?.seamState ?? state}
               </Badge>
             </div>
           );
