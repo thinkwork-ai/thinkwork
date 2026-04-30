@@ -17,6 +17,10 @@ export function ContextEngineSubAgentPanel({
     (provider) => provider.family === "sub-agent",
   );
   if (subAgents.length === 0) return null;
+  const liveCount = subAgents.filter(
+    (provider) => provider.subAgent?.seamState === "live",
+  ).length;
+  const plannedCount = subAgents.length - liveCount;
   const statusById = new Map(
     statuses.map((status) => [status.providerId, status]),
   );
@@ -24,15 +28,29 @@ export function ContextEngineSubAgentPanel({
   return (
     <section className="space-y-2 rounded-md border p-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">Company Brain sub-agents</h2>
-        <Badge variant="secondary" className="text-[11px]">
-          {subAgents.length} adapters
-        </Badge>
+        <h2 className="text-sm font-medium">Company Brain source agents</h2>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="secondary"
+            className="bg-green-500/15 text-[11px] text-green-700 dark:text-green-400"
+          >
+            {liveCount} live
+          </Badge>
+          {plannedCount > 0 && (
+            <Badge
+              variant="secondary"
+              className="bg-amber-500/15 text-[11px] text-amber-700 dark:text-amber-400"
+            >
+              {plannedCount} planned
+            </Badge>
+          )}
+        </div>
       </div>
       <div className="divide-y rounded-md border">
         {subAgents.map((provider) => {
           const status = statusById.get(provider.id);
           const state = status?.state ?? provider.lastTestState ?? "not tested";
+          const isLive = provider.subAgent?.seamState === "live";
           return (
             <div
               key={provider.id}
@@ -43,9 +61,9 @@ export function ContextEngineSubAgentPanel({
                 <p className="truncate text-xs text-muted-foreground">
                   {status?.reason ||
                     status?.error ||
-                    (provider.subAgent?.seamState === "live"
-                      ? provider.subAgent.processModel
-                      : "inert seam (v0)")}
+                    (isLive
+                      ? "hybrid lexical page search"
+                      : "connector and tools not wired yet")}
                 </p>
               </div>
               <span className="text-xs text-muted-foreground">
@@ -56,8 +74,15 @@ export function ContextEngineSubAgentPanel({
                   ? `${status.durationMs.toLocaleString()} ms`
                   : "no recent query"}
               </span>
-              <Badge variant="outline" className="w-fit text-[11px]">
-                {provider.subAgent?.seamState ?? state}
+              <Badge
+                variant="outline"
+                className={`w-fit text-[11px] ${
+                  isLive
+                    ? "border-green-500/30 text-green-700 dark:text-green-400"
+                    : "border-amber-500/30 text-amber-700 dark:text-amber-400"
+                }`}
+              >
+                {isLive ? "live" : state === "ok" ? "live" : "planned"}
               </Badge>
             </div>
           );
