@@ -31,6 +31,7 @@ export interface SubAgentContextProviderConfig {
 	}>;
 	toolAllowlist: string[];
 	depthCap: number;
+	processModel?: "deterministic-retrieval" | "lambda-bedrock-converse" | "agentcore";
 	defaultEnabled?: boolean;
 	timeoutMs?: number;
 	seamState?: "inert" | "live";
@@ -72,7 +73,9 @@ export function createSubAgentContextProvider(
 			skills: config.skills,
 			toolAllowlist: config.toolAllowlist,
 			depthCap: config.depthCap,
-			processModel: "lambda-bedrock-converse",
+			processModel:
+				config.processModel ??
+				(config.seam ? "deterministic-retrieval" : "agentcore"),
 			seamState: config.seamState ?? (config.seam ? "live" : "inert"),
 		},
 		async query(request): Promise<ContextProviderResult> {

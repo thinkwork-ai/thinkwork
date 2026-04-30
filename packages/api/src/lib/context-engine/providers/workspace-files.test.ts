@@ -103,4 +103,32 @@ describe("Workspace Files context provider", () => {
 			"searched 1/2 files in agent workspace fleet-caterpillar-456",
 		);
 	});
+
+	it("matches typoed query terms against workspace file content", async () => {
+		pushDbRows([{ slug: "acme" }]);
+		pushDbRows([{ slug: "fleet-caterpillar-456", tenantId: "tenant-1" }]);
+
+		const prefix = "tenants/acme/agents/fleet-caterpillar-456/workspace/";
+		s3Mock.on(ListObjectsV2Command, { Bucket: "test-bucket", Prefix: prefix }).resolves({
+			Contents: [{ Key: `${prefix}USER.md`, Size: 128 }],
+		});
+		s3Mock.on(GetObjectCommand, { Bucket: "test-bucket", Key: `${prefix}USER.md` }).resolves(
+			s3Body("- Notes: Favorite restaurant in Paris is Chez Amil Louise"),
+		);
+
+		const result = await createWorkspaceFilesContextProvider().query({
+			query: "favorite restarant in paris",
+			mode: "results",
+			scope: "auto",
+			depth: "quick",
+			limit: 5,
+			caller: { tenantId: "tenant-1", agentId: "agent-1" },
+		});
+
+		expect(result.hits).toHaveLength(1);
+		expect(result.hits[0]).toMatchObject({
+			title: "USER.md",
+			snippet: expect.stringContaining("Favorite restaurant in Paris"),
+		});
+	});
 });

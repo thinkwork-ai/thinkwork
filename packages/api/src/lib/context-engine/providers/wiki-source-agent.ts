@@ -98,6 +98,7 @@ export function createWikiSourceAgentContextProvider(options: {
 		],
 		toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
 		depthCap: 2,
+		processModel: "deterministic-retrieval",
 		defaultEnabled: options.defaultEnabled ?? false,
 		timeoutMs: 2_500,
 		seamState: "live",
@@ -164,7 +165,7 @@ export function createWikiSourceAgentContextProvider(options: {
 						page: row.page,
 						sourceAgent: {
 							id: config.id,
-							processModel: "lambda-bedrock-converse",
+							processModel: "deterministic-retrieval",
 							toolAllowlist: config.toolAllowlist,
 							retrievalStrategy: "agentic-hybrid-wiki-navigation",
 							plan,
