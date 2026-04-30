@@ -46,6 +46,15 @@ export {
   useContextQuery,
   type UseContextQueryArgs,
 } from "./hooks/use-context-query";
+export { useTenantEntityPage } from "./hooks/use-tenant-entity-page";
+export {
+  useTenantEntityFacets,
+  type TenantEntityFacet,
+} from "./hooks/use-tenant-entity-facets";
+export {
+  editTenantEntityFact,
+  rejectTenantEntityFact,
+} from "./brain";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,
@@ -71,6 +80,8 @@ export type {
   ThinkworkAuthContextValue,
   Agent,
   Thread,
+  ThreadEntityRef,
+  ThreadMetadata,
   Message,
   ThreadTurn,
   CreateThreadInput,

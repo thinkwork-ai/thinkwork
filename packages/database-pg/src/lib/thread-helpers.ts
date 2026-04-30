@@ -5,7 +5,7 @@
  * whenever a new unit of work begins (chat, email, scheduled job, etc.).
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { tenants } from "../schema/core";
 import { threads } from "../schema/threads";
@@ -40,6 +40,25 @@ interface EnsureThreadResult {
 	number: number;
 }
 
+export interface ThreadEntityRef {
+	pageTable: "wiki_pages" | "tenant_entity_pages";
+	pageId: string;
+	subtype: string;
+}
+
+export interface EnsureRecurringThreadOpts {
+	tenantId: string;
+	agentId: string;
+	userId: string;
+	recurringKey: string;
+	title: string;
+	entityRefs?: ThreadEntityRef[];
+}
+
+export interface EnsureRecurringThreadResult extends EnsureThreadResult {
+	created: boolean;
+}
+
 export async function ensureThreadForWork(opts: EnsureThreadOpts): Promise<EnsureThreadResult> {
 	const db = getDb();
 	const channel = opts.channel || "manual";
@@ -70,6 +89,7 @@ export async function ensureThreadForWork(opts: EnsureThreadOpts): Promise<Ensur
 		.values({
 			tenant_id: opts.tenantId,
 			agent_id: opts.agentId || undefined,
+			user_id: opts.userId || undefined,
 			number: nextNumber,
 			identifier,
 			title: opts.title || "Untitled conversation",
@@ -83,4 +103,71 @@ export async function ensureThreadForWork(opts: EnsureThreadOpts): Promise<Ensur
 		.returning({ id: threads.id });
 
 	return { threadId: thread.id, identifier, number: nextNumber };
+}
+
+export async function ensureRecurringThread(
+	opts: EnsureRecurringThreadOpts,
+): Promise<EnsureRecurringThreadResult> {
+	const recurringKey = opts.recurringKey.trim();
+	if (!recurringKey) throw new Error("recurringKey is required");
+	const db = getDb();
+
+	const [existing] = await db
+		.select({
+			id: threads.id,
+			identifier: threads.identifier,
+			number: threads.number,
+		})
+		.from(threads)
+		.where(
+			and(
+				eq(threads.tenant_id, opts.tenantId),
+				eq(threads.agent_id, opts.agentId),
+				eq(threads.user_id, opts.userId),
+				eq(threads.channel, "schedule"),
+				inArray(threads.status, ["in_progress", "todo"]),
+				sql`${threads.metadata}->>'recurringKey' = ${recurringKey}`,
+			),
+		)
+		.orderBy(desc(threads.created_at))
+		.limit(1);
+
+	if (existing) {
+		console.info("recurring_thread_found", {
+			tenantId: opts.tenantId,
+			threadId: existing.id,
+			recurringKey,
+		});
+		return {
+			threadId: existing.id,
+			identifier: existing.identifier ?? `AUTO-${existing.number}`,
+			number: existing.number,
+			created: false,
+		};
+	}
+
+	const created = await ensureThreadForWork({
+		tenantId: opts.tenantId,
+		agentId: opts.agentId,
+		userId: opts.userId,
+		title: opts.title,
+		channel: "schedule",
+	});
+	await db
+		.update(threads)
+		.set({
+			user_id: opts.userId,
+			metadata: {
+				recurringKey,
+				entityRefs: opts.entityRefs ?? [],
+			},
+			updated_at: new Date(),
+		})
+		.where(eq(threads.id, created.threadId));
+	console.info("recurring_thread_created", {
+		tenantId: opts.tenantId,
+		threadId: created.threadId,
+		recurringKey,
+	});
+	return { ...created, created: true };
 }

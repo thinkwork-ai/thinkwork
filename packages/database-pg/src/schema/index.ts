@@ -39,6 +39,8 @@ export * from "./mcp-admin-keys";
 export * from "./builtin-tools";
 export * from "./evaluations";
 export * from "./wiki";
+export * from "./tenant-entity-pages";
+export * from "./tenant-entity-external-refs";
 export * from "./context-engine";
 export * from "./skill-runs";
 export * from "./mutation-idempotency";

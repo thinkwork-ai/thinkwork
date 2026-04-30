@@ -6,7 +6,8 @@ export type ContextProviderFamily =
   | "wiki"
   | "workspace"
   | "knowledge-base"
-  | "mcp";
+  | "mcp"
+  | "sub-agent";
 
 export interface ContextEngineCaller {
   tenantId: string;
@@ -65,9 +66,18 @@ export interface ContextHit {
   scope: ContextEngineScope;
   provenance: ContextHitProvenance;
   metadata?: Record<string, unknown>;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
 }
 
-export type ContextProviderStatusState = "ok" | "skipped" | "error" | "timeout";
+export type ContextProviderStatusState =
+  | "ok"
+  | "skipped"
+  | "error"
+  | "timeout"
+  | "stale";
 
 export interface ContextProviderStatus {
   providerId: string;
@@ -80,6 +90,10 @@ export interface ContextProviderStatus {
   error?: string;
   reason?: string;
   defaultEnabled?: boolean;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
 }
 
 export interface ContextProviderResult {
@@ -94,6 +108,13 @@ export interface ContextProviderDescriptor {
   enabled?: boolean;
   defaultEnabled: boolean;
   config?: Record<string, unknown>;
+  subAgent?: {
+    promptRef: string;
+    toolAllowlist: string[];
+    depthCap: number;
+    processModel: "lambda-bedrock-converse" | "agentcore";
+    seamState?: "inert" | "live";
+  };
   supportedScopes?: ContextEngineScope[];
   timeoutMs?: number;
   query(request: ContextEngineProviderRequest): Promise<ContextProviderResult>;

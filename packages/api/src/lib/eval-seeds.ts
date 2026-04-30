@@ -14,6 +14,10 @@ import knowledgeBase from "../../../../seeds/eval-test-cases/knowledge-base.json
 import mcpGateway from "../../../../seeds/eval-test-cases/mcp-gateway.json";
 import redTeam from "../../../../seeds/eval-test-cases/red-team.json";
 import subAgents from "../../../../seeds/eval-test-cases/sub-agents.json";
+import brainOnepagerCitations from "../../../../seeds/eval-test-cases/brain-onepager-citations.json";
+import brainTriageRouting from "../../../../seeds/eval-test-cases/brain-triage-routing.json";
+import brainTrustGradientPromotion from "../../../../seeds/eval-test-cases/brain-trust-gradient-promotion.json";
+import brainWriteBackCapture from "../../../../seeds/eval-test-cases/brain-write-back-capture.json";
 import threadManagement from "../../../../seeds/eval-test-cases/thread-management.json";
 import toolSafety from "../../../../seeds/eval-test-cases/tool-safety.json";
 import workspaceMemory from "../../../../seeds/eval-test-cases/workspace-memory.json";
@@ -37,6 +41,10 @@ export const EVAL_SEED_CATEGORIES = [
 	"mcp-gateway",
 	"red-team",
 	"sub-agents",
+	"brain-onepager-citations",
+	"brain-triage-routing",
+	"brain-trust-gradient-promotion",
+	"brain-write-back-capture",
 	"thread-management",
 	"tool-safety",
 	"workspace-memory",
@@ -49,6 +57,10 @@ export const EVAL_SEEDS: SeedTestCase[] = [
 	...(mcpGateway as SeedTestCase[]),
 	...(redTeam as SeedTestCase[]),
 	...(subAgents as SeedTestCase[]),
+	...(brainOnepagerCitations as SeedTestCase[]),
+	...(brainTriageRouting as SeedTestCase[]),
+	...(brainTrustGradientPromotion as SeedTestCase[]),
+	...(brainWriteBackCapture as SeedTestCase[]),
 	...(threadManagement as SeedTestCase[]),
 	...(toolSafety as SeedTestCase[]),
 	...(workspaceMemory as SeedTestCase[]),

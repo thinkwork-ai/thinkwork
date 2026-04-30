@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import { timingSafeEqual } from "node:crypto";
 
 export interface AuthContext {
 	tenantId: string;
@@ -28,5 +29,10 @@ export function extractBearerToken(
 export function validateApiSecret(token: string): boolean {
 	const secret = process.env.API_AUTH_SECRET;
 	if (!secret) return false;
-	return token === secret;
+	const tokenBytes = Buffer.from(token);
+	const secretBytes = Buffer.from(secret);
+	return (
+		tokenBytes.length === secretBytes.length &&
+		timingSafeEqual(tokenBytes, secretBytes)
+	);
 }

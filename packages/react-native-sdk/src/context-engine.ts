@@ -8,7 +8,8 @@ export type ContextProviderFamily =
   | "wiki"
   | "workspace"
   | "knowledge-base"
-  | "mcp";
+  | "mcp"
+  | "sub-agent";
 
 export interface ContextEngineHit {
   id: string;
@@ -26,18 +27,26 @@ export interface ContextEngineHit {
     metadata?: Record<string, unknown>;
   };
   metadata?: Record<string, unknown>;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
 }
 
 export interface ContextProviderStatus {
   providerId: string;
   family: ContextProviderFamily;
   displayName: string;
-  state: "ok" | "skipped" | "error" | "timeout";
+  state: "ok" | "skipped" | "error" | "timeout" | "stale";
   error?: string;
   reason?: string;
   hitCount?: number;
   durationMs?: number;
   defaultEnabled?: boolean;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
 }
 
 export interface ContextEngineResponse {

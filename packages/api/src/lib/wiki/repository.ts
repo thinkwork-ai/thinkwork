@@ -51,7 +51,16 @@ export type WikiCompileTrigger =
 export type WikiSectionSourceKind =
 	| "memory_unit"
 	| "artifact"
-	| "journal_idea";
+	| "journal_idea"
+	| "hindsight_memory_unit"
+	| "erp_customer"
+	| "crm_opportunity"
+	| "erp_order"
+	| "crm_person"
+	| "support_case"
+	| "bedrock_kb"
+	| "web_url"
+	| "mcp_url";
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
 export type WikiPageLinkKind = "reference" | "parent_of" | "child_of";
 export type SectionPromotionStatus =
@@ -117,6 +126,7 @@ export interface WikiPageRow {
 	tenant_id: string;
 	owner_id: string;
 	type: WikiPageType;
+	entity_subtype?: string | null;
 	slug: string;
 	title: string;
 	summary: string | null;
@@ -202,6 +212,7 @@ export interface UpsertUnresolvedInput {
 	alias: string;
 	alias_normalized: string;
 	suggested_type?: WikiPageType | null;
+	entity_subtype?: string | null;
 	context?: { quote: string; source_ref: string };
 }
 

@@ -23,6 +23,7 @@ import {
   snakeToCamel,
   sql,
   tenantPolicyEvents,
+  users,
   COMPLIANCE_TIERS,
   type ComplianceTier,
 } from "../../utils.js";
@@ -43,10 +44,7 @@ export const updateTenantPolicy = async (
 
   await requirePlatformOperator(ctx);
 
-  const actorUserId =
-    ctx.auth.authType === "apikey"
-      ? ctx.auth.principalId
-      : await resolveCallerUserId(ctx);
+  const actorUserId = await resolvePolicyActorUserId(ctx);
   if (!actorUserId) throw new Error("Unable to resolve caller user id");
 
   const [current] = await db
@@ -207,4 +205,18 @@ async function requirePlatformOperator(ctx: GraphQLContext): Promise<void> {
   if (!email || !allowlist.includes(email)) {
     throw new Error("updateTenantPolicy requires platform-operator role");
   }
+}
+
+async function resolvePolicyActorUserId(
+  ctx: GraphQLContext,
+): Promise<string | null> {
+  if (ctx.auth.authType !== "apikey") return await resolveCallerUserId(ctx);
+  if (ctx.auth.principalId) return ctx.auth.principalId;
+  if (!ctx.auth.email) return null;
+
+  const [byEmail] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, ctx.auth.email));
+  return byEmail?.id ?? null;
 }

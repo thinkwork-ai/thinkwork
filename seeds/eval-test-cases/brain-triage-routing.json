@@ -1,0 +1,13 @@
+[
+  {
+    "name": "brain-triage-routing-01",
+    "category": "brain-triage-routing",
+    "query": "Run my Monday cold opportunity triage",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The agent should route through query_context and explain when ERP/CRM sub-agent providers are unavailable rather than fabricating operational data"
+      }
+    ]
+  }
+]

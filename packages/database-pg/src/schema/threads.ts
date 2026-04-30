@@ -50,6 +50,17 @@ export const threads = pgTable(
 		checkout_version: integer("checkout_version").notNull().default(0),
 		billing_code: text("billing_code"),
 		labels: jsonb("labels"),
+		/**
+		 * Additive metadata for agent-created threads.
+		 *
+		 * Brain v0 uses:
+		 *   recurringKey?: string
+		 *   entityRefs?: Array<{
+		 *     pageTable: 'wiki_pages' | 'tenant_entity_pages';
+		 *     pageId: string;
+		 *     subtype: string;
+		 *   }>
+		 */
 		metadata: jsonb("metadata"),
 		due_at: timestamp("due_at", { withTimezone: true }),
 		started_at: timestamp("started_at", { withTimezone: true }),

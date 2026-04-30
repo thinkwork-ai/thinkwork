@@ -13,10 +13,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Client as PgClient } from "pg";
 import { HarnessEnvError, newRunId, readHarnessEnv } from "./_harness/index.js";
-import {
-  createSandboxFixtures,
-  type Fixtures,
-} from "./_harness/fixtures.js";
+import { createSandboxFixtures, type Fixtures } from "./_harness/fixtures.js";
 import {
   assertSandboxInvocation,
   assertNoTokenLeak,
@@ -50,13 +47,11 @@ describe("sandbox-pilot E2E — flagship demo", () => {
   it("provisions fixtures and records agent turn + audit row + quota counter + no token leak", async () => {
     const startedAt = new Date();
 
-    // Send the sample prompt from SKILL.md. We don't literally fetch
-    // SKILL.md at test time to avoid a filesystem race during deploy
-    // windows; the prompt shape is stable.
     const samplePrompt =
-      "Run the sandbox pilot: use execute_code to pandas-summarise " +
-      "the skill_runs I just fetched, plot counts per skill_id, save to /tmp/pilot.png, " +
-      "upload to S3 with boto3, and post the URL to Slack.";
+      "You must call execute_code exactly once. Run Python code that imports pandas, " +
+      "builds a DataFrame with skill_id values ['sandbox-pilot', 'sandbox-pilot', 'artifacts'], " +
+      "groups by skill_id, prints the counts as CSV, and writes a small PNG chart to /tmp/pilot.png. " +
+      "After the tool returns, summarize the printed CSV.";
 
     const turn = await sendChatAndWait(env, fixtures, samplePrompt, startedAt);
 
@@ -124,36 +119,41 @@ async function sendChatAndWait(
   // reads thread_id from its payload, not from a sessions table.
   const threadId = await createThread(env, fixtures);
 
-  await insertUserMessage(env, fixtures, threadId, message);
+  const messageId = await insertUserMessage(env, fixtures, threadId, message);
 
   // Invoke the chat-agent Lambda directly (same pattern the resolver
   // uses). Naming is deterministic: `thinkwork-${stage}-api-chat-agent-invoke`.
   const lambda = new LambdaClient({ region: env.awsRegion });
   const payload = {
-    requestContext: { http: { method: "POST", path: "/invocations" } },
-    body: JSON.stringify({
-      tenantId: fixtures.tenantId,
-      agentId: fixtures.agentId,
-      threadId,
-      userId: fixtures.userId,
-      userMessage: message,
-    }),
+    tenantId: fixtures.tenantId,
+    agentId: fixtures.agentId,
+    threadId,
+    userMessage: message,
+    messageId,
   };
-  await lambda.send(
+  const invoke = await lambda.send(
     new InvokeCommand({
       FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke`,
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(JSON.stringify(payload)),
     }),
   );
+  assertLambdaInvokeSucceeded(invoke);
 
   // Poll thread_turns until completed or timeout (90s matches plan's
   // testTimeout budget minus vitest overhead).
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     const turn = await readLatestTurn(env, threadId, startedAt);
-    if (turn && (turn.status === "complete" || turn.status === "completed" || turn.status === "failed")) {
-      return { ...turn, status: turn.status === "complete" ? "completed" : turn.status };
+    if (
+      turn &&
+      ["complete", "completed", "succeeded", "failed"].includes(turn.status)
+    ) {
+      const normalized =
+        turn.status === "complete" || turn.status === "succeeded"
+          ? "completed"
+          : turn.status;
+      return { ...turn, status: normalized };
     }
     await new Promise((r) => setTimeout(r, 2_000));
   }
@@ -169,8 +169,8 @@ async function createThread(
   const db = await openDb(env);
   try {
     const result = await db.execute(
-      sql`INSERT INTO threads (tenant_id, agent_id, title, status, created_at, updated_at)
-          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${"sandbox-e2e thread"}, 'active', NOW(), NOW())
+      sql`INSERT INTO threads (tenant_id, agent_id, user_id, number, identifier, title, status, created_by_type, created_by_id, created_at, updated_at)
+          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${fixtures.userId}::uuid, 1, ${`${fixtures.names.tenantSlug}-1`}, ${"sandbox-e2e thread"}, 'active', 'user', ${fixtures.userId}, NOW(), NOW())
           RETURNING id`,
     );
     const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
@@ -187,16 +187,34 @@ async function insertUserMessage(
   fixtures: Fixtures,
   threadId: string,
   message: string,
-): Promise<void> {
+): Promise<string> {
   const db = await openDb(env);
   try {
-    await db.execute(
-      sql`INSERT INTO messages (tenant_id, thread_id, agent_id, role, content, created_at, updated_at)
-          VALUES (${fixtures.tenantId}::uuid, ${threadId}::uuid, ${fixtures.agentId}::uuid, 'user', ${message}, NOW(), NOW())`,
+    const result = await db.execute(
+      sql`INSERT INTO messages (tenant_id, thread_id, role, content, sender_type, sender_id, created_at)
+          VALUES (${fixtures.tenantId}::uuid, ${threadId}::uuid, 'user', ${message}, 'user', ${fixtures.userId}::uuid, NOW())
+          RETURNING id`,
     );
+    const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
+    const id = rows[0]?.id;
+    if (!id) throw new Error("sandbox-e2e: could not create user message");
+    return id;
   } finally {
     await closeDb(db);
   }
+}
+
+function assertLambdaInvokeSucceeded(invoke: {
+  FunctionError?: string;
+  Payload?: Uint8Array;
+}): void {
+  if (!invoke.FunctionError) return;
+  const payload = invoke.Payload
+    ? new TextDecoder().decode(invoke.Payload)
+    : "";
+  throw new Error(
+    `chat-agent-invoke failed: ${invoke.FunctionError} ${payload}`,
+  );
 }
 
 async function readLatestTurn(
