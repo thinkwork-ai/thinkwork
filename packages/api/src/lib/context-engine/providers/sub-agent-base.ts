@@ -121,7 +121,7 @@ function assertToolAllowlist(toolAllowlist: string[]): void {
 		throw new Error("sub-agent tool allowlist contains duplicates");
 	}
 	for (const tool of toolAllowlist) {
-		if (!/^[a-z0-9:_-]+$/i.test(tool)) {
+		if (!/^[a-z0-9:_.-]+$/i.test(tool)) {
 			throw new Error(`invalid sub-agent tool name: ${tool}`);
 		}
 	}
