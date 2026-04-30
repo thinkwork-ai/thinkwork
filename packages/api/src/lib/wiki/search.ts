@@ -82,10 +82,14 @@ export async function searchWikiForUser(args: {
   const limit = Math.max(1, args.limit);
   const aliasNeedle = query.toLowerCase();
   const fuzzyTerms = normalizeWikiSearchTerms(query);
+  const fuzzyTermArray = sql`ARRAY[${joinSqlChunks(
+    fuzzyTerms.map((term) => sql`${term}`),
+    sql`, `,
+  )}]::text[]`;
 
   const result = await db.execute(sql`
 		WITH search_terms AS (
-			SELECT unnest(${fuzzyTerms}::text[]) AS term
+			SELECT unnest(${fuzzyTermArray}) AS term
 		), alias_hits AS (
 			SELECT DISTINCT a.page_id, a.alias
 			FROM wiki_page_aliases a
@@ -171,4 +175,14 @@ export async function searchWikiForUser(args: {
     score: r.score,
     matchedAlias: r.matched_alias,
   }));
+}
+
+function joinSqlChunks(chunks: unknown[], separator: unknown): unknown {
+  const join = (sql as unknown as {
+    join?: (chunks: unknown[], separator: unknown) => unknown;
+  }).join;
+  if (join) return join(chunks, separator);
+  return chunks.flatMap((chunk, index) =>
+    index === 0 ? [chunk] : [separator, chunk],
+  );
 }
