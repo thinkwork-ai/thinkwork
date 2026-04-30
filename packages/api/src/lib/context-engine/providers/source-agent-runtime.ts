@@ -1,4 +1,8 @@
-import { invokeClaude, parseJsonResponse } from "../../wiki/bedrock.js";
+import { invokeClaudeJson, parseJsonResponse } from "../../wiki/bedrock.js";
+
+const SOURCE_AGENT_MODEL_ID =
+	process.env.COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID ||
+	process.env.CONTEXT_ENGINE_SOURCE_AGENT_MODEL_ID;
 
 export interface SourceAgentModelRequest {
 	system: string;
@@ -388,7 +392,18 @@ export async function runSourceAgent(args: {
 async function bedrockSourceAgentModel(
 	request: SourceAgentModelRequest,
 ): Promise<SourceAgentModelResponse> {
-	return invokeClaude(request);
+	const response = await invokeClaudeJson<SourceAgentAction>({
+		...request,
+		...(SOURCE_AGENT_MODEL_ID ? { modelId: SOURCE_AGENT_MODEL_ID } : {}),
+		parse: parseSourceAgentActionForRetry,
+	});
+	return {
+		text: response.text,
+		modelId: response.modelId,
+		inputTokens: response.inputTokens,
+		outputTokens: response.outputTokens,
+		stopReason: response.stopReason,
+	};
 }
 
 function buildUserTurnPrompt(args: {
@@ -416,6 +431,10 @@ function buildUserTurnPrompt(args: {
 		`{"tool_calls":[{"id":"call-1","tool":"tool.name","input":{}}]}`,
 		`{"final":{"answer":"short answer","results":[{"source_id":"observed-source-id","title":"title","summary":"why it matches","confidence":0.9,"source_tool_call_ids":["call-1"]}]}}`,
 		"",
+		args.observations.length
+			? "You may call another tool or return final JSON using only observed source ids."
+			: "No sources have been observed yet. Your first response must call at least one allowed tool.",
+		"",
 		"Citation rule: final.results must only cite source ids returned by earlier tool observations.",
 		"",
 		"Tool observations so far:",
@@ -433,6 +452,22 @@ function buildUserTurnPrompt(args: {
 				)
 			: "[]",
 	].join("\n");
+}
+
+function parseSourceAgentActionForRetry(text: string): SourceAgentAction {
+	const parsed = parseJsonResponse<SourceAgentAction>(text);
+	if (!parsed || typeof parsed !== "object") {
+		throw new Error("parseJsonResponse: source agent action must be an object");
+	}
+	if (parsed.final) {
+		return parsed;
+	}
+	if (normalizeToolCalls(parsed).length > 0) {
+		return parsed;
+	}
+	throw new Error(
+		"parseJsonResponse: source agent action must include tool_calls or final",
+	);
 }
 
 function parseAction(
