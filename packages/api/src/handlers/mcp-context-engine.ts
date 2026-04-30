@@ -331,6 +331,7 @@ async function handleToolCall(
             enabled: provider.enabled !== false,
             defaultEnabled: provider.defaultEnabled,
             config: provider.config ?? {},
+            subAgent: provider.subAgent ?? null,
           })),
         },
       });
@@ -472,6 +473,7 @@ function providerSummary(provider: {
   enabled?: boolean;
   defaultEnabled: boolean;
   config?: Record<string, unknown>;
+  subAgent?: unknown;
 }) {
   return {
     id: provider.id,
@@ -480,6 +482,7 @@ function providerSummary(provider: {
     enabled: provider.enabled !== false,
     defaultEnabled: provider.defaultEnabled,
     config: provider.config ?? {},
+    subAgent: provider.subAgent ?? null,
   };
 }
 
