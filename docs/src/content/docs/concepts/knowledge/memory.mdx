@@ -1,13 +1,13 @@
 ---
-title: Long-term Memory
-description: The adapter-agnostic memory contract ThinkWork owns — why the harness decides semantics while the engine (Hindsight or AgentCore Memory) stays pluggable, and how each adapter differs in practice.
+title: Memory Facet
+description: The adapter-agnostic memory facet inside Company Brain — why ThinkWork owns the contract while Hindsight or AgentCore Memory stay pluggable.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Long-term memory is how the harness's context-management layer carries learned context forward across work. Unlike document knowledge — which starts from material you authored — long-term memory starts from what the agent has observed during interactions: a user preference the agent noticed, a decision made in an earlier thread, a fact the agent confirmed and needs again.
+Memory is the Company Brain facet that carries learned context forward across work. Unlike authored knowledge bases, memory starts from what the agent has observed during interactions: a user preference the agent noticed, a decision made in an earlier thread, a fact the agent confirmed and needs again.
 
-The design decision that matters most — and the load-bearing implementation of the **Reliability** operating guarantee at the memory layer — is this: **ThinkWork owns the memory contract; the engine underneath is pluggable.** Agents, tools, and the compounding-memory wiki all read from the same interface regardless of whether the backing engine is Hindsight or AgentCore Memory. Swap the engine; the agents that consume memory don't change. That's the harness keeping its promise that "the operating model can change, the harness stays yours" all the way down to the memory tier.
+The design decision that matters most — and the load-bearing implementation of the **Reliability** operating guarantee at the memory layer — is this: **ThinkWork owns the memory contract; the engine underneath is pluggable.** Agents, tools, and compiled Company Brain pages all read from the same interface regardless of whether the backing engine is Hindsight or AgentCore Memory. Swap the engine; the agents that consume memory do not change.
 
 ## What long-term memory is for
 
@@ -36,7 +36,7 @@ Instead, the harness exposes a stable contract:
 - **`inspect(ownerId)`** — list / browse / search memories. Used by the admin UI and the wiki compile pipeline.
 - **`export(ownerId)`** — a durable export format. Used for backups and for migrating between adapters.
 
-Agents call the contract. Tools call the contract. The wiki pipeline calls `inspect`. Swapping from Hindsight to AgentCore Memory does not require changing any caller — only the adapter implementation changes.
+Agents call the contract. Tools call the contract. The Company Brain compile pipeline calls `inspect`. Swapping from Hindsight to AgentCore Memory does not require changing any caller — only the adapter implementation changes.
 
 <Aside type="tip">
   The contract is the stable part. The engine is pluggable. When you're thinking about memory in ThinkWork, think in terms of the contract operations first — then figure out which engine your deployment happens to use.
@@ -80,7 +80,7 @@ AgentCore Memory is the better fit when you want:
 - AWS-managed primitives rather than another service to operate.
 - Lower infrastructure sprawl.
 
-The cost: AgentCore Memory's strategies are what they are — less tunable than Hindsight's engine, and the compounding-memory pipeline currently only runs against Hindsight because Hindsight's cursor API is what the compile job consumes. AgentCore Memory tenants won't have a wiki in v1.
+The cost: AgentCore Memory's strategies are what they are — less tunable than Hindsight's engine, and the compile pipeline currently only runs against Hindsight because Hindsight's cursor API is what the compile job consumes. AgentCore Memory tenants will not have compiled pages in v1.
 
 ## Practical differences
 
@@ -95,7 +95,7 @@ A side-by-side of what matters in practice:
 | Reflection | Yes | Via summarization strategy |
 | Best for | Rich memory + wiki | Lean serverless deployments |
 
-Hosted ThinkWork defaults to Hindsight precisely because the wiki layer is a first-class feature there. Self-hosted deployments that want the simplest infra and don't need a wiki today can run AgentCore Memory and add Hindsight later if the needs shift.
+Hosted ThinkWork defaults to Hindsight precisely because compiled pages are a first-class feature there. Self-hosted deployments that want the simplest infra and do not need compiled pages today can run AgentCore Memory and add Hindsight later if the needs shift.
 
 ## Short-term vs. long-term, again
 
@@ -105,16 +105,16 @@ Worth repeating: short-term context comes from thread history. Long-term memory 
 
 - **One engine per deployment.** You can't run Hindsight for some tenants and AgentCore Memory for others in the same deployment. The adapter is deployment-scoped.
 - **Adapter swaps are possible but not automatic.** Exporting from one adapter and importing into another works via the `export` contract, but it's a manual migration, not a hot swap.
-- **Wiki only runs on Hindsight today.** AgentCore Memory tenants can use ThinkWork's core memory layer but don't get the compounding-memory wiki in v1.
+- **Compiled pages only run on Hindsight today.** AgentCore Memory tenants can use ThinkWork's core memory layer but do not get compiled Company Brain pages in v1.
 - **Recall quality depends on the engine.** The contract guarantees the *interface*, not equivalent *results*. Queries that return great matches on Hindsight may return less-relevant results on AgentCore Memory; tune per adapter.
 
 ## Related pages
 
-- [Memory (overview)](/concepts/knowledge/) — the umbrella
-- [Document Knowledge](/concepts/knowledge/document-knowledge/) — what memory *isn't*
-- [Compounding Memory](/concepts/knowledge/compounding-memory/) — what's built on top of the memory layer
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — where memory sits in turn assembly
-- [Operating Compounding Memory](/guides/compounding-memory-operations/) — recipes that depend on the memory contract
+- [Company Brain](/concepts/knowledge/) — the umbrella
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — what memory *isn't*
+- [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — what's built on top of the memory layer
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) — where memory sits in turn assembly
+- [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — recipes that depend on the memory contract
 
 ## Under the hood
 

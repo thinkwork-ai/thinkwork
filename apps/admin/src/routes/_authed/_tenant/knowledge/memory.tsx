@@ -15,7 +15,7 @@ function KnowledgeMemoryPage() {
       routeBase="/knowledge/memory"
       embedded
       breadcrumbs={[
-        { label: "Knowledge", href: "/knowledge/memory" },
+        { label: "Company Brain", href: "/knowledge/memory" },
         { label: "Memory" },
       ]}
     />

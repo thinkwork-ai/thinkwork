@@ -88,7 +88,7 @@ When the model produces its final response, AgentCore:
 A few things happen after the turn completes but before the Lambda returns:
 
 - **Memory retention.** If AgentCore Memory is the adapter, a retention event fires so background strategies (summaries, preferences, semantic facts) can extract what's worth remembering.
-- **Wiki compile enqueue.** If the agent has compounding memory enabled, a compile job gets queued on a 5-minute dedupe bucket (see [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)).
+- **Company Brain page compile enqueue.** If compiled pages are enabled, a compile job gets queued on a 5-minute dedupe bucket (see [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/)).
 - **Audit record.** An NDJSON record of the full invocation lands in the audit S3 bucket.
 - **Cost reducer.** The OTel spans emit; the cost reducer picks them up off the CloudWatch stream and writes a `thread_turn_costs` row.
 
@@ -113,11 +113,11 @@ Every managed agent has:
 - Optional **skill packs** — the agent's capabilities.
 - Optional **knowledge bases** — what it retrieves from.
 - Optional **long-term memory** — the adapter behavior is configured on the template.
-- Optional **compounding-memory wiki** — derived context on top of long-term memory.
+- Optional **compiled Company Brain pages** — derived context on top of long-term memory.
 - **Control settings** inherited from the template — guardrails, rate limits, budgets.
 
 <Aside type="note">
-  Memory is the umbrella context layer in ThinkWork. Document knowledge, long-term memory, and compounding-memory pages are different inputs into that layer — all three can feed the same turn, and the harness handles assembly without the agent's author wiring it up.
+  Company Brain is the umbrella context layer in ThinkWork. Knowledge bases, memory, compiled pages, workspace files, and approved tools are different inputs into that layer — all can feed the same turn, and the harness handles assembly without the agent's author wiring it up.
 </Aside>
 
 ## When to use managed agents
@@ -192,7 +192,7 @@ For all three, the configuration knobs above are sufficient — none of them req
 - [Runtime Selection](/concepts/agents/runtime-selection/) — Strands vs. Pi routing
 - [Templates](/concepts/agents/templates/) — the live-configuration reuse layer (model, guardrail, budget)
 - [Skills](/concepts/agents/skills/) — the capability reuse layer (tools + instructions)
-- [Memory](/concepts/knowledge/) — the context layer managed agents read
+- [Company Brain](/concepts/knowledge/) — the context layer managed agents read
 - [Control](/concepts/control/) — how guardrails, budgets, and audit wrap the managed path
 - [Architecture](/architecture/) — where AgentCore fits in the deployment
 

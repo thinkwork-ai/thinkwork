@@ -11,7 +11,7 @@ export function createWikiContextProvider(): ContextProviderDescriptor {
 	return {
 		id: "wiki",
 		family: "wiki",
-		displayName: "Compounding Wiki",
+		displayName: "Company Brain Pages",
 		defaultEnabled: true,
 		supportedScopes: ["personal", "auto"],
 		async query(request): Promise<ContextProviderResult> {

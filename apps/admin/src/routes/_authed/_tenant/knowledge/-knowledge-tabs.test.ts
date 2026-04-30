@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentKnowledgeTab } from "../knowledge";
+import { KNOWLEDGE_TABS, currentKnowledgeTab } from "../knowledge";
 
 describe("currentKnowledgeTab", () => {
   it("selects memory for the root and memory tab", () => {
@@ -15,5 +15,14 @@ describe("currentKnowledgeTab", () => {
     expect(currentKnowledgeTab("/knowledge/context-engine")).toBe(
       "context-engine",
     );
+  });
+
+  it("uses Company Brain product labels for visible tabs", () => {
+    expect(KNOWLEDGE_TABS.map((tab) => tab.label)).toEqual([
+      "Memory",
+      "Pages",
+      "Knowledge Bases",
+      "Sources",
+    ]);
   });
 });

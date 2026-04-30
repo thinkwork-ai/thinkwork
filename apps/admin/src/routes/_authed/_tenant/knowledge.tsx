@@ -17,6 +17,25 @@ export type KnowledgeTab =
   | "knowledge-bases"
   | "context-engine";
 
+export const KNOWLEDGE_TABS: {
+  value: KnowledgeTab;
+  to:
+    | "/knowledge/memory"
+    | "/knowledge/wiki"
+    | "/knowledge/knowledge-bases"
+    | "/knowledge/context-engine";
+  label: string;
+}[] = [
+  { value: "memory", to: "/knowledge/memory", label: "Memory" },
+  { value: "wiki", to: "/knowledge/wiki", label: "Pages" },
+  {
+    value: "knowledge-bases",
+    to: "/knowledge/knowledge-bases",
+    label: "Knowledge Bases",
+  },
+  { value: "context-engine", to: "/knowledge/context-engine", label: "Sources" },
+];
+
 export function currentKnowledgeTab(pathname: string): KnowledgeTab {
   if (pathname.startsWith("/knowledge/wiki")) return "wiki";
   if (pathname.startsWith("/knowledge/knowledge-bases")) {
@@ -38,24 +57,22 @@ function KnowledgeLayout() {
         <div className="grid grid-cols-3 items-center gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-foreground">
-              Knowledge
+              Company Brain
             </h1>
           </div>
           <div className="flex justify-center">
             <Tabs value={currentTab}>
               <TabsList>
-                <TabsTrigger value="memory" asChild className="px-2">
-                  <Link to="/knowledge/memory">Memory</Link>
-                </TabsTrigger>
-                <TabsTrigger value="wiki" asChild className="px-2">
-                  <Link to="/knowledge/wiki">Wiki</Link>
-                </TabsTrigger>
-                <TabsTrigger value="knowledge-bases" asChild className="px-2">
-                  <Link to="/knowledge/knowledge-bases">Knowledge Bases</Link>
-                </TabsTrigger>
-                <TabsTrigger value="context-engine" asChild className="px-2">
-                  <Link to="/knowledge/context-engine">Context Engine</Link>
-                </TabsTrigger>
+                {KNOWLEDGE_TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    asChild
+                    className="px-2"
+                  >
+                    <Link to={tab.to}>{tab.label}</Link>
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
           </div>

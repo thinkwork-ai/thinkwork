@@ -1,9 +1,9 @@
 ---
-title: Context Engine
-description: Shared Thinkwork context search for mobile, agents, and MCP clients.
+title: Company Brain Context API
+description: "The internal Context Engine contract behind Company Brain source routing: `query_context`, provider families, statuses, and MCP/runtime behavior."
 ---
 
-Context Engine is Thinkwork's read-only enterprise context primitive. It exposes one `query_context` contract over provider families instead of asking callers to choose between memory, wiki, workspace files, Bedrock Knowledge Bases, and approved MCP search tools.
+Company Brain is the product surface. **Context Engine** is the internal API/service boundary that powers its source routing. Developer-facing docs keep the exact names because clients, runtimes, and MCP tools still call `query_context`.
 
 ## Contract
 
@@ -15,17 +15,18 @@ Context Engine is Thinkwork's read-only enterprise context primitive. It exposes
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
 - `agentId`: optional target agent id when the caller needs agent-scoped workspace files or agent-specific knowledge-base attachments.
-- provider options: optional adapter-specific settings. The first supported option is Hindsight `recall` vs `reflect`.
+- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
 ## Provider Families
 
 - `memory`: user-scoped Hindsight/managed memory recall.
-- `wiki`: compiled Compounding Memory pages.
+- `wiki`: compiled Company Brain pages.
 - `workspace`: permissioned workspace files for the active target.
 - `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
+- `sub-agent`: read-only sub-agent providers, when enabled by the Company Brain v0 work.
 
 ## Hindsight Strategy
 
@@ -34,7 +35,7 @@ The memory provider can use Hindsight in two modes:
 - `recall`: returns matching memory records directly.
 - `reflect`: asks Hindsight to synthesize a higher-level reflection over matching memories.
 
-The Admin test harness exposes this as the Hindsight strategy dropdown. For agent-facing use, `reflect` is the preferred default when the caller wants a concise answer-like memory result; `recall` is useful for diagnostics and record-level inspection.
+Admin exposes this as the Hindsight strategy dropdown on Company Brain → Sources. For agent-facing use, `reflect` is the preferred default when the caller wants concise answer-like memory output; `recall` is useful for diagnostics and record-level inspection.
 
 ## ThinkWork Brain MCP
 
@@ -42,19 +43,19 @@ External MCP-capable agents connect to ThinkWork Brain at `/mcp/context-engine`.
 
 ## MCP Tool Eligibility
 
-MCP server approval is necessary but not sufficient. A tool must also have a row in `tenant_mcp_context_tools`, declare read-only and search-safe metadata, and be admin-approved before Context Engine can query it by default. Missing declarations are treated as ineligible.
+MCP server approval is necessary but not sufficient. A tool must also have a row in `tenant_mcp_context_tools`, declare read-only and search-safe metadata, and be admin-approved before Company Brain can query it by default. Missing declarations are treated as ineligible.
 
 ## Runtime Tools
 
-Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping provider routing and result normalization aligned with mobile and external MCP callers.
+Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
-When Context Engine is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context` and `query_wiki_context`. These are still Context Engine tools: Hindsight and Wiki remain adapters behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+When Company Brain is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context` and `query_wiki_context`. These are still Context Engine tools at the API layer: Hindsight and compiled pages remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
 
 ## Admin Verification
 
-Admin operators verify Context Engine from **Knowledge → Context Engine**. The test harness lets an operator:
+Admin operators verify source routing from **Company Brain → Sources**. The test harness lets an operator:
 
-- choose participating adapters with the Adapters dropdown;
+- choose participating sources with the Sources dropdown;
 - select an agent target so workspace files and agent-specific attachments are considered;
 - choose Hindsight `recall` or `reflect`;
 - run a query against the same backend Context Engine path used by runtimes;

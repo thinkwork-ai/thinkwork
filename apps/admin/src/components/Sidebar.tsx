@@ -205,6 +205,7 @@ export function AppSidebar() {
       label: "Threads",
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
+    { to: "/knowledge", icon: Brain, label: "Company Brain" },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
     {
       to: "/scheduled-jobs",
@@ -217,7 +218,6 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
-    { to: "/knowledge", icon: Brain, label: "Knowledge" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];

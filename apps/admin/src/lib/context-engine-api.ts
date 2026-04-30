@@ -115,12 +115,12 @@ async function callContextTool<T>(
 
     if (response.error) {
       throw new Error(
-        response.error.message || "Context Engine request failed",
+        response.error.message || "Company Brain request failed",
       );
     }
     const structured = response.result?.structuredContent;
     if (!structured)
-      throw new Error("Context Engine returned no structured content");
+      throw new Error("Company Brain returned no structured content");
     return structured;
   } catch (err) {
     if (err instanceof ApiError) {

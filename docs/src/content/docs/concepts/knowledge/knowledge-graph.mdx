@@ -1,11 +1,11 @@
 ---
-title: Knowledge Graph Direction
-description: What graph-shaped memory ThinkWork already ships (entity edges, co-mention links, parent hierarchies) and where typed-relationship semantics are headed next.
+title: Company Brain Graph Direction
+description: What graph-shaped Company Brain data ThinkWork already ships and where typed-relationship semantics are headed next.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork doesn't have that *yet*. But it's worth being honest about what **is** already graph-shaped in the product today — because it's more than the original docs suggested — and where the typed layer is headed next. Graph-shaped memory matters for the harness because it's how the **Traceability** operating guarantee scales beyond single-thread audit: a graph lets an operator follow what the agent learned across threads, not just within one.
+When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork does not have that full typed layer yet. But Company Brain already has graph-shaped data: page links, aliases, co-mentions, parent/child page relationships, and memory graph views. That graph shape is how traceability scales beyond a single thread.
 
 ## What ThinkWork already builds
 
@@ -43,10 +43,10 @@ Shipping the graph before the types isn't accidental. Typed edges in an agent sy
 
 ## Related pages
 
-- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the overview of the page graph that's shipped today
-- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — where `reference` and `parent_of` edges are written
-- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the `wiki_page_links` data model
-- [Operating Compounding Memory](/guides/compounding-memory-operations/) — how to monitor link density + quality
+- [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the overview of the page graph that's shipped today
+- [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — where `reference` and `parent_of` edges are written
+- [Company Brain Page Model](/concepts/knowledge/compounding-memory-pages/) — the `wiki_page_links` data model
+- [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — how to monitor link density + quality
 
 ## Under the hood
 

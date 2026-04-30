@@ -68,7 +68,7 @@ export function AgentContextPolicyBadge({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BrainCircuit className="h-4 w-4 text-muted-foreground" />
-              Context Engine Policy
+              Company Brain Policy
               {policy && (
                 <Badge variant={policy.enabled ? "secondary" : "outline"}>
                   {policy.enabled ? "enabled" : "disabled"}
@@ -113,7 +113,7 @@ function PolicyDialogContent({
         <AlertCircle className="mt-0.5 h-4 w-4 text-yellow-500" />
         <p>
           {error.includes("Unknown tool")
-            ? "Effective policy is unavailable until the Context Engine API deploy includes the admin policy tool."
+            ? "Effective policy is unavailable until the Company Brain API deploy includes the admin policy tool."
             : error}
         </p>
       </div>
@@ -146,7 +146,7 @@ function PolicyDialogContent({
         title="Final providers"
         providers={policy.finalProviders}
         empty={
-          policy.enabled ? "No adapters will run" : "Context Engine disabled"
+          policy.enabled ? "No sources will run" : "Company Brain disabled"
         }
       />
       {policy.providerOptions &&
