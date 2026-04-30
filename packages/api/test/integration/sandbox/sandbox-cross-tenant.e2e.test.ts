@@ -98,26 +98,24 @@ async function runTurn(
   startedAt: Date,
 ): Promise<void> {
   const threadId = await createThread(env, fixtures);
-  await insertUserMessage(env, fixtures, threadId, message);
+  const messageId = await insertUserMessage(env, fixtures, threadId, message);
   const lambda = new LambdaClient({ region: env.awsRegion });
-  await lambda.send(
+  const invoke = await lambda.send(
     new InvokeCommand({
       FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke`,
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(
         JSON.stringify({
-          requestContext: { http: { method: "POST", path: "/invocations" } },
-          body: JSON.stringify({
-            tenantId: fixtures.tenantId,
-            agentId: fixtures.agentId,
-            threadId,
-            userId: fixtures.userId,
-            userMessage: message,
-          }),
+          tenantId: fixtures.tenantId,
+          agentId: fixtures.agentId,
+          threadId,
+          userMessage: message,
+          messageId,
         }),
       ),
     }),
   );
+  assertLambdaInvokeSucceeded(invoke);
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     const turn = await readLatestTurn(env, threadId, startedAt);
@@ -136,8 +134,8 @@ async function createThread(
   const db = await openDb(env);
   try {
     const result = await db.execute(
-      sql`INSERT INTO threads (tenant_id, agent_id, title, status, created_at, updated_at)
-          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${"sandbox-e2e cross-tenant thread"}, 'active', NOW(), NOW())
+      sql`INSERT INTO threads (tenant_id, agent_id, user_id, number, identifier, title, status, created_by_type, created_by_id, created_at, updated_at)
+          VALUES (${fixtures.tenantId}::uuid, ${fixtures.agentId}::uuid, ${fixtures.userId}::uuid, 1, ${`${fixtures.names.tenantSlug}-1`}, ${"sandbox-e2e cross-tenant thread"}, 'active', 'user', ${fixtures.userId}, NOW(), NOW())
           RETURNING id`,
     );
     const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
@@ -152,16 +150,34 @@ async function insertUserMessage(
   fixtures: Fixtures,
   threadId: string,
   message: string,
-): Promise<void> {
+): Promise<string> {
   const db = await openDb(env);
   try {
-    await db.execute(
-      sql`INSERT INTO messages (tenant_id, thread_id, agent_id, role, content, created_at, updated_at)
-          VALUES (${fixtures.tenantId}::uuid, ${threadId}::uuid, ${fixtures.agentId}::uuid, 'user', ${message}, NOW(), NOW())`,
+    const result = await db.execute(
+      sql`INSERT INTO messages (tenant_id, thread_id, role, content, sender_type, sender_id, created_at)
+          VALUES (${fixtures.tenantId}::uuid, ${threadId}::uuid, 'user', ${message}, 'user', ${fixtures.userId}::uuid, NOW())
+          RETURNING id`,
     );
+    const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
+    const id = rows[0]?.id;
+    if (!id) throw new Error("sandbox-e2e: could not create user message");
+    return id;
   } finally {
     await closeDb(db);
   }
+}
+
+function assertLambdaInvokeSucceeded(invoke: {
+  FunctionError?: string;
+  Payload?: Uint8Array;
+}): void {
+  if (!invoke.FunctionError) return;
+  const payload = invoke.Payload
+    ? new TextDecoder().decode(invoke.Payload)
+    : "";
+  throw new Error(
+    `chat-agent-invoke failed: ${invoke.FunctionError} ${payload}`,
+  );
 }
 
 async function readLatestTurn(

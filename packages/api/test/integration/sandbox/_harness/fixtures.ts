@@ -67,9 +67,13 @@ export interface Fixtures {
  * Designed to be called from `beforeAll`. Throws a concrete error with a
  * runbook-cross-reference on any upstream failure.
  */
-export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtures> {
+export async function createSandboxFixtures(
+  opts: FixtureOptions,
+): Promise<Fixtures> {
   const names = nameFixtures(opts.runId, opts.suffix);
-  const created: Partial<Fixtures> & { env: HarnessEnv } = { env: opts.env } as any;
+  const created: Partial<Fixtures> & { env: HarnessEnv } = {
+    env: opts.env,
+  } as any;
 
   try {
     // ---- 1. Tenant -----------------------------------------------------
@@ -101,6 +105,7 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
     // ---- 4. User ------------------------------------------------------
     const userId = await createFixtureUser(opts.env, tenantId, names);
     (created as any).userId = userId;
+    const fixtureActor = { tenantId, userId };
 
     // ---- 5. Agent template with sandbox opt-in -------------------------
     const templateGql = await runGql<{ createAgentTemplate: { id: string } }>(
@@ -120,6 +125,7 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
           },
         },
       },
+      fixtureActor,
     );
     const templateId = templateGql.createAgentTemplate.id;
     (created as any).templateId = templateId;
@@ -138,6 +144,7 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
           },
         },
       },
+      fixtureActor,
     );
     const agentId = agentGql.createAgentFromTemplate.id;
     (created as any).agentId = agentId;
@@ -230,6 +237,7 @@ export async function cleanupStaleFixtures(
 async function runGql<T>(
   env: HarnessEnv,
   body: { query: string; variables?: Record<string, unknown> },
+  actor?: { tenantId: string; userId: string },
 ): Promise<T> {
   // Service-auth against the deployed graphql-http Lambda uses
   // `x-api-key` (not `Authorization: Bearer`). The Bearer slot is
@@ -240,21 +248,29 @@ async function runGql<T>(
   // an email from, so it reads this header instead. The value must
   // appear in the Lambda's THINKWORK_PLATFORM_OPERATOR_EMAILS list for
   // updateTenantPolicy etc. to allow the call.
-  const resp = await fetch(`${env.thinkworkApiUrl.replace(/\/$/, "")}/graphql`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": env.apiAuthSecret,
-      "x-principal-email": env.operatorEmail,
+  const resp = await fetch(
+    `${env.thinkworkApiUrl.replace(/\/$/, "")}/graphql`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": env.apiAuthSecret,
+        "x-principal-email": env.operatorEmail,
+        ...(actor
+          ? { "x-tenant-id": actor.tenantId, "x-principal-id": actor.userId }
+          : {}),
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
   const text = await resp.text();
   let parsed: any;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error(`GraphQL non-JSON response: ${resp.status} ${text.slice(0, 300)}`);
+    throw new Error(
+      `GraphQL non-JSON response: ${resp.status} ${text.slice(0, 300)}`,
+    );
   }
   if (parsed.errors?.length) {
     throw new Error(
@@ -294,23 +310,35 @@ async function ensureInterpreters(
   );
 
   const aci = new BedrockAgentCoreControlClient({ region: opts.env.awsRegion });
+  const suffix = opts.suffix
+    ? `_${opts.suffix.replace(/[^A-Za-z0-9_]/g, "_")}`
+    : "";
+  const nameBase = `sandbox_e2e_${opts.runId}${suffix}`;
 
   const pub: any = await aci.send(
     new CreateCodeInterpreterCommand({
-      name: `sandbox-e2e-${opts.runId}-pub`,
+      name: `${nameBase}_pub`,
       networkConfiguration: { networkMode: "PUBLIC" },
       description: `sandbox-e2e fallback interpreter (public) for tenant ${tenantId}`,
-      tags: { Stage: opts.env.stage, TenantId: tenantId, Environment: "default-public" },
-      clientToken: `${opts.runId}-pub`,
+      tags: {
+        Stage: opts.env.stage,
+        TenantId: tenantId,
+        Environment: "default-public",
+      },
+      clientToken: `sandbox-e2e-${opts.runId}${opts.suffix ? `-${opts.suffix}` : ""}-public-code-interpreter`,
     }),
   );
   const int: any = await aci.send(
     new CreateCodeInterpreterCommand({
-      name: `sandbox-e2e-${opts.runId}-int`,
+      name: `${nameBase}_int`,
       networkConfiguration: { networkMode: "SANDBOX" },
       description: `sandbox-e2e fallback interpreter (internal) for tenant ${tenantId}`,
-      tags: { Stage: opts.env.stage, TenantId: tenantId, Environment: "internal-only" },
-      clientToken: `${opts.runId}-int`,
+      tags: {
+        Stage: opts.env.stage,
+        TenantId: tenantId,
+        Environment: "internal-only",
+      },
+      clientToken: `sandbox-e2e-${opts.runId}${opts.suffix ? `-${opts.suffix}` : ""}-internal-code-interpreter`,
     }),
   );
   const publicId = pub.codeInterpreterId ?? pub.codeInterpreterArn;
@@ -333,6 +361,11 @@ async function createFixtureUser(
     const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
     const userId = rows[0]?.id;
     if (!userId) throw new Error("sandbox-e2e: could not create fixture user");
+    await db.execute(
+      sql`INSERT INTO tenant_members (tenant_id, principal_type, principal_id, role, status)
+          VALUES (${tenantId}::uuid, 'user', ${userId}::uuid, 'owner', 'active')
+          ON CONFLICT (tenant_id, principal_type, principal_id) DO NOTHING`,
+    );
     return userId;
   } finally {
     await closeDb(db);
@@ -391,11 +424,15 @@ async function teardownFixtures(
   // Delete code interpreters (manual fallback path only creates them;
   // when the Lambda path lands, the deprovision handler owns cleanup).
   if (fx.interpreterPublicId || fx.interpreterInternalId) {
-    const aci = new BedrockAgentCoreControlClient({ region: opts.env.awsRegion });
+    const aci = new BedrockAgentCoreControlClient({
+      region: opts.env.awsRegion,
+    });
     for (const id of [fx.interpreterPublicId, fx.interpreterInternalId]) {
       if (!id) continue;
       try {
-        await aci.send(new DeleteCodeInterpreterCommand({ codeInterpreterId: id }));
+        await aci.send(
+          new DeleteCodeInterpreterCommand({ codeInterpreterId: id }),
+        );
       } catch (err: any) {
         if (err?.name !== "ResourceNotFoundException") {
           console.warn(`teardown: DeleteCodeInterpreter ${id} failed:`, err);
@@ -411,7 +448,10 @@ async function teardownFixtures(
   }
 }
 
-async function deleteTenantCascade(env: HarnessEnv, tenantId: string): Promise<void> {
+async function deleteTenantCascade(
+  env: HarnessEnv,
+  tenantId: string,
+): Promise<void> {
   const db = await openDb(env);
   try {
     // Order matters — FK cascades handle most of it, but a few tables
@@ -422,24 +462,46 @@ async function deleteTenantCascade(env: HarnessEnv, tenantId: string): Promise<v
       sql`DELETE FROM agent_skills WHERE tenant_id = ${tenantId}::uuid`,
     );
     await db.execute(
+      sql`DELETE FROM agent_capabilities WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
       sql`DELETE FROM agent_knowledge_bases WHERE tenant_id = ${tenantId}::uuid`,
     );
-    await db.execute(sql`DELETE FROM agents WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(
+      sql`DELETE FROM messages WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM thread_turns WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM threads WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM cost_events WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM sandbox_invocations WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM sandbox_agent_hourly_counters WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM agents WHERE tenant_id = ${tenantId}::uuid`,
+    );
     await db.execute(
       sql`DELETE FROM agent_templates WHERE tenant_id = ${tenantId}::uuid`,
     );
     await db.execute(
       sql`DELETE FROM connections WHERE tenant_id = ${tenantId}::uuid`,
     );
-    await db.execute(sql`DELETE FROM users WHERE tenant_id = ${tenantId}::uuid`);
     await db.execute(
-      sql`DELETE FROM sandbox_invocations WHERE tenant_id = ${tenantId}::uuid`,
+      sql`DELETE FROM tenant_members WHERE tenant_id = ${tenantId}::uuid`,
+    );
+    await db.execute(
+      sql`DELETE FROM users WHERE tenant_id = ${tenantId}::uuid`,
     );
     await db.execute(
       sql`DELETE FROM sandbox_tenant_daily_counters WHERE tenant_id = ${tenantId}::uuid`,
-    );
-    await db.execute(
-      sql`DELETE FROM sandbox_agent_hourly_counters WHERE tenant_id = ${tenantId}::uuid`,
     );
     await db.execute(
       sql`DELETE FROM tenant_policy_events WHERE tenant_id = ${tenantId}::uuid`,
@@ -488,7 +550,6 @@ async function writeTenantInterpreterIds(
     await closeDb(db);
   }
 }
-
 
 // ---------------------------------------------------------------------------
 // Thin Drizzle/pg wrapper — one connection per call so the harness doesn't

@@ -102,7 +102,23 @@ describe("requireTenantAdmin", () => {
     });
   });
 
-  it("throws FORBIDDEN when authType is not cognito (e.g. unauthenticated caller)", async () => {
+  it("returns 'admin' for a service caller with an owner/admin principal", async () => {
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    const ctx: any = {
+      auth: {
+        authType: "apikey",
+        principalId: "user-1",
+        tenantId: "tenant-1",
+        email: null,
+      },
+    };
+    const role = await requireTenantAdmin(ctx, "tenant-1");
+    expect(role).toBe("admin");
+  });
+
+  it("throws FORBIDDEN when a service caller has no resolvable principal", async () => {
+    mockResolveCallerUserId.mockResolvedValue(null);
     const ctx: any = {
       auth: {
         authType: "apikey",

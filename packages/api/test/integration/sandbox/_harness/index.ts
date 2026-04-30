@@ -37,11 +37,13 @@ export class HarnessEnvError extends Error {
  * missing names — avoids the vitest-default "undefined is not a
  * string" surprise that makes aborted harnesses hard to diagnose.
  */
-export function readHarnessEnv(env: NodeJS.ProcessEnv = process.env): HarnessEnv {
+export function readHarnessEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): HarnessEnv {
   const required = {
     thinkworkApiUrl: env.THINKWORK_API_URL,
     apiAuthSecret: env.API_AUTH_SECRET,
-    databaseUrl: env.DATABASE_URL,
+    databaseUrl: normalizeNodePgDatabaseUrl(env.DATABASE_URL),
     awsRegion: env.AWS_REGION,
     stage: env.STAGE,
     agentcoreRuntimeLogGroup: env.AGENTCORE_RUNTIME_LOG_GROUP,
@@ -52,6 +54,12 @@ export function readHarnessEnv(env: NodeJS.ProcessEnv = process.env): HarnessEnv
     .map(([k]) => envVarName(k));
   if (missing.length > 0) throw new HarnessEnvError(missing);
   return required as HarnessEnv;
+}
+
+function normalizeNodePgDatabaseUrl(
+  url: string | undefined,
+): string | undefined {
+  return url?.replace("sslmode=require", "sslmode=no-verify");
 }
 
 function envVarName(camelKey: string): string {
@@ -103,4 +111,3 @@ export function nameFixtures(runId: string, suffix = ""): FixtureName {
     agentSlug: `${base}-agent`,
   };
 }
-

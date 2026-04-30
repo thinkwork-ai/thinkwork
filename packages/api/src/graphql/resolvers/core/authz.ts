@@ -68,9 +68,6 @@ export async function requireTenantAdmin(
   tenantId: string,
   dbOrTx: DbOrTx = defaultDb,
 ): Promise<TenantAdminRole> {
-  if (ctx.auth.authType !== "cognito") {
-    throw forbidden("Tenant admin role required");
-  }
   const callerUserId = await resolveCallerUserId(ctx);
   if (!callerUserId) {
     throw forbidden("Tenant admin role required");

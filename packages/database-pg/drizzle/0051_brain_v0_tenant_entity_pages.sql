@@ -14,8 +14,8 @@
 -- creates: public.uq_tenant_entity_pages_tenant_type_subtype_slug
 -- creates: public.idx_tenant_entity_pages_search_tsv
 -- creates: public.uq_tenant_entity_section_sources_section_kind_ref
--- creates: public.enforce_tenant_entity_section_source_tenant
--- creates: public.trg_tenant_entity_section_sources_tenant
+-- creates-function: public.enforce_tenant_entity_section_source_tenant
+-- creates-trigger: public.tenant_entity_section_sources.trg_tenant_entity_section_sources_tenant
 
 \set ON_ERROR_STOP on
 

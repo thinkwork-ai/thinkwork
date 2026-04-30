@@ -7,7 +7,7 @@
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0053_brain_v0_unresolved_mentions_subtype.sql
 --
 -- creates-column: public.wiki_unresolved_mentions.entity_subtype
--- creates-constraint: public.wiki_unresolved_mentions_entity_subtype_allowed
+-- creates-constraint: public.wiki_unresolved_mentions.wiki_unresolved_mentions_entity_subtype_allowed
 
 \set ON_ERROR_STOP on
 

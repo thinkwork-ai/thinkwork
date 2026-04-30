@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const env = {
   stage: process.env.STAGE,
   awsRegion: process.env.AWS_REGION ?? "us-east-1",
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: normalizeNodePgDatabaseUrl(process.env.DATABASE_URL),
   tenantId: process.env.USER_MEMORY_MCP_E2E_TENANT_ID,
   agentId: process.env.USER_MEMORY_MCP_E2E_AGENT_ID,
   threadId: process.env.USER_MEMORY_MCP_E2E_THREAD_ID,
@@ -15,6 +15,12 @@ const env = {
     "Call the configured user-memory MCP probe tool and summarize the result.",
   expectedTool: process.env.USER_MEMORY_MCP_E2E_EXPECTED_TOOL,
 };
+
+function normalizeNodePgDatabaseUrl(
+  url: string | undefined,
+): string | undefined {
+  return url?.replace("sslmode=require", "sslmode=no-verify");
+}
 
 const missing = [
   ["STAGE", env.stage],
@@ -71,7 +77,9 @@ describe("agent outbound user MCP E2E", () => {
   }, 180_000);
 });
 
-async function waitForTurn(startedAt: Date): Promise<{ status: string; toolInvocations: string }> {
+async function waitForTurn(
+  startedAt: Date,
+): Promise<{ status: string; toolInvocations: string }> {
   const deadline = Date.now() + 120_000;
   let last: { status: string; toolInvocations: string } | null = null;
 
@@ -80,7 +88,7 @@ async function waitForTurn(startedAt: Date): Promise<{ status: string; toolInvoc
     await client.connect();
     try {
       const result = await client.query(
-        `SELECT status, COALESCE(tool_invocations::text, '') AS "toolInvocations"
+        `SELECT status, COALESCE(usage_json->'tool_invocations', usage_json->'tools_called', '[]'::jsonb)::text AS "toolInvocations"
            FROM thread_turns
           WHERE thread_id = $1::uuid AND started_at >= $2
           ORDER BY started_at DESC
@@ -95,5 +103,7 @@ async function waitForTurn(startedAt: Date): Promise<{ status: string; toolInvoc
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
 
-  throw new Error(`agent user MCP turn did not complete within 120s; last=${JSON.stringify(last)}`);
+  throw new Error(
+    `agent user MCP turn did not complete within 120s; last=${JSON.stringify(last)}`,
+  );
 }

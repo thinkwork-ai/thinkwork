@@ -11,7 +11,8 @@
 # This script walks drizzle/*.sql, excludes files registered in the journal,
 # and for each remaining file greps the header for explicit creation markers
 # (`-- creates:` / `-- creates-column:` / `-- creates-extension:` /
-# `-- creates-constraint:`) and drop markers (`-- drops:` /
+# `-- creates-constraint:` / `-- creates-function:` / `-- creates-trigger:`)
+# and drop markers (`-- drops:` /
 # `-- drops-column:`) and probes the target
 # $DATABASE_URL to report APPLIED / MISSING (creates) or DROPPED /
 # STILL_PRESENT (drops) per object.
@@ -37,6 +38,8 @@
 #   -- creates-column: public.<table_name>.<column_name>
 #   -- creates-extension: <ext_name>            # probes pg_catalog.pg_extension
 #   -- creates-constraint: public.<table_name>.<constraint_name>
+#   -- creates-function: public.<function_name>
+#   -- creates-trigger: public.<table_name>.<trigger_name>
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 # Multiple markers per file are fine. A file with zero markers is reported
@@ -201,12 +204,66 @@ probe_constraint() {
   fi
 }
 
+probe_function() {
+  # Accepts public.function_name. Assumes no overloaded argument-sensitive
+  # verification is needed for migration marker checks.
+  local qualified="$1"
+  local schema="${qualified%%.*}"
+  local function="${qualified#*.}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1
+      FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = '$schema'
+       AND p.proname = '$function'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "$schema.$function"
+  fi
+}
+
+probe_trigger() {
+  # Accepts public.table.trigger.
+  local qualified="$1"
+  local schema="${qualified%%.*}"
+  local rest="${qualified#*.}"
+  local tbl="${rest%%.*}"
+  local trigger="${rest#*.}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1
+      FROM pg_catalog.pg_trigger t
+      JOIN pg_catalog.pg_class r ON r.oid = t.tgrelid
+      JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+     WHERE n.nspname = '$schema'
+       AND r.relname = '$tbl'
+       AND t.tgname = '$trigger'
+       AND NOT t.tgisinternal
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "$schema.$tbl.$trigger"
+  fi
+}
+
 any_missing=0
 any_unverified=0
 
 echo "Unindexed .sql files in packages/database-pg/drizzle/:"
 for f in "$DRIZZLE_DIR"/*.sql; do
   base="$(basename "$f")"
+  # Rollback companions document manual reversal commands. They are not part
+  # of the forward drift gate, where their drop markers would be expected to
+  # report STILL_PRESENT until an operator intentionally rolls back.
+  if [[ "$base" == *_rollback.sql ]]; then
+    continue
+  fi
   # Skip journal-registered files.
   if printf '%s\n' "$INDEXED" | grep -qx "$base"; then
     continue
@@ -232,6 +289,14 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     grep -oE "^--[[:space:]]+creates-constraint:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  function_markers=$(
+    grep -oE "^--[[:space:]]+creates-function:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
+  trigger_markers=$(
+    grep -oE "^--[[:space:]]+creates-trigger:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_col_markers=$(
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
@@ -241,8 +306,8 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- drops:', or '-- drops-column:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- drops:', or '-- drops-column:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -259,6 +324,12 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     fi
     if [[ -n "$constraint_markers" ]]; then
       while IFS= read -r m; do echo "    creates-constraint: $m"; done <<< "$constraint_markers"
+    fi
+    if [[ -n "$function_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-function: $m"; done <<< "$function_markers"
+    fi
+    if [[ -n "$trigger_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-trigger: $m"; done <<< "$trigger_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
@@ -300,6 +371,22 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       echo "    constraint $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$constraint_markers"
+  fi
+  if [[ -n "$function_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_function "$m")
+      echo "    function $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$function_markers"
+  fi
+  if [[ -n "$trigger_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_trigger "$m")
+      echo "    trigger $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$trigger_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do
