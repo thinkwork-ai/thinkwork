@@ -13,6 +13,7 @@ import type {
   ContextProviderSelection,
 } from "../lib/context-engine/types.js";
 import { upsertTenantContextProviderSetting } from "../lib/context-engine/admin-config.js";
+import { sourceFamilyForProvider } from "../lib/context-engine/source-families.js";
 import { resolveAgentRuntimeConfig } from "../lib/resolve-agent-runtime-config.js";
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
 
@@ -327,6 +328,7 @@ async function handleToolCall(
           providers: providers.map((provider) => ({
             id: provider.id,
             family: provider.family,
+            sourceFamily: sourceFamilyForProvider(provider),
             displayName: provider.displayName,
             enabled: provider.enabled !== false,
             defaultEnabled: provider.defaultEnabled,
@@ -468,16 +470,18 @@ async function buildAgentContextPolicy(
 
 function providerSummary(provider: {
   id: string;
-  family: string;
+  family: ContextProviderFamily;
   displayName: string;
   enabled?: boolean;
   defaultEnabled: boolean;
   config?: Record<string, unknown>;
-  subAgent?: unknown;
+  sourceFamily?: ReturnType<typeof sourceFamilyForProvider>;
+  subAgent?: Parameters<typeof sourceFamilyForProvider>[0]["subAgent"];
 }) {
   return {
     id: provider.id,
     family: provider.family,
+    sourceFamily: sourceFamilyForProvider(provider),
     displayName: provider.displayName,
     enabled: provider.enabled !== false,
     defaultEnabled: provider.defaultEnabled,

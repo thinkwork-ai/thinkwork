@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Mic, Plus, Search, Tag } from "lucide-react-native";
+import { ArrowUp, BookOpen, Mic, Plus, Search, Tag } from "lucide-react-native";
+import { IconTopologyStar3 } from "@tabler/icons-react-native";
 import { useCaptureMobileMemory } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
 import { toast } from "@/components/ui/toast";
 import { VoiceDictationBar } from "@/components/input/VoiceDictationBar";
 import type { COLORS } from "@/lib/theme";
+import type { BrainMode } from "@/components/brain/types";
 import { FactTypeChip, type FactType } from "./FactTypeChip";
 import { FactTypePicker } from "./FactTypePicker";
 
@@ -37,6 +39,9 @@ interface CaptureFooterProps {
 	 * debounce this value before passing it to the search query.
 	 */
 	onSearchQueryChange?: (query: string) => void;
+	searchPlaceholder?: string;
+	brainMode?: BrainMode;
+	onBrainModeChange?: (mode: BrainMode) => void;
 }
 
 export function CaptureFooter({
@@ -47,6 +52,9 @@ export function CaptureFooter({
 	colors,
 	isDark,
 	onSearchQueryChange,
+	searchPlaceholder = "Search wiki...",
+	brainMode,
+	onBrainModeChange,
 }: CaptureFooterProps) {
 	const [mode, setMode] = useState<CaptureFooterMode>("search");
 	const [text, setText] = useState("");
@@ -115,6 +123,23 @@ export function CaptureFooter({
 		requestAnimationFrame(() => inputRef.current?.focus());
 	}, []);
 
+	const focusInputAfterModeChange = useCallback(() => {
+		requestAnimationFrame(() => inputRef.current?.focus());
+		setTimeout(() => inputRef.current?.focus(), 75);
+	}, []);
+
+	const handleBrainModePress = useCallback((nextMode: BrainMode) => {
+		onBrainModeChange?.(nextMode);
+		if (nextMode === "search") {
+			setMode("search");
+			focusInputAfterModeChange();
+			return;
+		}
+
+		inputRef.current?.blur();
+		Keyboard.dismiss();
+	}, [focusInputAfterModeChange, onBrainModeChange]);
+
 	// Synchronous capture — sends to Hindsight now. No offline queue, no
 	// client-side persistence. If the request fails, we surface an error
 	// toast and keep the draft text so the user can retry.
@@ -178,9 +203,10 @@ export function CaptureFooter({
 		setIsDictating(true);
 	}, []);
 
-	const placeholder = mode === "search" ? "Search wiki..." : "Add new memory...";
+	const placeholder = mode === "search" ? searchPlaceholder : "Add new memory...";
 	const hasChip = mode === "add" && factType !== "FACT";
 	const showCounter = mode === "add" && charCount >= SOFT_WARN_CHARS;
+	const showBrainModeControls = Boolean(brainMode && onBrainModeChange);
 
 	return (
 		<>
@@ -265,31 +291,56 @@ export function CaptureFooter({
 				) : (
 					<View className="flex-row items-center justify-between px-4 pt-1 pb-2">
 						<View className="flex-row items-center gap-4">
-							<Pressable
-								onPress={toggleMode}
-								className="p-1 active:opacity-70"
-								accessibilityLabel={mode === "search" ? "Switch to add memory" : "Switch to search"}
-							>
-								{mode === "search" ? (
-									<Plus size={26} color={colors.mutedForeground} />
-								) : (
-									<Search size={24} color={colors.mutedForeground} />
-								)}
-							</Pressable>
-							<Pressable
-								onPress={() => {
-									if (mode !== "add") return;
-									Keyboard.dismiss();
-									setPickerOpen(true);
-								}}
-								disabled={mode !== "add"}
-								className="p-1 active:opacity-70"
-								accessibilityLabel="Choose memory type"
-								accessibilityState={{ disabled: mode !== "add" }}
-								style={{ opacity: mode === "add" ? 1 : 0.35 }}
-							>
-								<Tag size={22} color={colors.mutedForeground} />
-							</Pressable>
+							{showBrainModeControls && brainMode && onBrainModeChange ? (
+								<>
+									<BrainFooterModeButton
+										mode="pages"
+										currentMode={brainMode}
+										colors={colors}
+										onPress={handleBrainModePress}
+									/>
+									<BrainFooterModeButton
+										mode="graph"
+										currentMode={brainMode}
+										colors={colors}
+										onPress={handleBrainModePress}
+									/>
+									<BrainFooterModeButton
+										mode="search"
+										currentMode={brainMode}
+										colors={colors}
+										onPress={handleBrainModePress}
+									/>
+								</>
+							) : (
+								<>
+									<Pressable
+										onPress={toggleMode}
+										className="p-1 active:opacity-70"
+										accessibilityLabel={mode === "search" ? "Switch to add memory" : "Switch to search"}
+									>
+										{mode === "search" ? (
+											<Plus size={26} color={colors.mutedForeground} />
+										) : (
+											<Search size={24} color={colors.mutedForeground} />
+										)}
+									</Pressable>
+									<Pressable
+										onPress={() => {
+											if (mode !== "add") return;
+											Keyboard.dismiss();
+											setPickerOpen(true);
+										}}
+										disabled={mode !== "add"}
+										className="p-1 active:opacity-70"
+										accessibilityLabel="Choose memory type"
+										accessibilityState={{ disabled: mode !== "add" }}
+										style={{ opacity: mode === "add" ? 1 : 0.35 }}
+									>
+										<Tag size={22} color={colors.mutedForeground} />
+									</Pressable>
+								</>
+							)}
 						</View>
 						<View className="flex-row items-center gap-4">
 							{showCounter ? (
@@ -348,5 +399,52 @@ export function CaptureFooter({
 				current={userPickedType ? factType : undefined}
 			/>
 		</>
+	);
+}
+
+interface BrainFooterModeButtonProps {
+	mode: BrainMode;
+	currentMode: BrainMode;
+	colors: (typeof COLORS)["dark"];
+	onPress: (mode: BrainMode) => void;
+}
+
+function BrainFooterModeButton({
+	mode,
+	currentMode,
+	colors,
+	onPress,
+}: BrainFooterModeButtonProps) {
+	const selected = mode === currentMode;
+	const iconColor = selected ? colors.primary : colors.mutedForeground;
+	const label =
+		mode === "search"
+			? "Search Brain"
+			: mode === "pages"
+				? "Browse Brain pages"
+				: "Explore Brain graph";
+
+	return (
+		<Pressable
+			onPress={() => onPress(mode)}
+			className="items-center justify-center active:opacity-70"
+			accessibilityRole="button"
+			accessibilityLabel={label}
+			accessibilityState={{ selected }}
+			style={{
+				width: 34,
+				height: 34,
+				borderRadius: 17,
+				backgroundColor: "transparent",
+			}}
+		>
+			{mode === "search" ? (
+				<Search size={20} color={iconColor} />
+			) : mode === "pages" ? (
+				<BookOpen size={20} color={iconColor} />
+			) : (
+				<IconTopologyStar3 size={20} color={iconColor} strokeWidth={2} />
+			)}
+		</Pressable>
 	);
 }

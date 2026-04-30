@@ -41,6 +41,8 @@ export {
   type ContextEngineResponse,
   type ContextEngineHit,
   type ContextProviderStatus,
+  type ContextProviderFamily,
+  type ContextSourceFamily,
 } from "./context-engine";
 export {
   useContextQuery,
@@ -54,7 +56,11 @@ export {
 export {
   editTenantEntityFact,
   rejectTenantEntityFact,
+  runBrainPageEnrichment,
+  type BrainEnrichmentProposal,
+  type BrainEnrichmentSourceFamily,
 } from "./brain";
+export { useBrainEnrichment } from "./hooks/use-brain-enrichment";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,

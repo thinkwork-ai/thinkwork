@@ -8,6 +8,14 @@ export type ContextProviderFamily =
   | "knowledge-base"
   | "mcp"
   | "sub-agent";
+export type ContextSourceFamily =
+  | "brain"
+  | "pages"
+  | "workspace"
+  | "knowledge-base"
+  | "web"
+  | "mcp"
+  | "source-agent";
 
 export interface ContextEngineCaller {
   tenantId: string;
@@ -59,6 +67,7 @@ export interface ContextHit {
   id: string;
   providerId: string;
   family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
   title: string;
   snippet: string;
   score?: number | null;
@@ -82,6 +91,7 @@ export type ContextProviderStatusState =
 export interface ContextProviderStatus {
   providerId: string;
   family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
   displayName: string;
   state: ContextProviderStatusState;
   scope: ContextEngineScope;
@@ -105,6 +115,7 @@ export interface ContextProviderResult {
 export interface ContextProviderDescriptor {
   id: string;
   family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
   displayName: string;
   enabled?: boolean;
   defaultEnabled: boolean;

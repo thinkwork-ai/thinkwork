@@ -55,6 +55,7 @@ export function createWikiSourceAgentContextProvider(options: {
 	return createSubAgentContextProvider({
 		id: "wiki-source-agent",
 		displayName: "Company Brain Page Agent",
+		sourceFamily: "pages",
 		promptRef: "brain/provider/wiki-source-agent",
 		prompt: {
 			title: "Company Brain wiki navigator",

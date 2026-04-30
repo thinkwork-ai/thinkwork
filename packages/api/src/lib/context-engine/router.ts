@@ -14,6 +14,10 @@ import {
   type ContextEngineScope,
 } from "./types.js";
 import { invokeKbPromotionWorker } from "../kb-promotion/promotion-worker.js";
+import {
+  sourceFamilyForHit,
+  sourceFamilyForProvider,
+} from "./source-families.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -150,6 +154,7 @@ async function runProvider(
   const baseStatus: ContextProviderStatus = {
     providerId: provider.id,
     family: provider.family,
+    sourceFamily: sourceFamilyForProvider(provider),
     displayName: provider.displayName,
     state: "ok",
     scope: request.scope,
@@ -178,7 +183,10 @@ async function runProvider(
     const result = await withTimeout(provider.query(request), timeoutMs);
     const durationMs = Date.now() - started;
     return {
-      hits: result.hits,
+      hits: result.hits.map((hit) => ({
+        ...hit,
+        sourceFamily: sourceFamilyForHit(hit, provider),
+      })),
       status: {
         ...baseStatus,
         ...result.status,
