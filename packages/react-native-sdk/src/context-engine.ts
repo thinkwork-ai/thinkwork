@@ -10,11 +10,20 @@ export type ContextProviderFamily =
   | "knowledge-base"
   | "mcp"
   | "sub-agent";
+export type ContextSourceFamily =
+  | "brain"
+  | "pages"
+  | "workspace"
+  | "knowledge-base"
+  | "web"
+  | "mcp"
+  | "source-agent";
 
 export interface ContextEngineHit {
   id: string;
   providerId: string;
   family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
   title: string;
   snippet: string;
   score?: number | null;
@@ -36,6 +45,7 @@ export interface ContextEngineHit {
 export interface ContextProviderStatus {
   providerId: string;
   family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
   displayName: string;
   state: "ok" | "skipped" | "error" | "timeout" | "stale";
   error?: string;

@@ -34,6 +34,66 @@ type TenantEntityFacetConnection {
   pageInfo: PageInfo!
 }
 
+enum BrainEnrichmentSourceFamily {
+  BRAIN
+  WEB
+  KNOWLEDGE_BASE
+}
+
+type BrainEnrichmentCitation {
+  label: String
+  uri: String
+  sourceId: String
+  metadata: AWSJSON
+}
+
+type BrainEnrichmentCandidate {
+  id: ID!
+  title: String!
+  summary: String!
+  sourceFamily: BrainEnrichmentSourceFamily!
+  providerId: String!
+  score: Float
+  citation: BrainEnrichmentCitation
+}
+
+type BrainEnrichmentProviderStatus {
+  providerId: String!
+  family: String!
+  sourceFamily: String
+  displayName: String!
+  state: String!
+  reason: String
+  error: String
+  hitCount: Int
+  durationMs: Int
+}
+
+type BrainEnrichmentProposal {
+  id: ID!
+  tenantId: ID!
+  targetPageTable: String!
+  targetPageId: ID!
+  threadId: ID!
+  reviewRunId: ID!
+  reviewObjectKey: String!
+  status: String!
+  title: String!
+  candidates: [BrainEnrichmentCandidate!]!
+  providerStatuses: [BrainEnrichmentProviderStatus!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input RunBrainPageEnrichmentInput {
+  tenantId: ID!
+  pageTable: String!
+  pageId: ID!
+  query: String
+  sourceFamilies: [BrainEnrichmentSourceFamily!]
+  limit: Int = 12
+}
+
 extend type Query {
   tenantEntityPage(tenantId: ID!, pageId: ID!): TenantEntityPage
   tenantEntityFacets(pageId: ID!, limit: Int = 20, cursor: String): TenantEntityFacetConnection!
@@ -42,4 +102,5 @@ extend type Query {
 extend type Mutation {
   editTenantEntityFact(factId: ID!, content: String!): TenantEntitySection!
   rejectTenantEntityFact(factId: ID!, reason: String): TenantEntitySection!
+  runBrainPageEnrichment(input: RunBrainPageEnrichmentInput!): BrainEnrichmentProposal!
 }

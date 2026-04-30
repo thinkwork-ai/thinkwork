@@ -27,6 +27,7 @@ import {
   useThreadTurnUpdatedSubscription,
   useThreadUpdatedSubscription,
   useUpdateThread,
+  type ContextProviderStatus,
 } from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
@@ -64,10 +65,9 @@ import {
   Zap,
   Lock,
   CreditCard,
+  DatabaseZap,
 } from "lucide-react-native";
 import {
-  IconTopologyStar3,
-  IconList,
   IconLetterCase,
 } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
@@ -79,8 +79,9 @@ import {
   type SelectedWorkspace,
 } from "@/components/input/MessageInputFooter";
 import { CaptureFooter } from "@/components/wiki/CaptureFooter";
-import { WikiList } from "@/components/wiki/WikiList";
-import { WikiGraphView } from "@/components/wiki/graph";
+import { BrainSearchSurface } from "@/components/brain/BrainSearchSurface";
+import { BrainProviderStatusSheet } from "@/components/brain/BrainProviderStatusSheet";
+import type { BrainMode } from "@/components/brain/types";
 import { Inter_500Medium, useFonts } from "@expo-google-fonts/inter";
 import { ToastHost } from "@/components/ui/toast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -417,8 +418,8 @@ export default function ThreadsScreen() {
     [router, markRead],
   );
 
-  // ── Tabs: Threads | Wiki ─────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"threads" | "wiki">("threads");
+  // ── Tabs: Threads | Brain ────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"threads" | "brain">("threads");
 
   // ── New thread / memory input ────────────────────────────────────────
   // Each tab keeps its own draft text so switching tabs doesn't leak a
@@ -439,17 +440,20 @@ export default function ThreadsScreen() {
     void AsyncStorage.removeItem("thinkwork:capture-queue:v1").catch(() => {});
   }, []);
 
-  // Wiki-tab search: the footer only emits on explicit submit
+  // Brain-tab search: the footer only emits on explicit submit
   // (Enter or send tap), so no debounce layer is needed here.
-  const [wikiQuery, setWikiQuery] = useState("");
-  // Wiki tab: list (table rows) ↔ graph (force-directed view)
-  const [wikiViewMode, setWikiViewMode] = useState<"list" | "graph">("list");
-  // Wiki graph view: when on, render node titles + use a label-friendly
+  const [brainQuery, setBrainQuery] = useState("");
+  const [brainMode, setBrainMode] = useState<BrainMode>("pages");
+  const [brainProviders, setBrainProviders] = useState<ContextProviderStatus[]>(
+    [],
+  );
+  const [brainProvidersVisible, setBrainProvidersVisible] = useState(false);
+  // Brain graph view: when on, render node titles + use a label-friendly
   // force layout (longer links, more repulsion) so titles don't overlap.
   // In-session only; cold app launches start with labels off.
-  const [wikiShowLabels, setWikiShowLabels] = useState(false);
+  const [brainShowLabels, setBrainShowLabels] = useState(false);
   // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
-  const [wikiFontsLoaded] = useFonts({ Inter: Inter_500Medium });
+  const [brainFontsLoaded] = useFonts({ Inter: Inter_500Medium });
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(
@@ -600,6 +604,9 @@ export default function ThreadsScreen() {
   // ── Render ─────────────────────────────────────────────────────────────
   const agentDisplayName = activeAgent?.name || (agentsFetching ? "" : "Agent");
   const pickerAgents = visibleAgents.map((a: any) => ({ ...a, _id: a.id }));
+  const brainProviderErrors = brainProviders.filter((provider) =>
+    ["error", "timeout"].includes(provider.state),
+  ).length;
 
   return (
     <KeyboardAvoidingView
@@ -634,50 +641,47 @@ export default function ThreadsScreen() {
               </View>
             </AgentPicker>
 
-            {/* Right: Wiki-tab view toggle + Filter + Menu */}
+            {/* Right: Brain graph labels + Filter + Menu */}
             <View className="flex-row items-center gap-3">
-              {activeTab === "wiki" && wikiViewMode === "graph" ? (
+              {activeTab === "brain" && brainMode === "graph" ? (
                 <Pressable
-                  onPress={() => setWikiShowLabels((s) => !s)}
+                  onPress={() => setBrainShowLabels((s) => !s)}
                   className="p-2"
                   accessibilityRole="button"
                   accessibilityLabel={
-                    wikiShowLabels ? "Hide labels" : "Show labels"
+                    brainShowLabels ? "Hide labels" : "Show labels"
                   }
                 >
                   <IconLetterCase
                     size={22}
-                    color={wikiShowLabels ? colors.primary : colors.foreground}
+                    color={brainShowLabels ? colors.primary : colors.foreground}
                     strokeWidth={2}
                   />
                 </Pressable>
               ) : null}
-              {activeTab === "wiki" ? (
+              {activeTab === "brain" &&
+              brainMode === "search" &&
+              brainProviders.length > 0 ? (
                 <Pressable
-                  onPress={() =>
-                    setWikiViewMode((m) => (m === "list" ? "graph" : "list"))
-                  }
-                  className="p-2"
+                  onPress={() => setBrainProvidersVisible(true)}
+                  className="p-2 relative"
                   accessibilityRole="button"
-                  accessibilityLabel={
-                    wikiViewMode === "list"
-                      ? "Switch to graph view"
-                      : "Switch to list view"
-                  }
+                  accessibilityLabel="Brain providers"
                 >
-                  {wikiViewMode === "graph" ? (
-                    <IconList
-                      size={22}
-                      color={colors.foreground}
-                      strokeWidth={2}
+                  <DatabaseZap
+                    size={22}
+                    color={
+                      brainProviderErrors > 0
+                        ? colors.destructive
+                        : colors.foreground
+                    }
+                  />
+                  {brainProviderErrors > 0 ? (
+                    <View
+                      className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                      style={{ backgroundColor: colors.destructive }}
                     />
-                  ) : (
-                    <IconTopologyStar3
-                      size={22}
-                      color={colors.foreground}
-                      strokeWidth={2}
-                    />
-                  )}
+                  ) : null}
                 </Pressable>
               ) : null}
               {activeTab === "threads" ? (
@@ -783,7 +787,7 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Wiki segmented control */}
+      {/* Threads / Brain segmented control */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
         style={{ height: 52, paddingBottom: 8 }}
@@ -852,14 +856,14 @@ export default function ThreadsScreen() {
             ) : null}
           </Pressable>
           <Pressable
-            onPress={() => setActiveTab("wiki")}
+            onPress={() => setActiveTab("brain")}
             className="flex-row items-center justify-center gap-1.5 rounded-full"
             style={{
               minWidth: 96,
               paddingHorizontal: 16,
               paddingVertical: 5,
               backgroundColor:
-                activeTab === "wiki"
+                activeTab === "brain"
                   ? isDark
                     ? "#525252"
                     : "#ffffff"
@@ -870,12 +874,12 @@ export default function ThreadsScreen() {
               className="text-sm font-semibold"
               style={{
                 color:
-                  activeTab === "wiki"
+                  activeTab === "brain"
                     ? colors.foreground
                     : colors.mutedForeground,
               }}
             >
-              Wiki
+              Brain
             </Text>
           </Pressable>
         </View>
@@ -939,22 +943,19 @@ export default function ThreadsScreen() {
                   : { paddingTop: 8 }
               }
             />
-          ) : wikiViewMode === "graph" &&
-            tenantId &&
-            currentUser?.id &&
-            wikiFontsLoaded ? (
-            <WikiGraphView
-              tenantId={tenantId}
-              userId={currentUser.id}
-              searchQuery={wikiQuery}
-              showLabels={wikiShowLabels}
-            />
           ) : (
-            <WikiList
+            <BrainSearchSurface
+              apiBaseUrl={resolveApiUrl()}
+              mode={brainMode}
+              query={brainQuery}
+              tenantId={tenantId}
               userId={currentUser?.id}
               agentId={activeAgent?.id}
+              getToken={getToken}
               colors={colors}
-              searchQuery={wikiQuery}
+              graphFontsLoaded={brainFontsLoaded}
+              graphShowLabels={brainShowLabels}
+              onProviderStatusesChange={setBrainProviders}
             />
           )}
         </WebContent>
@@ -983,7 +984,7 @@ export default function ThreadsScreen() {
               setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))
             }
           />
-        ) : activeTab === "wiki" ? (
+        ) : activeTab === "brain" ? (
           <CaptureFooter
             agentId={activeAgent?.id}
             userId={currentUser?.id}
@@ -991,7 +992,12 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             colors={colors}
             isDark={isDark}
-            onSearchQueryChange={setWikiQuery}
+            searchPlaceholder="Search Brain..."
+            onSearchQueryChange={(next) => {
+              setBrainQuery(next);
+            }}
+            brainMode={brainMode}
+            onBrainModeChange={setBrainMode}
           />
         ) : null}
       </View>
@@ -1094,7 +1100,14 @@ export default function ThreadsScreen() {
         }}
       />
 
-      {activeTab === "wiki" ? <ToastHost bottomOffset={96} /> : null}
+      <BrainProviderStatusSheet
+        visible={brainProvidersVisible}
+        providers={brainProviders}
+        colors={colors}
+        onClose={() => setBrainProvidersVisible(false)}
+      />
+
+      {activeTab === "brain" ? <ToastHost bottomOffset={96} /> : null}
     </KeyboardAvoidingView>
   );
 }

@@ -19,17 +19,21 @@ export interface UseContextQueryArgs {
     ids?: string[];
     families?: ContextProviderFamily[];
   };
+  providerOptions?: Parameters<typeof queryContext>[0]["providerOptions"];
 }
 
 export function useContextQuery(args: UseContextQueryArgs) {
   const [data, setData] = useState<ContextEngineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const providerIds = args.providers?.ids?.join("\u0000") ?? "";
+  const providerFamilies = args.providers?.families?.join("\u0000") ?? "";
 
   const run = useCallback(async () => {
     const trimmed = args.query.trim();
     if (!trimmed) {
       setData(null);
+      setError(null);
       return null;
     }
     setLoading(true);
@@ -45,7 +49,17 @@ export function useContextQuery(args: UseContextQueryArgs) {
     } finally {
       setLoading(false);
     }
-  }, [args]);
+  }, [
+    args.apiBaseUrl,
+    args.query,
+    args.mode,
+    args.scope,
+    args.depth,
+    args.limit,
+    providerIds,
+    providerFamilies,
+    args.providerOptions,
+  ]);
 
   return {
     data,

@@ -10,6 +10,11 @@ import {
   eq,
   threadTurns,
 } from "../../graphql/utils.js";
+import {
+  applyBrainEnrichmentWorkspaceReview,
+  cancelBrainEnrichmentWorkspaceReview,
+  isBrainEnrichmentReviewPayload,
+} from "../brain/enrichment-apply.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -214,6 +219,49 @@ export async function decideWorkspaceReview(
     return { run, duplicate: true };
   }
 
+  const threadId = run.current_thread_turn_id
+    ? await store.findThreadIdForTurn(run.tenant_id, run.current_thread_turn_id)
+    : null;
+  const isBrainEnrichment = isBrainEnrichmentReviewPayload(
+    latestReviewEvent?.payload,
+  );
+  if (isBrainEnrichment && input.decision !== "resumed") {
+    const timestamp = now();
+    const nextStatus =
+      input.decision === "cancelled" ? "cancelled" : "completed";
+    const updatedRun = await store.updateRun(run.id, run.tenant_id, {
+      status: nextStatus,
+      last_event_at: timestamp,
+      completed_at: timestamp,
+      updated_at: timestamp,
+    });
+    if (!updatedRun) {
+      throw new WorkspaceReviewActionError(
+        "Workspace run update failed",
+        "CONFLICT",
+      );
+    }
+    if (input.decision === "accepted") {
+      await applyBrainEnrichmentWorkspaceReview({
+        payload: latestReviewEvent?.payload,
+        responseMarkdown: input.values?.responseMarkdown,
+        tenantId: run.tenant_id,
+        threadId,
+        turnId: run.current_thread_turn_id,
+        reviewerId: input.actorId,
+      });
+    } else {
+      await cancelBrainEnrichmentWorkspaceReview({
+        payload: latestReviewEvent?.payload,
+        tenantId: run.tenant_id,
+        threadId,
+        turnId: run.current_thread_turn_id,
+        reviewerId: input.actorId,
+      });
+    }
+    return { run: updatedRun, eventId: event.id, duplicate: false };
+  }
+
   const nextStatus = input.decision === "cancelled" ? "cancelled" : "pending";
   const timestamp = now();
   const updatedRun = await store.updateRun(run.id, run.tenant_id, {
@@ -233,9 +281,6 @@ export async function decideWorkspaceReview(
     return { run: updatedRun, eventId: event.id, duplicate: false };
   }
 
-  const threadId = run.current_thread_turn_id
-    ? await store.findThreadIdForTurn(run.tenant_id, run.current_thread_turn_id)
-    : null;
   const wakeup = await store.insertWakeup({
     tenant_id: run.tenant_id,
     agent_id: run.agent_id,
