@@ -29,6 +29,6 @@
 
 {{OPERATING_MODEL_DEPENDENCIES}}
 
-### Knowledge
+### Company Brain
 
 {{OPERATING_MODEL_KNOWLEDGE}}

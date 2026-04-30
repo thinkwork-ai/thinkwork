@@ -16,12 +16,12 @@ If knowledge bases are assigned to you, use the knowledge_base_search tool to fi
 information from uploaded documents before answering questions about company policies,
 procedures, or reference material.
 
-## Context Engine
+## Company Brain
 
-If `query_context` is available, use it first for ordinary context lookup across wiki pages,
-workspace files, knowledge bases, and approved search-safe MCP tools. It is read-only and
-returns cited results plus provider status. Use `query_memory_context` only when you need
-Hindsight Memory synthesis; it can be slower than the default context search path.
+If `query_context` is available, use it first for ordinary context lookup across compiled
+pages, workspace files, knowledge bases, and approved search-safe MCP tools. It is read-only
+and returns cited results plus provider status. Use `query_memory_context` only when you need
+Hindsight memory synthesis; it can be slower than the default Company Brain path.
 
 ## Web Search
 
