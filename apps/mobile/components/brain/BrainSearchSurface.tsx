@@ -14,6 +14,7 @@ import { WikiList } from "@/components/wiki/WikiList";
 import { WikiGraphView } from "@/components/wiki/graph";
 import { rememberBrainMemoryHit } from "@/lib/brain-memory-detail-store";
 import { BrainResultRow } from "./BrainResultRow";
+import { isBrainMemoryHit } from "./resultDisplay";
 import type { BrainMode } from "./types";
 
 interface BrainSearchSurfaceProps {
@@ -41,10 +42,6 @@ function pageRouteForHit(hit: ContextEngineHit): string | null {
   const slug = page?.slug ?? provenance?.slug;
   if (!type || !slug) return null;
   return `/wiki/${encodeURIComponent(type)}/${encodeURIComponent(slug)}`;
-}
-
-function isMemoryHit(hit: ContextEngineHit): boolean {
-  return (hit.sourceFamily ?? hit.family) === "memory";
 }
 
 export function BrainSearchSurface({
@@ -101,7 +98,7 @@ export function BrainSearchSurface({
         return;
       }
 
-      if (isMemoryHit(hit)) {
+      if (isBrainMemoryHit(hit)) {
         rememberBrainMemoryHit(hit);
         router.push(`/brain/memory/${encodeURIComponent(hit.id)}`);
       }
@@ -186,7 +183,7 @@ export function BrainSearchSurface({
                 hit={item}
                 colors={colors}
                 onPress={
-                  pageRouteForHit(item) || isMemoryHit(item)
+                  pageRouteForHit(item) || isBrainMemoryHit(item)
                     ? handlePress
                     : undefined
                 }

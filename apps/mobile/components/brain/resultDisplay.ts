@@ -1,6 +1,20 @@
 import type { ContextEngineHit } from "@thinkwork/react-native-sdk";
 import type { COLORS } from "@/lib/theme";
 
+export function isBrainMemoryHit(hit: ContextEngineHit): boolean {
+  const family = hit.sourceFamily ?? hit.family;
+  const providerId = hit.providerId?.toLowerCase() ?? "";
+  const provenanceLabel = hit.provenance?.label?.toLowerCase() ?? "";
+
+  return (
+    family === "memory" ||
+    providerId === "memory" ||
+    providerId === "hindsight" ||
+    provenanceLabel === "memory" ||
+    provenanceLabel.includes("hindsight")
+  );
+}
+
 export function looksLikeMarkdown(value: string): boolean {
   return (
     /(^|\n)\s{0,3}#{1,6}\s/.test(value) ||

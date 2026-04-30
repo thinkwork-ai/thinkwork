@@ -443,6 +443,7 @@ export default function ThreadsScreen() {
   // Brain-tab search: the footer only emits on explicit submit
   // (Enter or send tap), so no debounce layer is needed here.
   const [brainQuery, setBrainQuery] = useState("");
+  const [brainSearchQuery, setBrainSearchQuery] = useState("");
   const [brainMode, setBrainMode] = useState<BrainMode>("pages");
   const [brainProviders, setBrainProviders] = useState<ContextProviderStatus[]>(
     [],
@@ -454,6 +455,25 @@ export default function ThreadsScreen() {
   const [brainShowLabels, setBrainShowLabels] = useState(false);
   // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
   const [brainFontsLoaded] = useFonts({ Inter: Inter_500Medium });
+
+  const handleBrainQueryChange = useCallback(
+    (next: string) => {
+      setBrainQuery(next);
+      if (brainMode === "search") {
+        setBrainSearchQuery(next);
+      } else if (!next.trim()) {
+        setBrainSearchQuery("");
+      }
+    },
+    [brainMode],
+  );
+
+  const handleBrainModeChange = useCallback((nextMode: BrainMode) => {
+    setBrainMode(nextMode);
+    if (nextMode !== "search") {
+      setBrainSearchQuery("");
+    }
+  }, []);
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(
@@ -947,7 +967,7 @@ export default function ThreadsScreen() {
             <BrainSearchSurface
               apiBaseUrl={resolveApiUrl()}
               mode={brainMode}
-              query={brainQuery}
+              query={brainMode === "search" ? brainSearchQuery : brainQuery}
               tenantId={tenantId}
               userId={currentUser?.id}
               agentId={activeAgent?.id}
@@ -993,11 +1013,9 @@ export default function ThreadsScreen() {
             colors={colors}
             isDark={isDark}
             searchPlaceholder="Search Brain..."
-            onSearchQueryChange={(next) => {
-              setBrainQuery(next);
-            }}
+            onSearchQueryChange={handleBrainQueryChange}
             brainMode={brainMode}
-            onBrainModeChange={setBrainMode}
+            onBrainModeChange={handleBrainModeChange}
           />
         ) : null}
       </View>
