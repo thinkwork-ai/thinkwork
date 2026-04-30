@@ -84,7 +84,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
     ]);
     expect(provider.subAgent).toMatchObject({
       seamState: "live",
-      processModel: "lambda-bedrock-converse",
+      processModel: "deterministic-retrieval",
       toolAllowlist: ["source.read"],
     });
   });
@@ -186,6 +186,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
         metadata: expect.objectContaining({
           sourceAgent: expect.objectContaining({
             retrievalStrategy: "agentic-hybrid-wiki-navigation",
+            processModel: "deterministic-retrieval",
             inspectedPageCount: 1,
             plan: [
               { query: "favorite restarant in Paris", purpose: "original" },
