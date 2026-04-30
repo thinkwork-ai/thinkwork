@@ -6,6 +6,7 @@ import type {
 	ContextEngineScope,
 	ContextProviderResult,
 	ContextProviderStatusState,
+	ContextSourceFamily,
 } from "../types.js";
 
 export interface SubAgentContextProviderConfig {
@@ -15,6 +16,7 @@ export interface SubAgentContextProviderConfig {
 	toolAllowlist: string[];
 	depthCap: number;
 	defaultEnabled?: boolean;
+	sourceFamily?: ContextSourceFamily;
 	timeoutMs?: number;
 	seamState?: "inert" | "live";
 	seam?: SubAgentSeam;
@@ -44,6 +46,7 @@ export function createSubAgentContextProvider(
 	return {
 		id: config.id,
 		family: "sub-agent",
+		sourceFamily: config.sourceFamily,
 		displayName: config.displayName,
 		defaultEnabled: config.defaultEnabled ?? false,
 		supportedScopes: config.supportedScopes ?? ["team", "auto"],

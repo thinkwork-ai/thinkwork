@@ -82,6 +82,44 @@ function ThreadHitlPrompt({
   const actions = workspaceReviewActionsForStatus(review?.run?.status);
   const proposedChanges = (review?.proposedChanges ?? []) as any[];
   const body = String(review?.reviewBody ?? "").trim();
+  const reviewPayload = useMemo(() => reviewPayloadFor(review), [review]);
+  const enrichmentCandidates = useMemo(
+    () => brainEnrichmentCandidates(reviewPayload),
+    [reviewPayload],
+  );
+  const isBrainEnrichment = enrichmentCandidates !== null;
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
+    () => new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
+  );
+  const [enrichmentNote, setEnrichmentNote] = useState("");
+
+  useEffect(() => {
+    if (!isBrainEnrichment) return;
+    setSelectedCandidateIds(
+      new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
+    );
+    setEnrichmentNote("");
+  }, [isBrainEnrichment, review?.run?.id]);
+
+  useEffect(() => {
+    if (!isBrainEnrichment) return;
+    onChangeResponse(
+      JSON.stringify({
+        kind: "brain_enrichment_selection",
+        selectedCandidateIds: [...selectedCandidateIds],
+        note: enrichmentNote.trim() || null,
+      }),
+    );
+  }, [isBrainEnrichment, selectedCandidateIds, enrichmentNote, onChangeResponse]);
+
+  const toggleCandidate = useCallback((candidateId: string) => {
+    setSelectedCandidateIds((current) => {
+      const next = new Set(current);
+      if (next.has(candidateId)) next.delete(candidateId);
+      else next.add(candidateId);
+      return next;
+    });
+  }, []);
 
   return (
     <View
@@ -94,7 +132,7 @@ function ThreadHitlPrompt({
       <View className="flex-row items-center justify-between gap-3">
         <View className="flex-1">
           <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>
-            Agent waiting for confirmation
+            {isBrainEnrichment ? "Review Brain enrichment" : "Agent waiting for confirmation"}
           </Text>
           <Muted className="text-xs" numberOfLines={1}>
             {review?.targetPath || review?.run?.targetPath || "Workspace review"}
@@ -103,7 +141,7 @@ function ThreadHitlPrompt({
         {fetching ? <ActivityIndicator size="small" color="#f59e0b" /> : null}
       </View>
 
-      {body ? (
+      {body && !isBrainEnrichment ? (
         <Text className="mt-2 text-sm" numberOfLines={5} style={{ color: colors.foreground }}>
           {body.replace(/^#+\s*/gm, "").trim()}
         </Text>
@@ -113,7 +151,47 @@ function ThreadHitlPrompt({
         </Muted>
       ) : null}
 
-      {proposedChanges.length > 0 ? (
+      {isBrainEnrichment && enrichmentCandidates ? (
+        <View className="mt-3 gap-2">
+          {enrichmentCandidates.map((candidate) => {
+            const selected = selectedCandidateIds.has(candidate.id);
+            return (
+              <Pressable
+                key={candidate.id}
+                onPress={() => toggleCandidate(candidate.id)}
+                className="flex-row gap-2 rounded-lg px-2.5 py-2"
+                style={{
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(255,255,255,0.72)",
+                  borderWidth: 1,
+                  borderColor: selected ? "#f59e0b" : "transparent",
+                }}
+              >
+                <View className="pt-0.5">
+                  {selected ? (
+                    <CheckSquare size={17} color="#f59e0b" />
+                  ) : (
+                    <Circle size={17} color={colors.mutedForeground} />
+                  )}
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold" style={{ color: colors.foreground }} numberOfLines={1}>
+                    {candidate.title}
+                  </Text>
+                  <Muted className="text-xs" numberOfLines={3}>
+                    {candidate.summary}
+                  </Muted>
+                  <Muted className="mt-1 text-[11px]" numberOfLines={1}>
+                    {sourceFamilyLabel(candidate.sourceFamily)}
+                    {candidate.citation?.label ? ` · ${candidate.citation.label}` : ""}
+                  </Muted>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : proposedChanges.length > 0 ? (
         <View className="mt-3 gap-1.5">
           {proposedChanges.slice(0, 3).map((change, index) => (
             <View key={`${change.path ?? "change"}-${index}`} className="rounded-lg px-2.5 py-2" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.72)" }}>
@@ -129,8 +207,8 @@ function ThreadHitlPrompt({
       ) : null}
 
       <TextInput
-        value={response}
-        onChangeText={onChangeResponse}
+        value={isBrainEnrichment ? enrichmentNote : response}
+        onChangeText={isBrainEnrichment ? setEnrichmentNote : onChangeResponse}
         placeholder="Optional note for the agent"
         placeholderTextColor={colors.mutedForeground}
         multiline
@@ -176,6 +254,40 @@ function ThreadHitlPrompt({
       </View>
     </View>
   );
+}
+
+function parseReviewPayload(payload: unknown): any | null {
+  if (!payload) return null;
+  if (typeof payload === "object") return payload;
+  if (typeof payload !== "string") return null;
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function reviewPayloadFor(review: any): any | null {
+  return (
+    parseReviewPayload(review?.payload) ??
+    parseReviewPayload(review?.latestEvent?.payload) ??
+    parseReviewPayload(
+      (review?.events as any[] | undefined)?.find(
+        (event) => event?.eventType === "review.requested",
+      )?.payload,
+    )
+  );
+}
+
+function brainEnrichmentCandidates(payload: any): any[] | null {
+  if (payload?.kind !== "brain_enrichment_review") return null;
+  return Array.isArray(payload.candidates) ? payload.candidates : [];
+}
+
+function sourceFamilyLabel(sourceFamily?: string | null): string {
+  if (sourceFamily === "WEB") return "Web";
+  if (sourceFamily === "KNOWLEDGE_BASE") return "KB";
+  return "Brain";
 }
 
 function ReviewActionButton({
@@ -526,6 +638,8 @@ export default function ThreadDetailRoute() {
       if (!pendingReviewRunId) return;
       setPendingDecision(decision);
       try {
+        const isBrainEnrichmentReview =
+          reviewPayloadFor(reviewDetail)?.kind === "brain_enrichment_review";
         const input = {
           idempotencyKey: `mobile-${pendingReviewRunId}-${decision}-${Date.now()}`,
           expectedReviewEtag: reviewDetail?.reviewEtag ?? pendingReview?.reviewEtag ?? null,
@@ -540,13 +654,26 @@ export default function ThreadDetailRoute() {
 
         if (result.error) throw result.error;
         setReviewResponse("");
-        if (decision !== "cancel" && threadId) markThreadActive(threadId);
+        if (isBrainEnrichmentReview && threadId) {
+          clearThreadActive(threadId);
+        } else if (decision !== "cancel" && threadId) {
+          markThreadActive(threadId);
+        }
         reexecuteReviews({ requestPolicy: "network-only" });
         refreshReviewDetail();
         reexecuteThread({ requestPolicy: "network-only" });
         reexecuteTurns({ requestPolicy: "network-only" });
         reexecuteMessages({ requestPolicy: "network-only" });
-        Alert.alert("Done", workspaceReviewDecisionToast(decision));
+        Alert.alert(
+          "Done",
+          isBrainEnrichmentReview
+            ? decision === "accept"
+              ? "Brain enrichment applied"
+              : decision === "cancel"
+                ? "Brain enrichment rejected"
+                : "Brain enrichment review resumed"
+            : workspaceReviewDecisionToast(decision),
+        );
       } catch (error: any) {
         Alert.alert(
           "Could not update review",
@@ -560,12 +687,14 @@ export default function ThreadDetailRoute() {
       pendingReviewRunId,
       reviewDetail?.reviewEtag,
       pendingReview?.reviewEtag,
+      reviewDetail,
       reviewResponse,
       executeAcceptReview,
       executeCancelReview,
       executeResumeReview,
       threadId,
       markThreadActive,
+      clearThreadActive,
       reexecuteReviews,
       refreshReviewDetail,
       reexecuteThread,

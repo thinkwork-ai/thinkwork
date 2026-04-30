@@ -19,6 +19,7 @@ export function createWikiSourceAgentContextProvider(options: {
 	return createSubAgentContextProvider({
 		id: "wiki-source-agent",
 		displayName: "Company Brain Page Agent",
+		sourceFamily: "pages",
 		promptRef: "brain/provider/wiki-source-agent",
 		toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
 		depthCap: 2,

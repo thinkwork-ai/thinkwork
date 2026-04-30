@@ -9,6 +9,7 @@ import {
 	IconLayoutRows,
 	IconTopologyStar3,
 } from "@tabler/icons-react-native";
+import { Sparkles } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
 	useWikiBacklinks,
@@ -20,6 +21,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { WikiDetailSubgraph } from "@/components/wiki/graph";
+import { BrainEnrichmentSheet } from "@/components/brain/BrainEnrichmentSheet";
 
 /**
  * Intercept markdown link taps inside a wiki body. Rollup sections are
@@ -112,6 +114,7 @@ export default function WikiPageScreen() {
 	const [viewMode, setViewMode] = useState<"wiki" | "split" | "graph">(
 		"wiki",
 	);
+	const [enrichmentOpen, setEnrichmentOpen] = useState(false);
 
 	const markdownStyles = useMemo(
 		() => buildMarkdownStyles(colors, isDark),
@@ -126,6 +129,7 @@ export default function WikiPageScreen() {
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
 
 	const canToggleGraph = !!page && !!tenantId && !!userId;
+	const canEnrich = !!page && !!tenantId && !!userId && !!process.env.EXPO_PUBLIC_GRAPHQL_URL;
 	const cycleView = () =>
 		setViewMode((m) =>
 			m === "wiki" ? "split" : m === "split" ? "graph" : "wiki",
@@ -137,25 +141,39 @@ export default function WikiPageScreen() {
 				? IconLayoutRows
 				: IconTopologyStar3;
 	const ViewIcon = viewIcon;
-	const headerRight = canToggleGraph ? (
-		<Pressable
-			onPress={cycleView}
-			className="p-2"
-			accessibilityRole="button"
-			accessibilityLabel={
-				viewMode === "wiki"
-					? "Switch to split view"
-					: viewMode === "split"
-						? "Switch to graph view"
-						: "Switch to wiki view"
-			}
-		>
-			<ViewIcon
-				size={22}
-				color={viewMode === "wiki" ? colors.foreground : colors.primary}
-				strokeWidth={2}
-			/>
-		</Pressable>
+	const headerRight = canToggleGraph || canEnrich ? (
+		<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+			{canEnrich ? (
+				<Pressable
+					onPress={() => setEnrichmentOpen(true)}
+					className="p-2"
+					accessibilityRole="button"
+					accessibilityLabel="Enrich page"
+				>
+					<Sparkles size={21} color={colors.foreground} strokeWidth={2} />
+				</Pressable>
+			) : null}
+			{canToggleGraph ? (
+				<Pressable
+					onPress={cycleView}
+					className="p-2"
+					accessibilityRole="button"
+					accessibilityLabel={
+						viewMode === "wiki"
+							? "Switch to split view"
+							: viewMode === "split"
+								? "Switch to graph view"
+								: "Switch to wiki view"
+					}
+				>
+					<ViewIcon
+						size={22}
+						color={viewMode === "wiki" ? colors.foreground : colors.primary}
+						strokeWidth={2}
+					/>
+				</Pressable>
+			) : null}
+		</View>
 	) : undefined;
 
 	const showAnyGraph =
@@ -491,6 +509,18 @@ export default function WikiPageScreen() {
 					</View>
 				)}
 			</ScrollView>
+			{page && tenantId && process.env.EXPO_PUBLIC_GRAPHQL_URL ? (
+				<BrainEnrichmentSheet
+					visible={enrichmentOpen}
+					onClose={() => setEnrichmentOpen(false)}
+					graphqlUrl={process.env.EXPO_PUBLIC_GRAPHQL_URL}
+					tenantId={tenantId}
+					pageId={page.id}
+					pageTitle={page.title}
+					colors={colors}
+					onOpenThread={(threadId) => router.push(`/thread/${threadId}`)}
+				/>
+			) : null}
 		</DetailLayout>
 	);
 }
