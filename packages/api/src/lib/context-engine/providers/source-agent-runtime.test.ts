@@ -141,6 +141,39 @@ describe("source agent runtime", () => {
 		]);
 	});
 
+	it("accepts raw function-call arrays returned by Converse models", async () => {
+		let executed = false;
+		const result = await runSourceAgent({
+			name: "Company Brain Page Agent",
+			system: "Use allowed tools only.",
+			query: "favorite restaurant",
+			tools: [
+				{
+					name: "company-brain.pages.search",
+					description: "Search pages.",
+					async execute() {
+						executed = true;
+						return { observation: { pages: [] }, summary: "0 pages" };
+					},
+				},
+			],
+			allowedTools: ["company-brain.pages.search"],
+			depthCap: 1,
+			model: async () => ({
+				text: `<function_calls>${JSON.stringify([
+					{
+						id: "search-1",
+						tool: "company-brain.pages.search",
+						input: { query: "favorite restaurant Paris" },
+					},
+				])}</function_calls>`,
+			}),
+		});
+
+		expect(executed).toBe(true);
+		expect(result.trace.map((step) => step.type)).toEqual(["model", "tool"]);
+	});
+
 	it("returns an error trace when the model never produces final citations", async () => {
 		const result = await runSourceAgent({
 			name: "Company Brain Page Agent",

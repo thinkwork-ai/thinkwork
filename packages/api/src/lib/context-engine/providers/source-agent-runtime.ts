@@ -455,15 +455,9 @@ function buildUserTurnPrompt(args: {
 }
 
 function parseSourceAgentActionForRetry(text: string): SourceAgentAction {
-	const parsed = parseJsonResponse<SourceAgentAction>(text);
-	if (!parsed || typeof parsed !== "object") {
-		throw new Error("parseJsonResponse: source agent action must be an object");
-	}
-	if (parsed.final) {
-		return parsed;
-	}
-	if (normalizeToolCalls(parsed).length > 0) {
-		return parsed;
+	const action = coerceSourceAgentAction(parseJsonResponse<unknown>(text));
+	if (action) {
+		return action;
 	}
 	throw new Error(
 		"parseJsonResponse: source agent action must include tool_calls or final",
@@ -474,10 +468,8 @@ function parseAction(
 	text: string,
 ): { ok: true; value: SourceAgentAction } | { ok: false; error: string } {
 	try {
-		const parsed = parseJsonResponse<SourceAgentAction>(text);
-		if (!parsed || typeof parsed !== "object") {
-			return { ok: false, error: "model response was not a JSON object" };
-		}
+		const parsed = coerceSourceAgentAction(parseJsonResponse<unknown>(text));
+		if (!parsed) return { ok: false, error: "model response was not an action" };
 		return { ok: true, value: parsed };
 	} catch (err) {
 		return {
@@ -485,6 +477,30 @@ function parseAction(
 			error: `model response was not valid action JSON: ${errorMessage(err)}`,
 		};
 	}
+}
+
+function coerceSourceAgentAction(value: unknown): SourceAgentAction | null {
+	if (!value || typeof value !== "object") return null;
+	if (Array.isArray(value)) {
+		const toolCalls = value.filter(isSourceAgentToolCall);
+		return toolCalls.length ? { tool_calls: toolCalls } : null;
+	}
+	if (isSourceAgentToolCall(value)) {
+		return { tool_calls: [value] };
+	}
+	const action = value as SourceAgentAction;
+	if (action.final || normalizeToolCalls(action).length > 0) {
+		return action;
+	}
+	return null;
+}
+
+function isSourceAgentToolCall(value: unknown): value is SourceAgentToolCall {
+	return (
+		!!value &&
+		typeof value === "object" &&
+		typeof (value as SourceAgentToolCall).tool === "string"
+	);
 }
 
 function normalizeToolCalls(action: SourceAgentAction): SourceAgentToolCall[] {
