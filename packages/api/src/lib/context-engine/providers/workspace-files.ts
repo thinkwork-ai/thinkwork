@@ -255,15 +255,74 @@ function findMatchIndex(
 	if (pathLower.includes(query)) return 0;
 	if (terms.length === 0) return -1;
 
-	const matchesAllTerms = terms.every(
-		(term) => contentLower.includes(term) || pathLower.includes(term),
+	const contentTokens = tokenizeWithPositions(contentLower);
+	const pathTokens = tokenizeWithPositions(pathLower);
+	const termMatches = terms.map((term) =>
+		findTermIndex(term, contentLower, pathLower, contentTokens, pathTokens),
 	);
-	if (!matchesAllTerms) return -1;
+	if (termMatches.some((index) => index < 0)) return -1;
 
-	const contentTermIndexes = terms
-		.map((term) => contentLower.indexOf(term))
-		.filter((index) => index >= 0);
+	const contentTermIndexes = termMatches.filter((index) => index > 0);
 	return contentTermIndexes.length > 0 ? Math.min(...contentTermIndexes) : 0;
+}
+
+type PositionedToken = { token: string; index: number };
+
+function tokenizeWithPositions(text: string): PositionedToken[] {
+	const tokens: PositionedToken[] = [];
+	for (const match of text.matchAll(/[a-z0-9][a-z0-9_-]*/g)) {
+		tokens.push({ token: match[0], index: match.index ?? 0 });
+	}
+	return tokens;
+}
+
+function findTermIndex(
+	term: string,
+	contentLower: string,
+	pathLower: string,
+	contentTokens: PositionedToken[],
+	pathTokens: PositionedToken[],
+): number {
+	const contentExact = contentLower.indexOf(term);
+	if (contentExact >= 0) return contentExact;
+	if (pathLower.includes(term)) return 0;
+
+	const fuzzyContent = findFuzzyToken(term, contentTokens);
+	if (fuzzyContent >= 0) return fuzzyContent;
+	const fuzzyPath = findFuzzyToken(term, pathTokens);
+	return fuzzyPath >= 0 ? 0 : -1;
+}
+
+function findFuzzyToken(term: string, tokens: PositionedToken[]): number {
+	if (term.length < 5) return -1;
+	const maxDistance = term.length <= 7 ? 1 : 2;
+	for (const { token, index } of tokens) {
+		if (Math.abs(token.length - term.length) > maxDistance) continue;
+		if (editDistanceAtMost(term, token, maxDistance)) return index;
+	}
+	return -1;
+}
+
+function editDistanceAtMost(a: string, b: string, maxDistance: number): boolean {
+	if (Math.abs(a.length - b.length) > maxDistance) return false;
+	let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+	for (let i = 1; i <= a.length; i += 1) {
+		const current = [i];
+		let rowMin = current[0];
+		for (let j = 1; j <= b.length; j += 1) {
+			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+			const value = Math.min(
+				previous[j] + 1,
+				current[j - 1] + 1,
+				previous[j - 1] + cost,
+			);
+			current[j] = value;
+			rowMin = Math.min(rowMin, value);
+		}
+		if (rowMin > maxDistance) return false;
+		previous = current;
+	}
+	return previous[b.length] <= maxDistance;
 }
 
 function describeSearch(

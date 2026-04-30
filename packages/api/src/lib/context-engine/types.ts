@@ -129,7 +129,7 @@ export interface ContextProviderDescriptor {
     }>;
     toolAllowlist: string[];
     depthCap: number;
-    processModel: "lambda-bedrock-converse" | "agentcore";
+    processModel: "deterministic-retrieval" | "lambda-bedrock-converse" | "agentcore";
     seamState?: "inert" | "live";
   };
   supportedScopes?: ContextEngineScope[];

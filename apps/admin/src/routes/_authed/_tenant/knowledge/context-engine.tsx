@@ -177,7 +177,10 @@ function SubAgentConfigDetails({
       </div>
 
       <div className="grid gap-2 text-xs sm:grid-cols-2">
-        <ConfigFact label="Process" value={subAgent.processModel} />
+        <ConfigFact
+          label="Process"
+          value={formatSubAgentProcessModel(subAgent.processModel)}
+        />
         <ConfigFact label="Depth cap" value={String(subAgent.depthCap)} />
         <ConfigFact label="Prompt ref" value={subAgent.promptRef} />
         <ConfigFact label="Provider id" value={provider.id} />
@@ -233,6 +236,19 @@ function SubAgentConfigDetails({
       </div>
     </div>
   );
+}
+
+function formatSubAgentProcessModel(processModel: string): string {
+  switch (processModel) {
+    case "deterministic-retrieval":
+      return "Deterministic retrieval seam";
+    case "lambda-bedrock-converse":
+      return "Bedrock Converse model call";
+    case "agentcore":
+      return "AgentCore runtime";
+    default:
+      return processModel;
+  }
 }
 
 function ConfigFact({ label, value }: { label: string; value: string }) {
