@@ -1,11 +1,11 @@
 ---
-title: Admin — Memory
-description: Browse, search, edit, and visualize the memory corpus — AgentCore managed memory and optional Hindsight knowledge-graph records — across one agent or the whole tenant.
+title: Admin — Company Brain Memory
+description: Browse, search, edit, and visualize the memory facet inside Company Brain across one agent or the whole tenant.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Memory tab in Admin Knowledge is the browser and editor for the tenant's memory corpus. It covers both AgentCore managed memory (the default, automatic per-turn retention backed by Aurora) and the optional Hindsight add-on (structured knowledge graph with entities and edges).
+The Memory tab is the raw retained-record view inside [Admin — Company Brain](/applications/admin/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
 
 **Route:** `/knowledge/memory`
 **Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/memory.tsx`
@@ -15,136 +15,81 @@ The legacy `/memory` route redirects to this tab.
 
 ## Layout
 
-The page has four primary controls across the top:
+The page has four primary controls:
 
-- **Agent selector** — dropdown with "All Agents" plus every agent in the tenant. Scopes the view to one agent's namespace or fans out across all agents.
-- **View toggle** — Memories / Knowledge Graph. Only shown when Hindsight is enabled for the tenant.
-- **Search bar** — semantic search across memory content, backed by `MemorySearchQuery`
-- **Refresh** — manual re-fetch
+- **Agent selector** — "All Agents" plus every agent in the tenant. Scopes the view to one agent namespace or fans out across all agents.
+- **View toggle** — Memory / Knowledge Graph. Only shown when Hindsight is enabled.
+- **Search bar** — semantic search across memory content, backed by `MemorySearchQuery`.
+- **Refresh** — manual re-fetch.
 
-Below the controls, the main content area renders either a `DataTable` of memory records or an interactive 3D graph.
+Below the controls, the page renders either a `DataTable` of memory records or an interactive 3D graph.
 
-## Memory records view
+## Memory Records
 
-The table view shows memory records as rows with:
+The table view shows:
 
 | Column | Notes |
 |---|---|
 | Date | When the record was created or last updated |
 | Agent | Which agent produced the record |
-| Type | Strategy badge (semantic, summaries, preferences, episodes, reflections) |
+| Type | Strategy badge: semantic, summary, preference, episode, reflection |
 | Memory | Truncated content preview |
 
-Clicking a row opens a detail sheet on the right with the full record. The sheet renders the content in topic sections — the AgentCore memory format wraps content in `<topic name="...">...</topic>` XML tags, and the admin parser splits on those tags to render each topic as its own section.
+Clicking a row opens a detail sheet with full content, metadata, edit controls, and delete controls. Editing depends on the backend:
 
-### Detail sheet
+- **AgentCore managed memory** — records are immutable by default; the sheet is read-only.
+- **Hindsight** — records can be edited or deleted through `UpdateMemoryRecordMutation` and `DeleteMemoryRecordMutation`.
 
-The sheet shows:
+## Graph View
 
-- Full content, section by section
-- Metadata — confidence score, access count, proof count, tags, bi-temporal dates (created / updated / valid-from / valid-to)
-- Edit button (enables inline edit in a textarea)
-- Delete button (hard delete with confirmation)
-
-Whether edits are permitted depends on the backend:
-
-- **AgentCore managed memory** — records are immutable by default. The Edit button is disabled and the sheet is read-only.
-- **Hindsight** — records are fully editable. Edits fire `UpdateMemoryRecordMutation`; deletes fire `DeleteMemoryRecordMutation`.
-
-The Memory page checks `MemorySystemConfigQuery` at load time to determine which mode the tenant is in and renders the appropriate controls.
-
-## Knowledge Graph view (Hindsight only)
-
-When Hindsight is enabled, the View toggle offers a **Knowledge Graph** mode. The graph renders as a `MemoryGraph` component built on React Force Graph 3D (three.js + d3-force).
-
-Nodes are memory entities — people, companies, locations, concepts — colored by ontology type:
-
-| Type | Color |
-|---|---|
-| Person | Green |
-| Company | Blue |
-| Location | Amber |
-| Concept | Purple |
-| Other | Grey |
-
-Edges are labeled relationships drawn from the underlying knowledge graph. Node size reflects the number of connected edges (`edgeCount`).
-
-The graph supports standard 3D navigation — rotate, zoom, pan — and renders up to several hundred nodes fluidly. When **All Agents** is selected, the page fans out per-agent `MemoryGraphQuery` calls and concatenates the results, namespacing node ids as `${agentId}:${nodeId}` so the same entity can appear once per agent without collision.
+When Hindsight is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). It is useful for seeing clusters and relationships, but the compiled Pages tab is the better operator view for durable Company Brain knowledge.
 
 <Aside type="note">
-The graph view is non-interactive for drill-in. Node clicks fire the underlying Force Graph library's click handler but the page does not currently route anywhere in response. A future enhancement would open the detail sheet for the clicked node's underlying memory record.
+The graph view is a memory-backend inspection tool. It is not the full Company Brain graph: compiled pages, aliases, links, and source citations live in the Pages surface.
 </Aside>
-
-## Semantic search
-
-The search bar fires `MemorySearchQuery` with the current agent scope and the query string. Results are scored and returned in descending relevance. The table then displays the scored results in the same layout, so the operator can move between browse and search without a mode switch.
-
-Search works across AgentCore and Hindsight uniformly — the backend resolver dispatches to the right store based on tenant config.
-
-## GraphQL queries
-
-| Query / Mutation | Purpose |
-|---|---|
-| `AgentsListQuery` | Populate the agent selector |
-| `MemoryRecordsQuery($assistantId, $namespace)` | Fetch memory records for a single agent |
-| `MemorySearchQuery($assistantId, $query, $limit)` | Semantic search |
-| `MemorySystemConfigQuery` | Runtime check: `hindsightEnabled`, `managedMemoryEnabled` |
-| `MemoryGraphQuery($assistantId)` | Nodes and edges for the 3D graph view |
-| `UpdateMemoryRecordMutation($memoryRecordId, $content)` | Edit a record |
-| `DeleteMemoryRecordMutation($memoryRecordId)` | Delete a record |
 
 ## Workflows
 
-### Audit what an agent remembers
+### Audit What an Agent Remembers
 
-1. Open `/knowledge/memory`
-2. Pick the agent from the selector
-3. Scroll or search the record list
-4. Click a row to read the full content
-5. If something needs correction and the tenant has Hindsight enabled, edit in the sheet and save
-6. Delete stale records the agent should forget
+1. Open `/knowledge/memory`.
+2. Pick the agent from the selector.
+3. Scroll or search the record list.
+4. Click a row to read the full content.
+5. If the tenant has Hindsight enabled, edit or delete stale records from the sheet.
 
-### Inspect a cross-agent relationship
+### Debug Company Brain Results
 
-1. Select **All Agents**
-2. Switch to Knowledge Graph view (Hindsight only)
-3. Look for nodes that appear under multiple agents (the `${agentId}:${nodeId}` namespacing keeps them separate visually but placed near each other)
-4. Rotate the 3D graph to see clusters
+1. Run the query from `/knowledge/context-engine` in the Sources tab.
+2. If a memory hit looks wrong, open `/knowledge/memory`.
+3. Search for the same term or filter to the agent.
+4. Inspect the raw record and backend metadata.
 
-### Seed an agent with canonical context
+### Delete Sensitive Memory
 
-1. Pick the agent
-2. In the detail sheet, click "New record" (Hindsight only)
-3. Enter topic sections for things you want the agent to always know: identity, preferences, operating constraints
-4. Save
+1. Search for the sensitive term.
+2. Click into each matching record.
+3. Delete one by one from the detail sheet.
 
-### Delete sensitive memory
+Deletes are hard deletes. For bulk redaction, operate at the SQL layer with a reviewed script.
 
-1. Search for the sensitive term
-2. Click into any matching records
-3. Delete one by one from the detail sheet
+## Data Model
 
-Because delete is hard-delete, this is irreversible. For bulk sensitive-term redaction, use the SQL layer directly.
+- **AgentCore managed memory** — Aurora `memory_records` table with strategy, namespace, content, tags, confidence, access count, and bi-temporal dates.
+- **Hindsight graph** — separate Hindsight-managed entities, relationships, and facts surfaced through `MemoryGraphQuery`.
+- **Namespaces** — records are namespaced by strategy and agent; prefixes such as `semantic_`, `preferences_`, and `episodes_` identify the retention strategy.
 
-## Data model
+## Known Limits
 
-- **AgentCore managed memory** — Aurora `memory_records` table with columns for id, agent_id, strategy, namespace, content, tags, confidence, access_count, created_at, updated_at, valid_from, valid_to
-- **Hindsight knowledge graph** — separate Aurora tables for entities, relationships, and facts; queried through `MemoryGraphQuery` which wraps the underlying Hindsight service
-- **Namespaces** — memory records are namespaced by strategy and agent; `namespace` prefixes like `semantic_`, `preferences_`, `episodes_` identify which strategy produced the record
-
-## Known limits
-
-- **Multi-agent "all" is a client-side fan-out.** The GraphQL resolver's "all" branch doesn't work under Google OAuth because the JWT claims don't include the tenant claim it expects. The admin UI fans out per-agent queries instead. This scales to dozens of agents, not thousands.
-- **AgentCore records are read-only.** Editing is only available when Hindsight is enabled. For AgentCore-only tenants, the Memory page is effectively a browser, not an editor.
-- **Graph view lacks drill-in.** Clicking a node does not open a detail sheet or route anywhere.
-- **Search is semantic-only.** There is no exact-match filter for strings like IDs; the semantic path will find similar content but not necessarily the exact hit.
+- **All-agents graph is a client-side fan-out.** It scales to dozens of agents, not thousands.
+- **AgentCore records are read-only.** Editing is only available when Hindsight is enabled.
+- **Graph view lacks drill-in.** Clicking a node does not open a detail sheet.
+- **Search is semantic-only.** It can miss exact IDs or unusual strings.
 - **No bulk edit or bulk delete.** Every mutation is one record at a time.
 
-## Related pages
+## Related Pages
 
-- [Knowledge](/applications/admin/knowledge/) — the combined Admin surface for Memory, Wiki, Knowledge Bases, and Context Engine
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — the Bedrock KB tab behavior: manually-curated documents for retrieval
-- [Agents — Memory tab](/applications/admin/agents/#memory) — the per-agent version of this page
-- [Memory (concept)](/concepts/knowledge/) — the product model
-- [Long-term Memory](/concepts/knowledge/memory/) — the memory lifecycle
-- [Knowledge Graph Direction](/concepts/knowledge/knowledge-graph/) — future direction for structured memory
+- [Admin — Company Brain](/applications/admin/knowledge/) — the combined operator surface
+- [Company Brain](/concepts/knowledge/) — the product model
+- [Memory Facet](/concepts/knowledge/memory/) — memory contract and backend behavior
+- [Compiled Pages](/concepts/knowledge/compounding-memory/) — how memory becomes durable pages

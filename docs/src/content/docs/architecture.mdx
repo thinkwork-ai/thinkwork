@@ -17,7 +17,7 @@ Every resource lives in your AWS account. There is no shared infrastructure, no 
 
 ## The harness mechanics
 
-A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Memory, Agents, Connectors, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
+A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Company Brain, Agents, Connectors, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
 
 <Aside type="tip">
   The "harness" framing comes from the [Definitive Guide to Harness Engineering](https://www.harnessengineering.com/) (Mitchell Hashimoto, 2026). The metaphor: a state-of-the-art model is a powerful but directionless wild horse; the harness is the reins, bit, and bridle that make its power useful. ThinkWork's job is the harness — the engineered structure between your inputs and the model's output that turns potential into reliable, governable work. The rest of this page assumes that frame.
@@ -29,18 +29,18 @@ Every agent turn in ThinkWork follows the same four-phase cycle: **Perception, P
 
 ```mermaid
 flowchart LR
-  P[Perception<br/><span style="font-size:11px">Thread + Memory + tool catalog</span>] --> Pl[Planning<br/><span style="font-size:11px">Model invocation in AgentCore</span>]
+  P[Perception<br/><span style="font-size:11px">Thread + Company Brain + tool catalog</span>] --> Pl[Planning<br/><span style="font-size:11px">Model invocation in AgentCore</span>]
   Pl --> A[Action<br/><span style="font-size:11px">Tool calls, sandbox execution, replies</span>]
   A --> F[Feedback<br/><span style="font-size:11px">Turn record, cost, evals, audit</span>]
   F -.->|next turn| P
 ```
 
-- **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, retrieved memory, the tool catalog, the current channel context. This is what Threads + Memory + Connectors produce together — a structured snapshot the model reasons over.
+- **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, Company Brain context, the tool catalog, and current channel context. This is what Threads + Company Brain + Connectors produce together — a structured snapshot the model reasons over.
 - **Planning.** The model (via the selected AgentCore runtime on Bedrock) decides what to do next. ThinkWork doesn't replace the model's reasoning; it bounds the inputs and channels the outputs.
 - **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through connectors). Every action is captured as it happens.
 - **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the *next* turn perceives — and what an operator reads after the fact.
 
-The four phases are why the docs structure the components the way it does: Threads + Memory + Connectors are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
+The four phases are why the docs structure the components the way it does: Threads + Company Brain + Connectors are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
 
 ### The four operating guarantees
 
@@ -63,7 +63,7 @@ That separation is what makes turns reproducible (re-run a turn against a differ
 
 ### The conceptual model maps onto the harness
 
-The conceptual model below — Threads, Memory, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
+The conceptual model below — Threads, Company Brain, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
 
 ## System model
 
@@ -74,7 +74,7 @@ External systems and users
     ↓
 Threads
     ↓
-Memory
+Company Brain
     ↓
 Agents
     ↓
@@ -87,9 +87,9 @@ Threads are the durable record of work. User chats, connector events, emails, an
 
 See [Threads](/concepts/threads/).
 
-### Memory
+### Company Brain
 
-Memory is the context layer. It determines what gets surfaced into the current turn beyond the latest message, and over time it should be portable through a ThinkWork-owned contract rather than defined by any one backend.
+Company Brain is the context layer. It determines what gets surfaced into the current turn beyond the latest message, and over time it should be portable through a ThinkWork-owned contract rather than defined by any one backend.
 
 In the current open source app, that mainly means:
 
@@ -100,7 +100,7 @@ In the current open source app, that mainly means:
 
 The default long-term memory setup includes semantic, summarization, user-preference, and episodic strategies.
 
-See [Memory](/concepts/knowledge/).
+See [Company Brain](/concepts/knowledge/).
 
 ### Agents
 
@@ -286,7 +286,7 @@ EventBridge scheduled rule (cron)
 This split is useful to keep in mind:
 
 - **Threads** preserve the canonical record of work in Aurora
-- **Memory** combines persisted sources like documents and memories with retrieval-time assembly
+- **Company Brain** combines persisted sources like documents and memories with retrieval-time assembly
 - **Agents** are mostly stateless between invocations aside from their configuration
 - **Connectors** store credentials and integration configuration, but the resulting work still lands in threads
 

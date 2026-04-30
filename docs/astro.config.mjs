@@ -107,36 +107,36 @@ export default defineConfig({
               ],
             },
             {
-              label: "Memory",
+              label: "Company Brain",
               collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/knowledge" },
                 {
-                  label: "Document Knowledge",
+                  label: "Sources and Knowledge Bases",
                   slug: "concepts/knowledge/document-knowledge",
                 },
                 {
-                  label: "Long-term Memory",
+                  label: "Memory Facet",
                   slug: "concepts/knowledge/memory",
                 },
                 {
-                  label: "Compounding Memory",
+                  label: "Compiled Pages",
                   slug: "concepts/knowledge/compounding-memory",
                 },
                 {
-                  label: "Compounding Memory: Pipeline",
+                  label: "Compile Pipeline",
                   slug: "concepts/knowledge/compounding-memory-pipeline",
                 },
                 {
-                  label: "Compounding Memory: Pages",
+                  label: "Page Model",
                   slug: "concepts/knowledge/compounding-memory-pages",
                 },
                 {
-                  label: "Retrieval and Context",
+                  label: "Source Routing",
                   slug: "concepts/knowledge/retrieval-and-context",
                 },
                 {
-                  label: "Knowledge Graph Direction",
+                  label: "Graph Direction",
                   slug: "concepts/knowledge/knowledge-graph",
                 },
               ],
@@ -206,7 +206,7 @@ export default defineConfig({
                 { label: "Connectors", slug: "guides/connectors" },
                 { label: "Evaluations", slug: "guides/evaluations" },
                 {
-                  label: "Operating Compounding Memory",
+                  label: "Operating Compiled Pages",
                   slug: "guides/compounding-memory-operations",
                 },
               ],
@@ -222,7 +222,8 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { label: "GraphQL Schema", slug: "api/graphql" },
-                { label: "Compounding Memory", slug: "api/compounding-memory" },
+                { label: "Compiled Pages", slug: "api/compounding-memory" },
+                { label: "Company Brain Context", slug: "api/context-engine" },
               ],
             },
             {
@@ -325,7 +326,14 @@ export default defineConfig({
                       label: "Manage",
                       collapsed: true,
                       items: [
-                        { label: "Memory", slug: "applications/admin/memory" },
+                        {
+                          label: "Company Brain",
+                          slug: "applications/admin/knowledge",
+                        },
+                        {
+                          label: "Memory Facet",
+                          slug: "applications/admin/memory",
+                        },
                         {
                           label: "Knowledge Bases",
                           slug: "applications/admin/knowledge-bases",

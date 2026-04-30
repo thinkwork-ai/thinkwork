@@ -1,110 +1,115 @@
 ---
-title: Memory
-description: The harness-owned context layer for ThinkWork agents — document retrieval, long-term memory, and the compounding-memory wiki, all above a stable contract.
+title: Company Brain
+description: The harness-owned context substrate for ThinkWork agents — memory, compiled pages, knowledge bases, workspace files, and approved tools behind one inspectable layer.
 ---
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-Memory is the harness's context-management layer — how ThinkWork carries useful context forward without treating any one backend as the product. On every turn (the [Perception phase of PPAF](/architecture/#the-ppaf-agent-loop)), Memory decides what an agent should see *beyond* the latest user message: which documents to pull, which prior facts to recall, which entity pages from the agent's own wiki to surface, and how to weave all of that into the model's context window. Reliability lives here too — the contract above pluggable engines is what lets you swap from AgentCore managed memory to Hindsight without rewriting the agents that consume it.
+Company Brain is the context substrate agents use before they act. It is not a single database, vector index, or chat-history trick. It is the ThinkWork-owned layer that decides what an agent should know for the current turn, where each fact came from, how fresh it is, and whether it is durable enough to carry forward.
 
 The clean model is:
 
-- **Threads** keep the full record of work.
-- **Memory** decides what context should carry forward into the current turn.
-- **Agents** act on that assembled context.
+- **Threads** keep the complete record of work.
+- **Company Brain** assembles the context that should matter now.
+- **Agents** reason and act using that assembled context.
 
-That means Memory is not just document retrieval (RAG), and not just long-term recall. It's the harness-owned context layer above whatever retrieval and memory engines we happen to use.
+That distinction matters. Threads answer "what happened?" Company Brain answers "what should the agent know before it responds or takes action?"
 
-## Why we frame it this way
+## What It Contains
 
-Most agent systems conflate three different things — document retrieval, long-term memory, and turn assembly — and pick one backend as "the memory product." That's convenient in the short term and painful in the long term:
-
-- When the backend changes, every agent's behavior changes.
-- When a new context source appears (a wiki, a graph, a new embedding model), the system has no seam to plug it in without rewriting.
-- When compliance asks "what did this agent know at the moment it made that decision," the answer depends on which backend is "memory" today.
-
-ThinkWork picks the other design. There's a stable memory contract owned by the harness. Underneath, engines come and go — Hindsight, AgentCore Memory, Bedrock Knowledge Bases, the compounding-memory wiki. Above, agents and tools see one interface.
-
-## The three layers
-
-Memory in ThinkWork spans three concerns. They are distinct; they don't collapse into "memory == KB" or "memory == chat history."
+Company Brain is an umbrella over several source families. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
 
 <CardGrid>
-  <Card title="Document Knowledge" icon="open-book">
-    Uploaded source material — policies, runbooks, reference docs — made retrievable at turn time via Bedrock Knowledge Bases (pgvector under the hood).
+  <Card title="Memory" icon="seti:bookmark">
+    Durable facts, preferences, and observations retained from prior work. Hindsight and AgentCore Memory are adapter implementations below the ThinkWork memory contract.
   </Card>
-  <Card title="Long-term Memory" icon="seti:bookmark">
-    Facts and preferences learned from prior work, held in an adapter-agnostic contract. Hindsight is the hosted default; AgentCore Memory is the serverless-friendly alternative.
+  <Card title="Pages" icon="graph">
+    Compiled Company Brain pages: entity, topic, and decision pages distilled from memory records and source citations.
   </Card>
-  <Card title="Compounding Memory" icon="graph">
-    Raw memories continuously compiled into a navigable wiki of entity and topic pages — the system's deeper, structured answer to "what does this agent know?"
+  <Card title="Knowledge Bases" icon="open-book">
+    Operator-curated documents backed by Bedrock Knowledge Bases and Aurora pgvector. Best for policies, runbooks, product docs, and other authored source material.
   </Card>
-  <Card title="Retrieval and Context" icon="search">
-    How thread history, retrieved documents, recalled memories, and wiki pages come together inside a single turn's context window.
+  <Card title="Workspace Files" icon="file">
+    Permissioned files from an agent workspace, template workspace, or tenant defaults.
+  </Card>
+  <Card title="Approved MCP Tools" icon="setting">
+    Read-only, search-safe external tools that an admin has explicitly allowed to participate in context lookup.
+  </Card>
+  <Card title="Source Routing" icon="search">
+    The internal `query_context` contract that fans out to eligible sources and returns normalized hits plus per-source status.
   </Card>
 </CardGrid>
 
-### How the layers relate
+## Why It Exists
 
-A single agent turn, at a glance:
+Most agent systems expose memory, RAG, workspace search, and external search as separate tools. That makes agents choose implementation details mid-turn and makes operators debug the wrong layer: was the answer bad because the memory engine missed, the KB was stale, or the agent never called the right tool?
+
+Company Brain puts those sources behind one product boundary:
+
+- operators can inspect and test the sources together;
+- agents can ask for context without hard-coding every backend;
+- every hit carries provenance, source family, rank, freshness, and provider status;
+- backend choices can change without changing the product story.
+
+## How a Turn Uses Company Brain
+
+At turn time, Company Brain can assemble context from recent thread history, memory recall, compiled pages, knowledge-base chunks, workspace files, and approved MCP tools. The router ranks and budgets those results before the model sees them.
 
 ```
 User message arrives in a thread
         │
         ▼
-  Context assembly (the Memory layer)
+  Company Brain source routing
         │
-        ├─ Recent thread history (windowed)
-        ├─ Long-term memory recall (Hindsight / AgentCore Memory)
-        ├─ Document retrieval (Bedrock KB)
-        ├─ Compounding-memory wiki pages (when the agent has one)
+        ├─ Recent thread history
+        ├─ Memory recall
+        ├─ Compiled pages
+        ├─ Knowledge-base chunks
+        ├─ Workspace files
+        └─ Approved MCP search tools
         │
         ▼
-  Assembled context → Bedrock model
+  Assembled context → model/runtime
         │
         ▼
-  Response + tool calls → back into the thread
+  Response + tool calls → thread
 ```
 
-Every layer is optional per agent. A focused chatbot may use only document knowledge. A long-running research agent adds long-term memory. An agent that lives in a rich workspace (a user's inbox, a product's Slack) uses all four. The harness handles the assembly without each agent's author wiring the pieces by hand.
+Every source is optional. A focused support bot may only need a knowledge base. A long-running sales agent may use memory, compiled customer pages, workspace files, and approved operational search tools.
 
-## The adapter story
+## Trust and Provenance
 
-For long-term memory specifically, ThinkWork supports two adapters, and exactly one is canonical per deployment:
+Company Brain treats source trust as a product concern, not a prompt afterthought.
 
-- **[Hindsight](https://hindsight.vectorize.io/)** — the default for hosted ThinkWork. Runs as an ECS service in your VPC, offers semantic search, entity extraction, and reflection primitives. Richer, slightly heavier.
-- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)** — the default for serverless-friendly deployments. Four built-in strategies (semantic, summarization, user-preference, episodic) with per-turn auto-retention. Thinner, no persistent service to run.
-
-Both adapters implement the same memory contract the harness exposes. Swapping adapters swaps engines; it does not swap APIs for tools, agents, or the compounding-memory pipeline built on top.
+- **Authored knowledge** comes from operator-managed documents and keeps file/chunk citations.
+- **Memory** comes from prior work and keeps adapter/source references.
+- **Compiled pages** summarize many source facts and keep page-section provenance.
+- **External MCP hits** are transient unless a separate workflow promotes them.
+- **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
 
 <Aside type="note">
-  Short-term context still comes from thread history. Long-term memory should never masquerade as the thread record — the thread is always the canonical history of what happened.
+The internal Context Engine service and `query_context` tool are still the developer contract behind Company Brain source routing. Product-facing docs use Company Brain; API reference docs still name the exact contract developers call.
 </Aside>
 
-## Where compounding memory fits
+## Admin Surface
 
-The compounding-memory layer is the newest and most distinctive piece. It sits *above* the long-term memory adapter: raw memory records flow from Hindsight (or AgentCore Memory, when that path matures) into a compile pipeline that produces a continuously-updated wiki of entity and topic pages.
+In Admin, Company Brain lives at `/knowledge` and has four tabs:
 
-That wiki is not an index of memory; it's a derived, structured view of what the agent has learned. A memory record about "dinner at Franklin Barbecue" contributes to a Franklin Barbecue page (entity) and an Austin Restaurants page (topic hub). Agents read the wiki at recall time — often faster and more targeted than raw memory search — and operators browse it in the admin app to see what an agent actually knows.
+| Tab | Purpose |
+|---|---|
+| Memory | Browse, search, edit, and visualize retained memory records |
+| Pages | Inspect compiled Company Brain pages and graph/search output |
+| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status |
+| Sources | Configure and verify the provider layer used by `query_context` |
 
-This is the main reason memory in ThinkWork is framed as its own layer, not an implementation detail of an engine. The wiki works on top of Hindsight today; it will work on top of any adapter that implements the same recall contract.
+The route path still says `/knowledge` for compatibility, but the visible module name is Company Brain.
 
-## Related pages
+## Related Pages
 
-- [Document Knowledge](/concepts/knowledge/document-knowledge/) — uploaded source material, Bedrock Knowledge Bases, pgvector
-- [Long-term Memory](/concepts/knowledge/memory/) — the adapter contract, Hindsight vs. AgentCore Memory
-- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the wiki overview and when to turn it on
-- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — the leaf + aggregation compile passes in detail
-- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the page and link data model
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how the four sources are assembled at turn time
-- [Knowledge Graph Direction](/concepts/knowledge/knowledge-graph/) — what's shipped today vs. where structured memory is headed
-- [Operating Compounding Memory](/guides/compounding-memory-operations/) — hands-on recipes for running the wiki
-
-## Read this section in order
-
-If you're new to the memory model, read in this order:
-
-1. **Document Knowledge** — the easy entry point; most readers already have a mental model for RAG.
-2. **Long-term Memory** — the contract over adapters; why the harness owns this layer.
-3. **Compounding Memory** — what makes ThinkWork's memory distinctive.
-4. **Retrieval and Context** — how they all come together at turn time.
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and Bedrock KBs
+- [Memory Facet](/concepts/knowledge/memory/) — retained facts and memory backends
+- [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
+- [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
+- [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) — how `query_context` assembles source hits
+- [Admin — Company Brain](/applications/admin/knowledge/) — operator workflows

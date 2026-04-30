@@ -115,7 +115,7 @@ const TOOLS = [
   {
     name: "query_wiki_context",
     description:
-      "Search only Thinkwork Compounding Wiki pages. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory.",
+      "Search only compiled Company Brain pages. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -132,7 +132,7 @@ const TOOLS = [
   {
     name: "list_context_providers",
     description:
-      "List Context Engine provider families available through ThinkWork Brain.",
+      "List Company Brain source families available through ThinkWork Brain.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -142,7 +142,7 @@ const TOOLS = [
   {
     name: "get_agent_context_policy",
     description:
-      "Admin-only read model explaining the effective Context Engine policy for one Thinkwork agent.",
+      "Admin-only read model explaining the effective Company Brain policy for one Thinkwork agent.",
     inputSchema: {
       type: "object",
       properties: {
@@ -155,7 +155,7 @@ const TOOLS = [
   {
     name: "update_context_provider_setting",
     description:
-      "Admin-only update for tenant built-in Context Engine provider eligibility, defaults, and provider-specific config.",
+      "Admin-only update for tenant built-in Company Brain source eligibility, defaults, and provider-specific config.",
     inputSchema: {
       type: "object",
       properties: {
@@ -353,8 +353,8 @@ async function handleToolCall(
           {
             type: "text",
             text: policy.enabled
-              ? `Context Engine uses ${policy.finalProviders.length} provider(s).`
-              : "Context Engine is disabled for this agent.",
+              ? `Company Brain uses ${policy.finalProviders.length} provider(s).`
+              : "Company Brain is disabled for this agent.",
           },
         ],
       });

@@ -3,7 +3,7 @@ title: ThinkWork
 description: The open Agent Harness for Business — production-grade AI work, on the AWS account you own.
 template: splash
 hero:
-  tagline: ThinkWork is the open Agent Harness for Business — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap either with services. Threads carry the work, memory carries the context, agents do the work, connectors bring in the world, automations time the work, and controls keep it accountable — all inside the AWS account your team already runs.
+  tagline: ThinkWork is the open Agent Harness for Business — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap either with services. Threads carry the work, Company Brain carries the context, agents do the work, connectors bring in the world, automations time the work, and controls keep it accountable — all inside the AWS account your team already runs.
   actions:
     - text: Getting Started
       link: /getting-started/
@@ -19,7 +19,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What ThinkWork is
 
-ThinkWork is **the open Agent Harness for Business** — a Terraform module that stands up a production-grade agent runtime inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with agent state in your Aurora cluster. The harness — Threads, Memory, Agents, Connectors, Automations, Control — is what's opinionated; the infrastructure is yours. Reliability, Efficiency, Security, and Traceability are built into the runtime, not bolted on as an afterthought.
+ThinkWork is **the open Agent Harness for Business** — a Terraform module that stands up a production-grade agent runtime inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with agent state in your Aurora cluster. The harness — Threads, Company Brain, Agents, Connectors, Automations, Control — is what's opinionated; the infrastructure is yours. Reliability, Efficiency, Security, and Traceability are built into the runtime, not bolted on as an afterthought.
 
 If ThinkWork the company disappears tomorrow, your deployment keeps working.
 
@@ -48,7 +48,7 @@ These docs are organized into four branches, each answering a different question
     Start here. The harness mechanics — PPAF agent loop, the four operating guarantees, deployment topology, and how the six components fit together. [Read more →](/architecture/)
   </Card>
   <Card title="Components" icon="puzzle">
-    The six components of the harness — Threads, Agents, Memory, Connectors, Automations, and Control. Each page follows the same skeleton: why, what, how to configure, common patterns. [Read more →](/concepts/threads/)
+    The six components of the harness — Threads, Agents, Company Brain, Connectors, Automations, and Control. Each page follows the same skeleton: why, what, how to configure, common patterns. [Read more →](/concepts/threads/)
   </Card>
   <Card title="Configure" icon="setting">
     Runbooks for standing the harness up and tuning it — deploy paths (greenfield AWS, BYO infrastructure, configuration reference) and authoring guides for skill packs, connectors, evaluations, and compounding memory operations. [Read more →](/deploy/greenfield/)
@@ -69,8 +69,8 @@ Every concept page in these docs follows the same skeleton: **why** the componen
   <Card title="Threads" icon="document">
     The harness's perception and history layer. Every conversation, task, automation, and connector event lands in a thread with history and audit trail. [Read more →](/concepts/threads/)
   </Card>
-  <Card title="Memory" icon="open-book">
-    The harness's context-management layer. Document knowledge, long-term memory, retrieval context, and portable memory contracts above any one backend. [Read more →](/concepts/knowledge/)
+  <Card title="Company Brain" icon="open-book">
+    The harness's context layer: memory, compiled pages, knowledge bases, workspace files, approved tools, and source routing above any one backend. [Read more →](/concepts/knowledge/)
   </Card>
   <Card title="Connectors" icon="puzzle">
     The harness's I/O surface. External channels, events, and tools — Slack, GitHub, Google Workspace integrations plus MCP tools for remote capabilities. [Read more →](/concepts/connectors/)
@@ -99,4 +99,4 @@ Five commands, one AWS account, and you own a production-grade Agent Harness —
 
 If you'd rather not run the runtime yourself, [ThinkWork for Business](https://thinkwork.ai/cloud) is the same harness operated by us, and [ThinkWork Enterprise](https://thinkwork.ai/services) wraps either with services.
 
-If you're new to ThinkWork, read the Concepts section in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Memory](/concepts/knowledge/), then [Connectors](/concepts/connectors/).
+If you're new to ThinkWork, read the Concepts section in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Company Brain](/concepts/knowledge/), then [Connectors](/concepts/connectors/).

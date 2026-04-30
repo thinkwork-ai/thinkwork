@@ -1,20 +1,22 @@
 ---
-title: Retrieval and Context
-description: How thread history, document retrieval, long-term memory recall, and the compounding-memory wiki come together at turn time — with the token budget tradeoffs that matter when you're tuning it.
+title: Source Routing
+description: How thread history, knowledge bases, memory, compiled pages, workspace files, and approved tools come together through Company Brain at turn time.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, the harness assembles context from up to four sources, budgets them against the model's context window, and decides what to include vs. truncate. This page is about that assembly. Context assembly is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop) — the moment the harness decides what the model gets to see — and the **Efficiency** operating guarantee lives here in concrete form: every assembled context is bounded by an explicit token budget, ranked for relevance, and trimmed before the call. The model never sees unbudgeted context; the operator never sees a turn whose cost was hidden by lazy assembly.
+A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, Company Brain assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
 
-## The four sources
+## Source families
 
 Any given turn can draw from:
 
 - **Thread history.** The recent conversation in this thread — prior user messages, agent responses, tool calls, and their outputs. This is the short-term context.
-- **Document knowledge.** Chunks retrieved from the agent's assigned knowledge bases at the start of the turn, based on semantic similarity to the user's message.
-- **Long-term memory.** Facts and preferences recalled from the agent's memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
-- **Compounding-memory wiki.** When the agent has a wiki compiled, relevant entity and topic pages surface through the wiki-recall tool — typically faster and more targeted than raw memory search.
+- **Knowledge bases.** Chunks retrieved from assigned Bedrock Knowledge Bases, based on semantic similarity to the user's message.
+- **Memory.** Facts and preferences recalled from the memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
+- **Compiled pages.** Relevant entity, topic, and decision pages produced by the Company Brain compile pipeline.
+- **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
+- **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
 
 Not every source feeds every turn. A focused chatbot may use only thread history + document knowledge. A long-running research agent adds memory. An agent deeply embedded in a user's workspace uses all four.
 
@@ -44,7 +46,7 @@ the system prompt, tool definitions, and response.
 Assembled context → Bedrock converse call
 ```
 
-All four queries run in parallel. Whichever is slowest sets the turn's baseline latency — usually document retrieval (Bedrock KB) or long-term memory recall. Wiki recall is fast (a single structured query against `wiki_pages` + `wiki_page_sections`).
+Source queries run in parallel. Whichever is slowest sets the turn's baseline latency — usually Bedrock KB retrieval or memory recall. Compiled page lookup is fast (a single structured query against `wiki_pages` + `wiki_page_sections`).
 
 ## Token budget tradeoffs
 
@@ -89,14 +91,14 @@ Long-term memory should never masquerade as the thread record. If an operator as
 
 - **No runtime introspection of what was assembled.** The admin thread detail shows the final context shape for a turn (which KB returned which chunks, which memories were recalled), but modifying the assembly mid-turn isn't possible. Tune at the template level and re-run.
 - **Budgeting is heuristic.** The harness approximates token counts; the model's tokenizer is authoritative. A turn that appears to fit the budget can still truncate if the estimate is off by a few percent. Keep headroom.
-- **Wiki recall is optional per-invocation.** If the wiki compile is behind (the compile job hasn't caught up to the agent's latest memories), the wiki-recall tool returns older content. Operators can force a compile if this matters.
+- **Compiled page recall is optional per-invocation.** If the compile job is behind, compiled page lookup returns older content. Operators can force a compile if this matters.
 
 ## Related pages
 
-- [Memory (overview)](/concepts/knowledge/) — the umbrella
-- [Document Knowledge](/concepts/knowledge/document-knowledge/) — the retrieval source
-- [Long-term Memory](/concepts/knowledge/memory/) — the recall source
-- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the wiki source
+- [Company Brain](/concepts/knowledge/) — the umbrella
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
+- [Memory Facet](/concepts/knowledge/memory/) — the recall source
+- [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow
 
 ## Under the hood

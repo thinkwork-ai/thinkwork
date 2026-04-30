@@ -51,6 +51,7 @@ import {
   type ContextQueryResult,
 } from "@/lib/context-engine-api";
 import { useTenant } from "@/context/TenantContext";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { Switch } from "@/components/ui/switch";
 import { ContextEngineSubAgentPanel } from "@/components/ContextEngineSubAgentPanel";
 import {
@@ -78,7 +79,7 @@ const FAMILY_ICONS = {
 
 const FAMILY_LABELS: Record<string, string> = {
   memory: "Memory",
-  wiki: "Wiki",
+  wiki: "Pages",
   "knowledge-base": "Knowledge Base",
   workspace: "Workspace",
   mcp: "MCP",
@@ -177,6 +178,10 @@ function ProviderStatusBadge({
 
 function ContextEnginePage() {
   const { tenantId } = useTenant();
+  useBreadcrumbs([
+    { label: "Company Brain", href: "/knowledge/memory" },
+    { label: "Sources" },
+  ]);
   const [providers, setProviders] = useState<ContextProviderSummary[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providersError, setProvidersError] = useState<string | null>(null);
@@ -422,7 +427,7 @@ function ContextEnginePage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-72">
-                  <DropdownMenuLabel>Context adapters</DropdownMenuLabel>
+                  <DropdownMenuLabel>Company Brain sources</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {providers.map((provider) => {
                     const Icon =
@@ -510,7 +515,7 @@ function ContextEnginePage() {
         <CardContent className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
-              placeholder="Search memory, wiki, knowledge bases, files, and approved MCP tools..."
+              placeholder="Search memory, pages, knowledge bases, files, and approved MCP tools..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && runQuery()}
@@ -549,7 +554,7 @@ function ContextEnginePage() {
             <p className="flex items-center gap-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
               <AlertCircle className="h-3.5 w-3.5" />
               Requested Hindsight {memoryQueryMode}, but the API returned{" "}
-              {memoryModeMismatch}. Deploy the Context Engine provider-options
+              {memoryModeMismatch}. Deploy the Company Brain source-options
               handler before trusting this test result.
             </p>
           )}
@@ -703,7 +708,9 @@ function ContextEnginePage() {
                           ? "Runs against tenant and agent-linked Bedrock Knowledge Bases."
                           : provider.family === "mcp"
                             ? "Approved at the individual read-only/search-safe tool level."
-                            : "Fast compiled-wiki lookup remains separate from raw Wiki inspection."}
+                            : provider.family === "sub-agent"
+                              ? "Read-only specialist source behind Company Brain."
+                              : "Fast compiled page lookup remains separate from raw page inspection."}
                   </p>
                   {provider.lastTestState && (
                     <p className="text-xs text-muted-foreground">
@@ -745,12 +752,12 @@ function ContextEnginePage() {
           <DialogHeader>
             <DialogTitle>
               {resultDialog?.type === "full"
-                ? "Full Context Result"
+                ? "Full Company Brain Result"
                 : resultDialog?.type === "hit"
                   ? resultDialog.hit.title
                   : resultDialog?.type === "provider"
                     ? resultDialog.status.displayName
-                    : "Context Result"}
+                    : "Company Brain Result"}
             </DialogTitle>
             <DialogDescription>
               {resultDialog?.type === "full"
@@ -915,8 +922,8 @@ function ContextEnginePage() {
                 ?.displayName ?? "Adapter Configuration"}
             </DialogTitle>
             <DialogDescription>
-              Tenant policy controls which built-in adapters are eligible and
-              which adapters run by default.
+              Tenant policy controls which Company Brain sources are eligible
+              and which sources run by default.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">
@@ -924,7 +931,7 @@ function ContextEnginePage() {
               <div>
                 <Label htmlFor="adapter-enabled">Eligible</Label>
                 <p className="text-xs text-muted-foreground">
-                  Disabled adapters cannot be selected by templates or tests.
+                  Disabled sources cannot be selected by templates or tests.
                 </p>
               </div>
               <Switch
@@ -940,7 +947,7 @@ function ContextEnginePage() {
               <div>
                 <Label htmlFor="adapter-default">Tenant default</Label>
                 <p className="text-xs text-muted-foreground">
-                  Default adapters run when a query does not name providers.
+                  Default sources run when a query does not name providers.
                 </p>
               </div>
               <Switch
