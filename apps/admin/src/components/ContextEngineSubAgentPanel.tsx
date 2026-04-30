@@ -17,7 +17,7 @@ export function ContextEngineSubAgentPanel({ providers, statuses = [] }: Props) 
   return (
     <section className="space-y-2 rounded-md border p-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium">Sub-agent providers</h2>
+        <h2 className="text-sm font-medium">Company Brain sub-agents</h2>
         <Badge variant="secondary" className="text-[11px]">
           {subAgents.length} adapters
         </Badge>

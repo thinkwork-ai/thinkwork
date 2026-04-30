@@ -1,71 +1,75 @@
 ---
-title: Admin — Knowledge
-description: Unified admin surface for Memory, Wiki, Knowledge Bases, and Context Engine verification.
+title: Admin — Company Brain
+description: "The operator surface for inspecting and configuring the context agents can use: memory, compiled pages, knowledge bases, and source routing."
 ---
 
-The Knowledge page is the operator hub for the context an agent can use. It combines the previous tenant-wide Memory, Wiki Pages, and Knowledge Bases surfaces under one tabbed route, then adds Context Engine configuration and test tooling.
+The Company Brain page is the operator hub for the context an agent can use. It combines memory records, compiled pages, Bedrock Knowledge Bases, workspace/source routing, and provider verification under one tabbed module.
 
 **Route:** `/knowledge`  
-**Tabs:** Memory, Wiki, Knowledge Bases, Context Engine
+**Tabs:** Memory, Pages, Knowledge Bases, Sources
+
+The route path still uses `/knowledge` for compatibility. The visible product/module name is Company Brain.
 
 ## Why It Exists
 
-Agents can draw context from several sources:
+Agents draw context from several places:
 
 - durable memory, including Hindsight-backed memory when enabled;
-- compiled wiki pages from Compounding Memory;
-- Bedrock Knowledge Bases attached to agents;
-- workspace files scoped to an agent;
+- compiled Company Brain pages from the page compile pipeline;
+- Bedrock Knowledge Bases attached to the tenant, template, or agent;
+- workspace files scoped to an agent or template;
 - approved MCP context tools.
 
-Before the Knowledge page, operators had to inspect these sources across multiple sidebar pages and then reason separately about what Context Engine would query. The Knowledge page keeps source inspection and Context Engine routing close together without merging the underlying stores.
+Company Brain keeps source inspection and source routing close together. Operators can look at the raw source, then run the same backend query path agents use through `query_context`.
 
 ## Tabs
 
 | Tab | Purpose |
 |---|---|
-| Memory | Browse and search retained memory records; view the Hindsight memory graph when available |
-| Wiki | Inspect compiled wiki pages and graph/search output |
+| Memory | Browse and search retained memory records; view the Hindsight graph when available |
+| Pages | Inspect compiled pages and graph/search output |
 | Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status |
-| Context Engine | Configure and verify the provider layer used by `query_context` |
+| Sources | Configure and verify the source layer used by `query_context` |
 
-The old standalone routes should redirect into the matching tab:
+The old standalone routes redirect into the matching tab:
 
-| Old route | New route |
+| Old route | Current route |
 |---|---|
 | `/memory` | `/knowledge/memory` |
 | `/wiki` | `/knowledge/wiki` |
 | `/knowledge-bases` | `/knowledge/knowledge-bases` |
 
-## Context Engine Test Harness
+## Sources Query Test
 
-The Context Engine tab includes a safe query harness for operator verification. It is intended for dogfooding provider behavior before testing through a full agent chat.
+The Sources tab includes a safe query harness for operator verification. It is intended for dogfooding source behavior before testing through a full agent chat.
 
 The harness controls are:
 
-- **Adapters** — multi-select dropdown for provider families such as Hindsight Memory, Compounding Wiki, Workspace Files, and Bedrock Knowledge Bases.
+- **Sources** — multi-select dropdown for provider families such as Hindsight Memory, compiled pages, workspace files, Bedrock Knowledge Bases, and approved MCP tools.
 - **Agent target** — optional agent picker used when workspace files or agent-scoped attachments should participate in the test.
 - **Hindsight strategy** — `recall` for direct memory-record retrieval or `reflect` for synthesized memory output.
-- **Search** — full-width natural-language query field.
+- **Search** — natural-language query field.
 
-Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a skipped Bedrock KB or slow Hindsight call should not hide successful Wiki or Workspace hits.
+Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a skipped Bedrock KB or slow Hindsight call should not hide successful page or workspace hits.
 
 ## Template Configuration
 
-Agent Templates expose Context Engine as a built-in tool alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling it injects the platform-owned `query_context` tool into supported runtimes. Template configuration can further choose which tenant-approved adapters participate by default and can expose adapter-specific options such as Hindsight strategy.
+Agent Templates expose Company Brain as a built-in tool alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling it injects the platform-owned `query_context` tool into supported runtimes.
 
-Normal agent configuration should show Hindsight as a Context Engine adapter, not as a separate peer tool. Raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Context Engine.
+Template configuration can choose which tenant-approved sources participate by default and can expose source-specific options such as Hindsight strategy. Normal agent configuration should show Hindsight as a Company Brain source, not as a separate peer tool. Raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Company Brain.
 
 ## Operational Guidance
 
-- Use the Context Engine tab first when debugging provider behavior. It gives provider-level latency, hit counts, skipped states, and partial failures without model/tool-selection noise.
-- Select an agent target when testing Workspace Files. Workspace search needs the agent workspace scope to find files such as `USER.md`.
+- Use the Sources tab first when debugging provider behavior. It gives provider-level latency, hit counts, skipped states, and partial failures without model/tool-selection noise.
+- Select an agent target when testing workspace files. Workspace search needs the agent workspace scope to find files such as `USER.md`.
 - Use `reflect` for answer-like memory verification and `recall` when debugging raw memory retrieval.
-- Keep mobile Wiki search on the dedicated Wiki path unless a future mobile Context Search screen intentionally replaces it.
+- Use Pages when you want the durable compiled view of what an agent has learned; use Memory when you need the raw retained records.
+- Use Knowledge Bases for authored, operator-curated documents that should remain distinct from learned memory.
 
 ## Related Pages
 
-- [Context Engine API](/api/context-engine/) — shared provider contract and runtime tool behavior
-- [Memory](/applications/admin/memory/) — details of the Memory tab behavior
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — details of Bedrock KB management
-- [Agents](/applications/admin/agents/) — per-agent workspace and knowledge attachments
+- [Company Brain](/concepts/knowledge/) — product model and source families
+- [Company Brain Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
+- [Memory Facet](/applications/admin/memory/) — details of the Memory tab behavior
+- [Knowledge Bases](/applications/admin/knowledge-bases/) — Bedrock KB management
+- [Agents](/applications/admin/agents/) — per-agent workspace and Company Brain attachments

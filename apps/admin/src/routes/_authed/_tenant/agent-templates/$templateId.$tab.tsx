@@ -936,7 +936,7 @@ function TemplateEditorPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <BrainCircuit className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-sm">Context Engine</CardTitle>
+                      <CardTitle className="text-sm">Company Brain</CardTitle>
                     </div>
                     <Switch
                       id="context-engine-enabled"
@@ -954,9 +954,9 @@ function TemplateEditorPage() {
                       Enable <code>query_context</code>
                     </Label>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Injects Context Engine into agent turns for memory, wiki,
-                      workspace, knowledge base, and approved MCP context
-                      search.
+                      Gives agent turns access to Company Brain context from
+                      memory, pages, workspace files, knowledge bases, and
+                      approved MCP search tools.
                     </p>
                   </div>
                   {contextEngineEnabled && (
@@ -1190,16 +1190,16 @@ function TemplateEditorPage() {
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Context Engine Configuration</DialogTitle>
+            <DialogTitle>Company Brain Sources</DialogTitle>
             <DialogDescription>
-              Choose the adapters this template should use when it injects{" "}
+              Choose the sources this template should use when it injects{" "}
               <code>query_context</code>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <Label>Enabled adapters</Label>
+                <Label>Enabled sources</Label>
                 {contextEngineProviderIds === null && (
                   <Badge variant="secondary" className="text-xs">
                     Global defaults
@@ -1213,7 +1213,7 @@ function TemplateEditorPage() {
                 placeholder={
                   contextProvidersLoading
                     ? "Loading adapters..."
-                    : "Select adapters..."
+                    : "Select sources..."
                 }
                 searchable
                 hideSelectAll
@@ -1221,7 +1221,7 @@ function TemplateEditorPage() {
                 maxCount={6}
               />
               <p className="text-xs text-muted-foreground">
-                Removing an adapter here prevents this template's default{" "}
+                Removing a source here prevents this template's default{" "}
                 <code>query_context</code> calls from using it.
               </p>
             </div>

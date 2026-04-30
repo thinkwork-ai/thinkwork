@@ -102,7 +102,7 @@ function AgentKnowledgePage() {
   useBreadcrumbs([
     { label: "Agents", href: "/agents" },
     { label: agent?.name ?? "...", href: `/agents/${agentId}` },
-    { label: "Knowledge" },
+    { label: "Knowledge Bases" },
   ]);
 
   if (agentResult.fetching && !agentResult.data) return <PageSkeleton />;

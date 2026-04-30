@@ -719,7 +719,7 @@ function ServerDetailDialog({
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  Context Engine
+                  Company Brain
                   {contextTools.length > 0 ? (
                     <Badge variant="secondary" className="text-[10px]">
                       {contextTools.length} provider
@@ -729,7 +729,7 @@ function ServerDetailDialog({
                 </div>
                 <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
                   Approve search-safe tools before they can participate in
-                  Context Engine. Default search controls whether approved tools
+                  Company Brain. Default search controls whether approved tools
                   are included automatically.
                 </p>
               </div>

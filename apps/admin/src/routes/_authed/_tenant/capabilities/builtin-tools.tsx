@@ -101,9 +101,9 @@ const CATALOG: CatalogEntry[] = [
   },
   {
     slug: "context-engine",
-    name: "Context Engine",
+    name: "Company Brain",
     description:
-      "Lets agents query Thinkwork Context Engine across memory, wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Opt-in per agent template.",
+      "Lets agents query Company Brain across memory, pages, workspace files, knowledge bases, and approved search-safe MCP tools. Opt-in per agent template.",
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "thinkwork-context",
@@ -648,7 +648,7 @@ function PolicyGatedInfoDialog({
               {isSandbox
                 ? "Bedrock AgentCore Code Interpreter. One public + one internal-only interpreter are provisioned per tenant on first enrollment."
                 : isContextEngine
-                  ? "Context Engine is provided by Thinkwork and resolves provider status for memory, wiki, workspace, knowledge bases, and approved MCP context tools at query time."
+                  ? "Company Brain is provided by Thinkwork and resolves source status for memory, pages, workspace files, knowledge bases, and approved MCP context tools at query time."
                   : isEmail
                     ? "Thinkwork platform email sending uses the agent email channel and records reply tokens for bidirectional conversations."
                     : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}

@@ -5,7 +5,7 @@ description: Create and manage Bedrock Knowledge Bases, upload documents via pre
 
 import { Aside } from '@astrojs/starlight/components';
 
-Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Knowledge page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
+Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Company Brain page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
 
 ## The list view
 
@@ -103,7 +103,7 @@ The detail query carries most of the interesting fields: `status`, `errorMessage
 
 ## Assigning a KB to an agent
 
-Knowledge bases are not automatically attached to every agent. The assignment happens on the agent's Knowledge tab — see [Agents → Knowledge](/applications/admin/agents/#knowledge). An operator attaches a KB to a specific agent, and the agent retrieves from that KB on every turn.
+Knowledge bases are not automatically attached to every agent. An operator attaches a KB to a specific agent or template, and the agent retrieves from that KB on every turn.
 
 ## Data model
 
@@ -125,7 +125,7 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 5. Upload documents one at a time or in a batch (each upload goes directly to S3 via presigned URL)
 6. Click **Sync Now** — the KB transitions to `syncing`
 7. The page polls every 5s until sync completes
-8. Attach the KB to one or more agents on their Knowledge tab
+8. Attach the KB to one or more agents or templates
 9. Agents start retrieving from the new KB on their next turn
 
 ### Update a document
@@ -153,9 +153,9 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 
 ## Related pages
 
-- [Agents — Knowledge tab](/applications/admin/agents/#knowledge) — where a KB gets attached to an agent
-- [Knowledge](/applications/admin/knowledge/) — the combined Admin surface for Memory, Wiki, Knowledge Bases, and Context Engine
+- [Agents](/applications/admin/agents/) — where a KB can be attached to an agent
+- [Admin — Company Brain](/applications/admin/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
 - [Memory](/applications/admin/memory/) — the Memory tab behavior: stateful memory vs stateless documents
-- [Document Knowledge (concept)](/concepts/knowledge/document-knowledge/) — the product model
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the product model
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
 - [Architecture](/architecture/) — the three-tier deployment including Bedrock and Aurora pgvector

@@ -1,13 +1,13 @@
 ---
-title: Document Knowledge
-description: How ThinkWork uses uploaded documents — product docs, runbooks, policies — as a retrievable context source at agent invocation time, backed by Bedrock Knowledge Bases and pgvector.
+title: Sources and Knowledge Bases
+description: How Company Brain uses authored documents — product docs, runbooks, policies — as retrievable context backed by Bedrock Knowledge Bases and pgvector.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Document knowledge is the part of the harness's context-management layer that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
+Sources and Knowledge Bases are the Company Brain facet that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
 
-An agent with document knowledge attached will, on every turn, retrieve the most relevant chunks from its assigned knowledge base and include them in context before the model generates a response. The agent doesn't memorize the documents; it grounds on them.
+An agent with a knowledge base attached can retrieve the most relevant chunks and include them in Company Brain context before the model generates a response. The agent does not memorize the documents; it grounds on them.
 
 ## When to reach for it
 
@@ -20,7 +20,7 @@ Document knowledge is the right fit when:
 
 And it's the *wrong* fit when:
 
-- **The useful context is what this agent has learned across work** — that's [Long-term Memory](/concepts/knowledge/memory/) and [Compounding Memory](/concepts/knowledge/compounding-memory/), not documents.
+- **The useful context is what this agent has learned across work** — that's [Memory](/concepts/knowledge/memory/) and [compiled pages](/concepts/knowledge/compounding-memory/), not documents.
 - **The content is massive and sparsely relevant** — a million-line codebase isn't a knowledge base; it's a search target for a different tool.
 - **The question needs reasoning over a graph of entities** — document chunks won't reliably answer "which engineers owned which services in Q3."
 
@@ -62,7 +62,7 @@ ThinkWork configures the vector index to live in the same Aurora Postgres cluste
 
 ## Assigning a KB to an agent
 
-Knowledge bases are assigned per agent in the admin app (Agents → agent detail → Knowledge tab) or via the GraphQL API. An agent can have multiple KBs attached; retrieval will query each and merge the top-K across them.
+Knowledge bases are assigned per agent in the admin app or via the GraphQL API. An agent can have multiple KBs attached; retrieval will query each and merge the top-K across them. Tenant-level inspection and upload flows live in Company Brain → Knowledge Bases.
 
 The agent template can specify a default KB assignment — new agents created from that template inherit it. That makes fleet-wide KB rotation a single update to the template.
 
@@ -71,13 +71,13 @@ The agent template can specify a default KB assignment — new agents created fr
 - **KB sync is not real-time.** Uploading a new document and immediately asking the agent about it will return "I don't know" until the next sync runs. Bedrock KBs sync on a configurable interval (often daily for production KBs; on-demand for dev).
 - **Chunk-size is a one-time decision.** Rechunking a KB requires a full re-ingestion. Pick a chunking strategy before loading a large corpus.
 - **No cross-KB semantic deduplication.** If two KBs both contain the same policy document, retrieval will return duplicates and the model is asked to reconcile.
-- **Retrieval is lexical-and-semantic, not graph-aware.** Document knowledge can't answer "which documents cite this one" — that's a graph question, better served by [Compounding Memory](/concepts/knowledge/compounding-memory/) over authored content.
+- **Retrieval is lexical-and-semantic, not graph-aware.** Knowledge-base retrieval can't answer "which documents cite this one" — that's a graph question, better served by [compiled pages](/concepts/knowledge/compounding-memory/) over authored content.
 
 ## Related pages
 
-- [Memory (overview)](/concepts/knowledge/) — where document knowledge sits relative to long-term and compounding memory
-- [Long-term Memory](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how retrieved chunks combine with thread history and recalled memories at turn time
+- [Company Brain](/concepts/knowledge/) — where authored sources sit relative to memory and compiled pages
+- [Memory Facet](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieved chunks combine with thread history and recalled memories at turn time
 - [Admin: Knowledge Bases](/applications/admin/knowledge-bases/) — the operator surface for creating, syncing, and inspecting KBs
 - [Architecture](/architecture/) — where KBs fit in the data tier
 
