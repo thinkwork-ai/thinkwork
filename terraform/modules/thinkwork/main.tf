@@ -199,28 +199,29 @@ module "api" {
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
-  lambda_zips_dir                    = var.lambda_zips_dir
-  api_auth_secret                    = var.api_auth_secret
-  db_password                        = var.db_password
-  agentcore_function_name            = module.agentcore.agentcore_function_name
-  agentcore_pi_function_name         = module.agentcore.agentcore_pi_function_name
-  agentcore_function_arn             = module.agentcore.agentcore_function_arn
-  agentcore_pi_function_arn          = module.agentcore.agentcore_pi_function_arn
-  hindsight_endpoint                 = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id                = module.agentcore_memory.memory_id
-  memory_engine                      = local.resolved_memory_engine
-  admin_url                          = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
-  docs_url                           = "https://${module.docs_site.distribution_domain}"
-  www_url                            = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
-  stripe_price_ids_json              = var.stripe_price_ids_json
-  appsync_realtime_url               = module.appsync.graphql_realtime_url
-  ecr_repository_url                 = module.agentcore.ecr_repository_url
-  job_scheduler_role_arn             = module.job_triggers.job_scheduler_role_arn
-  wiki_compile_model_id              = var.wiki_compile_model_id
-  wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
-  google_places_api_key              = var.google_places_api_key
-  enable_workspace_orchestration     = var.enable_workspace_orchestration
+  lambda_zips_dir                     = var.lambda_zips_dir
+  api_auth_secret                     = var.api_auth_secret
+  db_password                         = var.db_password
+  agentcore_function_name             = module.agentcore.agentcore_function_name
+  agentcore_pi_function_name          = module.agentcore.agentcore_pi_function_name
+  agentcore_function_arn              = module.agentcore.agentcore_function_arn
+  agentcore_pi_function_arn           = module.agentcore.agentcore_pi_function_arn
+  hindsight_endpoint                  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id                 = module.agentcore_memory.memory_id
+  memory_engine                       = local.resolved_memory_engine
+  admin_url                           = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
+  docs_url                            = "https://${module.docs_site.distribution_domain}"
+  www_url                             = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
+  stripe_price_ids_json               = var.stripe_price_ids_json
+  appsync_realtime_url                = module.appsync.graphql_realtime_url
+  ecr_repository_url                  = module.agentcore.ecr_repository_url
+  job_scheduler_role_arn              = module.job_triggers.job_scheduler_role_arn
+  wiki_compile_model_id               = var.wiki_compile_model_id
+  company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
+  wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
+  google_places_api_key               = var.google_places_api_key
+  enable_workspace_orchestration      = var.enable_workspace_orchestration
 
   # Per-user OAuth client credentials — fed to Secrets Manager in
   # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*

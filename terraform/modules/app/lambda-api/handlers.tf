@@ -70,6 +70,7 @@ locals {
     GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN = aws_secretsmanager_secret.oauth_google_productivity.arn
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
+    COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID  = var.company_brain_source_agent_model_id
 
     # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
     # the actual keys live in Secrets Manager and are fetched by
