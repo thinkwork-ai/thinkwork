@@ -20,6 +20,7 @@ import type {
 import type { COLORS } from "@/lib/theme";
 import {
   displayBrainResultSnippet,
+  isBrainMemoryHit,
   looksLikeMarkdown,
 } from "./resultDisplay";
 
@@ -107,12 +108,15 @@ function displayProvenance(hit: ContextEngineHit): string {
 }
 
 export function BrainResultRow({ hit, colors, onPress }: BrainResultRowProps) {
-  const type = FAMILY_CONFIG[hit.sourceFamily ?? hit.family];
+  const isMemory = isBrainMemoryHit(hit);
+  const type = isMemory
+    ? FAMILY_CONFIG.memory
+    : FAMILY_CONFIG[hit.sourceFamily ?? hit.family];
   const Icon = type.icon;
   const provenance = displayProvenance(hit);
   const snippet = displayBrainResultSnippet(hit, type.label);
   const renderSnippetAsMarkdown =
-    snippet && type.label === "MEMORY" && looksLikeMarkdown(snippet);
+    snippet && isMemory && looksLikeMarkdown(snippet);
 
   return (
     <Pressable

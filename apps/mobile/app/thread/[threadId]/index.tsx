@@ -60,6 +60,8 @@ import {
   workspaceReviewErrorMessage,
 } from "@/lib/workspace-review-state";
 
+type HitlDetailTab = "review" | "thread";
+
 function ThreadHitlPrompt({
   review,
   fetching,
@@ -123,16 +125,18 @@ function ThreadHitlPrompt({
 
   return (
     <View
-      className="mx-4 mb-3 rounded-xl border p-3"
-      style={{
-        backgroundColor: isDark ? "rgba(245,158,11,0.10)" : "#fffbeb",
-        borderColor: isDark ? "rgba(245,158,11,0.38)" : "#f59e0b",
-      }}
+      className="flex-1 px-4 pt-4 pb-3"
+      style={{ backgroundColor: colors.background }}
     >
       <View className="flex-row items-center justify-between gap-3">
         <View className="flex-1">
-          <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>
-            {isBrainEnrichment ? "Review Brain enrichment" : "Agent waiting for confirmation"}
+          <Text
+            className="text-sm font-semibold"
+            style={{ color: colors.foreground }}
+          >
+            {isBrainEnrichment
+              ? "Review Brain enrichment"
+              : "Agent waiting for confirmation"}
           </Text>
           <Muted className="text-xs" numberOfLines={1}>
             {review?.targetPath || review?.run?.targetPath || "Workspace review"}
@@ -142,7 +146,11 @@ function ThreadHitlPrompt({
       </View>
 
       {body && !isBrainEnrichment ? (
-        <Text className="mt-2 text-sm" numberOfLines={5} style={{ color: colors.foreground }}>
+        <Text
+          className="mt-2 text-sm"
+          numberOfLines={5}
+          style={{ color: colors.foreground }}
+        >
           {body.replace(/^#+\s*/gm, "").trim()}
         </Text>
       ) : review?.reason ? (
@@ -152,20 +160,22 @@ function ThreadHitlPrompt({
       ) : null}
 
       {isBrainEnrichment && enrichmentCandidates ? (
-        <View className="mt-3 gap-2">
-          {enrichmentCandidates.map((candidate) => {
+        <FlatList
+          data={enrichmentCandidates}
+          keyExtractor={(candidate) => candidate.id}
+          style={{ flex: 1, marginTop: 12 }}
+          contentContainerStyle={{ gap: 10, paddingBottom: 8 }}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item: candidate }) => {
             const selected = selectedCandidateIds.has(candidate.id);
             return (
               <Pressable
-                key={candidate.id}
                 onPress={() => toggleCandidate(candidate.id)}
-                className="flex-row gap-2 rounded-lg px-2.5 py-2"
+                className="flex-row gap-2 rounded-lg px-2.5 py-2.5"
                 style={{
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(255,255,255,0.72)",
+                  backgroundColor: "transparent",
                   borderWidth: 1,
-                  borderColor: selected ? "#f59e0b" : "transparent",
+                  borderColor: selected ? "#f59e0b" : colors.border,
                 }}
               >
                 <View className="pt-0.5">
@@ -176,7 +186,11 @@ function ThreadHitlPrompt({
                   )}
                 </View>
                 <View className="flex-1">
-                  <Text className="text-xs font-semibold" style={{ color: colors.foreground }} numberOfLines={1}>
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: colors.foreground }}
+                    numberOfLines={1}
+                  >
                     {candidate.title}
                   </Text>
                   <Muted className="text-xs" numberOfLines={3}>
@@ -184,18 +198,32 @@ function ThreadHitlPrompt({
                   </Muted>
                   <Muted className="mt-1 text-[11px]" numberOfLines={1}>
                     {sourceFamilyLabel(candidate.sourceFamily)}
-                    {candidate.citation?.label ? ` · ${candidate.citation.label}` : ""}
+                    {candidate.citation?.label
+                      ? ` · ${candidate.citation.label}`
+                      : ""}
                   </Muted>
                 </View>
               </Pressable>
             );
-          })}
-        </View>
+          }}
+        />
       ) : proposedChanges.length > 0 ? (
         <View className="mt-3 gap-1.5">
           {proposedChanges.slice(0, 3).map((change, index) => (
-            <View key={`${change.path ?? "change"}-${index}`} className="rounded-lg px-2.5 py-2" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.72)" }}>
-              <Text className="text-xs font-semibold" style={{ color: colors.foreground }} numberOfLines={1}>
+            <View
+              key={`${change.path ?? "change"}-${index}`}
+              className="rounded-lg px-2.5 py-2"
+              style={{
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(255,255,255,0.72)",
+              }}
+            >
+              <Text
+                className="text-xs font-semibold"
+                style={{ color: colors.foreground }}
+                numberOfLines={1}
+              >
                 {change.path || change.kind || "Proposed change"}
               </Text>
               <Muted className="text-xs" numberOfLines={2}>
@@ -290,6 +318,53 @@ function sourceFamilyLabel(sourceFamily?: string | null): string {
   return "Brain";
 }
 
+function ThreadHitlTabs({
+  value,
+  onChange,
+  colors,
+}: {
+  value: HitlDetailTab;
+  onChange: (next: HitlDetailTab) => void;
+  colors: (typeof COLORS)["dark"];
+}) {
+  return (
+    <View
+      className="border-b border-neutral-200 px-4 py-2 dark:border-neutral-800"
+      style={{ backgroundColor: colors.background }}
+    >
+      <View
+        className="flex-row rounded-full p-0.5"
+        style={{ backgroundColor: colors.secondary }}
+      >
+        {(["review", "thread"] as const).map((tab) => {
+          const selected = value === tab;
+          return (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => onChange(tab)}
+              className="min-h-[34px] flex-1 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: selected ? colors.muted : "transparent",
+              }}
+            >
+              <Text
+                className="text-sm font-semibold"
+                style={{
+                  color: selected ? colors.foreground : colors.mutedForeground,
+                }}
+              >
+                {tab === "review" ? "Review" : "Thread"}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function ReviewActionButton({
   label,
   decision,
@@ -305,7 +380,11 @@ function ReviewActionButton({
 }) {
   const disabled = pendingDecision !== null;
   const backgroundColor =
-    tone === "primary" ? "#f59e0b" : tone === "danger" ? "#dc2626" : "transparent";
+    tone === "primary"
+      ? "#f59e0b"
+      : tone === "danger"
+        ? "#dc2626"
+        : "transparent";
   const borderColor =
     tone === "primary" ? "#f59e0b" : tone === "danger" ? "#dc2626" : "#a3a3a3";
   const color = tone === "neutral" ? "#737373" : "#ffffff";
@@ -479,11 +558,25 @@ export default function ThreadDetailRoute() {
   const reviewDetail = (reviewDetailData?.agentWorkspaceReview ??
     pendingReview) as any | null;
   const [reviewResponse, setReviewResponse] = useState("");
+  const [hitlTab, setHitlTab] = useState<HitlDetailTab>("review");
+  const previousReviewRunIdRef = useRef<string | undefined>(undefined);
   const [pendingDecision, setPendingDecision] =
     useState<WorkspaceReviewDecision | null>(null);
   const [, executeAcceptReview] = useMutation(AcceptAgentWorkspaceReviewMutation);
   const [, executeCancelReview] = useMutation(CancelAgentWorkspaceReviewMutation);
   const [, executeResumeReview] = useMutation(ResumeAgentWorkspaceRunMutation);
+
+  useEffect(() => {
+    if (!pendingReviewRunId) {
+      previousReviewRunIdRef.current = undefined;
+      setHitlTab("thread");
+      return;
+    }
+
+    if (previousReviewRunIdRef.current === pendingReviewRunId) return;
+    previousReviewRunIdRef.current = pendingReviewRunId;
+    setHitlTab("review");
+  }, [pendingReviewRunId]);
 
   // Continuously poll messages/turns while the screen is mounted. Fast cadence
   // while a turn is running, slower cadence when idle — the idle poll is a
@@ -807,37 +900,40 @@ export default function ThreadDetailRoute() {
 
       </View>
 
-      {/* Content area — single scrollable page via ActivityTimeline's FlatList */}
+      {isLoaded && reviewDetail ? (
+        <ThreadHitlTabs value={hitlTab} onChange={setHitlTab} colors={colors} />
+      ) : null}
+
+      {/* Content area */}
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         {isLoaded ? (
-          <ActivityTimeline
-            key={threadId}
-            messages={visibleMessages}
-            turns={visibleTurns}
-            agentName={agentName}
-            isAdmin={isAdmin}
-            tenantId={tenantId}
-            isAgentRunning={!!threadId && isThreadActive(threadId)}
-            onLinkPress={handleLinkPress}
-            onSaveRecipe={handleSaveRecipe}
-            listHeaderComponent={
-              reviewDetail ? (
-                <ThreadHitlPrompt
-                  review={reviewDetail}
-                  fetching={fetchingReviewDetail}
-                  response={reviewResponse}
-                  onChangeResponse={setReviewResponse}
-                  onDecide={handleReviewDecision}
-                  pendingDecision={pendingDecision}
-                  colors={colors}
-                  isDark={isDark}
-                />
-              ) : null
-            }
-            refreshing={pullRefreshing}
-            onRefresh={handleRefresh}
-            currentUserId={currentUser?.id}
-          />
+          reviewDetail && hitlTab === "review" ? (
+            <ThreadHitlPrompt
+              review={reviewDetail}
+              fetching={fetchingReviewDetail}
+              response={reviewResponse}
+              onChangeResponse={setReviewResponse}
+              onDecide={handleReviewDecision}
+              pendingDecision={pendingDecision}
+              colors={colors}
+              isDark={isDark}
+            />
+          ) : (
+            <ActivityTimeline
+              key={threadId}
+              messages={visibleMessages}
+              turns={visibleTurns}
+              agentName={agentName}
+              isAdmin={isAdmin}
+              tenantId={tenantId}
+              isAgentRunning={!!threadId && isThreadActive(threadId)}
+              onLinkPress={handleLinkPress}
+              onSaveRecipe={handleSaveRecipe}
+              refreshing={pullRefreshing}
+              onRefresh={handleRefresh}
+              currentUserId={currentUser?.id}
+            />
+          )
         ) : (
           <View className="flex-1 items-center justify-center">
             <ShimmerText
