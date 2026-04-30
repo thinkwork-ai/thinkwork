@@ -94,6 +94,7 @@ export interface ContextProviderStatus {
     asOf: string;
     ttlSeconds: number;
   };
+  metadata?: Record<string, unknown>;
 }
 
 export interface ContextProviderResult {

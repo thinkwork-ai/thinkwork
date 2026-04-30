@@ -3,8 +3,19 @@ import {
 	searchWikiForUser,
 	type UserWikiSearchResult,
 } from "../../wiki/search.js";
-import type { ContextHit } from "../types.js";
-import { createSubAgentContextProvider } from "./sub-agent-base.js";
+import type { ContextEngineProviderRequest, ContextHit } from "../types.js";
+import {
+	createSubAgentContextProvider,
+	type SubAgentContextProviderConfig,
+	type SubAgentSeamResult,
+} from "./sub-agent-base.js";
+import {
+	runSourceAgent,
+	type SourceAgentFinalResult,
+	type SourceAgentModel,
+	type SourceAgentRunResult,
+} from "./source-agent-runtime.js";
+import { createWikiSourceAgentTools } from "./wiki-source-agent-tools.js";
 
 const WIKI_SOURCE_AGENT_LIMIT = 10;
 const WIKI_SOURCE_AGENT_MAX_SEARCH_PATHS = 3;
@@ -25,6 +36,8 @@ export type WikiSourceAgentSearch = (args: {
 	limit: number;
 }) => Promise<UserWikiSearchResult[]>;
 
+export type WikiSourceAgentRuntimeMode = "model" | "deterministic";
+
 export interface WikiSourceAgentPlanStep {
 	query: string;
 	purpose: "original" | "repaired" | "focused";
@@ -34,8 +47,11 @@ export interface WikiSourceAgentPlanStep {
 export function createWikiSourceAgentContextProvider(options: {
 	search?: WikiSourceAgentSearch;
 	defaultEnabled?: boolean;
+	runtimeMode?: WikiSourceAgentRuntimeMode;
+	model?: SourceAgentModel;
 } = {}) {
 	const search = options.search ?? searchWikiForUser;
+	const runtimeMode = options.runtimeMode ?? "model";
 	return createSubAgentContextProvider({
 		id: "wiki-source-agent",
 		displayName: "Company Brain Page Agent",
@@ -97,10 +113,13 @@ export function createWikiSourceAgentContextProvider(options: {
 			},
 		],
 		toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
-		depthCap: 2,
-		processModel: "deterministic-retrieval",
+		depthCap: 3,
+		processModel:
+			runtimeMode === "model"
+				? "lambda-bedrock-converse"
+				: "deterministic-retrieval",
 		defaultEnabled: options.defaultEnabled ?? false,
-		timeoutMs: 2_500,
+		timeoutMs: runtimeMode === "model" ? 15_000 : 2_500,
 		seamState: "live",
 		supportedScopes: ["personal", "auto"],
 		seam: async (request, config) => {
@@ -113,69 +132,273 @@ export function createWikiSourceAgentContextProvider(options: {
 			}
 
 			const userId = request.caller.userId;
-			const plan = planWikiSourceAgentQueries(request.query);
-			const searches = await Promise.all(
-				plan.map(async (step) => ({
-					step,
-					rows: await search({
-						tenantId: request.caller.tenantId,
-						userId,
-						query: step.query,
-						limit: Math.min(request.limit, WIKI_SOURCE_AGENT_LIMIT),
-					}),
-				})),
-			);
-			const rows = rankWikiSourceAgentResults({
-				searches,
-				originalQuery: request.query,
-				limit: Math.min(request.limit, WIKI_SOURCE_AGENT_LIMIT),
+			const limit = Math.min(request.limit, WIKI_SOURCE_AGENT_LIMIT);
+			if (runtimeMode === "deterministic") {
+				return runDeterministicWikiSourceAgent({
+					search,
+					request,
+					config,
+					userId,
+					limit,
+					fallbackFrom: null,
+				});
+			}
+
+			const toolSet = createWikiSourceAgentTools({
+				tenantId: request.caller.tenantId,
+				userId,
+				defaultLimit: limit,
+				search,
 			});
-			const inspectedPageCount = countUniquePages(searches);
+			const agentRun = await runSourceAgent({
+				name: config.displayName,
+				system: buildWikiSourceAgentSystemPrompt(config),
+				query: request.query,
+				tools: toolSet.tools,
+				allowedTools: config.toolAllowlist,
+				depthCap: config.depthCap,
+				model: options.model,
+			});
+
+			if (agentRun.state !== "ok") {
+				return runDeterministicWikiSourceAgent({
+					search,
+					request,
+					config,
+					userId,
+					limit,
+					fallbackFrom: agentRun,
+				});
+			}
+
+			const hits = agentRun.finalResults
+				.map((result, index): ContextHit | null => {
+					const row = toolSet.getPage(result.sourceId);
+					if (!row) return null;
+					return modelResultToHit({
+						row,
+						result,
+						index,
+						request,
+						providerId: config.id,
+						promptRef: config.promptRef,
+						toolAllowlist: config.toolAllowlist,
+						depthCap: config.depthCap,
+						agentRun,
+					});
+				})
+				.filter((hit): hit is ContextHit => hit !== null)
+				.slice(0, limit);
+
+			if (hits.length === 0) {
+				return runDeterministicWikiSourceAgent({
+					search,
+					request,
+					config,
+					userId,
+					limit,
+					fallbackFrom: {
+						...agentRun,
+						state: "error",
+						reason: "source agent final answer produced no resolvable pages",
+					},
+				});
+			}
 
 			return {
 				state: "ok",
-				reason: `searched ${plan.length} query path${
-					plan.length === 1 ? "" : "s"
-				}; inspected ${inspectedPageCount} compiled page${
-					inspectedPageCount === 1 ? "" : "s"
-				}`,
-				hits: rows.map(({ row, score, sourceStep }): ContextHit => ({
-					id: `wiki-agent:${row.page.id}`,
-					providerId: config.id,
-					family: "wiki",
-					title: row.page.title,
-					snippet: row.page.summary || row.page.title,
-					score,
-					scope: request.scope,
-					provenance: {
-						label: "Company Brain page agent",
-						sourceId: row.page.id,
-						uri: `thinkwork://wiki/${row.page.type.toLowerCase()}/${row.page.slug}`,
-						metadata: {
-							promptRef: config.promptRef,
-							toolAllowlist: config.toolAllowlist,
-							depthCap: config.depthCap,
-							retrievalStrategy: "agentic-hybrid-wiki-navigation",
-							matchedAlias: row.matchedAlias,
-							sourceQuery: sourceStep.query,
-							sourceQueryPurpose: sourceStep.purpose,
-						},
+				reason: `source agent ran ${agentRun.model.turns} model turn${
+					agentRun.model.turns === 1 ? "" : "s"
+				}, ${agentRun.toolCallCount} tool call${
+					agentRun.toolCallCount === 1 ? "" : "s"
+				}; cited ${hits.length} compiled page${hits.length === 1 ? "" : "s"}`,
+				metadata: {
+					sourceAgent: {
+						id: config.id,
+						processModel: "lambda-bedrock-converse",
+						model: agentRun.model,
+						toolCallCount: agentRun.toolCallCount,
+						trace: agentRun.trace,
+						observedSourceIds: agentRun.observedSourceIds,
 					},
-					metadata: {
-						page: row.page,
-						sourceAgent: {
-							id: config.id,
-							processModel: "deterministic-retrieval",
-							toolAllowlist: config.toolAllowlist,
-							retrievalStrategy: "agentic-hybrid-wiki-navigation",
-							plan,
-							inspectedPageCount,
-						},
-					},
-				})),
+				},
+				hits,
 			};
 		},
 	});
+}
+
+async function runDeterministicWikiSourceAgent(args: {
+	search: WikiSourceAgentSearch;
+	request: ContextEngineProviderRequest;
+	config: SubAgentContextProviderConfig;
+	userId: string;
+	limit: number;
+	fallbackFrom: SourceAgentRunResult | null;
+}): Promise<SubAgentSeamResult> {
+	const plan = planWikiSourceAgentQueries(args.request.query);
+	const searches = await Promise.all(
+		plan.map(async (step) => ({
+			step,
+			rows: await args.search({
+				tenantId: args.request.caller.tenantId,
+				userId: args.userId,
+				query: step.query,
+				limit: args.limit,
+			}),
+		})),
+	);
+	const rows = rankWikiSourceAgentResults({
+		searches,
+		originalQuery: args.request.query,
+		limit: args.limit,
+	});
+	const inspectedPageCount = countUniquePages(searches);
+	const fallbackReason = args.fallbackFrom?.reason;
+
+	return {
+		state: "ok",
+		reason: `${
+			fallbackReason ? `model fallback: ${fallbackReason}; ` : ""
+		}searched ${plan.length} query path${plan.length === 1 ? "" : "s"}; inspected ${
+			inspectedPageCount
+		} compiled page${inspectedPageCount === 1 ? "" : "s"}`,
+		metadata: {
+			sourceAgent: {
+				id: args.config.id,
+				processModel: args.fallbackFrom
+					? "lambda-bedrock-converse-with-deterministic-fallback"
+					: "deterministic-retrieval",
+				fallback: !!args.fallbackFrom,
+				fallbackReason,
+				trace: args.fallbackFrom?.trace,
+			},
+		},
+		hits: rows.map(({ row, score, sourceStep }): ContextHit => ({
+			id: `wiki-agent:${row.page.id}`,
+			providerId: args.config.id,
+			family: "wiki",
+			title: row.page.title,
+			snippet: row.page.summary || row.page.title,
+			score,
+			scope: args.request.scope,
+			provenance: {
+				label: "Company Brain page agent",
+				sourceId: row.page.id,
+				uri: `thinkwork://wiki/${row.page.type.toLowerCase()}/${row.page.slug}`,
+				metadata: {
+					promptRef: args.config.promptRef,
+					toolAllowlist: args.config.toolAllowlist,
+					depthCap: args.config.depthCap,
+					retrievalStrategy: "agentic-hybrid-wiki-navigation",
+					matchedAlias: row.matchedAlias,
+					sourceQuery: sourceStep.query,
+					sourceQueryPurpose: sourceStep.purpose,
+				},
+			},
+			metadata: {
+				page: row.page,
+				sourceAgent: {
+					id: args.config.id,
+					processModel: args.fallbackFrom
+						? "lambda-bedrock-converse-with-deterministic-fallback"
+						: "deterministic-retrieval",
+					toolAllowlist: args.config.toolAllowlist,
+					retrievalStrategy: "agentic-hybrid-wiki-navigation",
+					plan,
+					inspectedPageCount,
+					fallback: !!args.fallbackFrom,
+					fallbackReason,
+					trace: args.fallbackFrom?.trace,
+				},
+			},
+		})),
+	};
+}
+
+function modelResultToHit(args: {
+	row: UserWikiSearchResult;
+	result: SourceAgentFinalResult;
+	index: number;
+	request: ContextEngineProviderRequest;
+	providerId: string;
+	promptRef: string;
+	toolAllowlist: string[];
+	depthCap: number;
+	agentRun: SourceAgentRunResult;
+}): ContextHit {
+	const confidence = args.result.confidence ?? 0.85;
+	return {
+		id: `wiki-agent:${args.row.page.id}`,
+		providerId: args.providerId,
+		family: "wiki",
+		title: args.result.title || args.row.page.title,
+		snippet: args.result.summary || args.row.page.summary || args.row.page.title,
+		score: confidence + Math.max(0, 0.05 - args.index * 0.01),
+		scope: args.request.scope,
+		provenance: {
+			label: "Company Brain page agent",
+			sourceId: args.row.page.id,
+			uri: `thinkwork://wiki/${args.row.page.type.toLowerCase()}/${args.row.page.slug}`,
+			metadata: {
+				promptRef: args.promptRef,
+				toolAllowlist: args.toolAllowlist,
+				depthCap: args.depthCap,
+				retrievalStrategy: "source-agent-tool-loop",
+				matchedAlias: args.row.matchedAlias,
+				sourceToolCallIds: args.result.sourceToolCallIds,
+			},
+		},
+		metadata: {
+			page: args.row.page,
+			sourceAgent: {
+				id: args.providerId,
+				processModel: "lambda-bedrock-converse",
+				retrievalStrategy: "source-agent-tool-loop",
+				toolAllowlist: args.toolAllowlist,
+				model: args.agentRun.model,
+				toolCallCount: args.agentRun.toolCallCount,
+				trace: args.agentRun.trace,
+				observedSourceIds: args.agentRun.observedSourceIds,
+				sourceToolCallIds: args.result.sourceToolCallIds,
+			},
+		},
+	};
+}
+
+function buildWikiSourceAgentSystemPrompt(
+	config: SubAgentContextProviderConfig,
+): string {
+	return [
+		"You are a Company Brain Page Agent inspired by Scout-style source specialists.",
+		"Your job is to navigate only compiled Company Brain pages and return cited page results.",
+		"Use the source-local tools iteratively: search first, then read any promising page when the snippet is not enough.",
+		"Repair obvious query typos before giving up. Common repairs include restarant/restraunt/resturant/restaraunt -> restaurant and favourite/fav -> favorite.",
+		"Prefer pages whose title, alias, summary, body, or cited sections directly support the user's question.",
+		"Never cite a page that was not returned by a tool observation in this run.",
+		"",
+		`Prompt ref: ${config.promptRef}`,
+		config.prompt
+			? [
+					`Prompt title: ${config.prompt.title}`,
+					`Prompt summary: ${config.prompt.summary}`,
+					...(config.prompt.instructions ?? []).map(
+						(instruction) => `Instruction: ${instruction}`,
+					),
+				].join("\n")
+			: "",
+		"",
+		"Resources:",
+		...(config.resources ?? []).map(
+			(resource) =>
+				`- ${resource.label} (${resource.type}, ${resource.access}): ${resource.description}`,
+		),
+		"",
+		"Skills:",
+		...(config.skills ?? []).map(
+			(skill) => `- ${skill.label}: ${skill.description}`,
+		),
+	].join("\n");
 }
 
 export function planWikiSourceAgentQueries(query: string): WikiSourceAgentPlanStep[] {

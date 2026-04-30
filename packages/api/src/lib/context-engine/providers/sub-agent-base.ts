@@ -43,6 +43,7 @@ export interface SubAgentSeamResult {
 	hits: ContextHit[];
 	state: ContextProviderStatusState;
 	reason?: string;
+	metadata?: Record<string, unknown>;
 	freshness?: {
 		asOf: string;
 		ttlSeconds: number;
@@ -86,6 +87,7 @@ export function createSubAgentContextProvider(
 					state: result.state,
 					reason: result.reason,
 					freshness: result.freshness,
+					metadata: result.metadata,
 				},
 			};
 		},

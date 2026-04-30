@@ -93,6 +93,17 @@ type ProviderBadgeState =
   | "live"
   | "planned";
 
+type SourceAgentTraceStep = {
+  id?: string;
+  type?: string;
+  turn?: number;
+  status?: string;
+  summary?: string;
+  tool?: string;
+  toolCallId?: string;
+  durationMs?: number;
+};
+
 function statusClasses(state: ProviderBadgeState) {
   if (state === "ok" || state === "available" || state === "live") {
     return "bg-green-500/15 text-green-700 dark:text-green-400";
@@ -243,7 +254,7 @@ function formatSubAgentProcessModel(processModel: string): string {
     case "deterministic-retrieval":
       return "Deterministic retrieval seam";
     case "lambda-bedrock-converse":
-      return "Bedrock Converse model call";
+      return "Bedrock source-agent loop";
     case "agentcore":
       return "AgentCore runtime";
     default:
@@ -304,6 +315,68 @@ function ConfigList({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function sourceAgentTrace(status: ContextProviderStatus): SourceAgentTraceStep[] {
+  const sourceAgent = status.metadata?.sourceAgent;
+  if (!sourceAgent || typeof sourceAgent !== "object") return [];
+  const trace = (sourceAgent as { trace?: unknown }).trace;
+  if (!Array.isArray(trace)) return [];
+  return trace.filter(
+    (step): step is SourceAgentTraceStep =>
+      !!step && typeof step === "object",
+  );
+}
+
+function SourceAgentTraceSummary({
+  status,
+}: {
+  status: ContextProviderStatus;
+}) {
+  const trace = sourceAgentTrace(status);
+  if (trace.length === 0) return null;
+  return (
+    <div className="rounded-md border">
+      <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
+        Source-agent trace
+      </div>
+      <div className="divide-y">
+        {trace.map((step, index) => (
+          <div
+            key={step.id ?? `${step.type}-${index}`}
+            className="grid gap-2 px-3 py-2 text-xs sm:grid-cols-[6rem_minmax(0,1fr)]"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="font-mono text-[10px]">
+                {step.type ?? "step"}
+              </Badge>
+              {step.status && (
+                <Badge
+                  variant="secondary"
+                  className={`text-[10px] ${statusClasses(step.status === "ok" ? "ok" : "error")}`}
+                >
+                  {step.status}
+                </Badge>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-foreground">
+                {step.summary ?? step.tool ?? step.id ?? "Trace step"}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                turn {step.turn ?? "?"}
+                {step.tool ? ` · ${step.tool}` : ""}
+                {step.toolCallId ? ` · ${step.toolCallId}` : ""}
+                {step.durationMs != null
+                  ? ` · ${step.durationMs.toLocaleString()} ms`
+                  : ""}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -857,6 +930,12 @@ function ContextEnginePage() {
                           {status.error || status.reason}
                         </p>
                       )}
+                      {sourceAgentTrace(status).length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {sourceAgentTrace(status).length} source-agent trace
+                          steps
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -1094,6 +1173,7 @@ function ContextEnginePage() {
                     </p>
                   )}
                 </div>
+                <SourceAgentTraceSummary status={resultDialog.status} />
                 {resultDialog.hits.length > 0 && (
                   <div className="space-y-2">
                     {resultDialog.hits.map((hit) => (
