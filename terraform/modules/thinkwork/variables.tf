@@ -362,6 +362,12 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
+variable "company_brain_source_agent_model_id" {
+  description = "Bedrock model id used by GraphQL Company Brain source agents for JSON tool/action turns. Defaults to Claude Haiku for reliable action output while the wiki compiler can remain on gpt-oss for throughput."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). 'true' to enable, anything else disables. Pinned in terraform so unrelated deploys don't reset it."
   type        = string
