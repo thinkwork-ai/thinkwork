@@ -12,6 +12,23 @@ export interface SubAgentContextProviderConfig {
 	id: string;
 	displayName: string;
 	promptRef: string;
+	prompt?: {
+		title: string;
+		summary: string;
+		instructions?: string[];
+	};
+	resources?: Array<{
+		id: string;
+		label: string;
+		type: string;
+		description: string;
+		access: "read" | "write" | "read-write";
+	}>;
+	skills?: Array<{
+		id: string;
+		label: string;
+		description: string;
+	}>;
 	toolAllowlist: string[];
 	depthCap: number;
 	defaultEnabled?: boolean;
@@ -50,6 +67,9 @@ export function createSubAgentContextProvider(
 		timeoutMs: config.timeoutMs ?? 1_000,
 		subAgent: {
 			promptRef: config.promptRef,
+			prompt: config.prompt,
+			resources: config.resources,
+			skills: config.skills,
 			toolAllowlist: config.toolAllowlist,
 			depthCap: config.depthCap,
 			processModel: "lambda-bedrock-converse",

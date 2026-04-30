@@ -86,16 +86,210 @@ const FAMILY_LABELS: Record<string, string> = {
   "sub-agent": "Sub-agent",
 };
 
-function statusClasses(state: ContextProviderStatus["state"] | "available") {
-  if (state === "ok" || state === "available") {
+type ProviderBadgeState =
+  | ContextProviderStatus["state"]
+  | "available"
+  | "disabled"
+  | "live"
+  | "planned";
+
+function statusClasses(state: ProviderBadgeState) {
+  if (state === "ok" || state === "available" || state === "live") {
     return "bg-green-500/15 text-green-700 dark:text-green-400";
   }
-  if (state === "skipped") return "bg-muted text-muted-foreground";
-  if (state === "stale") return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+  if (state === "skipped" || state === "disabled") {
+    return "bg-muted text-muted-foreground";
+  }
+  if (state === "stale" || state === "planned") {
+    return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+  }
   if (state === "timeout") {
     return "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400";
   }
   return "bg-destructive/15 text-destructive";
+}
+
+function providerBadge(provider: ContextProviderSummary): {
+  label: string;
+  state: ProviderBadgeState;
+} {
+  if (provider.enabled === false) return { label: "disabled", state: "disabled" };
+  if (provider.family === "sub-agent") {
+    return provider.subAgent?.seamState === "live"
+      ? { label: "live", state: "live" }
+      : { label: "planned", state: "planned" };
+  }
+  return { label: "available", state: "available" };
+}
+
+function providerDescription(provider: ContextProviderSummary) {
+  if (provider.family === "memory") {
+    return `Hindsight ${memoryConfig(provider).queryMode}, ${memoryConfig(provider).timeoutMs.toLocaleString()} ms`;
+  }
+  if (provider.family === "workspace") {
+    return "Requires an agent, template, or defaults workspace target.";
+  }
+  if (provider.family === "knowledge-base") {
+    return "Runs against tenant and agent-linked Bedrock Knowledge Bases.";
+  }
+  if (provider.family === "mcp") {
+    return "Approved at the individual read-only/search-safe tool level.";
+  }
+  if (provider.family === "sub-agent") {
+    return provider.subAgent?.seamState === "live"
+      ? "Searches compiled Company Brain pages with typo-tolerant hybrid retrieval."
+      : "Planned source adapter; connector and tools are not wired yet.";
+  }
+  return "Fast compiled page lookup remains separate from raw page inspection.";
+}
+
+function SubAgentConfigDetails({
+  provider,
+}: {
+  provider: ContextProviderSummary;
+}) {
+  const subAgent = provider.subAgent;
+  if (!subAgent) return null;
+  const status = subAgent.seamState === "live" ? "Live" : "Planned";
+  const resources = subAgent.resources ?? [];
+  const skills = subAgent.skills ?? [];
+
+  return (
+    <div className="space-y-3 rounded-md border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">Source agent anatomy</p>
+          <p className="text-xs text-muted-foreground">
+            Prompt, resources, skills, and tool surface for this Company Brain
+            adapter.
+          </p>
+        </div>
+        <Badge
+          variant="secondary"
+          className={
+            subAgent.seamState === "live"
+              ? "bg-green-500/15 text-green-700 dark:text-green-400"
+              : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+          }
+        >
+          {status}
+        </Badge>
+      </div>
+
+      <div className="grid gap-2 text-xs sm:grid-cols-2">
+        <ConfigFact label="Process" value={subAgent.processModel} />
+        <ConfigFact label="Depth cap" value={String(subAgent.depthCap)} />
+        <ConfigFact label="Prompt ref" value={subAgent.promptRef} />
+        <ConfigFact label="Provider id" value={provider.id} />
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Prompt</p>
+        <div className="rounded-md bg-muted/40 p-2">
+          <p className="text-sm font-medium">
+            {subAgent.prompt?.title ?? subAgent.promptRef}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {subAgent.prompt?.summary ?? "Prompt details have not been declared."}
+          </p>
+          {(subAgent.prompt?.instructions?.length ?? 0) > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {subAgent.prompt?.instructions?.map((instruction) => (
+                <li key={instruction}>- {instruction}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <ConfigList
+        title="Resources"
+        empty="No resources declared."
+        items={resources.map((resource) => ({
+          id: resource.id,
+          title: resource.label,
+          subtitle: resource.description,
+          badges: [resource.type, resource.access],
+        }))}
+      />
+      <ConfigList
+        title="Skills"
+        empty="No skills declared."
+        items={skills.map((skill) => ({
+          id: skill.id,
+          title: skill.label,
+          subtitle: skill.description,
+        }))}
+      />
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Tools</p>
+        <div className="flex flex-wrap gap-1.5">
+          {subAgent.toolAllowlist.map((tool) => (
+            <Badge key={tool} variant="outline" className="font-mono text-[11px]">
+              {tool}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-muted/40 p-2">
+      <p className="text-[11px] uppercase text-muted-foreground">{label}</p>
+      <p className="truncate font-mono text-xs">{value}</p>
+    </div>
+  );
+}
+
+function ConfigList({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    badges?: string[];
+  }>;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      {items.length === 0 ? (
+        <p className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+          {empty}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.id} className="rounded-md bg-muted/40 p-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <p className="text-sm font-medium">{item.title}</p>
+                {item.badges?.map((badge) => (
+                  <Badge
+                    key={badge}
+                    variant="outline"
+                    className="font-mono text-[10px]"
+                  >
+                    {badge}
+                  </Badge>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item.subtitle}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function StatusIcon({ state }: { state: ContextProviderStatus["state"] }) {
@@ -398,6 +592,10 @@ function ContextEnginePage() {
     }
   }
 
+  const configProvider = providers.find(
+    (provider) => provider.id === configProviderId,
+  );
+
   return (
     <div className="space-y-4">
       <Card>
@@ -672,6 +870,10 @@ function ContextEnginePage() {
             const Icon =
               FAMILY_ICONS[provider.family as keyof typeof FAMILY_ICONS] ??
               Search;
+            const badge = providerBadge(provider);
+            const isPlannedSubAgent =
+              provider.family === "sub-agent" &&
+              provider.subAgent?.seamState !== "live";
             return (
               <Card key={provider.id} size="sm">
                 <CardHeader>
@@ -684,9 +886,9 @@ function ContextEnginePage() {
                     </div>
                     <Badge
                       variant="secondary"
-                      className={`shrink-0 text-xs ${statusClasses("available")}`}
+                      className={`shrink-0 text-xs ${statusClasses(badge.state)}`}
                     >
-                      {provider.enabled === false ? "disabled" : "available"}
+                      {badge.label}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -700,17 +902,7 @@ function ContextEnginePage() {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {provider.family === "memory"
-                      ? `Hindsight ${memoryConfig(provider).queryMode}, ${memoryConfig(provider).timeoutMs.toLocaleString()} ms`
-                      : provider.family === "workspace"
-                        ? "Requires an agent, template, or defaults workspace target."
-                        : provider.family === "knowledge-base"
-                          ? "Runs against tenant and agent-linked Bedrock Knowledge Bases."
-                          : provider.family === "mcp"
-                            ? "Approved at the individual read-only/search-safe tool level."
-                            : provider.family === "sub-agent"
-                              ? "Read-only specialist source behind Company Brain."
-                              : "Fast compiled page lookup remains separate from raw page inspection."}
+                    {providerDescription(provider)}
                   </p>
                   {provider.lastTestState && (
                     <p className="text-xs text-muted-foreground">
@@ -720,7 +912,14 @@ function ContextEnginePage() {
                         : ""}
                     </p>
                   )}
-                  {provider.family !== "mcp" && (
+                  {isPlannedSubAgent ? (
+                    <Badge
+                      variant="outline"
+                      className="mt-1 w-fit text-[11px] text-muted-foreground"
+                    >
+                      Not wired
+                    </Badge>
+                  ) : provider.family !== "mcp" ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -731,7 +930,7 @@ function ContextEnginePage() {
                       <Settings2 className="h-4 w-4" />
                       Configure
                     </Button>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             );
@@ -915,18 +1114,20 @@ function ContextEnginePage() {
         open={Boolean(configProviderId)}
         onOpenChange={(open) => !open && setConfigProviderId(null)}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {providers.find((provider) => provider.id === configProviderId)
-                ?.displayName ?? "Adapter Configuration"}
+              {configProvider?.displayName ?? "Adapter Configuration"}
             </DialogTitle>
             <DialogDescription>
               Tenant policy controls which Company Brain sources are eligible
               and which sources run by default.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody className="max-h-[70vh] space-y-4">
+            {configProvider?.family === "sub-agent" && (
+              <SubAgentConfigDetails provider={configProvider} />
+            )}
             <div className="flex items-center justify-between gap-3 rounded-md border p-3">
               <div>
                 <Label htmlFor="adapter-enabled">Eligible</Label>
@@ -957,8 +1158,7 @@ function ContextEnginePage() {
                 onCheckedChange={setConfigDefaultEnabled}
               />
             </div>
-            {providers.find((provider) => provider.id === configProviderId)
-              ?.family === "memory" && (
+            {configProvider?.family === "memory" && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1">
                   <Label>Hindsight strategy</Label>
