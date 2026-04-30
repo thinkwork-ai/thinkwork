@@ -71,8 +71,21 @@ export interface Thread {
   lastReadAt?: string | null;
   archivedAt?: string | null;
   lastResponsePreview?: string | null;
+  metadata?: ThreadMetadata | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ThreadEntityRef {
+  pageTable: "wiki_pages" | "tenant_entity_pages";
+  pageId: string;
+  subtype: string;
+}
+
+export interface ThreadMetadata {
+  recurringKey?: string;
+  entityRefs?: ThreadEntityRef[];
+  [key: string]: unknown;
 }
 
 export type MessageRole = "USER" | "ASSISTANT" | "SYSTEM" | "TOOL";

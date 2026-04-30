@@ -237,6 +237,9 @@ resource "aws_lambda_function" "handler" {
     # catalog-missing tools before Agent(tools=...). Shared
     # API_AUTH_SECRET bearer.
     "capability-catalog-list",
+    # Brain v0 narrow write endpoint. Strands calls this with
+    # Bearer API_AUTH_SECRET; GraphQL remains user/admin-facing only.
+    "brain-agent-write",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -331,6 +334,10 @@ locals {
     "POST /mcp/oauth/revoke"                             = "mcp-oauth"
     "ANY /mcp/user-memory"                               = "mcp-user-memory"
     "ANY /mcp/context-engine"                            = "mcp-context-engine"
+
+    # Brain v0 service-auth writeback.
+    "POST /api/brain/agent-write"    = "brain-agent-write"
+    "OPTIONS /api/brain/agent-write" = "brain-agent-write"
 
     # Activity
     "ANY /api/activity/{proxy+}" = "activity"

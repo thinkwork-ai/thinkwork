@@ -208,6 +208,9 @@ build_handler "mcp-user-memory" \
 build_handler "mcp-context-engine" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-context-engine.ts"
 
+build_handler "brain-agent-write" \
+  "$REPO_ROOT/packages/api/src/handlers/brain-agent-write.ts"
+
 # Service-auth REST endpoint the Strands agent container calls during
 # kind=run_skill dispatch to fetch the agent's runtime config (template,
 # skills, MCP, memory, guardrail). Plan 2026-04-24-008 §U1 added the

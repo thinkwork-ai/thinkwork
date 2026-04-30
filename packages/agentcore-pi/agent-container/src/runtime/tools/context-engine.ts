@@ -116,7 +116,7 @@ export function buildContextEngineTool(
     payload,
     "query_context",
     "Query Context",
-    "Search Thinkwork Context Engine across fast default providers: wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup; use query_memory_context only when the user explicitly asks for Hindsight Memory.",
+    "Search Thinkwork Context Engine across fast default providers: wiki, workspace files, knowledge bases, sub-agent providers, and approved search-safe MCP tools. Prefer Brain facets in trust order: operational, relationship, compiled, kb_sourced/activity, external. Use this first for ordinary context lookup; use query_memory_context only when the user explicitly asks for Hindsight Memory.",
   );
 }
 

@@ -44,7 +44,14 @@ const TOOLS = [
               type: "array",
               items: {
                 type: "string",
-                enum: ["memory", "wiki", "workspace", "knowledge-base", "mcp"],
+                enum: [
+                  "memory",
+                  "wiki",
+                  "workspace",
+                  "knowledge-base",
+                  "mcp",
+                  "sub-agent",
+                ],
               },
             },
           },
