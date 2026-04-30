@@ -20,6 +20,7 @@ import { createMcpToolContextProvider } from "./mcp-tool.js";
 import { createSupportCaseContextProvider } from "./support-case.js";
 import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 import { createWikiContextProvider } from "./wiki.js";
+import { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
 
 export function createCoreContextProviders(
   settings: TenantContextProviderSetting[] = [],
@@ -28,6 +29,7 @@ export function createCoreContextProviders(
   const providers = [
     createMemoryContextProvider(memoryConfig),
     createWikiContextProvider(),
+    createWikiSourceAgentContextProvider(),
     createWorkspaceFilesContextProvider(),
     createBedrockKnowledgeBaseContextProvider(),
     createErpCustomerContextProvider(),
@@ -184,3 +186,4 @@ export { createSupportCaseContextProvider } from "./support-case.js";
 export { createSubAgentContextProvider } from "./sub-agent-base.js";
 export { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 export { createWikiContextProvider } from "./wiki.js";
+export { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reflectMock = vi.hoisted(() => vi.fn());
 const recallMock = vi.hoisted(() => vi.fn());
+const findPageSourcesAcrossSurfacesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../memory/index.js", () => ({
   getMemoryServices: () => ({
@@ -14,12 +15,18 @@ vi.mock("../../memory/index.js", () => ({
   }),
 }));
 
+vi.mock("../../brain/repository.js", () => ({
+  findPageSourcesAcrossSurfaces: findPageSourcesAcrossSurfacesMock,
+}));
+
 describe("memory context provider", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
     reflectMock.mockReset();
     recallMock.mockReset();
+    findPageSourcesAcrossSurfacesMock.mockReset();
+    findPageSourcesAcrossSurfacesMock.mockResolvedValue([]);
   });
 
   it("uses reflection text as the Context Engine snippet", async () => {
@@ -160,6 +167,131 @@ describe("memory context provider", () => {
       provenance: {
         metadata: expect.objectContaining({ mode: "recall" }),
       },
+    });
+  });
+
+  it("returns compiled wiki pages that cite recalled Hindsight memory units", async () => {
+    recallMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "mem-restaurant",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          kind: "semantic",
+          sourceType: "conversation",
+          status: "active",
+          content: {
+            summary: "Favorite restaurant",
+            text: "Auberge Bressane is a favorite restaurant in Paris.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-04-29T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 0.8,
+        backend: "hindsight",
+      },
+    ]);
+    findPageSourcesAcrossSurfacesMock.mockResolvedValueOnce([
+      {
+        pageTable: "wiki_pages",
+        pageId: "page-auberge-bressane",
+        sectionId: "section-overview",
+        sourceKind: "memory_unit",
+        sourceRef: "mem-restaurant",
+        title: "Auberge Bressane",
+        slug: "auberge-bressane",
+        entitySubtype: "concept",
+      },
+    ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "favorite restaurant in paris",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(findPageSourcesAcrossSurfacesMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      ownerId: "user-1",
+      sourceKind: "memory_unit",
+      sourceRef: "mem-restaurant",
+    });
+    expect(result.hits).toEqual([
+      expect.objectContaining({
+        id: "memory:mem-restaurant",
+        family: "memory",
+      }),
+      expect.objectContaining({
+        id: "wiki:wiki_pages:page-auberge-bressane:via-memory:mem-restaurant",
+        providerId: "memory",
+        family: "wiki",
+        title: "Auberge Bressane",
+        score: 0.9500000000000001,
+        provenance: expect.objectContaining({
+          sourceId: "page-auberge-bressane",
+          uri: "thinkwork://wiki/concept/auberge-bressane",
+          metadata: expect.objectContaining({
+            bridge: "hindsight-memory-to-wiki",
+            memoryUnitId: "mem-restaurant",
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it("keeps memory hits when the wiki citation bridge is unavailable", async () => {
+    recallMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "mem-no-bridge",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          kind: "semantic",
+          sourceType: "conversation",
+          status: "active",
+          content: {
+            summary: "Favorite restaurant",
+            text: "Auberge Bressane is a favorite restaurant in Paris.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-04-29T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 0.8,
+        backend: "hindsight",
+      },
+    ]);
+    findPageSourcesAcrossSurfacesMock.mockRejectedValueOnce(
+      new Error("citation lookup failed"),
+    );
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "favorite restaurant in paris",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(result.hits).toEqual([
+      expect.objectContaining({ id: "memory:mem-no-bridge" }),
+    ]);
+    expect(result.status).toMatchObject({
+      state: "stale",
+      reason: "wiki citation bridge failed: citation lookup failed",
     });
   });
 });
