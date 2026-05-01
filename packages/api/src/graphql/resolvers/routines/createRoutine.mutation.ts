@@ -25,7 +25,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
 import {
   routineAslVersions,
   routines,
@@ -45,8 +44,6 @@ import {
   stateMachineArn,
   stateMachineName,
 } from "../../../lib/routines/sfn-client.js";
-
-void and;
 
 interface CreateRoutineInput {
   tenantId: string;
@@ -183,9 +180,3 @@ export async function createRoutine(
 
   return snakeToCamel(inserted);
 }
-
-// `routines` import below is unused at import time but appears via
-// snakeToCamel at runtime; export-only ensures tree-shake doesn't drop
-// the schema-init side effect.
-void routines;
-void eq;

@@ -33,20 +33,17 @@ import {
 // Module-scope client
 // ---------------------------------------------------------------------------
 
+// Module-scope SFN client so warm Lambda invocations reuse the TCP pool.
+// Tests `vi.mock('@aws-sdk/client-sfn', ...)` to swap the constructor — no
+// runtime override hook needed. requestTimeout is per-call; the resolver
+// chain (CreateStateMachine + PublishStateMachineVersion + CreateAlias)
+// must fit in graphql-http's 30s Lambda timeout, so cap each call at 8s.
 const _DEFAULT_SFN_CLIENT = new SFNClient({
-  requestHandler: { requestTimeout: 15_000, connectionTimeout: 5_000 },
+  requestHandler: { requestTimeout: 8_000, connectionTimeout: 5_000 },
 });
 
-let _sfnClientOverride: SFNClient | undefined;
-
-/** Tests inject a mock SFNClient via this hook so resolvers don't need
- * a per-call options bag. Production code never calls this. */
-export function _setSfnClientForTests(client: SFNClient | undefined): void {
-  _sfnClientOverride = client;
-}
-
 export function getSfnClient(): SFNClient {
-  return _sfnClientOverride ?? _DEFAULT_SFN_CLIENT;
+  return _DEFAULT_SFN_CLIENT;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +105,19 @@ export function snapshotRoutinesEnv(): RoutinesEnv {
   const routinesExecutionRoleArn =
     process.env.ROUTINES_EXECUTION_ROLE_ARN ?? "";
   const routinesLogGroupArn = process.env.ROUTINES_LOG_GROUP_ARN;
+  // Fail at handler entry rather than letting AWS reject `roleArn=""` deep
+  // inside CreateStateMachine — that error surfaces as `InvalidArn` far
+  // from the actual cause (missing terraform wiring of the env var).
+  if (!accountId) {
+    throw new Error(
+      "Routines runtime is misconfigured: AWS_ACCOUNT_ID env var is not set",
+    );
+  }
+  if (!routinesExecutionRoleArn) {
+    throw new Error(
+      "Routines runtime is misconfigured: ROUTINES_EXECUTION_ROLE_ARN env var is not set",
+    );
+  }
   return {
     region,
     accountId,

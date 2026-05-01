@@ -305,8 +305,8 @@ describe("createRoutine — Step Functions live cutover", () => {
 
 describe("publishRoutineVersion — version + alias flip", () => {
   it("UpdateStateMachine + PublishStateMachineVersion + UpdateAlias on success", async () => {
-    // Routine lookup → admin gate → validator → 3 SFN calls → version
-    // insert → routine update.
+    // Routine lookup → admin gate → validator → prior-version lookup
+    // → 3 SFN calls → version insert → routine update.
     mockSelectRows
       .mockReturnValueOnce([
         {
@@ -318,6 +318,12 @@ describe("publishRoutineVersion — version + alias flip", () => {
           state_machine_alias_arn:
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
           current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:1",
         },
       ])
       .mockReturnValueOnce([

@@ -17,7 +17,7 @@
  *      in a single transaction.
  */
 
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   routineAslVersions,
   routines,
@@ -93,7 +93,23 @@ export async function publishRoutineVersion(
   // Step 4-6 — SFN: update definition, publish version, flip alias.
   const sfn = getSfnClient();
   const previousVersion = routine.current_version ?? 0;
-  const previousAliasPointing = routine.state_machine_alias_arn ?? null;
+
+  // Capture the *prior version ARN* the alias was pointing at so we have
+  // usable rollback metadata. (The schema's `alias_was_pointing` column
+  // means "the version_arn the live alias was pointing at before this
+  // publish" — recording the alias ARN itself, as a prior version did,
+  // would make rollback impossible because the alias has by then been
+  // flipped.)
+  const [priorVersionRow] = await db
+    .select({ version_arn: routineAslVersions.version_arn })
+    .from(routineAslVersions)
+    .where(
+      and(
+        eq(routineAslVersions.routine_id, i.routineId),
+        eq(routineAslVersions.version_number, previousVersion),
+      ),
+    );
+  const previousAliasPointing = priorVersionRow?.version_arn ?? null;
 
   await sfn.send(
     new UpdateStateMachineCommand({
