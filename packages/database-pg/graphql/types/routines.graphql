@@ -63,7 +63,10 @@ type Routine {
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
   runs: [RoutineRun!]! @deprecated(reason: "Use executions; routine_runs storage was removed pre-Phase A")
-  executions: [RoutineExecution!]!
+  # Nullable in Phase A while the type-resolver lands in Phase B U7. A
+  # non-null list with no resolver null-propagates and breaks the parent
+  # routine query for any client that selects it.
+  executions: [RoutineExecution!]
   triggers: [RoutineTrigger!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!

@@ -26,6 +26,7 @@
 -- creates-column: public.routines.state_machine_alias_arn
 -- creates-column: public.routines.documentation_md
 -- creates-column: public.routines.current_version
+-- creates-constraint: public.routines.routines_engine_enum
 -- creates: public.idx_routine_executions_sfn_arn
 -- creates: public.idx_routine_executions_tenant_status
 -- creates: public.idx_routine_executions_routine_started

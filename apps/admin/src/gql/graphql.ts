@@ -3645,7 +3645,7 @@ export type Routine = {
   description?: Maybe<Scalars['String']['output']>;
   documentationMd?: Maybe<Scalars['String']['output']>;
   engine: Scalars['String']['output'];
-  executions: Array<RoutineExecution>;
+  executions?: Maybe<Array<RoutineExecution>>;
   id: Scalars['ID']['output'];
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   name: Scalars['String']['output'];

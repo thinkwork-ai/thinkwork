@@ -270,6 +270,16 @@ resource "aws_iam_role_policy" "execution_secrets" {
 # routine calling another via startExecution.sync:2). Plus task-token
 # completion (SendTaskSuccess / SendTaskFailure) needed by the inbox-
 # approval bridge that runs out-of-band from this state machine.
+#
+# **ABAC tenant isolation is application-layer in Phase A.** A previous
+# revision had an ABAC tag-condition on StartExecution
+# (aws:ResourceTag/tenantId vs aws:PrincipalTag/tenantId). The shared
+# execution role has no tenantId principal tag, so the condition resolved
+# to '' on every invocation and denied all sub-routine calls. True ABAC
+# for a shared role requires session tags via sts:AssumeRole + TagSession
+# (Phase B follow-up — see review residuals). For now tenant isolation
+# lives at the GraphQL resolver layer (routine_id auth check + tenant_id
+# FK), matching the rest of the platform's tenant-scoped resources.
 resource "aws_iam_role_policy" "execution_states" {
   name = "states-self-invoke"
   role = aws_iam_role.execution.id
@@ -278,20 +288,25 @@ resource "aws_iam_role_policy" "execution_states" {
     Version = "2012-10-17"
     Statement = [
       {
+        # StartExecution operates on the stateMachine ARN.
         Effect = "Allow"
         Action = [
           "states:StartExecution",
+        ]
+        Resource = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-*"
+      },
+      {
+        # DescribeExecution and StopExecution operate on the execution
+        # ARN, not the stateMachine ARN. startExecution.sync:2 polls
+        # DescribeExecution under the hood; without this statement the
+        # routine_invoke recipe would fail at runtime with an implicit
+        # IAM deny.
+        Effect = "Allow"
+        Action = [
           "states:DescribeExecution",
           "states:StopExecution",
         ]
-        # Tenant-tag matched: a routine in tenant A cannot start a
-        # routine in tenant B. Enforced by ABAC condition.
-        Resource = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-*"
-        Condition = {
-          StringEquals = {
-            "aws:ResourceTag/tenantId" = "$${aws:PrincipalTag/tenantId}"
-          }
-        }
+        Resource = "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-routine-*:*"
       },
       {
         Effect = "Allow"
