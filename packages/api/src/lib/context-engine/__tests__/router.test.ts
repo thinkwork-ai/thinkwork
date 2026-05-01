@@ -235,4 +235,62 @@ describe("Context Engine router", () => {
     expect(result.hits[0]?.id).toBe("high");
     expect(result.hits[0]?.rank).toBe(1);
   });
+
+  it("dedupes near-identical memory facts before returning review candidates", async () => {
+    const router = createContextEngineRouter({
+      providers: [
+        provider({
+          id: "memory",
+          family: "memory",
+          query: async () => ({
+            hits: [
+              {
+                id: "memory:chicken-short",
+                providerId: "memory",
+                family: "memory",
+                title: "Memory",
+                snippet:
+                  "The narrator considers the chicken at Chez L'Ami Louis to be one of the best in Paris, cooked in a wood oven with duck and goose fat",
+                score: 0.8,
+                scope: "auto",
+                provenance: { sourceId: "memory-a" },
+              },
+              {
+                id: "memory:chicken-expanded",
+                providerId: "memory",
+                family: "memory",
+                title: "Memory",
+                snippet:
+                  "The narrator considers the chicken at Chez L'Ami Louis to be one of the best in Paris, cooked in a wood oven with duck and goose fat. | Involving: fleet-caterpillar-456",
+                score: 0.7,
+                scope: "auto",
+                provenance: { sourceId: "memory-b" },
+              },
+              {
+                id: "memory:favorite",
+                providerId: "memory",
+                family: "memory",
+                title: "Memory",
+                snippet:
+                  "The narrator considers Chez L'Ami Louis a favorite restaurant.",
+                score: 0.6,
+                scope: "auto",
+                provenance: { sourceId: "memory-c" },
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+
+    const result = await router.query({
+      query: "Chez L'Ami Louis",
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(result.hits.map((hit) => hit.id)).toEqual([
+      "memory:chicken-short",
+      "memory:favorite",
+    ]);
+  });
 });
