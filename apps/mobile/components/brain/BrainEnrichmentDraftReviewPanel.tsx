@@ -259,7 +259,7 @@ function SectionBlock({
       accessibilityRole={region ? "button" : undefined}
       accessibilityLabel={
         region
-          ? `${accepted ? "Reject" : "Accept"} ${section.heading} change`
+          ? `${accepted ? "Reject" : "Accept"} ${section.heading || "(preamble)"} change`
           : undefined
       }
       onPress={onToggle}

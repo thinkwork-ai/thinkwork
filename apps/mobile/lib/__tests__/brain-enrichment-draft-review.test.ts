@@ -65,14 +65,15 @@ describe("defaultAcceptedRegionIds", () => {
 });
 
 describe("serializeBrainEnrichmentDraftDecision", () => {
-  it("emits the canonical envelope with sorted unique ids", () => {
+  it("dedupes preserving insertion order", () => {
     const json = serializeBrainEnrichmentDraftDecision({
-      acceptedRegionIds: ["r1", "r1", "r2"],
+      acceptedRegionIds: ["r2", "r2", "r1"],
       rejectedRegionIds: ["r3"],
     });
     const parsed = JSON.parse(json);
     expect(parsed.kind).toBe("brain_enrichment_draft_decision");
-    expect(parsed.acceptedRegionIds).toEqual(["r1", "r2"]);
+    // Insertion order preserved (r2 appears before r1 because it was first).
+    expect(parsed.acceptedRegionIds).toEqual(["r2", "r1"]);
     expect(parsed.rejectedRegionIds).toEqual(["r3"]);
     expect(parsed.note).toBeUndefined();
   });
@@ -94,6 +95,35 @@ describe("serializeBrainEnrichmentDraftDecision", () => {
     });
     expect(JSON.parse(json).note).toBeUndefined();
   });
+});
+
+// Cross-package parity guard: import the server's slugifyTitle and assert
+// the mobile mirror produces identical output across the cases that matter.
+// Drift here silently breaks region lookups (sections render un-highlighted,
+// user can't toggle accept/reject). Vitest in the mobile package can resolve
+// the workspace-linked api package, so the import is cheap.
+import { slugifyTitle } from "../../../../packages/api/src/lib/wiki/aliases.js";
+
+describe("slugifyDraftHeading parity with server slugifyTitle", () => {
+  const cases = [
+    "Hello World",
+    "Opéra",
+    "Café Société",
+    "Tickets & Subscriptions!",
+    "foo - - - bar",
+    "???",
+    "Multi   Spaces",
+    "ALL CAPS HEADING",
+    "with-existing-dashes",
+    "trailing punctuation.",
+    "héllo wörld — em-dash",
+    "x".repeat(150), // exercises the 120-char cap on both sides
+  ];
+  for (const input of cases) {
+    it(`matches server for input: ${input.length > 30 ? input.slice(0, 30) + "…" : input}`, () => {
+      expect(slugifyDraftHeading(input)).toBe(slugifyTitle(input));
+    });
+  }
 });
 
 describe("slugifyDraftHeading (must mirror server slugifyTitle)", () => {
