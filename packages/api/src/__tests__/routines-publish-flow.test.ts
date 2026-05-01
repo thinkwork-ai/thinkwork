@@ -150,6 +150,8 @@ beforeEach(() => {
   process.env.STAGE = "dev";
   process.env.ROUTINES_EXECUTION_ROLE_ARN =
     "arn:aws:iam::123456789012:role/thinkwork-dev-routines-execution-role";
+  process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME =
+    "thinkwork-dev-api-routine-approval-callback";
   mockSfnSend.mockReset();
   mockValidate.mockReset();
   mockRequireAdminOrApiKeyCaller.mockReset();

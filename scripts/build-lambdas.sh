@@ -274,6 +274,15 @@ build_handler "routine-task-python" \
 build_handler "routine-resume" \
   "$REPO_ROOT/packages/lambda/routine-resume.ts"
 
+# routine-approval-callback: SFN's inbox_approval Task hits this Lambda
+# directly via .waitForTaskToken (plan 2026-05-01-005 §U8). Creates the
+# inbox_items row + persists the task token in routine_approval_tokens.
+# The operator's later decideInboxItem decision flows through
+# routine-approval-bridge.ts which conditional-UPDATEs the token row +
+# invokes routine-resume.
+build_handler "routine-approval-callback" \
+  "$REPO_ROOT/packages/api/src/handlers/routine-approval-callback.ts"
+
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"
 
