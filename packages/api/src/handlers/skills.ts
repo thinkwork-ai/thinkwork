@@ -16,7 +16,6 @@ import {
   CreateSecretCommand,
   UpdateSecretCommand,
   DeleteSecretCommand,
-  GetSecretValueCommand,
   ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql, inArray, isNull } from "drizzle-orm";
@@ -61,6 +60,14 @@ import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
+import {
+  builtinToolSecretName,
+  loadTenantBuiltinTools,
+  resolveBuiltinToolApiKey,
+  runWebSearch,
+} from "../lib/builtin-tools/web-search.js";
+
+export { loadTenantBuiltinTools };
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
@@ -2969,10 +2976,6 @@ const BUILTIN_TOOL_CATALOG: Record<
   },
 };
 
-function builtinToolSecretName(tenantId: string, slug: string): string {
-  return `thinkwork/${STAGE}/tenant/${tenantId}/builtin/${slug}`;
-}
-
 async function builtinToolsList(
   tenantSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -3036,7 +3039,7 @@ async function builtinToolsUpsert(
 
   let secretRef = existing?.secret_ref ?? null;
   if (body.apiKey) {
-    const secretName = builtinToolSecretName(tenantId, slug);
+    const secretName = builtinToolSecretName(STAGE, tenantId, slug);
     const secretValue = JSON.stringify({
       type: "builtinToolApiKey",
       token: body.apiKey,
@@ -3130,24 +3133,6 @@ async function builtinToolsDelete(
   return json({ ok: true, deleted: slug });
 }
 
-async function resolveBuiltinToolApiKey(
-  secretRef: string,
-): Promise<string | null> {
-  try {
-    const res = await sm.send(
-      new GetSecretValueCommand({ SecretId: secretRef }),
-    );
-    if (!res.SecretString) return null;
-    const parsed = JSON.parse(res.SecretString) as { token?: string };
-    return parsed.token ?? null;
-  } catch (err) {
-    console.warn(
-      `[builtin-tools] Failed to fetch secret ${secretRef}: ${(err as Error).message}`,
-    );
-    return null;
-  }
-}
-
 async function builtinToolsTest(
   tenantSlug: string,
   slug: string,
@@ -3193,51 +3178,25 @@ async function builtinToolsTest(
 
   try {
     if (provider === "exa") {
-      const res = await fetch("https://api.exa.ai/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "User-Agent": "Thinkwork/1.0",
-        },
-        body: JSON.stringify({ query: "ping", numResults: 1 }),
-        signal: AbortSignal.timeout(10000),
+      const results = await runWebSearch({
+        provider: "exa",
+        apiKey,
+        query: "ping",
+        limit: 1,
       });
-      if (!res.ok) {
-        const text = await res.text();
-        return json(
-          { ok: false, error: `Exa ${res.status}: ${text.slice(0, 200)}` },
-          502,
-        );
-      }
-      const data = (await res.json()) as { results?: unknown[] };
-      const count = Array.isArray(data.results) ? data.results.length : 0;
       await markBuiltinToolTested(tenantId, slug);
-      return json({ ok: true, provider, resultCount: count });
+      return json({ ok: true, provider, resultCount: results.length });
     }
 
     if (provider === "serpapi") {
-      const url = `https://serpapi.com/search.json?engine=google&q=ping&num=1&api_key=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) {
-        const text = await res.text();
-        return json(
-          { ok: false, error: `SerpAPI ${res.status}: ${text.slice(0, 200)}` },
-          502,
-        );
-      }
-      const data = (await res.json()) as {
-        organic_results?: unknown[];
-        error?: string;
-      };
-      if (data.error) {
-        return json({ ok: false, error: `SerpAPI: ${data.error}` }, 502);
-      }
-      const count = Array.isArray(data.organic_results)
-        ? data.organic_results.length
-        : 0;
+      const results = await runWebSearch({
+        provider: "serpapi",
+        apiKey,
+        query: "ping",
+        limit: 1,
+      });
       await markBuiltinToolTested(tenantId, slug);
-      return json({ ok: true, provider, resultCount: count });
+      return json({ ok: true, provider, resultCount: results.length });
     }
 
     return error(`Unknown provider '${provider}'`, 400);
@@ -3259,49 +3218,6 @@ async function markBuiltinToolTested(
         eq(tenantBuiltinTools.tool_slug, slug),
       ),
     );
-}
-
-/** Load enabled built-in tools for a tenant, with API keys resolved from Secrets Manager. */
-export async function loadTenantBuiltinTools(tenantId: string): Promise<
-  Array<{
-    toolSlug: string;
-    provider: string | null;
-    envOverrides: Record<string, string>;
-  }>
-> {
-  const rows = await db
-    .select()
-    .from(tenantBuiltinTools)
-    .where(
-      and(
-        eq(tenantBuiltinTools.tenant_id, tenantId),
-        eq(tenantBuiltinTools.enabled, true),
-      ),
-    );
-
-  const out: Array<{
-    toolSlug: string;
-    provider: string | null;
-    envOverrides: Record<string, string>;
-  }> = [];
-  for (const row of rows) {
-    const envOverrides: Record<string, string> = {};
-    if (row.tool_slug === "web-search") {
-      const provider = row.provider ?? "exa";
-      envOverrides.WEB_SEARCH_PROVIDER = provider;
-      if (row.secret_ref) {
-        const key = await resolveBuiltinToolApiKey(row.secret_ref);
-        if (key) {
-          if (provider === "exa") envOverrides.EXA_API_KEY = key;
-          else if (provider === "serpapi") envOverrides.SERPAPI_KEY = key;
-        }
-      }
-      // If no key resolved, skip — we don't inject a broken skill.
-      if (!envOverrides.EXA_API_KEY && !envOverrides.SERPAPI_KEY) continue;
-    }
-    out.push({ toolSlug: row.tool_slug, provider: row.provider, envOverrides });
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

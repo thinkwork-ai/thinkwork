@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { InteractionManager } from "react-native";
 import {
   ActivityIndicator,
@@ -11,6 +17,7 @@ import {
   Alert,
   RefreshControl,
   TextInput,
+  ScrollView,
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
@@ -29,21 +36,43 @@ import {
 } from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { ShimmerText } from "@/components/ui/ShimmerText";
-import { getExternalProviderLabel, getThreadHeaderLabel } from "@/lib/thread-display";
+import {
+  getExternalProviderLabel,
+  getThreadHeaderLabel,
+} from "@/lib/thread-display";
 import { MessageInputFooter } from "@/components/input/MessageInputFooter";
-import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
-import { useQuickActions, type QuickAction } from "@/lib/hooks/use-quick-actions";
-import { WebViewSheet, type WebViewSheetRef } from "@/components/chat/WebViewSheet";
+import {
+  QuickActionsSheet,
+  type QuickActionsSheetRef,
+} from "@/components/chat/QuickActionsSheet";
+import {
+  useQuickActions,
+  type QuickAction,
+} from "@/lib/hooks/use-quick-actions";
+import {
+  WebViewSheet,
+  type WebViewSheetRef,
+} from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
 import {
-	useNewMessageSubscription,
-	useThreadUpdatedSubscription,
+  useNewMessageSubscription,
+  useThreadUpdatedSubscription,
 } from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
-import { useThreadReadState, isLocallyRead } from "@/lib/hooks/use-thread-read-state";
-import { ActivityTimeline, type SaveRecipeInfo } from "@/components/threads/ActivityTimeline";
+import {
+  useThreadReadState,
+  isLocallyRead,
+} from "@/lib/hooks/use-thread-read-state";
+import {
+  ActivityTimeline,
+  type SaveRecipeInfo,
+} from "@/components/threads/ActivityTimeline";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
-import { SaveRecipeSheet, type SaveRecipeSheetRef } from "@/components/genui/SaveRecipeSheet";
+import {
+  SaveRecipeSheet,
+  type SaveRecipeSheetRef,
+} from "@/components/genui/SaveRecipeSheet";
+import { BrainEnrichmentReviewPanel } from "@/components/brain/BrainEnrichmentReviewPanel";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
 import { Text, Muted } from "@/components/ui/typography";
@@ -63,6 +92,11 @@ import {
   CancelAgentWorkspaceReviewMutation,
   ResumeAgentWorkspaceRunMutation,
 } from "@/lib/graphql-queries";
+import {
+  candidatesForBrainEnrichmentReview,
+  isBrainEnrichmentReviewPayload,
+  serializeBrainEnrichmentSelection,
+} from "@/lib/brain-enrichment-review";
 import {
   type WorkspaceReviewDecision,
   workspaceReviewActionsForStatus,
@@ -89,42 +123,48 @@ function ThreadHitlPrompt({
   const proposedChanges = (review?.proposedChanges ?? []) as any[];
   const body = String(review?.reviewBody ?? "").trim();
   const reviewPayload = useMemo(() => reviewPayloadFor(review), [review]);
-  const enrichmentCandidates = useMemo(
-    () => brainEnrichmentCandidates(reviewPayload),
-    [reviewPayload],
+  const isBrainEnrichment = isBrainEnrichmentReviewPayload(reviewPayload);
+  const enrichmentReviewRunId = String(review?.run?.id ?? review?.id ?? "");
+  const enrichmentProposal = useMemo(
+    () =>
+      isBrainEnrichment
+        ? {
+            candidates: Array.isArray(reviewPayload.candidates)
+              ? reviewPayload.candidates
+              : [],
+            providerStatuses: Array.isArray(reviewPayload.providerStatuses)
+              ? reviewPayload.providerStatuses
+              : [],
+            reviewRunId: enrichmentReviewRunId,
+          }
+        : null,
+    [enrichmentReviewRunId, isBrainEnrichment, reviewPayload],
   );
-  const isBrainEnrichment = enrichmentCandidates !== null;
-  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
-    () => new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>(
+    () =>
+      candidatesForBrainEnrichmentReview(enrichmentProposal).map(
+        (candidate) => candidate.id,
+      ),
   );
 
   useEffect(() => {
     if (!isBrainEnrichment) return;
     setSelectedCandidateIds(
-      new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
+      candidatesForBrainEnrichmentReview(enrichmentProposal).map(
+        (candidate) => candidate.id,
+      ),
     );
-  }, [isBrainEnrichment, review?.run?.id]);
+  }, [enrichmentReviewRunId, isBrainEnrichment]);
 
   useEffect(() => {
     if (!isBrainEnrichment) return;
-    const trimmedNote = (note ?? "").trim();
     onChangeResponse(
-      JSON.stringify({
-        kind: "brain_enrichment_selection",
-        selectedCandidateIds: [...selectedCandidateIds],
-        note: trimmedNote || null,
+      serializeBrainEnrichmentSelection({
+        selectedCandidateIds,
+        note,
       }),
     );
   }, [isBrainEnrichment, selectedCandidateIds, note, onChangeResponse]);
-
-  const toggleCandidate = useCallback((candidateId: string) => {
-    setSelectedCandidateIds((current) => {
-      const next = new Set(current);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
-  }, []);
 
   return (
     <View
@@ -142,7 +182,9 @@ function ThreadHitlPrompt({
               : "Agent waiting for confirmation"}
           </Text>
           <Muted className="text-xs" numberOfLines={1}>
-            {review?.targetPath || review?.run?.targetPath || "Workspace review"}
+            {review?.targetPath ||
+              review?.run?.targetPath ||
+              "Workspace review"}
           </Muted>
         </View>
       </View>
@@ -161,47 +203,22 @@ function ThreadHitlPrompt({
         </Muted>
       ) : null}
 
-      {isBrainEnrichment && enrichmentCandidates ? (
-        <FlatList
-          data={enrichmentCandidates}
-          keyExtractor={(candidate) => candidate.id}
+      {isBrainEnrichment ? (
+        <ScrollView
           style={{ flex: 1, marginTop: 12 }}
-          contentContainerStyle={{ gap: 10, paddingBottom: 8 }}
+          contentContainerStyle={{ paddingBottom: 8 }}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item: candidate }) => {
-            const selected = selectedCandidateIds.has(candidate.id);
-            return (
-              <Pressable
-                onPress={() => toggleCandidate(candidate.id)}
-                className="rounded-lg px-3 py-2.5"
-                style={{
-                  backgroundColor: "transparent",
-                  borderWidth: 1,
-                  borderColor: selected ? colors.primary : colors.border,
-                }}
-              >
-                <View>
-                  <Text
-                    className="text-xs font-semibold"
-                    style={{ color: colors.foreground }}
-                    numberOfLines={1}
-                  >
-                    {candidate.title}
-                  </Text>
-                  <Muted className="text-xs" numberOfLines={3}>
-                    {candidate.summary}
-                  </Muted>
-                  <Muted className="mt-1 text-[11px]" numberOfLines={1}>
-                    {sourceFamilyLabel(candidate.sourceFamily)}
-                    {candidate.citation?.label
-                      ? ` · ${candidate.citation.label}`
-                      : ""}
-                  </Muted>
-                </View>
-              </Pressable>
-            );
-          }}
-        />
+        >
+          <BrainEnrichmentReviewPanel
+            proposal={enrichmentProposal}
+            colors={colors}
+            note={note}
+            onNoteChange={() => {}}
+            selectedCandidateIds={selectedCandidateIds}
+            onSelectedCandidateIdsChange={setSelectedCandidateIds}
+            showNote={false}
+          />
+        </ScrollView>
       ) : proposedChanges.length > 0 ? (
         <View className="mt-3 gap-1.5">
           {proposedChanges.slice(0, 3).map((change, index) => (
@@ -228,7 +245,6 @@ function ThreadHitlPrompt({
           ))}
         </View>
       ) : null}
-
     </View>
   );
 }
@@ -429,7 +445,11 @@ function ReviewActionButton({
       {pendingDecision === decision ? (
         <ActivityIndicator color={color} size="small" />
       ) : (
-        <Text className="text-xs font-semibold" style={{ color }} numberOfLines={1}>
+        <Text
+          className="text-xs font-semibold"
+          style={{ color }}
+          numberOfLines={1}
+        >
           {label}
         </Text>
       )}
@@ -531,11 +551,15 @@ function LoadingTitle() {
 }
 
 export default function ThreadDetailRoute() {
-  const { threadId, title: initialTitle } = useLocalSearchParams<{ threadId: string; title?: string }>();
+  const { threadId, title: initialTitle } = useLocalSearchParams<{
+    threadId: string;
+    title?: string;
+  }>();
   const router = useRouter();
   const { user } = useAuth();
   const tenantId = user?.tenantId;
-  const { isThreadActive, markThreadActive, clearThreadActive } = useTurnCompletion(tenantId);
+  const { isThreadActive, markThreadActive, clearThreadActive } =
+    useTurnCompletion(tenantId);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -544,7 +568,9 @@ export default function ThreadDetailRoute() {
   // Defer queries by one frame to avoid setState-during-render with URQL shared cache
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    const handle = InteractionManager.runAfterInteractions(() => setMounted(true));
+    const handle = InteractionManager.runAfterInteractions(() =>
+      setMounted(true),
+    );
     return () => handle.cancel();
   }, []);
 
@@ -566,16 +592,22 @@ export default function ThreadDetailRoute() {
   }, [agentsData?.agents]);
 
   // ── Thread data ──
-  const [{ data: threadData, fetching: fetchingThread }, reexecuteThread] = useQuery({
-    query: ThreadQuery,
-    variables: { id: threadId! },
-    pause: !threadId,
-  });
+  const [{ data: threadData, fetching: fetchingThread }, reexecuteThread] =
+    useQuery({
+      query: ThreadQuery,
+      variables: { id: threadId! },
+      pause: !threadId,
+    });
   const thread = threadData?.thread as any;
-  const agentName = thread?.agentId ? agentMap[thread.agentId] || "Agent" : "Agent";
+  const agentName = thread?.agentId
+    ? agentMap[thread.agentId] || "Agent"
+    : "Agent";
 
   // ── Messages (separate query to include toolResults for GenUI) ──
-  const [{ data: messagesData, fetching: fetchingMessages }, reexecuteMessages] = useQuery({
+  const [
+    { data: messagesData, fetching: fetchingMessages },
+    reexecuteMessages,
+  ] = useQuery({
     query: MessagesQuery,
     variables: { threadId: threadId!, limit: 100 },
     pause: !threadId,
@@ -594,7 +626,10 @@ export default function ThreadDetailRoute() {
       let toolResults = null;
       if (m.toolResults) {
         try {
-          const parsed = typeof m.toolResults === 'string' ? JSON.parse(m.toolResults) : m.toolResults;
+          const parsed =
+            typeof m.toolResults === "string"
+              ? JSON.parse(m.toolResults)
+              : m.toolResults;
           if (Array.isArray(parsed) && parsed.length > 0) toolResults = parsed;
         } catch {}
       }
@@ -617,7 +652,8 @@ export default function ThreadDetailRoute() {
       .filter((m: any) => {
         const role = (m.role || "").toLowerCase();
         if (role !== "system") return false;
-        const kind = (m.metadata as Record<string, unknown> | null | undefined)?.kind;
+        const kind = (m.metadata as Record<string, unknown> | null | undefined)
+          ?.kind;
         return kind === "external_task_event";
       })
       .map((m: any) => ({
@@ -628,11 +664,12 @@ export default function ThreadDetailRoute() {
   }, [rawMessages]);
 
   // ── Turns ──
-  const [{ data: turnsData, fetching: fetchingTurns }, reexecuteTurns] = useQuery({
-    query: ThreadTurnsForThreadQuery,
-    variables: { tenantId: tenantId!, threadId: threadId!, limit: 50 },
-    pause: !threadId || !tenantId,
-  });
+  const [{ data: turnsData, fetching: fetchingTurns }, reexecuteTurns] =
+    useQuery({
+      query: ThreadTurnsForThreadQuery,
+      variables: { tenantId: tenantId!, threadId: threadId!, limit: 50 },
+      pause: !threadId || !tenantId,
+    });
   const turns = (turnsData?.threadTurns ?? []) as any[];
   const hasRunningTurn = turns.some((t: any) => t.status === "running");
   // Scope reviews to the calling user — the resolver chain-walks
@@ -640,29 +677,33 @@ export default function ThreadDetailRoute() {
   // user surfaces here (in the parent agent's thread). Pause until both
   // tenantId and the resolved user id are known.
   const callerUserId = currentUser?.id ?? null;
-  const [{ data: reviewListData, fetching: fetchingReviews }, reexecuteReviews] =
-    useQuery({
-      query: AgentWorkspaceReviewsQuery,
-      variables: {
-        tenantId: tenantId!,
-        responsibleUserId: callerUserId!,
-        status: "awaiting_review",
-        limit: 50,
-      },
-      pause: !threadId || !tenantId || !callerUserId,
-    });
+  const [
+    { data: reviewListData, fetching: fetchingReviews },
+    reexecuteReviews,
+  ] = useQuery({
+    query: AgentWorkspaceReviewsQuery,
+    variables: {
+      tenantId: tenantId!,
+      responsibleUserId: callerUserId!,
+      status: "awaiting_review",
+      limit: 50,
+    },
+    pause: !threadId || !tenantId || !callerUserId,
+  });
   const pendingReview = useMemo(() => {
     return ((reviewListData?.agentWorkspaceReviews ?? []) as any[]).find(
       (review) => review.threadId === threadId,
     );
   }, [reviewListData?.agentWorkspaceReviews, threadId]);
   const pendingReviewRunId = pendingReview?.run?.id as string | undefined;
-  const [{ data: reviewDetailData, fetching: fetchingReviewDetail }, reexecuteReviewDetail] =
-    useQuery({
-      query: AgentWorkspaceReviewQuery,
-      variables: { runId: pendingReviewRunId! },
-      pause: !pendingReviewRunId,
-    });
+  const [
+    { data: reviewDetailData, fetching: fetchingReviewDetail },
+    reexecuteReviewDetail,
+  ] = useQuery({
+    query: AgentWorkspaceReviewQuery,
+    variables: { runId: pendingReviewRunId! },
+    pause: !pendingReviewRunId,
+  });
   const refreshReviewDetail = useCallback(() => {
     if (!pendingReviewRunId) return;
     reexecuteReviewDetail({ requestPolicy: "network-only" });
@@ -675,8 +716,12 @@ export default function ThreadDetailRoute() {
   const previousReviewRunIdRef = useRef<string | undefined>(undefined);
   const [pendingDecision, setPendingDecision] =
     useState<WorkspaceReviewDecision | null>(null);
-  const [, executeAcceptReview] = useMutation(AcceptAgentWorkspaceReviewMutation);
-  const [, executeCancelReview] = useMutation(CancelAgentWorkspaceReviewMutation);
+  const [, executeAcceptReview] = useMutation(
+    AcceptAgentWorkspaceReviewMutation,
+  );
+  const [, executeCancelReview] = useMutation(
+    CancelAgentWorkspaceReviewMutation,
+  );
   const [, executeResumeReview] = useMutation(ResumeAgentWorkspaceRunMutation);
 
   useEffect(() => {
@@ -712,7 +757,15 @@ export default function ThreadDetailRoute() {
       refreshReviewDetail();
     }, delay);
     return () => clearInterval(interval);
-  }, [threadId, hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages, reexecuteReviews, refreshReviewDetail]);
+  }, [
+    threadId,
+    hasRunningTurn,
+    reexecuteTurns,
+    reexecuteThread,
+    reexecuteMessages,
+    reexecuteReviews,
+    refreshReviewDetail,
+  ]);
 
   // Refresh whenever the screen gains focus — covers returning to the thread
   // from info/details and app foregrounding.
@@ -724,7 +777,14 @@ export default function ThreadDetailRoute() {
       reexecuteTurns({ requestPolicy: "network-only" });
       reexecuteReviews({ requestPolicy: "network-only" });
       refreshReviewDetail();
-    }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns, reexecuteReviews, refreshReviewDetail]),
+    }, [
+      threadId,
+      reexecuteThread,
+      reexecuteMessages,
+      reexecuteTurns,
+      reexecuteReviews,
+      refreshReviewDetail,
+    ]),
   );
 
   // ── Subscriptions (deferred to avoid setState-during-render warnings) ──
@@ -739,7 +799,14 @@ export default function ThreadDetailRoute() {
         refreshReviewDetail();
       }, 0);
     }
-  }, [threadEvent?.onThreadUpdated?.updatedAt, reexecuteThread, reexecuteTurns, reexecuteMessages, reexecuteReviews, refreshReviewDetail]);
+  }, [
+    threadEvent?.onThreadUpdated?.updatedAt,
+    reexecuteThread,
+    reexecuteTurns,
+    reexecuteMessages,
+    reexecuteReviews,
+    refreshReviewDetail,
+  ]);
 
   const [{ data: msgEvent }] = useNewMessageSubscription(threadId);
   useEffect(() => {
@@ -790,39 +857,50 @@ export default function ThreadDetailRoute() {
   const [, executeCreateRecipe] = useMutation(CreateRecipeMutation);
 
   const handleSaveRecipe = useCallback((info: SaveRecipeInfo) => {
-    console.log("[ThreadDetail] handleSaveRecipe called:", info.label, "sheetRef:", !!saveRecipeRef.current);
+    console.log(
+      "[ThreadDetail] handleSaveRecipe called:",
+      info.label,
+      "sheetRef:",
+      !!saveRecipeRef.current,
+    );
     pendingRecipeRef.current = info;
     saveRecipeRef.current?.present({ title: info.label });
   }, []);
 
-  const handleSaveRecipeConfirm = useCallback(async (data: { title: string; summary: string }) => {
-    const info = pendingRecipeRef.current;
-    if (!info) return;
-    await executeCreateRecipe({
-      input: {
-        tenantId: info.tenantId,
-        threadId: info.threadId,
-        title: data.title,
-        summary: data.summary || null,
-        server: info.toolInfo.server,
-        tool: info.toolInfo.tool,
-        params: JSON.stringify(info.toolInfo.params),
-        genuiType: info.genuiType,
-        sourceMessageId: info.messageId,
-      },
-    });
-    pendingRecipeRef.current = null;
-  }, [executeCreateRecipe]);
+  const handleSaveRecipeConfirm = useCallback(
+    async (data: { title: string; summary: string }) => {
+      const info = pendingRecipeRef.current;
+      if (!info) return;
+      await executeCreateRecipe({
+        input: {
+          tenantId: info.tenantId,
+          threadId: info.threadId,
+          title: data.title,
+          summary: data.summary || null,
+          server: info.toolInfo.server,
+          tool: info.toolInfo.tool,
+          params: JSON.stringify(info.toolInfo.params),
+          genuiType: info.genuiType,
+          sourceMessageId: info.messageId,
+        },
+      });
+      pendingRecipeRef.current = null;
+    },
+    [executeCreateRecipe],
+  );
 
   // Quick Actions (per-user, from DB) — defer until mounted to avoid setState-during-render
   const [{ data: qaData }] = useQuickActions(mounted ? tenantId : undefined);
-  const quickActions: QuickAction[] = (qaData?.userQuickActions ?? []) as QuickAction[];
+  const quickActions: QuickAction[] = (qaData?.userQuickActions ??
+    []) as QuickAction[];
 
   const handleLinkPress = useCallback((url: string) => {
     if (webViewSheetRef.current) {
       webViewSheetRef.current.open(url);
     } else {
-      import("react-native").then(({ Linking }) => Linking.openURL(url).catch(() => null));
+      import("react-native").then(({ Linking }) =>
+        Linking.openURL(url).catch(() => null),
+      );
     }
   }, []);
 
@@ -836,12 +914,31 @@ export default function ThreadDetailRoute() {
     reexecuteTurns({ requestPolicy: "network-only" });
     reexecuteReviews({ requestPolicy: "network-only" });
     refreshReviewDetail();
-  }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns, reexecuteReviews, refreshReviewDetail]);
+  }, [
+    threadId,
+    reexecuteThread,
+    reexecuteMessages,
+    reexecuteTurns,
+    reexecuteReviews,
+    refreshReviewDetail,
+  ]);
   useEffect(() => {
-    if (pullRefreshing && !fetchingThread && !fetchingMessages && !fetchingTurns) {
+    if (
+      pullRefreshing &&
+      !fetchingThread &&
+      !fetchingMessages &&
+      !fetchingTurns
+    ) {
       setPullRefreshing(false);
     }
-  }, [pullRefreshing, fetchingThread, fetchingMessages, fetchingTurns, fetchingReviews, fetchingReviewDetail]);
+  }, [
+    pullRefreshing,
+    fetchingThread,
+    fetchingMessages,
+    fetchingTurns,
+    fetchingReviews,
+    fetchingReviewDetail,
+  ]);
 
   const handleReviewDecision = useCallback(
     async (decision: WorkspaceReviewDecision) => {
@@ -852,7 +949,8 @@ export default function ThreadDetailRoute() {
           reviewPayloadFor(reviewDetail)?.kind === "brain_enrichment_review";
         const input = {
           idempotencyKey: `mobile-${pendingReviewRunId}-${decision}-${Date.now()}`,
-          expectedReviewEtag: reviewDetail?.reviewEtag ?? pendingReview?.reviewEtag ?? null,
+          expectedReviewEtag:
+            reviewDetail?.reviewEtag ?? pendingReview?.reviewEtag ?? null,
           responseMarkdown: reviewResponse.trim() || null,
         };
         const result =
@@ -947,7 +1045,16 @@ export default function ThreadDetailRoute() {
     reexecuteThread({ requestPolicy: "network-only" });
     reexecuteMessages({ requestPolicy: "network-only" });
     reexecuteTurns({ requestPolicy: "network-only" });
-  }, [messageText, threadId, currentUser?.id, executeSendMessage, reexecuteThread, reexecuteMessages, reexecuteTurns, markThreadActive]);
+  }, [
+    messageText,
+    threadId,
+    currentUser?.id,
+    executeSendMessage,
+    reexecuteThread,
+    reexecuteMessages,
+    reexecuteTurns,
+    markThreadActive,
+  ]);
 
   // Don't render stale content — wait until the correct thread is loaded
   const isLoaded = thread && thread.id === threadId;
@@ -976,16 +1083,29 @@ export default function ThreadDetailRoute() {
             : "border-b border-neutral-200 dark:border-neutral-800"
         }
       >
-        <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 48 }}>
+        <View
+          className="flex-row items-center justify-between pl-2 pr-4"
+          style={{ height: 48 }}
+        >
           {/* Left: back + title */}
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}>
+          <Pressable
+            onPress={() =>
+              router.canGoBack() ? router.back() : router.replace("/")
+            }
+            className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink"
+            style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}
+          >
             <ChevronLeft size={24} color={colors.foreground} />
             {isLoaded ? (
               <Text className="text-lg font-semibold" numberOfLines={1}>
-                {hasExternalTask && externalProviderLabel ? externalProviderLabel : thread.title}
+                {hasExternalTask && externalProviderLabel
+                  ? externalProviderLabel
+                  : thread.title}
               </Text>
             ) : initialTitle ? (
-              <Text className="text-lg font-semibold" numberOfLines={1}>{initialTitle}</Text>
+              <Text className="text-lg font-semibold" numberOfLines={1}>
+                {initialTitle}
+              </Text>
             ) : (
               <LoadingTitle />
             )}
@@ -1017,16 +1137,27 @@ export default function ThreadDetailRoute() {
                             style: "destructive",
                             onPress: async () => {
                               try {
-                                await executeUpdateThread({ id: threadId, input: { archivedAt: new Date().toISOString() } });
+                                await executeUpdateThread({
+                                  id: threadId,
+                                  input: {
+                                    archivedAt: new Date().toISOString(),
+                                  },
+                                });
                                 if (router.canGoBack()) router.back();
                                 else router.replace("/");
                               } catch (e) {
-                                console.error("[ThreadDetail] Delete failed:", e);
-                                Alert.alert("Error", "Failed to delete. Please try again.");
+                                console.error(
+                                  "[ThreadDetail] Delete failed:",
+                                  e,
+                                );
+                                Alert.alert(
+                                  "Error",
+                                  "Failed to delete. Please try again.",
+                                );
                               }
                             },
                           },
-                        ]
+                        ],
                       );
                     },
                   },
@@ -1035,7 +1166,6 @@ export default function ThreadDetailRoute() {
             </View>
           )}
         </View>
-
       </View>
 
       {showsReviewTabs ? (
@@ -1124,7 +1254,13 @@ export default function ThreadDetailRoute() {
               setMessageText("");
               Keyboard.dismiss();
               executeSendMessage({
-                input: { threadId: threadId, role: "USER" as any, content: text, senderType: "human", senderId: currentUser?.id },
+                input: {
+                  threadId: threadId,
+                  role: "USER" as any,
+                  content: text,
+                  senderType: "human",
+                  senderId: currentUser?.id,
+                },
               }).then(() => {
                 markThreadActive(threadId);
                 reexecuteThread({ requestPolicy: "network-only" });

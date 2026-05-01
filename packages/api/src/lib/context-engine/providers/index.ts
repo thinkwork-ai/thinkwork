@@ -21,6 +21,7 @@ import { createSupportCaseContextProvider } from "./support-case.js";
 import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 import { createWikiContextProvider } from "./wiki.js";
 import { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
+import { createTenantWebSearchContextProvider } from "./web-search.js";
 
 export function createCoreContextProviders(
   settings: TenantContextProviderSetting[] = [],
@@ -51,7 +52,12 @@ export async function createContextProvidersForCaller(caller?: {
       )
     : createCoreContextProviders();
   if (!caller?.tenantId) return providers;
-  return [...providers, ...(await createTenantMcpContextProviders(caller))];
+  const webSearchProvider = await createTenantWebSearchContextProvider(caller);
+  return [
+    ...providers,
+    ...(webSearchProvider ? [webSearchProvider] : []),
+    ...(await createTenantMcpContextProviders(caller)),
+  ];
 }
 
 async function createTenantMcpContextProviders(caller: {
@@ -184,6 +190,7 @@ export { createMemoryContextProvider } from "./memory.js";
 export { createMcpToolContextProvider } from "./mcp-tool.js";
 export { createSupportCaseContextProvider } from "./support-case.js";
 export { createSubAgentContextProvider } from "./sub-agent-base.js";
+export { createWebSearchContextProvider } from "./web-search.js";
 export { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 export { createWikiContextProvider } from "./wiki.js";
 export { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
