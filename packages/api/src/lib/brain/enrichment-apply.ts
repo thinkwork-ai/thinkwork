@@ -7,6 +7,11 @@ import {
   threads,
 } from "../../graphql/utils.js";
 import { tenantEntityPages, wikiPages } from "@thinkwork/database-pg/schema";
+import {
+  composeBodyFromSections,
+  parseSections,
+  type DraftCompileRegion,
+} from "../wiki/draft-compile.js";
 import type { BrainEnrichmentCandidate } from "./enrichment-service.js";
 
 type DbLike = typeof defaultDb;
@@ -304,6 +309,309 @@ async function appendCandidatesToPage(args: {
 function appendMarkdown(existing: string, addition: string): string {
   const trimmed = existing.trim();
   return trimmed ? `${trimmed}\n\n${addition}` : addition;
+}
+
+// ---------------------------------------------------------------------------
+// Draft-page review apply (U2 — sibling to applyBrainEnrichmentWorkspaceReview)
+// ---------------------------------------------------------------------------
+
+export interface BrainEnrichmentDraftPayload {
+  proposedBodyMd: string;
+  snapshotMd: string;
+  regions: DraftCompileRegion[];
+  targetPage: {
+    pageTable: "wiki_pages" | "tenant_entity_pages";
+    id: string;
+    title?: string;
+  };
+}
+
+export interface BrainEnrichmentDraftDecision {
+  acceptedRegionIds: string[];
+  rejectedRegionIds: string[];
+  note?: string;
+}
+
+const DRAFT_DECISION_KIND = "brain_enrichment_draft_decision";
+
+/**
+ * Parse a `responseMarkdown` JSON envelope produced by the mobile draft-review
+ * panel. Returns null when the payload is missing or malformed (caller
+ * defaults to bulk-accept).
+ */
+export function parseBrainEnrichmentDraftDecision(
+  responseMarkdown: string | null | undefined,
+): BrainEnrichmentDraftDecision | null {
+  const text = responseMarkdown?.trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as {
+      kind?: string;
+      acceptedRegionIds?: unknown;
+      rejectedRegionIds?: unknown;
+      note?: unknown;
+    };
+    if (parsed.kind !== DRAFT_DECISION_KIND) return null;
+    const accepted = Array.isArray(parsed.acceptedRegionIds)
+      ? parsed.acceptedRegionIds.filter((v): v is string => typeof v === "string")
+      : [];
+    const rejected = Array.isArray(parsed.rejectedRegionIds)
+      ? parsed.rejectedRegionIds.filter((v): v is string => typeof v === "string")
+      : [];
+    const note = typeof parsed.note === "string" ? parsed.note : undefined;
+    return {
+      acceptedRegionIds: accepted,
+      rejectedRegionIds: rejected,
+      ...(note ? { note } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure function: compute the final page body markdown from a draft payload
+ * plus an accept/reject decision.
+ *
+ * Semantics:
+ *   - Sections with no region → unchanged (use proposed.afterMd).
+ *   - Sections with a region NOT in rejectedRegionIds → accepted (use afterMd).
+ *   - Sections with a region in rejectedRegionIds:
+ *       - region has non-empty beforeMd  → revert to beforeMd in place.
+ *       - region has empty beforeMd      → drop the section (it was a new
+ *                                           addition the user rejected).
+ *   - Removed regions (in snapshot, absent from proposed) in rejectedRegionIds
+ *     → re-append the snapshot section at the end of the body.
+ *
+ * Reject-all behaves the same as whole-draft cancel: final body = snapshot.
+ */
+export function mergeAcceptedRegions(args: {
+  draftPayload: BrainEnrichmentDraftPayload;
+  decision: BrainEnrichmentDraftDecision | null;
+}): string {
+  const { proposedBodyMd, snapshotMd, regions } = args.draftPayload;
+  const decision = args.decision;
+
+  // Bulk-accept short-circuit.
+  if (
+    !decision ||
+    (decision.rejectedRegionIds.length === 0 && regions.length > 0)
+  ) {
+    return proposedBodyMd;
+  }
+
+  // Reject-all short-circuit.
+  const rejectedSet = new Set(decision.rejectedRegionIds);
+  const allRegionsRejected =
+    regions.length > 0 && regions.every((r) => rejectedSet.has(r.id));
+  if (allRegionsRejected) {
+    return snapshotMd;
+  }
+
+  const proposedSections = parseSections(proposedBodyMd);
+  const regionsBySlug = new Map(regions.map((r) => [r.sectionSlug, r]));
+
+  const finalSections: Array<{
+    slug: string;
+    heading: string;
+    bodyMd: string;
+  }> = [];
+
+  for (const section of proposedSections) {
+    const region = regionsBySlug.get(section.slug);
+    if (!region || !rejectedSet.has(region.id)) {
+      finalSections.push(section);
+      continue;
+    }
+    // Region rejected.
+    if (region.beforeMd.trim()) {
+      // Modified section rejected → revert to before content in place.
+      finalSections.push({
+        slug: section.slug,
+        heading: section.heading,
+        bodyMd: region.beforeMd,
+      });
+    }
+    // Brand-new section rejected (empty beforeMd) → omit.
+  }
+
+  // Re-append snapshot sections for removed-and-rejected regions.
+  const proposedSlugs = new Set(proposedSections.map((s) => s.slug));
+  for (const region of regions) {
+    if (proposedSlugs.has(region.sectionSlug)) continue;
+    if (!rejectedSet.has(region.id)) continue;
+    if (!region.beforeMd.trim()) continue;
+    finalSections.push({
+      slug: region.sectionSlug,
+      heading: region.sectionHeading,
+      bodyMd: region.beforeMd,
+    });
+  }
+
+  return composeBodyFromSections(finalSections);
+}
+
+export interface ApplyBrainEnrichmentDraftReviewArgs {
+  draftPayload: BrainEnrichmentDraftPayload;
+  decision: BrainEnrichmentDraftDecision | null;
+  tenantId: string;
+  threadId?: string | null;
+  turnId?: string | null;
+  reviewerId?: string | null;
+  db?: DbLike;
+}
+
+export interface ApplyBrainEnrichmentDraftReviewResult {
+  acceptedRegionCount: number;
+  rejectedRegionCount: number;
+  bodyChanged: boolean;
+}
+
+/**
+ * Apply a draft-page review decision: write the merged body to the target
+ * page, then close the review thread with an outcome message. Sibling to
+ * `applyBrainEnrichmentWorkspaceReview` — does NOT modify the legacy append
+ * path.
+ *
+ * Ships inert (no caller in `decideWorkspaceReview` yet — origin plan U5/U6
+ * wire the dispatch).
+ */
+export async function applyBrainEnrichmentDraftReview(
+  args: ApplyBrainEnrichmentDraftReviewArgs,
+): Promise<ApplyBrainEnrichmentDraftReviewResult> {
+  const db = args.db ?? defaultDb;
+  const { draftPayload, decision } = args;
+  const target = draftPayload.targetPage;
+
+  const finalBody = mergeAcceptedRegions({ draftPayload, decision });
+
+  // Refuse to blank a non-empty page. This catches two corner cases that
+  // would otherwise destroy data silently:
+  //   - Model produced zero sections + bulk-accept walks finalBody to "".
+  //   - All sections were brand-new (empty beforeMd) and all rejected, leaving
+  //     finalBody empty even though the snapshot had content.
+  // Throwing here surfaces the anomaly to the caller (decideWorkspaceReview)
+  // instead of overwriting the wiki page with an empty body.
+  if (!finalBody.trim() && draftPayload.snapshotMd.trim()) {
+    throw new Error(
+      "applyBrainEnrichmentDraftReview: refusing to blank a non-empty page (empty merged body against non-empty snapshot)",
+    );
+  }
+
+  await replacePageBody({
+    db,
+    target,
+    bodyMd: finalBody,
+  });
+
+  const acceptedCount = countAccepted(draftPayload.regions, decision);
+  const rejectedCount = decision?.rejectedRegionIds.length ?? 0;
+
+  await completeReviewThread({
+    db,
+    tenantId: args.tenantId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    preview: outcomePreview(acceptedCount, rejectedCount),
+    message: outcomeMessage({
+      title: target.title,
+      acceptedCount,
+      rejectedCount,
+    }),
+    reviewerId: args.reviewerId,
+    status: "done",
+  });
+
+  return {
+    acceptedRegionCount: acceptedCount,
+    rejectedRegionCount: rejectedCount,
+    bodyChanged: finalBody !== draftPayload.snapshotMd,
+  };
+}
+
+/**
+ * Whole-draft reject for draft-page reviews — leaves the page unchanged and
+ * marks the thread cancelled.
+ */
+export async function cancelBrainEnrichmentDraftReview(args: {
+  draftPayload: BrainEnrichmentDraftPayload;
+  tenantId: string;
+  threadId?: string | null;
+  turnId?: string | null;
+  reviewerId?: string | null;
+  note?: string;
+  db?: DbLike;
+}): Promise<void> {
+  const db = args.db ?? defaultDb;
+  await completeReviewThread({
+    db,
+    tenantId: args.tenantId,
+    threadId: args.threadId,
+    turnId: args.turnId,
+    preview: "Draft-page review rejected.",
+    message: args.note
+      ? `Draft was rejected. Reviewer note: ${args.note}`
+      : "Draft was rejected.",
+    reviewerId: args.reviewerId,
+    status: "cancelled",
+  });
+}
+
+function countAccepted(
+  regions: DraftCompileRegion[],
+  decision: BrainEnrichmentDraftDecision | null,
+): number {
+  if (!decision) return regions.length;
+  const rejected = new Set(decision.rejectedRegionIds);
+  return regions.filter((r) => !rejected.has(r.id)).length;
+}
+
+function outcomePreview(accepted: number, rejected: number): string {
+  if (accepted === 0 && rejected > 0) return "All draft regions rejected.";
+  if (rejected === 0) return `${accepted} draft regions applied.`;
+  return `${accepted} accepted, ${rejected} rejected.`;
+}
+
+function outcomeMessage(args: {
+  title?: string;
+  acceptedCount: number;
+  rejectedCount: number;
+}): string {
+  const target = args.title ? `${args.title}` : "the page";
+  if (args.acceptedCount === 0) {
+    return `Draft applied to ${target}: all ${args.rejectedCount} regions rejected; page unchanged.`;
+  }
+  if (args.rejectedCount === 0) {
+    return `Draft applied to ${target}: ${args.acceptedCount} regions accepted.`;
+  }
+  return `Draft applied to ${target}: ${args.acceptedCount} accepted, ${args.rejectedCount} rejected.`;
+}
+
+async function replacePageBody(args: {
+  db: DbLike;
+  target: {
+    pageTable: "wiki_pages" | "tenant_entity_pages";
+    id: string;
+  };
+  bodyMd: string;
+}) {
+  if (args.target.pageTable === "tenant_entity_pages") {
+    await args.db
+      .update(tenantEntityPages)
+      .set({
+        body_md: args.bodyMd,
+        updated_at: new Date(),
+      })
+      .where(eq(tenantEntityPages.id, args.target.id));
+  } else {
+    await args.db
+      .update(wikiPages)
+      .set({
+        body_md: args.bodyMd,
+        updated_at: new Date(),
+      })
+      .where(eq(wikiPages.id, args.target.id));
+  }
 }
 
 async function completeReviewThread(args: {

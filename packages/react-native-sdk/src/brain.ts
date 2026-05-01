@@ -49,6 +49,60 @@ export interface BrainEnrichmentSourceAvailability {
   reason?: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Draft-page review (origin plan: 2026-05-01-002 — async, thread-delivered
+// recompiled-page review with section-grain regions).
+// ---------------------------------------------------------------------------
+
+export type BrainEnrichmentDraftRegionFamily =
+  | "BRAIN"
+  | "KNOWLEDGE_BASE"
+  | "WEB"
+  | "MIXED";
+
+export interface BrainEnrichmentDraftRegion {
+  id: string;
+  sectionSlug: string;
+  sectionHeading: string;
+  sourceFamily: BrainEnrichmentDraftRegionFamily;
+  citation: {
+    label?: string | null;
+    uri?: string | null;
+    sourceId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  beforeMd: string;
+  afterMd: string;
+  contributingCandidateIds: string[];
+}
+
+export interface BrainEnrichmentDraftPage {
+  proposedBodyMd: string;
+  snapshotMd: string;
+  regions: BrainEnrichmentDraftRegion[];
+  pageTitle: string;
+  targetPageTable: "wiki_pages" | "tenant_entity_pages";
+  targetPageId: string;
+}
+
+/**
+ * Wire payload kinds used by the draft-page review flow. These travel as a
+ * `kind` discriminator inside JSON-stringified payloads on workspace-review
+ * `responseMarkdown` and `agent_workspace_events.payload`.
+ */
+export const BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND =
+  "brain_enrichment_draft_review" as const;
+
+export const BRAIN_ENRICHMENT_DRAFT_DECISION_KIND =
+  "brain_enrichment_draft_decision" as const;
+
+export interface BrainEnrichmentDraftDecisionPayload {
+  kind: typeof BRAIN_ENRICHMENT_DRAFT_DECISION_KIND;
+  acceptedRegionIds: string[];
+  rejectedRegionIds: string[];
+  note?: string;
+}
+
 export async function listBrainEnrichmentSources(args: {
   graphqlUrl: string;
   input: {

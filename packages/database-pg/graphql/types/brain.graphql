@@ -93,6 +93,54 @@ type BrainEnrichmentProposal {
   updatedAt: AWSDateTime!
 }
 
+# ---------------------------------------------------------------------------
+# Draft-page review (origin plan: 2026-05-01-002 — replaces synchronous
+# candidate-card review for Brain pages with an async, thread-delivered
+# draft of the recompiled page).
+# ---------------------------------------------------------------------------
+
+"""
+Source family aggregation for a single proposed-body region. MIXED is set when
+multiple candidates from different families contributed to the same section.
+"""
+enum BrainEnrichmentDraftRegionFamily {
+  BRAIN
+  KNOWLEDGE_BASE
+  WEB
+  MIXED
+}
+
+"""
+One section-grain change region in a draft-page review. The mobile review
+surface tap-targets the section in the in-place render, and the "show changes"
+toggle uses beforeMd/afterMd to render a stacked diff.
+"""
+type BrainEnrichmentDraftRegion {
+  id: ID!
+  sectionSlug: String!
+  sectionHeading: String!
+  sourceFamily: BrainEnrichmentDraftRegionFamily!
+  citation: BrainEnrichmentCitation
+  beforeMd: String!
+  afterMd: String!
+  contributingCandidateIds: [ID!]!
+}
+
+"""
+The structured payload behind a `brain_enrichment_draft_review` workspace
+review. `proposedBodyMd` renders as the in-place review surface; `snapshotMd`
+is the pinned current body at draft-creation time so per-region rejection
+reverts deterministically.
+"""
+type BrainEnrichmentDraftPage {
+  proposedBodyMd: String!
+  snapshotMd: String!
+  regions: [BrainEnrichmentDraftRegion!]!
+  pageTitle: String!
+  targetPageTable: String!
+  targetPageId: ID!
+}
+
 input RunBrainPageEnrichmentInput {
   tenantId: ID!
   pageTable: String!
