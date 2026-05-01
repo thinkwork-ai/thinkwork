@@ -75,13 +75,19 @@ export default function RoutineBuilderScreen() {
     if (!building || !routineRecord) return;
     const rt = routineRecord as any;
     console.log("[RoutineBuilder] Watching routine record:", {
-      hasCode: !!rt.code,
+      currentVersion: rt.currentVersion,
       updatedAt: rt.updatedAt,
       buildingStartedAt: buildingStartedAt.current,
     });
-    // Check if code was updated after we started building
-    if (rt.code && rt.updatedAt > (buildingStartedAt.current ?? 0)) {
-      console.log("[RoutineBuilder] Code detected! Build complete.");
+    // Phase C U10: build completes when publishRoutineVersion bumps
+    // currentVersion. The legacy `code` field is removed from the schema;
+    // currentVersion is the unambiguous "a new version landed" signal.
+    if (
+      typeof rt.currentVersion === "number" &&
+      rt.currentVersion > 0 &&
+      rt.updatedAt > (buildingStartedAt.current ?? 0)
+    ) {
+      console.log("[RoutineBuilder] New version published! Build complete.");
       setBuilding(false);
       router.replace("/(tabs)/routines");
     }
@@ -155,15 +161,25 @@ export default function RoutineBuilderScreen() {
     const isFirstMessage = serverMessages.length === 0;
     let systemPrefix = "";
     if (isFirstMessage) {
-      const baseContext = `[SYSTEM CONTEXT -- not visible to user]\n\n${ROUTINE_BUILDER_PROMPT}\n\nRoutine ID: ${params.routineId}. Name: "${params.name}". Trigger: ${params.triggerType}. TWO-PHASE FLOW: Phase 1 (now) -- discuss and design the routine with the user. Do NOT build yet. Phase 2 -- when you receive a "user clicked BUILD" message, THEN generate final code + documentation using the update_routine tool.`;
+      const baseContext = `[SYSTEM CONTEXT -- not visible to user]\n\n${ROUTINE_BUILDER_PROMPT}\n\nRoutine ID: ${params.routineId}. Name: "${params.name}". Trigger: ${params.triggerType}. TWO-PHASE FLOW: Phase 1 (now) -- discuss and design the routine with the user. Do NOT publish yet. Phase 2 -- when you receive a "user clicked BUILD" message, THEN generate the final ASL + markdown summary + step manifest and call publishRoutineVersion exactly once.`;
       if (isEditMode && existingRoutine) {
-        const codeSection = (existingRoutine as any).code
-          ? `\n\nEXISTING CODE:\n\`\`\`python\n${(existingRoutine as any).code}\n\`\`\``
+        // Existing routine context: surface the latest published markdown
+        // summary so the agent has prior intent in front of it. The
+        // legacy Python `code` field has no equivalent in the ASL world.
+        // Mobile fetches `documentationMd` (the markdown summary
+        // regenerated on every publish per the Routine GraphQL type);
+        // raw ASL is fetched on-demand via routineAslVersion(id) when
+        // the agent specifically asks the validator about a current
+        // step shape.
+        const r = existingRoutine as any;
+        const summarySection = r.documentationMd
+          ? `\n\nEXISTING ROUTINE SUMMARY (markdown):\n${r.documentationMd}`
           : "";
-        const docsSection = (existingRoutine as any).documentation
-          ? `\n\nEXISTING DOCUMENTATION:\n${(existingRoutine as any).documentation}`
-          : "";
-        systemPrefix = `${baseContext}\n\nThis is an EDIT of an existing routine. Preserve existing behavior unless the user asks to change it. Update the documentation with any changes you make.${codeSection}${docsSection} [END SYSTEM] `;
+        const versionSection =
+          typeof r.currentVersion === "number" && r.currentVersion > 0
+            ? `\n\nCurrent published version: ${r.currentVersion}`
+            : "";
+        systemPrefix = `${baseContext}\n\nThis is an EDIT of an existing routine. Preserve existing behavior unless the user asks to change it. Update the markdown summary with any changes you make.${summarySection}${versionSection} [END SYSTEM] `;
       } else {
         systemPrefix = `${baseContext} [END SYSTEM] `;
       }
@@ -197,7 +213,7 @@ export default function RoutineBuilderScreen() {
               await sendToSession({
                 threadId: sessionThreadId,
                 assistantId,
-                content: `[SYSTEM CONTEXT -- not visible to user] The user clicked BUILD. Generate the final Python code, documentation, and a short description NOW based on our entire conversation. IMPORTANT: You MUST use ONLY the update_routine tool. Call update_routine with: routineId="${params.routineId}", code, documentation, and description. ONE tool call only. Do NOT ask the user anything. [END SYSTEM] Build routine`,
+                content: `[SYSTEM CONTEXT -- not visible to user] The user clicked BUILD. Generate the final ASL + markdown summary + step manifest NOW based on our entire conversation. IMPORTANT: You MUST use ONLY the publishRoutineVersion tool. Call publishRoutineVersion with: routineId="${params.routineId}", asl, markdownSummary, stepManifest. ONE tool call only. Do NOT ask the user anything. [END SYSTEM] Build routine`,
               });
               console.log("[RoutineBuilder] Finalize message sent successfully");
             } catch (err) {

@@ -18,7 +18,6 @@ import { Text, Muted } from "@/components/ui/typography";
 import { Input } from "@/components/ui/input";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
-import { callMcpTool } from "@/lib/mcp-client";
 
 type BuildPhase = "form" | "evaluating";
 
@@ -56,19 +55,12 @@ export default function NewRoutineScreen() {
     setPhase("evaluating");
 
     try {
-      // Step 1: Ask the LLM whether we have enough info to build
-      const evaluation = await callMcpTool<{
-        decision: "build" | "ask";
-        message: string;
-        questions?: string[];
-      }>("evaluate_routine", { name: trimmedName, description: trimmedDesc });
-
-      // Step 2: Create the draft routine.
-      // Phase B U7: createRoutine now requires asl/markdownSummary/stepManifest.
-      // Until the chat builder retarget in Phase C U10 wires real ASL emission,
-      // ship a minimal pass-through state machine so the publish flow has a
-      // valid first version. The chat builder will publish a new version
-      // populated with real recipes once the user iterates with it.
+      // Create the draft routine. createRoutine (Phase B U7) requires
+      // asl/markdownSummary/stepManifest; the chat builder will publish a
+      // new version populated with real recipes once the operator iterates.
+      // Phase C U10 retired the phantom `evaluate_routine` MCP call that
+      // used to gate this — there is no such tool, and the gate was a
+      // pre-builder UX nicety, not load-bearing.
       const placeholderAsl = {
         Comment: "Draft routine — awaiting builder",
         StartAt: "NoOp",
@@ -87,20 +79,18 @@ export default function NewRoutineScreen() {
       const routineId = result.data?.createRoutine?.id;
       if (!routineId) throw new Error("Failed to create routine");
 
-      // TODO: Migrate createSession + linkBuilderThread + updateBuildStatus + sendMessage to GraphQL
-      // For now, navigate to routine detail
-      if (evaluation.decision === "build") {
-        router.replace(`/routines/${routineId}`);
-      } else {
-        router.replace({
-          pathname: "/routines/builder-chat",
-          params: {
-            routineName: trimmedName,
-            routineId,
-            pendingQuestions: JSON.stringify(evaluation.questions ?? []),
-          },
-        });
-      }
+      // Drop the operator straight into the chat builder so they can
+      // iterate the routine into a real recipe sequence. The placeholder
+      // ASL above is the routine's first version; the next
+      // publishRoutineVersion call from the chat builder bumps to a real
+      // version.
+      router.replace({
+        pathname: "/routines/builder-chat",
+        params: {
+          routineName: trimmedName,
+          routineId,
+        },
+      });
     } catch (err: any) {
       setPhase("form");
       Alert.alert("Error", err?.message || "Failed to create routine");
