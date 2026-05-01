@@ -171,7 +171,11 @@ async function runExaSearch(args: {
         "x-api-key": args.apiKey,
         "User-Agent": "Thinkwork/1.0",
       },
-      body: JSON.stringify({ query: args.query, numResults: args.limit }),
+      body: JSON.stringify({
+        query: args.query,
+        numResults: args.limit,
+        contents: { text: true },
+      }),
       signal: AbortSignal.timeout(10_000),
     },
   );

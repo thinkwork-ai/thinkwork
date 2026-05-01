@@ -131,6 +131,16 @@ describe("tenant Web Search built-in tools", () => {
         raw: expect.any(Object),
       },
     ]);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.exa.ai/search",
+      expect.objectContaining({
+        body: JSON.stringify({
+          query: "launch",
+          numResults: 5,
+          contents: { text: true },
+        }),
+      }),
+    );
   });
 
   it("normalizes SerpAPI organic results with URL citations", async () => {

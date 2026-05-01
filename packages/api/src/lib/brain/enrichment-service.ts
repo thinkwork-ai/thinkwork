@@ -501,9 +501,20 @@ function normalizeSourceFamilies(
   input: BrainEnrichmentSourceFamily[] | null | undefined,
 ): BrainEnrichmentSourceFamily[] {
   const selected = input?.length ? input : DEFAULT_SOURCE_FAMILIES;
-  return [...new Set(selected)].filter((family) =>
-    DEFAULT_SOURCE_FAMILIES.includes(family),
-  );
+  const normalized = selected
+    .map((family) => normalizeSourceFamily(family))
+    .filter((family): family is BrainEnrichmentSourceFamily => family !== null);
+  return [...new Set(normalized)];
+}
+
+function normalizeSourceFamily(
+  family: string,
+): BrainEnrichmentSourceFamily | null {
+  const normalized = family.toUpperCase().replace(/[-\s]+/g, "_");
+  if (normalized === "BRAIN") return "BRAIN";
+  if (normalized === "WEB") return "WEB";
+  if (normalized === "KNOWLEDGE_BASE") return "KNOWLEDGE_BASE";
+  return null;
 }
 
 function defaultSourceFamiliesForProviders(
