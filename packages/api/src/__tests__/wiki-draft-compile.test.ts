@@ -134,6 +134,18 @@ describe("draft-compile / composeBodyFromSections", () => {
 // parseModelResponse
 // ---------------------------------------------------------------------------
 
+describe("draft-compile / parseModelResponse — duplicate slug rejection", () => {
+	it("throws when the model emits two sections with the same slug", () => {
+		const text = JSON.stringify({
+			sections: [
+				{ slug: "overview", heading: "Overview", afterMd: "first" },
+				{ slug: "overview", heading: "Other", afterMd: "second" },
+			],
+		});
+		expect(() => parseModelResponse(text)).toThrow(/duplicate section slug/);
+	});
+});
+
 describe("draft-compile / parseModelResponse", () => {
 	it("parses a well-formed JSON response", () => {
 		const text = JSON.stringify({
@@ -380,6 +392,71 @@ describe("draft-compile / runDraftCompile (seam-injected)", () => {
 		expect(removed).toBeDefined();
 		expect(removed!.beforeMd).toBe("Old content.");
 		expect(removed!.afterMd).toBe("");
+		// Removed-section regions are always BRAIN-sourced (they reflect the
+		// snapshot, not any incoming candidate). Lock that contract here so a
+		// future refactor can't change it silently.
+		expect(removed!.sourceFamily).toBe("BRAIN");
+		expect(removed!.contributingCandidateIds).toEqual([]);
+	});
+
+	it("does NOT emit a removed-section region for `_preamble`", async () => {
+		const seam = fakeSeam(
+			JSON.stringify({
+				sections: [
+					{
+						slug: "details",
+						heading: "Details",
+						afterMd: "details body",
+						contributingCandidateIds: [],
+					},
+				],
+			}),
+		);
+		const result = await runDraftCompile(
+			{
+				pageId: "p1",
+				pageTable: "wiki_pages",
+				pageTitle: "Page",
+				currentBodyMd: "Top-line preamble.\n\n## Details\n\ndetails body",
+				candidates: [],
+			},
+			seam,
+		);
+		const preamble = result.regions.find((r) => r.sectionSlug === "_preamble");
+		expect(preamble).toBeUndefined();
+	});
+
+	it("rejects model output with duplicate section slugs", async () => {
+		const seam = fakeSeam(
+			JSON.stringify({
+				sections: [
+					{
+						slug: "overview",
+						heading: "Overview",
+						afterMd: "first",
+						contributingCandidateIds: [],
+					},
+					{
+						slug: "overview",
+						heading: "Overview (dupe)",
+						afterMd: "second",
+						contributingCandidateIds: [],
+					},
+				],
+			}),
+		);
+		await expect(
+			runDraftCompile(
+				{
+					pageId: "p1",
+					pageTable: "wiki_pages",
+					pageTitle: "Page",
+					currentBodyMd: "",
+					candidates: [],
+				},
+				seam,
+			),
+		).rejects.toThrow(/duplicate section slug/);
 	});
 
 	it("MIXED source family when a region has contributors from multiple families", async () => {

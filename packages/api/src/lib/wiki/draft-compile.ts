@@ -349,8 +349,16 @@ function computeRegions(args: ComputeRegionsArgs): DraftCompileRegion[] {
 	// Removed sections (existed in snapshot, dropped from proposed) become
 	// regions whose afterMd is empty, so the review surface can show "this
 	// section will be removed if you accept."
+	//
+	// Skip `_preamble` — it's a synthetic slug for prose before the first H2,
+	// and the merge path can't safely re-insert it at the end of the document
+	// without an H2 header (composeBodyFromSections only treats preamble as
+	// header-less when it appears first in the section list). If the model
+	// wants to preserve or update preamble it can emit a section with slug
+	// `_preamble`; otherwise we accept the model's drop silently.
 	for (const existing of args.existingSections) {
 		if (proposedSlugs.has(existing.slug)) continue;
+		if (existing.slug === "_preamble") continue;
 		regions.push({
 			id: `region-${existing.slug}`,
 			sectionSlug: existing.slug,
@@ -428,6 +436,7 @@ export function parseModelResponse(text: string): ParsedModelResponse {
 	}
 
 	const sections: ParsedModelSection[] = [];
+	const seenSlugs = new Set<string>();
 	for (const item of (raw as { sections: unknown[] }).sections) {
 		if (!item || typeof item !== "object") continue;
 		const obj = item as Record<string, unknown>;
@@ -437,6 +446,15 @@ export function parseModelResponse(text: string): ParsedModelResponse {
 		if (!slug || !heading) {
 			throw new Error("draft-compile: section missing slug or heading");
 		}
+		// Reject duplicate slugs. The accept/reject envelope keys regions on
+		// `region-<slug>`; collapsing two sections under one id would make the
+		// user's per-region decision ambiguous and silently drop one section.
+		if (seenSlugs.has(slug)) {
+			throw new Error(
+				`draft-compile: duplicate section slug '${slug}' in model output`,
+			);
+		}
+		seenSlugs.add(slug);
 		const ids = Array.isArray(obj.contributingCandidateIds)
 			? obj.contributingCandidateIds.filter((v): v is string => typeof v === "string")
 			: [];
@@ -683,8 +701,19 @@ export async function runDraftCompileJobById(
 			`runDraftCompileJobById: job ${jobId} has trigger=${job.trigger}, expected enrichment_draft`,
 		);
 	}
+	// Terminal-state short-circuits. `failed` must short-circuit too — without
+	// this guard, retrying the handler against an already-failed job would
+	// re-run the agentic compile and double-complete the row.
 	if (job.status === "succeeded" || job.status === "skipped") {
 		return { ok: true, jobId: job.id, status: "succeeded" };
+	}
+	if (job.status === "failed") {
+		return {
+			ok: false,
+			jobId: job.id,
+			status: "failed",
+			error: job.error ?? "previous attempt failed",
+		};
 	}
 	return runDraftCompileJob(job, opts);
 }

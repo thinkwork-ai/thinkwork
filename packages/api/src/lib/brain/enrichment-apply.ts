@@ -485,6 +485,19 @@ export async function applyBrainEnrichmentDraftReview(
 
   const finalBody = mergeAcceptedRegions({ draftPayload, decision });
 
+  // Refuse to blank a non-empty page. This catches two corner cases that
+  // would otherwise destroy data silently:
+  //   - Model produced zero sections + bulk-accept walks finalBody to "".
+  //   - All sections were brand-new (empty beforeMd) and all rejected, leaving
+  //     finalBody empty even though the snapshot had content.
+  // Throwing here surfaces the anomaly to the caller (decideWorkspaceReview)
+  // instead of overwriting the wiki page with an empty body.
+  if (!finalBody.trim() && draftPayload.snapshotMd.trim()) {
+    throw new Error(
+      "applyBrainEnrichmentDraftReview: refusing to blank a non-empty page (empty merged body against non-empty snapshot)",
+    );
+  }
+
   await replacePageBody({
     db,
     target,

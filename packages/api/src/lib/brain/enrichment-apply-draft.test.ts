@@ -281,6 +281,26 @@ describe("mergeAcceptedRegions", () => {
     ).toBe("## A\n\nproposed-a");
   });
 
+  it("snapshot has _preamble and proposed drops it: no removed-region for _preamble (preamble is silently absorbed)", () => {
+    // mergeAcceptedRegions is the apply-side merge; the no-region-for-_preamble
+    // contract is enforced upstream in computeRegions (draft-compile.ts), so a
+    // payload that shouldn't have one wouldn't be in `regions` to begin with.
+    // This test pins the intended behavior at the apply-side: when the regions
+    // list contains no _preamble entry but snapshot has preamble prose, the
+    // proposed body wins verbatim — no implicit re-insertion.
+    const draft = payload({
+      proposedBodyMd: "## Details\n\ndetails body",
+      snapshotMd: "Top-line preamble.\n\n## Details\n\ndetails body",
+      regions: [],
+    });
+    expect(
+      mergeAcceptedRegions({
+        draftPayload: draft,
+        decision: { acceptedRegionIds: [], rejectedRegionIds: [] },
+      }),
+    ).toBe("## Details\n\ndetails body");
+  });
+
   it("rejecting an unknown region id is a no-op (region not in payload)", () => {
     const draft = payload({
       proposedBodyMd: "## A\n\nproposed-a",
