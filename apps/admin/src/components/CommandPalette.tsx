@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
   { label: "Agents", to: "/agents", icon: Bot },
-  { label: "Routines", to: "/routines", icon: Repeat },
+  { label: "Routines", to: "/automations/routines", icon: Repeat },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
   { label: "Org Chart", to: "/org", icon: Network },
   { label: "Settings", to: "/settings", icon: Settings },
