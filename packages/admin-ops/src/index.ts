@@ -50,3 +50,12 @@ export type { User, TenantMember } from "./users.js";
 
 export * as artifacts from "./artifacts.js";
 export type { Artifact, ListArtifactsInput } from "./artifacts.js";
+
+export * as routines from "./routines.js";
+export type {
+	Routine,
+	RoutineExecutionLite,
+	CreateAgentRoutineInput,
+	TriggerRoutineRunInput,
+	VisibilityCheckResult,
+} from "./routines.js";

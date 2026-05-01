@@ -38,6 +38,7 @@ import {
 	templates as templateOps,
 	users as userOps,
 	artifacts as artifactOps,
+	routines as routineOps,
 } from "@thinkwork/admin-ops";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
@@ -678,7 +679,203 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 				return artifactOps.getArtifact(clientFor(args), (args as { id: string }).id);
 			},
 		},
+
+		// -------------------------------------------------------------------
+		// Routines (Plan 2026-05-01-006 §U11)
+		// -------------------------------------------------------------------
+		// Both tools are inert by default. ROUTINES_AGENT_TOOLS_ENABLED=true
+		// flips them live. The pattern lets the code merge before the agent
+		// runtime warm-flush — agents see the tools in tools/list but every
+		// tools/call returns `not_yet_enabled` until the env flag flips,
+		// avoiding a half-rolled-out window where agents try to invoke
+		// tools that aren't ready.
+		//
+		// Visibility (v0): a routine with `agentId` set is private to that
+		// agent; `agentId === null` means tenant-shared. routine_invoke
+		// runs `checkRoutineVisibility` against the caller's agentId
+		// before delegating to triggerRoutineRun.
+		{
+			name: "create_routine",
+			description:
+				"Create a new agent-private routine (Phase B Step Functions runtime). The new routine is stamped with the caller's agentId and starts as a no-op `Succeed` state machine; the agent iterates the ASL via subsequent publishRoutineVersion calls. Returns the created routine. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: {
+						type: "string",
+						description: "Tenant UUID (omit when the admin key already pins the tenant).",
+					},
+					agentId: {
+						type: "string",
+						description:
+							"Caller's agent UUID. The routine is stamped private to this agent.",
+					},
+					name: {
+						type: "string",
+						description: "Operator-facing routine name.",
+					},
+					description: {
+						type: "string",
+						description: "Optional one-line description.",
+					},
+					intent: {
+						type: "string",
+						description:
+							"Natural-language description of the work. Becomes the markdown summary's intent line.",
+					},
+					suggestedSteps: {
+						type: "array",
+						items: { type: "string" },
+						description: "Optional ordered list of step descriptions.",
+					},
+					principalId: { type: "string", description: "Invoking user's UUID (optional)." },
+				},
+				required: ["agentId", "name", "intent"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				if (!routinesAgentToolsEnabled()) {
+					return notYetEnabled("create_routine");
+				}
+				const a = args as {
+					tenantId?: string;
+					agentId: string;
+					name: string;
+					description?: string;
+					intent: string;
+					suggestedSteps?: string[];
+				};
+				if (a.intent.trim().length < 10) {
+					throw new Error(
+						"intent must be at least 10 chars — describe the work specifically enough to generate ASL.",
+					);
+				}
+				const client = clientFor(args);
+				const tenantId = client.tenantId;
+				if (!tenantId) {
+					throw new Error(
+						"tenantId required: pass via args or use a tenant-pinned admin key.",
+					);
+				}
+				const markdownSummary = buildAgentStampMarkdown(a);
+				return routineOps.createAgentRoutine(client, {
+					tenantId,
+					agentId: a.agentId,
+					name: a.name,
+					description: a.description,
+					markdownSummary,
+				});
+			},
+		},
+		{
+			name: "routine_invoke",
+			description:
+				"Trigger a routine execution. The routine must be owned by the caller's agent (private) or tenant-shared (agentId=null). Returns a routine execution lite (id, status, triggerSource, startedAt). Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: {
+						type: "string",
+						description: "Tenant UUID (omit when the admin key already pins the tenant).",
+					},
+					agentId: {
+						type: "string",
+						description:
+							"Caller's agent UUID. Used for visibility check against the routine's owning agentId.",
+					},
+					routineId: {
+						type: "string",
+						description: "Routine UUID to invoke.",
+					},
+					args: {
+						type: "object",
+						description:
+							"Arbitrary input passed to the SFN execution as $$.Execution.Input.",
+						additionalProperties: true,
+					},
+					principalId: { type: "string", description: "Invoking user's UUID (optional)." },
+				},
+				required: ["agentId", "routineId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				if (!routinesAgentToolsEnabled()) {
+					return notYetEnabled("routine_invoke");
+				}
+				const a = args as {
+					tenantId?: string;
+					agentId: string;
+					routineId: string;
+					args?: Record<string, unknown>;
+				};
+				const client = clientFor(args);
+				const tenantId = client.tenantId;
+				if (!tenantId) {
+					throw new Error(
+						"tenantId required: pass via args or use a tenant-pinned admin key.",
+					);
+				}
+				const routine = await routineOps.getRoutine(client, a.routineId);
+				const visibility = routineOps.checkRoutineVisibility(routine, {
+					tenantId,
+					agentId: a.agentId,
+				});
+				if (!visibility.ok) {
+					throw new Error(
+						`routine_invoke denied: ${visibility.reason} (routineId=${a.routineId}, agentId=${a.agentId})`,
+					);
+				}
+				return routineOps.triggerRoutineRun(client, {
+					routineId: a.routineId,
+					args: a.args,
+				});
+			},
+		},
 	];
+}
+
+// ---------------------------------------------------------------------------
+// Phase C U11: agent-tool gate + agent-stamp helper
+// ---------------------------------------------------------------------------
+
+function routinesAgentToolsEnabled(): boolean {
+	return process.env.ROUTINES_AGENT_TOOLS_ENABLED === "true";
+}
+
+function notYetEnabled(toolName: string): {
+	error: "not_yet_enabled";
+	tool: string;
+	message: string;
+} {
+	return {
+		error: "not_yet_enabled",
+		tool: toolName,
+		message: `${toolName} is defined but disabled — flip ROUTINES_AGENT_TOOLS_ENABLED=true on the runtime to activate.`,
+	};
+}
+
+/** Build the operator-facing markdown summary for an agent-stamped
+ * routine. The chat builder regenerates this on the next
+ * publishRoutineVersion; the v0 placeholder reflects the agent's
+ * stated intent and any suggested steps so the routine isn't an
+ * empty shell on the routines list. Exported for tests. */
+export function buildAgentStampMarkdown(input: {
+	name: string;
+	intent: string;
+	suggestedSteps?: string[];
+}): string {
+	const lines = [`# ${input.name}`, "", `**Intent:** ${input.intent.trim()}`, ""];
+	if (input.suggestedSteps && input.suggestedSteps.length > 0) {
+		lines.push("**Suggested steps:**");
+		for (const step of input.suggestedSteps) {
+			lines.push(`- ${step}`);
+		}
+		lines.push("");
+	}
+	lines.push(
+		"_Created via the agent-stamp MCP tool. The owning agent will iterate the routine via publishRoutineVersion._",
+	);
+	return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
