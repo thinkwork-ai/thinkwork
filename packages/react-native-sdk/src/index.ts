@@ -60,9 +60,15 @@ export {
   cancelBrainEnrichmentReview,
   listBrainEnrichmentSources,
   runBrainPageEnrichment,
+  BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND,
+  BRAIN_ENRICHMENT_DRAFT_DECISION_KIND,
   type BrainEnrichmentProposal,
   type BrainEnrichmentSourceAvailability,
   type BrainEnrichmentSourceFamily,
+  type BrainEnrichmentDraftPage,
+  type BrainEnrichmentDraftRegion,
+  type BrainEnrichmentDraftRegionFamily,
+  type BrainEnrichmentDraftDecisionPayload,
 } from "./brain";
 export { useBrainEnrichment } from "./hooks/use-brain-enrichment";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";

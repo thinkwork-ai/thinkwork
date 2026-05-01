@@ -667,6 +667,50 @@ export type BrainEnrichmentCitation = {
   uri?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * The structured payload behind a `brain_enrichment_draft_review` workspace
+ * review. `proposedBodyMd` renders as the in-place review surface; `snapshotMd`
+ * is the pinned current body at draft-creation time so per-region rejection
+ * reverts deterministically.
+ */
+export type BrainEnrichmentDraftPage = {
+  __typename?: 'BrainEnrichmentDraftPage';
+  pageTitle: Scalars['String']['output'];
+  proposedBodyMd: Scalars['String']['output'];
+  regions: Array<BrainEnrichmentDraftRegion>;
+  snapshotMd: Scalars['String']['output'];
+  targetPageId: Scalars['ID']['output'];
+  targetPageTable: Scalars['String']['output'];
+};
+
+/**
+ * One section-grain change region in a draft-page review. The mobile review
+ * surface tap-targets the section in the in-place render, and the "show changes"
+ * toggle uses beforeMd/afterMd to render a stacked diff.
+ */
+export type BrainEnrichmentDraftRegion = {
+  __typename?: 'BrainEnrichmentDraftRegion';
+  afterMd: Scalars['String']['output'];
+  beforeMd: Scalars['String']['output'];
+  citation?: Maybe<BrainEnrichmentCitation>;
+  contributingCandidateIds: Array<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  sectionHeading: Scalars['String']['output'];
+  sectionSlug: Scalars['String']['output'];
+  sourceFamily: BrainEnrichmentDraftRegionFamily;
+};
+
+/**
+ * Source family aggregation for a single proposed-body region. MIXED is set when
+ * multiple candidates from different families contributed to the same section.
+ */
+export enum BrainEnrichmentDraftRegionFamily {
+  Brain = 'BRAIN',
+  KnowledgeBase = 'KNOWLEDGE_BASE',
+  Mixed = 'MIXED',
+  Web = 'WEB'
+}
+
 export type BrainEnrichmentProposal = {
   __typename?: 'BrainEnrichmentProposal';
   candidates: Array<BrainEnrichmentCandidate>;
