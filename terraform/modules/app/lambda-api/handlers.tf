@@ -253,6 +253,14 @@ resource "aws_lambda_function" "handler" {
     # the trust boundary is the routines-stepfunctions execution role's
     # lambda:InvokeFunction grant scoped to this Lambda's ARN.
     "routine-approval-callback",
+    # routine-step-callback + routine-execution-callback (Phase B U9).
+    # Bearer API_AUTH_SECRET ingest endpoints — Task wrappers and the
+    # EventBridge SFN-state-change rule POST here. routine-step-callback
+    # writes routine_step_events; routine-execution-callback updates
+    # routine_executions lifecycle status. Idempotent on the dedup index
+    # for steps + on the conditional UPDATE for executions.
+    "routine-step-callback",
+    "routine-execution-callback",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -575,6 +583,18 @@ locals {
     # ASL document; returns { valid, errors, warnings }.
     "POST /api/routines/validate"    = "routine-asl-validator"
     "OPTIONS /api/routines/validate" = "routine-asl-validator"
+
+    # Routines step-event ingest (plan 2026-05-01-005 §U9). Task wrappers
+    # (routine-task-python, routine-resume) POST per-step status
+    # transitions; the EventBridge rule in routines-stepfunctions/main.tf
+    # POSTs SFN execution-state-change events here for the agent_invoke
+    # recipe path (no wrapper Lambda). Bearer API_AUTH_SECRET. Idempotent
+    # via partial unique index on (execution_id, node_id, status,
+    # started_at) — see migration 0056.
+    "POST /api/routines/step"         = "routine-step-callback"
+    "OPTIONS /api/routines/step"      = "routine-step-callback"
+    "POST /api/routines/execution"    = "routine-execution-callback"
+    "OPTIONS /api/routines/execution" = "routine-execution-callback"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
