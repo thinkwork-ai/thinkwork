@@ -52,13 +52,14 @@ const ALLOWED_STATUSES = new Set([
 
 /** Terminal statuses lock the row out of further status changes — a
  * stale `running` event from EventBridge must not regress to running
- * after the execution already succeeded/failed. */
-const TERMINAL_STATUSES = new Set([
-  "succeeded",
-  "failed",
-  "cancelled",
-  "timed_out",
-]);
+ * after the execution already succeeded/failed. The literal SQL
+ * fragment below is built from this Set so a future addition (e.g.,
+ * `expired`) flows into both the in-process check and the WHERE clause. */
+const TERMINAL_STATUSES = ["succeeded", "failed", "cancelled", "timed_out"] as const;
+const TERMINAL_STATUS_SET: ReadonlySet<string> = new Set(TERMINAL_STATUSES);
+const TERMINAL_STATUSES_SQL_LIST = sql.raw(
+  TERMINAL_STATUSES.map((s) => `'${s}'`).join(","),
+);
 
 // ---------------------------------------------------------------------------
 // EventBridge SFN-state-change shape — keys mirror the AWS event payload.
@@ -226,7 +227,7 @@ async function updateRoutineExecution(
       .where(
         and(
           eq(routineExecutions.sfn_execution_arn, row.sfn_execution_arn),
-          sql`(${routineExecutions.status} NOT IN ('succeeded','failed','cancelled','timed_out')
+          sql`(${routineExecutions.status} NOT IN (${TERMINAL_STATUSES_SQL_LIST})
                 OR ${routineExecutions.status} = ${row.status})`,
         ),
       )
@@ -309,7 +310,7 @@ export function shapeExecutionCallback(
 
 // Re-export the terminal-status constant so tests can reason about the
 // transition matrix without re-defining it.
-export { TERMINAL_STATUSES };
+export { TERMINAL_STATUSES, TERMINAL_STATUS_SET };
 
 // ---------------------------------------------------------------------------
 // Coercion helpers
