@@ -23,11 +23,12 @@ export function createWebSearchContextProvider(args: {
   config: TenantWebSearchConfig;
   search?: (query: string, limit: number) => Promise<WebSearchResult[]>;
 }): ContextProviderDescriptor {
+  const label = webSearchProviderLabel(args.config.provider);
   return {
     id: WEB_SEARCH_CONTEXT_PROVIDER_ID,
     family: "mcp",
     sourceFamily: "web",
-    displayName: "Web Search",
+    displayName: label,
     defaultEnabled: false,
     supportedScopes: ["personal", "team", "auto"],
     config: {
@@ -35,7 +36,7 @@ export function createWebSearchContextProvider(args: {
       provider: args.config.provider,
       externalTrust: "lower",
     },
-    timeoutMs: 12_000,
+    timeoutMs: 28_000,
     async query(request): Promise<ContextProviderResult> {
       try {
         const results = await (args.search ?? defaultSearch)(
@@ -44,7 +45,7 @@ export function createWebSearchContextProvider(args: {
         );
         return {
           hits: results.map((result, index) =>
-            webSearchResultToHit(result, index, request.scope),
+            webSearchResultToHit(result, index, request.scope, label),
           ),
         };
       } catch (err) {
@@ -74,6 +75,7 @@ function webSearchResultToHit(
   result: WebSearchResult,
   index: number,
   scope: "personal" | "team" | "auto",
+  label: string,
 ): ContextHit {
   const sourceId = result.id || result.url || String(index + 1);
   return {
@@ -86,7 +88,7 @@ function webSearchResultToHit(
     score: result.score ?? 1 / (index + 1),
     scope,
     provenance: {
-      label: "Web Search",
+      label,
       uri: result.url,
       sourceId,
       metadata: {
@@ -100,4 +102,8 @@ function webSearchResultToHit(
       raw: result.raw,
     },
   };
+}
+
+function webSearchProviderLabel(provider: TenantWebSearchConfig["provider"]) {
+  return provider === "exa" ? "Exa Research" : "Web Search";
 }

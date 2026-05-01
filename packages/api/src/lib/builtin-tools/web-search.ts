@@ -174,9 +174,9 @@ async function runExaSearch(args: {
       body: JSON.stringify({
         query: args.query,
         numResults: args.limit,
-        contents: { text: true },
+        contents: { summary: true },
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(25_000),
     },
   );
   const payload = (await response.json().catch(() => ({}))) as {
@@ -237,9 +237,9 @@ function normalizeExaResult(
   if (!record) return null;
   const title = stringValue(record.title) || stringValue(record.url);
   const snippet =
-    stringValue(record.text) ||
     stringValue(record.summary) ||
-    stringValue(record.highlights);
+    stringValue(record.highlights) ||
+    cleanSearchText(stringValue(record.text));
   if (!title || !snippet) return null;
   return {
     id: stringValue(record.id) ?? String(index + 1),
@@ -249,6 +249,29 @@ function normalizeExaResult(
     score: numberValue(record.score) ?? 1 / (index + 1),
     raw: item,
   };
+}
+
+function cleanSearchText(text: string | null): string | null {
+  if (!text) return null;
+  const noise = new Set([
+    "# back",
+    "back",
+    "my special offers",
+    "by date",
+    "prices",
+    "0",
+    "300",
+    "0€",
+    "300€",
+  ]);
+  const cleaned = text
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !noise.has(line.toLowerCase()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return cleaned || null;
 }
 
 function normalizeSerpApiResult(

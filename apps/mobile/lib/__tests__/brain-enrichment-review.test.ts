@@ -48,7 +48,7 @@ describe("brain enrichment review helpers", () => {
         {
           id: "web-1",
           title: "Acme opened Austin office",
-          summary: "External source reports: Acme opened an Austin office.",
+          summary: "Exa Research reports: Acme opened an Austin office.",
           sourceFamily: "WEB",
           providerId: "builtin:web-search",
         },
@@ -79,6 +79,6 @@ describe("brain enrichment review helpers", () => {
   });
 
   it("labels Web as external/lower trust", () => {
-    expect(sourceLabel("WEB")).toBe("Web · external");
+    expect(sourceLabel("WEB")).toBe("External research");
   });
 });

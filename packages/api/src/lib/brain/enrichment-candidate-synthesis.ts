@@ -52,7 +52,10 @@ function candidateFromHit(
   return {
     id: `candidate:${randomUUID()}`,
     title,
-    summary: sourceFamily === "WEB" ? webSummary(snippet) : snippet,
+    summary:
+      sourceFamily === "WEB"
+        ? webSummary(snippet, hit.provenance.label)
+        : snippet,
     sourceFamily,
     providerId: hit.providerId,
     score: hit.score ?? null,
@@ -68,9 +71,10 @@ function candidateFromHit(
   };
 }
 
-function webSummary(snippet: string): string {
-  const withoutPrefix = snippet.replace(/^external source reports:\s*/i, "");
-  return `External source reports: ${withoutPrefix}`;
+function webSummary(snippet: string, label?: string | null): string {
+  const sourceLabel = label?.trim() || "External source";
+  const withoutPrefix = stripWebPrefix(snippet);
+  return `${sourceLabel} reports: ${withoutPrefix}`;
 }
 
 function mergeCandidates(
@@ -109,7 +113,10 @@ function areDuplicateCandidates(
 }
 
 function stripWebPrefix(value: string): string {
-  return value.replace(/^external source reports:\s*/i, "");
+  return value.replace(
+    /^(external source|exa research|web search) reports:\s*/i,
+    "",
+  );
 }
 
 function normalizeFactText(value: string): string {

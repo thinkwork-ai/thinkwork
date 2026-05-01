@@ -18,7 +18,7 @@ describe("Brain enrichment candidate synthesis", () => {
           score: 0.8,
           scope: "auto",
           provenance: {
-            label: "Web Search",
+            label: "Exa Research",
             uri: "https://example.com/pricing",
             sourceId: "web-1",
           },
@@ -32,11 +32,11 @@ describe("Brain enrichment candidate synthesis", () => {
       expect.objectContaining({
         title: "Thinkwork launches new pricing",
         summary:
-          "External source reports: Thinkwork published new pricing details for enterprise plans.",
+          "Exa Research reports: Thinkwork published new pricing details for enterprise plans.",
         sourceFamily: "WEB",
         providerId: "builtin:web-search",
         citation: expect.objectContaining({
-          label: "Web Search",
+          label: "Exa Research",
           uri: "https://example.com/pricing",
           sourceId: "web-1",
         }),

@@ -55,7 +55,7 @@ export function serializeBrainEnrichmentSelection(args: {
 
 export function sourceLabel(family: BrainEnrichmentSourceFamily): string {
   if (family === "KNOWLEDGE_BASE") return "Knowledge base";
-  if (family === "WEB") return "Web · external";
+  if (family === "WEB") return "External research";
   return "Brain";
 }
 
@@ -108,7 +108,10 @@ function parseMaybeJson(payload: unknown): unknown {
 }
 
 function stripWebPrefix(value: string): string {
-  return value.replace(/^external source reports:\s*/i, "");
+  return value.replace(
+    /^(external source|exa research|web search) reports:\s*/i,
+    "",
+  );
 }
 
 function normalize(value: string): string {

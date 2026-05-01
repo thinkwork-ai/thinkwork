@@ -29,7 +29,7 @@ describe("Web Search Context Engine provider", () => {
       id: "builtin:web-search",
       family: "mcp",
       sourceFamily: "web",
-      displayName: "Web Search",
+      displayName: "Exa Research",
       defaultEnabled: false,
     });
 
@@ -51,7 +51,7 @@ describe("Web Search Context Engine provider", () => {
         title: "Fresh public fact",
         snippet: "The public web says something current.",
         provenance: expect.objectContaining({
-          label: "Web Search",
+          label: "Exa Research",
           uri: "https://example.com/fact",
           sourceId: "result-1",
         }),

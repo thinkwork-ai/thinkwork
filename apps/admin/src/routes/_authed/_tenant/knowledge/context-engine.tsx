@@ -149,9 +149,9 @@ function providerBadge(provider: ContextProviderSummary): {
 function providerDescription(provider: ContextProviderSummary) {
   if (provider.id === WEB_SEARCH_PROVIDER_ID) {
     if (isPendingWebSearchProvider(provider)) {
-      return "Web Search is enabled under Built-in Tools, but this API has not returned its Context Engine adapter yet.";
+      return "Exa Research is enabled under Built-in Tools, but this API has not returned its Context Engine adapter yet.";
     }
-    return "Searches the public web through the tenant-configured Web Search built-in.";
+    return "Runs external research through the tenant-configured Exa Web Search built-in.";
   }
   if (provider.family === "memory") {
     return `Hindsight ${memoryConfig(provider).queryMode}, ${memoryConfig(provider).timeoutMs.toLocaleString()} ms`;
@@ -211,7 +211,7 @@ function withBuiltinWebSearchFallback(
     id: WEB_SEARCH_PROVIDER_ID,
     family: "mcp",
     sourceFamily: "web",
-    displayName: "Web Search",
+    displayName: webSearchTool.provider === "exa" ? "Exa Research" : "Web Search",
     enabled: webSearchTool.enabled,
     defaultEnabled: false,
     config: {

@@ -106,7 +106,7 @@ describe("tenant Web Search built-in tools", () => {
             id: "exa-1",
             title: "Launch notes",
             url: "https://example.com/launch",
-            text: "Public launch detail",
+            summary: "Public launch detail",
             score: 0.8,
           },
         ],
@@ -137,10 +137,73 @@ describe("tenant Web Search built-in tools", () => {
         body: JSON.stringify({
           query: "launch",
           numResults: 5,
-          contents: { text: true },
+          contents: { summary: true },
         }),
       }),
     );
+  });
+
+  it("prefers Exa summaries over scraped page text", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            id: "exa-1",
+            title: "Visit Palais Garnier",
+            url: "https://www.operadeparis.fr/en/visits/palais-garnier",
+            summary:
+              "The official Paris Opera page describes tours of Palais Garnier, visit options, and ticketing details.",
+            text: "# back\nMy special offers\nBy date\nPrices\n0\n300\n0€\n300€",
+          },
+        ],
+      }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      runWebSearch({
+        provider: "exa",
+        apiKey: "exa-key",
+        query: "Paris Opera official website Palais Garnier",
+        limit: 5,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject([
+      {
+        snippet:
+          "The official Paris Opera page describes tours of Palais Garnier, visit options, and ticketing details.",
+      },
+    ]);
+  });
+
+  it("cleans obvious navigation and filter text when Exa only returns page text", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            title: "Visit Palais Garnier",
+            url: "https://www.operadeparis.fr/en/visits/palais-garnier",
+            text: "# back\nPrices\n0\n300\nGuided tours of the Palais Garnier are available through the official Paris Opera site.",
+          },
+        ],
+      }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      runWebSearch({
+        provider: "exa",
+        apiKey: "exa-key",
+        query: "Paris Opera official website Palais Garnier",
+        limit: 5,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject([
+      {
+        snippet:
+          "Guided tours of the Palais Garnier are available through the official Paris Opera site.",
+      },
+    ]);
   });
 
   it("normalizes SerpAPI organic results with URL citations", async () => {
