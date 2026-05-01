@@ -47,7 +47,8 @@ export type WikiCompileTrigger =
 	| "memory_retain"
 	| "bootstrap_import"
 	| "admin"
-	| "lint";
+	| "lint"
+	| "enrichment_draft";
 export type WikiSectionSourceKind =
 	| "memory_unit"
 	| "artifact"
@@ -110,6 +111,8 @@ export interface WikiCompileJobRow {
 	finished_at: Date | null;
 	error: string | null;
 	metrics: unknown;
+	/** Optional per-trigger input payload (e.g., enrichment-draft candidates). NULL for default compile. */
+	input?: unknown;
 	created_at: Date;
 }
 
@@ -305,6 +308,26 @@ export function parseCompileDedupeBucket(dedupeKey: string): number | null {
 	return Number.isFinite(n) && Number.isInteger(n) ? n : null;
 }
 
+/**
+ * Dedupe key for enrichment-draft compile jobs. Keyed on (tenant, owner, page,
+ * 5-min bucket) so concurrent enrichment runs against the same page collapse
+ * to one draft, but two different pages don't share a slot.
+ *
+ * Distinct prefix `enrichment-draft:` keeps these keys from colliding with the
+ * default cluster-driven compile keys. `parseCompileDedupeBucket` returns null
+ * for these (5 parts vs 3); that's correct — enrichment-draft jobs aren't part
+ * of the chained continuation flow.
+ */
+export function buildEnrichmentDraftDedupeKey(args: {
+	tenantId: string;
+	ownerId: string;
+	pageId: string;
+	nowEpochSeconds?: number;
+}): string {
+	const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+	const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
+	return `enrichment-draft:${args.tenantId}:${args.ownerId}:${args.pageId}:${bucket}`;
+}
 
 // ---------------------------------------------------------------------------
 // Compile jobs
@@ -358,6 +381,61 @@ export async function enqueueCompileJob(
 	if (!existing[0]) {
 		throw new Error(
 			`enqueueCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
+		);
+	}
+	return { inserted: false, job: existing[0] as WikiCompileJobRow };
+}
+
+/**
+ * Insert an enrichment-draft compile job. Carries the page reference + the
+ * synthesized candidate list as `input` jsonb so the dispatcher can run the
+ * draft-compile module without consulting memory_units. Dedupe-key shape
+ * differs from the default compile (5-part `enrichment-draft:` prefix); the
+ * dedupe behavior is otherwise the same — concurrent enrichments for the
+ * same page within a 5-min bucket collapse to one draft.
+ */
+export async function enqueueEnrichmentDraftCompileJob(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		pageId: string;
+		input: unknown;
+		nowEpochSeconds?: number;
+	},
+	db: DbClient = defaultDb,
+): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
+	const dedupeKey = buildEnrichmentDraftDedupeKey({
+		tenantId: args.tenantId,
+		ownerId: args.ownerId,
+		pageId: args.pageId,
+		nowEpochSeconds: args.nowEpochSeconds,
+	});
+
+	const [inserted] = await db
+		.insert(wikiCompileJobs)
+		.values({
+			tenant_id: args.tenantId,
+			owner_id: args.ownerId,
+			dedupe_key: dedupeKey,
+			trigger: "enrichment_draft",
+			input: args.input as never,
+		})
+		.onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
+		.returning();
+
+	if (inserted) {
+		return { inserted: true, job: inserted as WikiCompileJobRow };
+	}
+
+	const existing = await db
+		.select()
+		.from(wikiCompileJobs)
+		.where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
+		.limit(1);
+
+	if (!existing[0]) {
+		throw new Error(
+			`enqueueEnrichmentDraftCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
 		);
 	}
 	return { inserted: false, job: existing[0] as WikiCompileJobRow };
