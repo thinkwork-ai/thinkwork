@@ -41,6 +41,41 @@ export interface BrainEnrichmentProposal {
   updatedAt: string;
 }
 
+export interface BrainEnrichmentSourceAvailability {
+  family: BrainEnrichmentSourceFamily;
+  label: string;
+  available: boolean;
+  selectedByDefault: boolean;
+  reason?: string | null;
+}
+
+export async function listBrainEnrichmentSources(args: {
+  graphqlUrl: string;
+  input: {
+    tenantId: string;
+    pageTable: "wiki_pages" | "tenant_entity_pages";
+    pageId: string;
+  };
+}): Promise<BrainEnrichmentSourceAvailability[]> {
+  const data = await brainGraphql<{
+    brainEnrichmentSources: BrainEnrichmentSourceAvailability[];
+  }>(args.graphqlUrl, {
+    query: `
+      query BrainEnrichmentSources($tenantId: ID!, $pageTable: String!, $pageId: ID!) {
+        brainEnrichmentSources(tenantId: $tenantId, pageTable: $pageTable, pageId: $pageId) {
+          family
+          label
+          available
+          selectedByDefault
+          reason
+        }
+      }
+    `,
+    variables: args.input,
+  });
+  return data.brainEnrichmentSources;
+}
+
 export async function runBrainPageEnrichment(args: {
   graphqlUrl: string;
   input: {
@@ -102,6 +137,58 @@ export async function runBrainPageEnrichment(args: {
   return data.runBrainPageEnrichment;
 }
 
+export async function acceptBrainEnrichmentReview(args: {
+  graphqlUrl: string;
+  reviewRunId: string;
+  responseMarkdown: string;
+  notes?: string;
+}) {
+  return brainGraphql(args.graphqlUrl, {
+    query: `
+      mutation AcceptBrainEnrichmentReview($runId: ID!, $input: AgentWorkspaceReviewDecisionInput) {
+        acceptAgentWorkspaceReview(runId: $runId, input: $input) {
+          id
+          status
+          updatedAt
+        }
+      }
+    `,
+    variables: {
+      runId: args.reviewRunId,
+      input: {
+        responseMarkdown: args.responseMarkdown,
+        notes: args.notes,
+      },
+    },
+  });
+}
+
+export async function cancelBrainEnrichmentReview(args: {
+  graphqlUrl: string;
+  reviewRunId: string;
+  responseMarkdown?: string;
+  notes?: string;
+}) {
+  return brainGraphql(args.graphqlUrl, {
+    query: `
+      mutation CancelBrainEnrichmentReview($runId: ID!, $input: AgentWorkspaceReviewDecisionInput) {
+        cancelAgentWorkspaceReview(runId: $runId, input: $input) {
+          id
+          status
+          updatedAt
+        }
+      }
+    `,
+    variables: {
+      runId: args.reviewRunId,
+      input: {
+        responseMarkdown: args.responseMarkdown,
+        notes: args.notes,
+      },
+    },
+  });
+}
+
 export async function editTenantEntityFact(args: {
   graphqlUrl: string;
   factId: string;
@@ -142,7 +229,9 @@ async function brainGraphql<T = Record<string, unknown>>(
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.errors?.length) {
-    throw new Error(payload.errors?.[0]?.message || `GraphQL HTTP ${response.status}`);
+    throw new Error(
+      payload.errors?.[0]?.message || `GraphQL HTTP ${response.status}`,
+    );
   }
   return payload.data as T;
 }

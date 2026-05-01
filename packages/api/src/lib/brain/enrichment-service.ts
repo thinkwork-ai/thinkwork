@@ -17,9 +17,8 @@ import {
 import { tenantEntityPages, wikiPages } from "@thinkwork/database-pg/schema";
 import { getContextEngineService } from "../context-engine/service.js";
 import { sourceFamilyForProvider } from "../context-engine/source-families.js";
-import type {
-  ContextEngineService,
-} from "../context-engine/service.js";
+import { synthesizeBrainEnrichmentCandidates } from "./enrichment-candidate-synthesis.js";
+import type { ContextEngineService } from "../context-engine/service.js";
 import type {
   ContextEngineCaller,
   ContextHit,
@@ -75,9 +74,16 @@ type DbLike = typeof defaultDb;
 
 const DEFAULT_SOURCE_FAMILIES: BrainEnrichmentSourceFamily[] = [
   "BRAIN",
-  "WEB",
   "KNOWLEDGE_BASE",
 ];
+
+export interface BrainEnrichmentSourceAvailability {
+  family: BrainEnrichmentSourceFamily;
+  label: string;
+  available: boolean;
+  selectedByDefault: boolean;
+  reason?: string | null;
+}
 
 export async function runBrainPageEnrichment(args: {
   input: RunBrainPageEnrichmentInput;
@@ -93,8 +99,10 @@ export async function runBrainPageEnrichment(args: {
     input: args.input,
     callerUserId: args.caller.userId,
   });
-  const sourceFamilies = normalizeSourceFamilies(args.input.sourceFamilies);
   const providers = await contextEngine.listProviders({ caller: args.caller });
+  const sourceFamilies = args.input.sourceFamilies?.length
+    ? normalizeSourceFamilies(args.input.sourceFamilies)
+    : defaultSourceFamiliesForProviders(providers);
   const providerIds = selectProviderIdsForSourceFamilies(
     providers,
     sourceFamilies,
@@ -156,6 +164,25 @@ export async function runBrainPageEnrichment(args: {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
+}
+
+export async function listBrainEnrichmentSources(args: {
+  tenantId: string;
+  caller: ContextEngineCaller;
+  contextEngine?: ContextEngineService;
+}): Promise<BrainEnrichmentSourceAvailability[]> {
+  const contextEngine = args.contextEngine ?? getContextEngineService();
+  const providers = await contextEngine.listProviders({
+    caller: { ...args.caller, tenantId: args.tenantId },
+  });
+  return availableSourceFamiliesForProviders(providers).map((family) => ({
+    family,
+    label: displayNameForSourceFamily(family),
+    available: true,
+    selectedByDefault:
+      DEFAULT_SOURCE_FAMILIES.includes(family) && family !== "WEB",
+    reason: null,
+  }));
 }
 
 async function createReviewThread(args: {
@@ -362,7 +389,10 @@ function renderReviewMessage(args: {
   ];
 
   if (args.candidates.length === 0) {
-    lines.push("No candidate additions were found for the selected sources.", "");
+    lines.push(
+      "No candidate additions were found for the selected sources.",
+      "",
+    );
   } else {
     for (const candidate of args.candidates) {
       const citation = candidate.citation?.label
@@ -377,7 +407,9 @@ function renderReviewMessage(args: {
   const errors = args.providerStatuses.filter((status) =>
     ["error", "timeout"].includes(status.state),
   ).length;
-  lines.push(`Sources checked: ${checked}${errors ? ` (${errors} with errors)` : ""}.`);
+  lines.push(
+    `Sources checked: ${checked}${errors ? ` (${errors} with errors)` : ""}.`,
+  );
   return lines.join("\n");
 }
 
@@ -428,30 +460,7 @@ export function buildEnrichmentCandidates(args: {
   sourceFamilies: BrainEnrichmentSourceFamily[];
   limit: number;
 }): BrainEnrichmentCandidate[] {
-  const wanted = new Set(args.sourceFamilies);
-  return args.hits
-    .map((hit): BrainEnrichmentCandidate | null => {
-      const sourceFamily = graphqlFamilyForSourceFamily(
-        hit.sourceFamily ?? fallbackSourceFamilyForHit(hit),
-      );
-      if (!sourceFamily || !wanted.has(sourceFamily)) return null;
-      return {
-        id: `candidate:${randomUUID()}`,
-        title: hit.title,
-        summary: hit.snippet,
-        sourceFamily,
-        providerId: hit.providerId,
-        score: hit.score ?? null,
-        citation: {
-          label: hit.provenance.label ?? null,
-          uri: hit.provenance.uri ?? null,
-          sourceId: hit.provenance.sourceId ?? null,
-          metadata: hit.provenance.metadata ?? null,
-        },
-      };
-    })
-    .filter((candidate): candidate is BrainEnrichmentCandidate => !!candidate)
-    .slice(0, args.limit);
+  return synthesizeBrainEnrichmentCandidates(args);
 }
 
 function withUnavailableStatuses(args: {
@@ -466,7 +475,9 @@ function withUnavailableStatuses(args: {
       sourceFamilies.includes(sourceFamilyForProvider(provider)),
     );
     const alreadyReported = statuses.some((status) =>
-      sourceFamilies.includes(status.sourceFamily ?? fallbackStatusFamily(status)),
+      sourceFamilies.includes(
+        status.sourceFamily ?? fallbackStatusFamily(status),
+      ),
     );
     if (!available && !alreadyReported) {
       statuses.push({
@@ -490,9 +501,45 @@ function normalizeSourceFamilies(
   input: BrainEnrichmentSourceFamily[] | null | undefined,
 ): BrainEnrichmentSourceFamily[] {
   const selected = input?.length ? input : DEFAULT_SOURCE_FAMILIES;
-  return [...new Set(selected)].filter((family) =>
-    DEFAULT_SOURCE_FAMILIES.includes(family),
-  );
+  const normalized = selected
+    .map((family) => normalizeSourceFamily(family))
+    .filter((family): family is BrainEnrichmentSourceFamily => family !== null);
+  return [...new Set(normalized)];
+}
+
+function normalizeSourceFamily(
+  family: string,
+): BrainEnrichmentSourceFamily | null {
+  const normalized = family.toUpperCase().replace(/[-\s]+/g, "_");
+  if (normalized === "BRAIN") return "BRAIN";
+  if (normalized === "WEB") return "WEB";
+  if (normalized === "KNOWLEDGE_BASE") return "KNOWLEDGE_BASE";
+  return null;
+}
+
+function defaultSourceFamiliesForProviders(
+  providers: ContextProviderDescriptor[],
+): BrainEnrichmentSourceFamily[] {
+  const available = new Set(availableSourceFamiliesForProviders(providers));
+  return DEFAULT_SOURCE_FAMILIES.filter((family) => available.has(family));
+}
+
+function availableSourceFamiliesForProviders(
+  providers: ContextProviderDescriptor[],
+): BrainEnrichmentSourceFamily[] {
+  const available = new Set<BrainEnrichmentSourceFamily>();
+  for (const provider of providers) {
+    const family = graphqlFamilyForSourceFamily(
+      sourceFamilyForProvider(provider),
+    );
+    if (family) available.add(family);
+  }
+  const ordered: BrainEnrichmentSourceFamily[] = [
+    "BRAIN",
+    "KNOWLEDGE_BASE",
+    "WEB",
+  ];
+  return ordered.filter((family) => available.has(family));
 }
 
 function sourceFamiliesForGraphqlFamily(
@@ -512,14 +559,9 @@ function graphqlFamilyForSourceFamily(
   return null;
 }
 
-function fallbackSourceFamilyForHit(hit: ContextHit): ContextSourceFamily {
-  if (hit.family === "memory" || hit.family === "wiki") return hit.family === "wiki" ? "pages" : "brain";
-  if (hit.family === "knowledge-base") return "knowledge-base";
-  if (hit.family === "workspace") return "workspace";
-  return hit.family === "mcp" ? "mcp" : "source-agent";
-}
-
-function fallbackStatusFamily(status: ContextProviderStatus): ContextSourceFamily {
+function fallbackStatusFamily(
+  status: ContextProviderStatus,
+): ContextSourceFamily {
   if (status.family === "memory") return "brain";
   if (status.family === "wiki") return "pages";
   if (status.family === "knowledge-base") return "knowledge-base";
@@ -535,7 +577,9 @@ function fallbackProviderFamilyForGraphqlFamily(
   return "memory";
 }
 
-function displayNameForSourceFamily(family: BrainEnrichmentSourceFamily): string {
+function displayNameForSourceFamily(
+  family: BrainEnrichmentSourceFamily,
+): string {
   if (family === "KNOWLEDGE_BASE") return "Knowledge Base";
   if (family === "WEB") return "Web";
   return "Brain";

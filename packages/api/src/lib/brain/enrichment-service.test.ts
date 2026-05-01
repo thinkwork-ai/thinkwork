@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEnrichmentCandidates,
+  listBrainEnrichmentSources,
   selectProviderIdsForSourceFamilies,
 } from "./enrichment-service.js";
 import { isBrainEnrichmentReviewPayload } from "./enrichment-apply.js";
@@ -103,5 +104,73 @@ describe("Brain enrichment service", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("lists only available source families with Web unselected by default", async () => {
+    const sources = await listBrainEnrichmentSources({
+      tenantId: "tenant-1",
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+      contextEngine: {
+        listProviders: async () => [
+          provider({ id: "memory", family: "memory" }),
+          provider({ id: "kb", family: "knowledge-base" }),
+          provider({
+            id: "builtin:web-search",
+            family: "mcp",
+            sourceFamily: "web",
+            defaultEnabled: false,
+            displayName: "Web Search",
+          }),
+        ],
+        query: async () => {
+          throw new Error("not used");
+        },
+      },
+    });
+
+    expect(sources).toEqual([
+      {
+        family: "BRAIN",
+        label: "Brain",
+        available: true,
+        selectedByDefault: true,
+        reason: null,
+      },
+      {
+        family: "KNOWLEDGE_BASE",
+        label: "Knowledge Base",
+        available: true,
+        selectedByDefault: true,
+        reason: null,
+      },
+      {
+        family: "WEB",
+        label: "Web",
+        available: true,
+        selectedByDefault: false,
+        reason: null,
+      },
+    ]);
+  });
+
+  it("omits Web from source availability when no Web provider is registered", async () => {
+    const sources = await listBrainEnrichmentSources({
+      tenantId: "tenant-1",
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+      contextEngine: {
+        listProviders: async () => [
+          provider({ id: "memory", family: "memory" }),
+          provider({ id: "kb", family: "knowledge-base" }),
+        ],
+        query: async () => {
+          throw new Error("not used");
+        },
+      },
+    });
+
+    expect(sources.map((source) => source.family)).toEqual([
+      "BRAIN",
+      "KNOWLEDGE_BASE",
+    ]);
   });
 });

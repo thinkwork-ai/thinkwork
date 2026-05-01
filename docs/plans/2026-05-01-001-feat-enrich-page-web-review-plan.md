@@ -1,7 +1,7 @@
 ---
 title: "feat: Improve Enrich Page web search and review UX"
 type: feat
-status: active
+status: completed
 date: 2026-05-01
 origin: docs/brainstorms/2026-05-01-enrich-page-web-and-review-ux-requirements.md
 ---
