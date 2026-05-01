@@ -274,6 +274,60 @@ resource "aws_lambda_function" "handler" {
 }
 
 # ---------------------------------------------------------------------------
+# wiki-compile async retry config + DLQ
+# ---------------------------------------------------------------------------
+#
+# AWS Lambda's default async invoke retries the function 2 times with a
+# 1-minute delay before sending failures to a DLQ (or dropping). For
+# wiki-compile, retries duplicate Bedrock cost AND can produce duplicate
+# user-visible threads + workspace_runs (the brain-enrichment draft path
+# in particular — see plan 2026-05-01-002 U5/U6 and
+# docs/solutions/architecture-patterns/async-retry-idempotency-lessons).
+#
+# Pin retries to 0 and route failures to a dedicated DLQ. The runner's
+# job-status short-circuit (running/succeeded/failed/skipped) is the
+# in-process protection against duplicate writebacks; this is the
+# infrastructure-level belt-and-suspenders.
+
+resource "aws_sqs_queue" "wiki_compile_dlq" {
+  count                     = local.use_local_zips ? 1 : 0
+  name                      = "thinkwork-${var.stage}-wiki-compile-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-wiki-compile-dlq"
+  }
+}
+
+resource "aws_iam_role_policy" "wiki_compile_dlq_send" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "thinkwork-${var.stage}-wiki-compile-dlq-send"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["wiki-compile"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.wiki_compile_dlq[0].arn
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
 # API Gateway routes → Lambda integrations
 # ---------------------------------------------------------------------------
 
