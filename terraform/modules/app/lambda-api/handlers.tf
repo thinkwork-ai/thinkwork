@@ -119,6 +119,17 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
+    # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
+    # id + the per-stage S3 routine-output bucket. The interpreter id is
+    # provisioned by the agentcore-code-interpreter module and exposed via
+    # the agentcore_code_interpreter_id input variable; the bucket name
+    # follows the per-stage naming convention from the routines-stepfunctions
+    # module (Phase A U1).
+    "routine-task-python" = {
+      SANDBOX_INTERPRETER_ID         = var.agentcore_code_interpreter_id
+      ROUTINE_OUTPUT_BUCKET          = "thinkwork-${var.stage}-routine-output"
+      ROUTINE_PYTHON_ENV_ALLOWLIST   = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
+    }
   }
 }
 
@@ -197,6 +208,19 @@ resource "aws_lambda_function" "handler" {
     # accepting LLM-emitted ASL. Needs states:ValidateStateMachineDefinition
     # IAM grant — see main.tf.
     "routine-asl-validator",
+    # Routines Step Functions Task wrappers (plan
+    # docs/plans/2026-05-01-005-feat-routines-phase-b-runtime-plan.md §U6).
+    # routine-task-python: SFN-invoked Lambda that runs `python` recipe
+    # states in the AgentCore code interpreter, offloading stdout/stderr
+    # to the per-stage routine-output bucket. Needs bedrock-agentcore
+    # (Start/Invoke/Stop CodeInterpreterSession) + S3 PutObject IAM —
+    # see main.tf.
+    "routine-task-python",
+    # routine-resume: SDK-invoked by routine-approval-bridge (Phase B
+    # U8) after a HITL decision. Calls SendTaskSuccess/SendTaskFailure;
+    # idempotent on already-consumed tokens. Needs states:SendTaskSuccess
+    # + states:SendTaskFailure IAM (already granted in U1's substrate).
+    "routine-resume",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer

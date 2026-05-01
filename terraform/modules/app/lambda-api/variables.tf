@@ -321,3 +321,13 @@ variable "mcp_custom_domain_ready" {
   type        = bool
   default     = false
 }
+
+# ---------------------------------------------------------------------------
+# Routines runtime (Phase B U6) — code-interpreter id for routine-task-python
+# ---------------------------------------------------------------------------
+
+variable "agentcore_code_interpreter_id" {
+  description = "AgentCore Code Interpreter id used by routine-task-python (Phase B U6) for SFN `python` recipe states. Default empty — the Lambda fails closed with sandbox_misconfigured when unset, which is the correct behavior until Phase B U7 provisions a routines-dedicated interpreter. Operations sets this via tfvars once the interpreter is created."
+  type        = string
+  default     = ""
+}
