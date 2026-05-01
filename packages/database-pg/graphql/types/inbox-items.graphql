@@ -94,10 +94,19 @@ input CreateInboxItemInput {
 input InboxItemDecisionInput {
   status: InboxItemStatus!
   comment: String
+  # Optional structured decision payload for inbox items whose recipe
+  # declared a decisionSchema (Phase B U8 routine_approval bridge). The
+  # callback persists the decisionSchema in inbox_items.config; the
+  # operator-side UI populates this field with the matching answers.
+  # Forwarded to SFN as the SendTaskSuccess output payload.
+  decisionValues: AWSJSON
 }
 
 input ApproveInboxItemInput {
   reviewNotes: String
+  # Optional structured decision payload — same shape as
+  # InboxItemDecisionInput.decisionValues. Forwarded to SFN on approve.
+  decisionValues: AWSJSON
 }
 
 input RejectInboxItemInput {

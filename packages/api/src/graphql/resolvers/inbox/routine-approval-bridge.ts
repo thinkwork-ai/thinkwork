@@ -132,6 +132,13 @@ export async function bridgeInboxDecisionToRoutineApproval(input: {
     .returning();
 
   if (consumed.length === 0) {
+    // Log the no-op rather than returning silently — a double-decide
+    // race or a decide-after-cancel is rare and worth signal in the
+    // operator-audit log. Mirrors the silent-dedupe-collision lesson
+    // from docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md.
+    console.warn(
+      `[routine-approval-bridge] alreadyDecided no-op inbox_item_id=${input.inboxItem.id} actor=${input.actorId ?? "unknown"} decision=${input.decision} — token already consumed or never armed`,
+    );
     return { dispatched: false, alreadyDecided: true };
   }
   const tokenRow = consumed[0];
@@ -161,13 +168,27 @@ export async function bridgeInboxDecisionToRoutineApproval(input: {
         };
 
   const lambdaClient = input.lambdaClient ?? _DEFAULT_LAMBDA_CLIENT;
-  await lambdaClient.send(
+  const invokeResult = await lambdaClient.send(
     new InvokeCommand({
       FunctionName: resumeFunctionName,
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(JSON.stringify(resumePayload)),
     }),
   );
+
+  // Surface routine-resume's application-level errors. RequestResponse
+  // returns 200 even when the Lambda function itself threw — FunctionError
+  // ('Handled' or 'Unhandled') is the discriminator. Without this check
+  // a crashing routine-resume would silently strand the SFN execution
+  // while the bridge reports dispatched:true.
+  if (invokeResult.FunctionError) {
+    const payloadText = invokeResult.Payload
+      ? new TextDecoder().decode(invokeResult.Payload)
+      : "";
+    throw new Error(
+      `routine-resume Lambda returned FunctionError=${invokeResult.FunctionError}: ${payloadText.slice(0, 500)}`,
+    );
+  }
 
   return { dispatched: true, alreadyDecided: false };
 }

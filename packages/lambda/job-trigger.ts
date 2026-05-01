@@ -608,8 +608,14 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             // Seed the execution input with the inbox_approval callback
             // function name so the recipe ASL's
             // `$$.Execution.Input.inboxApprovalFunctionName` lookup
-            // resolves at runtime (Phase B U8).
+            // resolves at runtime (Phase B U8). Fail loud rather than
+            // omitting the field — the recipe would error opaquely.
             const callbackFn = process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME;
+            if (!callbackFn) {
+              throw new Error(
+                "Routines runtime is misconfigured: ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME env var is not set",
+              );
+            }
             const startResp = await _SFN_CLIENT.send(
               new StartExecutionCommand({
                 stateMachineArn: routine.state_machine_alias_arn,
@@ -617,9 +623,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
                   triggerId,
                   triggerSource: "schedule",
                   scheduleName: scheduleName ?? null,
-                  ...(callbackFn
-                    ? { inboxApprovalFunctionName: callbackFn }
-                    : {}),
+                  inboxApprovalFunctionName: callbackFn,
                 }),
               }),
             );

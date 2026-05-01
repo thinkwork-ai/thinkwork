@@ -6,6 +6,7 @@ import {
 	recordActivity,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { requireTenantMember } from "../core/authz.js";
 import {
 	bridgeInboxDecisionToWorkspaceReview,
 	isWorkspaceReviewInboxItem,
@@ -18,6 +19,7 @@ import {
 export const approveInboxItem = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [current] = await db.select().from(inboxItems).where(eq(inboxItems.id, args.id));
 	if (!current) throw new Error("Inbox item not found");
+	await requireTenantMember(ctx, current.tenant_id);
 	assertInboxItemTransition(current.status, "approved");
 	const reviewNotes = args.input?.reviewNotes ?? null;
 	const callerUserId = await resolveCallerUserId(ctx);
@@ -44,11 +46,23 @@ export const approveInboxItem = async (_parent: any, args: any, ctx: GraphQLCont
 		});
 	}
 	if (isRoutineApprovalInboxItem(current)) {
+		// Parse optional structured decision payload (AWSJSON wire shape).
+		let parsedValues: Record<string, unknown> | undefined;
+		const rawValues = args.input?.decisionValues;
+		if (typeof rawValues === "string" && rawValues.length > 0) {
+			try {
+				parsedValues = JSON.parse(rawValues);
+			} catch (err) {
+				throw new Error(
+					`decisionValues is not valid JSON: ${(err as Error).message}`,
+				);
+			}
+		}
 		await bridgeInboxDecisionToRoutineApproval({
 			inboxItem: current,
 			decision: "approved",
 			actorId: callerUserId ?? null,
-			decisionPayload: { reviewNotes },
+			decisionPayload: { reviewNotes, values: parsedValues },
 		});
 	}
 

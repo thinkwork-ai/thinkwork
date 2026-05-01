@@ -605,6 +605,7 @@ export type ApplyActivationBundleInput = {
 };
 
 export type ApproveInboxItemInput = {
+  decisionValues?: InputMaybe<Scalars['AWSJSON']['input']>;
   reviewNotes?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1327,6 +1328,7 @@ export type InboxItemComment = {
 
 export type InboxItemDecisionInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
+  decisionValues?: InputMaybe<Scalars['AWSJSON']['input']>;
   status: InboxItemStatus;
 };
 

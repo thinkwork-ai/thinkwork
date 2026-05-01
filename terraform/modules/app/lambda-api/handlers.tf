@@ -392,6 +392,21 @@ resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
   }
 }
 
+# Phase B U8: SFN's inbox_approval Task invokes routine-approval-callback
+# directly via .waitForTaskToken. Lambda's default async-retry policy
+# (2 attempts) is incompatible with the callback's two-insert flow —
+# even though the inserts are now wrapped in db.transaction(), AWS
+# Lambda's own retry-after-error semantics multiply with SFN's task
+# Retry policy and create thundering-herd attempts on transient
+# failures. SFN is the canonical retry path; Lambda async retries are
+# off. Per project_async_retry_idempotency_lessons.
+resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["routine-approval-callback"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
 # ---------------------------------------------------------------------------
 # API Gateway routes → Lambda integrations
 # ---------------------------------------------------------------------------
