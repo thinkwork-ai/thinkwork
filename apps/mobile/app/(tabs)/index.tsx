@@ -899,7 +899,7 @@ export default function ThreadsScreen() {
                     : colors.mutedForeground,
               }}
             >
-              Brain
+              Memories
             </Text>
           </Pressable>
         </View>
@@ -1012,7 +1012,13 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             colors={colors}
             isDark={isDark}
-            searchPlaceholder="Search Brain..."
+            searchPlaceholder={
+              brainMode === "pages"
+                ? "Search Pages..."
+                : brainMode === "graph"
+                  ? "Search Graph..."
+                  : "Search Brain..."
+            }
             onSearchQueryChange={handleBrainQueryChange}
             brainMode={brainMode}
             onBrainModeChange={handleBrainModeChange}
