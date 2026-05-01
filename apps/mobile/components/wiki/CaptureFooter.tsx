@@ -10,7 +10,15 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, BookOpen, Mic, Plus, Search, Tag } from "lucide-react-native";
+import {
+	ArrowUp,
+	BookOpen,
+	Brain,
+	Mic,
+	Plus,
+	Search,
+	Tag,
+} from "lucide-react-native";
 import { IconTopologyStar3 } from "@tabler/icons-react-native";
 import { useCaptureMobileMemory } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
@@ -421,8 +429,8 @@ function BrainFooterModeButton({
 		mode === "search"
 			? "Search Brain"
 			: mode === "pages"
-				? "Browse Brain pages"
-				: "Explore Brain graph";
+				? "Search Pages"
+				: "Search Graph";
 
 	return (
 		<Pressable
@@ -439,7 +447,7 @@ function BrainFooterModeButton({
 			}}
 		>
 			{mode === "search" ? (
-				<Search size={20} color={iconColor} />
+				<Brain size={20} color={iconColor} />
 			) : mode === "pages" ? (
 				<BookOpen size={20} color={iconColor} />
 			) : (
