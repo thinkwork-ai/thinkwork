@@ -1131,6 +1131,11 @@ export type DailyCostPoint = {
   totalUsd: Scalars['Float']['output'];
 };
 
+export type DecideRoutineApprovalInput = {
+  decision: Scalars['AWSJSON']['input'];
+  inboxItemId: Scalars['ID']['input'];
+};
+
 export type DelegateThreadInput = {
   agentId: Scalars['ID']['input'];
   assigneeId: Scalars['ID']['input'];
@@ -1690,6 +1695,7 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   decideInboxItem: InboxItem;
+  decideRoutineApproval: InboxItem;
   delegateThread: Thread;
   deleteAgent: Scalars['Boolean']['output'];
   deleteAgentBudgetPolicy: Scalars['Boolean']['output'];
@@ -1726,6 +1732,7 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  publishRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2046,6 +2053,11 @@ export type MutationDecideInboxItemArgs = {
 };
 
 
+export type MutationDecideRoutineApprovalArgs = {
+  input: DecideRoutineApprovalInput;
+};
+
+
 export type MutationDelegateThreadArgs = {
   input: DelegateThreadInput;
 };
@@ -2278,6 +2290,11 @@ export type MutationNotifyThreadUpdateArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
+};
+
+
+export type MutationPublishRoutineVersionArgs = {
+  input: PublishRoutineVersionInput;
 };
 
 
@@ -2698,6 +2715,13 @@ export type PinStatusFile = {
   updateAvailable: Scalars['Boolean']['output'];
 };
 
+export type PublishRoutineVersionInput = {
+  asl: Scalars['AWSJSON']['input'];
+  markdownSummary: Scalars['String']['input'];
+  routineId: Scalars['ID']['input'];
+  stepManifest: Scalars['AWSJSON']['input'];
+};
+
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
@@ -2802,8 +2826,14 @@ export type Query = {
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
   routine?: Maybe<Routine>;
+  routineAslVersion?: Maybe<RoutineAslVersion>;
+  routineExecution?: Maybe<RoutineExecution>;
+  routineExecutions: Array<RoutineExecution>;
+  /** @deprecated Use routineExecution; removed in Phase E. */
   routineRun?: Maybe<RoutineRun>;
+  /** @deprecated Use routineExecutions; removed in Phase E. */
   routineRuns: Array<RoutineRun>;
+  routineStepEvents: Array<RoutineStepEvent>;
   routines: Array<Routine>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
   runtimeManifestsByTemplate: Array<RuntimeManifest>;
@@ -2820,6 +2850,7 @@ export type Query = {
   tenantEntityFacets: TenantEntityFacetConnection;
   tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
+  tenantToolInventory: TenantToolInventory;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadLabels: Array<ThreadLabel>;
@@ -3254,6 +3285,24 @@ export type QueryRoutineArgs = {
 };
 
 
+export type QueryRoutineAslVersionArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryRoutineExecutionArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryRoutineExecutionsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  routineId: Scalars['ID']['input'];
+  status?: InputMaybe<RoutineExecutionStatus>;
+};
+
+
 export type QueryRoutineRunArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3263,6 +3312,11 @@ export type QueryRoutineRunsArgs = {
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type QueryRoutineStepEventsArgs = {
+  executionId: Scalars['ID']['input'];
 };
 
 
@@ -3363,6 +3417,11 @@ export type QueryTenantEntityPageArgs = {
 
 
 export type QueryTenantMembersArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -3582,13 +3641,20 @@ export type Routine = {
   agentId?: Maybe<Scalars['ID']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
+  currentVersion?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
+  documentationMd?: Maybe<Scalars['String']['output']>;
+  engine: Scalars['String']['output'];
+  executions?: Maybe<Array<RoutineExecution>>;
   id: Scalars['ID']['output'];
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   name: Scalars['String']['output'];
   nextRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  /** @deprecated Use executions; routine_runs storage was removed pre-Phase A */
   runs: Array<RoutineRun>;
   schedule?: Maybe<Scalars['String']['output']>;
+  stateMachineAliasArn?: Maybe<Scalars['String']['output']>;
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
   status: Scalars['String']['output'];
   team?: Maybe<Team>;
   teamId?: Maybe<Scalars['ID']['output']>;
@@ -3597,6 +3663,63 @@ export type Routine = {
   type: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export type RoutineAslVersion = {
+  __typename?: 'RoutineAslVersion';
+  aliasWasPointing?: Maybe<Scalars['String']['output']>;
+  aslJson: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  markdownSummary: Scalars['String']['output'];
+  publishedByActorId?: Maybe<Scalars['ID']['output']>;
+  publishedByActorType?: Maybe<Scalars['String']['output']>;
+  routineId: Scalars['ID']['output'];
+  stateMachineArn: Scalars['String']['output'];
+  stepManifestJson: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+  validationWarningsJson?: Maybe<Scalars['AWSJSON']['output']>;
+  versionArn: Scalars['String']['output'];
+  versionNumber: Scalars['Int']['output'];
+};
+
+export enum RoutineEngine {
+  LegacyPython = 'LEGACY_PYTHON',
+  StepFunctions = 'STEP_FUNCTIONS'
+}
+
+export type RoutineExecution = {
+  __typename?: 'RoutineExecution';
+  aliasArn?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorCode?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  routine?: Maybe<Routine>;
+  routineId: Scalars['ID']['output'];
+  sfnExecutionArn: Scalars['String']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  stateMachineArn: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  stepEvents: Array<RoutineStepEvent>;
+  tenantId: Scalars['ID']['output'];
+  totalLlmCostUsdCents?: Maybe<Scalars['Int']['output']>;
+  trigger?: Maybe<RoutineTrigger>;
+  triggerId?: Maybe<Scalars['ID']['output']>;
+  triggerSource: Scalars['String']['output'];
+  versionArn?: Maybe<Scalars['String']['output']>;
+};
+
+export enum RoutineExecutionStatus {
+  AwaitingApproval = 'AWAITING_APPROVAL',
+  Cancelled = 'CANCELLED',
+  Failed = 'FAILED',
+  Running = 'RUNNING',
+  Succeeded = 'SUCCEEDED',
+  TimedOut = 'TIMED_OUT'
+}
 
 export type RoutineRun = {
   __typename?: 'RoutineRun';
@@ -3641,6 +3764,28 @@ export type RoutineStep = {
   status: Scalars['String']['output'];
   stepIndex: Scalars['Int']['output'];
   tenantId: Scalars['ID']['output'];
+};
+
+export type RoutineStepEvent = {
+  __typename?: 'RoutineStepEvent';
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorJson?: Maybe<Scalars['AWSJSON']['output']>;
+  executionId: Scalars['ID']['output'];
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  llmCostUsdCents?: Maybe<Scalars['Int']['output']>;
+  nodeId: Scalars['String']['output'];
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  recipeType: Scalars['String']['output'];
+  retryCount: Scalars['Int']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  stderrS3Uri?: Maybe<Scalars['String']['output']>;
+  stdoutPreview?: Maybe<Scalars['String']['output']>;
+  stdoutS3Uri?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  truncated: Scalars['Boolean']['output'];
 };
 
 export type RoutineTrigger = {
@@ -4040,6 +4185,45 @@ export type TenantSettings = {
   maxAgents?: Maybe<Scalars['Int']['output']>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type TenantToolInventory = {
+  __typename?: 'TenantToolInventory';
+  agents: Array<TenantToolInventoryAgent>;
+  routines: Array<TenantToolInventoryRoutine>;
+  skills: Array<TenantToolInventorySkill>;
+  tools: Array<TenantToolInventoryTool>;
+};
+
+export type TenantToolInventoryAgent = {
+  __typename?: 'TenantToolInventoryAgent';
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+};
+
+export type TenantToolInventoryRoutine = {
+  __typename?: 'TenantToolInventoryRoutine';
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  visibility?: Maybe<Scalars['String']['output']>;
+};
+
+export type TenantToolInventorySkill = {
+  __typename?: 'TenantToolInventorySkill';
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  slug: Scalars['String']['output'];
+};
+
+export type TenantToolInventoryTool = {
+  __typename?: 'TenantToolInventoryTool';
+  argSchemaJson?: Maybe<Scalars['AWSJSON']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  source: Scalars['String']['output'];
 };
 
 export type Thread = {
