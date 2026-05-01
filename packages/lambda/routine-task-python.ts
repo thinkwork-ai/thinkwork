@@ -42,6 +42,10 @@ import {
   StopCodeInterpreterSessionCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  postStepCallback,
+  type StepCallbackEnv,
+} from "./routine-step-callback-client.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -77,6 +81,11 @@ export interface PythonTaskOptions {
   bucket: string;
   /** Caller-supplied env keys allowed to pass through. Defaults to []. */
   envAllowlist?: string[];
+  /** Routine step-callback env (THINKWORK_API_URL + API_AUTH_SECRET).
+   * When omitted (e.g., unit tests), no callback fires. Production
+   * lambda-api wires both env vars. Failure to POST never fails the
+   * Task — see routine-step-callback-client.ts. */
+  stepCallback?: StepCallbackEnv;
   agentCoreClient?: BedrockAgentCoreClient;
   s3Client?: S3Client;
 }
@@ -151,6 +160,26 @@ export async function invokePythonTask(
   const previewCap = input.previewCapBytes ?? DEFAULT_PREVIEW_CAP_BYTES;
   const sfnExecutionId = extractExecutionId(input.executionId);
   const keyPrefix = `${input.tenantId}/${sfnExecutionId}/${input.nodeId}`;
+
+  // Step-callback fires before + after the sandbox invoke so the
+  // run-detail UI sees the step transition `running → succeeded/failed`.
+  // The handler resolves `executionArn` (full SFN execution ARN) to the
+  // routine_executions row UUID, so the wrapper just forwards what
+  // it has from the SFN Context (`$$.Execution.Id`).
+  const stepCallback = options.stepCallback;
+  const startedAt = new Date().toISOString();
+
+  if (stepCallback) {
+    // Fire-and-log on failure — telemetry must not fail the Task.
+    await postStepCallback(stepCallback, {
+      tenantId: input.tenantId,
+      executionArn: input.executionId,
+      nodeId: input.nodeId,
+      recipeType: "python",
+      status: "running",
+      startedAt,
+    });
+  }
 
   // ---- 1. Start session ------------------------------------------------
   let sessionId: string;
@@ -277,7 +306,7 @@ export async function invokePythonTask(
 
   const { preview, truncated } = trimPreview(stdout, previewCap);
 
-  return {
+  const result: PythonTaskResult = {
     exitCode,
     stdoutS3Uri: stdoutOk ? `s3://${bucket}/${stdoutKey}` : null,
     stderrS3Uri: stderrOk ? `s3://${bucket}/${stderrKey}` : null,
@@ -286,14 +315,45 @@ export async function invokePythonTask(
     ...(s3PartialFailure
       ? {
           errorClass: "s3_offload_failed",
-          errorMessage: stdoutOk && !stderrOk
-            ? "stderr S3 PutObject failed"
-            : !stdoutOk && stderrOk
-              ? "stdout S3 PutObject failed"
-              : "S3 PutObject failed",
+          errorMessage:
+            stdoutOk && !stderrOk
+              ? "stderr S3 PutObject failed"
+              : !stdoutOk && stderrOk
+                ? "stdout S3 PutObject failed"
+                : "S3 PutObject failed",
         }
       : {}),
   };
+
+  // ---- step-callback: status=succeeded | failed -----------------------
+  // Recipe-aware status: a non-zero exitCode is a sandbox-side failure
+  // (user code threw). The SFN Task itself succeeded — its output
+  // includes errorClass/errorMessage. Surface as `failed` step so the
+  // run-detail UI can render the failure inline without waiting for SFN
+  // state-machine-level failure (which only fires if the recipe doesn't
+  // catch the non-zero exit).
+  if (stepCallback) {
+    const status: "succeeded" | "failed" =
+      result.exitCode === 0 && !result.errorClass ? "succeeded" : "failed";
+    await postStepCallback(stepCallback, {
+      tenantId: input.tenantId,
+      executionArn: input.executionId,
+      nodeId: input.nodeId,
+      recipeType: "python",
+      status,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      stdoutS3Uri: result.stdoutS3Uri ?? undefined,
+      stderrS3Uri: result.stderrS3Uri ?? undefined,
+      stdoutPreview: result.stdoutPreview,
+      truncated: result.truncated,
+      errorJson: result.errorClass
+        ? { errorClass: result.errorClass, errorMessage: result.errorMessage }
+        : undefined,
+    });
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,13 +557,21 @@ function failWith(
 // ---------------------------------------------------------------------------
 
 export async function handler(event: PythonTaskInput): Promise<PythonTaskResult> {
-  // Snapshot env at handler entry; never re-read in async paths.
+  // Snapshot env at handler entry; never re-read in async paths
+  // (per feedback_completion_callback_snapshot_pattern).
   const interpreterId = process.env.SANDBOX_INTERPRETER_ID ?? "";
   const bucket = process.env.ROUTINE_OUTPUT_BUCKET ?? "";
   const envAllowlist = (process.env.ROUTINE_PYTHON_ENV_ALLOWLIST ?? "")
     .split(",")
     .map((k) => k.trim())
     .filter(Boolean);
+  const stepCallback: StepCallbackEnv | undefined =
+    process.env.THINKWORK_API_URL && process.env.API_AUTH_SECRET
+      ? {
+          apiUrl: process.env.THINKWORK_API_URL,
+          authSecret: process.env.API_AUTH_SECRET,
+        }
+      : undefined;
 
   if (!interpreterId || !bucket) {
     return failWith(
@@ -518,5 +586,6 @@ export async function handler(event: PythonTaskInput): Promise<PythonTaskResult>
     interpreterId,
     bucket,
     envAllowlist,
+    stepCallback,
   });
 }

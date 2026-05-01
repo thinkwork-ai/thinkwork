@@ -23,6 +23,10 @@ import {
   SendTaskSuccessCommand,
   SFNClient,
 } from "@aws-sdk/client-sfn";
+import {
+  postStepCallback,
+  type StepCallbackEnv,
+} from "./routine-step-callback-client.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -40,6 +44,16 @@ export interface ResumeInput {
   /** Optional when decision='failure'. AWS-side `cause` field — operator-
    * facing message. */
   errorMessage?: string;
+  /** Optional step-callback context. When provided, routine-resume
+   * fires a `routine_step_events` POST after the SendTask* call so the
+   * inbox_approval node transitions awaiting_approval → succeeded/failed
+   * in the run-detail UI. The bridge (routine-approval-bridge.ts) is
+   * the production caller that supplies these. Tests omit them. */
+  stepCallback?: {
+    tenantId: string;
+    executionArn: string;
+    nodeId: string;
+  };
 }
 
 export interface ResumeResult {
@@ -51,6 +65,9 @@ export interface ResumeResult {
 
 export interface ResumeOptions {
   sfnClient?: SFNClient;
+  /** Step-callback env (THINKWORK_API_URL + API_AUTH_SECRET). Snapshot
+   * at handler entry. Tests omit. */
+  stepCallbackEnv?: StepCallbackEnv;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +120,31 @@ export async function resumeRoutineExecution(
         }),
       );
     }
+    // Fire step-callback after SendTask* succeeds so the run-detail UI
+    // transitions the inbox_approval node out of awaiting_approval. The
+    // bridge supplies stepCallback metadata; tests + direct invocations
+    // omit it. Fire-and-log on failure — telemetry must never unwind
+    // the resume.
+    const sc = input.stepCallback;
+    if (sc && options.stepCallbackEnv) {
+      await postStepCallback(options.stepCallbackEnv, {
+        tenantId: sc.tenantId,
+        executionArn: sc.executionArn,
+        nodeId: sc.nodeId,
+        recipeType: "inbox_approval",
+        status: input.decision === "success" ? "succeeded" : "failed",
+        finishedAt: new Date().toISOString(),
+        outputJson:
+          input.decision === "success" ? input.output ?? null : undefined,
+        errorJson:
+          input.decision === "failure"
+            ? {
+                errorCode: input.errorCode ?? "RoutineApprovalRejected",
+                errorMessage: input.errorMessage ?? "",
+              }
+            : undefined,
+      });
+    }
     return { ok: true, alreadyConsumed: false };
   } catch (err) {
     const name = (err as { name?: string })?.name ?? "";
@@ -120,5 +162,14 @@ export async function resumeRoutineExecution(
 // ---------------------------------------------------------------------------
 
 export async function handler(event: ResumeInput): Promise<ResumeResult> {
-  return resumeRoutineExecution(event);
+  // Snapshot env at handler entry per the completion-callback-snapshot
+  // pattern; never re-read process.env in async paths.
+  const stepCallbackEnv: StepCallbackEnv | undefined =
+    process.env.THINKWORK_API_URL && process.env.API_AUTH_SECRET
+      ? {
+          apiUrl: process.env.THINKWORK_API_URL,
+          authSecret: process.env.API_AUTH_SECRET,
+        }
+      : undefined;
+  return resumeRoutineExecution(event, { stepCallbackEnv });
 }
