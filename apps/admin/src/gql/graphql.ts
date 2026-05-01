@@ -1028,13 +1028,13 @@ export type CreateRecipeInput = {
 
 export type CreateRoutineInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
+  asl: Scalars['AWSJSON']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
+  markdownSummary: Scalars['String']['input'];
   name: Scalars['String']['input'];
-  schedule?: InputMaybe<Scalars['String']['input']>;
+  stepManifest: Scalars['AWSJSON']['input'];
   teamId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
-  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type CreateScheduledJobInput = {
@@ -1780,7 +1780,7 @@ export type Mutation = {
   /** Sync template to every linked agent in a tenant. idempotencyKey optional. */
   syncTemplateToAllAgents: SyncSummary;
   toggleAgentEmailChannel: AgentCapability;
-  triggerRoutineRun: RoutineRun;
+  triggerRoutineRun: RoutineExecution;
   unpauseAgent: Agent;
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgent: Agent;
@@ -2513,6 +2513,7 @@ export type MutationToggleAgentEmailChannelArgs = {
 
 
 export type MutationTriggerRoutineRunArgs = {
+  input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
 };
 
@@ -4537,7 +4538,6 @@ export type UpdateRecipeInput = {
 
 export type UpdateRoutineInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   schedule?: InputMaybe<Scalars['String']['input']>;

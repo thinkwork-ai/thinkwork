@@ -18,6 +18,8 @@ import {
   agents,
   agentSkills,
   evalRuns,
+  routineExecutions,
+  routines,
   scheduledJobs,
   skillRuns,
   tenantSettings,
@@ -25,6 +27,15 @@ import {
   users,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
+import {
+  SFNClient,
+  StartExecutionCommand,
+} from "@aws-sdk/client-sfn";
+
+// Module-scope SFN client so warm Lambda invocations reuse the TCP pool.
+const _SFN_CLIENT = new SFNClient({
+  requestHandler: { requestTimeout: 15_000, connectionTimeout: 5_000 },
+});
 
 interface JobTriggerEvent {
   triggerId: string;
@@ -566,55 +577,89 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         `[job-trigger] skill_run ${triggerId} started run ${runRow.id} for skill ${skillId}`,
       );
     } else if (routineId) {
-      // Routine jobs: create a thread_turns record + invoke routine runner
-      const [run] = await db
-        .insert(threadTurns)
-        .values({
-          tenant_id: tenantId,
-          trigger_id: triggerId,
-          routine_id: routineId,
-          invocation_source: "schedule",
-          trigger_detail: scheduleName
-            ? `schedule:${scheduleName}`
-            : `job:${triggerId}`,
-          status: "queued",
+      // Routine jobs (Phase B U7 cutover):
+      //   - step_functions engine → SFN.StartExecution against the alias
+      //     ARN; insert routine_executions row pre-emptively.
+      //   - legacy_python engine → keep the thread_turns insert path
+      //     until Phase E archives those rows. The legacy ROUTINE_RUNNER_URL
+      //     POST has been removed because the URL was never provisioned.
+      const [routine] = await db
+        .select({
+          id: routines.id,
+          tenant_id: routines.tenant_id,
+          engine: routines.engine,
+          state_machine_arn: routines.state_machine_arn,
+          state_machine_alias_arn: routines.state_machine_alias_arn,
         })
-        .returning();
+        .from(routines)
+        .where(eq(routines.id, routineId));
 
-      console.log(
-        `[job-trigger] Created thread_turn ${run.id} for routine ${routineId}`,
-      );
-
-      // Invoke routine runner if configured
-      const routineRunnerUrl = process.env.ROUTINE_RUNNER_URL;
-      const routineAuthSecret = process.env.ROUTINE_AUTH_SECRET;
-      if (routineRunnerUrl && routineAuthSecret) {
-        try {
-          const response = await fetch(`${routineRunnerUrl}/routine/trigger`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${routineAuthSecret}`,
-            },
-            body: JSON.stringify({
-              routineId,
-              runId: run.id,
-              tenantId,
-              triggerId,
-            }),
-          });
-          if (!response.ok) {
-            const errText = await response.text();
-            console.error(
-              `[job-trigger] Routine runner error: ${response.status} ${errText}`,
-            );
-          }
-        } catch (runnerErr) {
+      if (!routine) {
+        console.error(
+          `[job-trigger] routine ${routineId} not found; skipping schedule fire`,
+        );
+      } else if (routine.engine === "step_functions") {
+        if (!routine.state_machine_alias_arn || !routine.state_machine_arn) {
           console.error(
-            `[job-trigger] Failed to invoke routine runner:`,
-            runnerErr,
+            `[job-trigger] routine ${routineId} engine=step_functions but missing alias ARN; skipping`,
           );
+        } else {
+          try {
+            const startResp = await _SFN_CLIENT.send(
+              new StartExecutionCommand({
+                stateMachineArn: routine.state_machine_alias_arn,
+                input: JSON.stringify({
+                  triggerId,
+                  triggerSource: "schedule",
+                  scheduleName: scheduleName ?? null,
+                }),
+              }),
+            );
+            if (startResp.executionArn) {
+              await db.insert(routineExecutions).values({
+                tenant_id: tenantId,
+                routine_id: routineId,
+                state_machine_arn: routine.state_machine_arn,
+                alias_arn: routine.state_machine_alias_arn,
+                sfn_execution_arn: startResp.executionArn,
+                trigger_id: triggerId,
+                trigger_source: "schedule",
+                input_json: { triggerId, scheduleName: scheduleName ?? null },
+                status: "running",
+                started_at: startResp.startDate ?? new Date(),
+              });
+              console.log(
+                `[job-trigger] Started SFN execution ${startResp.executionArn} for routine ${routineId}`,
+              );
+            }
+          } catch (sfnErr) {
+            console.error(
+              `[job-trigger] SFN.StartExecution failed for routine ${routineId}:`,
+              sfnErr,
+            );
+            throw sfnErr;
+          }
         }
+      } else {
+        // legacy_python — keep the original thread_turns insert. The
+        // legacy ROUTINE_RUNNER_URL POST is removed; the Phase E sweep
+        // archives these routines.
+        const [run] = await db
+          .insert(threadTurns)
+          .values({
+            tenant_id: tenantId,
+            trigger_id: triggerId,
+            routine_id: routineId,
+            invocation_source: "schedule",
+            trigger_detail: scheduleName
+              ? `schedule:${scheduleName}`
+              : `job:${triggerId}`,
+            status: "queued",
+          })
+          .returning();
+        console.log(
+          `[job-trigger] Created thread_turn ${run.id} for legacy_python routine ${routineId}`,
+        );
       }
     }
 

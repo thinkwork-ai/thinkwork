@@ -130,6 +130,22 @@ locals {
       ROUTINE_OUTPUT_BUCKET          = "thinkwork-${var.stage}-routine-output"
       ROUTINE_PYTHON_ENV_ALLOWLIST   = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
     }
+    # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
+    # resolvers (Phase B U7). They call CreateStateMachine with the
+    # routines-stepfunctions execution role; snapshotRoutinesEnv reads
+    # this env var at handler entry and throws if unset, so terraform
+    # wiring is mandatory before the publish flow goes live.
+    "graphql-http" = {
+      ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
+      ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
+      AWS_ACCOUNT_ID              = var.account_id
+    }
+    # job-trigger fires scheduled routine runs via SFN.StartExecution
+    # (Phase B U7) — the alias ARN comes from the row, but the Lambda
+    # also reads AWS_ACCOUNT_ID for diagnostic logging.
+    "job-trigger" = {
+      AWS_ACCOUNT_ID = var.account_id
+    }
   }
 }
 

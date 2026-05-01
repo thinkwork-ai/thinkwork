@@ -331,3 +331,15 @@ variable "agentcore_code_interpreter_id" {
   type        = string
   default     = ""
 }
+
+variable "routines_execution_role_arn" {
+  description = "ARN of the Step Functions execution role newly-created routine state machines run under (Phase B U7). Wired from the routines-stepfunctions module's execution_role_arn output. createRoutine passes this as RoleArn on CreateStateMachine; the lambda-api role's RoutinePassExecutionRole grant is scoped to exactly this ARN."
+  type        = string
+  default     = ""
+}
+
+variable "routines_log_group_arn" {
+  description = "ARN of the routines-stepfunctions CloudWatch log group (Phase B U7). Surfaced to the publish flow for future LoggingConfiguration on CreateStateMachine."
+  type        = string
+  default     = ""
+}

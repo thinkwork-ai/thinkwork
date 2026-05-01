@@ -216,6 +216,8 @@ module "api" {
   appsync_realtime_url                = module.appsync.graphql_realtime_url
   ecr_repository_url                  = module.agentcore.ecr_repository_url
   job_scheduler_role_arn              = module.job_triggers.job_scheduler_role_arn
+  routines_execution_role_arn         = module.routines_stepfunctions.execution_role_arn
+  routines_log_group_arn              = module.routines_stepfunctions.log_group_arn
   wiki_compile_model_id               = var.wiki_compile_model_id
   company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
   wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
