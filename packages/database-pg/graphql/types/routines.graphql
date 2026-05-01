@@ -1,5 +1,12 @@
 # Routine domain types: Routine, RoutineRun, RoutineStep,
 # RoutineTrigger and related enums/inputs.
+#
+# Step Functions migration: as of plan 2026-05-01-004 (Routines Phase A),
+# Routine carries an `engine` partition + Step-Functions-specific fields,
+# and three new types (RoutineExecution / RoutineStepEvent /
+# RoutineAslVersion) back the Step Functions runtime. RoutineRun and
+# RoutineStep are deprecated; they remain shipping through Phase D and
+# are removed in Phase E (U15).
 
 enum RoutineStatus {
   ACTIVE
@@ -15,6 +22,20 @@ enum RoutineRunStatus {
   CANCELLED
 }
 
+enum RoutineEngine {
+  LEGACY_PYTHON
+  STEP_FUNCTIONS
+}
+
+enum RoutineExecutionStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  AWAITING_APPROVAL
+  TIMED_OUT
+}
+
 type Routine {
   id: ID!
   tenantId: ID!
@@ -28,15 +49,27 @@ type Routine {
   status: String!
   schedule: String
   config: AWSJSON
+  # Step Functions migration partition: legacy_python | step_functions.
+  # legacy_python rows pre-date Phase A; step_functions rows are the new
+  # ASL-backed shape.
+  engine: String!
+  # Step Functions resource ARNs. Null on legacy_python routines.
+  stateMachineArn: String
+  stateMachineAliasArn: String
+  # Agent-authored markdown summary, regenerated on every publish.
+  documentationMd: String
+  # Pointer to the latest published version_number in routine_asl_versions.
+  currentVersion: Int
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
-  runs: [RoutineRun!]!
+  runs: [RoutineRun!]! @deprecated(reason: "Use executions; routine_runs storage was removed pre-Phase A")
+  executions: [RoutineExecution!]!
   triggers: [RoutineTrigger!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
 
-type RoutineRun {
+type RoutineRun @deprecated(reason: "Use RoutineExecution. Removed in Phase E (U15).") {
   id: ID!
   routineId: ID!
   tenantId: ID!
@@ -49,7 +82,7 @@ type RoutineRun {
   createdAt: AWSDateTime!
 }
 
-type RoutineStep {
+type RoutineStep @deprecated(reason: "Use RoutineStepEvent. Unbacked since pre-Phase A; removed in Phase E.") {
   id: ID!
   runId: ID!
   routineId: ID!
@@ -74,6 +107,112 @@ type RoutineTrigger {
   enabled: Boolean!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
+}
+
+# ---- Step Functions runtime types (Phase A) ----
+
+type RoutineExecution {
+  id: ID!
+  tenantId: ID!
+  routineId: ID!
+  routine: Routine
+  stateMachineArn: String!
+  aliasArn: String
+  versionArn: String
+  sfnExecutionArn: String!
+  triggerId: ID
+  trigger: RoutineTrigger
+  triggerSource: String!
+  inputJson: AWSJSON
+  outputJson: AWSJSON
+  status: String!
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  errorCode: String
+  errorMessage: String
+  totalLlmCostUsdCents: Int
+  stepEvents: [RoutineStepEvent!]!
+  createdAt: AWSDateTime!
+}
+
+type RoutineStepEvent {
+  id: ID!
+  tenantId: ID!
+  executionId: ID!
+  nodeId: String!
+  recipeType: String!
+  status: String!
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  inputJson: AWSJSON
+  outputJson: AWSJSON
+  errorJson: AWSJSON
+  llmCostUsdCents: Int
+  retryCount: Int!
+  stdoutS3Uri: String
+  stderrS3Uri: String
+  stdoutPreview: String
+  truncated: Boolean!
+  createdAt: AWSDateTime!
+}
+
+type RoutineAslVersion {
+  id: ID!
+  tenantId: ID!
+  routineId: ID!
+  versionNumber: Int!
+  stateMachineArn: String!
+  versionArn: String!
+  aliasWasPointing: String
+  aslJson: AWSJSON!
+  markdownSummary: String!
+  stepManifestJson: AWSJSON!
+  validationWarningsJson: AWSJSON
+  publishedByActorId: ID
+  publishedByActorType: String
+  createdAt: AWSDateTime!
+}
+
+# ---- Tenant tool inventory (Phase A scaffold; resolver comes in Phase A U4) ----
+#
+# Aggregates the fragmented inventory the chat builder agent + tool_invoke
+# recipe consume: agents, MCP-server tools, builtin tools, skills, and prior
+# step_functions routines. Aggregation logic owned by Phase A U4
+# (packages/api/src/lib/routines/recipe-catalog.ts +
+#  packages/api/src/graphql/resolvers/routines/tenantToolInventory.query.ts).
+
+type TenantToolInventoryAgent {
+  id: ID!
+  name: String!
+  description: String
+}
+
+type TenantToolInventoryTool {
+  id: ID!
+  source: String!  # mcp | builtin
+  name: String!
+  description: String
+  argSchemaJson: AWSJSON
+}
+
+type TenantToolInventorySkill {
+  id: ID!
+  slug: String!
+  description: String
+}
+
+type TenantToolInventoryRoutine {
+  id: ID!
+  name: String!
+  description: String
+  visibility: String
+}
+
+type TenantToolInventory {
+  agents: [TenantToolInventoryAgent!]!
+  tools: [TenantToolInventoryTool!]!
+  skills: [TenantToolInventorySkill!]!
+  routines: [TenantToolInventoryRoutine!]!
 }
 
 # --- Inputs ---
@@ -106,14 +245,33 @@ input RoutineTriggerInput {
   enabled: Boolean
 }
 
+# Phase B U7 will land the resolver. Schema present in Phase A so codegen
+# carries the type signature into all consumers ahead of the resolver.
+input PublishRoutineVersionInput {
+  routineId: ID!
+  asl: AWSJSON!
+  markdownSummary: String!
+  stepManifest: AWSJSON!
+}
+
+input DecideRoutineApprovalInput {
+  inboxItemId: ID!
+  decision: AWSJSON!
+}
+
 # --- Query / Mutation extensions ---
 
 extend type Query {
   routines(tenantId: ID!, teamId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
   routine(id: ID!): Routine
-  routineRun(id: ID!): RoutineRun
-  routineRuns(routineId: ID!, limit: Int, cursor: String): [RoutineRun!]!
-
+  routineRun(id: ID!): RoutineRun @deprecated(reason: "Use routineExecution; removed in Phase E.")
+  routineRuns(routineId: ID!, limit: Int, cursor: String): [RoutineRun!]! @deprecated(reason: "Use routineExecutions; removed in Phase E.")
+  # Phase A schema; resolvers ship in Phase B (U7+U9) and Phase A (U4).
+  routineExecution(id: ID!): RoutineExecution
+  routineExecutions(routineId: ID!, status: RoutineExecutionStatus, limit: Int, cursor: String): [RoutineExecution!]!
+  routineStepEvents(executionId: ID!): [RoutineStepEvent!]!
+  routineAslVersion(id: ID!): RoutineAslVersion
+  tenantToolInventory(tenantId: ID!): TenantToolInventory!
 }
 
 extend type Mutation {
@@ -125,4 +283,7 @@ extend type Mutation {
   setRoutineTrigger(routineId: ID!, input: RoutineTriggerInput!): RoutineTrigger!
   deleteRoutineTrigger(id: ID!): Boolean!
 
+  # Phase A schema; resolvers ship in Phase B (U7) and Phase B (U8).
+  publishRoutineVersion(input: PublishRoutineVersionInput!): RoutineAslVersion!
+  decideRoutineApproval(input: DecideRoutineApprovalInput!): InboxItem!
 }
