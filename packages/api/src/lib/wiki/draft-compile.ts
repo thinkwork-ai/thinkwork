@@ -31,6 +31,14 @@ import {
 	getCompileJob,
 	type WikiCompileJobRow,
 } from "./repository.js";
+import {
+	writeDraftReviewFailure,
+	writeDraftReviewNoOp,
+	writeDraftReviewSuccess,
+	type DraftWritebackContext,
+	type DraftWritebackIO,
+	type DraftWritebackResult,
+} from "../brain/draft-review-writeback.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -584,12 +592,14 @@ export interface DraftCompileJobResult {
 	jobId: string;
 	status: "succeeded" | "failed";
 	result?: DraftCompileResult;
+	writeback?: DraftWritebackResult;
 	error?: string;
 }
 
 export interface DraftCompileRunOpts {
 	modelId?: string;
 	seam?: DraftCompileSeam;
+	writebackIo?: DraftWritebackIO;
 }
 
 /**
@@ -649,19 +659,38 @@ export function parseDraftCompileInput(raw: unknown): DraftCompileInput {
 }
 
 /**
- * Run a draft-compile job claimed from `wiki_compile_jobs`. Updates the job
- * row to succeeded or failed and stores the result + metrics. **Does not yet
- * write the workspace review object** — that's U5's completion writeback.
- *
- * Inert in production until U6 enqueues these jobs.
+ * Run a draft-compile job claimed from `wiki_compile_jobs`. As of U5, this
+ * also dispatches the user-facing writeback (thread, workspace_run,
+ * workspace_events, messages) before marking the job complete. The writeback
+ * runs BEFORE `completeCompileJob` so a writeback failure surfaces as a
+ * job-level failure that the reconciler can retry — otherwise we'd ship a
+ * "succeeded" job ledger row whose user-visible artifacts never landed.
  */
 export async function runDraftCompileJob(
 	job: WikiCompileJobRow,
 	opts: DraftCompileRunOpts = {},
 ): Promise<DraftCompileJobResult> {
+	let parsedInput: DraftCompileInput | null = null;
 	try {
-		const input = parseDraftCompileInput(job.input);
-		const result = await runDraftCompile(input, opts.seam);
+		parsedInput = parseDraftCompileInput(job.input);
+		const ctx: DraftWritebackContext = {
+			job,
+			pageTable: parsedInput.pageTable,
+			pageId: parsedInput.pageId,
+			pageTitle: parsedInput.pageTitle,
+			candidates: parsedInput.candidates,
+		};
+		const result = await runDraftCompile(parsedInput, opts.seam);
+
+		const writeback =
+			result.regions.length === 0
+				? await writeDraftReviewNoOp({ context: ctx, io: opts.writebackIo })
+				: await writeDraftReviewSuccess({
+						context: ctx,
+						result,
+						io: opts.writebackIo,
+					});
+
 		await completeCompileJob({
 			jobId: job.id,
 			status: "succeeded",
@@ -672,17 +701,49 @@ export async function runDraftCompileJob(
 				regions_count: result.regions.length,
 				proposed_body_chars: result.proposedBodyMd.length,
 				snapshot_chars: result.snapshotMd.length,
+				writeback_thread_id: writeback.threadId,
+				writeback_run_id: writeback.workspaceRunId,
 			},
 		});
-		return { ok: true, jobId: job.id, status: "succeeded", result };
+		return { ok: true, jobId: job.id, status: "succeeded", result, writeback };
 	} catch (err) {
 		const msg = (err as Error)?.message || String(err);
+		// Best-effort: surface failure in a thread so the user knows the run
+		// happened. If we couldn't even parse the input, there's no thread
+		// context to write — skip writeback and just mark the job failed.
+		let writeback: DraftWritebackResult | undefined;
+		if (parsedInput) {
+			const ctx: DraftWritebackContext = {
+				job,
+				pageTable: parsedInput.pageTable,
+				pageId: parsedInput.pageId,
+				pageTitle: parsedInput.pageTitle,
+				candidates: parsedInput.candidates,
+			};
+			try {
+				writeback = await writeDraftReviewFailure({
+					context: ctx,
+					error: msg,
+					io: opts.writebackIo,
+				});
+			} catch (wbErr) {
+				console.warn(
+					`[draft-compile] failure-path writeback errored: ${(wbErr as Error)?.message ?? wbErr}`,
+				);
+			}
+		}
 		await completeCompileJob({
 			jobId: job.id,
 			status: "failed",
 			error: msg,
 		});
-		return { ok: false, jobId: job.id, status: "failed", error: msg };
+		return {
+			ok: false,
+			jobId: job.id,
+			status: "failed",
+			error: msg,
+			...(writeback ? { writeback } : {}),
+		};
 	}
 }
 
