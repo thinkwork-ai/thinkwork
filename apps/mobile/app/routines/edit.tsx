@@ -18,8 +18,8 @@ import { WebContent } from "@/components/layout/web-content";
 import { useAuth } from "@/lib/auth-context";
 import { useTenant } from "@/lib/hooks/use-tenants";
 import { useAgents } from "@/lib/hooks/use-agents";
-import { useUpdateRoutine } from "@/lib/hooks/use-routines";
-import { ROUTINE_BUILDER_CF_PROMPT } from "@/prompts/routine-builder-cf";
+import { useRoutine } from "@/lib/hooks/use-routines";
+import { ROUTINE_BUILDER_PROMPT } from "@/prompts/routine-builder";
 
 type EditPhase = "form" | "evaluating";
 
@@ -43,7 +43,15 @@ export default function EditRoutineScreen() {
   const [description, setDescription] = useState(params.prefill ?? "");
   const [phase, setPhase] = useState<EditPhase>("form");
 
-  const [, executeUpdateRoutine] = useUpdateRoutine();
+  // Load the routine's current published version markdown summary so the
+  // chat agent has prior intent in context. Phase C U10 retargeted the
+  // edit flow to the ASL chat builder; the legacy Python code-factory
+  // path that read `routine.code` is gone, replaced by the markdown
+  // summary that publishRoutineVersion regenerates on every publish.
+  const [{ data: routineData }] = useRoutine(routineId);
+  const existingRoutine = routineData?.routine as
+    | { documentationMd?: string | null; currentVersion?: number | null }
+    | undefined;
   // TODO: messages.createChatSession and sendChatToSession not yet available via GraphQL
   const createSession = async (_args: any): Promise<string> => "stub-thread-id";
   const sendToSession = async (_args: any) => {};
@@ -79,24 +87,26 @@ export default function EditRoutineScreen() {
     setPhase("evaluating");
 
     try {
-      // Set build status to building
-      await executeUpdateRoutine({ id: routineId, buildStatus: "building" });
-
+      // Phase C U10: dropped the buildStatus mutation. The legacy
+      // code-factory flow tracked sub-agent progress via a buildStatus
+      // field on routines that no longer exists in the GraphQL schema.
+      // ASL publish is atomic — there is no in-flight state to track.
       // Create a chat session for this edit
       const threadId = await createSession({
         assistantId: chatAgentId,
         title: `Edit: ${routineName}`,
       });
 
-      const repoDir = tenantRepo.replace("/", "--");
-      const repoContext = `\nTarget repository: ${tenantRepo} (available at /oc/${repoDir}/)`;
-      const routineContext = `\nRoutine name: "${routineName}"`;
-      const editContext = `\nEditing existing routine at: /oc/${repoDir}/routines/${editSlug}/routine.py`;
-      const tenantContext = tenantSlug
-        ? `\nTenant: ${tenantSlug}\nTenant repository: ${tenantRepo}`
+      const summaryContext = existingRoutine?.documentationMd
+        ? `\n\nEXISTING ROUTINE SUMMARY (markdown):\n${existingRoutine.documentationMd}`
         : "";
+      const versionContext =
+        typeof existingRoutine?.currentVersion === "number" &&
+        existingRoutine.currentVersion > 0
+          ? `\n\nCurrent published version: ${existingRoutine.currentVersion}`
+          : "";
 
-      const buildMessage = `[SYSTEM CONTEXT -- not visible to user]\n\n${ROUTINE_BUILDER_CF_PROMPT}${repoContext}${routineContext}${editContext}${tenantContext}\n\nRoutine ID: ${routineId}\nRoutine slug: ${editSlug}\n\nThis is an UPDATE to an existing routine. The sub-agent MUST:\n1. Read the existing routine code first\n2. Apply the requested changes\n3. Update the diagram if the workflow changed\n4. Append a changelog entry to the README\n\nAfter pushing to main, the sub-agent MUST run this command to mark the build complete:\ncurl -X POST "$THINKWORK_API_URL/api/routines/build-status" -H "Authorization: Bearer $MC_API_TOKEN" -H "Content-Type: application/json" -d '{"routineId":"${routineId}","buildStatus":"completed"}'\n\nYou have enough information. Build this update now. Do NOT ask questions. [END SYSTEM] Update routine: ${trimmedDesc}`;
+      const buildMessage = `[SYSTEM CONTEXT -- not visible to user]\n\n${ROUTINE_BUILDER_PROMPT}\n\nRoutine ID: ${routineId}\nRoutine name: "${routineName}"\nRoutine slug: ${editSlug}\n\nThis is an EDIT of an existing routine. Preserve existing behavior unless the user asks to change it. When the user clicks BUILD, call publishRoutineVersion exactly once with the updated ASL + markdown summary + step manifest.${summaryContext}${versionContext}\n\nYou have enough information to proceed. Discuss the change with the operator, then publish a new version when they confirm. [END SYSTEM] Update routine: ${trimmedDesc}`;
 
       await sendToSession({
         threadId: threadId,

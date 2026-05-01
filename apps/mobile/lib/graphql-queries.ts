@@ -403,6 +403,9 @@ export const RoutineQuery = graphql(`
       status
       schedule
       config
+      engine
+      currentVersion
+      documentationMd
       lastRunAt
       nextRunAt
       triggers {
