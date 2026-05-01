@@ -7,9 +7,12 @@ export interface BrainEnrichmentProposal {
   tenantId: string;
   targetPageTable: string;
   targetPageId: string;
-  threadId: string;
-  reviewRunId: string;
-  reviewObjectKey: string;
+  // Null when status === 'QUEUED' (U6 async-draft path). The writeback
+  // creates these on compile completion; mobile reads `status` to decide
+  // whether to wait for a thread message vs render a synchronous review.
+  threadId: string | null;
+  reviewRunId: string | null;
+  reviewObjectKey: string | null;
   status: string;
   title: string;
   candidates: Array<{
