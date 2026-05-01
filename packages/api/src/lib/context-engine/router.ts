@@ -212,18 +212,24 @@ async function runProvider(
 }
 
 export function rankAndDedupe(hits: ContextHit[]): ContextHit[] {
-  const byKey = new Map<string, ContextHit>();
+  const deduped: ContextHit[] = [];
+
   for (const hit of hits) {
-    const key =
-      hit.provenance.sourceId ??
-      `${hit.family}:${hit.title.toLowerCase()}:${hit.snippet.slice(0, 80)}`;
-    const existing = byKey.get(key);
-    if (!existing || normalizedScore(hit) > normalizedScore(existing)) {
-      byKey.set(key, hit);
+    const existingIndex = deduped.findIndex((existing) =>
+      areDuplicateHits(existing, hit),
+    );
+
+    if (existingIndex === -1) {
+      deduped.push(hit);
+      continue;
+    }
+
+    if (normalizedScore(hit) > normalizedScore(deduped[existingIndex]!)) {
+      deduped[existingIndex] = hit;
     }
   }
 
-  return [...byKey.values()]
+  return deduped
     .sort((a, b) => {
       const scoreDiff = normalizedScore(b) - normalizedScore(a);
       if (scoreDiff !== 0) return scoreDiff;
@@ -233,6 +239,60 @@ export function rankAndDedupe(hits: ContextHit[]): ContextHit[] {
       return a.title.localeCompare(b.title);
     })
     .map((hit, index) => ({ ...hit, rank: index + 1 }));
+}
+
+function areDuplicateHits(a: ContextHit, b: ContextHit): boolean {
+  if (
+    a.provenance.sourceId &&
+    b.provenance.sourceId &&
+    a.provenance.sourceId === b.provenance.sourceId
+  ) {
+    return true;
+  }
+
+  const titleA = normalizeFactText(a.title);
+  const titleB = normalizeFactText(b.title);
+  if (titleA !== titleB) return false;
+
+  const snippetA = normalizeFactText(a.snippet);
+  const snippetB = normalizeFactText(b.snippet);
+  if (!snippetA || !snippetB) return false;
+  if (snippetA === snippetB) return true;
+
+  return tokenSimilarity(snippetA, snippetB) >= 0.88;
+}
+
+function normalizeFactText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+\|\s*(involving|when|where|source|sources):.*$/i, "")
+    .replace(/[*_`#>[\](){}]/g, " ")
+    .replace(/[^\p{L}\p{N}'\s-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenSimilarity(a: string, b: string): number {
+  const aTokens = new Set(tokensForSimilarity(a));
+  const bTokens = new Set(tokensForSimilarity(b));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) intersection += 1;
+  }
+
+  const union = new Set([...aTokens, ...bTokens]).size;
+  const jaccard = intersection / union;
+  const containment = intersection / Math.min(aTokens.size, bTokens.size);
+  return Math.max(jaccard, containment);
+}
+
+function tokensForSimilarity(value: string): string[] {
+  return value
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
 }
 
 function scopeIsSupported(
