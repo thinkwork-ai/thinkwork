@@ -171,23 +171,23 @@ function ThreadHitlPrompt({
       className="flex-1 px-4 pt-4 pb-3"
       style={{ backgroundColor: colors.background }}
     >
-      <View className="flex-row items-center justify-between gap-3">
-        <View className="flex-1">
-          <Text
-            className="text-sm font-semibold"
-            style={{ color: colors.foreground }}
-          >
-            {isBrainEnrichment
-              ? "Review Brain enrichment"
-              : "Agent waiting for confirmation"}
-          </Text>
-          <Muted className="text-xs" numberOfLines={1}>
-            {review?.targetPath ||
-              review?.run?.targetPath ||
-              "Workspace review"}
-          </Muted>
+      {!isBrainEnrichment ? (
+        <View className="flex-row items-center justify-between gap-3">
+          <View className="flex-1">
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: colors.foreground }}
+            >
+              Agent waiting for confirmation
+            </Text>
+            <Muted className="text-xs" numberOfLines={1}>
+              {review?.targetPath ||
+                review?.run?.targetPath ||
+                "Workspace review"}
+            </Muted>
+          </View>
         </View>
-      </View>
+      ) : null}
 
       {body && !isBrainEnrichment ? (
         <Text
@@ -197,7 +197,7 @@ function ThreadHitlPrompt({
         >
           {body.replace(/^#+\s*/gm, "").trim()}
         </Text>
-      ) : review?.reason ? (
+      ) : !isBrainEnrichment && review?.reason ? (
         <Muted className="mt-2 text-sm">
           {String(review.reason).replace(/[_-]+/g, " ")}
         </Muted>
@@ -205,7 +205,7 @@ function ThreadHitlPrompt({
 
       {isBrainEnrichment ? (
         <ScrollView
-          style={{ flex: 1, marginTop: 12 }}
+          style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 8 }}
           showsVerticalScrollIndicator={false}
         >
