@@ -6,18 +6,16 @@ import {
   Inbox,
   Bot,
   Users,
-  Repeat,
   BarChart3,
   Settings,
   CreditCard,
   Puzzle,
   Brain,
-  FileText,
-  Webhook,
   Shield,
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -25,7 +23,6 @@ import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import {
   InboxItemsListQuery,
   AgentsListQuery,
-  ThreadsListQuery,
   ThreadsPagedQuery,
   RoutinesListQuery,
 } from "@/lib/graphql-queries";
@@ -52,7 +49,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight } from "lucide-react";
 
 interface NavItem {
   to: string;
@@ -211,7 +207,6 @@ export function AppSidebar() {
   // retry counter so the effect re-fires on the next tick once the token is
   // available. Other errors are non-fatal for the cosmetic count badges.
   const [activeScheduledJobs, setActiveScheduledJobs] = useState(0);
-  const [activeRoutines, setActiveRoutines] = useState(0);
   const [activeWebhooks, setActiveWebhooks] = useState(0);
   const [authRetryTick, setAuthRetryTick] = useState(0);
 
