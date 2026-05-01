@@ -515,6 +515,91 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
   })
 }
 
+# Step Functions admin operations — for createRoutine / publishRoutineVersion
+# / triggerRoutineRun / updateRoutine resolvers (Phase B U7) and the
+# routine-asl-validator Lambda (Phase A U5). State-machine ARNs follow the
+# naming convention `thinkwork-${stage}-routine-*`; aliases follow the
+# state-machine ARN with a colon-separated alias name.
+resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
+  name = "routines-step-functions"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RoutineStateMachineLifecycle"
+        Effect = "Allow"
+        Action = [
+          "states:CreateStateMachine",
+          "states:UpdateStateMachine",
+          "states:DeleteStateMachine",
+          "states:DescribeStateMachine",
+          "states:ListStateMachines",
+          "states:TagResource",
+          "states:UntagResource",
+          "states:PublishStateMachineVersion",
+          "states:DeleteStateMachineVersion",
+          "states:ListStateMachineVersions",
+          "states:CreateStateMachineAlias",
+          "states:UpdateStateMachineAlias",
+          "states:DeleteStateMachineAlias",
+          "states:DescribeStateMachineAlias",
+          "states:ListStateMachineAliases",
+          "states:DescribeStateMachineForExecution",
+        ]
+        Resource = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-*"
+      },
+      {
+        Sid    = "RoutineExecution"
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution",
+          "states:StartSyncExecution",
+          "states:StopExecution",
+          "states:DescribeExecution",
+          "states:ListExecutions",
+          "states:GetExecutionHistory",
+        ]
+        Resource = [
+          "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-*",
+          "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-routine-*:*",
+        ]
+      },
+      {
+        Sid    = "RoutineTaskTokens"
+        Effect = "Allow"
+        Action = [
+          "states:SendTaskSuccess",
+          "states:SendTaskFailure",
+          "states:SendTaskHeartbeat",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "RoutineValidate"
+        Effect   = "Allow"
+        Action   = ["states:ValidateStateMachineDefinition"]
+        Resource = "*"
+      },
+      {
+        # PassRole so the createRoutine resolver can hand the routines
+        # execution role to a newly-created state machine. Scoped to the
+        # specific role created by the routines-stepfunctions module.
+        Sid      = "RoutinePassExecutionRole"
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = "arn:aws:iam::${var.account_id}:role/thinkwork-${var.stage}-routines-execution-role"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "states.amazonaws.com"
+          }
+        }
+      },
+    ]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #
