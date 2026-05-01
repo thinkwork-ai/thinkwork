@@ -1,4 +1,5 @@
 import {
+  and,
   db as defaultDb,
   eq,
   inboxItems,
@@ -482,6 +483,11 @@ export async function applyBrainEnrichmentDraftReview(
   const db = args.db ?? defaultDb;
   const { draftPayload, decision } = args;
   const target = draftPayload.targetPage;
+  if (!args.tenantId) {
+    throw new Error(
+      "applyBrainEnrichmentDraftReview: tenantId is required for tenant-scoped page updates",
+    );
+  }
 
   const finalBody = mergeAcceptedRegions({ draftPayload, decision });
 
@@ -500,6 +506,7 @@ export async function applyBrainEnrichmentDraftReview(
 
   await replacePageBody({
     db,
+    tenantId: args.tenantId,
     target,
     bodyMd: finalBody,
   });
@@ -589,28 +596,55 @@ function outcomeMessage(args: {
 
 async function replacePageBody(args: {
   db: DbLike;
+  tenantId: string;
   target: {
     pageTable: "wiki_pages" | "tenant_entity_pages";
     id: string;
   };
   bodyMd: string;
 }) {
+  // Tenant-scoped UPDATE + .returning() to detect 0-row writes. A page that
+  // was deleted between draft creation and apply, or a payload that points at
+  // a different tenant's page id, must surface as an error rather than
+  // silently committing an "applied" thread message for a no-op write.
   if (args.target.pageTable === "tenant_entity_pages") {
-    await args.db
+    const updated = await args.db
       .update(tenantEntityPages)
       .set({
         body_md: args.bodyMd,
         updated_at: new Date(),
       })
-      .where(eq(tenantEntityPages.id, args.target.id));
+      .where(
+        and(
+          eq(tenantEntityPages.id, args.target.id),
+          eq(tenantEntityPages.tenant_id, args.tenantId),
+        ),
+      )
+      .returning({ id: tenantEntityPages.id });
+    if (updated.length === 0) {
+      throw new Error(
+        `applyBrainEnrichmentDraftReview: target page not found (tenant_entity_pages id=${args.target.id})`,
+      );
+    }
   } else {
-    await args.db
+    const updated = await args.db
       .update(wikiPages)
       .set({
         body_md: args.bodyMd,
         updated_at: new Date(),
       })
-      .where(eq(wikiPages.id, args.target.id));
+      .where(
+        and(
+          eq(wikiPages.id, args.target.id),
+          eq(wikiPages.tenant_id, args.tenantId),
+        ),
+      )
+      .returning({ id: wikiPages.id });
+    if (updated.length === 0) {
+      throw new Error(
+        `applyBrainEnrichmentDraftReview: target page not found (wiki_pages id=${args.target.id})`,
+      );
+    }
   }
 }
 

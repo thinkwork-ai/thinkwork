@@ -14,6 +14,10 @@ import {
   applyBrainEnrichmentWorkspaceReview,
   cancelBrainEnrichmentWorkspaceReview,
   isBrainEnrichmentReviewPayload,
+  applyBrainEnrichmentDraftReview,
+  cancelBrainEnrichmentDraftReview,
+  parseBrainEnrichmentDraftDecision,
+  type BrainEnrichmentDraftPayload,
 } from "../brain/enrichment-apply.js";
 
 const REGION =
@@ -222,10 +226,17 @@ export async function decideWorkspaceReview(
   const threadId = run.current_thread_turn_id
     ? await store.findThreadIdForTurn(run.tenant_id, run.current_thread_turn_id)
     : null;
-  const isBrainEnrichment = isBrainEnrichmentReviewPayload(
+  const draftPayload = parseDraftReviewEventPayload(
     latestReviewEvent?.payload,
   );
-  if (isBrainEnrichment && input.decision !== "resumed") {
+  const isBrainEnrichmentDraft = draftPayload !== null;
+  const isBrainEnrichment =
+    !isBrainEnrichmentDraft &&
+    isBrainEnrichmentReviewPayload(latestReviewEvent?.payload);
+  if (
+    (isBrainEnrichment || isBrainEnrichmentDraft) &&
+    input.decision !== "resumed"
+  ) {
     const timestamp = now();
     const nextStatus =
       input.decision === "cancelled" ? "cancelled" : "completed";
@@ -241,7 +252,30 @@ export async function decideWorkspaceReview(
         "CONFLICT",
       );
     }
-    if (input.decision === "accepted") {
+    if (isBrainEnrichmentDraft && draftPayload) {
+      if (input.decision === "accepted") {
+        const decision = parseBrainEnrichmentDraftDecision(
+          input.values?.responseMarkdown,
+        );
+        await applyBrainEnrichmentDraftReview({
+          draftPayload,
+          decision,
+          tenantId: run.tenant_id,
+          threadId,
+          turnId: run.current_thread_turn_id,
+          reviewerId: input.actorId,
+        });
+      } else {
+        await cancelBrainEnrichmentDraftReview({
+          draftPayload,
+          tenantId: run.tenant_id,
+          threadId,
+          turnId: run.current_thread_turn_id,
+          reviewerId: input.actorId,
+          note: input.values?.notes ?? undefined,
+        });
+      }
+    } else if (input.decision === "accepted") {
       await applyBrainEnrichmentWorkspaceReview({
         payload: latestReviewEvent?.payload,
         responseMarkdown: input.values?.responseMarkdown,
@@ -532,4 +566,56 @@ function isNoSuchKey(err: unknown): boolean {
   return (
     err instanceof NoSuchKey || name === "NoSuchKey" || name === "NotFound"
   );
+}
+
+/**
+ * Reshape a workspace event payload into the BrainEnrichmentDraftPayload
+ * shape that `applyBrainEnrichmentDraftReview` expects, when the payload is
+ * a `brain_enrichment_draft_review` kind. Returns null otherwise so the
+ * dispatcher falls through to the legacy candidate-card path or the generic
+ * wakeup-enqueue.
+ */
+function parseDraftReviewEventPayload(
+  raw: unknown,
+): BrainEnrichmentDraftPayload | null {
+  const obj =
+    typeof raw === "string"
+      ? safeJsonParse(raw)
+      : raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>)
+        : null;
+  if (!obj) return null;
+  if (obj.kind !== "brain_enrichment_draft_review") return null;
+  if (typeof obj.proposedBodyMd !== "string") return null;
+  if (typeof obj.snapshotMd !== "string") return null;
+  if (!Array.isArray(obj.regions)) return null;
+  const targetPageTable = obj.targetPageTable;
+  const targetPageId = obj.targetPageId;
+  if (
+    targetPageTable !== "wiki_pages" &&
+    targetPageTable !== "tenant_entity_pages"
+  ) {
+    return null;
+  }
+  if (typeof targetPageId !== "string" || !targetPageId) return null;
+  return {
+    proposedBodyMd: obj.proposedBodyMd,
+    snapshotMd: obj.snapshotMd,
+    regions: obj.regions as BrainEnrichmentDraftPayload["regions"],
+    targetPage: {
+      pageTable: targetPageTable,
+      id: targetPageId,
+      title:
+        typeof obj.pageTitle === "string" ? obj.pageTitle : undefined,
+    },
+  };
+}
+
+function safeJsonParse(s: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(s);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
