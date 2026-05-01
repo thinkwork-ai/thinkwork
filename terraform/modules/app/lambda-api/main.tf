@@ -615,11 +615,12 @@ resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
         # routine-task-python S3 offload — full stdout/stderr land in
         # the per-stage routine-output bucket under
         # <tenantId>/<sfn-execution-id>/<nodeId>/{stdout,stderr}.log.
+        # PutObject only — the read path is GraphQL-fronted and runs
+        # under the graphql-http handler's role, not this one.
         Sid    = "RoutineTaskPythonS3Offload"
         Effect = "Allow"
         Action = [
           "s3:PutObject",
-          "s3:GetObject",
         ]
         Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/*"
       },

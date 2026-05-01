@@ -24,17 +24,14 @@ vi.mock("@aws-sdk/client-bedrock-agentcore", () => ({
   BedrockAgentCoreClient: class {
     send = mockAgentCoreSend;
   },
-  StartCodeInterpreterSessionCommand: class {
+  StartCodeInterpreterSessionCommand: class StartCodeInterpreterSessionCommand {
     constructor(public input: unknown) {}
-    static name = "StartCodeInterpreterSessionCommand";
   },
-  InvokeCodeInterpreterCommand: class {
+  InvokeCodeInterpreterCommand: class InvokeCodeInterpreterCommand {
     constructor(public input: unknown) {}
-    static name = "InvokeCodeInterpreterCommand";
   },
-  StopCodeInterpreterSessionCommand: class {
+  StopCodeInterpreterSessionCommand: class StopCodeInterpreterSessionCommand {
     constructor(public input: unknown) {}
-    static name = "StopCodeInterpreterSessionCommand";
   },
 }));
 
@@ -42,20 +39,22 @@ vi.mock("@aws-sdk/client-s3", () => ({
   S3Client: class {
     send = mockS3Send;
   },
-  PutObjectCommand: class {
+  PutObjectCommand: class PutObjectCommand {
     constructor(public input: unknown) {}
-    static name = "PutObjectCommand";
   },
 }));
 
+import {
+  StopCodeInterpreterSessionCommand,
+} from "@aws-sdk/client-bedrock-agentcore";
 import {
   invokePythonTask,
   type PythonTaskInput,
 } from "../routine-task-python.js";
 
 const baseInput: PythonTaskInput = {
-  tenantId: "tenant-a",
-  executionArn:
+  tenantId: "00000000-0000-4000-8000-000000000001",
+  executionId:
     "arn:aws:states:us-east-1:1:execution:thinkwork-dev-routine-r:exec-1",
   nodeId: "RunReport",
   code: "print('hello')",
@@ -111,7 +110,6 @@ describe("invokePythonTask — happy path", () => {
       .mockResolvedValueOnce({}); // stop session
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -120,10 +118,10 @@ describe("invokePythonTask — happy path", () => {
     expect(result.stdoutPreview).toBe("hello\n");
     expect(result.truncated).toBe(false);
     expect(result.stdoutS3Uri).toBe(
-      "s3://thinkwork-dev-routine-output/tenant-a/exec-1/RunReport/stdout.log",
+      `s3://thinkwork-dev-routine-output/${baseInput.tenantId}/exec-1/RunReport/stdout.log`,
     );
     expect(result.stderrS3Uri).toBe(
-      "s3://thinkwork-dev-routine-output/tenant-a/exec-1/RunReport/stderr.log",
+      `s3://thinkwork-dev-routine-output/${baseInput.tenantId}/exec-1/RunReport/stderr.log`,
     );
   });
 
@@ -139,7 +137,6 @@ describe("invokePythonTask — happy path", () => {
       .mockResolvedValueOnce({});
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -167,7 +164,6 @@ describe("invokePythonTask — session lifecycle", () => {
       .mockResolvedValueOnce({}); // stop call
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -177,11 +173,8 @@ describe("invokePythonTask — session lifecycle", () => {
     // Three sends: Start, Invoke (rejected), Stop. The Stop call is the
     // critical part of this test — finally-equivalent runs even on error.
     expect(mockAgentCoreSend).toHaveBeenCalledTimes(3);
-    const stopCallArg = mockAgentCoreSend.mock.calls[2][0] as {
-      constructor: { name: string };
-    };
-    expect(stopCallArg.constructor.name).toBe(
-      "StopCodeInterpreterSessionCommand",
+    expect(mockAgentCoreSend.mock.calls[2][0]).toBeInstanceOf(
+      StopCodeInterpreterSessionCommand,
     );
   });
 
@@ -189,7 +182,6 @@ describe("invokePythonTask — session lifecycle", () => {
     mockAgentCoreSend.mockRejectedValueOnce(new Error("provisioning"));
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -216,7 +208,6 @@ describe("invokePythonTask — edge cases", () => {
       .mockResolvedValueOnce({});
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -253,7 +244,6 @@ describe("invokePythonTask — edge cases", () => {
       .mockResolvedValueOnce({});
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -276,10 +266,9 @@ describe("invokePythonTask — edge cases", () => {
     await invokePythonTask(
       {
         ...baseInput,
-        env: { TENANT_NAME: "alpha", FORBIDDEN_KEY: "leak" },
+        environment: { TENANT_NAME: "alpha", FORBIDDEN_KEY: "leak" },
       },
       {
-        stage: "dev",
         interpreterId: "ipi-shared",
         bucket: "thinkwork-dev-routine-output",
         envAllowlist: ["TENANT_NAME"],
@@ -313,7 +302,6 @@ describe("invokePythonTask — error paths", () => {
       .mockResolvedValueOnce({});
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -323,7 +311,7 @@ describe("invokePythonTask — error paths", () => {
     expect(result.errorMessage).toContain("transient AWS error");
   });
 
-  it("returns exitCode 0 even if S3 PutObject fails — sandbox output is still successful", async () => {
+  it("returns exitCode 0 even if both S3 PutObject calls fail — sandbox output is still successful", async () => {
     mockAgentCoreSend
       .mockResolvedValueOnce(defaultStartResponse())
       .mockResolvedValueOnce({
@@ -332,13 +320,12 @@ describe("invokePythonTask — error paths", () => {
         ]),
       })
       .mockResolvedValueOnce({});
-    // S3 fails — but the wrapper should not turn a successful sandbox
-    // execution into a sandbox_invoke_failed. S3 errors degrade to
-    // missing URIs; preview/exit still flow back.
+    // Both S3 PUTs fail — but the wrapper should not turn a successful
+    // sandbox execution into a sandbox_invoke_failed. S3 errors degrade
+    // to missing URIs; preview/exit still flow back.
     mockS3Send.mockRejectedValue(new Error("s3 503"));
 
     const result = await invokePythonTask(baseInput, {
-      stage: "dev",
       interpreterId: "ipi-shared",
       bucket: "thinkwork-dev-routine-output",
     });
@@ -349,5 +336,81 @@ describe("invokePythonTask — error paths", () => {
     expect(result.stderrS3Uri).toBeNull();
     // Preview is still populated from the in-memory buffer.
     expect(result.stdoutPreview).toBe("ok");
+  });
+
+  it("reports stdout URI but null stderrS3Uri when stderr S3 PutObject fails (partial-success)", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({ stdout: "ok", stderr: "", exitCode: 0 }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+    // First call (stdout) succeeds; second (stderr) rejects.
+    mockS3Send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error("stderr 503"));
+
+    const result = await invokePythonTask(baseInput, {
+      interpreterId: "ipi-shared",
+      bucket: "thinkwork-dev-routine-output",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.errorClass).toBe("s3_offload_failed");
+    expect(result.stdoutS3Uri).not.toBeNull();
+    expect(result.stderrS3Uri).toBeNull();
+    expect(result.errorMessage).toMatch(/stderr/i);
+  });
+
+  it("rejects malformed tenantId (not a UUID) before invoking the sandbox", async () => {
+    const result = await invokePythonTask(
+      { ...baseInput, tenantId: "../other-tenant" },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+      },
+    );
+    expect(result.exitCode).toBe(-1);
+    expect(result.errorClass).toBe("invalid_tenant_id");
+    expect(mockAgentCoreSend).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed nodeId (path-traversal attempt) before invoking the sandbox", async () => {
+    const result = await invokePythonTask(
+      { ...baseInput, nodeId: "../../etc/passwd" },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+      },
+    );
+    expect(result.exitCode).toBe(-1);
+    expect(result.errorClass).toBe("invalid_node_id");
+    expect(mockAgentCoreSend).not.toHaveBeenCalled();
+  });
+
+  it("defaults exitCode to 1 when stderr is non-empty and exitCode wasn't reported", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          {
+            // No exitCode in structuredContent.
+            result: {
+              content: [],
+              structuredContent: { stderr: "Traceback..." },
+            },
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await invokePythonTask(baseInput, {
+      interpreterId: "ipi-shared",
+      bucket: "thinkwork-dev-routine-output",
+    });
+
+    expect(result.exitCode).toBe(1);
   });
 });
