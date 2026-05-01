@@ -274,7 +274,7 @@ function EvaluationsPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link to="/scheduled-jobs" search={{ type: "eval_scheduled" }}>
+                <Link to="/automations/schedules" search={{ type: "eval_scheduled" }}>
                   <Calendar className="mr-1 h-4 w-4" /> Schedules
                 </Link>
               </Button>

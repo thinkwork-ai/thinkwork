@@ -244,7 +244,7 @@ export function AgentDetailChrome({
               onDeleteBudget={handleDeleteBudget}
               onSaveRuntime={handleSaveRuntime}
             >
-              <Link to="/scheduled-jobs" search={{ type: "agent", agentId }}>
+              <Link to="/automations/schedules" search={{ type: "agent", agentId }}>
                 <Badge
                   variant="outline"
                   className={`gap-1 cursor-pointer hover:bg-accent ${triggerCount === 0 ? "text-muted-foreground" : ""}`}
