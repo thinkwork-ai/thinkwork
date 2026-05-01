@@ -56,8 +56,12 @@ export {
 export {
   editTenantEntityFact,
   rejectTenantEntityFact,
+  acceptBrainEnrichmentReview,
+  cancelBrainEnrichmentReview,
+  listBrainEnrichmentSources,
   runBrainPageEnrichment,
   type BrainEnrichmentProposal,
+  type BrainEnrichmentSourceAvailability,
   type BrainEnrichmentSourceFamily,
 } from "./brain";
 export { useBrainEnrichment } from "./hooks/use-brain-enrichment";

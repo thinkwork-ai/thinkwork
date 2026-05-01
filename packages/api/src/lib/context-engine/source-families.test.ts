@@ -21,12 +21,12 @@ function provider(
 
 describe("Context Engine source families", () => {
   it("maps core providers to mobile source families", () => {
-    expect(sourceFamilyForProvider(provider({ id: "memory", family: "memory" }))).toBe(
-      "brain",
-    );
-    expect(sourceFamilyForProvider(provider({ id: "wiki", family: "wiki" }))).toBe(
-      "pages",
-    );
+    expect(
+      sourceFamilyForProvider(provider({ id: "memory", family: "memory" })),
+    ).toBe("brain");
+    expect(
+      sourceFamilyForProvider(provider({ id: "wiki", family: "wiki" })),
+    ).toBe("pages");
     expect(
       sourceFamilyForProvider(
         provider({ id: "bedrock-knowledge-base", family: "knowledge-base" }),
@@ -73,6 +73,20 @@ describe("Context Engine source families", () => {
         }),
       ),
     ).toBe("pages");
+  });
+
+  it("maps the tenant built-in Web Search provider explicitly", () => {
+    expect(
+      sourceFamilyForProvider(
+        provider({
+          id: "builtin:web-search",
+          family: "mcp",
+          sourceFamily: "web",
+          displayName: "Web Search",
+          defaultEnabled: false,
+        }),
+      ),
+    ).toBe("web");
   });
 
   it("derives hit source family from hit family before provider family", () => {

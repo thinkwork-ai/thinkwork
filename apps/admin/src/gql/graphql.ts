@@ -697,6 +697,15 @@ export type BrainEnrichmentProviderStatus = {
   state: Scalars['String']['output'];
 };
 
+export type BrainEnrichmentSourceAvailability = {
+  __typename?: 'BrainEnrichmentSourceAvailability';
+  available: Scalars['Boolean']['output'];
+  family: BrainEnrichmentSourceFamily;
+  label: Scalars['String']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+  selectedByDefault: Scalars['Boolean']['output'];
+};
+
 export enum BrainEnrichmentSourceFamily {
   Brain = 'BRAIN',
   KnowledgeBase = 'KNOWLEDGE_BASE',
@@ -2682,6 +2691,7 @@ export type Query = {
   allTenantAgents: Array<Agent>;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
+  brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
@@ -2964,6 +2974,13 @@ export type QueryArtifactsArgs = {
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+
+export type QueryBrainEnrichmentSourcesArgs = {
+  pageId: Scalars['ID']['input'];
+  pageTable: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 

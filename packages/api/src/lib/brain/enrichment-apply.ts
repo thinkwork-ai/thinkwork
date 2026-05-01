@@ -48,12 +48,9 @@ function parseBrainEnrichmentReviewPayload(
       return null;
     }
   }
-  return (
-    !!payload &&
+  return !!payload &&
     typeof payload === "object" &&
-    (payload as BrainEnrichmentReviewPayload).kind ===
-      "brain_enrichment_review"
-  )
+    (payload as BrainEnrichmentReviewPayload).kind === "brain_enrichment_review"
     ? (payload as BrainEnrichmentReviewPayload)
     : null;
 }
@@ -221,7 +218,9 @@ export async function closeBrainEnrichmentReviewThread(args: {
   });
 }
 
-function renderApprovedAdditions(candidates: BrainEnrichmentCandidate[]): string {
+function renderApprovedAdditions(
+  candidates: BrainEnrichmentCandidate[],
+): string {
   const lines = [
     `## Approved enrichment ${new Date().toISOString().slice(0, 10)}`,
     "",
@@ -235,14 +234,13 @@ function renderApprovedAdditions(candidates: BrainEnrichmentCandidate[]): string
   return lines.join("\n");
 }
 
-function selectApprovedCandidates(
+export function selectApprovedCandidates(
   candidates: BrainEnrichmentCandidate[],
   responseMarkdown?: string | null,
 ): BrainEnrichmentCandidate[] {
   const selectedIds = parseSelectedCandidateIds(responseMarkdown);
   if (!selectedIds) return candidates;
-  const selected = candidates.filter((candidate) => selectedIds.has(candidate.id));
-  return selected.length > 0 ? selected : candidates;
+  return candidates.filter((candidate) => selectedIds.has(candidate.id));
 }
 
 function parseSelectedCandidateIds(

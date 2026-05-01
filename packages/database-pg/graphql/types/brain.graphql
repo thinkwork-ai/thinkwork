@@ -69,6 +69,14 @@ type BrainEnrichmentProviderStatus {
   durationMs: Int
 }
 
+type BrainEnrichmentSourceAvailability {
+  family: BrainEnrichmentSourceFamily!
+  label: String!
+  available: Boolean!
+  selectedByDefault: Boolean!
+  reason: String
+}
+
 type BrainEnrichmentProposal {
   id: ID!
   tenantId: ID!
@@ -96,11 +104,22 @@ input RunBrainPageEnrichmentInput {
 
 extend type Query {
   tenantEntityPage(tenantId: ID!, pageId: ID!): TenantEntityPage
-  tenantEntityFacets(pageId: ID!, limit: Int = 20, cursor: String): TenantEntityFacetConnection!
+  tenantEntityFacets(
+    pageId: ID!
+    limit: Int = 20
+    cursor: String
+  ): TenantEntityFacetConnection!
+  brainEnrichmentSources(
+    tenantId: ID!
+    pageTable: String!
+    pageId: ID!
+  ): [BrainEnrichmentSourceAvailability!]!
 }
 
 extend type Mutation {
   editTenantEntityFact(factId: ID!, content: String!): TenantEntitySection!
   rejectTenantEntityFact(factId: ID!, reason: String): TenantEntitySection!
-  runBrainPageEnrichment(input: RunBrainPageEnrichmentInput!): BrainEnrichmentProposal!
+  runBrainPageEnrichment(
+    input: RunBrainPageEnrichmentInput!
+  ): BrainEnrichmentProposal!
 }
