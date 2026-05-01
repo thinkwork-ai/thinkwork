@@ -180,7 +180,7 @@ function ThreadHitlPrompt({
                 style={{
                   backgroundColor: "transparent",
                   borderWidth: 1,
-                  borderColor: selected ? "#f59e0b" : colors.border,
+                  borderColor: selected ? colors.primary : colors.border,
                 }}
               >
                 <View>
@@ -414,12 +414,12 @@ function ReviewActionButton({
   const disabled = pendingDecision !== null;
   const backgroundColor =
     tone === "primary"
-      ? "#f59e0b"
+      ? "#16a34a"
       : tone === "danger"
         ? "#dc2626"
         : "transparent";
   const borderColor =
-    tone === "primary" ? "#f59e0b" : tone === "danger" ? "#dc2626" : "#a3a3a3";
+    tone === "primary" ? "#16a34a" : tone === "danger" ? "#dc2626" : "#a3a3a3";
   const color = tone === "neutral" ? "#737373" : "#ffffff";
 
   return (
