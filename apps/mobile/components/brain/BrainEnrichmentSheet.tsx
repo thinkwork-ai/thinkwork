@@ -79,7 +79,7 @@ export function BrainEnrichmentSheet({
 
   const run = async () => {
     try {
-      await enrichment.run({
+      const proposal = await enrichment.run({
         tenantId,
         pageTable: "wiki_pages",
         pageId,
@@ -87,6 +87,20 @@ export function BrainEnrichmentSheet({
         sourceFamilies: sources,
         limit: 12,
       });
+      // U6 of plan 2026-05-01-002: status='QUEUED' means the agentic
+      // draft compile is running async. Close the sheet immediately and
+      // surface a confirmation; the user gets a thread message when the
+      // draft is ready to review.
+      if (proposal.status === "QUEUED") {
+        toast.show({
+          message:
+            "We're preparing your draft. You'll get a thread message when it's ready.",
+        });
+        enrichment.reset();
+        setSelectedCandidateIds([]);
+        setNote("");
+        onClose();
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Try again in a moment.";
@@ -96,6 +110,18 @@ export function BrainEnrichmentSheet({
 
   const decide = async (decision: "accept" | "cancel") => {
     if (!enrichment.proposal) return;
+    // QUEUED proposals don't have a reviewRunId yet — the writeback will
+    // create one when the async compile finishes. The decide buttons should
+    // not be reachable in this state (the sheet closes on QUEUED), but guard
+    // anyway in case of a subscription update or stale state.
+    const reviewRunId = enrichment.proposal.reviewRunId;
+    if (!reviewRunId) {
+      toast.show({
+        tone: "error",
+        message: "This draft is still preparing — try again in a moment.",
+      });
+      return;
+    }
     setDeciding(decision);
     try {
       const responseMarkdown = serializeBrainEnrichmentSelection({
@@ -105,7 +131,7 @@ export function BrainEnrichmentSheet({
       if (decision === "accept") {
         await acceptBrainEnrichmentReview({
           graphqlUrl,
-          reviewRunId: enrichment.proposal.reviewRunId,
+          reviewRunId,
           responseMarkdown,
           notes: note,
         });
@@ -113,7 +139,7 @@ export function BrainEnrichmentSheet({
       } else {
         await cancelBrainEnrichmentReview({
           graphqlUrl,
-          reviewRunId: enrichment.proposal.reviewRunId,
+          reviewRunId,
           responseMarkdown,
           notes: note,
         });
@@ -255,10 +281,12 @@ export function BrainEnrichmentSheet({
                       )}
                     </Pressable>
                   </View>
-                  {onOpenThread ? (
+                  {onOpenThread && enrichment.proposal!.threadId ? (
                     <Pressable
                       onPress={() => {
-                        onOpenThread(enrichment.proposal!.threadId);
+                        const tid = enrichment.proposal!.threadId;
+                        if (!tid) return;
+                        onOpenThread(tid);
                         onClose();
                       }}
                       className="flex-row items-center justify-center rounded-md px-3 py-2"

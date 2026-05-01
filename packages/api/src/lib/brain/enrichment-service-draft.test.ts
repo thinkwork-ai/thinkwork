@@ -14,6 +14,10 @@
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+// Drizzle table tokens needed by the resolver's transitive imports. The
+// resolver itself does not import wikiCompileJobs from utils.js — that lives
+// in the repository module which this test mocks separately — so it is not
+// included here.
 const tableTokens = vi.hoisted(() => ({
 	tenants: { __tag: "tenants" } as { __tag: string },
 	agents: { __tag: "agents" } as { __tag: string },
@@ -22,7 +26,6 @@ const tableTokens = vi.hoisted(() => ({
 	agentWorkspaceRuns: { __tag: "agentWorkspaceRuns" } as { __tag: string },
 	agentWorkspaceEvents: { __tag: "agentWorkspaceEvents" } as { __tag: string },
 	messages: { __tag: "messages" } as { __tag: string },
-	wikiCompileJobs: { __tag: "wikiCompileJobs" } as { __tag: string },
 }));
 
 vi.mock("../../graphql/utils.js", () => ({
@@ -34,7 +37,6 @@ vi.mock("../../graphql/utils.js", () => ({
 	agentWorkspaceRuns: tableTokens.agentWorkspaceRuns,
 	agentWorkspaceEvents: tableTokens.agentWorkspaceEvents,
 	messages: tableTokens.messages,
-	wikiCompileJobs: tableTokens.wikiCompileJobs,
 	eq: (...args: unknown[]) => ({ __op: "eq", args }),
 	and: (...args: unknown[]) => ({ __op: "and", args }),
 	sql: ((strings: TemplateStringsArray, ...values: unknown[]) => ({
@@ -211,7 +213,8 @@ describe("runBrainPageEnrichment (U6 async draft-compile path)", () => {
 
 		// invokeWikiCompile fired with the new jobId
 		expect(invokeMock).toHaveBeenCalledTimes(1);
-		expect(invokeMock.mock.calls[0]![0]).toBe("job-test-1");
+		const invokeArgs = invokeMock.mock.calls[0] as unknown as [string];
+		expect(invokeArgs[0]).toBe("job-test-1");
 
 		// Crucially: NO thread / workspace_run / messages / S3 inserts.
 		const insertedTables = inserts.map(
