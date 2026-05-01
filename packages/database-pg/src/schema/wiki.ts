@@ -386,6 +386,10 @@ export const wikiCompileJobs = pgTable(
 		finished_at: timestamp("finished_at", { withTimezone: true }),
 		error: text("error"),
 		metrics: jsonb("metrics"), // { records_read, pages_upserted, sections_rewritten, latency_ms, cost_usd }
+		// Optional per-trigger input payload. Used by trigger='enrichment_draft' jobs
+		// to carry { pageId, pageTable, candidates }. Default (cluster-driven) compile
+		// jobs leave this NULL and read input from memory_units.
+		input: jsonb("input"),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.default(sql`now()`),

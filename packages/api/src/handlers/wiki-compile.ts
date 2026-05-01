@@ -14,6 +14,10 @@ import { S3Client } from "@aws-sdk/client-s3";
 
 import { runCompileJob, runJobById } from "../lib/wiki/compiler.js";
 import {
+	runDraftCompileJob,
+	runDraftCompileJobById,
+} from "../lib/wiki/draft-compile.js";
+import {
 	claimNextCompileJob,
 	getCompileJob,
 	type WikiCompileJobRow,
@@ -77,6 +81,20 @@ export async function handler(
 			if (!job || job.status === "succeeded" || job.status === "skipped") {
 				return { ok: true, jobId: event.jobId, status: "already_done" };
 			}
+			if (job.trigger === "enrichment_draft") {
+				const draft = await runDraftCompileJobById(event.jobId, {
+					...(event.modelId ? { modelId: event.modelId } : {}),
+				});
+				if (!draft) {
+					return { ok: true, jobId: event.jobId, status: "already_done" };
+				}
+				return {
+					ok: draft.status === "succeeded",
+					jobId: draft.jobId,
+					status: draft.status,
+					...(draft.error ? { error: draft.error } : {}),
+				};
+			}
 			const result = await runJobById(event.jobId, opts);
 			if (!result) {
 				return { ok: true, jobId: event.jobId, status: "already_done" };
@@ -94,6 +112,17 @@ export async function handler(
 		const claimed = await claimNextCompileJob();
 		if (!claimed) {
 			return { ok: true, status: "no_job" };
+		}
+		if (claimed.trigger === "enrichment_draft") {
+			const draft = await runDraftCompileJob(claimed, {
+				...(event.modelId ? { modelId: event.modelId } : {}),
+			});
+			return {
+				ok: draft.status === "succeeded",
+				jobId: draft.jobId,
+				status: draft.status,
+				...(draft.error ? { error: draft.error } : {}),
+			};
 		}
 		const result = await runCompileJob(claimed, opts);
 		await writePackIfSucceeded(claimed, result.status);
