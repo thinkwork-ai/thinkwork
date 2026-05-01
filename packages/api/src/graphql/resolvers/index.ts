@@ -35,6 +35,7 @@ import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { activationQueries, activationMutations } from "./activation/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
+import { routineQueries } from "./routines/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -60,6 +61,7 @@ export const queryResolvers: Record<string, any> = {
   ...workspaceQueries,
   ...activationQueries,
   ...brainQueries,
+  ...routineQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {

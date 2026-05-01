@@ -252,6 +252,12 @@ build_handler "sandbox-quota-check" \
 build_handler "sandbox-invocation-log" \
   "$REPO_ROOT/packages/api/src/handlers/sandbox-invocation-log.ts"
 
+# Routines Step Functions ASL validator (plan 2026-05-01-004 §U5).
+# Server-side AWS ValidateStateMachineDefinition + recipe-aware linter.
+# Bearer API_AUTH_SECRET; called by the chat builder + publish flow.
+build_handler "routine-asl-validator" \
+  "$REPO_ROOT/packages/api/src/handlers/routine-asl-validator.ts"
+
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"
 

@@ -31,6 +31,8 @@
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/lambda": "workspace:*",
     "@thinkwork/workspace-defaults": "workspace:*",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "drizzle-orm": "^0.39.0",
     "expo-server-sdk": "^6.1.0",
     "jszip": "^3.10.1",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
+    "@aws-sdk/client-sfn": "^3.917.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1010.0",
     "@aws-sdk/s3-request-presigner": "^3.1023.0",
     "@envelop/depth-limit": "^7.1.1",
