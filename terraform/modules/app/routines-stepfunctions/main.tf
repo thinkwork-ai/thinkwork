@@ -50,6 +50,12 @@ variable "log_retention_days" {
   default     = 30
 }
 
+variable "execution_callback_lambda_arn" {
+  description = "ARN of the routine-execution-callback Lambda. EventBridge sends SFN execution-state-change events here so routine_executions lifecycle status mirrors the SFN-side reality. When empty, the EventBridge rule is not provisioned (Phase B U9 hasn't deployed yet)."
+  type        = string
+  default     = ""
+}
+
 locals {
   log_group_name = "/aws/vendedlogs/states/thinkwork-${var.stage}-routines"
   output_bucket  = "thinkwork-${var.stage}-routine-output"
@@ -383,4 +389,62 @@ output "output_bucket_arn" {
 output "stage" {
   description = "Echo of the stage variable (convenience for downstream modules)."
   value       = var.stage
+}
+
+################################################################################
+# EventBridge → routine-execution-callback (Phase B U9)
+#
+# AWS EventBridge fires `Step Functions Execution Status Change` events on
+# every status transition (RUNNING/SUCCEEDED/FAILED/TIMED_OUT/ABORTED). The
+# routine-execution-callback Lambda speaks both API Gateway POST shape and
+# this EventBridge shape; the Lambda detects the EventBridge event by
+# `source === "aws.states"` and adapts.
+#
+# The rule is gated on var.execution_callback_lambda_arn being set so the
+# substrate module remains provisionable before the lambda-api module
+# defines the function. The thinkwork composite module wires the ARN
+# back in once both modules apply.
+################################################################################
+
+resource "aws_cloudwatch_event_rule" "sfn_state_change" {
+  count       = var.execution_callback_lambda_arn != "" ? 1 : 0
+  name        = "thinkwork-${var.stage}-routines-sfn-state-change"
+  description = "Forward SFN execution-state-change events to routine-execution-callback so routine_executions tracks lifecycle status."
+
+  event_pattern = jsonencode({
+    source        = ["aws.states"]
+    "detail-type" = ["Step Functions Execution Status Change"]
+    detail = {
+      # Constrain to state machines provisioned by createRoutine — the
+      # alias-pointing state machine ARNs all live under the
+      # `thinkwork-${stage}-routine-` prefix per the publish flow's naming
+      # contract (Phase B U7).
+      stateMachineArn = [
+        {
+          prefix = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-"
+        },
+      ]
+    }
+  })
+
+  tags = {
+    Name  = "thinkwork-${var.stage}-routines-sfn-state-change"
+    Stage = var.stage
+  }
+}
+
+resource "aws_cloudwatch_event_target" "sfn_state_change" {
+  count     = var.execution_callback_lambda_arn != "" ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.sfn_state_change[0].name
+  target_id = "routine-execution-callback"
+  arn       = var.execution_callback_lambda_arn
+}
+
+resource "aws_lambda_permission" "sfn_state_change" {
+  count         = var.execution_callback_lambda_arn != "" ? 1 : 0
+  statement_id  = "AllowEventBridgeInvokeRoutineExecutionCallback"
+  action        = "lambda:InvokeFunction"
+  function_name = var.execution_callback_lambda_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.sfn_state_change[0].arn
 }

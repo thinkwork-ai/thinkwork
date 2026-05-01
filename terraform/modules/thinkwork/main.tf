@@ -298,6 +298,14 @@ module "routines_stepfunctions" {
   stage      = var.stage
   account_id = var.account_id
   region     = var.region
+
+  # Phase B U9: EventBridge → routine-execution-callback. Constructed
+  # from the lambda-api naming convention rather than referencing the
+  # module output directly to avoid a cycle (lambda-api consumes
+  # routines_execution_role_arn from this module). The function exists
+  # for_each-iterated under aws_lambda_function.handler[*] in lambda-api;
+  # the ARN follows the deterministic naming pattern.
+  execution_callback_lambda_arn = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-execution-callback"
 }
 
 module "hindsight" {

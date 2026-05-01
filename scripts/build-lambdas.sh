@@ -283,6 +283,15 @@ build_handler "routine-resume" \
 build_handler "routine-approval-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-approval-callback.ts"
 
+# Routines step-event + execution-event REST ingest (plan 2026-05-01-005 §U9).
+# Task wrappers POST step events to /api/routines/step; an EventBridge rule
+# routes SFN execution-state-change events to /api/routines/execution. Both
+# Bearer API_AUTH_SECRET; idempotent under double-delivery.
+build_handler "routine-step-callback" \
+  "$REPO_ROOT/packages/api/src/handlers/routine-step-callback.ts"
+build_handler "routine-execution-callback" \
+  "$REPO_ROOT/packages/api/src/handlers/routine-execution-callback.ts"
+
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"
 
