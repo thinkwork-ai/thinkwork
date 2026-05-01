@@ -72,7 +72,12 @@ type Routine {
   updatedAt: AWSDateTime!
 }
 
-type RoutineRun @deprecated(reason: "Use RoutineExecution. Removed in Phase E (U15).") {
+# @deprecated: Use RoutineExecution. Removed in Phase E (U15).
+# (Object types cannot carry @deprecated per GraphQL spec — only fields,
+# enum values, input fields, and arguments can. Deprecation is signaled
+# via the routineRun/routineRuns queries and the Routine.runs field
+# below, which are field-level usages where @deprecated is valid.)
+type RoutineRun {
   id: ID!
   routineId: ID!
   tenantId: ID!
@@ -85,7 +90,9 @@ type RoutineRun @deprecated(reason: "Use RoutineExecution. Removed in Phase E (U
   createdAt: AWSDateTime!
 }
 
-type RoutineStep @deprecated(reason: "Use RoutineStepEvent. Unbacked since pre-Phase A; removed in Phase E.") {
+# @deprecated: Use RoutineStepEvent. Unbacked since pre-Phase A; removed
+# in Phase E. Same spec note as RoutineRun above.
+type RoutineStep {
   id: ID!
   runId: ID!
   routineId: ID!
