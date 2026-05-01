@@ -596,6 +596,34 @@ resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
           }
         }
       },
+      {
+        # routine-task-python (Phase B U6) wraps the AgentCore code
+        # interpreter so SFN can run `python` recipe states. Three calls
+        # per Task: Start session, Invoke, Stop. Resource is `*` because
+        # interpreter sessions are runtime-scoped, not provisioned.
+        Sid    = "RoutineTaskPythonCodeInterpreter"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartCodeInterpreterSession",
+          "bedrock-agentcore:InvokeCodeInterpreter",
+          "bedrock-agentcore:StopCodeInterpreterSession",
+          "bedrock-agentcore:GetCodeInterpreterSession",
+        ]
+        Resource = "*"
+      },
+      {
+        # routine-task-python S3 offload — full stdout/stderr land in
+        # the per-stage routine-output bucket under
+        # <tenantId>/<sfn-execution-id>/<nodeId>/{stdout,stderr}.log.
+        # PutObject only — the read path is GraphQL-fronted and runs
+        # under the graphql-http handler's role, not this one.
+        Sid    = "RoutineTaskPythonS3Offload"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+        ]
+        Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/*"
+      },
     ]
   })
 }

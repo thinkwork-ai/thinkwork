@@ -70,7 +70,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "activation-apply-worker" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "activation-apply-worker" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -257,6 +257,22 @@ build_handler "sandbox-invocation-log" \
 # Bearer API_AUTH_SECRET; called by the chat builder + publish flow.
 build_handler "routine-asl-validator" \
   "$REPO_ROOT/packages/api/src/handlers/routine-asl-validator.ts"
+
+# Routines Step Functions Task wrappers (plan 2026-05-01-005 §U6).
+# routine-task-python: invoked by SFN for every `python` recipe state.
+# Wraps StartCodeInterpreterSession + InvokeCodeInterpreter +
+# StopCodeInterpreterSession; offloads stdout/stderr to the per-stage
+# routine-output S3 bucket. Uses BUNDLED_AGENTCORE_ESBUILD_FLAGS because
+# @aws-sdk/client-bedrock-agentcore is newer than the Node 20 Lambda
+# runtime's bundled SDK set.
+build_handler "routine-task-python" \
+  "$REPO_ROOT/packages/lambda/routine-task-python.ts"
+
+# routine-resume: invoked by routine-approval-bridge (U8) after a HITL
+# decision lands. Calls SendTaskSuccess/SendTaskFailure; idempotent on
+# already-consumed tokens.
+build_handler "routine-resume" \
+  "$REPO_ROOT/packages/lambda/routine-resume.ts"
 
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"

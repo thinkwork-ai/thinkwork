@@ -119,6 +119,17 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
+    # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
+    # id + the per-stage S3 routine-output bucket. The interpreter id is
+    # provisioned by the agentcore-code-interpreter module and exposed via
+    # the agentcore_code_interpreter_id input variable; the bucket name
+    # follows the per-stage naming convention from the routines-stepfunctions
+    # module (Phase A U1).
+    "routine-task-python" = {
+      SANDBOX_INTERPRETER_ID         = var.agentcore_code_interpreter_id
+      ROUTINE_OUTPUT_BUCKET          = "thinkwork-${var.stage}-routine-output"
+      ROUTINE_PYTHON_ENV_ALLOWLIST   = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
+    }
   }
 }
 
@@ -197,6 +208,19 @@ resource "aws_lambda_function" "handler" {
     # accepting LLM-emitted ASL. Needs states:ValidateStateMachineDefinition
     # IAM grant — see main.tf.
     "routine-asl-validator",
+    # Routines Step Functions Task wrappers (plan
+    # docs/plans/2026-05-01-005-feat-routines-phase-b-runtime-plan.md §U6).
+    # routine-task-python: SFN-invoked Lambda that runs `python` recipe
+    # states in the AgentCore code interpreter, offloading stdout/stderr
+    # to the per-stage routine-output bucket. Needs bedrock-agentcore
+    # (Start/Invoke/Stop CodeInterpreterSession) + S3 PutObject IAM —
+    # see main.tf.
+    "routine-task-python",
+    # routine-resume: SDK-invoked by routine-approval-bridge (Phase B
+    # U8) after a HITL decision. Calls SendTaskSuccess/SendTaskFailure;
+    # idempotent on already-consumed tokens. Needs states:SendTaskSuccess
+    # + states:SendTaskFailure IAM (already granted in U1's substrate).
+    "routine-resume",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -259,7 +283,10 @@ resource "aws_lambda_function" "handler" {
   # wiki-bootstrap-import runs a full Hindsight ingest for ~3,000 records;
   # the LLM-backed retain path makes it the longest-running Lambda in the
   # set. 900 s is Lambda's per-invocation max and matches eval-runner's ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : 30
+  # routine-task-python wraps a 300s sandbox session and needs headroom
+  # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
+  # for AWS-call setup and offload after the sandbox's own ceiling.
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
