@@ -15,7 +15,18 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2, Pencil, RefreshCw } from "lucide-react-native";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Check,
+  ListChecks,
+  AlertCircle,
+  Clock,
+  Trash2,
+  Pencil,
+  RefreshCw,
+} from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { ShimmerText } from "@/components/ui/ShimmerText";
 import { getExternalProviderLabel, getThreadHeaderLabel } from "@/lib/thread-display";
@@ -171,21 +182,14 @@ function ThreadHitlPrompt({
             return (
               <Pressable
                 onPress={() => toggleCandidate(candidate.id)}
-                className="flex-row gap-2 rounded-lg px-2.5 py-2.5"
+                className="rounded-lg px-3 py-2.5"
                 style={{
                   backgroundColor: "transparent",
                   borderWidth: 1,
                   borderColor: selected ? "#f59e0b" : colors.border,
                 }}
               >
-                <View className="pt-0.5">
-                  {selected ? (
-                    <CheckSquare size={17} color="#f59e0b" />
-                  ) : (
-                    <Circle size={17} color={colors.mutedForeground} />
-                  )}
-                </View>
-                <View className="flex-1">
+                <View>
                   <Text
                     className="text-xs font-semibold"
                     style={{ color: colors.foreground }}
@@ -309,7 +313,9 @@ function reviewPayloadFor(review: any): any | null {
 
 function brainEnrichmentCandidates(payload: any): any[] | null {
   if (payload?.kind !== "brain_enrichment_review") return null;
-  return Array.isArray(payload.candidates) ? payload.candidates : [];
+  return Array.isArray(payload.candidates)
+    ? dedupeBrainEnrichmentCandidates(payload.candidates)
+    : [];
 }
 
 function sourceFamilyLabel(sourceFamily?: string | null): string {
@@ -318,23 +324,95 @@ function sourceFamilyLabel(sourceFamily?: string | null): string {
   return "Brain";
 }
 
+function dedupeBrainEnrichmentCandidates(candidates: any[]): any[] {
+  const deduped: any[] = [];
+
+  for (const candidate of candidates) {
+    const existingIndex = deduped.findIndex((existing) =>
+      areSimilarEnrichmentCandidates(existing, candidate),
+    );
+
+    if (existingIndex === -1) {
+      deduped.push(candidate);
+      continue;
+    }
+
+    const existingScore = Number(deduped[existingIndex]?.score ?? 0);
+    const candidateScore = Number(candidate?.score ?? 0);
+    if (candidateScore > existingScore) deduped[existingIndex] = candidate;
+  }
+
+  return deduped;
+}
+
+function areSimilarEnrichmentCandidates(a: any, b: any): boolean {
+  const titleA = normalizeCandidateText(String(a?.title ?? ""));
+  const titleB = normalizeCandidateText(String(b?.title ?? ""));
+  if (!titleA || titleA !== titleB) return false;
+
+  const summaryA = normalizeCandidateText(String(a?.summary ?? ""));
+  const summaryB = normalizeCandidateText(String(b?.summary ?? ""));
+  if (!summaryA || !summaryB) return false;
+  if (summaryA === summaryB) return true;
+
+  return candidateTokenSimilarity(summaryA, summaryB) >= 0.88;
+}
+
+function normalizeCandidateText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s+\|\s*(involving|when|where|source|sources):.*$/i, "")
+    .replace(/[*_`#>[\](){}]/g, " ")
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function candidateTokenSimilarity(a: string, b: string): number {
+  const aTokens = new Set(tokensForCandidateSimilarity(a));
+  const bTokens = new Set(tokensForCandidateSimilarity(b));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) intersection += 1;
+  }
+
+  const union = new Set([...aTokens, ...bTokens]).size;
+  const jaccard = intersection / union;
+  const containment = intersection / Math.min(aTokens.size, bTokens.size);
+  return Math.max(jaccard, containment);
+}
+
+function tokensForCandidateSimilarity(value: string): string[] {
+  return value
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
+}
+
 function ThreadHitlTabs({
   value,
   onChange,
   colors,
+  isDark,
 }: {
   value: HitlDetailTab;
   onChange: (next: HitlDetailTab) => void;
   colors: (typeof COLORS)["dark"];
+  isDark: boolean;
 }) {
   return (
     <View
-      className="border-b border-neutral-200 px-4 py-2 dark:border-neutral-800"
-      style={{ backgroundColor: colors.background }}
+      className="items-center justify-center border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
+      style={{
+        height: 52,
+        paddingBottom: 8,
+      }}
     >
       <View
-        className="flex-row rounded-full p-0.5"
-        style={{ backgroundColor: colors.secondary }}
+        className="flex-row rounded-full"
+        style={{ backgroundColor: colors.secondary, padding: 2 }}
       >
         {(["review", "thread"] as const).map((tab) => {
           const selected = value === tab;
@@ -344,9 +422,16 @@ function ThreadHitlTabs({
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               onPress={() => onChange(tab)}
-              className="min-h-[34px] flex-1 items-center justify-center rounded-full"
+              className="flex-row items-center justify-center rounded-full"
               style={{
-                backgroundColor: selected ? colors.muted : "transparent",
+                minWidth: 96,
+                paddingHorizontal: 16,
+                paddingVertical: 5,
+                backgroundColor: selected
+                  ? isDark
+                    ? "#525252"
+                    : "#ffffff"
+                  : "transparent",
               }}
             >
               <Text
@@ -823,6 +908,7 @@ export default function ThreadDetailRoute() {
 
   // Don't render stale content — wait until the correct thread is loaded
   const isLoaded = thread && thread.id === threadId;
+  const showsReviewTabs = isLoaded && Boolean(reviewDetail);
 
   if (!threadId) return <View className="flex-1 bg-white dark:bg-black" />;
 
@@ -835,8 +921,16 @@ export default function ThreadDetailRoute() {
     >
       {/* Header */}
       <View
-        style={{ paddingTop: insets.top, backgroundColor: colors.background }}
-        className="border-b border-neutral-200 dark:border-neutral-800"
+        style={
+          showsReviewTabs
+            ? { paddingTop: insets.top }
+            : { paddingTop: insets.top, backgroundColor: colors.background }
+        }
+        className={
+          showsReviewTabs
+            ? "bg-white dark:bg-neutral-950"
+            : "border-b border-neutral-200 dark:border-neutral-800"
+        }
       >
         <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 48 }}>
           {/* Left: back + title */}
@@ -900,8 +994,13 @@ export default function ThreadDetailRoute() {
 
       </View>
 
-      {isLoaded && reviewDetail ? (
-        <ThreadHitlTabs value={hitlTab} onChange={setHitlTab} colors={colors} />
+      {showsReviewTabs ? (
+        <ThreadHitlTabs
+          value={hitlTab}
+          onChange={setHitlTab}
+          colors={colors}
+          isDark={isDark}
+        />
       ) : null}
 
       {/* Content area */}
