@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RoutinesListQuery } from "@/lib/graphql-queries";
-import { useDialog } from "@/context/DialogContext";
 import { relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/automations/routines/")({
@@ -118,7 +117,6 @@ const columns: ColumnDef<RoutineRow>[] = [
 
 function RoutinesPage() {
   const { tenantId } = useTenant();
-  const { openNewRoutine } = useDialog();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   useBreadcrumbs([{ label: "Routines" }]);
@@ -172,9 +170,11 @@ function RoutinesPage() {
             Schedules
           </Link>
         </Button>
-        <Button size="sm" onClick={() => openNewRoutine()}>
-          <Plus className="h-4 w-4 mr-1" />
-          New Routine
+        <Button size="sm" asChild>
+          <Link to="/automations/routines/new">
+            <Plus className="h-4 w-4 mr-1" />
+            New Routine
+          </Link>
         </Button>
       </div>
 

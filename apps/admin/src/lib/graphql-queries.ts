@@ -748,6 +748,87 @@ export const RoutineDetailQuery = graphql(`
   }
 `);
 
+// Phase D U13: admin createRoutine mutation. Mirrors mobile's
+// useCreateRoutine — same Phase B U7 input shape (asl + markdownSummary
+// + stepManifest required since the publish flow went live).
+export const CreateRoutineMutation = graphql(`
+  mutation CreateRoutine($input: CreateRoutineInput!) {
+    createRoutine(input: $input) {
+      id
+      name
+      currentVersion
+    }
+  }
+`);
+
+// Phase D U13: run-detail surface (plan
+// docs/plans/2026-05-01-007-feat-routines-phase-d-ui-plan.md §U13).
+// One round-trip pulls execution metadata + step events + the routine's
+// latest ASL version (markdown + step manifest) so ExecutionGraph can
+// render before any step events arrive.
+
+export const RoutineExecutionDetailQuery = graphql(`
+  query RoutineExecutionDetail($id: ID!) {
+    routineExecution(id: $id) {
+      id
+      tenantId
+      routineId
+      stateMachineArn
+      aliasArn
+      versionArn
+      sfnExecutionArn
+      triggerSource
+      inputJson
+      outputJson
+      status
+      startedAt
+      finishedAt
+      errorCode
+      errorMessage
+      totalLlmCostUsdCents
+      stepEvents {
+        id
+        nodeId
+        recipeType
+        status
+        startedAt
+        finishedAt
+        inputJson
+        outputJson
+        errorJson
+        llmCostUsdCents
+        retryCount
+        stdoutS3Uri
+        stderrS3Uri
+        stdoutPreview
+        truncated
+        createdAt
+      }
+      routine {
+        id
+        name
+        description
+        currentVersion
+        documentationMd
+      }
+      createdAt
+    }
+  }
+`);
+
+export const RoutineAslVersionDetailQuery = graphql(`
+  query RoutineAslVersionDetail($id: ID!) {
+    routineAslVersion(id: $id) {
+      id
+      versionNumber
+      aslJson
+      markdownSummary
+      stepManifestJson
+      createdAt
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Inbox Items
 // ---------------------------------------------------------------------------
