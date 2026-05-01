@@ -109,14 +109,10 @@ function compile(recipe: RecipeDefinition) {
   return compiled;
 }
 
-// ---------------------------------------------------------------------------
-// Resource ARNs that are valid in routine ASL but not owned by a recipe.
-// Native ASL primitives (Pass, Choice, Wait, Succeed, Fail, Parallel, Map)
-// don't carry Resource fields. The set below is the allowlist for Task
-// states whose Resource is recognized but has no recipe entry — currently
-// empty by design: every routine Task must map to a recipe.
-// ---------------------------------------------------------------------------
-const RECIPE_LESS_TASK_RESOURCES = new Set<string>([]);
+// Module-scoped client so warm Lambda invocations reuse the existing TCP
+// pool. The optional sfnClient override in validateRoutineAsl still wins
+// for unit tests.
+const _DEFAULT_SFN_CLIENT = new SFNClient({});
 
 // ---------------------------------------------------------------------------
 // Pure validator entry point — exposed for unit tests and the publish flow.
@@ -166,7 +162,7 @@ export async function validateRoutineAsl(
 
   // ---- 1. AWS ValidateStateMachineDefinition ------------------------------
   try {
-    const sfn = options.sfnClient ?? new SFNClient({});
+    const sfn = options.sfnClient ?? _DEFAULT_SFN_CLIENT;
     const cmd = new ValidateStateMachineDefinitionCommand({
       definition: JSON.stringify(doc),
       type: "STANDARD",
@@ -217,10 +213,7 @@ export async function validateRoutineAsl(
           message: `Task state '${name}' is missing a \`Resource\` field.`,
           stateName: name,
         });
-      } else if (
-        !knownResourceArn(arn) &&
-        !RECIPE_LESS_TASK_RESOURCES.has(arn)
-      ) {
+      } else if (!knownResourceArn(arn)) {
         errors.push({
           code: "unknown_resource_arn",
           message: `Task state '${name}' uses an unrecognized Resource ARN '${arn}'. Use a v0 recipe (${RECIPE_CATALOG.map((r) => r.id).join(", ")}).`,
@@ -325,10 +318,17 @@ function derivePayloadForArgCheck(
     // emitter wires it from `args` directly — Ajv-checking the wired
     // form against the user-args schema would require a reverse mapping
     // beyond v0 scope. Allow them.
+    // routine_invoke is the one Task recipe whose emitter writes args
+    // directly under Parameters (not Parameters.Payload), since it goes
+    // through the native states:startExecution.sync:2 integration. Handle
+    // it separately so the validator actually checks the routineId/input
+    // shape instead of silently passing on a stub.
+    if (recipe.id === "routine_invoke") {
+      return reconstructRoutineInvokeArgs(params);
+    }
     if (
       recipe.id === "tool_invoke" ||
       recipe.id === "agent_invoke" ||
-      recipe.id === "routine_invoke" ||
       recipe.id === "slack_send" ||
       recipe.id === "email_send" ||
       recipe.id === "inbox_approval" ||
@@ -387,12 +387,41 @@ function reconstructArgsForTask(
     }
     return stripped;
   }
-  if (recipe.id === "routine_invoke") {
-    // The emitter stuffs routineId into the dotted-path StateMachineArn.$.
-    // For arg validation we don't need the routine id back.
-    return { routineId: "00000000-0000-4000-8000-000000000000", input: stripped.Input ?? {} };
-  }
   return stripped;
+}
+
+/**
+ * Reconstruct the user-authored {routineId, input} shape from the wired
+ * Parameters of a routine_invoke Task state. The emitter writes
+ * `StateMachineArn.$: $$.Execution.Input.routineAliasArns.<routineId>`
+ * and the user-authored Input under Parameters.Input.
+ *
+ * Pulling the real routineId out makes the schema's UUID `pattern`
+ * actually catch malformed emissions. Returns undefined when the dotted
+ * path isn't recognized — Ajv then runs against `{ input }` and the
+ * `required: ['routineId', 'input']` constraint fires.
+ */
+function reconstructRoutineInvokeArgs(
+  params: Record<string, unknown>,
+): unknown {
+  const arnTemplate = params["StateMachineArn.$"];
+  const input = (params.Input as Record<string, unknown> | undefined) ?? {};
+  let routineId: string | undefined;
+  if (typeof arnTemplate === "string") {
+    // Expected shape: "$$.Execution.Input.routineAliasArns.<routineId>".
+    // Strip the canonical prefix; whatever follows is the user's
+    // routineId (or a malformed value Ajv will reject).
+    const prefix = "$$.Execution.Input.routineAliasArns.";
+    if (arnTemplate.startsWith(prefix)) {
+      routineId = arnTemplate.slice(prefix.length);
+    } else {
+      // Static literal ARN — leave routineId undefined so Ajv's `required`
+      // constraint fires; the publish flow shouldn't accept literal ARNs
+      // anyway because cycle detection can't see them.
+      routineId = undefined;
+    }
+  }
+  return routineId === undefined ? { input } : { routineId, input };
 }
 
 function lintJsonataExpression(
@@ -438,6 +467,14 @@ function lintChoiceState(
   warnings: ValidationWarning[],
 ): void {
   const choices = Array.isArray(state.Choices) ? state.Choices : [];
+  // Collect the set of top-level field names any other state demonstrably
+  // writes — ResultPath / ResultSelector / Pass.Result keys — so the
+  // Choice variable's field can be checked against actual producers.
+  // This replaces a previous JSON.stringify+regex heuristic that was both
+  // a ReDoS surface (fieldName interpolated into a RegExp without
+  // escaping) and prone to false positives.
+  const writtenFields = collectWrittenFields(states, name);
+
   for (const choice of choices) {
     if (typeof choice !== "object" || !choice) continue;
     const variable = (choice as { Variable?: string }).Variable;
@@ -450,26 +487,49 @@ function lintChoiceState(
       });
       continue;
     }
-    // Field existence check — without per-step output schemas, we can
-    // only flag references to fields no prior state appears to write.
-    // Cheap approximation: warn if the field name doesn't appear anywhere
-    // in any other state's text. False-positive prone, so warning only.
     const fieldName = variable.replace(/^\$\.?/, "").split(".")[0];
     if (!fieldName) continue;
-    const corpus = JSON.stringify(states);
-    const occurrences = (corpus.match(new RegExp(`"${fieldName}`, "g")) ?? [])
-      .length;
-    if (occurrences <= 2) {
-      // 2 = the Choice variable itself appears at least once; another
-      // occurrence (input or prior write) should bring it above the
-      // threshold. The threshold is intentionally permissive.
-      warnings.push({
-        code: "choice_unresolved_field",
-        message: `Choice state '${name}': variable '${variable}' may reference an unresolved field. Confirm a prior step writes \`${fieldName}\` before this Choice.`,
-        stateName: name,
-      });
+    // `$$.Execution.Input` references and top-level execution-input fields
+    // are out-of-band producers we can't see in `states`; trust them.
+    if (variable.startsWith("$$.")) continue;
+    if (writtenFields.has(fieldName)) continue;
+    warnings.push({
+      code: "choice_unresolved_field",
+      message: `Choice state '${name}': variable '${variable}' may reference an unresolved field. Confirm a prior step writes \`${fieldName}\` before this Choice.`,
+      stateName: name,
+    });
+  }
+}
+
+/** Walk every state except `excludeName` and collect top-level field names
+ * that get written via ResultPath, ResultSelector keys, or Pass.Result keys.
+ * The set is conservative — it intentionally over-collects (any state's
+ * writes count, even ones unreachable from the Choice) since the linter
+ * here is a warning, not an error gate. */
+function collectWrittenFields(
+  states: Record<string, AslState>,
+  excludeName: string,
+): Set<string> {
+  const out = new Set<string>();
+  for (const [name, state] of Object.entries(states)) {
+    if (name === excludeName) continue;
+    if (typeof state.ResultPath === "string") {
+      const field = state.ResultPath.replace(/^\$\.?/, "").split(".")[0];
+      if (field) out.add(field);
+    }
+    if (state.ResultSelector && typeof state.ResultSelector === "object") {
+      for (const key of Object.keys(
+        state.ResultSelector as Record<string, unknown>,
+      )) {
+        // ResultSelector keys may carry a ".$" suffix (`foo.$`); strip it.
+        out.add(key.replace(/\.\$$/, ""));
+      }
+    }
+    if (state.Result && typeof state.Result === "object") {
+      for (const key of Object.keys(state.Result)) out.add(key);
     }
   }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -484,10 +544,29 @@ function collectRoutineInvokeTargets(
     const recipe = resolveRecipeForState(state);
     if (recipe?.id !== "routine_invoke") continue;
     const params = state.Parameters as Record<string, unknown> | undefined;
-    const arn = params?.["StateMachineArn.$"];
-    if (typeof arn !== "string") continue;
-    const id = arn.split(".").pop();
-    if (id) out.push(id);
+    if (!params) continue;
+    // Two emission shapes the LLM might produce — handle both so cycle
+    // detection can't be sidestepped by switching from the canonical
+    // template to a static ARN.
+    const dotted = params["StateMachineArn.$"];
+    if (typeof dotted === "string") {
+      const prefix = "$$.Execution.Input.routineAliasArns.";
+      const id = dotted.startsWith(prefix)
+        ? dotted.slice(prefix.length)
+        : null;
+      if (id) out.push(id);
+      continue;
+    }
+    const literal = params.StateMachineArn;
+    if (typeof literal === "string") {
+      // ThinkWork-conventional state machine name:
+      //   thinkwork-<stage>-routine-<routineId>(:<version|aliasName>)?
+      // Pull the routineId out of the resource segment.
+      const match = literal.match(
+        /:stateMachine:thinkwork-[^:-]+-routine-([^:]+)/,
+      );
+      if (match?.[1]) out.push(match[1]);
+    }
   }
   return out;
 }

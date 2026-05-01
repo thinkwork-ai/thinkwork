@@ -116,6 +116,11 @@ export async function tenantToolInventory(
           and(
             eq(tenantMcpServers.tenant_id, args.tenantId),
             eq(tenantMcpServers.enabled, true),
+            // Plugin-installed MCP servers land enabled but pending; only
+            // approved servers are surfaced to the chat builder so it can't
+            // compose tool_invoke steps that downstream dispatch refuses.
+            // Mirrors the pattern in packages/api/src/lib/mcp-configs.ts.
+            eq(tenantMcpServers.status, "approved"),
           ),
         ),
       db

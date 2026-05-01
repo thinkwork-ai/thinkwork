@@ -263,4 +263,81 @@ describe("validateRoutineAsl — direct self-invocation cycle", () => {
       result.errors.some((e) => e.code === "routine_invoke_cycle"),
     ).toBe(true);
   });
+
+  it("detects multi-hop cycles A→B→C→A through the supplied callGraph", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        InvokeB: {
+          Type: "Task",
+          Resource: "arn:aws:states:::states:startExecution.sync:2",
+          Comment: "recipe:routine_invoke",
+          Parameters: {
+            "StateMachineArn.$":
+              "$$.Execution.Input.routineAliasArns.routine-b",
+            Input: {},
+          },
+          End: true,
+        },
+      }),
+      currentRoutineId: "routine-a",
+      callGraph: {
+        "routine-b": ["routine-c"],
+        "routine-c": ["routine-a"],
+      },
+    });
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.code === "routine_invoke_cycle"),
+    ).toBe(true);
+  });
+
+  it("detects cycles when the LLM emits a literal StateMachineArn instead of the dotted-path template", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        InvokeSelf: {
+          Type: "Task",
+          Resource: "arn:aws:states:::states:startExecution.sync:2",
+          Comment: "recipe:routine_invoke",
+          Parameters: {
+            StateMachineArn:
+              "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-prod-routine-routine-a",
+            Input: {},
+          },
+          End: true,
+        },
+      }),
+      currentRoutineId: "routine-a",
+    });
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.code === "routine_invoke_cycle"),
+    ).toBe(true);
+  });
+});
+
+describe("validateRoutineAsl — routine_invoke arg-validation", () => {
+  it("rejects routine_invoke with non-UUID routineId in the dotted-path template", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        InvokeOther: {
+          Type: "Task",
+          Resource: "arn:aws:states:::states:startExecution.sync:2",
+          Comment: "recipe:routine_invoke",
+          Parameters: {
+            "StateMachineArn.$":
+              "$$.Execution.Input.routineAliasArns.not-a-uuid",
+            Input: {},
+          },
+          End: true,
+        },
+      }),
+    });
+    expect(result.valid).toBe(false);
+    const argError = result.errors.find(
+      (e) =>
+        e.code === "recipe_arg_invalid" && e.stateName === "InvokeOther",
+    );
+    expect(argError).toBeDefined();
+    expect(argError?.message.toLowerCase()).toContain("routineid");
+  });
 });
