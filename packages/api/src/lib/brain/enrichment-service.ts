@@ -18,6 +18,8 @@ import { tenantEntityPages, wikiPages } from "@thinkwork/database-pg/schema";
 import { getContextEngineService } from "../context-engine/service.js";
 import { sourceFamilyForProvider } from "../context-engine/source-families.js";
 import { synthesizeBrainEnrichmentCandidates } from "./enrichment-candidate-synthesis.js";
+import { enqueueEnrichmentDraftCompileJob } from "../wiki/repository.js";
+import { invokeWikiCompile } from "../wiki/enqueue.js";
 import type { ContextEngineService } from "../context-engine/service.js";
 import type {
   ContextEngineCaller,
@@ -59,9 +61,12 @@ export interface BrainEnrichmentProposal {
   tenantId: string;
   targetPageTable: string;
   targetPageId: string;
-  threadId: string;
-  reviewRunId: string;
-  reviewObjectKey: string;
+  // Null in the QUEUED async-draft response (U6+); populated in the legacy
+  // synchronous AWAITING_REVIEW path. The writeback creates these on
+  // compile completion.
+  threadId: string | null;
+  reviewRunId: string | null;
+  reviewObjectKey: string | null;
   status: string;
   title: string;
   candidates: BrainEnrichmentCandidate[];
@@ -135,29 +140,58 @@ export async function runBrainPageEnrichment(args: {
     sourceFamilies,
     limit,
   });
-  const review = await createReviewThread({
+
+  // U6 of plan 2026-05-01-002: enqueue an async draft-compile job instead of
+  // creating the synchronous review thread. The compile dedupes candidates
+  // against the existing page body and (via U5's writeback) creates the
+  // thread + workspace_run + review event when it finishes. Mobile reads
+  // status === 'QUEUED' and disengages the synchronous review surface (U7).
+  //
+  // Candidate synthesis stays in the resolver — the agentic compile receives
+  // candidates as input rather than re-running the context engine. This
+  // keeps the resolver's wall-time tight while the slow agentic step runs
+  // async on the wiki-compile Lambda.
+  const { inserted, job } = await enqueueEnrichmentDraftCompileJob(
+    {
+      tenantId: args.input.tenantId,
+      ownerId: args.caller.userId,
+      pageId: args.input.pageId,
+      input: {
+        pageId: args.input.pageId,
+        pageTable: args.input.pageTable,
+        pageTitle: target.title,
+        currentBodyMd: target.bodyMd,
+        candidates,
+      },
+    },
     db,
-    s3: args.s3,
-    tenantId: args.input.tenantId,
-    userId: args.caller.userId,
-    targetTitle: target.title,
-    targetPageTable: args.input.pageTable,
-    targetPageId: args.input.pageId,
-    query,
-    sourceFamilies,
-    candidates,
-    providerStatuses,
-  });
+  );
+
+  // Async-invoke the wiki-compile Lambda so the dedupe bucket gets work
+  // immediately. If the invoke fails (function name unresolved in dev,
+  // transient AWS error), the job row still exists and any compile worker
+  // — scheduler-driven drainer, manual replay — picks it up. Don't fail
+  // the resolver; the job is durable.
+  if (inserted) {
+    invokeWikiCompile(job.id).catch((err) => {
+      console.warn(
+        `[brain-enrichment] wiki-compile invoke failed for job ${job.id}: ${(err as Error)?.message ?? err}`,
+      );
+    });
+  }
+
   const now = new Date();
   return {
-    id: review.runId,
+    id: job.id,
     tenantId: args.input.tenantId,
     targetPageTable: args.input.pageTable,
     targetPageId: args.input.pageId,
-    threadId: review.threadId,
-    reviewRunId: review.runId,
-    reviewObjectKey: review.reviewObjectKey,
-    status: "AWAITING_REVIEW",
+    // No thread/run/object yet — the writeback creates them on compile
+    // completion. Mobile must read `status` to discriminate.
+    threadId: null,
+    reviewRunId: null,
+    reviewObjectKey: null,
+    status: "QUEUED",
     title: `Enrich ${target.title}`,
     candidates,
     providerStatuses,
@@ -600,6 +634,7 @@ async function loadTargetPage(args: {
   tenantId: string;
   title: string;
   summary: string | null;
+  bodyMd: string;
 }> {
   if (args.input.pageTable === "tenant_entity_pages") {
     const [page] = await args.db
@@ -608,6 +643,7 @@ async function loadTargetPage(args: {
         tenantId: tenantEntityPages.tenant_id,
         title: tenantEntityPages.title,
         summary: tenantEntityPages.summary,
+        bodyMd: tenantEntityPages.body_md,
       })
       .from(tenantEntityPages)
       .where(
@@ -618,7 +654,11 @@ async function loadTargetPage(args: {
       )
       .limit(1);
     if (!page) throw notFound("Brain page not found");
-    return { pageTable: "tenant_entity_pages", ...page };
+    return {
+      pageTable: "tenant_entity_pages",
+      ...page,
+      bodyMd: page.bodyMd ?? "",
+    };
   }
 
   if (args.input.pageTable === "wiki_pages") {
@@ -628,6 +668,7 @@ async function loadTargetPage(args: {
         tenantId: wikiPages.tenant_id,
         title: wikiPages.title,
         summary: wikiPages.summary,
+        bodyMd: wikiPages.body_md,
       })
       .from(wikiPages)
       .where(
@@ -639,7 +680,11 @@ async function loadTargetPage(args: {
       )
       .limit(1);
     if (!page) throw notFound("Brain page not found");
-    return { pageTable: "wiki_pages", ...page };
+    return {
+      pageTable: "wiki_pages",
+      ...page,
+      bodyMd: page.bodyMd ?? "",
+    };
   }
 
   throw new GraphQLError("Unsupported Brain page table", {
