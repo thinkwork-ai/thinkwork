@@ -10,6 +10,10 @@ import {
 	closeBrainEnrichmentReviewThread,
 } from "../../../lib/brain/enrichment-apply.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import {
+	bridgeInboxDecisionToRoutineApproval,
+	isRoutineApprovalInboxItem,
+} from "./routine-approval-bridge.js";
 
 export const decideInboxItem = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
@@ -47,6 +51,20 @@ export const decideInboxItem = async (_parent: any, args: any, ctx: GraphQLConte
 				status: targetStatus,
 			});
 		}
+	}
+	if (
+		isRoutineApprovalInboxItem(current) &&
+		(targetStatus === "approved" || targetStatus === "rejected")
+	) {
+		await bridgeInboxDecisionToRoutineApproval({
+			inboxItem: current,
+			decision: targetStatus as "approved" | "rejected",
+			actorId: decidedBy,
+			decisionPayload: {
+				reviewNotes: i.comment ?? null,
+				values: i.decisionValues,
+			},
+		});
 	}
 	await recordActivity(
 		row.tenant_id, "user", decidedBy ?? row.id,

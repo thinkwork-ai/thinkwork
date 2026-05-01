@@ -10,6 +10,10 @@ import {
 	bridgeInboxDecisionToWorkspaceReview,
 	isWorkspaceReviewInboxItem,
 } from "./workspace-review-bridge.js";
+import {
+	bridgeInboxDecisionToRoutineApproval,
+	isRoutineApprovalInboxItem,
+} from "./routine-approval-bridge.js";
 
 export const rejectInboxItem = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [current] = await db.select().from(inboxItems).where(eq(inboxItems.id, args.id));
@@ -37,6 +41,14 @@ export const rejectInboxItem = async (_parent: any, args: any, ctx: GraphQLConte
 			decision: "cancelled",
 			actorId: callerUserId ?? null,
 			values: { notes: reviewNotes },
+		});
+	}
+	if (isRoutineApprovalInboxItem(current)) {
+		await bridgeInboxDecisionToRoutineApproval({
+			inboxItem: current,
+			decision: "rejected",
+			actorId: callerUserId ?? null,
+			decisionPayload: { reviewNotes },
 		});
 	}
 

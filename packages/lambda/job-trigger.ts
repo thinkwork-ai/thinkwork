@@ -605,6 +605,11 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           );
         } else {
           try {
+            // Seed the execution input with the inbox_approval callback
+            // function name so the recipe ASL's
+            // `$$.Execution.Input.inboxApprovalFunctionName` lookup
+            // resolves at runtime (Phase B U8).
+            const callbackFn = process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME;
             const startResp = await _SFN_CLIENT.send(
               new StartExecutionCommand({
                 stateMachineArn: routine.state_machine_alias_arn,
@@ -612,6 +617,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
                   triggerId,
                   triggerSource: "schedule",
                   scheduleName: scheduleName ?? null,
+                  ...(callbackFn
+                    ? { inboxApprovalFunctionName: callbackFn }
+                    : {}),
                 }),
               }),
             );
