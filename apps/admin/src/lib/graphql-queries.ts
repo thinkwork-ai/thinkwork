@@ -767,6 +767,34 @@ export const CreateRoutineMutation = graphql(`
 // latest ASL version (markdown + step manifest) so ExecutionGraph can
 // render before any step events arrive.
 
+// Phase D U14: paginated executions list for the routine detail page
+// (plan docs/plans/2026-05-01-007-feat-routines-phase-d-ui-plan.md §U14).
+// Status filter is optional; cursor + limit drive started_at-keyed paging.
+export const RoutineExecutionsListQuery = graphql(`
+  query RoutineExecutionsList(
+    $routineId: ID!
+    $status: RoutineExecutionStatus
+    $limit: Int
+    $cursor: String
+  ) {
+    routineExecutions(
+      routineId: $routineId
+      status: $status
+      limit: $limit
+      cursor: $cursor
+    ) {
+      id
+      status
+      triggerSource
+      startedAt
+      finishedAt
+      totalLlmCostUsdCents
+      errorCode
+      createdAt
+    }
+  }
+`);
+
 export const RoutineExecutionDetailQuery = graphql(`
   query RoutineExecutionDetail($id: ID!) {
     routineExecution(id: $id) {
