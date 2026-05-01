@@ -291,6 +291,28 @@ function SectionBlock({
           style={{
             body: { color: colors.foreground, fontSize: 14, lineHeight: 22 },
             paragraph: { marginTop: 0, marginBottom: 8 },
+            code_inline: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              fontFamily: "Menlo",
+              fontSize: 13,
+            },
+            fence: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              borderRadius: 6,
+              padding: 8,
+              fontFamily: "Menlo",
+              fontSize: 13,
+            },
+            code_block: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              borderRadius: 6,
+              padding: 8,
+              fontFamily: "Menlo",
+              fontSize: 13,
+            },
           }}
         >
           {section.bodyMd || "_(empty section)_"}
@@ -466,6 +488,28 @@ function DiffPane({
               lineHeight: 20,
             },
             paragraph: { marginTop: 0, marginBottom: 6 },
+            code_inline: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              fontFamily: "Menlo",
+              fontSize: 12,
+            },
+            fence: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              borderRadius: 6,
+              padding: 8,
+              fontFamily: "Menlo",
+              fontSize: 12,
+            },
+            code_block: {
+              color: colors.foreground,
+              backgroundColor: colors.muted,
+              borderRadius: 6,
+              padding: 8,
+              fontFamily: "Menlo",
+              fontSize: 12,
+            },
           }}
         >
           {bodyMd}
