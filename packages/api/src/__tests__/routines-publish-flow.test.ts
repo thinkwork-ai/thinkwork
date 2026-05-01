@@ -8,7 +8,7 @@
  *   - updateRoutine.mutation.ts
  *   - triggerRoutineRun.mutation.ts
  *
- * Mocks the AWS SFN boundary, the validator, the DB, and requireTenantAdmin.
+ * Mocks the AWS SFN boundary, the validator, the DB, and the auth gate.
  * The resolvers are tested through their pure logic — IAM grants and
  * Terraform wiring are out of scope here (verified by `pnpm plan -s dev`).
  */
@@ -20,13 +20,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockSfnSend,
   mockValidate,
-  mockRequireTenantAdmin,
+  mockRequireAdminOrApiKeyCaller,
   mockSelectRows,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSfnSend: vi.fn(),
   mockValidate: vi.fn(),
-  mockRequireTenantAdmin: vi.fn(),
+  mockRequireAdminOrApiKeyCaller: vi.fn(),
   mockSelectRows: vi.fn(),
   mockTransaction: vi.fn(),
 }));
@@ -60,7 +60,7 @@ vi.mock("../handlers/routine-asl-validator.js", () => ({
 }));
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
-  requireTenantAdmin: mockRequireTenantAdmin,
+  requireAdminOrApiKeyCaller: mockRequireAdminOrApiKeyCaller,
 }));
 
 // db.transaction(fn) → fn(tx); both db.select() and tx.select() route through
@@ -152,11 +152,11 @@ beforeEach(() => {
     "arn:aws:iam::123456789012:role/thinkwork-dev-routines-execution-role";
   mockSfnSend.mockReset();
   mockValidate.mockReset();
-  mockRequireTenantAdmin.mockReset();
+  mockRequireAdminOrApiKeyCaller.mockReset();
   mockSelectRows.mockReset();
   mockTransaction.mockReset();
   // Default: caller is admin, validator passes.
-  mockRequireTenantAdmin.mockResolvedValue("admin");
+  mockRequireAdminOrApiKeyCaller.mockResolvedValue("admin");
   mockValidate.mockResolvedValue({ valid: true, errors: [], warnings: [] });
 });
 
@@ -175,7 +175,7 @@ const minimalAsl = {
 
 describe("createRoutine — Step Functions live cutover", () => {
   it("creates state machine + alias + DB row when ASL is valid", async () => {
-    // Sequence: requireTenantAdmin (handled), validate (handled),
+    // Sequence: requireAdminOrApiKeyCaller (handled), validate (handled),
     // CreateStateMachine, CreateStateMachineAlias, then DB inserts.
     mockSfnSend
       .mockResolvedValueOnce({
@@ -224,7 +224,11 @@ describe("createRoutine — Step Functions live cutover", () => {
       ctx,
     );
 
-    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-a");
+    expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
+      ctx,
+      "tenant-a",
+      "create_routine",
+    );
     expect(mockValidate).toHaveBeenCalledTimes(1);
     // 3 SFN calls: CreateStateMachine, PublishStateMachineVersion, CreateStateMachineAlias.
     expect(mockSfnSend).toHaveBeenCalledTimes(3);
@@ -270,7 +274,7 @@ describe("createRoutine — Step Functions live cutover", () => {
   });
 
   it("requires tenant admin role before any SFN call", async () => {
-    mockRequireTenantAdmin.mockRejectedValueOnce(
+    mockRequireAdminOrApiKeyCaller.mockRejectedValueOnce(
       new Error("Tenant admin role required"),
     );
 
@@ -486,7 +490,11 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       ctx,
     );
 
-    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-a");
+    expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
+      ctx,
+      "tenant-a",
+      "trigger_routine_run",
+    );
     expect(mockSfnSend).toHaveBeenCalledTimes(1);
     const startCall = mockSfnSend.mock.calls[0][0] as {
       input: { stateMachineArn: string };

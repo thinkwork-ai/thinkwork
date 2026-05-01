@@ -24,7 +24,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
 import {
   PublishStateMachineVersionCommand,
@@ -63,8 +63,15 @@ export async function publishRoutineVersion(
     );
   }
 
-  // Step 1 — admin gate against the routine's own tenant.
-  await requireTenantAdmin(ctx, routine.tenant_id);
+  // Step 1 — admin gate against the routine's own tenant. Apikey
+  // callers (Phase C MCP wrappers) hit the per-agent allowlist for
+  // `publish_routine_version`; Cognito callers fall through to the
+  // existing tenant-admin role check.
+  await requireAdminOrApiKeyCaller(
+    ctx,
+    routine.tenant_id,
+    "publish_routine_version",
+  );
 
   // Step 3 — validate.
   let aslJson: unknown;

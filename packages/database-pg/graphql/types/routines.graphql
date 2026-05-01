@@ -227,24 +227,35 @@ type TenantToolInventory {
 
 # --- Inputs ---
 
+# Phase B U7 cutover: CreateRoutineInput now carries the ASL + markdown
+# summary + step manifest the chat builder + publish flow emit. The
+# legacy type/schedule/config triple was removed because the new resolver
+# provisions a real Step Functions state machine via the ASL document
+# instead of the legacy in-row config blob. Schedules attach to a routine
+# via setRoutineTrigger after creation; routine type is derived from the
+# routine's triggers, not stored on the routines row.
 input CreateRoutineInput {
   tenantId: ID!
   teamId: ID
   agentId: ID
   name: String!
   description: String
-  type: String
-  schedule: String
-  config: AWSJSON
+  asl: AWSJSON!
+  markdownSummary: String!
+  stepManifest: AWSJSON!
 }
 
+# Phase B U7: ASL changes go through publishRoutineVersion. updateRoutine
+# narrows to non-ASL metadata edits. `type` is the legacy
+# routines.type column (heartbeat | scheduled | cron) still consulted
+# by job-triggers; the canonical trigger surface is routine_triggers,
+# but the column survives through Phase D's UI cutover.
 input UpdateRoutineInput {
   name: String
   description: String
   type: String
   status: String
   schedule: String
-  config: AWSJSON
   teamId: ID
   agentId: ID
 }
@@ -288,7 +299,11 @@ extend type Mutation {
   createRoutine(input: CreateRoutineInput!): Routine!
   updateRoutine(id: ID!, input: UpdateRoutineInput!): Routine!
   deleteRoutine(id: ID!): Boolean!
-  triggerRoutineRun(routineId: ID!): RoutineRun!
+  # Phase B U7 cutover: returns RoutineExecution! (the row pre-emptively
+  # inserted into routine_executions). Optional `input` is forwarded as
+  # the SFN execution input. The legacy RoutineRun! return shape was
+  # backed by a never-populated routine_runs table.
+  triggerRoutineRun(routineId: ID!, input: AWSJSON): RoutineExecution!
 
   setRoutineTrigger(routineId: ID!, input: RoutineTriggerInput!): RoutineTrigger!
   deleteRoutineTrigger(id: ID!): Boolean!

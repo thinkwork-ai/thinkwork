@@ -11,11 +11,12 @@ import { eq } from "drizzle-orm";
 import { routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 
 interface UpdateRoutineInput {
   name?: string;
   description?: string;
+  type?: string;
   status?: string;
   schedule?: string;
   teamId?: string;
@@ -34,12 +35,17 @@ export async function updateRoutine(
   if (!existing) {
     throw new Error(`Routine ${args.id} not found`);
   }
-  await requireTenantAdmin(ctx, existing.tenant_id);
+  await requireAdminOrApiKeyCaller(
+    ctx,
+    existing.tenant_id,
+    "update_routine",
+  );
 
   const i = args.input;
   const updates: Record<string, unknown> = { updated_at: new Date() };
   if (i.name !== undefined) updates.name = i.name;
   if (i.description !== undefined) updates.description = i.description;
+  if (i.type !== undefined) updates.type = i.type;
   if (i.status !== undefined) updates.status = i.status;
   if (i.schedule !== undefined) updates.schedule = i.schedule;
   if (i.teamId !== undefined) updates.team_id = i.teamId;

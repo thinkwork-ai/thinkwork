@@ -17,7 +17,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import {
   StartExecutionCommand,
   getSfnClient,
@@ -35,7 +35,11 @@ export async function triggerRoutineRun(
   if (!routine) {
     throw new Error(`Routine ${args.routineId} not found`);
   }
-  await requireTenantAdmin(ctx, routine.tenant_id);
+  await requireAdminOrApiKeyCaller(
+    ctx,
+    routine.tenant_id,
+    "trigger_routine_run",
+  );
 
   if (routine.engine !== "step_functions") {
     throw new Error(

@@ -63,13 +63,25 @@ export default function NewRoutineScreen() {
         questions?: string[];
       }>("evaluate_routine", { name: trimmedName, description: trimmedDesc });
 
-      // Step 2: Create the draft routine
+      // Step 2: Create the draft routine.
+      // Phase B U7: createRoutine now requires asl/markdownSummary/stepManifest.
+      // Until the chat builder retarget in Phase C U10 wires real ASL emission,
+      // ship a minimal pass-through state machine so the publish flow has a
+      // valid first version. The chat builder will publish a new version
+      // populated with real recipes once the user iterates with it.
+      const placeholderAsl = {
+        Comment: "Draft routine — awaiting builder",
+        StartAt: "NoOp",
+        States: { NoOp: { Type: "Succeed" } },
+      };
       const result = await createRoutine({
         input: {
           name: trimmedName,
           description: trimmedDesc,
           tenantId: tenantId!,
-          type: "durable",
+          asl: JSON.stringify(placeholderAsl),
+          markdownSummary: `# ${trimmedName}\n\n${trimmedDesc}`,
+          stepManifest: JSON.stringify({}),
         },
       });
       const routineId = result.data?.createRoutine?.id;

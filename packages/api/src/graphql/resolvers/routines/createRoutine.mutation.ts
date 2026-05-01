@@ -31,7 +31,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
 import {
   CreateStateMachineAliasCommand,
@@ -64,8 +64,11 @@ export async function createRoutine(
   const env = snapshotRoutinesEnv();
   const i = args.input;
 
-  // Step 1 — admin gate before any AWS or DB side effect.
-  await requireTenantAdmin(ctx, i.tenantId);
+  // Step 1 — admin gate before any AWS or DB side effect. Apikey callers
+  // (Phase C MCP wrappers) go through requireAgentAllowsOperation per the
+  // per-agent operation allowlist; Cognito callers fall through to the
+  // existing tenant-admin role check.
+  await requireAdminOrApiKeyCaller(ctx, i.tenantId, "create_routine");
 
   // Step 2 — validate ASL.
   let aslJson: unknown;
