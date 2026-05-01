@@ -84,3 +84,89 @@ function parseMaybeJson(payload: unknown): unknown {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Section parsing for in-place render (mirror of the API parser)
+// ---------------------------------------------------------------------------
+
+export interface ParsedDraftSection {
+  slug: string;
+  heading: string;
+  bodyMd: string;
+}
+
+/**
+ * Slugify a heading using the same algorithm the server uses for section
+ * slugs. Must stay in sync with `slugifyTitle` in
+ * `packages/api/src/lib/wiki/aliases.ts` so client-side region lookups
+ * resolve to the same slug the server attached to each region.
+ */
+export function slugifyDraftHeading(title: string): string {
+  return title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+}
+
+/**
+ * Parse a markdown body into H2-bounded sections. Mirrors the API's
+ * `parseSections` exactly so the panel can map section slugs to regions
+ * the server attached. Content before the first H2 is exposed as a synthetic
+ * `_preamble` section.
+ */
+export function parseDraftSections(bodyMd: string): ParsedDraftSection[] {
+  const trimmed = bodyMd.trimEnd();
+  if (!trimmed) return [];
+
+  const lines = trimmed.split("\n");
+  const sections: ParsedDraftSection[] = [];
+  const preambleLines: string[] = [];
+  let current: { heading: string; slug: string; lines: string[] } | null = null;
+
+  const pushCurrent = () => {
+    if (current) {
+      sections.push({
+        slug: current.slug,
+        heading: current.heading,
+        bodyMd: current.lines.join("\n").trim(),
+      });
+    }
+  };
+
+  for (const line of lines) {
+    const h2Match = /^##\s+(.+?)\s*$/.exec(line);
+    if (h2Match) {
+      pushCurrent();
+      const heading = h2Match[1]!.trim();
+      current = {
+        heading,
+        slug: slugifyDraftHeading(heading) || "section",
+        lines: [],
+      };
+      continue;
+    }
+    if (current) {
+      current.lines.push(line);
+    } else {
+      preambleLines.push(line);
+    }
+  }
+  pushCurrent();
+
+  const preamble = preambleLines.join("\n").trim();
+  if (preamble) {
+    sections.unshift({
+      slug: "_preamble",
+      heading: "",
+      bodyMd: preamble,
+    });
+  }
+
+  return sections;
+}

@@ -98,6 +98,12 @@ import {
   serializeBrainEnrichmentSelection,
 } from "@/lib/brain-enrichment-review";
 import {
+  defaultAcceptedRegionIds,
+  isBrainEnrichmentDraftReviewPayload,
+  serializeBrainEnrichmentDraftDecision,
+} from "@/lib/brain-enrichment-draft-review";
+import { BrainEnrichmentDraftReviewPanel } from "@/components/brain/BrainEnrichmentDraftReviewPanel";
+import {
   type WorkspaceReviewDecision,
   workspaceReviewActionsForStatus,
   workspaceReviewDecisionLabel,
@@ -124,6 +130,8 @@ function ThreadHitlPrompt({
   const body = String(review?.reviewBody ?? "").trim();
   const reviewPayload = useMemo(() => reviewPayloadFor(review), [review]);
   const isBrainEnrichment = isBrainEnrichmentReviewPayload(reviewPayload);
+  const isBrainEnrichmentDraft =
+    isBrainEnrichmentDraftReviewPayload(reviewPayload);
   const enrichmentReviewRunId = String(review?.run?.id ?? review?.id ?? "");
   const enrichmentProposal = useMemo(
     () =>
@@ -166,12 +174,67 @@ function ThreadHitlPrompt({
     );
   }, [isBrainEnrichment, selectedCandidateIds, note, onChangeResponse]);
 
+  // ---- Draft-page review state (U4) ----
+  const draftPayload = isBrainEnrichmentDraft
+    ? (reviewPayload as ReturnType<
+        typeof reviewPayloadFor
+      > & {
+        proposedBodyMd: string;
+        snapshotMd: string;
+        regions: Array<{
+          id: string;
+          sectionSlug: string;
+          sectionHeading: string;
+          sourceFamily: "BRAIN" | "KNOWLEDGE_BASE" | "WEB" | "MIXED";
+          citation: { uri?: string | null; label?: string | null } | null;
+          beforeMd: string;
+          afterMd: string;
+          contributingCandidateIds: string[];
+        }>;
+        pageTitle: string;
+        targetPageTable: "wiki_pages" | "tenant_entity_pages";
+        targetPageId: string;
+      })
+    : null;
+  const draftReviewRunId = String(review?.run?.id ?? review?.id ?? "");
+  const [acceptedRegionIds, setAcceptedRegionIds] = useState<string[]>(() =>
+    draftPayload ? defaultAcceptedRegionIds(draftPayload.regions) : [],
+  );
+  const [showChanges, setShowChanges] = useState(false);
+
+  useEffect(() => {
+    if (!isBrainEnrichmentDraft || !draftPayload) return;
+    setAcceptedRegionIds(defaultAcceptedRegionIds(draftPayload.regions));
+    setShowChanges(false);
+  }, [draftReviewRunId, isBrainEnrichmentDraft]);
+
+  useEffect(() => {
+    if (!isBrainEnrichmentDraft || !draftPayload) return;
+    const acceptedSet = new Set(acceptedRegionIds);
+    const rejectedRegionIds = draftPayload.regions
+      .map((r: { id: string }) => r.id)
+      .filter((id: string) => !acceptedSet.has(id));
+    onChangeResponse(
+      serializeBrainEnrichmentDraftDecision({
+        acceptedRegionIds,
+        rejectedRegionIds,
+        note,
+      }),
+    );
+  }, [
+    isBrainEnrichmentDraft,
+    draftPayload,
+    acceptedRegionIds,
+    note,
+    onChangeResponse,
+  ]);
+
   return (
     <View
       className="flex-1 px-4 pt-4 pb-3"
       style={{ backgroundColor: colors.background }}
     >
-      {!isBrainEnrichment ? (
+      {!isBrainEnrichment && !isBrainEnrichmentDraft ? (
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-1">
             <Text
@@ -189,7 +252,7 @@ function ThreadHitlPrompt({
         </View>
       ) : null}
 
-      {body && !isBrainEnrichment ? (
+      {body && !isBrainEnrichment && !isBrainEnrichmentDraft ? (
         <Text
           className="mt-2 text-sm"
           numberOfLines={5}
@@ -197,13 +260,31 @@ function ThreadHitlPrompt({
         >
           {body.replace(/^#+\s*/gm, "").trim()}
         </Text>
-      ) : !isBrainEnrichment && review?.reason ? (
+      ) : !isBrainEnrichment && !isBrainEnrichmentDraft && review?.reason ? (
         <Muted className="mt-2 text-sm">
           {String(review.reason).replace(/[_-]+/g, " ")}
         </Muted>
       ) : null}
 
-      {isBrainEnrichment ? (
+      {isBrainEnrichmentDraft && draftPayload ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 8 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <BrainEnrichmentDraftReviewPanel
+            payload={draftPayload}
+            colors={colors}
+            acceptedRegionIds={acceptedRegionIds}
+            onAcceptedRegionIdsChange={setAcceptedRegionIds}
+            showChanges={showChanges}
+            onShowChangesChange={setShowChanges}
+            note={note}
+            onNoteChange={() => {}}
+            showNote={false}
+          />
+        </ScrollView>
+      ) : isBrainEnrichment ? (
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 8 }}
