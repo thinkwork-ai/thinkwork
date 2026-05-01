@@ -10,6 +10,7 @@ type JsonRpcResponse<T> = {
 export type ContextProviderSummary = {
   id: string;
   family: string;
+  sourceFamily?: string;
   displayName: string;
   enabled?: boolean;
   defaultEnabled: boolean;
@@ -47,6 +48,7 @@ export type ContextProviderSummary = {
 export type ContextProviderStatus = {
   providerId: string;
   family: string;
+  sourceFamily?: string;
   displayName: string;
   state: "ok" | "skipped" | "error" | "timeout" | "stale";
   scope: string;
@@ -63,6 +65,7 @@ export type ContextHit = {
   id: string;
   providerId: string;
   family: string;
+  sourceFamily?: string;
   title: string;
   snippet: string;
   score?: number | null;
