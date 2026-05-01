@@ -75,14 +75,12 @@ type HitlDetailTab = "review" | "thread";
 
 function ThreadHitlPrompt({
   review,
-  fetching,
   note,
   onChangeResponse,
   colors,
   isDark,
 }: {
   review: any;
-  fetching?: boolean;
   note: string;
   onChangeResponse: (value: string) => void;
   colors: (typeof COLORS)["dark"];
@@ -147,7 +145,6 @@ function ThreadHitlPrompt({
             {review?.targetPath || review?.run?.targetPath || "Workspace review"}
           </Muted>
         </View>
-        {fetching ? <ActivityIndicator size="small" color="#f59e0b" /> : null}
       </View>
 
       {body && !isBrainEnrichment ? (
@@ -1056,7 +1053,6 @@ export default function ThreadDetailRoute() {
           reviewDetail && hitlTab === "review" ? (
             <ThreadHitlPrompt
               review={reviewDetail}
-              fetching={fetchingReviewDetail}
               note={reviewNote}
               onChangeResponse={setReviewResponse}
               colors={colors}
