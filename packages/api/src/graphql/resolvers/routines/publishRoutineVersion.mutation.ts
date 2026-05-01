@@ -1,0 +1,164 @@
+/**
+ * publishRoutineVersion (Plan 2026-05-01-005 §U7).
+ *
+ * Update the ASL on an existing step_functions routine, publish a new
+ * version, and flip the `live` alias to point at it. Pipeline:
+ *
+ *   1. requireTenantAdmin BEFORE any side effect.
+ *   2. Look up the routine; reject if engine != 'step_functions' or
+ *      state_machine_arn is missing (legacy routines must migrate via
+ *      createRoutine; we don't auto-promote).
+ *   3. Validate the new ASL.
+ *   4. UpdateStateMachine — sets the new definition on the latest
+ *      $LATEST pseudo-version.
+ *   5. PublishStateMachineVersion — snapshots $LATEST as version N+1.
+ *   6. UpdateStateMachineAlias — flips `live` to point at version N+1.
+ *   7. Insert new routine_asl_versions row + bump routines.current_version
+ *      in a single transaction.
+ */
+
+import { eq } from "drizzle-orm";
+import {
+  routineAslVersions,
+  routines,
+} from "@thinkwork/database-pg/schema";
+import type { GraphQLContext } from "../../context.js";
+import { db, snakeToCamel } from "../../utils.js";
+import { requireTenantAdmin } from "../core/authz.js";
+import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
+import {
+  PublishStateMachineVersionCommand,
+  ROUTINE_ALIAS_NAME,
+  UpdateStateMachineAliasCommand,
+  UpdateStateMachineCommand,
+  getSfnClient,
+} from "../../../lib/routines/sfn-client.js";
+
+interface PublishRoutineVersionInput {
+  routineId: string;
+  asl: string;
+  markdownSummary: string;
+  stepManifest: string;
+}
+
+export async function publishRoutineVersion(
+  _parent: unknown,
+  args: { input: PublishRoutineVersionInput },
+  ctx: GraphQLContext,
+): Promise<unknown> {
+  const i = args.input;
+
+  // Step 2 — load the routine first so we can run the admin gate against
+  // its actual tenant_id (not a caller-supplied one).
+  const [routine] = await db
+    .select()
+    .from(routines)
+    .where(eq(routines.id, i.routineId));
+  if (!routine) {
+    throw new Error(`Routine ${i.routineId} not found`);
+  }
+  if (routine.engine !== "step_functions" || !routine.state_machine_arn) {
+    throw new Error(
+      `Routine ${i.routineId} is on the legacy_python engine; publishRoutineVersion only handles step_functions routines.`,
+    );
+  }
+
+  // Step 1 — admin gate against the routine's own tenant.
+  await requireTenantAdmin(ctx, routine.tenant_id);
+
+  // Step 3 — validate.
+  let aslJson: unknown;
+  try {
+    aslJson = JSON.parse(i.asl);
+  } catch (err) {
+    throw new Error(`asl is not valid JSON: ${(err as Error).message}`);
+  }
+  let stepManifestJson: unknown;
+  try {
+    stepManifestJson = JSON.parse(i.stepManifest);
+  } catch (err) {
+    throw new Error(`stepManifest is not valid JSON: ${(err as Error).message}`);
+  }
+
+  const validation = await validateRoutineAsl({
+    asl: aslJson,
+    currentRoutineId: i.routineId,
+  });
+  if (!validation.valid) {
+    throw new Error(
+      validation.errors.map((e) => e.message).join("\n") || "ASL validation failed",
+    );
+  }
+
+  // Step 4-6 — SFN: update definition, publish version, flip alias.
+  const sfn = getSfnClient();
+  const previousVersion = routine.current_version ?? 0;
+  const previousAliasPointing = routine.state_machine_alias_arn ?? null;
+
+  await sfn.send(
+    new UpdateStateMachineCommand({
+      stateMachineArn: routine.state_machine_arn,
+      definition: JSON.stringify(aslJson),
+    }),
+  );
+  const publishResp = await sfn.send(
+    new PublishStateMachineVersionCommand({
+      stateMachineArn: routine.state_machine_arn,
+      description: `v${previousVersion + 1}`,
+    }),
+  );
+  if (!publishResp.stateMachineVersionArn) {
+    throw new Error("PublishStateMachineVersion returned no version ARN");
+  }
+  if (!routine.state_machine_alias_arn) {
+    throw new Error(
+      `Routine ${i.routineId} has engine='step_functions' but no alias ARN — invariant violation.`,
+    );
+  }
+  await sfn.send(
+    new UpdateStateMachineAliasCommand({
+      stateMachineAliasArn: routine.state_machine_alias_arn,
+      routingConfiguration: [
+        {
+          stateMachineVersionArn: publishResp.stateMachineVersionArn,
+          weight: 100,
+        },
+      ],
+    }),
+  );
+
+  // Step 7 — DB writes in one transaction.
+  const newVersionNumber = previousVersion + 1;
+  const inserted = await db.transaction(async (tx) => {
+    const [versionRow] = await tx
+      .insert(routineAslVersions)
+      .values({
+        routine_id: i.routineId,
+        tenant_id: routine.tenant_id,
+        version_number: newVersionNumber,
+        state_machine_arn: routine.state_machine_arn!,
+        version_arn: publishResp.stateMachineVersionArn!,
+        alias_was_pointing: previousAliasPointing,
+        asl_json: aslJson,
+        markdown_summary: i.markdownSummary,
+        step_manifest_json: stepManifestJson,
+        validation_warnings_json:
+          validation.warnings.length > 0 ? validation.warnings : null,
+        published_by_actor_id: ctx.auth.principalId ?? null,
+        published_by_actor_type: ctx.auth.authType ?? null,
+      })
+      .returning();
+    await tx
+      .update(routines)
+      .set({
+        current_version: newVersionNumber,
+        documentation_md: i.markdownSummary,
+        updated_at: new Date(),
+      })
+      .where(eq(routines.id, i.routineId))
+      .returning();
+    return versionRow;
+  });
+
+  return snakeToCamel(inserted);
+}
