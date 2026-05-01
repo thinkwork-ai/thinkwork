@@ -290,6 +290,14 @@ module "job_triggers" {
   region     = var.region
 }
 
+module "routines_stepfunctions" {
+  source = "../app/routines-stepfunctions"
+
+  stage      = var.stage
+  account_id = var.account_id
+  region     = var.region
+}
+
 module "hindsight" {
   count  = local.hindsight_enabled ? 1 : 0
   source = "../app/hindsight-memory"
