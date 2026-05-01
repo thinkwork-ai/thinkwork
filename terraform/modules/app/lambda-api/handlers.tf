@@ -191,6 +191,12 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
     "sandbox-quota-check",
     "sandbox-invocation-log",
+    # Routines Step Functions ASL validator (plan
+    # docs/plans/2026-05-01-004-feat-routines-phase-a-substrate-plan.md §U5).
+    # Bearer API_AUTH_SECRET; chat builder + publish flow call this before
+    # accepting LLM-emitted ASL. Needs states:ValidateStateMachineDefinition
+    # IAM grant — see main.tf.
+    "routine-asl-validator",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -435,6 +441,12 @@ locals {
     # executeCode. 429 on quota denial, 201 on audit-row insert.
     "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
     "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
+
+    # Routines ASL validator (plan 2026-05-01-004 §U5). Bearer
+    # API_AUTH_SECRET. Chat builder + publish flow POST the candidate
+    # ASL document; returns { valid, errors, warnings }.
+    "POST /api/routines/validate"    = "routine-asl-validator"
+    "OPTIONS /api/routines/validate" = "routine-asl-validator"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
