@@ -131,20 +131,29 @@ locals {
       ROUTINE_PYTHON_ENV_ALLOWLIST   = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
     }
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
-    # resolvers (Phase B U7). They call CreateStateMachine with the
-    # routines-stepfunctions execution role; snapshotRoutinesEnv reads
-    # this env var at handler entry and throws if unset, so terraform
-    # wiring is mandatory before the publish flow goes live.
+    # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
+    # U8) which invokes routine-resume via the AWS SDK.
     "graphql-http" = {
-      ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
-      ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
-      AWS_ACCOUNT_ID              = var.account_id
+      ROUTINES_EXECUTION_ROLE_ARN  = var.routines_execution_role_arn
+      ROUTINES_LOG_GROUP_ARN       = var.routines_log_group_arn
+      AWS_ACCOUNT_ID               = var.account_id
+      # routine-approval-bridge (Phase B U8) calls this function name
+      # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
+      # The bridge throws if unset — terraform wiring is mandatory.
+      ROUTINE_RESUME_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-resume"
+      # triggerRoutineRun seeds this into the SFN execution input so the
+      # inbox_approval recipe Task can find the callback Lambda via
+      # $$.Execution.Input.inboxApprovalFunctionName.
+      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
-    # also reads AWS_ACCOUNT_ID for diagnostic logging.
+    # also reads AWS_ACCOUNT_ID for diagnostic logging. It also passes
+    # the routine-approval-callback function name in the SFN execution
+    # input so the inbox_approval recipe can fanout to it on .waitForTaskToken.
     "job-trigger" = {
-      AWS_ACCOUNT_ID = var.account_id
+      AWS_ACCOUNT_ID                         = var.account_id
+      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
     }
   }
 }
@@ -237,6 +246,13 @@ resource "aws_lambda_function" "handler" {
     # idempotent on already-consumed tokens. Needs states:SendTaskSuccess
     # + states:SendTaskFailure IAM (already granted in U1's substrate).
     "routine-resume",
+    # routine-approval-callback: SFN's inbox_approval Task invokes this
+    # via .waitForTaskToken (plan 2026-05-01-005 §U8). Creates the
+    # inbox_items row + persists the task token in routine_approval_tokens.
+    # No additional IAM beyond the lambda execution role's DB access —
+    # the trust boundary is the routines-stepfunctions execution role's
+    # lambda:InvokeFunction grant scoped to this Lambda's ARN.
+    "routine-approval-callback",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -374,6 +390,21 @@ resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
       destination = aws_sqs_queue.wiki_compile_dlq[0].arn
     }
   }
+}
+
+# Phase B U8: SFN's inbox_approval Task invokes routine-approval-callback
+# directly via .waitForTaskToken. Lambda's default async-retry policy
+# (2 attempts) is incompatible with the callback's two-insert flow —
+# even though the inserts are now wrapped in db.transaction(), AWS
+# Lambda's own retry-after-error semantics multiply with SFN's task
+# Retry policy and create thundering-herd attempts on transient
+# failures. SFN is the canonical retry path; Lambda async retries are
+# off. Per project_async_retry_idempotency_lessons.
+resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["routine-approval-callback"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
 }
 
 # ---------------------------------------------------------------------------

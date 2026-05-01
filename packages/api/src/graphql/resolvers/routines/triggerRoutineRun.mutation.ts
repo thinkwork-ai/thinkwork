@@ -54,11 +54,27 @@ export async function triggerRoutineRun(
 
   // Start the execution against the alias — that way version cutovers
   // via publishRoutineVersion are picked up automatically.
+  // Seed the execution input with the inbox_approval callback function
+  // name so the recipe ASL emitter at packages/api/src/lib/routines/
+  // recipe-catalog.ts:621 (`$$.Execution.Input.inboxApprovalFunctionName`)
+  // can resolve it. Fail loud at handler entry rather than letting the
+  // recipe error opaquely deep in SFN's Task interpreter.
+  const callbackFn = process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME;
+  if (!callbackFn) {
+    throw new Error(
+      "Routines runtime is misconfigured: ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME env var is not set",
+    );
+  }
+  const userInput = args.input ?? {};
+  const sfnInput = {
+    ...userInput,
+    inboxApprovalFunctionName: callbackFn,
+  };
   const sfn = getSfnClient();
   const startResp = await sfn.send(
     new StartExecutionCommand({
       stateMachineArn: routine.state_machine_alias_arn,
-      input: JSON.stringify(args.input ?? {}),
+      input: JSON.stringify(sfnInput),
     }),
   );
   if (!startResp.executionArn) {
