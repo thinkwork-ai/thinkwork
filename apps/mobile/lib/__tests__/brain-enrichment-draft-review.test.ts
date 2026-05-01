@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   defaultAcceptedRegionIds,
   isBrainEnrichmentDraftReviewPayload,
+  parseDraftSections,
   regionFamilyLabel,
   serializeBrainEnrichmentDraftDecision,
+  slugifyDraftHeading,
 } from "../brain-enrichment-draft-review";
 
 describe("isBrainEnrichmentDraftReviewPayload", () => {
@@ -91,6 +93,57 @@ describe("serializeBrainEnrichmentDraftDecision", () => {
       note: "   ",
     });
     expect(JSON.parse(json).note).toBeUndefined();
+  });
+});
+
+describe("slugifyDraftHeading (must mirror server slugifyTitle)", () => {
+  it("lowercases + dashes whitespace", () => {
+    expect(slugifyDraftHeading("Hello World")).toBe("hello-world");
+  });
+  it("strips diacritics", () => {
+    expect(slugifyDraftHeading("Opéra")).toBe("opera");
+  });
+  it("strips punctuation and symbols", () => {
+    expect(slugifyDraftHeading("Tickets & Subscriptions!")).toBe(
+      "tickets-subscriptions",
+    );
+  });
+  it("collapses runs of dashes", () => {
+    expect(slugifyDraftHeading("foo - - - bar")).toBe("foo-bar");
+  });
+  it("returns empty for non-alphanumeric input", () => {
+    expect(slugifyDraftHeading("???")).toBe("");
+  });
+});
+
+describe("parseDraftSections (mirrors server parseSections)", () => {
+  it("returns empty array for empty body", () => {
+    expect(parseDraftSections("")).toEqual([]);
+  });
+  it("parses two H2 sections in order", () => {
+    expect(
+      parseDraftSections(["## First", "", "first", "", "## Second", "", "second"].join("\n")),
+    ).toEqual([
+      { slug: "first", heading: "First", bodyMd: "first" },
+      { slug: "second", heading: "Second", bodyMd: "second" },
+    ]);
+  });
+  it("captures preamble before the first H2 as a synthetic _preamble section", () => {
+    const md = ["intro prose", "", "## Details", "", "details body"].join("\n");
+    expect(parseDraftSections(md)).toEqual([
+      { slug: "_preamble", heading: "", bodyMd: "intro prose" },
+      { slug: "details", heading: "Details", bodyMd: "details body" },
+    ]);
+  });
+  it("keeps H3 inside the parent H2 section's body", () => {
+    expect(parseDraftSections("## Top\n\n### Sub\n\nbody")).toEqual([
+      { slug: "top", heading: "Top", bodyMd: "### Sub\n\nbody" },
+    ]);
+  });
+  it("falls back to slug='section' when slugify returns empty", () => {
+    expect(parseDraftSections("## ???\n\nbody")).toEqual([
+      { slug: "section", heading: "???", bodyMd: "body" },
+    ]);
   });
 });
 
