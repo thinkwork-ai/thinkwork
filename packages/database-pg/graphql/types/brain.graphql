@@ -82,9 +82,17 @@ type BrainEnrichmentProposal {
   tenantId: ID!
   targetPageTable: String!
   targetPageId: ID!
-  threadId: ID!
-  reviewRunId: ID!
-  reviewObjectKey: String!
+  # threadId/reviewRunId/reviewObjectKey are populated only when the
+  # enrichment ran through the legacy synchronous path. As of U6 of plan
+  # 2026-05-01-002, Brain-page enrichments queue an async draft-compile
+  # job and return immediately; the thread + workspace_run are created
+  # by the writeback (U5) when the compile finishes, so these are NULL
+  # in the queued response. Mobile reads `status === 'QUEUED'` to detect
+  # the new flow and disengage the synchronous review surface.
+  threadId: ID
+  reviewRunId: ID
+  reviewObjectKey: String
+  # 'AWAITING_REVIEW' (legacy synchronous path) or 'QUEUED' (U6 async draft).
   status: String!
   title: String!
   candidates: [BrainEnrichmentCandidate!]!

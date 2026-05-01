@@ -717,13 +717,13 @@ export type BrainEnrichmentProposal = {
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
   providerStatuses: Array<BrainEnrichmentProviderStatus>;
-  reviewObjectKey: Scalars['String']['output'];
-  reviewRunId: Scalars['ID']['output'];
+  reviewObjectKey?: Maybe<Scalars['String']['output']>;
+  reviewRunId?: Maybe<Scalars['ID']['output']>;
   status: Scalars['String']['output'];
   targetPageId: Scalars['ID']['output'];
   targetPageTable: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
   title: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };

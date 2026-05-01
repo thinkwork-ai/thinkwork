@@ -390,9 +390,19 @@ export async function enqueueCompileJob(
  * Insert an enrichment-draft compile job. Carries the page reference + the
  * synthesized candidate list as `input` jsonb so the dispatcher can run the
  * draft-compile module without consulting memory_units. Dedupe-key shape
- * differs from the default compile (5-part `enrichment-draft:` prefix); the
- * dedupe behavior is otherwise the same — concurrent enrichments for the
- * same page within a 5-min bucket collapse to one draft.
+ * differs from the default compile (5-part `enrichment-draft:` prefix).
+ *
+ * Dedupe behavior:
+ *   - Concurrent enrichments for the same page within a 5-min bucket whose
+ *     existing job is still in-flight (pending / running) collapse to that
+ *     job — the second caller gets `{ inserted: false, job: existingJob }`
+ *     and the existing run will surface the user-visible thread.
+ *   - When the existing job has reached a terminal state (succeeded / failed
+ *     / skipped), the dedupe key is rotated with a `:rerun-N` suffix so a
+ *     fresh job carries the new candidates. Without this, re-running
+ *     enrichment within 5 minutes of a completed compile would silently
+ *     attach to a finished row that no worker re-runs and the user would
+ *     never see the new draft.
  */
 export async function enqueueEnrichmentDraftCompileJob(
 	args: {
@@ -404,41 +414,57 @@ export async function enqueueEnrichmentDraftCompileJob(
 	},
 	db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
-	const dedupeKey = buildEnrichmentDraftDedupeKey({
+	const baseDedupeKey = buildEnrichmentDraftDedupeKey({
 		tenantId: args.tenantId,
 		ownerId: args.ownerId,
 		pageId: args.pageId,
 		nowEpochSeconds: args.nowEpochSeconds,
 	});
 
-	const [inserted] = await db
-		.insert(wikiCompileJobs)
-		.values({
-			tenant_id: args.tenantId,
-			owner_id: args.ownerId,
-			dedupe_key: dedupeKey,
-			trigger: "enrichment_draft",
-			input: args.input as never,
-		})
-		.onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
-		.returning();
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const dedupeKey =
+			attempt === 0 ? baseDedupeKey : `${baseDedupeKey}:rerun-${attempt}`;
 
-	if (inserted) {
-		return { inserted: true, job: inserted as WikiCompileJobRow };
+		const [inserted] = await db
+			.insert(wikiCompileJobs)
+			.values({
+				tenant_id: args.tenantId,
+				owner_id: args.ownerId,
+				dedupe_key: dedupeKey,
+				trigger: "enrichment_draft",
+				input: args.input as never,
+			})
+			.onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
+			.returning();
+
+		if (inserted) {
+			return { inserted: true, job: inserted as WikiCompileJobRow };
+		}
+
+		const existing = await db
+			.select()
+			.from(wikiCompileJobs)
+			.where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
+			.limit(1);
+
+		if (!existing[0]) {
+			throw new Error(
+				`enqueueEnrichmentDraftCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
+			);
+		}
+
+		const existingJob = existing[0] as WikiCompileJobRow;
+		// In-flight job → collapse to it. The user gets the same draft.
+		if (existingJob.status === "pending" || existingJob.status === "running") {
+			return { inserted: false, job: existingJob };
+		}
+		// Terminal job (succeeded / failed / skipped) → rotate the key with
+		// `:rerun-N` and try again. Loop iteration handles the suffix.
 	}
 
-	const existing = await db
-		.select()
-		.from(wikiCompileJobs)
-		.where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
-		.limit(1);
-
-	if (!existing[0]) {
-		throw new Error(
-			`enqueueEnrichmentDraftCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
-		);
-	}
-	return { inserted: false, job: existing[0] as WikiCompileJobRow };
+	throw new Error(
+		`enqueueEnrichmentDraftCompileJob: exhausted rerun-suffix attempts for base key=${baseDedupeKey}`,
+	);
 }
 
 /**
