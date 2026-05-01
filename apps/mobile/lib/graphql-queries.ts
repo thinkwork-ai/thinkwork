@@ -491,11 +491,13 @@ export const DeleteRoutineMutation = graphql(`
 `);
 
 export const TriggerRoutineRunMutation = graphql(`
-  mutation TriggerRoutineRun($routineId: ID!) {
-    triggerRoutineRun(routineId: $routineId) {
+  mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
+    triggerRoutineRun(routineId: $routineId, input: $input) {
       id
       routineId
       status
+      sfnExecutionArn
+      startedAt
       createdAt
     }
   }

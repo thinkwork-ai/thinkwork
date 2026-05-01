@@ -7,10 +7,7 @@ import { threadTurn } from "./threadTurn.query.js";
 import { threadTurnEvents_ as threadTurnEvents } from "./threadTurnEvents.query.js";
 import { scheduledJobs_ as scheduledJobs } from "./scheduledJobs.query.js";
 import { scheduledJob } from "./scheduledJob.query.js";
-import { createRoutine } from "./createRoutine.mutation.js";
-import { updateRoutine } from "./updateRoutine.mutation.js";
 import { deleteRoutine } from "./deleteRoutine.mutation.js";
-import { triggerRoutineRun } from "./triggerRoutineRun.mutation.js";
 import { setRoutineTrigger } from "./setRoutineTrigger.mutation.js";
 import { deleteRoutineTrigger } from "./deleteRoutineTrigger.mutation.js";
 import { cancelThreadTurn } from "./cancelThreadTurn.mutation.js";
@@ -18,5 +15,9 @@ import { createWakeupRequest } from "./createWakeupRequest.mutation.js";
 import { createScheduledJob } from "./createScheduledJob.mutation.js";
 import { queuedWakeups } from "./queuedWakeups.query.js";
 
+// Phase B U7: createRoutine, updateRoutine, and triggerRoutineRun moved
+// to resolvers/routines/ (live Step Functions flow). publishRoutineVersion
+// is also there. Legacy mutations under this directory remain for the
+// routine_runs/thread_turns surfaces still in use through Phase D.
 export const triggerQueries = { routines, routine, routineRun, routineRuns, threadTurns, threadTurn, threadTurnEvents, scheduledJobs, scheduledJob, queuedWakeups };
-export const triggerMutations = { createRoutine, updateRoutine, deleteRoutine, triggerRoutineRun, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob };
+export const triggerMutations = { deleteRoutine, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob };
