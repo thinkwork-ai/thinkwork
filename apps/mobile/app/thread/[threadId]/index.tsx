@@ -76,23 +76,18 @@ type HitlDetailTab = "review" | "thread";
 function ThreadHitlPrompt({
   review,
   fetching,
-  response,
+  note,
   onChangeResponse,
-  onDecide,
-  pendingDecision,
   colors,
   isDark,
 }: {
   review: any;
   fetching?: boolean;
-  response: string;
+  note: string;
   onChangeResponse: (value: string) => void;
-  onDecide: (decision: WorkspaceReviewDecision) => void;
-  pendingDecision: WorkspaceReviewDecision | null;
   colors: (typeof COLORS)["dark"];
   isDark: boolean;
 }) {
-  const actions = workspaceReviewActionsForStatus(review?.run?.status);
   const proposedChanges = (review?.proposedChanges ?? []) as any[];
   const body = String(review?.reviewBody ?? "").trim();
   const reviewPayload = useMemo(() => reviewPayloadFor(review), [review]);
@@ -104,26 +99,25 @@ function ThreadHitlPrompt({
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
     () => new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
   );
-  const [enrichmentNote, setEnrichmentNote] = useState("");
 
   useEffect(() => {
     if (!isBrainEnrichment) return;
     setSelectedCandidateIds(
       new Set(enrichmentCandidates?.map((candidate) => candidate.id) ?? []),
     );
-    setEnrichmentNote("");
   }, [isBrainEnrichment, review?.run?.id]);
 
   useEffect(() => {
     if (!isBrainEnrichment) return;
+    const trimmedNote = (note ?? "").trim();
     onChangeResponse(
       JSON.stringify({
         kind: "brain_enrichment_selection",
         selectedCandidateIds: [...selectedCandidateIds],
-        note: enrichmentNote.trim() || null,
+        note: trimmedNote || null,
       }),
     );
-  }, [isBrainEnrichment, selectedCandidateIds, enrichmentNote, onChangeResponse]);
+  }, [isBrainEnrichment, selectedCandidateIds, note, onChangeResponse]);
 
   const toggleCandidate = useCallback((candidateId: string) => {
     setSelectedCandidateIds((current) => {
@@ -238,52 +232,6 @@ function ThreadHitlPrompt({
         </View>
       ) : null}
 
-      <TextInput
-        value={isBrainEnrichment ? enrichmentNote : response}
-        onChangeText={isBrainEnrichment ? setEnrichmentNote : onChangeResponse}
-        placeholder="Optional note for the agent"
-        placeholderTextColor={colors.mutedForeground}
-        multiline
-        className="mt-3 rounded-lg px-3 py-2 text-sm"
-        style={{
-          minHeight: 42,
-          maxHeight: 96,
-          color: colors.foreground,
-          backgroundColor: isDark ? "rgba(23,23,23,0.78)" : "#ffffff",
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}
-      />
-
-      <View className="mt-3 flex-row gap-2">
-        {actions.accept ? (
-          <ReviewActionButton
-            label={workspaceReviewDecisionLabel("accept")}
-            decision="accept"
-            pendingDecision={pendingDecision}
-            onPress={onDecide}
-            tone="primary"
-          />
-        ) : null}
-        {actions.resume ? (
-          <ReviewActionButton
-            label={workspaceReviewDecisionLabel("resume")}
-            decision="resume"
-            pendingDecision={pendingDecision}
-            onPress={onDecide}
-            tone="neutral"
-          />
-        ) : null}
-        {actions.cancel ? (
-          <ReviewActionButton
-            label={workspaceReviewDecisionLabel("cancel")}
-            decision="cancel"
-            pendingDecision={pendingDecision}
-            onPress={onDecide}
-            tone="danger"
-          />
-        ) : null}
-      </View>
     </View>
   );
 }
@@ -492,6 +440,88 @@ function ReviewActionButton({
   );
 }
 
+function ThreadHitlReviewFooter({
+  review,
+  note,
+  onChangeNote,
+  onDecide,
+  pendingDecision,
+  colors,
+}: {
+  review: any;
+  note: string;
+  onChangeNote: (value: string) => void;
+  onDecide: (decision: WorkspaceReviewDecision) => void;
+  pendingDecision: WorkspaceReviewDecision | null;
+  colors: (typeof COLORS)["dark"];
+}) {
+  const insets = useSafeAreaInsets();
+  const actions = workspaceReviewActionsForStatus(review?.run?.status);
+  const isBrainEnrichment =
+    reviewPayloadFor(review)?.kind === "brain_enrichment_review";
+  const showResume = actions.resume && !isBrainEnrichment;
+
+  return (
+    <View
+      className="border-t border-neutral-200 bg-neutral-100 px-4 pt-3 dark:border-neutral-800 dark:bg-neutral-900"
+      style={{
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        overflow: "hidden",
+        paddingBottom: insets.bottom || 8,
+      }}
+    >
+      <TextInput
+        value={note}
+        onChangeText={onChangeNote}
+        placeholder="Optional note for the agent..."
+        placeholderTextColor={colors.mutedForeground}
+        multiline
+        className="max-h-[96px]"
+        style={{
+          color: colors.foreground,
+          fontSize: 18,
+          lineHeight: 24,
+          paddingTop: 4,
+          paddingBottom: 4,
+        }}
+        returnKeyType="default"
+        blurOnSubmit={false}
+      />
+
+      <View className="flex-row gap-2 pt-3 pb-2">
+        {actions.accept ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("accept")}
+            decision="accept"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="primary"
+          />
+        ) : null}
+        {showResume ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("resume")}
+            decision="resume"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="neutral"
+          />
+        ) : null}
+        {actions.cancel ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("cancel")}
+            decision="cancel"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="danger"
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function LoadingTitle() {
   const [dots, setDots] = useState("");
   useEffect(() => {
@@ -643,6 +673,7 @@ export default function ThreadDetailRoute() {
   const reviewDetail = (reviewDetailData?.agentWorkspaceReview ??
     pendingReview) as any | null;
   const [reviewResponse, setReviewResponse] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
   const [hitlTab, setHitlTab] = useState<HitlDetailTab>("review");
   const previousReviewRunIdRef = useRef<string | undefined>(undefined);
   const [pendingDecision, setPendingDecision] =
@@ -655,12 +686,16 @@ export default function ThreadDetailRoute() {
     if (!pendingReviewRunId) {
       previousReviewRunIdRef.current = undefined;
       setHitlTab("thread");
+      setReviewNote("");
+      setReviewResponse("");
       return;
     }
 
     if (previousReviewRunIdRef.current === pendingReviewRunId) return;
     previousReviewRunIdRef.current = pendingReviewRunId;
     setHitlTab("review");
+    setReviewNote("");
+    setReviewResponse("");
   }, [pendingReviewRunId]);
 
   // Continuously poll messages/turns while the screen is mounted. Fast cadence
@@ -832,6 +867,7 @@ export default function ThreadDetailRoute() {
 
         if (result.error) throw result.error;
         setReviewResponse("");
+        setReviewNote("");
         if (isBrainEnrichmentReview && threadId) {
           clearThreadActive(threadId);
         } else if (decision !== "cancel" && threadId) {
@@ -881,6 +917,16 @@ export default function ThreadDetailRoute() {
     ],
   );
 
+  const handleReviewNoteChange = useCallback(
+    (value: string) => {
+      setReviewNote(value);
+      if (reviewPayloadFor(reviewDetail)?.kind !== "brain_enrichment_review") {
+        setReviewResponse(value);
+      }
+    },
+    [reviewDetail],
+  );
+
   // ── Send message ──
   const [messageText, setMessageText] = useState("");
   const [, executeSendMessage] = useMutation(SendMessageMutation);
@@ -909,6 +955,7 @@ export default function ThreadDetailRoute() {
   // Don't render stale content — wait until the correct thread is loaded
   const isLoaded = thread && thread.id === threadId;
   const showsReviewTabs = isLoaded && Boolean(reviewDetail);
+  const showingReviewForm = showsReviewTabs && hitlTab === "review";
 
   if (!threadId) return <View className="flex-1 bg-white dark:bg-black" />;
 
@@ -1010,10 +1057,8 @@ export default function ThreadDetailRoute() {
             <ThreadHitlPrompt
               review={reviewDetail}
               fetching={fetchingReviewDetail}
-              response={reviewResponse}
+              note={reviewNote}
               onChangeResponse={setReviewResponse}
-              onDecide={handleReviewDecision}
-              pendingDecision={pendingDecision}
               colors={colors}
               isDark={isDark}
             />
@@ -1047,8 +1092,17 @@ export default function ThreadDetailRoute() {
         )}
       </View>
 
-      {/* Message input */}
-      <View>
+      {/* Footer input */}
+      {showingReviewForm && reviewDetail ? (
+        <ThreadHitlReviewFooter
+          review={reviewDetail}
+          note={reviewNote}
+          onChangeNote={handleReviewNoteChange}
+          onDecide={handleReviewDecision}
+          pendingDecision={pendingDecision}
+          colors={colors}
+        />
+      ) : (
         <MessageInputFooter
           value={messageText}
           onChangeText={setMessageText}
@@ -1058,7 +1112,7 @@ export default function ThreadDetailRoute() {
           isDark={isDark}
           onQuickActions={() => quickActionsRef.current?.present()}
         />
-      </View>
+      )}
 
       {/* Quick Actions Bottom Sheet */}
       <QuickActionsSheet
