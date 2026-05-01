@@ -85,8 +85,22 @@ const PAYLOAD_KIND = "brain_enrichment_draft_review";
 
 /**
  * Success path: write the S3 sidecar + open a workspace review for the user.
- * Idempotent on `wiki_compile_jobs.id` — re-running for the same job is a
- * no-op via the agent_workspace_events idempotency_key.
+ *
+ * Duplicate-write protection works in two layers:
+ *   - The runner (`runDraftCompileJobById`) short-circuits on succeeded /
+ *     skipped / failed / running job statuses, so the writeback is invoked
+ *     at most once per job in normal operation.
+ *   - The `agent_workspace_events` insert uses `onConflictDoNothing` on
+ *     idempotency_key=`brain-enrichment-draft:<jobId>` as defense in depth.
+ *     A duplicate writeback that slips past the runner gate writes a fresh
+ *     thread + workspace_run + S3 sidecar (those tables have no idempotency
+ *     anchor in U5), but does not throw on the event insert — so the catch
+ *     path in the runner does not synthesize a *third* failure thread on top.
+ *
+ * Wrapping the multi-step writes in a `db.transaction` is a known follow-up
+ * (rel-2 from review run 20260501-132529-bca3799a). Today this mirrors the
+ * legacy `createReviewThread` precedent — partial failures can leak orphan
+ * thread/turn/run rows. The reconciler is the recovery path.
  */
 export async function writeDraftReviewSuccess(args: {
 	context: DraftWritebackContext;
@@ -170,21 +184,31 @@ export async function writeDraftReviewSuccess(args: {
 		})
 		.returning({ id: agentWorkspaceRuns.id });
 
-	await db.insert(agentWorkspaceEvents).values({
-		tenant_id: args.context.job.tenant_id,
-		agent_id: agentId,
-		run_id: run.id,
-		event_type: "review.requested",
-		idempotency_key: `brain-enrichment-draft:${args.context.job.id}`,
-		bucket,
-		source_object_key: reviewObjectKey,
-		object_etag: put.ETag ?? null,
-		sequencer: reviewId,
-		reason: PAYLOAD_KIND,
-		payload,
-		actor_type: "user",
-		actor_id: args.context.job.owner_id,
-	});
+	// onConflictDoNothing on idempotency_key — defense in depth. The runner's
+	// terminal-status short-circuit (runDraftCompileJobById's running/failed
+	// guards) is the primary protection against duplicate writebacks. If a
+	// duplicate slips through anyway (e.g., concurrent worker race that the
+	// FOR UPDATE SKIP LOCKED claim somehow bypasses), this swallows the
+	// duplicate event silently rather than throwing mid-writeback after
+	// thread/turn/run have already been written.
+	await db
+		.insert(agentWorkspaceEvents)
+		.values({
+			tenant_id: args.context.job.tenant_id,
+			agent_id: agentId,
+			run_id: run.id,
+			event_type: "review.requested",
+			idempotency_key: `brain-enrichment-draft:${args.context.job.id}`,
+			bucket,
+			source_object_key: reviewObjectKey,
+			object_etag: put.ETag ?? null,
+			sequencer: reviewId,
+			reason: PAYLOAD_KIND,
+			payload,
+			actor_type: "user",
+			actor_id: args.context.job.owner_id,
+		})
+		.onConflictDoNothing();
 
 	await db.insert(messages).values({
 		thread_id: thread.id,

@@ -101,23 +101,20 @@ function makeFakeDb() {
 			return {
 				values(values: unknown) {
 					inserts.push({ table, values });
-					return {
+					const builder = {
 						returning(_cols?: unknown) {
 							// Heuristic: return a stable id based on insert order so
 							// tests can correlate.
 							const id = `id-${inserts.length}`;
-							if (table === tableTokens.threads) {
-								return Promise.resolve([{ id }]);
-							}
-							if (table === tableTokens.threadTurns) {
-								return Promise.resolve([{ id }]);
-							}
-							if (table === tableTokens.agentWorkspaceRuns) {
-								return Promise.resolve([{ id }]);
-							}
 							return Promise.resolve([{ id }]);
 						},
+						onConflictDoNothing(_args?: unknown) {
+							// No-op in the fake; record a flag so tests can assert if
+							// needed. Real Drizzle returns a Promise; mirror that here.
+							return Promise.resolve([]);
+						},
 					};
+					return builder;
 				},
 			};
 		},

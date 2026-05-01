@@ -764,7 +764,13 @@ export async function runDraftCompileJobById(
 	}
 	// Terminal-state short-circuits. `failed` must short-circuit too — without
 	// this guard, retrying the handler against an already-failed job would
-	// re-run the agentic compile and double-complete the row.
+	// re-run the agentic compile and double-complete the row. **`running`
+	// must short-circuit too** — Lambda's default async retry (2 attempts)
+	// would re-claim a job whose previous attempt wrote thread+run+S3 but
+	// crashed before completeCompileJob; re-running would duplicate the
+	// thread + workspace_run + S3 sidecar. The `running` state is presumed
+	// to be a previous attempt still in flight or a crash; the reconciler
+	// owns recovery, not the redrive path.
 	if (job.status === "succeeded" || job.status === "skipped") {
 		return { ok: true, jobId: job.id, status: "succeeded" };
 	}
@@ -774,6 +780,17 @@ export async function runDraftCompileJobById(
 			jobId: job.id,
 			status: "failed",
 			error: job.error ?? "previous attempt failed",
+		};
+	}
+	if (job.status === "running") {
+		console.warn(
+			`[draft-compile] runDraftCompileJobById: job ${jobId} is already running; skipping redrive (reconciler owns recovery)`,
+		);
+		return {
+			ok: false,
+			jobId: job.id,
+			status: "failed",
+			error: "job already running — refusing redrive",
 		};
 	}
 	return runDraftCompileJob(job, opts);
