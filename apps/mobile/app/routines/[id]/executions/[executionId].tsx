@@ -124,6 +124,24 @@ export default function RoutineExecutionDetailScreen() {
     setTimeout(() => setRefreshing(false), 300);
   };
 
+  // Step manifest comes from RoutineExecution.aslVersion (schema
+  // follow-up bundle). Resolver matches by (state_machine_arn,
+  // version_arn) so each execution renders against its own manifest,
+  // not the routine's current version. Falls back to events-only graph
+  // rendering when versionArn is null (out-of-band SFN starts).
+  const stepManifest = useMemo<Record<string, { recipeType?: string }> | null>(() => {
+    const manifestJson = (execution as any)?.aslVersion?.stepManifestJson;
+    if (!manifestJson) return null;
+    try {
+      return JSON.parse(manifestJson) as Record<
+        string,
+        { recipeType?: string }
+      >;
+    } catch {
+      return null;
+    }
+  }, [execution]);
+
   const stepEventsLite: StepEventLite[] = useMemo(
     () =>
       (execution?.stepEvents ?? []).map((ev) => ({
@@ -204,7 +222,7 @@ export default function RoutineExecutionDetailScreen() {
               </Text>
             </View>
             <ExecutionGraphMobile
-              stepManifest={null}
+              stepManifest={stepManifest}
               stepEvents={stepEventsLite}
               selectedNodeId={selectedNodeId}
               onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}

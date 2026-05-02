@@ -105,6 +105,13 @@ type RoutineExecution {
   errorMessage: String
   totalLlmCostUsdCents: Int
   stepEvents: [RoutineStepEvent!]!
+  # Pointer to the routine_asl_versions row that backed this specific
+  # execution. Resolved by (state_machine_arn, version_arn) — the same
+  # pair PublishStateMachineVersion stamps onto each version. Run-detail
+  # consumes `aslVersion.stepManifestJson` so the graph renders even
+  # before any step events arrive. Null for executions whose version
+  # ARN wasn't recorded (out-of-band SFN starts).
+  aslVersion: RoutineAslVersion
   createdAt: AWSDateTime!
 }
 
