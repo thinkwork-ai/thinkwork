@@ -1736,6 +1736,7 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  planRoutineDraft: RoutineDraft;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
@@ -2299,6 +2300,11 @@ export type MutationNotifyThreadUpdateArgs = {
 };
 
 
+export type MutationPlanRoutineDraftArgs = {
+  input: PlanRoutineDraftInput;
+};
+
+
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
 };
@@ -2730,6 +2736,13 @@ export type PinStatusFile = {
   pinnedContent?: Maybe<Scalars['String']['output']>;
   pinnedSha?: Maybe<Scalars['String']['output']>;
   updateAvailable: Scalars['Boolean']['output'];
+};
+
+export type PlanRoutineDraftInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  steps?: InputMaybe<Array<RoutineDefinitionStepConfigInput>>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type PublishRoutineVersionInput = {
@@ -3728,6 +3741,17 @@ export type RoutineDefinitionStep = {
 export type RoutineDefinitionStepConfigInput = {
   args: Scalars['AWSJSON']['input'];
   nodeId: Scalars['String']['input'];
+};
+
+export type RoutineDraft = {
+  __typename?: 'RoutineDraft';
+  asl: Scalars['AWSJSON']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  kind: Scalars['String']['output'];
+  markdownSummary: Scalars['String']['output'];
+  stepManifest: Scalars['AWSJSON']['output'];
+  steps: Array<RoutineDefinitionStep>;
+  title: Scalars['String']['output'];
 };
 
 export enum RoutineEngine {
