@@ -1,88 +1,103 @@
 ---
 title: Admin — Automations
-description: Recurring agent work, scheduled jobs, and routine triggers. Cron, rate, and one-shot schedules backed by EventBridge plus Step Functions for multi-step routines. Lives in the admin Work group, below Inbox.
+description: Tenant-wide home for routines (Step Functions workflows), schedules (cron + rate triggers), and webhooks. Three children under one Automations parent in the admin sidebar — each with its own list, detail, and run/invocation history.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, CardGrid, Card } from '@astrojs/starlight/components';
 
-Automations is the tenant-wide home for recurring agent work — cron heartbeats, rate-based triggers, one-shot reminders, scheduled agent invocations, and routine triggers (multi-step workflows). Behind the UI it's the same surface as the underlying `scheduled-jobs` route; "Automations" is the operator-facing name and IA position.
+Automations is the admin app's parent surface for everything that runs agent work without a human chat message — Step Functions routines, scheduled jobs, and webhook endpoints. It's a real route group in the sidebar (not a label-only rename), with three children: Routines, Schedules, and Webhooks. The detail surfaces under Routines are where the operator watches a routine execute step by step, with a live graph of state transitions, per-step input/output/cost, and the agent-authored markdown summary that names HITL approval points by state name.
 
 ## Where it lives in the admin sidebar
 
-Automations sits in the **Work** group, below Inbox:
+Automations is a parent group in the **Work** section, with three children:
 
 ```
 Work
 ├── Dashboard
+├── Agents
 ├── Threads
 ├── Inbox
-└── Automations            ← here
+└── Automations            ← parent; expands to:
+    ├── Routines           ← /automations/routines
+    ├── Schedules          ← /automations/schedules
+    └── Webhooks           ← /automations/webhooks
 ```
 
-It moved out of the Manage group during the workspace-reviews routing refactor (see [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow) for the design context). Manage now keeps pure config/infra surfaces — Analytics, Webhooks, People, Billing, Settings.
+The previous top-level routes (`/scheduled-jobs`, `/webhooks`, `/routines`) survive as 301-redirect shims so existing deep-links and bookmarks still land. Webhooks moved out of the Manage group during the Phase D nav restructure; Manage now keeps pure config/infra surfaces — Analytics, People, Billing, Settings.
 
-## What it covers
+## Routines
 
-Four trigger types live behind a single page:
+**List route:** `/automations/routines`
+**Detail route:** `/automations/routines/:routineId`
+**Run-detail route:** `/automations/routines/:routineId/executions/:executionId`
+**New routine:** `/automations/routines/new`
 
-- **Heartbeats** — recurring prompts that run an agent on a timer (e.g. "every 10 minutes, check your inbox").
-- **Reminders** — one-shot or recurring prompts that nudge an agent toward a specific action (e.g. "daily at 08:00, send the morning digest").
-- **Scheduled invocations** — general schedule-based agent runs.
-- **Routine triggers** — schedule or one-time triggers that kick off a multi-step routine (workflow), rather than a single agent turn.
+A routine is an Amazon States Language state machine the chat builder agent emits, validated and provisioned by the `publishRoutineVersion` GraphQL mutation. Each routine has:
 
-Each type determines how the trigger interacts with the target:
+- **An ASL state machine** versioned via Step Functions `PublishStateMachineVersion`. The routine carries an alias ARN; the alias points at the current version, so triggering a routine always runs whatever the latest publish set as current.
+- **An agent-authored markdown summary** (`documentationMd`), regenerated on every publish, that names the steps the operator will see in the run-detail graph plus any HITL approval points.
+- **A step manifest** (`step_manifest_json` on `routine_asl_versions`) that maps ASL state names to v0 recipe ids — the run-detail graph derives nodes from this manifest so brand-new executions render their shape immediately.
+- **A visibility model** — `visibility = 'agent_private'` (only the owning agent can invoke) or `visibility = 'tenant_shared'` (any agent in the tenant). Splits the conflated `agentId` field; `owning_agent_id` is the authoring/stewardship agent for private routines.
 
-- Heartbeats skip if the agent is busy.
-- Reminders queue if the prior run hasn't finished.
-- Routine triggers fan out to step execution via AWS Step Functions.
+### The routines list
 
-## The list
+Filtered to `engine = 'step_functions'` so legacy_python rows don't pollute the operator's view. Columns: status badge, name, type, schedule, agent, last run, next run. Click a row to drill into the detail page.
 
-**Route:** `/scheduled-jobs`  
-**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx`
+The **New Routine** button routes to a thin form-based create page that mints a placeholder routine (no-op `Succeed`-state ASL) and drops the operator into the routine detail page. Iteration happens via the chat builder once that surface lands; until then, operators iterate via direct ASL edits.
 
-"Automations" is a label-only rename: the route, file paths, GraphQL queries, and underlying database tables (`scheduled_jobs`) all still use `scheduled-jobs` naming. Only the operator-facing UI label and IA position changed.
+### The routine detail page
 
-A searchable table with a top-right **New Job** button and a type-filter dropdown.
+Two tabs:
 
-| Column | Notes |
-|---|---|
-| Name | Display name; description rendered below in smaller type |
-| Type | Icon + badge: **Heartbeat**, **Reminder**, **Scheduled**, **Routine** |
-| Schedule | Cron or rate expression, rendered human-readable ("every 5 minutes", "daily at 09:00 UTC") |
-| Enabled | Toggle — disabling pauses the underlying EventBridge rule, it does not delete it |
-| Last run | Relative time |
-| Next run | Estimated from the schedule expression and `last_run_at` |
+- **Runs** — the `ExecutionList` component. Status filter pills (running / awaiting_approval / succeeded / failed / cancelled / timed_out / all) persist via URL search params, so reload preserves the filter. Cursor pagination keyed on `started_at`; explicit Previous/Next with a cursor stack. The list polls every 5s while at least one row is non-terminal AND the page is visible (no background polling). Click a row → run-detail page.
+- **Scheduled Jobs** — the `routine_triggers` rows that fire this routine on a schedule. Routine triggers go through the same `scheduled_jobs` substrate as agent triggers but with `trigger_type = 'routine_schedule'` or `'routine_one_time'`.
 
-## The detail page
+Side card shows routine metadata: type, schedule, owning agent, team, last run, next run, created.
 
-**Route:** `/scheduled-jobs/:scheduledJobId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/$scheduledJobId.tsx`
+### The run-detail page
 
-Each automation has its own detail page with:
+The customer-visible "watch the routine execute" surface. Three components combine:
 
-- **Header** — name + type badge; action buttons for **Edit**, **Run Now** (manual trigger), and **Enable / Disable**; delete with confirmation.
-- **Schedule and target** — the schedule expression, the target agent (or routine), and any payload attached to the trigger.
-- **Run history** — recent invocations with status, duration, and a link into the resulting thread for full audit.
-- **Activity log** — administrative changes to the automation itself (created, enabled, disabled, edited).
+- **`ExecutionGraph`** — vertical-stepper visualization of the state machine. Nodes derive from the routine_asl_versions step manifest backing this specific execution (resolved via `RoutineExecution.aslVersion`); fall back to deriving from `routine_step_events` when the manifest isn't fetchable. Latest-event-per-node selection collapses retry chatter into a single graph dot. Status icons: spinning loader for running, green check for succeeded, red X for failed, purple pause for awaiting_approval, amber clock for timed_out.
+- **`StepDetailPanel`** — click a step in the graph; this panel shows input/output JSON, recipe type, retry count, LLM cost, duration. For `python` recipe steps with S3-offloaded stdout/stderr, the inline 4KB preview surfaces with a "(truncated)" marker plus the S3 URI for full output.
+- **`MarkdownSummary`** — renders the routine's `documentationMd`. HITL anchor links of the form `[label](#step-NodeName)` are intercepted and route to the parent's step-selection handler so clicking the anchor jumps the graph + panel to the named state.
 
-## Under the hood
+The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRoutineExecutionUpdated`) is a Phase E follow-up — current polling is fine at 4-tenant scale.
 
-Automations are AWS-native: EventBridge rules drive the schedule, the `job-schedule-manager` Lambda owns the rule lifecycle, and the `job-trigger` Lambda fires the agent wakeup when the rule matches. Routine-type triggers also kick off Step Functions state machines for the multi-step flow.
+## Schedules
 
-A note on `rate()` schedules: AWS Scheduler treats `rate()` as **creation-time + interval**, not wall-clock-aligned. A `rate(1 hour)` job created at 09:23 fires at 10:23, 11:23, … rather than on the hour. Use `cron()` if you need wall-clock alignment.
+**Route:** `/automations/schedules`
+**Detail:** `/automations/schedules/:scheduledJobId`
 
-User-initiated create and update operations call the underlying Lambda with `RequestResponse` invocation so errors surface synchronously — no fire-and-forget paths.
+The `scheduled_jobs` substrate that previously lived at `/scheduled-jobs`. Behavior is unchanged — same four trigger types (heartbeats, reminders, scheduled invocations, routine triggers), same EventBridge → `job-schedule-manager` → `job-trigger` provisioning chain. Routine triggers fire `triggerRoutineRun` GraphQL mutation, which calls SFN `StartExecution` against the routine's alias ARN.
+
+## Webhooks
+
+**Route:** `/automations/webhooks`
+**Detail:** `/automations/webhooks/:webhookId`
+
+The webhook surface that previously lived at `/webhooks`. Behavior is unchanged — webhook tokens, target_type (agent | routine), enabled toggle, invocation history. Routine-target webhooks invoke `triggerRoutineRun` via the webhook handler.
 
 ## What does *not* live here
 
-- **Workspace HITL reviews** — system-agent workspace reviews surface in **Inbox**, not Automations. See [Admin — Inbox → Workspace reviews (system HITL)](/applications/admin/inbox/#workspace-reviews-system-hitl).
-- **Per-thread agent invocations** — those live in the [Threads](/applications/admin/threads/) tab.
-- **Per-user OAuth or connector credentials** — those live in the mobile app. The platform's stance: admin owns tenant-wide infra and config, users own their own integration auth on mobile. See [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/).
+- **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not Automations. Routine-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
+- **Per-thread agent invocations** — those live in [Threads](/applications/admin/threads/). Routines are distinct: a routine execution has its own `routine_executions` row, not a `thread_turns` row, and is observable through the run-detail graph rather than a chat timeline.
+- **Per-user OAuth or connector credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
+- **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the Phase E migration and excluded from the routines list. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
+
+## Under the hood
+
+- Routines: `routines` table holds the routine record; `routine_asl_versions` is the version history (one row per `publishRoutineVersion`); `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log (running/succeeded/failed transitions, plus python stdout previews + LLM cost). EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the executions row tracks lifecycle even for `agent_invoke`-only routines that have no wrapper Lambda.
+- Schedules: `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS Scheduler; `job-trigger` fires the wakeup or routine StartExecution.
+- Webhooks: `webhooks` table; `webhooks` handler authenticates the public endpoint and routes the payload.
+
+`rate()` schedules treat the cadence as creation-time + interval, not wall-clock-aligned — a `rate(1 hour)` job created at 09:23 fires at 10:23, 11:23, … rather than on the hour. Use `cron()` for wall-clock alignment. The Schedule create form steers operators toward `cron()` for this reason.
+
+User-initiated create and update Lambda invokes use `RequestResponse` so errors surface synchronously — no fire-and-forget paths.
 
 ## Related pages
 
-- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including system-agent workspace reviews.
-- [Threads](/applications/admin/threads/) — the conversation surface for agent runs, including those triggered by automations.
-- [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — the underlying file-and-event substrate that automations and other entry points feed into.
-- [Scheduled and Event-driven Automations (concept)](/concepts/automations/scheduled-and-event-driven/) — the broader concept doc on how scheduled work fits into the platform.
+- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including routine `inbox_approval` waits.
+- [Threads](/applications/admin/threads/) — the conversation surface for agent runs that aren't routine-driven.
+- [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) — the concept doc covering recipes, ASL, the chat builder, and how step events become the run-detail graph.
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedules and event triggers feed routines and agent invocations.

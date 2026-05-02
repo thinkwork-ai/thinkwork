@@ -1,123 +1,154 @@
 ---
 title: Routines and Execution Model
-description: Multi-step automations backed by AWS Step Functions — how agent invocations chain with tool calls and human-in-the-loop waits, how retries and failures propagate, and how every step lands back on the same AUTO- thread.
+description: Multi-step automations as AWS Step Functions state machines authored from a chat session that emits ASL through the v0 recipe catalog. How recipes compose, how publishing versions a routine, how human-in-the-loop pauses execution on a task token, and how every step lands as a row in routine_step_events.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-A single "invoke the agent with this prompt" is the simplest automation. Many useful automations are multi-step: fetch data, classify it, draft responses, wait for human approval, act on the results. ThinkWork calls these **routines**, and they're backed by AWS Step Functions state machines. Routines are how the harness's scheduled-trigger surface scales beyond single-turn work — and where the **Reliability** operating guarantee lives in concrete form: each step is independently observable, retriable, and auditable, with Step Functions providing the durable execution substrate that survives Lambda timeouts, intermediate failures, and human-in-the-loop pauses.
+A routine is a multi-step automation backed by an AWS Step Functions state machine. The state machine itself is an Amazon States Language (ASL) document the chat builder agent emits — operators describe what they want in natural language ("fetch overnight email, classify each, draft urgent replies, require approval before sending"), the agent composes the steps from a small catalog of recipes, and the `publishRoutineVersion` mutation validates the ASL and provisions a new state-machine version. There is no visual builder; ASL is the only authoring format, and the chat session is the only authoring surface today.
 
-The design goal for routines is that each step is independently observable, retriable, and auditable — while still belonging to one coherent run that lands in one `AUTO-` thread.
+The design goal is that each step is independently observable, retriable, and auditable, while still belonging to one coherent run that lands on one `routine_executions` row with a graph the operator watches in real time.
 
-## The execution model
+## The recipe catalog
 
-Every routine is a Step Functions state machine. States can be:
+A routine is composed from a small fixed vocabulary of "recipes" — the v0 catalog. The chat builder is scoped to these ids; the runtime executes them; the operator-facing run graph names each step by recipe. The catalog is intentionally small so the surface area stays human-readable:
 
-- **Agent invocations** — call AgentCore with a prompt, wait for the response, continue.
-- **Tool invocations** — call a specific tool or connector directly (not through an agent).
-- **Branching** — `Choice` states that route based on prior output.
-- **Waits** — `Wait` states or the human-in-the-loop pattern via the Inbox.
-- **Parallel fan-out** — `Map` states that run the same step against many inputs.
-- **Failure handlers** — `Catch` blocks that route failures to retry logic or explicit error states.
+| Recipe | Purpose |
+|---|---|
+| `http_request` | Generic outbound HTTP. Connectors that don't have a dedicated recipe yet flow through this. |
+| `aurora_query` | Read from the tenant's Aurora schema. |
+| `transform_json` | JSONata expression to reshape data between steps. |
+| `set_variable` | Bind a named value into the SFN execution context for downstream steps. |
+| `slack_send` | Post a message via the tenant's Slack OAuth app. |
+| `email_send` | Send via the SES path. |
+| `inbox_approval` | Pause execution on an SFN task token; surface an inbox item; resume when the operator decides. The HITL primitive. |
+| `python` | Run user-supplied Python in an AgentCore code-interpreter sandbox with explicit env-var allowlist. The escape hatch when no recipe covers the work. |
+| `agent_invoke` | Direct call into AgentCore — runs a configured agent with a configured prompt as one step. |
+| `tool_invoke` | Direct call into a single MCP tool the tenant has installed. |
+| `routine_invoke` | Compose another routine as a step. |
+| `choice` | ASL `Choice` state — branch on prior output. |
+| `wait` | ASL `Wait` state — durable pause. |
+| `map` | ASL `Map` state — fan out across an iterable. |
+| `sequence` | Linear group of steps that share a parent label. |
+| `fail` | Explicit failure terminal state. |
 
-Step Functions handles the state transitions, retries, timeouts, and dead-letter behavior. ThinkWork provides the integration layer: every state's output becomes the next state's input, and every agent-invocation state threads through the same thread + memory system as interactive chat.
+Each catalog entry has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. New recipes are added by extending the catalog at `packages/api/src/lib/routines/recipe-catalog.ts`.
 
-## A worked example
+## Authoring: the chat builder
 
-Consider a real routine: "process every new customer support email that arrived overnight."
+Operators describe a routine in natural language. The chat builder agent is scoped to the recipe catalog (injected at session start from `tenantToolInventory`) and emits ASL through the `publishRoutineVersion` tool call. Two-phase flow:
+
+1. **Design.** The agent and operator iterate on the step list in plain prose. The agent recognizes HITL phrases ("require approval before…", "pause for review", "ask before sending") and inserts an `inbox_approval` step before the gated action.
+2. **Build.** The operator clicks Build. The agent makes one tool call: `publishRoutineVersion({ asl, markdownSummary, stepManifest })`. The validator runs server-side; on rejection the error feeds back into the chat session and the agent retries up to 3 times. After 3 failures the agent surfaces "I'm having trouble building this routine end-to-end — let's break it into smaller steps."
+
+The same prompt and contract apply to mobile and admin chat surfaces — the prompt module is shared, and the `publishRoutineVersion` mutation is the only path for emitting ASL into the runtime.
+
+## Publishing and versioning
+
+`publishRoutineVersion` does five things atomically:
+
+1. **Validates the ASL** against AWS Step Functions' `ValidateStateMachineDefinition` plus a recipe-aware linter that confirms every state's recipe id is in the catalog and every state's arguments match the recipe's JSON Schema.
+2. **Calls SFN `UpdateStateMachine`** with the new ASL, then `PublishStateMachineVersion` to mint an immutable versioned ARN.
+3. **Inserts a `routine_asl_versions` row** capturing the canonical ASL JSON, the agent-authored markdown summary, the structured step manifest, the version ARN, and the version number.
+4. **Updates the alias** so it points at the new version. Existing in-flight executions finish on whichever version they started on; new triggers run the new version.
+5. **Records `alias_was_pointing`** as audit so an operator can roll back by re-publishing a prior version's ASL.
+
+There is no "edit a routine without publishing" path. ASL is the source of truth; the markdown summary is regenerated alongside the ASL on every publish.
+
+## Triggering an execution
+
+Three entry points all converge on `triggerRoutineRun` (GraphQL) or its REST equivalent:
+
+- **Manual** — operator clicks "Run Now" on the routine detail page.
+- **Schedule** — `scheduled_jobs` row with `trigger_type = 'routine_schedule'` or `'routine_one_time'`; `job-trigger` Lambda calls `triggerRoutineRun`.
+- **Webhook** — public webhook endpoint with `target_type = 'routine'`; the webhook handler calls `triggerRoutineRun`.
+- **Agent self-stamp** — the `routine_invoke` MCP tool (Phase C U11; gated behind `ROUTINES_AGENT_TOOLS_ENABLED`) lets a Strands agent invoke a routine it owns or that is `tenant_shared`.
+
+`triggerRoutineRun` does three things: SFN `StartExecution` against the routine's alias ARN, insert a `routine_executions` row keyed on the SFN execution ARN, and return the row to the caller. The pre-emptive insert means the run-detail page has a row to render before the first step event lands.
+
+## What runs at execution time
+
+Step Functions handles state transitions, retries, timeouts, and dead-letter routing. ThinkWork provides the integration layer: every state's output becomes the next state's input, callbacks ingest step lifecycle events into `routine_step_events`, and the EventBridge bridge populates the `routine_executions.status` field in real time.
+
+For each recipe type:
+
+- **`python`** is wrapped by the `routine-task-python` Lambda. It starts an AgentCore code-interpreter session, runs the user code with an env-var allowlist, captures stdout/stderr to S3 with a 4KB inline preview, and stops the session in a finally-equivalent block. The wrapper POSTs step events at status=running before sandbox invoke and status=succeeded|failed after, with the S3 URIs and preview embedded in the event row.
+- **`agent_invoke`** uses Step Functions' direct `aws-sdk:bedrockagentcore:invokeAgentRuntime` integration — no wrapper Lambda. The EventBridge state-change rule is the only path for surfacing per-step status to `routine_step_events` for these states.
+- **`inbox_approval`** uses Step Functions' `.waitForTaskToken` integration. The Task invokes `routine-approval-callback` which inserts an `inbox_items` row plus a `routine_approval_tokens` row holding the task token. When the operator decides via `decideInboxItem`, the `routine-approval-bridge` conditional-UPDATEs the token row (consume-once invariant via partial UNIQUE index) and invokes `routine-resume` to send `SendTaskSuccess` or `SendTaskFailure`.
+- **All other recipes** map to native ASL primitives or direct AWS SDK integrations.
+
+A worked example: "process every overnight customer email."
 
 ```
 Start
   │
   ▼
-FetchOvernightEmails  (Lambda: queries the email system for unread items)
+FetchOvernightEmails  (http_request: query email connector)
   │
   ▼
-ForEachEmail  (Map state, concurrency=5)
-  ├─ ClassifyEmail       (Agent: "is this urgent, routine, or spam?")
+ForEachEmail  (map, concurrency=5)
+  ├─ ClassifyEmail       (agent_invoke: "is this urgent, routine, or spam?")
   ├─ Choice: isUrgent?
-  │    ├─ Yes → DraftUrgentReply  (Agent: generate a tight, pre-approved reply)
+  │    ├─ Yes → DraftUrgentReply  (agent_invoke: generate a tight reply)
   │    │         │
   │    │         ▼
-  │    │      RequestApproval     (Inbox wait: operator approves or revises)
+  │    │      RequestApproval     (inbox_approval: operator decides)
   │    │         │
   │    │         ▼
-  │    │      SendReply           (Tool: post the reply via email connector)
-  │    └─ No  → LogAndSkip        (just record that it was seen)
-  │
-  ▼
-RecordRunMetrics  (Lambda: write summary to the routine's AUTO thread)
+  │    │      SendReply           (slack_send or email_send)
+  │    └─ No  → LogAndSkip        (set_variable: record seen)
   │
   ▼
 End
 ```
 
-Several things are worth noticing:
+Notice: every agent invocation is a discrete state with its own input, output, and retry policy, not bundled into one giant "run the agent" step. Parallelism is explicit (the `map` state). HITL pauses on the `inbox_approval` recipe and resumes via task token. Failure trapping is per-step.
 
-- **Every agent invocation is a state.** They're not bundled into one giant "run the agent" step — each invocation is discrete, with its own input, output, and retry policy.
-- **The `RequestApproval` state uses the Inbox.** A Step Functions "Task Token" is issued and persisted as an inbox item; an operator approving the item resumes the state machine with their decision.
-- **Parallelism is explicit.** The `Map` state fans out up to 5 emails at a time; this is a state-machine-level parallelism guarantee, not an in-agent one.
-- **Failures are trapped at each step.** If `ClassifyEmail` fails three times in a row for one email, that email's branch fails but the others keep going.
+## Observability: the run-detail surface
 
-## The AUTO thread
+Each routine execution has three complementary views:
 
-The whole run has one `AUTO-` thread attached. Every agent-invocation state writes into that thread's turn log — so a single thread contains the Classify turn, the Draft turn, the approval event, and the send result. An operator debugging "why did this routine do the wrong thing on email 3?" opens that thread and walks the turn timeline.
+1. **The run-detail UI** — `/automations/routines/:routineId/executions/:executionId`. Combines an `ExecutionGraph` (vertical-stepper visualization with status icons), a `StepDetailPanel` (input/output/cost/duration on click), and a `MarkdownSummary` (the agent-authored summary with HITL anchor links that jump the graph). Polls every 5s while non-terminal. The graph derives nodes from the step manifest backing this specific execution (resolved via `RoutineExecution.aslVersion`); falls back to deriving from `routine_step_events` when the manifest isn't fetchable.
+2. **The Step Functions execution console** — `aws stepfunctions describe-execution` and the AWS console. State-by-state status, input/output per state, retry counts. The right view for state-machine-level failures (a step timed out, retries exhausted, a branch routed wrong).
+3. **CloudWatch metrics** — aggregate health across many runs. The right view for tracking routine health over weeks.
 
-For routines with very high fan-out (the Map state processes 10,000 items), ThinkWork supports a "run-per-item" mode where each Map iteration gets its own child `AUTO-` thread with the parent routine's thread as its `parentThreadId`. This keeps any one thread from drowning in a thousand turns.
+The ExecutionGraph + step events are the operator's primary surface; the SFN console is reserved for the rare state-machine-level debugging that needs the full SFN history.
 
 ## Retries and failure handling
 
 Each state can configure:
 
-- **Retry policy.** Intervals, back-off multiplier, max attempts, which error categories to retry on.
-- **Catch handlers.** Route specific errors to fallback states (e.g., a classification failure routes to a "human classifies this one" state rather than failing the whole run).
-- **Timeouts.** Per-state timeout beyond which the state errors out.
-- **Dead-letter.** Failed executions can route to an SQS dead-letter queue for manual replay.
+- **Retry policy** — intervals, back-off multiplier, max attempts, which error categories.
+- **Catch handlers** — route specific errors to fallback states (e.g., classification failure routes to a "human classifies this one" state rather than failing the whole run).
+- **Timeouts** — per-state.
+- **Dead-letter** — failed executions can route to SQS for manual replay.
 
-ThinkWork's Terraform module ships opinionated defaults for these — retries on `ThrottlingException` and `ServiceUnavailable`, no retry on `AccessDeniedException`, 15-minute per-state timeout — but each routine can override them per step.
+The recipe catalog ships opinionated defaults (retries on `States.TaskFailed` with backoff, no retry on `States.Permissions`, 15-minute per-state timeout); routines can override per step.
 
-## Where routines are defined
+## Visibility model
 
-Two authoring surfaces:
-
-- **Admin app Routines UI.** A visual builder for common patterns (the support-email example above would be authored here). Under the hood it generates an Amazon States Language (ASL) document and provisions a Step Functions state machine.
-- **IaC.** Complex routines with custom Lambda steps or unusual branching are authored directly as Terraform modules, versioning the ASL JSON in the repo.
-
-The IaC path is the right choice when the routine is going to live for years and needs code-review discipline. The UI path is the right choice for operational flows that will change quarterly.
-
-## Observability
-
-Three complementary views of a routine run:
-
-1. **The AUTO thread** — narrative timeline with every agent turn and every operator decision.
-2. **The Step Functions execution** — state-by-state status, input/output per state, retry counts, duration per state. Open via the admin app's Runs surface or the AWS console.
-3. **CloudWatch metrics** — aggregate health across many runs (success rate, p95 duration per state, retry rate, dead-letter count).
-
-For debugging one bad run, the thread + execution views are enough. For tracking routine health over weeks, CloudWatch is the one to watch.
-
-<Aside type="tip">
-  If a routine is failing intermittently, check the state-level retry metrics before the agent's output. A state that's retrying on every invocation means the upstream tool or connector is flaky, not that the agent is broken.
-</Aside>
+A routine is either `agent_private` (only the `owning_agent_id` agent can invoke it) or `tenant_shared` (any agent in the tenant). The `routine_invoke` MCP tool enforces this via the `checkRoutineVisibility` helper before calling `triggerRoutineRun`. The split is between `agent_id` (the primary execution agent — what the routine runs as) and `owning_agent_id` (the authoring/stewardship agent — who can invoke it). Most agent-stamped routines have both pointing at the same agent; tenant-shared routines have neither set.
 
 ## Known limits
 
-- **No pause-and-edit.** Once a Step Functions execution starts, you can't edit its state-machine definition mid-run. The ASL version running is the version that started.
-- **No backward compatibility guarantee on routine edits.** Editing a routine in the admin app publishes a new ASL version. In-flight executions finish on the old version; new invocations use the new. If a step is removed, any execution waiting on that step fails.
-- **Map state max concurrency is 40.** Step Functions limits inline `Map` concurrency. For higher fan-out, fan through SQS to independent state machines.
-- **Human-in-the-loop waits have a 1-year max.** A task-token-based Inbox wait can live up to 1 year, but not beyond. Longer waits need periodic re-issue.
+- **No pause-and-edit.** Once an SFN execution starts, you can't edit its state-machine definition mid-run. The ASL version running is the version that started.
+- **Editing a routine publishes a new version.** In-flight executions finish on the old version; new triggers use the new. If a step is removed and an in-flight execution waits on that step, it fails (rare in practice, since publishes happen between executions for short routines).
+- **Map state max concurrency is 40** for inline `Map` (Step Functions limit). For higher fan-out, fan through SQS to independent state machines.
+- **HITL waits have a 1-year max.** Task-token-based `inbox_approval` waits can live up to 1 year per Step Functions; longer waits need periodic re-issue.
+- **Step manifest is per-version, not per-execution.** Today the run-detail page resolves the manifest via the version ARN that backed the execution, so each execution renders against its own shape; if a new publish lands mid-execution, the old execution still renders the old manifest.
+- **Live updates use polling, not subscription.** The 5s poll is good enough at v1 scale; AppSync `OnRoutineExecutionUpdated` is a follow-up.
+
+## Where the data lives
+
+- `routines` — routine definitions (one row per routine, regardless of how many versions).
+- `routine_asl_versions` — version history (one row per `publishRoutineVersion`).
+- `routine_executions` — execution history (one row per SFN execution).
+- `routine_step_events` — per-step event log (multiple rows per execution; transitions, python stdout previews, LLM cost).
+- `routine_approval_tokens` — HITL task tokens, with a partial UNIQUE index `(execution_id, node_id) WHERE consumed=false` enforcing single-pending-approval-per-node.
 
 ## Related pages
 
 - [Automations (overview)](/concepts/automations/) — the umbrella
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the entry points that start routines
-- [Admin: Automations](/applications/admin/automations/) — the operator UI
-- [Admin: Inbox](/applications/admin/inbox/) — the human-in-the-loop approval surface
-- [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — AUTO threads and parent/child threading
-
-## Under the hood
-
-Routines are backed by AWS Step Functions state machines provisioned through the ThinkWork Terraform module. Routine definitions (the state-machine ASL) are stored in the operational database; a publisher reconciles stored ASL with the deployed state machine when routines are edited.
-
-Human-in-the-loop waits use Step Functions task tokens, persisted on the Inbox item. Resolving the inbox item releases the token and resumes the execution.
-
-For the operator view of routines, see [Admin: Automations](/applications/admin/automations/). For the inbox surface that handles human-in-the-loop approvals, see [Admin: Inbox](/applications/admin/inbox/).
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — entry points that start routines
+- [Admin: Automations](/applications/admin/automations/) — operator UI for routines, schedules, webhooks
+- [Admin: Inbox](/applications/admin/inbox/) — HITL approval surface (`inbox_approval` recipe lands here)
