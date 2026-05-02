@@ -15,7 +15,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { Link } from "@tanstack/react-router";
-import { Play, Bot, Clock, Repeat, Webhook, RefreshCw } from "lucide-react";
+import {
+  ArrowRight,
+  Play,
+  Bot,
+  Clock,
+  Repeat,
+  Webhook,
+  RefreshCw,
+} from "lucide-react";
 import { RoutineExecutionsListQuery } from "@/lib/graphql-queries";
 import { RoutineExecutionStatus } from "@/gql/graphql";
 import { Button } from "@/components/ui/button";
@@ -100,6 +108,7 @@ export interface ExecutionListProps {
   onStatusFilterChange: (filter: StatusFilterId) => void;
   /** Optional CTA shown in the empty state. */
   emptyCta?: React.ReactNode;
+  refreshKey?: number;
 }
 
 function triggerIcon(source: string) {
@@ -142,6 +151,7 @@ export function ExecutionList({
   statusFilter,
   onStatusFilterChange,
   emptyCta,
+  refreshKey,
 }: ExecutionListProps) {
   const enumStatus = statusFilterToEnum(statusFilter);
 
@@ -169,6 +179,11 @@ export function ExecutionList({
     requestPolicy: "cache-and-network",
   });
 
+  useEffect(() => {
+    if (refreshKey == null) return;
+    refetch({ requestPolicy: "network-only" });
+  }, [refreshKey, refetch]);
+
   const rows = useMemo<ExecutionRow[]>(
     () =>
       (queryResult.data?.routineExecutions ?? []).map((r) => ({
@@ -193,7 +208,10 @@ export function ExecutionList({
   useEffect(() => {
     if (!hasNonTerminal) return;
     const tick = () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
       refetch({ requestPolicy: "network-only" });
@@ -245,7 +263,10 @@ export function ExecutionList({
           title="Refresh"
         >
           <RefreshCw
-            className={cn("h-3.5 w-3.5", queryResult.fetching && "animate-spin")}
+            className={cn(
+              "h-3.5 w-3.5",
+              queryResult.fetching && "animate-spin",
+            )}
           />
         </Button>
       </div>
@@ -293,10 +314,11 @@ export function ExecutionList({
                     <span className="text-xs text-muted-foreground w-16 shrink-0 text-right tabular-nums">
                       {formatLlmCost(row.totalLlmCostUsdCents)}
                     </span>
-                    <StatusBadge
-                      status={row.status.toLowerCase()}
-                      size="sm"
-                    />
+                    <StatusBadge status={row.status.toLowerCase()} size="sm" />
+                    <span className="hidden items-center gap-1 text-xs text-muted-foreground md:inline-flex">
+                      View output
+                      <ArrowRight className="h-3 w-3" />
+                    </span>
                   </Link>
                 </li>
               ))}

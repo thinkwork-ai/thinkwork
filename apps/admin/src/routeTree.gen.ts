@@ -96,7 +96,7 @@ import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from 
 import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/_tenant/evaluations/studio/edit.$testCaseId";
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId";
 import { Route as AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/_tenant/automations/system-workflows/$workflowId.runs.$runId";
-import { Route as AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/_tenant/automations/routines/$routineId.executions.$executionId";
+import { Route as AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/_tenant/automations/routines/$routineId_.executions.$executionId";
 
 const SignInRoute = SignInRouteImport.update({
   id: "/sign-in",
@@ -601,9 +601,9 @@ const AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRoute =
 const AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute =
   AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRouteImport.update(
     {
-      id: "/executions/$executionId",
-      path: "/executions/$executionId",
-      getParentRoute: () => AuthedTenantAutomationsRoutinesRoutineIdRoute,
+      id: "/automations/routines/$routineId_/executions/$executionId",
+      path: "/automations/routines/$routineId/executions/$executionId",
+      getParentRoute: () => AuthedTenantRoute,
     } as any,
   );
 
@@ -670,7 +670,7 @@ export interface FileRoutesByFullPath {
   "/agents/$agentId/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
   "/agents/$agentId/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
   "/agents/$agentId/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
-  "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren;
+  "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/automations/system-workflows/$workflowId": typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRouteWithChildren;
@@ -755,7 +755,7 @@ export interface FileRoutesByTo {
   "/agents/$agentId/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
   "/agents/$agentId/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
   "/agents/$agentId/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
-  "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren;
+  "/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/automations/system-workflows/$workflowId": typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRouteWithChildren;
@@ -846,7 +846,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/agents/$agentId_/sub-agents": typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
   "/_authed/_tenant/agents/$agentId_/workspace": typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
   "/_authed/_tenant/agents/$agentId_/workspaces": typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
-  "/_authed/_tenant/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren;
+  "/_authed/_tenant/automations/routines/$routineId": typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   "/_authed/_tenant/automations/routines/new": typeof AuthedTenantAutomationsRoutinesNewRoute;
   "/_authed/_tenant/automations/schedules/$scheduledJobId": typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   "/_authed/_tenant/automations/system-workflows/$workflowId": typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRouteWithChildren;
@@ -868,7 +868,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
   "/_authed/_tenant/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
   "/_authed/_tenant/agents/$agentId_/scheduled-jobs/": typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
-  "/_authed/_tenant/automations/routines/$routineId/executions/$executionId": typeof AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute;
+  "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId": typeof AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/_authed/_tenant/automations/system-workflows/$workflowId/runs/$runId": typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRoute;
 }
 export interface FileRouteTypes {
@@ -1133,7 +1133,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId"
     | "/_authed/_tenant/evaluations/studio/edit/$testCaseId"
     | "/_authed/_tenant/agents/$agentId_/scheduled-jobs/"
-    | "/_authed/_tenant/automations/routines/$routineId/executions/$executionId"
+    | "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId"
     | "/_authed/_tenant/automations/system-workflows/$workflowId/runs/$runId";
   fileRoutesById: FileRoutesById;
 }
@@ -1758,12 +1758,12 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRouteImport;
       parentRoute: typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRoute;
     };
-    "/_authed/_tenant/automations/routines/$routineId/executions/$executionId": {
-      id: "/_authed/_tenant/automations/routines/$routineId/executions/$executionId";
-      path: "/executions/$executionId";
+    "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId": {
+      id: "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId";
+      path: "/automations/routines/$routineId/executions/$executionId";
       fullPath: "/automations/routines/$routineId/executions/$executionId";
       preLoaderRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRouteImport;
-      parentRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
+      parentRoute: typeof AuthedTenantRoute;
     };
   }
 }
@@ -1860,21 +1860,6 @@ const AuthedTenantKnowledgeRouteWithChildren =
     AuthedTenantKnowledgeRouteChildren,
   );
 
-interface AuthedTenantAutomationsRoutinesRoutineIdRouteChildren {
-  AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute;
-}
-
-const AuthedTenantAutomationsRoutinesRoutineIdRouteChildren: AuthedTenantAutomationsRoutinesRoutineIdRouteChildren =
-  {
-    AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute:
-      AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute,
-  };
-
-const AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren =
-  AuthedTenantAutomationsRoutinesRoutineIdRoute._addFileChildren(
-    AuthedTenantAutomationsRoutinesRoutineIdRouteChildren,
-  );
-
 interface AuthedTenantAutomationsSystemWorkflowsWorkflowIdRouteChildren {
   AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRoute: typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRunsRunIdRoute;
 }
@@ -1935,7 +1920,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdSubAgentsRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRoute;
   AuthedTenantAgentsAgentIdWorkspaceRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRoute;
   AuthedTenantAgentsAgentIdWorkspacesRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRoute;
-  AuthedTenantAutomationsRoutinesRoutineIdRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren;
+  AuthedTenantAutomationsRoutinesRoutineIdRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdRoute;
   AuthedTenantAutomationsRoutinesNewRoute: typeof AuthedTenantAutomationsRoutinesNewRoute;
   AuthedTenantAutomationsSchedulesScheduledJobIdRoute: typeof AuthedTenantAutomationsSchedulesScheduledJobIdRoute;
   AuthedTenantAutomationsSystemWorkflowsWorkflowIdRoute: typeof AuthedTenantAutomationsSystemWorkflowsWorkflowIdRouteWithChildren;
@@ -1951,6 +1936,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
   AuthedTenantEvaluationsStudioEditTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
   AuthedTenantAgentsAgentIdScheduledJobsIndexRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute;
+  AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute;
 }
 
 const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
@@ -2008,7 +1994,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsAgentIdWorkspacesRoute:
     AuthedTenantAgentsAgentIdWorkspacesRoute,
   AuthedTenantAutomationsRoutinesRoutineIdRoute:
-    AuthedTenantAutomationsRoutinesRoutineIdRouteWithChildren,
+    AuthedTenantAutomationsRoutinesRoutineIdRoute,
   AuthedTenantAutomationsRoutinesNewRoute:
     AuthedTenantAutomationsRoutinesNewRoute,
   AuthedTenantAutomationsSchedulesScheduledJobIdRoute:
@@ -2038,6 +2024,8 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
     AuthedTenantEvaluationsStudioEditTestCaseIdRoute,
   AuthedTenantAgentsAgentIdScheduledJobsIndexRoute:
     AuthedTenantAgentsAgentIdScheduledJobsIndexRoute,
+  AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute:
+    AuthedTenantAutomationsRoutinesRoutineIdExecutionsExecutionIdRoute,
 };
 
 const AuthedTenantRouteWithChildren = AuthedTenantRoute._addFileChildren(

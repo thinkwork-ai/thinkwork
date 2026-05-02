@@ -26,7 +26,10 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ExecutionGraph, type StepEventLite } from "@/components/routines/ExecutionGraph";
+import {
+  ExecutionGraph,
+  type StepEventLite,
+} from "@/components/routines/ExecutionGraph";
 import {
   StepDetailPanel,
   type StepEventDetail,
@@ -35,7 +38,7 @@ import { MarkdownSummary } from "@/components/routines/MarkdownSummary";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute(
-  "/_authed/_tenant/automations/routines/$routineId/executions/$executionId",
+  "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId",
 )({
   component: ExecutionDetailPage,
 });
@@ -134,24 +137,26 @@ function ExecutionDetailPage() {
     retryCount: ev.retryCount,
   }));
 
-  const stepEventsDetail: StepEventDetail[] = execution.stepEvents.map((ev) => ({
-    id: ev.id,
-    nodeId: ev.nodeId,
-    recipeType: ev.recipeType,
-    status: ev.status,
-    startedAt: ev.startedAt ?? null,
-    finishedAt: ev.finishedAt ?? null,
-    inputJson: ev.inputJson ?? null,
-    outputJson: ev.outputJson ?? null,
-    errorJson: ev.errorJson ?? null,
-    llmCostUsdCents: ev.llmCostUsdCents ?? null,
-    retryCount: ev.retryCount,
-    stdoutS3Uri: ev.stdoutS3Uri ?? null,
-    stderrS3Uri: ev.stderrS3Uri ?? null,
-    stdoutPreview: ev.stdoutPreview ?? null,
-    truncated: ev.truncated,
-    createdAt: ev.createdAt,
-  }));
+  const stepEventsDetail: StepEventDetail[] = execution.stepEvents.map(
+    (ev) => ({
+      id: ev.id,
+      nodeId: ev.nodeId,
+      recipeType: ev.recipeType,
+      status: ev.status,
+      startedAt: ev.startedAt ?? null,
+      finishedAt: ev.finishedAt ?? null,
+      inputJson: ev.inputJson ?? null,
+      outputJson: ev.outputJson ?? null,
+      errorJson: ev.errorJson ?? null,
+      llmCostUsdCents: ev.llmCostUsdCents ?? null,
+      retryCount: ev.retryCount,
+      stdoutS3Uri: ev.stdoutS3Uri ?? null,
+      stderrS3Uri: ev.stderrS3Uri ?? null,
+      stdoutPreview: ev.stdoutPreview ?? null,
+      truncated: ev.truncated,
+      createdAt: ev.createdAt,
+    }),
+  );
 
   const eventsForSelected = selectedNodeId
     ? stepEventsDetail

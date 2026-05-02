@@ -10,7 +10,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  Trash2,
+} from "lucide-react";
 
 export type RoutineConfigField = {
   key: string;
@@ -45,6 +51,8 @@ interface RoutineStepConfigEditorProps {
   onMoveStep?: (nodeId: string, direction: "up" | "down") => void;
   onRemoveStep?: (nodeId: string) => void;
   fieldErrors?: Record<string, string>;
+  selectedNodeId?: string | null;
+  onSelectStep?: (nodeId: string) => void;
 }
 
 export function RoutineStepConfigEditor({
@@ -55,110 +63,162 @@ export function RoutineStepConfigEditor({
   onMoveStep,
   onRemoveStep,
   fieldErrors = {},
+  selectedNodeId,
+  onSelectStep,
 }: RoutineStepConfigEditorProps) {
   return (
-    <div className="divide-y divide-border/70">
-      {steps.map((step, index) => (
-        <div
-          key={step.nodeId}
-          className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]"
-        >
-          <div className="min-w-0">
-            <div className="flex items-start gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                {index + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                {onLabelChange ? (
-                  <Input
-                    aria-label={`${step.recipeName} step label`}
-                    value={step.label}
-                    onChange={(event) =>
-                      onLabelChange(step.nodeId, event.target.value)
-                    }
-                    className="h-8 font-medium"
-                  />
-                ) : (
-                  <div className="truncate text-sm font-medium">
-                    {step.label}
+    <div className="space-y-3 p-3">
+      {steps.map((step, index) => {
+        const stepErrors = step.configFields.filter(
+          (field) => fieldErrors[fieldKey(step.nodeId, field.key)],
+        ).length;
+        const editableCount = step.configFields.filter(
+          (field) => field.editable,
+        ).length;
+        const configuredCount = step.configFields.filter((field) =>
+          (fieldValues[fieldKey(step.nodeId, field.key)] ?? "").trim(),
+        ).length;
+        const selected = selectedNodeId === step.nodeId;
+
+        return (
+          <article
+            key={step.nodeId}
+            className={cn(
+              "grid gap-4 rounded-lg border px-4 py-4 transition-colors lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]",
+              selected
+                ? "border-ring bg-muted/35 shadow-sm"
+                : "border-border/70 bg-background/40 hover:bg-muted/20",
+            )}
+            onFocusCapture={() => onSelectStep?.(step.nodeId)}
+          >
+            <div className="min-w-0">
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => onSelectStep?.(step.nodeId)}
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selected
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-label={`Select step ${index + 1}: ${step.label}`}
+                >
+                  {index + 1}
+                </button>
+                <div className="min-w-0 flex-1">
+                  {onLabelChange ? (
+                    <Input
+                      aria-label={`${step.recipeName} step label`}
+                      value={step.label}
+                      onChange={(event) =>
+                        onLabelChange(step.nodeId, event.target.value)
+                      }
+                      className="h-8 font-medium"
+                    />
+                  ) : (
+                    <div className="truncate text-sm font-medium">
+                      {step.label}
+                    </div>
+                  )}
+                  <div className="truncate text-xs text-muted-foreground">
+                    {step.recipeName}
                   </div>
-                )}
-                <div className="truncate text-xs text-muted-foreground">
-                  {step.recipeName}
+                  <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                    {stepErrors > 0 ? (
+                      <Badge className="border-transparent bg-destructive/10 text-destructive">
+                        <AlertCircle className="h-3 w-3" />
+                        {stepErrors} {stepErrors === 1 ? "issue" : "issues"}
+                      </Badge>
+                    ) : editableCount > 0 ? (
+                      <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Configured
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">No config</Badge>
+                    )}
+                    {editableCount > 0 && (
+                      <Badge variant="outline">
+                        {configuredCount}/{step.configFields.length} fields
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "font-mono",
-                  step.recipeId === "email_send" &&
-                    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                )}
-              >
-                {step.recipeId}
-              </Badge>
-              {onMoveStep && (
-                <>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={`Move ${step.label} up`}
-                    disabled={index === 0}
-                    onClick={() => onMoveStep(step.nodeId, "up")}
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={`Move ${step.label} down`}
-                    disabled={index === steps.length - 1}
-                    onClick={() => onMoveStep(step.nodeId, "down")}
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </Button>
-                </>
-              )}
-              {onRemoveStep && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  aria-label={`Remove ${step.label}`}
-                  onClick={() => onRemoveStep(step.nodeId)}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "font-mono",
+                    step.recipeId === "email_send" &&
+                      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  )}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                  {step.recipeId}
+                </Badge>
+                {onMoveStep && (
+                  <>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Move ${step.label} up`}
+                      disabled={index === 0}
+                      onClick={() => onMoveStep(step.nodeId, "up")}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Move ${step.label} down`}
+                      disabled={index === steps.length - 1}
+                      onClick={() => onMoveStep(step.nodeId, "down")}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
+                {onRemoveStep && (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label={`Remove ${step.label}`}
+                    onClick={() => onRemoveStep(step.nodeId)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              {step.configFields.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-sm text-muted-foreground md:col-span-2">
+                  No configurable fields.
+                </div>
+              ) : (
+                step.configFields.map((field) => (
+                  <ConfigFieldInput
+                    key={field.key}
+                    step={step}
+                    field={field}
+                    value={fieldValues[fieldKey(step.nodeId, field.key)] ?? ""}
+                    error={fieldErrors[fieldKey(step.nodeId, field.key)]}
+                    changed={fieldChanged(step.nodeId, field, fieldValues)}
+                    onChange={(value) =>
+                      onFieldChange(fieldKey(step.nodeId, field.key), value)
+                    }
+                  />
+                ))
               )}
             </div>
-          </div>
-
-          <div className="grid min-w-0 gap-3 md:grid-cols-2">
-            {step.configFields.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-sm text-muted-foreground md:col-span-2">
-                No configurable fields.
-              </div>
-            ) : (
-              step.configFields.map((field) => (
-                <ConfigFieldInput
-                  key={field.key}
-                  step={step}
-                  field={field}
-                  value={fieldValues[fieldKey(step.nodeId, field.key)] ?? ""}
-                  error={fieldErrors[fieldKey(step.nodeId, field.key)]}
-                  onChange={(value) =>
-                    onFieldChange(fieldKey(step.nodeId, field.key), value)
-                  }
-                />
-              ))
-            )}
-          </div>
-        </div>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -168,12 +228,14 @@ function ConfigFieldInput({
   field,
   value,
   error,
+  changed,
   onChange,
 }: {
   step: RoutineConfigStep;
   field: RoutineConfigField;
   value: string;
   error?: string;
+  changed?: boolean;
   onChange: (value: string) => void;
 }) {
   const id = `${step.nodeId}-${field.key}`;
@@ -192,7 +254,7 @@ function ConfigFieldInput({
       htmlFor={id}
       className={cn("block min-w-0", fullWidth && "md:col-span-2")}
     >
-      <span className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+      <span className="mb-1.5 flex min-w-0 items-center gap-2 text-sm font-medium">
         <span>
           {field.label}
           {field.required && (
@@ -205,6 +267,11 @@ function ConfigFieldInput({
           <span className="text-xs font-normal text-muted-foreground">
             Read-only
           </span>
+        )}
+        {changed && field.editable && (
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+            Edited
+          </Badge>
         )}
       </span>
       {control === "select" && field.options?.length ? (
@@ -311,7 +378,8 @@ function fieldChanged(
 ): boolean {
   const key = fieldKey(nodeId, field.key);
   const next = valueForMutation(field, values[key] ?? "");
-  return JSON.stringify(next) !== JSON.stringify(field.value ?? null);
+  const original = valueForMutation(field, stringValue(field.value));
+  return JSON.stringify(next) !== JSON.stringify(original);
 }
 
 function valueForMutation(field: RoutineConfigField, value: string): unknown {

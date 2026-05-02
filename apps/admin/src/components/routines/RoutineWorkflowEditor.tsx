@@ -1,5 +1,11 @@
-import { useMemo, useState } from "react";
-import { Plus, Search, Workflow } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Plus,
+  Search,
+  Workflow,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -45,6 +51,9 @@ export function RoutineWorkflowEditor({
   fieldErrors = {},
 }: RoutineWorkflowEditorProps) {
   const [search, setSearch] = useState("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
+    () => steps[0]?.nodeId ?? null,
+  );
   const filteredRecipes = useMemo(
     () => filterRecipes(recipes, search),
     [recipes, search],
@@ -53,6 +62,29 @@ export function RoutineWorkflowEditor({
     () => groupRecipes(filteredRecipes),
     [filteredRecipes],
   );
+  const issueCount = Object.keys(fieldErrors).length;
+  const configurableFieldCount = steps.reduce(
+    (count, step) => count + step.configFields.length,
+    0,
+  );
+  const configuredFieldCount = steps.reduce(
+    (count, step) =>
+      count +
+      step.configFields.filter((field) =>
+        (fieldValues[fieldKey(step.nodeId, field.key)] ?? "").trim(),
+      ).length,
+    0,
+  );
+
+  useEffect(() => {
+    if (steps.length === 0) {
+      setSelectedNodeId(null);
+      return;
+    }
+    if (!steps.some((step) => step.nodeId === selectedNodeId)) {
+      setSelectedNodeId(steps[0]?.nodeId ?? null);
+    }
+  }, [selectedNodeId, steps]);
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
@@ -146,11 +178,27 @@ export function RoutineWorkflowEditor({
               <Workflow className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold">Workflow</h2>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {steps.length
-                ? `${steps.length} ${steps.length === 1 ? "step" : "steps"}`
-                : "Add recipes to assemble the routine."}
-            </p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+              <Badge variant="secondary">
+                {steps.length} {steps.length === 1 ? "step" : "steps"}
+              </Badge>
+              {configurableFieldCount > 0 && (
+                <Badge variant="outline">
+                  {configuredFieldCount}/{configurableFieldCount} configured
+                </Badge>
+              )}
+              {issueCount > 0 ? (
+                <Badge className="border-transparent bg-destructive/10 text-destructive">
+                  <AlertCircle className="h-3 w-3" />
+                  {issueCount} {issueCount === 1 ? "issue" : "issues"}
+                </Badge>
+              ) : steps.length > 0 ? (
+                <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3 w-3" />
+                  No issues
+                </Badge>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -163,6 +211,8 @@ export function RoutineWorkflowEditor({
             onMoveStep={onMoveStep}
             onRemoveStep={onRemoveStep}
             fieldErrors={fieldErrors}
+            selectedNodeId={selectedNodeId}
+            onSelectStep={setSelectedNodeId}
           />
         ) : (
           <div className="px-4 py-12 text-center">
@@ -207,4 +257,8 @@ function filterRecipes(
 
 function categoryLabel(category: string): string {
   return category.replace(/_/g, " ");
+}
+
+function fieldKey(nodeId: string, key: string): string {
+  return `${nodeId}.${key}`;
 }
