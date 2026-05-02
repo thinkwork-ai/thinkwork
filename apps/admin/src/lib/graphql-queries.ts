@@ -777,6 +777,28 @@ export const PlanRoutineDraftMutation = graphql(`
   }
 `);
 
+export const RoutineRecipeCatalogQuery = graphql(`
+  query RoutineRecipeCatalog($tenantId: ID!) {
+    routineRecipeCatalog(tenantId: $tenantId) {
+      id
+      displayName
+      description
+      category
+      hitlCapable
+      defaultArgs
+      configFields {
+        key
+        label
+        value
+        inputType
+        required
+        editable
+        options
+      }
+    }
+  }
+`);
+
 export const TriggerRoutineRunMutation = graphql(`
   mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
     triggerRoutineRun(routineId: $routineId, input: $input) {

@@ -4,16 +4,21 @@ import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTenant } from "@/context/TenantContext";
 import {
+  RoutineRecipeCatalogQuery,
   RoutineDefinitionQuery,
   UpdateRoutineDefinitionMutation,
 } from "@/lib/graphql-queries";
 import {
-  RoutineStepConfigEditor,
   argsFromStepFields,
-  changedSteps,
   valuesFromSteps,
+  type RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
+import {
+  RoutineWorkflowEditor,
+  type RoutineRecipeCatalogItem,
+} from "./RoutineWorkflowEditor";
 
 interface RoutineDefinitionPanelProps {
   routineId: string;
@@ -24,38 +29,52 @@ export function RoutineDefinitionPanel({
   routineId,
   onPublished,
 }: RoutineDefinitionPanelProps) {
+  const { tenantId } = useTenant();
   const [queryResult, refetch] = useQuery({
     query: RoutineDefinitionQuery,
     variables: { routineId },
     requestPolicy: "cache-and-network",
+  });
+  const [catalogResult] = useQuery({
+    query: RoutineRecipeCatalogQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
   });
   const [updateState, executeUpdate] = useMutation(
     UpdateRoutineDefinitionMutation,
   );
   const definition = queryResult.data?.routineDefinition;
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [steps, setSteps] = useState<RoutineConfigStep[]>([]);
 
   useEffect(() => {
     if (!definition) return;
+    setSteps(definition.steps);
     setFieldValues(valuesFromSteps(definition.steps));
   }, [definition?.versionId]);
 
-  const dirtySteps = useMemo(() => {
+  const originalSnapshot = useMemo(() => {
     if (!definition) return [];
-    return changedSteps(definition.steps, fieldValues);
-  }, [definition, fieldValues]);
+    return stepsForMutation(
+      definition.steps,
+      valuesFromSteps(definition.steps),
+    );
+  }, [definition]);
 
-  const dirty = dirtySteps.length > 0;
+  const editedSnapshot = useMemo(
+    () => stepsForMutation(steps, fieldValues),
+    [fieldValues, steps],
+  );
+
+  const dirty =
+    JSON.stringify(originalSnapshot) !== JSON.stringify(editedSnapshot);
 
   const save = async () => {
     if (!definition || !dirty) return;
     const res = await executeUpdate({
       input: {
         routineId,
-        steps: dirtySteps.map((step) => ({
-          nodeId: step.nodeId,
-          args: argsFromStepFields(step, fieldValues),
-        })),
+        steps: editedSnapshot,
       },
     });
 
@@ -97,6 +116,8 @@ export function RoutineDefinitionPanel({
 
   if (!definition) return null;
 
+  const recipes = catalogResult.data?.routineRecipeCatalog ?? [];
+
   return (
     <section className="mb-5 rounded-lg border border-border/70 bg-card/40">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
@@ -122,13 +143,129 @@ export function RoutineDefinitionPanel({
         </Button>
       </div>
 
-      <RoutineStepConfigEditor
-        steps={definition.steps}
-        fieldValues={fieldValues}
-        onFieldChange={(key, value) =>
-          setFieldValues((current) => ({ ...current, [key]: value }))
-        }
-      />
+      <div className="p-4">
+        <RoutineWorkflowEditor
+          steps={steps}
+          recipes={recipes}
+          fieldValues={fieldValues}
+          onFieldChange={(key, value) =>
+            setFieldValues((current) => ({ ...current, [key]: value }))
+          }
+          onAddRecipe={(recipe) =>
+            setSteps((current) => {
+              const next = [...current, stepFromRecipe(recipe, current)];
+              setFieldValues((values) => mergeFieldValues(next, values));
+              return next;
+            })
+          }
+          onLabelChange={(nodeId, value) =>
+            setSteps((current) =>
+              current.map((step) =>
+                step.nodeId === nodeId ? { ...step, label: value } : step,
+              ),
+            )
+          }
+          onMoveStep={(nodeId, direction) =>
+            setSteps((current) => moveStep(current, nodeId, direction))
+          }
+          onRemoveStep={(nodeId) =>
+            setSteps((current) =>
+              current.filter((step) => step.nodeId !== nodeId),
+            )
+          }
+          catalogLoading={catalogResult.fetching}
+        />
+      </div>
     </section>
   );
+}
+
+function stepsForMutation(
+  steps: RoutineConfigStep[],
+  fieldValues: Record<string, string>,
+): Array<{
+  nodeId: string;
+  recipeId: string;
+  label: string;
+  args: Record<string, unknown>;
+}> {
+  return steps.map((step) => ({
+    nodeId: step.nodeId,
+    recipeId: step.recipeId,
+    label: step.label,
+    args: {
+      ...jsonObject(step.args),
+      ...argsFromStepFields(step, fieldValues),
+    },
+  }));
+}
+
+function mergeFieldValues(
+  steps: RoutineConfigStep[],
+  current: Record<string, string>,
+): Record<string, string> {
+  const defaults = valuesFromSteps(steps);
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [
+      key,
+      current[key] ?? value,
+    ]),
+  );
+}
+
+function stepFromRecipe(
+  recipe: RoutineRecipeCatalogItem,
+  existingSteps: RoutineConfigStep[],
+): RoutineConfigStep {
+  const nodeId = uniqueNodeId(recipe.displayName, existingSteps);
+  return {
+    nodeId,
+    recipeId: recipe.id,
+    recipeName: recipe.displayName,
+    label: recipe.displayName,
+    args: jsonObject(recipe.defaultArgs),
+    configFields: recipe.configFields,
+  };
+}
+
+function moveStep(
+  steps: RoutineConfigStep[],
+  nodeId: string,
+  direction: "up" | "down",
+): RoutineConfigStep[] {
+  const index = steps.findIndex((step) => step.nodeId === nodeId);
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || target < 0 || target >= steps.length) return steps;
+  const next = [...steps];
+  const [step] = next.splice(index, 1);
+  if (!step) return steps;
+  next.splice(target, 0, step);
+  return next;
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function uniqueNodeId(
+  displayName: string,
+  existingSteps: RoutineConfigStep[],
+): string {
+  const base =
+    displayName
+      .replace(/[^A-Za-z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("") || "Step";
+  const used = new Set(existingSteps.map((step) => step.nodeId));
+  let index = existingSteps.length + 1;
+  let candidate = `${base}${index}`;
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = `${base}${index}`;
+  }
+  return candidate;
 }

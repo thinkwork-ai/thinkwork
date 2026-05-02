@@ -1,25 +1,11 @@
-/**
- * Admin "new routine" surface (Plan 2026-05-01-007 §U13).
- *
- * v1 ships as a thin form: operator enters name + description, and the
- * server-side authoring MVP attempts to produce real recipe-backed ASL
- * through `createRoutine`. Unsupported intents are rejected before any
- * Step Functions resources are created.
- *
- * Plan §"Files" calls for a full RoutineChatBuilder admin chrome
- * (sharing the mobile ROUTINE_BUILDER_PROMPT). Mobile's chat session
- * infrastructure (createSession / sendToSession) is currently stubbed
- * pending GraphQL migration (per Phase C U10's caveat); this form is the
- * non-chat authoring bridge until that lands.
- */
-
-import { useState, useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import {
   CreateRoutineMutation,
   PlanRoutineDraftMutation,
+  RoutineRecipeCatalogQuery,
 } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -29,9 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  RoutineStepConfigEditor,
+  RoutineWorkflowEditor,
+  type RoutineRecipeCatalogItem,
+} from "@/components/routines/RoutineWorkflowEditor";
+import {
   argsFromStepFields,
-  changedSteps,
   valuesFromSteps,
   type RoutineConfigStep,
 } from "@/components/routines/RoutineStepConfigEditor";
@@ -54,16 +42,44 @@ function NewRoutinePage() {
 
   const [, executeCreate] = useMutation(CreateRoutineMutation);
   const [planState, executePlan] = useMutation(PlanRoutineDraftMutation);
+  const [catalogResult] = useQuery({
+    query: RoutineRecipeCatalogQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   useBreadcrumbs([
     { label: "Routines", href: "/automations/routines" },
     { label: "New" },
   ]);
 
-  const canSubmit = name.trim().length > 0 && description.trim().length > 0;
+  const recipes = useMemo(
+    () => catalogResult.data?.routineRecipeCatalog ?? [],
+    [catalogResult.data?.routineRecipeCatalog],
+  );
+  const steps = draft?.steps ?? [];
+  const canPlan =
+    name.trim().length > 0 && description.trim().length > 0 && !submitting;
+  const canPublish = name.trim().length > 0 && steps.length > 0 && !submitting;
+
+  const replaceSteps = useCallback(
+    (nextSteps: RoutineConfigStep[]) => {
+      setDraft((current) => ({
+        title: current?.title ?? (name.trim() || "Untitled routine"),
+        description: current?.description ?? description.trim(),
+        kind: current?.kind ?? "recipe_graph",
+        steps: nextSteps,
+        asl: current?.asl ?? null,
+        markdownSummary: current?.markdownSummary ?? "",
+        stepManifest: current?.stepManifest ?? null,
+      }));
+      setFieldValues((current) => mergeFieldValues(nextSteps, current));
+    },
+    [description, name],
+  );
 
   const handlePlan = useCallback(async () => {
-    if (!canSubmit || !tenantId || submitting) return;
+    if (!canPlan || !tenantId) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -84,41 +100,31 @@ function NewRoutinePage() {
     } finally {
       setSubmitting(false);
     }
-  }, [
-    canSubmit,
-    tenantId,
-    submitting,
-    name,
-    description,
-    executePlan,
-  ]);
+  }, [canPlan, tenantId, name, description, executePlan]);
 
   const handlePublish = useCallback(async () => {
-    if (!draft || !tenantId || submitting) return;
+    if (!canPublish || !tenantId) return;
     setSubmitting(true);
     setError(null);
     try {
-      let reviewedDraft = draft;
-      const dirtySteps = changedSteps(draft.steps, fieldValues);
-      if (dirtySteps.length > 0) {
-        const planned = await executePlan({
-          input: {
-            tenantId,
-            name: name.trim(),
-            description: description.trim(),
-            steps: dirtySteps.map((step) => ({
-              nodeId: step.nodeId,
-              args: argsFromStepFields(step, fieldValues),
-            })),
-          },
-        });
-        if (planned.error) throw new Error(planned.error.message);
-        const nextDraft = planned.data?.planRoutineDraft;
-        if (!nextDraft) throw new Error("Planner returned no routine draft.");
-        reviewedDraft = nextDraft;
-        setDraft(nextDraft);
-        setFieldValues(valuesFromSteps(nextDraft.steps));
-      }
+      const planned = await executePlan({
+        input: {
+          tenantId,
+          name: name.trim(),
+          description: description.trim(),
+          steps: steps.map((step) => ({
+            nodeId: step.nodeId,
+            recipeId: step.recipeId,
+            label: step.label,
+            args: fullArgsFromStep(step, fieldValues),
+          })),
+        },
+      });
+      if (planned.error) throw new Error(planned.error.message);
+      const reviewedDraft = planned.data?.planRoutineDraft;
+      if (!reviewedDraft) throw new Error("Planner returned no routine draft.");
+      setDraft(reviewedDraft);
+      setFieldValues(valuesFromSteps(reviewedDraft.steps));
 
       const result = await executeCreate({
         input: {
@@ -144,16 +150,56 @@ function NewRoutinePage() {
       setSubmitting(false);
     }
   }, [
-    draft,
+    canPublish,
     tenantId,
-    submitting,
     name,
     description,
+    steps,
     fieldValues,
     executePlan,
     executeCreate,
     navigate,
   ]);
+
+  const handleAddRecipe = useCallback(
+    (recipe: RoutineRecipeCatalogItem) => {
+      const nextStep = stepFromRecipe(recipe, steps);
+      replaceSteps([...steps, nextStep]);
+    },
+    [replaceSteps, steps],
+  );
+
+  const handleLabelChange = useCallback(
+    (nodeId: string, value: string) => {
+      replaceSteps(
+        steps.map((step) =>
+          step.nodeId === nodeId ? { ...step, label: value } : step,
+        ),
+      );
+    },
+    [replaceSteps, steps],
+  );
+
+  const handleMoveStep = useCallback(
+    (nodeId: string, direction: "up" | "down") => {
+      const index = steps.findIndex((step) => step.nodeId === nodeId);
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= steps.length) return;
+      const nextSteps = [...steps];
+      const [step] = nextSteps.splice(index, 1);
+      if (!step) return;
+      nextSteps.splice(target, 0, step);
+      replaceSteps(nextSteps);
+    },
+    [replaceSteps, steps],
+  );
+
+  const handleRemoveStep = useCallback(
+    (nodeId: string) => {
+      replaceSteps(steps.filter((step) => step.nodeId !== nodeId));
+    },
+    [replaceSteps, steps],
+  );
 
   return (
     <div className="space-y-4">
@@ -167,89 +213,84 @@ function NewRoutinePage() {
         </Button>
         <PageHeader
           title="New routine"
-          description="Describe the routine, review the generated recipe steps, then publish it."
+          description="Plan from a prompt or assemble recipe blocks directly."
         />
       </div>
 
-      <Card className="max-w-2xl">
+      <Card>
         <CardContent className="space-y-4 py-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Name</label>
-            <Input
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setDraft(null);
-              }}
-              placeholder="e.g. Triage overnight email"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">What should it do?</label>
-            <textarea
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                setDraft(null);
-              }}
-              placeholder="e.g. Pull overnight email from the inbox, classify each into urgent/normal, post a digest to #ops, and require approval before sending replies."
-              rows={4}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
+          <div className="grid gap-4 lg:grid-cols-[minmax(240px,360px)_minmax(0,1fr)]">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Triage overnight email"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Planner prompt</label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="e.g. Pull overnight email from the inbox, classify each into urgent/normal, post a digest to #ops, and require approval before sending replies."
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
           </div>
 
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
 
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => navigate({ to: "/automations/routines" })}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handlePlan} disabled={!canSubmit || submitting}>
-              <Sparkles className="h-4 w-4" />
-              {submitting && planState.fetching ? "Planning..." : "Plan routine"}
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {draft && <Badge variant="outline">{draft.kind}</Badge>}
+              {draft?.description && (
+                <span className="max-w-2xl truncate text-sm text-muted-foreground">
+                  {draft.description}
+                </span>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: "/automations/routines" })}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handlePlan} disabled={!canPlan}>
+                <Sparkles className="h-4 w-4" />
+                {submitting && planState.fetching
+                  ? "Planning..."
+                  : "Plan routine"}
+              </Button>
+              <Button onClick={handlePublish} disabled={!canPublish}>
+                {submitting && !planState.fetching
+                  ? "Publishing..."
+                  : "Publish routine"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {draft && (
-        <Card>
-          <CardContent className="space-y-4 p-0">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold">Draft definition</h2>
-                  <Badge variant="outline">{draft.kind}</Badge>
-                </div>
-                <p className="mt-1 truncate text-sm text-muted-foreground">
-                  {draft.description}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={handlePublish}
-                disabled={submitting}
-              >
-                {submitting ? "Publishing..." : "Publish routine"}
-              </Button>
-            </div>
-            <RoutineStepConfigEditor
-              steps={draft.steps}
-              fieldValues={fieldValues}
-              onFieldChange={(key, value) =>
-                setFieldValues((current) => ({ ...current, [key]: value }))
-              }
-            />
-          </CardContent>
-        </Card>
-      )}
+      <RoutineWorkflowEditor
+        steps={steps}
+        recipes={recipes}
+        fieldValues={fieldValues}
+        onFieldChange={(key, value) =>
+          setFieldValues((current) => ({ ...current, [key]: value }))
+        }
+        onAddRecipe={handleAddRecipe}
+        onLabelChange={handleLabelChange}
+        onMoveStep={handleMoveStep}
+        onRemoveStep={handleRemoveStep}
+        catalogLoading={catalogResult.fetching}
+      />
     </div>
   );
 }
@@ -267,4 +308,69 @@ type RoutineDraft = {
 function cleanError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   return message.replace(/^\[GraphQL\]\s*/, "");
+}
+
+function mergeFieldValues(
+  steps: RoutineConfigStep[],
+  current: Record<string, string>,
+): Record<string, string> {
+  const defaults = valuesFromSteps(steps);
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [
+      key,
+      current[key] ?? value,
+    ]),
+  );
+}
+
+function fullArgsFromStep(
+  step: RoutineConfigStep,
+  fieldValues: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    ...jsonObject(step.args),
+    ...argsFromStepFields(step, fieldValues),
+  };
+}
+
+function stepFromRecipe(
+  recipe: RoutineRecipeCatalogItem,
+  existingSteps: RoutineConfigStep[],
+): RoutineConfigStep {
+  const nodeId = uniqueNodeId(recipe.displayName, existingSteps);
+  return {
+    nodeId,
+    recipeId: recipe.id,
+    recipeName: recipe.displayName,
+    label: recipe.displayName,
+    args: jsonObject(recipe.defaultArgs),
+    configFields: recipe.configFields,
+  };
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function uniqueNodeId(
+  displayName: string,
+  existingSteps: RoutineConfigStep[],
+): string {
+  const base =
+    displayName
+      .replace(/[^A-Za-z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("") || "Step";
+  const used = new Set(existingSteps.map((step) => step.nodeId));
+  let index = existingSteps.length + 1;
+  let candidate = `${base}${index}`;
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = `${base}${index}`;
+  }
+  return candidate;
 }

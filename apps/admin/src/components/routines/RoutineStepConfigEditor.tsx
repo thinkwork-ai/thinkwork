@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -8,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 
 export type RoutineConfigField = {
   key: string;
@@ -24,6 +26,7 @@ export type RoutineConfigStep = {
   recipeId: string;
   recipeName: string;
   label: string;
+  args?: unknown;
   configFields: RoutineConfigField[];
 };
 
@@ -31,12 +34,18 @@ interface RoutineStepConfigEditorProps {
   steps: RoutineConfigStep[];
   fieldValues: Record<string, string>;
   onFieldChange: (key: string, value: string) => void;
+  onLabelChange?: (nodeId: string, value: string) => void;
+  onMoveStep?: (nodeId: string, direction: "up" | "down") => void;
+  onRemoveStep?: (nodeId: string) => void;
 }
 
 export function RoutineStepConfigEditor({
   steps,
   fieldValues,
   onFieldChange,
+  onLabelChange,
+  onMoveStep,
+  onRemoveStep,
 }: RoutineStepConfigEditorProps) {
   return (
     <div className="divide-y divide-border/70">
@@ -46,29 +55,77 @@ export function RoutineStepConfigEditor({
           className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]"
         >
           <div className="min-w-0">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
                 {index + 1}
               </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
-                  {step.label}
-                </div>
+              <div className="min-w-0 flex-1">
+                {onLabelChange ? (
+                  <Input
+                    aria-label={`${step.recipeName} step label`}
+                    value={step.label}
+                    onChange={(event) =>
+                      onLabelChange(step.nodeId, event.target.value)
+                    }
+                    className="h-8"
+                  />
+                ) : (
+                  <div className="truncate text-sm font-medium">
+                    {step.label}
+                  </div>
+                )}
                 <div className="truncate text-xs text-muted-foreground">
                   {step.recipeName}
                 </div>
               </div>
             </div>
-            <Badge
-              variant="secondary"
-              className={cn(
-                "mt-3 font-mono",
-                step.recipeId === "email_send" &&
-                  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "font-mono",
+                  step.recipeId === "email_send" &&
+                    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                )}
+              >
+                {step.recipeId}
+              </Badge>
+              {onMoveStep && (
+                <>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label={`Move ${step.label} up`}
+                    disabled={index === 0}
+                    onClick={() => onMoveStep(step.nodeId, "up")}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label={`Move ${step.label} down`}
+                    disabled={index === steps.length - 1}
+                    onClick={() => onMoveStep(step.nodeId, "down")}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </>
               )}
-            >
-              {step.recipeId}
-            </Badge>
+              {onRemoveStep && (
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={`Remove ${step.label}`}
+                  onClick={() => onRemoveStep(step.nodeId)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="grid min-w-0 gap-3 md:grid-cols-2">

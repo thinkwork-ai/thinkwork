@@ -265,6 +265,15 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["seconds"],
     },
+    configFields: [
+      {
+        key: "seconds",
+        label: "Seconds",
+        inputType: "number",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -297,6 +306,15 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["agentId", "input"],
     },
+    configFields: [
+      {
+        key: "agentId",
+        label: "Agent ID",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.agentInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -333,6 +351,23 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["toolId", "toolSource", "args"],
     },
+    configFields: [
+      {
+        key: "toolId",
+        label: "Tool ID",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "toolSource",
+        label: "Tool source",
+        inputType: "select",
+        required: true,
+        editable: true,
+        options: ["mcp", "builtin", "skill"],
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.toolInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -371,6 +406,15 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["routineId", "input"],
     },
+    configFields: [
+      {
+        key: "routineId",
+        label: "Routine ID",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.routineInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -414,6 +458,30 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["method", "apiEndpoint", "connectionArn"],
     },
+    configFields: [
+      {
+        key: "method",
+        label: "Method",
+        inputType: "select",
+        required: true,
+        editable: true,
+        options: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      },
+      {
+        key: "apiEndpoint",
+        label: "API endpoint",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "connectionArn",
+        label: "Connection ARN",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.httpRequest,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -456,6 +524,22 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["sql", "databaseName"],
     },
+    configFields: [
+      {
+        key: "sql",
+        label: "SQL",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "databaseName",
+        label: "Database",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.auroraQuery,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -493,6 +577,15 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["expression"],
     },
+    configFields: [
+      {
+        key: "expression",
+        label: "Expression",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -524,6 +617,22 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["name", "value"],
     },
+    configFields: [
+      {
+        key: "name",
+        label: "Name",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "value",
+        label: "Value",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -557,6 +666,22 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["channelId", "text"],
     },
+    configFields: [
+      {
+        key: "channelId",
+        label: "Channel ID",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "text",
+        label: "Message",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.slackSend,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -613,6 +738,12 @@ const _CATALOG: RecipeDefinition[] = [
         label: "Subject",
         inputType: "text",
         required: true,
+        editable: true,
+      },
+      {
+        key: "body",
+        label: "Body",
+        inputType: "text",
         editable: true,
       },
       {
@@ -683,6 +814,22 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["title", "markdownContext", "decisionSchema"],
     },
+    configFields: [
+      {
+        key: "title",
+        label: "Title",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "markdownContext",
+        label: "Context",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.inboxApproval,
     aslEmitter: (args, ctx) => {
       const state: AslState = {
@@ -733,6 +880,13 @@ const _CATALOG: RecipeDefinition[] = [
       required: ["code"],
     },
     configFields: [
+      {
+        key: "code",
+        label: "Code",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
       {
         key: "timeoutSeconds",
         label: "Timeout seconds",
@@ -797,7 +951,7 @@ export function getRecipe(id: string): RecipeDefinition | undefined {
 
 export function getRecipeConfigFields(
   recipeId: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown> = {},
 ): RecipeConfigField[] {
   const recipe = getRecipe(recipeId);
   if (!recipe?.configFields) return [];
@@ -819,6 +973,56 @@ export function getRecipeConfigFields(
 
 export function listRecipes(): readonly RecipeDefinition[] {
   return RECIPE_CATALOG;
+}
+
+export function getRecipeDefaultArgs(
+  recipeId: string,
+): Record<string, unknown> {
+  switch (recipeId) {
+    case "wait":
+      return { seconds: 300 };
+    case "agent_invoke":
+      return { agentId: "", input: {} };
+    case "tool_invoke":
+      return { toolId: "", toolSource: "builtin", args: {} };
+    case "routine_invoke":
+      return { routineId: "", input: {} };
+    case "http_request":
+      return {
+        method: "GET",
+        apiEndpoint: "https://",
+        connectionArn: "",
+      };
+    case "aurora_query":
+      return { sql: "select 1", databaseName: "" };
+    case "transform_json":
+      return { expression: "$" };
+    case "set_variable":
+      return { name: "value", value: "" };
+    case "slack_send":
+      return { channelId: "", text: "" };
+    case "email_send":
+      return {
+        to: [],
+        subject: "",
+        body: "Add email body text.",
+        bodyFormat: "markdown",
+      };
+    case "inbox_approval":
+      return {
+        title: "",
+        markdownContext: "",
+        decisionSchema: { type: "object" },
+      };
+    case "python":
+      return {
+        code: "print('hello from ThinkWork routine')",
+        timeoutSeconds: 60,
+        networkAllowlist: [],
+      };
+    default:
+      return {};
+  }
 }
 
 /**

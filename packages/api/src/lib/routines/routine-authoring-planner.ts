@@ -1,6 +1,7 @@
 import {
   getRecipe,
   getRecipeConfigFields,
+  getRecipeDefaultArgs,
   type AslState,
   type RecipeConfigField,
 } from "./recipe-catalog.js";
@@ -46,6 +47,8 @@ export type RoutineDefinitionResult =
 
 export interface RoutineDefinitionStepConfigEdit {
   nodeId: string;
+  recipeId?: string | null;
+  label?: string | null;
   args: Record<string, unknown>;
 }
 
@@ -95,6 +98,20 @@ export function buildRoutineArtifactsFromPlan(
   return artifactsForPlan(refreshPlanConfigFields(plan));
 }
 
+export function planRoutineFromSteps(input: {
+  name: string;
+  description?: string | null;
+  steps: RoutineDefinitionStepConfigEdit[];
+}): RoutinePlanResult {
+  const planned = planFromStepInputs(
+    input.name,
+    input.description,
+    input.steps,
+  );
+  if (!planned.ok) return planned;
+  return buildRoutineArtifactsFromPlan(planned.plan);
+}
+
 export function routineDefinitionFromArtifacts(input: {
   routineName: string;
   routineDescription?: string | null;
@@ -139,6 +156,17 @@ export function applyRoutineDefinitionEdits(
   plan: RoutinePlan,
   edits: RoutineDefinitionStepConfigEdit[],
 ): RoutinePlanResult {
+  if (edits.some((edit) => edit.recipeId || edit.label)) {
+    const planned = planFromStepInputs(
+      plan.title,
+      plan.description,
+      edits,
+      plan,
+    );
+    if (!planned.ok) return planned;
+    return buildRoutineArtifactsFromPlan(planned.plan);
+  }
+
   const next = refreshPlanConfigFields({
     ...plan,
     steps: plan.steps.map((step) => ({
@@ -333,6 +361,109 @@ function planFromManifestDefinition(
       description: descriptionForPlan(plan),
     },
   };
+}
+
+function planFromStepInputs(
+  routineName: string,
+  description: string | null | undefined,
+  edits: RoutineDefinitionStepConfigEdit[],
+  basePlan?: RoutinePlan,
+): RoutineDefinitionResult {
+  if (edits.length === 0) {
+    return unsupported("Routine definition must include at least one step.");
+  }
+
+  const baseByNodeId = new Map(
+    basePlan?.steps.map((step) => [step.nodeId, step]) ?? [],
+  );
+  const seenNodeIds = new Set<string>();
+  const steps: RoutinePlanStep[] = [];
+
+  for (let index = 0; index < edits.length; index += 1) {
+    const edit = edits[index]!;
+    const nodeId = String(edit.nodeId ?? "").trim();
+    if (!nodeId) {
+      return unsupported("Routine definition step is missing a node id.");
+    }
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nodeId)) {
+      return unsupported(
+        `Routine definition step ${nodeId} must start with a letter and use only letters, numbers, and underscores.`,
+      );
+    }
+    if (seenNodeIds.has(nodeId)) {
+      return unsupported(`Routine definition has duplicate step id: ${nodeId}`);
+    }
+    seenNodeIds.add(nodeId);
+
+    const base = baseByNodeId.get(nodeId);
+    const recipeId = String(edit.recipeId ?? base?.recipeId ?? "").trim();
+    const recipe = getRecipe(recipeId);
+    if (!recipe) {
+      return unsupported(`Unknown routine recipe: ${recipeId || nodeId}`);
+    }
+
+    const submitted = normalizeJsonObject(edit.args);
+    const submittedArgs = base
+      ? editableArgsForExistingStep(recipeId, base.args, submitted)
+      : { ok: true as const, args: submitted };
+    if (!submittedArgs.ok) return submittedArgs;
+    const args = {
+      ...(base?.args ?? getRecipeDefaultArgs(recipeId)),
+      ...submittedArgs.args,
+    };
+
+    steps.push({
+      nodeId,
+      recipeId,
+      recipeName: recipe.displayName,
+      label: String(edit.label ?? base?.label ?? recipe.displayName).trim(),
+      args,
+      configFields: getRecipeConfigFields(recipeId, args),
+    });
+  }
+
+  const plan = refreshPlanConfigFields({
+    kind: "recipe_graph",
+    title: routineName.trim() || "Untitled routine",
+    description: description ?? "",
+    steps,
+  });
+
+  return {
+    ok: true,
+    plan: {
+      ...plan,
+      description: plan.description || descriptionForPlan(plan),
+    },
+  };
+}
+
+function editableArgsForExistingStep(
+  recipeId: string,
+  baseArgs: Record<string, unknown>,
+  submitted: Record<string, unknown>,
+): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
+  const args: Record<string, unknown> = {};
+  const fieldsByKey = new Map(
+    getRecipeConfigFields(recipeId, baseArgs).map((field) => [
+      field.key,
+      field,
+    ]),
+  );
+
+  for (const [key, value] of Object.entries(submitted)) {
+    const field = fieldsByKey.get(key);
+    if (!field) continue;
+    if (!field.editable) {
+      if (!sameJson(value, baseArgs[key] ?? null)) {
+        return unsupported(`${field.label} is read-only.`);
+      }
+      continue;
+    }
+    args[key] = value;
+  }
+
+  return { ok: true, args };
 }
 
 function refreshPlanConfigFields(plan: RoutinePlan): RoutinePlan {

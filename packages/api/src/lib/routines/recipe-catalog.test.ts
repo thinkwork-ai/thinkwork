@@ -214,35 +214,43 @@ describe("recipe-catalog", () => {
       bodyFormat: "markdown",
     });
 
-    expect(fields).toEqual([
-      expect.objectContaining({
-        key: "to",
-        label: "To",
-        value: ["ericodom37@gmail.com"],
-        inputType: "email_array",
-        required: true,
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "subject",
-        value: "Austin weather update",
-        inputType: "text",
-        required: true,
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "bodyFormat",
-        value: "markdown",
-        inputType: "select",
-        options: ["text", "html", "markdown"],
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "bodyPath",
-        value: "$.FetchAustinWeather.stdoutPreview",
-        editable: false,
-      }),
-    ]);
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "to",
+          label: "To",
+          value: ["ericodom37@gmail.com"],
+          inputType: "email_array",
+          required: true,
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "subject",
+          value: "Austin weather update",
+          inputType: "text",
+          required: true,
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "body",
+          value: null,
+          inputType: "text",
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "bodyFormat",
+          value: "markdown",
+          inputType: "select",
+          options: ["text", "html", "markdown"],
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "bodyPath",
+          value: "$.FetchAustinWeather.stdoutPreview",
+          editable: false,
+        }),
+      ]),
+    );
     expect(fields.map((field) => field.key)).not.toContain("cc");
   });
 
