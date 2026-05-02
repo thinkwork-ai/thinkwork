@@ -6,16 +6,17 @@ import {
   Inbox,
   Bot,
   Users,
+  Repeat,
   BarChart3,
   Settings,
   CreditCard,
   Puzzle,
   Brain,
+  Webhook,
   Shield,
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
-  ChevronRight,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -39,16 +40,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuBadge,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 interface NavItem {
   to: string;
@@ -57,81 +50,9 @@ interface NavItem {
   badge?: number | string;
 }
 
-interface NavSubItem {
-  to: string;
-  label: string;
-  badge?: number | string;
-}
-
-interface NavParentItem {
-  // The parent collapsible group: a top-level nav row that toggles a child list.
-  basePath: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  badge?: number | string;
-  children: NavSubItem[];
-}
-
 function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(n);
-}
-
-function NavParent({ item }: { item: NavParentItem }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isMobile, setOpenMobile } = useSidebar();
-  const isActive = pathname.startsWith(item.basePath);
-
-  return (
-    <Collapsible defaultOpen={isActive} className="group/collapsible">
-      <SidebarMenuItem>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.label} isActive={isActive}>
-            <item.icon />
-            <span>{item.label}</span>
-            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-          </SidebarMenuButton>
-        </CollapsibleTrigger>
-        {item.badge != null && item.badge !== 0 && (
-          <SidebarMenuBadge>
-            <Badge
-              variant="outline"
-              className="h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums border-zinc-400 dark:border-zinc-500"
-            >
-              {item.badge}
-            </Badge>
-          </SidebarMenuBadge>
-        )}
-        <CollapsibleContent>
-          <SidebarMenuSub>
-            {item.children.map((child) => {
-              const childActive = pathname.startsWith(child.to);
-              return (
-                <SidebarMenuSubItem key={child.to}>
-                  <SidebarMenuSubButton asChild isActive={childActive}>
-                    <Link
-                      to={child.to}
-                      onClick={() => isMobile && setOpenMobile(false)}
-                    >
-                      <span>{child.label}</span>
-                      {child.badge != null && child.badge !== 0 && (
-                        <Badge
-                          variant="outline"
-                          className="ml-auto h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums border-zinc-400 dark:border-zinc-500"
-                        >
-                          {child.badge}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              );
-            })}
-          </SidebarMenuSub>
-        </CollapsibleContent>
-      </SidebarMenuItem>
-    </Collapsible>
-  );
 }
 
 function NavItems({ items }: { items: NavItem[] }) {
@@ -284,32 +205,26 @@ export function AppSidebar() {
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
   ];
 
-  const automationsParent: NavParentItem = {
-    basePath: "/automations",
-    icon: CalendarClock,
-    label: "Automations",
-    // Preserve the prior badge behavior (active scheduled-jobs count) on the
-    // parent row so operators don't lose at-a-glance signal after the
-    // restructure. Routines and webhooks active counts surface on the children.
-    badge: activeScheduledJobs,
-    children: [
-      {
-        to: "/automations/routines",
-        label: "Routines",
-        badge: routineActiveCount,
-      },
-      {
-        to: "/automations/schedules",
-        label: "Schedules",
-        badge: activeScheduledJobs,
-      },
-      {
-        to: "/automations/webhooks",
-        label: "Webhooks",
-        badge: activeWebhooks,
-      },
-    ],
-  };
+  const automationsItems: NavItem[] = [
+    {
+      to: "/automations/routines",
+      icon: Repeat,
+      label: "Routines",
+      badge: routineActiveCount,
+    },
+    {
+      to: "/automations/schedules",
+      icon: CalendarClock,
+      label: "Schedules",
+      badge: activeScheduledJobs,
+    },
+    {
+      to: "/automations/webhooks",
+      icon: Webhook,
+      label: "Webhooks",
+      badge: activeWebhooks,
+    },
+  ];
 
   const agentsItems: NavItem[] = [
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
@@ -354,9 +269,13 @@ export function AppSidebar() {
           <SidebarGroupLabel>Work</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={workItems} />
-            <SidebarMenu className="gap-0.5">
-              <NavParent item={automationsParent} />
-            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Automations</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
