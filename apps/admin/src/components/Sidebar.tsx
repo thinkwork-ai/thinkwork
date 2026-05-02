@@ -203,16 +203,16 @@ export function AppSidebar() {
 
   const automationsItems: NavItem[] = [
     {
-      to: "/automations/schedules",
-      icon: CalendarClock,
-      label: "Scheduled Jobs",
-      badge: activeScheduledJobs,
-    },
-    {
       to: "/automations/routines",
       icon: Repeat,
       label: "Routines",
       badge: routineActiveCount,
+    },
+    {
+      to: "/automations/schedules",
+      icon: CalendarClock,
+      label: "Scheduled Jobs",
+      badge: activeScheduledJobs,
     },
     {
       to: "/automations/webhooks",

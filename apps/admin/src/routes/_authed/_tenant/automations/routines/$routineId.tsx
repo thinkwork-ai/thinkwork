@@ -5,12 +5,8 @@ import { RefreshCw, Zap } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
-import { StatusBadge } from "@/components/StatusBadge";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   RebuildRoutineVersionMutation,
   RoutineDetailQuery,
@@ -85,115 +81,76 @@ function RoutineDetailPage() {
 
   if (result.fetching || !routine) return <PageSkeleton />;
 
+  const actions = (
+    <>
+      {routine.engine === "step_functions" && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleRebuild}
+          disabled={rebuildState.fetching || triggerState.fetching}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          {rebuildState.fetching ? "Rebuilding..." : "Rebuild"}
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handleRunNow}
+        disabled={triggerState.fetching || rebuildState.fetching}
+      >
+        <Zap className="h-3.5 w-3.5" />
+        {triggerState.fetching ? "Starting..." : "Test Routine"}
+      </Button>
+    </>
+  );
+
   return (
     <PageLayout
       header={
         <PageHeader
           title={routine.name}
           description={routine.description ?? undefined}
-          actions={<StatusBadge status={routine.status.toLowerCase()} />}
+          actions={actions}
         />
       }
     >
-      <Tabs defaultValue="runs">
-        <div className="flex items-center justify-between gap-2">
-          <TabsList>
-            <TabsTrigger value="runs">Runs</TabsTrigger>
-            <TabsTrigger value="triggers">
-              Scheduled Jobs ({routine.triggers.length})
-            </TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-2">
-            {routine.engine === "step_functions" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRebuild}
-                disabled={rebuildState.fetching || triggerState.fetching}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                {rebuildState.fetching ? "Rebuilding…" : "Rebuild"}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRunNow}
-              disabled={triggerState.fetching || rebuildState.fetching}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {triggerState.fetching ? "Starting…" : "Test"}
+      {rebuildMessage && (
+        <p className="mb-3 text-sm text-muted-foreground">{rebuildMessage}</p>
+      )}
+      {rebuildError && (
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">
+          {rebuildError}
+        </p>
+      )}
+      {triggerError && (
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">
+          {triggerError}
+        </p>
+      )}
+
+      <ExecutionList
+        routineId={routineId}
+        statusFilter={statusFilter}
+        onStatusFilterChange={(next) =>
+          navigate({
+            to: "/automations/routines/$routineId",
+            params: { routineId },
+            search: next === "all" ? {} : { status: next },
+            replace: true,
+          })
+        }
+        emptyCta={
+          statusFilter === "all" ? (
+            <Button size="sm" asChild>
+              <Link to="/automations/schedules" search={{ type: "routine" }}>
+                Set up a trigger
+              </Link>
             </Button>
-          </div>
-        </div>
-        {rebuildMessage && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            {rebuildMessage}
-          </p>
-        )}
-        {rebuildError && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {rebuildError}
-          </p>
-        )}
-        {triggerError && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {triggerError}
-          </p>
-        )}
-
-        <TabsContent value="runs" className="mt-4">
-          <ExecutionList
-            routineId={routineId}
-            statusFilter={statusFilter}
-            onStatusFilterChange={(next) =>
-              navigate({
-                to: "/automations/routines/$routineId",
-                params: { routineId },
-                search: next === "all" ? {} : { status: next },
-                replace: true,
-              })
-            }
-            emptyCta={
-              statusFilter === "all" ? (
-                <Button size="sm" asChild>
-                  <Link to="/automations/schedules" search={{ type: "routine" }}>
-                    Set up a trigger
-                  </Link>
-                </Button>
-              ) : null
-            }
-          />
-        </TabsContent>
-
-        <TabsContent value="triggers" className="mt-4">
-          <Card>
-            <CardContent className="pt-4">
-              {routine.triggers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No scheduled jobs configured.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {routine.triggers.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between py-1.5"
-                    >
-                      <span className="text-sm font-medium">
-                        {t.triggerType}
-                      </span>
-                      <Badge variant={t.enabled ? "default" : "secondary"}>
-                        {t.enabled ? "Enabled" : "Disabled"}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          ) : null
+        }
+      />
     </PageLayout>
   );
 }
