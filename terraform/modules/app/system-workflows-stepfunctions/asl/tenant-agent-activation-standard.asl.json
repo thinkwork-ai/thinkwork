@@ -1,0 +1,46 @@
+{
+  "Comment": "thinkwork-system-workflow:tenant-agent-activation:2026-05-02.v1",
+  "StartAt": "TrackReadiness",
+  "States": {
+    "TrackReadiness": {
+      "Type": "Pass",
+      "Comment": "standard:checkpoint:Track readiness",
+      "Result": {
+        "workflowId": "tenant-agent-activation",
+        "stepType": "checkpoint",
+        "runtime": "standard"
+      },
+      "Next": "RunPolicyChecks"
+    },
+    "RunPolicyChecks": {
+      "Type": "Pass",
+      "Comment": "standard:validation:Run policy checks",
+      "Result": {
+        "workflowId": "tenant-agent-activation",
+        "stepType": "validation",
+        "runtime": "standard"
+      },
+      "Next": "ApplyActivationBundle"
+    },
+    "ApplyActivationBundle": {
+      "Type": "Pass",
+      "Comment": "standard:worker:Apply activation bundle",
+      "Result": {
+        "workflowId": "tenant-agent-activation",
+        "stepType": "worker",
+        "runtime": "standard"
+      },
+      "Next": "RecordLaunchDecision"
+    },
+    "RecordLaunchDecision": {
+      "Type": "Pass",
+      "Comment": "standard:evidence:Record launch decision",
+      "Result": {
+        "workflowId": "tenant-agent-activation",
+        "stepType": "evidence",
+        "runtime": "standard"
+      },
+      "End": true
+    }
+  }
+}
