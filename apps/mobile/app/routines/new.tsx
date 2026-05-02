@@ -11,7 +11,6 @@ import {
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useAuth } from "@/lib/auth-context";
-import { useTenant } from "@/lib/hooks/use-tenants";
 import { useCreateRoutine } from "@/lib/hooks/use-routines";
 import { COLORS } from "@/lib/theme";
 import { Text, Muted } from "@/components/ui/typography";
@@ -39,70 +38,39 @@ export default function NewRoutineScreen() {
   // TODO: Migrate api.codeFactoryChat.createSession to GraphQL
   // TODO: Migrate api.codeFactoryChat.sendMessage to GraphQL
 
-  // Resolve tenant for repo context
-  const [{ data: tenantData }] = useTenant(tenantId);
-  const tenant = tenantData?.tenant;
-  const tenantSlug = tenant?.slug ?? "";
-  const tenantRepo = tenantSlug ? `thinkwork-ai/tenant-${tenantSlug}` : "";
-
   const canSave = name.trim().length > 0 && description.trim().length > 0;
 
   const handleSave = useCallback(async () => {
-    if (!canSave || phase !== "form" || !tenantRepo) return;
+    if (!canSave || phase !== "form" || !tenantId) return;
 
     const trimmedName = name.trim();
     const trimmedDesc = description.trim();
     setPhase("evaluating");
 
     try {
-      // Create the draft routine. createRoutine (Phase B U7) requires
-      // asl/markdownSummary/stepManifest; the chat builder will publish a
-      // new version populated with real recipes once the operator iterates.
-      // Phase C U10 retired the phantom `evaluate_routine` MCP call that
-      // used to gate this — there is no such tool, and the gate was a
-      // pre-builder UX nicety, not load-bearing.
-      const placeholderAsl = {
-        Comment: "Draft routine — awaiting builder",
-        StartAt: "NoOp",
-        States: { NoOp: { Type: "Succeed" } },
-      };
       const result = await createRoutine({
         input: {
           name: trimmedName,
           description: trimmedDesc,
-          tenantId: tenantId!,
-          asl: JSON.stringify(placeholderAsl),
-          markdownSummary: `# ${trimmedName}\n\n${trimmedDesc}`,
-          stepManifest: JSON.stringify({}),
+          tenantId,
         },
       });
       const routineId = result.data?.createRoutine?.id;
       if (!routineId) throw new Error("Failed to create routine");
 
-      // Drop the operator straight into the chat builder so they can
-      // iterate the routine into a real recipe sequence. The placeholder
-      // ASL above is the routine's first version; the next
-      // publishRoutineVersion call from the chat builder bumps to a real
-      // version.
-      router.replace({
-        pathname: "/routines/builder-chat",
-        params: {
-          routineName: trimmedName,
-          routineId,
-        },
-      });
+      router.replace(`/routines/${routineId}`);
     } catch (err: any) {
       setPhase("form");
       Alert.alert("Error", err?.message || "Failed to create routine");
     }
-  }, [canSave, phase, tenantRepo, name, description]);
+  }, [canSave, phase, tenantId, name, description, createRoutine, router]);
 
   const inputBg = colorScheme === "dark" ? "#171717" : "#f5f5f5";
   const inputBorder = colorScheme === "dark" ? "#262626" : "#e5e5e5";
   const inputText = colorScheme === "dark" ? "#fafafa" : "#0a0a0a";
   const placeholderColor = colorScheme === "dark" ? "#525252" : "#a3a3a3";
 
-  const notReady = !tenantRepo;
+  const notReady = !tenantId;
 
   // -- Evaluating phase: full-screen loading overlay --
   if (phase === "evaluating") {
@@ -110,9 +78,7 @@ export default function NewRoutineScreen() {
       <DetailLayout title="New Routine">
         <View className="flex-1 items-center justify-center px-8">
           <ActivityIndicator size="large" color="#0ea5e9" />
-          <Muted className="mt-4 text-center">
-            Evaluating your routine...
-          </Muted>
+          <Muted className="mt-4 text-center">Evaluating your routine...</Muted>
         </View>
       </DetailLayout>
     );
@@ -145,7 +111,10 @@ export default function NewRoutineScreen() {
             />
 
             <View className="gap-1.5">
-              <Text weight="medium" className="text-sm text-neutral-700 dark:text-neutral-300">
+              <Text
+                weight="medium"
+                className="text-sm text-neutral-700 dark:text-neutral-300"
+              >
                 What do you want to do?
               </Text>
               <TextInput

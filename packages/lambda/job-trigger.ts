@@ -27,10 +27,7 @@ import {
   users,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
-import {
-  SFNClient,
-  StartExecutionCommand,
-} from "@aws-sdk/client-sfn";
+import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 
 // Module-scope SFN client so warm Lambda invocations reuse the TCP pool.
 const _SFN_CLIENT = new SFNClient({
@@ -605,26 +602,15 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           );
         } else {
           try {
-            // Seed the execution input with the inbox_approval callback
-            // function name so the recipe ASL's
-            // `$$.Execution.Input.inboxApprovalFunctionName` lookup
-            // resolves at runtime (Phase B U8). Fail loud rather than
-            // omitting the field — the recipe would error opaquely.
-            const callbackFn = process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME;
-            if (!callbackFn) {
-              throw new Error(
-                "Routines runtime is misconfigured: ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME env var is not set",
-              );
-            }
+            const routineInput = buildRoutineExecutionInput({
+              triggerId,
+              triggerSource: "schedule",
+              scheduleName: scheduleName ?? null,
+            });
             const startResp = await _SFN_CLIENT.send(
               new StartExecutionCommand({
                 stateMachineArn: routine.state_machine_alias_arn,
-                input: JSON.stringify({
-                  triggerId,
-                  triggerSource: "schedule",
-                  scheduleName: scheduleName ?? null,
-                  inboxApprovalFunctionName: callbackFn,
-                }),
+                input: JSON.stringify(routineInput),
               }),
             );
             if (startResp.executionArn) {
@@ -711,4 +697,42 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
   } catch (err) {
     console.error("[job-trigger] Failed to process job trigger:", err);
   }
+}
+
+export function buildRoutineExecutionInput(
+  userInput: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...userInput,
+    inboxApprovalFunctionName: runtimeFunctionName(
+      "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
+      "routine-approval-callback",
+    ),
+    emailSendFunctionName: runtimeFunctionName(
+      "EMAIL_SEND_FUNCTION_NAME",
+      "email-send",
+    ),
+    routineTaskPythonFunctionName: runtimeFunctionName(
+      "ROUTINE_TASK_PYTHON_FUNCTION_NAME",
+      "routine-task-python",
+    ),
+    adminOpsMcpFunctionName: runtimeFunctionName(
+      "ADMIN_OPS_MCP_FUNCTION_NAME",
+      "admin-ops-mcp",
+    ),
+    slackSendFunctionName: runtimeFunctionName(
+      "SLACK_SEND_FUNCTION_NAME",
+      "slack-send",
+    ),
+  };
+}
+
+function runtimeFunctionName(envName: string, handlerName: string): string {
+  const explicit = process.env[envName];
+  if (explicit) return explicit;
+  const stage = process.env.STAGE;
+  if (stage) return `thinkwork-${stage}-api-${handlerName}`;
+  throw new Error(
+    `Routines runtime is misconfigured: ${envName} env var is not set`,
+  );
 }

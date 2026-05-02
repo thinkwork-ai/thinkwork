@@ -233,9 +233,13 @@ input CreateRoutineInput {
   owningAgentId: ID
   name: String!
   description: String
-  asl: AWSJSON!
-  markdownSummary: String!
-  stepManifest: AWSJSON!
+  # Optional explicit artifacts for chat/agent authoring paths that
+  # already generated ASL. If omitted, createRoutine attempts the
+  # server-side authoring MVP from the description/intent and rejects
+  # unsupported intents before creating AWS resources.
+  asl: AWSJSON
+  markdownSummary: String
+  stepManifest: AWSJSON
 }
 
 # Phase B U7: ASL changes go through publishRoutineVersion. updateRoutine

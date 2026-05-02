@@ -11,10 +11,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import {
-  routineExecutions,
-  routines,
-} from "@thinkwork/database-pg/schema";
+import { routineExecutions, routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
@@ -53,23 +50,10 @@ export async function triggerRoutineRun(
   }
 
   // Start the execution against the alias — that way version cutovers
-  // via publishRoutineVersion are picked up automatically.
-  // Seed the execution input with the inbox_approval callback function
-  // name so the recipe ASL emitter at packages/api/src/lib/routines/
-  // recipe-catalog.ts:621 (`$$.Execution.Input.inboxApprovalFunctionName`)
-  // can resolve it. Fail loud at handler entry rather than letting the
-  // recipe error opaquely deep in SFN's Task interpreter.
-  const callbackFn = process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME;
-  if (!callbackFn) {
-    throw new Error(
-      "Routines runtime is misconfigured: ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME env var is not set",
-    );
-  }
-  const userInput = args.input ?? {};
-  const sfnInput = {
-    ...userInput,
-    inboxApprovalFunctionName: callbackFn,
-  };
+  // via publishRoutineVersion are picked up automatically. Server-owned
+  // runtime fields win over caller input so clients cannot redirect recipe
+  // Lambda invocations by passing similarly named keys.
+  const sfnInput = buildRoutineExecutionInput(args.input ?? {});
   const sfn = getSfnClient();
   const startResp = await sfn.send(
     new StartExecutionCommand({
@@ -96,4 +80,42 @@ export async function triggerRoutineRun(
     })
     .returning();
   return snakeToCamel(execRow);
+}
+
+export function buildRoutineExecutionInput(
+  userInput: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...userInput,
+    inboxApprovalFunctionName: runtimeFunctionName(
+      "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
+      "routine-approval-callback",
+    ),
+    emailSendFunctionName: runtimeFunctionName(
+      "EMAIL_SEND_FUNCTION_NAME",
+      "email-send",
+    ),
+    routineTaskPythonFunctionName: runtimeFunctionName(
+      "ROUTINE_TASK_PYTHON_FUNCTION_NAME",
+      "routine-task-python",
+    ),
+    adminOpsMcpFunctionName: runtimeFunctionName(
+      "ADMIN_OPS_MCP_FUNCTION_NAME",
+      "admin-ops-mcp",
+    ),
+    slackSendFunctionName: runtimeFunctionName(
+      "SLACK_SEND_FUNCTION_NAME",
+      "slack-send",
+    ),
+  };
+}
+
+function runtimeFunctionName(envName: string, handlerName: string): string {
+  const explicit = process.env[envName];
+  if (explicit) return explicit;
+  const stage = process.env.STAGE;
+  if (stage) return `thinkwork-${stage}-api-${handlerName}`;
+  throw new Error(
+    `Routines runtime is misconfigured: ${envName} env var is not set`,
+  );
 }

@@ -19,11 +19,13 @@ const {
 	mockInsert,
 	mockUpdate,
 	mockLambdaSend,
+	mockSfnSend,
 } = vi.hoisted(() => ({
 	mockSelect: vi.fn(),
 	mockInsert: vi.fn(),
 	mockUpdate: vi.fn(),
 	mockLambdaSend: vi.fn(),
+	mockSfnSend: vi.fn(),
 }));
 
 // Rows returned by `db.select().from().where()` — routed by a tag the caller
@@ -108,8 +110,17 @@ vi.mock("@aws-sdk/client-lambda", () => ({
 	InvokeCommand: vi.fn().mockImplementation((input) => ({ input })),
 }));
 
-// After mocks — import the handler + the exported binding resolver.
-import { handler, resolveInputBindings } from "../job-trigger.js";
+vi.mock("@aws-sdk/client-sfn", () => ({
+	SFNClient: vi.fn().mockImplementation(() => ({ send: mockSfnSend })),
+	StartExecutionCommand: vi.fn().mockImplementation((input) => ({ input })),
+}));
+
+// After mocks — import the handler + exported pure helpers.
+import {
+	buildRoutineExecutionInput,
+	handler,
+	resolveInputBindings,
+} from "../job-trigger.js";
 
 const BASE_EVENT = {
 	triggerId: "job-1",
@@ -155,7 +166,39 @@ const pushAgentSkillEnablement = (enabled: boolean | null): void => {
 beforeEach(() => {
 	vi.clearAllMocks();
 	process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
+	process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME =
+		"thinkwork-dev-api-routine-approval-callback";
+	process.env.EMAIL_SEND_FUNCTION_NAME = "thinkwork-dev-api-email-send";
+	process.env.ROUTINE_TASK_PYTHON_FUNCTION_NAME =
+		"thinkwork-dev-api-routine-task-python";
+	process.env.ADMIN_OPS_MCP_FUNCTION_NAME =
+		"thinkwork-dev-api-admin-ops-mcp";
+	process.env.SLACK_SEND_FUNCTION_NAME = "thinkwork-dev-api-slack-send";
 	mockLambdaSend.mockResolvedValue({ FunctionError: undefined, Payload: undefined });
+});
+
+// ---------------------------------------------------------------------------
+// Routine execution input helper (pure function)
+// ---------------------------------------------------------------------------
+
+describe("buildRoutineExecutionInput", () => {
+	it("adds server-owned routine recipe function names and overrides caller values", () => {
+		const input = buildRoutineExecutionInput({
+			emailSendFunctionName: "caller-controlled",
+			customValue: "kept",
+		});
+
+		expect(input).toMatchObject({
+			customValue: "kept",
+			inboxApprovalFunctionName:
+				"thinkwork-dev-api-routine-approval-callback",
+			emailSendFunctionName: "thinkwork-dev-api-email-send",
+			routineTaskPythonFunctionName:
+				"thinkwork-dev-api-routine-task-python",
+			adminOpsMcpFunctionName: "thinkwork-dev-api-admin-ops-mcp",
+			slackSendFunctionName: "thinkwork-dev-api-slack-send",
+		});
+	});
 });
 
 // ---------------------------------------------------------------------------

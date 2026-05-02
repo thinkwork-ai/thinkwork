@@ -562,34 +562,42 @@ const _CATALOG: RecipeDefinition[] = [
         to: { type: "array", items: STR_NONEMPTY, minItems: 1 },
         subject: STR_NONEMPTY,
         body: STR_NONEMPTY,
+        bodyPath: STR_NONEMPTY,
         bodyFormat: { type: "string", enum: ["text", "html", "markdown"] },
         cc: { type: "array", items: STR_NONEMPTY },
       },
-      required: ["to", "subject", "body"],
+      required: ["to", "subject"],
+      anyOf: [{ required: ["body"] }, { required: ["bodyPath"] }],
     },
     resourceArnPattern: RESOURCE_ARN_PATTERNS.emailSend,
-    aslEmitter: (args, ctx) =>
-      markRecipe(
+    aslEmitter: (args, ctx) => {
+      const payload: Record<string, unknown> = {
+        to: args.to,
+        subject: args.subject,
+        bodyFormat: args.bodyFormat ?? "markdown",
+        ...(Array.isArray(args.cc) ? { cc: args.cc } : {}),
+      };
+      if (typeof args.bodyPath === "string" && args.bodyPath.trim()) {
+        payload["body.$"] = args.bodyPath;
+      } else {
+        payload.body = args.body;
+      }
+      return markRecipe(
         applySequencing(
           {
             Type: "Task",
             Resource: "arn:aws:states:::lambda:invoke",
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.emailSendFunctionName",
-              "Payload": {
-                to: args.to,
-                subject: args.subject,
-                body: args.body,
-                bodyFormat: args.bodyFormat ?? "markdown",
-                ...(Array.isArray(args.cc) ? { cc: args.cc } : {}),
-              },
+              "Payload": payload,
             },
             ResultSelector: { "messageId.$": "$.Payload.messageId" },
           },
           ctx,
         ),
         "email_send",
-      ),
+      );
+    },
   },
 
   // --- HITL ---------------------------------------------------------------

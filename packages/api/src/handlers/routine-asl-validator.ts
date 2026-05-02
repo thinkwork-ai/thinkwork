@@ -148,7 +148,8 @@ export async function validateRoutineAsl(
   if (stateNames.length === 0) {
     errors.push({
       code: "empty_states",
-      message: "ASL document has an empty `States` map; every routine needs at least one state.",
+      message:
+        "ASL document has an empty `States` map; every routine needs at least one state.",
     });
     return { valid: false, errors, warnings };
   }
@@ -371,11 +372,7 @@ function reconstructArgsForTask(
   // the user-authored args shape. taskToken/executionId/nodeId/etc. are
   // emitter concerns, not recipe args.
   const stripped = { ...payload };
-  for (const k of [
-    "taskToken.$",
-    "executionId.$",
-    "nodeId",
-  ]) {
+  for (const k of ["taskToken.$", "executionId.$", "nodeId"]) {
     delete stripped[k];
   }
   if (recipe.id === "tool_invoke") {
@@ -386,6 +383,13 @@ function reconstructArgsForTask(
       return { toolId: tool, toolSource: source, args };
     }
     return stripped;
+  }
+  if (recipe.id === "email_send") {
+    const bodyPath = stripped["body.$"];
+    if (typeof bodyPath === "string") {
+      delete stripped["body.$"];
+      return { ...stripped, bodyPath };
+    }
   }
   return stripped;
 }
@@ -551,9 +555,7 @@ function collectRoutineInvokeTargets(
     const dotted = params["StateMachineArn.$"];
     if (typeof dotted === "string") {
       const prefix = "$$.Execution.Input.routineAliasArns.";
-      const id = dotted.startsWith(prefix)
-        ? dotted.slice(prefix.length)
-        : null;
+      const id = dotted.startsWith(prefix) ? dotted.slice(prefix.length) : null;
       if (id) out.push(id);
       continue;
     }

@@ -152,6 +152,11 @@ beforeEach(() => {
     "arn:aws:iam::123456789012:role/thinkwork-dev-routines-execution-role";
   process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME =
     "thinkwork-dev-api-routine-approval-callback";
+  process.env.EMAIL_SEND_FUNCTION_NAME = "thinkwork-dev-api-email-send";
+  process.env.ROUTINE_TASK_PYTHON_FUNCTION_NAME =
+    "thinkwork-dev-api-routine-task-python";
+  process.env.ADMIN_OPS_MCP_FUNCTION_NAME = "thinkwork-dev-api-admin-ops-mcp";
+  process.env.SLACK_SEND_FUNCTION_NAME = "thinkwork-dev-api-slack-send";
   mockSfnSend.mockReset();
   mockValidate.mockReset();
   mockRequireAdminOrApiKeyCaller.mockReset();
@@ -208,9 +213,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       ])
       .mockReturnValueOnce([{ id: "asl-version-1" }]);
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     const result = await createRoutine(
       null,
@@ -234,9 +238,85 @@ describe("createRoutine — Step Functions live cutover", () => {
     expect(mockValidate).toHaveBeenCalledTimes(1);
     // 3 SFN calls: CreateStateMachine, PublishStateMachineVersion, CreateStateMachineAlias.
     expect(mockSfnSend).toHaveBeenCalledTimes(3);
-    const r = result as { engine: string; currentVersion?: number; current_version?: number };
+    const r = result as {
+      engine: string;
+      currentVersion?: number;
+      current_version?: number;
+    };
     expect(r.engine).toBe("step_functions");
     expect(r.currentVersion ?? r.current_version).toBe(1);
+  });
+
+  it("authors supported intent-only input before creating the state machine", async () => {
+    mockSfnSend
+      .mockResolvedValueOnce({
+        stateMachineArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+      })
+      .mockResolvedValueOnce({
+        stateMachineVersionArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:1",
+      })
+      .mockResolvedValueOnce({});
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Check Austin Weather",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([{ id: "asl-version-1" }]);
+
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
+
+    await createRoutine(
+      null,
+      {
+        input: {
+          tenantId: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to ericodom37@gmail.com.",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockValidate).toHaveBeenCalledTimes(1);
+    expect(mockValidate.mock.calls[0][0].asl.StartAt).toBe(
+      "FetchAustinWeather",
+    );
+    expect(mockSfnSend).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects unsupported intent-only input before SFN side effects", async () => {
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
+
+    await expect(
+      createRoutine(
+        null,
+        {
+          input: {
+            tenantId: "tenant-a",
+            name: "Slack alert",
+            description: "Post a Slack message when a webhook fires.",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/currently supports Austin weather/i);
+
+    expect(mockValidate).not.toHaveBeenCalled();
+    expect(mockSfnSend).not.toHaveBeenCalled();
   });
 
   it("returns validator errors and creates no state machine on invalid ASL (covers AE3)", async () => {
@@ -252,9 +332,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       warnings: [],
     });
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await expect(
       createRoutine(
@@ -280,9 +359,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       new Error("Tenant admin role required"),
     );
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await expect(
       createRoutine(
@@ -349,9 +427,8 @@ describe("publishRoutineVersion — version + alias flip", () => {
       })
       .mockResolvedValueOnce({}); // UpdateStateMachineAlias
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     const result = await publishRoutineVersion(
       null,
@@ -386,15 +463,12 @@ describe("publishRoutineVersion — version + alias flip", () => {
     ]);
     mockValidate.mockResolvedValueOnce({
       valid: false,
-      errors: [
-        { code: "asl_syntax", message: "Missing Next on state X" },
-      ],
+      errors: [{ code: "asl_syntax", message: "Missing Next on state X" }],
       warnings: [],
     });
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     await expect(
       publishRoutineVersion(
@@ -426,9 +500,8 @@ describe("publishRoutineVersion — version + alias flip", () => {
       },
     ]);
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     await expect(
       publishRoutineVersion(
@@ -461,6 +534,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
           id: "routine-a",
           tenant_id: "tenant-a",
           engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
           state_machine_alias_arn:
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
         },
@@ -482,9 +557,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       startDate: new Date(),
     });
 
-    const { triggerRoutineRun } = await import(
-      "../graphql/resolvers/routines/triggerRoutineRun.mutation.js"
-    );
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
 
     const result = await triggerRoutineRun(
       null,
@@ -499,10 +573,57 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
     );
     expect(mockSfnSend).toHaveBeenCalledTimes(1);
     const startCall = mockSfnSend.mock.calls[0][0] as {
-      input: { stateMachineArn: string };
+      input: { stateMachineArn: string; input: string };
     };
     expect(startCall.input.stateMachineArn).toContain(":live");
+    expect(JSON.parse(startCall.input.input)).toMatchObject({
+      inboxApprovalFunctionName: "thinkwork-dev-api-routine-approval-callback",
+      emailSendFunctionName: "thinkwork-dev-api-email-send",
+      routineTaskPythonFunctionName: "thinkwork-dev-api-routine-task-python",
+      adminOpsMcpFunctionName: "thinkwork-dev-api-admin-ops-mcp",
+      slackSendFunctionName: "thinkwork-dev-api-slack-send",
+    });
     expect((result as { status: string }).status).toBe("running");
+  });
+
+  it("server-owned runtime names override caller-supplied execution input", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+        },
+      ])
+      .mockReturnValueOnce([{ id: "exec-row-1", status: "running" }]);
+    mockSfnSend.mockResolvedValueOnce({
+      executionArn:
+        "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-routine-routine-a:exec-1",
+      startDate: new Date(),
+    });
+
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
+
+    await triggerRoutineRun(
+      null,
+      {
+        routineId: "routine-a",
+        input: { emailSendFunctionName: "attacker-controlled" },
+      },
+      ctx,
+    );
+
+    const startCall = mockSfnSend.mock.calls[0][0] as {
+      input: { input: string };
+    };
+    expect(JSON.parse(startCall.input.input).emailSendFunctionName).toBe(
+      "thinkwork-dev-api-email-send",
+    );
   });
 
   it("rejects trigger on a legacy_python routine with a deprecation error (not a silent fallback)", async () => {
@@ -515,9 +636,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       },
     ]);
 
-    const { triggerRoutineRun } = await import(
-      "../graphql/resolvers/routines/triggerRoutineRun.mutation.js"
-    );
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
 
     await expect(
       triggerRoutineRun(null, { routineId: "routine-legacy" }, ctx),
