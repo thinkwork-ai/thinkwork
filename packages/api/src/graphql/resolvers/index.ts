@@ -94,10 +94,12 @@ import { agentTypeResolvers } from "./agents/types.js";
 import { threadTypeResolvers } from "./threads/types.js";
 import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
+import { routineExecutionTypeResolvers } from "./routines/types.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
   Agent: agentTypeResolvers,
   Thread: threadTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
+  RoutineExecution: routineExecutionTypeResolvers,
 };

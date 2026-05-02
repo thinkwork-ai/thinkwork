@@ -61,6 +61,15 @@ export const routines = pgTable(
 		// Pointer to the latest published version_number in routine_asl_versions.
 		// Null for legacy_python; sequential starting at 1 for step_functions.
 		current_version: integer("current_version"),
+		// Visibility model (schema follow-up bundle): splits the conflated
+		// agent_id field. visibility is 'agent_private' or 'tenant_shared';
+		// owning_agent_id is the agent that authored the routine (separate
+		// from agent_id, which is the primary execution agent). The MCP
+		// routine_invoke tool reads these columns to enforce ownership.
+		// Lower-snake enum values match the literals already baked into
+		// admin-ops/checkRoutineVisibility.
+		visibility: text("visibility").notNull().default("agent_private"),
+		owning_agent_id: uuid("owning_agent_id").references(() => agents.id),
 		last_run_at: timestamp("last_run_at", { withTimezone: true }),
 		next_run_at: timestamp("next_run_at", { withTimezone: true }),
 		created_at: timestamp("created_at", { withTimezone: true })
@@ -77,6 +86,10 @@ export const routines = pgTable(
 		check(
 			"routines_engine_enum",
 			sql`${table.engine} IN ('legacy_python', 'step_functions')`,
+		),
+		check(
+			"routines_visibility_enum",
+			sql`${table.visibility} IN ('agent_private', 'tenant_shared')`,
 		),
 	],
 );

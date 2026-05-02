@@ -21,6 +21,8 @@ function routine(overrides: Partial<Routine> = {}): Routine {
     id: "rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr",
     tenantId: TENANT_A,
     agentId: AGENT_OWNER,
+    visibility: "agent_private",
+    owningAgentId: AGENT_OWNER,
     name: "Test routine",
     description: null,
     status: "active",
@@ -67,20 +69,43 @@ describe("checkRoutineVisibility", () => {
     if (!result.ok) expect(result.reason).toBe("private_to_other_agent");
   });
 
-  it("allows any agent in the tenant to invoke a tenant-shared routine (agentId=null)", () => {
-    const result = checkRoutineVisibility(routine({ agentId: null }), {
-      tenantId: TENANT_A,
-      agentId: AGENT_OTHER,
-    });
+  it("allows any agent in the tenant to invoke a tenant_shared routine", () => {
+    const result = checkRoutineVisibility(
+      routine({
+        visibility: "tenant_shared",
+        owningAgentId: null,
+        agentId: null,
+      }),
+      { tenantId: TENANT_A, agentId: AGENT_OTHER },
+    );
     expect(result.ok).toBe(true);
   });
 
-  it("still rejects cross-tenant access on tenant-shared routines", () => {
-    const result = checkRoutineVisibility(routine({ agentId: null }), {
-      tenantId: TENANT_B,
-      agentId: AGENT_OTHER,
-    });
+  it("still rejects cross-tenant access on tenant_shared routines", () => {
+    const result = checkRoutineVisibility(
+      routine({
+        visibility: "tenant_shared",
+        owningAgentId: null,
+        agentId: null,
+      }),
+      { tenantId: TENANT_B, agentId: AGENT_OTHER },
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("different_tenant");
+  });
+
+  it("uses owningAgentId (not agentId) for the private-routine ownership check", () => {
+    // Schema follow-up bundle: a routine can have agentId set to one
+    // execution agent while owningAgentId points at the authoring
+    // agent. The MCP routine_invoke check is gated on owningAgentId.
+    const result = checkRoutineVisibility(
+      routine({
+        agentId: AGENT_OTHER,
+        owningAgentId: AGENT_OWNER,
+        visibility: "agent_private",
+      }),
+      { tenantId: TENANT_A, agentId: AGENT_OWNER },
+    );
+    expect(result.ok).toBe(true);
   });
 });
