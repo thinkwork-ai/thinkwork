@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Plus, Search, CalendarClock } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -132,12 +132,6 @@ function RoutinesPage() {
           />
         </div>
         <div className="flex-1" />
-        <Button size="sm" variant="outline" asChild>
-          <Link to="/automations/schedules" search={{ type: "routine" }}>
-            <CalendarClock className="h-4 w-4 mr-1" />
-            Schedules
-          </Link>
-        </Button>
         <Button size="sm" asChild>
           <Link to="/automations/routines/new">
             <Plus className="h-4 w-4 mr-1" />
