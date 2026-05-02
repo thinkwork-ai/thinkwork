@@ -16,6 +16,7 @@ import {
   RESOURCE_ARN_PATTERNS,
   findRecipeByArn,
   getRecipe,
+  getRecipeConfigFields,
   knownResourceArn,
   listRecipes,
   readRecipeMarker,
@@ -203,6 +204,46 @@ describe("recipe-catalog", () => {
         subject: "Austin weather update",
       }),
     ).toBe(false);
+  });
+
+  it("exposes editor config from recipe metadata without surfacing internal args", () => {
+    const fields = getRecipeConfigFields("email_send", {
+      to: ["ericodom37@gmail.com"],
+      subject: "Austin weather update",
+      bodyPath: "$.FetchAustinWeather.stdoutPreview",
+      bodyFormat: "markdown",
+    });
+
+    expect(fields).toEqual([
+      expect.objectContaining({
+        key: "to",
+        label: "To",
+        value: ["ericodom37@gmail.com"],
+        inputType: "email_array",
+        required: true,
+        editable: true,
+      }),
+      expect.objectContaining({
+        key: "subject",
+        value: "Austin weather update",
+        inputType: "text",
+        required: true,
+        editable: true,
+      }),
+      expect.objectContaining({
+        key: "bodyFormat",
+        value: "markdown",
+        inputType: "select",
+        options: ["text", "html", "markdown"],
+        editable: true,
+      }),
+      expect.objectContaining({
+        key: "bodyPath",
+        value: "$.FetchAustinWeather.stdoutPreview",
+        editable: false,
+      }),
+    ]);
+    expect(fields.map((field) => field.key)).not.toContain("cc");
   });
 
   it("email_send and python payloads include server-owned routine identity", () => {

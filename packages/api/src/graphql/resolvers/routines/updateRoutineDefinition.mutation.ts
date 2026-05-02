@@ -1,22 +1,19 @@
 import { and, eq } from "drizzle-orm";
-import {
-  routineAslVersions,
-  routines,
-} from "@thinkwork/database-pg/schema";
+import { routineAslVersions, routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import {
   applyRoutineDefinitionEdits,
   routineDefinitionFromArtifacts,
-  type RoutineDefinitionEdit,
+  type RoutineDefinitionStepConfigEdit,
 } from "../../../lib/routines/routine-authoring-planner.js";
 import { publishRoutineArtifacts } from "./publishRoutineVersion.mutation.js";
 import { routineDefinitionPayload } from "./routineDefinition.shared.js";
 
 interface UpdateRoutineDefinitionInput {
   routineId: string;
-  fields: RoutineDefinitionEdit[];
+  steps: RoutineDefinitionStepConfigEdit[];
 }
 
 export async function updateRoutineDefinition(
@@ -24,7 +21,7 @@ export async function updateRoutineDefinition(
   args: { input: UpdateRoutineDefinitionInput },
   ctx: GraphQLContext,
 ): Promise<unknown> {
-  const { routineId, fields } = args.input;
+  const { routineId, steps } = args.input;
   const [routine] = await db
     .select()
     .from(routines)
@@ -69,7 +66,7 @@ export async function updateRoutineDefinition(
     throw new Error(definition.reason);
   }
 
-  const edited = applyRoutineDefinitionEdits(definition.plan, fields);
+  const edited = applyRoutineDefinitionEdits(definition.plan, steps);
   if (!edited.ok) {
     throw new Error(edited.reason);
   }

@@ -172,16 +172,20 @@ type RoutineAslVersion {
 type RoutineDefinitionStep {
   nodeId: String!
   recipeId: String!
+  recipeName: String!
   label: String!
   args: AWSJSON!
+  configFields: [RoutineDefinitionConfigField!]!
 }
 
-type RoutineDefinitionField {
+type RoutineDefinitionConfigField {
   key: String!
   label: String!
-  value: String
+  value: AWSJSON
   inputType: String!
-  stepNodeId: String
+  required: Boolean!
+  editable: Boolean!
+  options: [String!]
 }
 
 type RoutineDefinition {
@@ -192,7 +196,6 @@ type RoutineDefinition {
   description: String
   kind: String!
   steps: [RoutineDefinitionStep!]!
-  editableFields: [RoutineDefinitionField!]!
 }
 
 # ---- Tenant tool inventory (Phase A scaffold; resolver comes in Phase A U4) ----
@@ -302,14 +305,14 @@ input RebuildRoutineVersionInput {
   routineId: ID!
 }
 
-input RoutineDefinitionFieldInput {
-  key: String!
-  value: String
+input RoutineDefinitionStepConfigInput {
+  nodeId: String!
+  args: AWSJSON!
 }
 
 input UpdateRoutineDefinitionInput {
   routineId: ID!
-  fields: [RoutineDefinitionFieldInput!]!
+  steps: [RoutineDefinitionStepConfigInput!]!
 }
 
 input DecideRoutineApprovalInput {
