@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useQuery } from "urql";
 import {
   WikiBacklinksQuery,
@@ -79,12 +80,16 @@ export function useWikiPage({ tenantId, userId, ownerId, type, slug }: UseWikiPa
     pause: !tenantId || !scopeUserId || !type || !slug,
     requestPolicy: "cache-and-network",
   });
+  const refresh = useCallback(
+    () => refetch({ requestPolicy: "network-only" }),
+    [refetch],
+  );
 
   return {
     page: data?.wikiPage ?? null,
     loading: fetching,
     error,
-    refetch: () => refetch({ requestPolicy: "network-only" }),
+    refetch: refresh,
   };
 }
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
@@ -108,7 +108,7 @@ export default function WikiPageScreen() {
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
 
-	const { page, loading } = useWikiPage({ tenantId, userId, type, slug });
+	const { page, loading, refetch } = useWikiPage({ tenantId, userId, type, slug });
 	const { backlinks } = useWikiBacklinks(page?.id);
 	const { connectedPages } = useWikiConnectedPages(page?.id);
 	const [viewMode, setViewMode] = useState<"wiki" | "split" | "graph">(
@@ -124,6 +124,13 @@ export default function WikiPageScreen() {
 	const onLinkPress = useCallback(
 		(url: string) => buildWikiLinkHandler(router, userId)(url),
 		[router, userId],
+	);
+
+	useFocusEffect(
+		useCallback(() => {
+			if (!tenantId || !userId || !type || !slug) return;
+			refetch();
+		}, [tenantId, userId, type, slug, refetch]),
 	);
 
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
