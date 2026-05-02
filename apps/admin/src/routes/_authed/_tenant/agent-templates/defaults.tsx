@@ -42,7 +42,7 @@ const DEFAULT_FILES: Record<string, string> = {
 
 function DefaultWorkspacePage() {
   useBreadcrumbs([
-    { label: "Templates", href: "/agent-templates" },
+    { label: "Agent Templates", href: "/agent-templates" },
     { label: "Default Workspace" },
   ]);
 

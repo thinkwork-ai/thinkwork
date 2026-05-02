@@ -195,7 +195,7 @@ function ScheduledJobDetailPage() {
   const [triggering, setTriggering] = useState(false);
 
   useBreadcrumbs([
-    { label: "Automations", href: "/automations/schedules" },
+    { label: "Scheduled Jobs", href: "/automations/schedules" },
     { label: job?.name || "..." },
   ]);
 
