@@ -66,6 +66,32 @@ describe("system workflow registry", () => {
     });
   });
 
+  it("builds tenant-agent-activation ASL with a Lambda task and failure gate", () => {
+    const definition = getSystemWorkflowDefinition("tenant-agent-activation");
+    const asl = buildSystemWorkflowAsl(definition!);
+
+    expect(definition).toBeTruthy();
+    expect(asl.Comment).toBe(
+      "thinkwork-system-workflow:tenant-agent-activation:2026-05-02.v1",
+    );
+    expect(asl.States.ApplyActivationBundle).toMatchObject({
+      Type: "Task",
+      Resource: "arn:aws:states:::lambda:invoke",
+      Parameters: {
+        FunctionName: "${activation_workflow_adapter_lambda_arn}",
+        "Payload.$": "$",
+      },
+    });
+    expect(asl.States.RecordLaunchDecision).toMatchObject({
+      Type: "Choice",
+      Default: "ActivationWorkflowFailed",
+    });
+    expect(asl.States.ActivationWorkflowFailed).toMatchObject({
+      Type: "Fail",
+      Error: "ActivationWorkflowFailed",
+    });
+  });
+
   it("validates config against required typed fields", () => {
     const definition = getSystemWorkflowDefinition("tenant-agent-activation")!;
     const config = defaultSystemWorkflowConfig(definition);

@@ -139,6 +139,9 @@ build_handler "scheduled-jobs" \
 build_handler "activation" \
   "$REPO_ROOT/packages/api/src/handlers/activation.ts"
 
+build_handler "activation-workflow-adapter" \
+  "$REPO_ROOT/packages/api/src/handlers/activation-workflow-adapter.ts"
+
 build_handler "activation-apply-worker" \
   "$REPO_ROOT/packages/api/src/handlers/activation-apply-worker.ts"
 

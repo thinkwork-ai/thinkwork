@@ -19,6 +19,10 @@ export function buildSystemWorkflowAsl(
     return buildEvaluationRunsAsl(definition);
   }
 
+  if (definition.id === "tenant-agent-activation") {
+    return buildTenantAgentActivationAsl(definition);
+  }
+
   const states: Record<string, AslState> = {};
   for (const [index, step] of definition.stepManifest.entries()) {
     const next = definition.stepManifest[index + 1]?.nodeId;
@@ -180,6 +184,97 @@ function buildEvaluationRunsAsl(
         Type: "Fail",
         Error: "EvaluationThresholdFailed",
         Cause: "Evaluation pass-rate gate did not pass.",
+      },
+    },
+  };
+}
+
+function buildTenantAgentActivationAsl(
+  definition: SystemWorkflowDefinition,
+): SystemWorkflowAsl {
+  return {
+    Comment: `thinkwork-system-workflow:${definition.id}:${definition.activeVersion}`,
+    StartAt: "TrackReadiness",
+    States: {
+      TrackReadiness: {
+        Type: "Pass",
+        Comment: "standard:checkpoint:Track activation readiness",
+        Parameters: {
+          "activationSessionId.$": "$.input.activationSessionId",
+          "tenantId.$": "$.tenantId",
+          "userId.$": "$.input.userId",
+          "mode.$": "$.input.mode",
+          "focusLayer.$": "$.input.focusLayer",
+          "currentLayer.$": "$.input.currentLayer",
+          "systemWorkflowRunId.$": "$.workflowRunId",
+          "systemWorkflowExecutionArn.$": "$$.Execution.Id",
+          "domainRef.$": "$.domainRef",
+        },
+        Next: "RunPolicyChecks",
+      },
+      RunPolicyChecks: {
+        Type: "Pass",
+        Comment: "standard:validation:Run activation policy checks",
+        Parameters: {
+          "activationSessionId.$": "$.activationSessionId",
+          "tenantId.$": "$.tenantId",
+          "userId.$": "$.userId",
+          "mode.$": "$.mode",
+          "focusLayer.$": "$.focusLayer",
+          "currentLayer.$": "$.currentLayer",
+          "systemWorkflowRunId.$": "$.systemWorkflowRunId",
+          "systemWorkflowExecutionArn.$": "$.systemWorkflowExecutionArn",
+          "domainRef.$": "$.domainRef",
+          policy: {
+            securityAttestationRequired: true,
+            launchApprovalRole: "admin",
+          },
+        },
+        Next: "ApplyActivationBundle",
+      },
+      ApplyActivationBundle: {
+        Type: "Task",
+        Comment: "standard:worker:Record activation workflow evidence",
+        Resource: "arn:aws:states:::lambda:invoke",
+        Parameters: {
+          FunctionName: "${activation_workflow_adapter_lambda_arn}",
+          "Payload.$": "$",
+        },
+        OutputPath: "$.Payload",
+        Retry: [
+          {
+            ErrorEquals: [
+              "Lambda.ServiceException",
+              "Lambda.AWSLambdaException",
+              "Lambda.SdkClientException",
+              "Lambda.TooManyRequestsException",
+            ],
+            IntervalSeconds: 2,
+            MaxAttempts: 3,
+            BackoffRate: 2,
+          },
+        ],
+        Next: "RecordLaunchDecision",
+      },
+      RecordLaunchDecision: {
+        Type: "Choice",
+        Comment: "standard:evidence:Record launch decision",
+        Choices: [
+          {
+            Variable: "$.ok",
+            BooleanEquals: true,
+            Next: "ActivationWorkflowSucceeded",
+          },
+        ],
+        Default: "ActivationWorkflowFailed",
+      },
+      ActivationWorkflowSucceeded: {
+        Type: "Succeed",
+      },
+      ActivationWorkflowFailed: {
+        Type: "Fail",
+        Error: "ActivationWorkflowFailed",
+        Cause: "Tenant/Agent Activation workflow adapter did not pass.",
       },
     },
   };
