@@ -62,7 +62,6 @@ type Routine {
   currentVersion: Int
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
-  runs: [RoutineRun!]! @deprecated(reason: "Use executions; routine_runs storage was removed pre-Phase A")
   # Nullable in Phase A while the type-resolver lands in Phase B U7. A
   # non-null list with no resolver null-propagates and breaks the parent
   # routine query for any client that selects it.
@@ -70,42 +69,6 @@ type Routine {
   triggers: [RoutineTrigger!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
-}
-
-# @deprecated: Use RoutineExecution. Removed in Phase E (U15).
-# (Object types cannot carry @deprecated per GraphQL spec — only fields,
-# enum values, input fields, and arguments can. Deprecation is signaled
-# via the routineRun/routineRuns queries and the Routine.runs field
-# below, which are field-level usages where @deprecated is valid.)
-type RoutineRun {
-  id: ID!
-  routineId: ID!
-  tenantId: ID!
-  status: String!
-  startedAt: AWSDateTime
-  completedAt: AWSDateTime
-  error: String
-  metadata: AWSJSON
-  steps: [RoutineStep!]!
-  createdAt: AWSDateTime!
-}
-
-# @deprecated: Use RoutineStepEvent. Unbacked since pre-Phase A; removed
-# in Phase E. Same spec note as RoutineRun above.
-type RoutineStep {
-  id: ID!
-  runId: ID!
-  routineId: ID!
-  tenantId: ID!
-  stepIndex: Int!
-  name: String!
-  status: String!
-  input: AWSJSON
-  output: AWSJSON
-  startedAt: AWSDateTime
-  completedAt: AWSDateTime
-  error: String
-  createdAt: AWSDateTime!
 }
 
 type RoutineTrigger {
@@ -285,8 +248,6 @@ input DecideRoutineApprovalInput {
 extend type Query {
   routines(tenantId: ID!, teamId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
   routine(id: ID!): Routine
-  routineRun(id: ID!): RoutineRun @deprecated(reason: "Use routineExecution; removed in Phase E.")
-  routineRuns(routineId: ID!, limit: Int, cursor: String): [RoutineRun!]! @deprecated(reason: "Use routineExecutions; removed in Phase E.")
   # Phase A schema; resolvers ship in Phase B (U7+U9) and Phase A (U4).
   routineExecution(id: ID!): RoutineExecution
   routineExecutions(routineId: ID!, status: RoutineExecutionStatus, limit: Int, cursor: String): [RoutineExecution!]!
