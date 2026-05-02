@@ -105,6 +105,32 @@ export type AslEmitter = (
   ctx: AslEmitContext,
 ) => AslState;
 
+export type RecipeConfigInputType =
+  | "text"
+  | "email_array"
+  | "select"
+  | "string_array"
+  | "number";
+
+export interface RecipeConfigFieldDefinition {
+  key: string;
+  label: string;
+  inputType: RecipeConfigInputType;
+  required?: boolean;
+  editable?: boolean;
+  options?: readonly string[];
+}
+
+export interface RecipeConfigField {
+  key: string;
+  label: string;
+  value: unknown | null;
+  inputType: RecipeConfigInputType;
+  required: boolean;
+  editable: boolean;
+  options: readonly string[] | null;
+}
+
 export interface RecipeDefinition {
   /** Stable lookup key. Embedded in the emitted state's `Comment` so the
    * validator can reverse-map state → recipe. */
@@ -120,6 +146,12 @@ export interface RecipeDefinition {
    * Ajv-checks LLM emissions against this.
    */
   argSchema: JsonSchema7Type;
+  /**
+   * Product-owned fields safe to surface in routine editors. This metadata
+   * is the source of truth for config UI; args omitted here are internal
+   * implementation details even when present in argSchema.
+   */
+  configFields?: readonly RecipeConfigFieldDefinition[];
   /**
    * Pure function returning the ASL state for the given args + context.
    * The emitter is responsible for embedding `recipe:<id>` in the state's
@@ -182,15 +214,12 @@ function applySequencing(state: AslState, ctx: AslEmitContext): AslState {
 export const RESOURCE_ARN_PATTERNS = Object.freeze({
   // bedrockagentcore InvokeAgentRuntime — sync invocation; arg-shape is the
   // Strands input payload.
-  agentInvoke:
-    /^arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime$/,
+  agentInvoke: /^arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime$/,
   // admin-ops-mcp Lambda invoke — wraps `tool_invoke`. Region/account vary,
   // function name is fixed by Terraform.
-  toolInvoke:
-    /^arn:aws:states:::lambda:invoke$/,
+  toolInvoke: /^arn:aws:states:::lambda:invoke$/,
   // routine_invoke uses native sfn:startExecution.sync:2.
-  routineInvoke:
-    /^arn:aws:states:::states:startExecution\.sync:2$/,
+  routineInvoke: /^arn:aws:states:::states:startExecution\.sync:2$/,
   // python() — thin Lambda wrapping InvokeCodeInterpreter.
   python: /^arn:aws:states:::lambda:invoke$/,
   // inbox_approval — .waitForTaskToken on a Lambda that creates the
@@ -210,7 +239,8 @@ const STR = { type: "string" } as const;
 const STR_NONEMPTY = { type: "string", minLength: 1 } as const;
 const UUID = {
   type: "string",
-  pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+  pattern:
+    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
 } as const;
 
 /**
@@ -273,11 +303,12 @@ const _CATALOG: RecipeDefinition[] = [
         applySequencing(
           {
             Type: "Task",
-            Resource: "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
+            Resource:
+              "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
             Parameters: {
               "AgentRuntimeArn.$": "$$.Execution.Input.tenantAgentRuntimeArn",
-              "Qualifier": "DEFAULT",
-              "Payload": args.input ?? { "_": "$" },
+              Qualifier: "DEFAULT",
+              Payload: args.input ?? { _: "$" },
             },
           },
           ctx,
@@ -311,7 +342,7 @@ const _CATALOG: RecipeDefinition[] = [
             Resource: "arn:aws:states:::lambda:invoke",
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.adminOpsMcpFunctionName",
-              "Payload": {
+              Payload: {
                 tool: args.toolId,
                 source: args.toolSource,
                 args: args.args ?? {},
@@ -349,7 +380,7 @@ const _CATALOG: RecipeDefinition[] = [
             Resource: "arn:aws:states:::states:startExecution.sync:2",
             Parameters: {
               "StateMachineArn.$": `$$.Execution.Input.routineAliasArns.${String(args.routineId)}`,
-              "Input": args.input ?? {},
+              Input: args.input ?? {},
             },
             ResultSelector: { "output.$": "$.Output" },
           },
@@ -391,15 +422,15 @@ const _CATALOG: RecipeDefinition[] = [
             Type: "Task",
             Resource: "arn:aws:states:::http:invoke",
             Parameters: {
-              "ApiEndpoint": args.apiEndpoint,
-              "Method": args.method,
-              "Authentication": { "ConnectionArn": args.connectionArn },
-              ...(args.headers ? { "Headers": args.headers } : {}),
+              ApiEndpoint: args.apiEndpoint,
+              Method: args.method,
+              Authentication: { ConnectionArn: args.connectionArn },
+              ...(args.headers ? { Headers: args.headers } : {}),
               ...(args.queryParameters
-                ? { "QueryParameters": args.queryParameters }
+                ? { QueryParameters: args.queryParameters }
                 : {}),
               ...(args.requestBody !== undefined
-                ? { "RequestBody": args.requestBody }
+                ? { RequestBody: args.requestBody }
                 : {}),
             },
           },
@@ -435,10 +466,10 @@ const _CATALOG: RecipeDefinition[] = [
             Parameters: {
               "ResourceArn.$": "$$.Execution.Input.auroraClusterArn",
               "SecretArn.$": "$$.Execution.Input.auroraSecretArn",
-              "Database": args.databaseName,
-              "Sql": args.sql,
+              Database: args.databaseName,
+              Sql: args.sql,
               ...(Array.isArray(args.parameters)
-                ? { "Parameters": args.parameters }
+                ? { Parameters: args.parameters }
                 : {}),
             },
           },
@@ -535,7 +566,7 @@ const _CATALOG: RecipeDefinition[] = [
             Resource: "arn:aws:states:::lambda:invoke",
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.slackSendFunctionName",
-              "Payload": {
+              Payload: {
                 channelId: args.channelId,
                 text: args.text,
                 ...(Array.isArray(args.blocks) ? { blocks: args.blocks } : {}),
@@ -569,6 +600,35 @@ const _CATALOG: RecipeDefinition[] = [
       required: ["to", "subject"],
       anyOf: [{ required: ["body"] }, { required: ["bodyPath"] }],
     },
+    configFields: [
+      {
+        key: "to",
+        label: "To",
+        inputType: "email_array",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "subject",
+        label: "Subject",
+        inputType: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "bodyFormat",
+        label: "Body format",
+        inputType: "select",
+        options: ["text", "html", "markdown"],
+        editable: true,
+      },
+      {
+        key: "bodyPath",
+        label: "Body source",
+        inputType: "text",
+        editable: false,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.emailSend,
     aslEmitter: (args, ctx) => {
       const payload: Record<string, unknown> = {
@@ -592,7 +652,7 @@ const _CATALOG: RecipeDefinition[] = [
             Resource: "arn:aws:states:::lambda:invoke",
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.emailSendFunctionName",
-              "Payload": payload,
+              Payload: payload,
             },
             ResultSelector: { "messageId.$": "$.Payload.messageId" },
           },
@@ -630,10 +690,10 @@ const _CATALOG: RecipeDefinition[] = [
         Resource: "arn:aws:states:::lambda:invoke.waitForTaskToken",
         Parameters: {
           "FunctionName.$": "$$.Execution.Input.inboxApprovalFunctionName",
-          "Payload": {
+          Payload: {
             "taskToken.$": "$$.Task.Token",
             "executionId.$": "$$.Execution.Id",
-            "nodeId": ctx.stateName,
+            nodeId: ctx.stateName,
             title: args.title,
             markdownContext: args.markdownContext,
             decisionSchema: args.decisionSchema,
@@ -672,6 +732,20 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["code"],
     },
+    configFields: [
+      {
+        key: "timeoutSeconds",
+        label: "Timeout seconds",
+        inputType: "number",
+        editable: false,
+      },
+      {
+        key: "networkAllowlist",
+        label: "Network allowlist",
+        inputType: "string_array",
+        editable: false,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.python,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -680,12 +754,13 @@ const _CATALOG: RecipeDefinition[] = [
             Type: "Task",
             Resource: "arn:aws:states:::lambda:invoke",
             Parameters: {
-              "FunctionName.$": "$$.Execution.Input.routineTaskPythonFunctionName",
-              "Payload": {
+              "FunctionName.$":
+                "$$.Execution.Input.routineTaskPythonFunctionName",
+              Payload: {
                 "tenantId.$": "$$.Execution.Input.tenantId",
                 "routineId.$": "$$.Execution.Input.routineId",
                 "executionId.$": "$$.Execution.Id",
-                "nodeId": ctx.stateName,
+                nodeId: ctx.stateName,
                 code: args.code,
                 timeoutSeconds: args.timeoutSeconds ?? 60,
                 networkAllowlist: Array.isArray(args.networkAllowlist)
@@ -709,7 +784,8 @@ const _CATALOG: RecipeDefinition[] = [
   },
 ];
 
-export const RECIPE_CATALOG: readonly RecipeDefinition[] = Object.freeze(_CATALOG);
+export const RECIPE_CATALOG: readonly RecipeDefinition[] =
+  Object.freeze(_CATALOG);
 
 const _CATALOG_BY_ID: Map<string, RecipeDefinition> = new Map(
   RECIPE_CATALOG.map((r) => [r.id, r]),
@@ -717,6 +793,28 @@ const _CATALOG_BY_ID: Map<string, RecipeDefinition> = new Map(
 
 export function getRecipe(id: string): RecipeDefinition | undefined {
   return _CATALOG_BY_ID.get(id);
+}
+
+export function getRecipeConfigFields(
+  recipeId: string,
+  args: Record<string, unknown>,
+): RecipeConfigField[] {
+  const recipe = getRecipe(recipeId);
+  if (!recipe?.configFields) return [];
+
+  const required = new Set(
+    Array.isArray(recipe.argSchema.required) ? recipe.argSchema.required : [],
+  );
+
+  return recipe.configFields.map((field) => ({
+    key: field.key,
+    label: field.label,
+    value: args[field.key] ?? null,
+    inputType: field.inputType,
+    required: field.required ?? required.has(field.key),
+    editable: field.editable ?? true,
+    options: field.options ?? null,
+  }));
 }
 
 export function listRecipes(): readonly RecipeDefinition[] {

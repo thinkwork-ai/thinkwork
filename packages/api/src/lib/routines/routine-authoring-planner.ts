@@ -1,4 +1,9 @@
-import { getRecipe, type AslState } from "./recipe-catalog.js";
+import {
+  getRecipe,
+  getRecipeConfigFields,
+  type AslState,
+  type RecipeConfigField,
+} from "./recipe-catalog.js";
 
 export interface RoutinePlanInput {
   name: string;
@@ -9,16 +14,10 @@ export interface RoutinePlanInput {
 export interface RoutinePlanStep {
   nodeId: string;
   recipeId: string;
+  recipeName: string;
   label: string;
   args: Record<string, unknown>;
-}
-
-export interface RoutineDefinitionField {
-  key: string;
-  label: string;
-  value: string | null;
-  inputType: "email" | "text";
-  stepNodeId?: string | null;
+  configFields: RecipeConfigField[];
 }
 
 export interface RoutinePlan {
@@ -26,7 +25,6 @@ export interface RoutinePlan {
   title: string;
   description: string;
   steps: RoutinePlanStep[];
-  editableFields: RoutineDefinitionField[];
 }
 
 export type RoutineDefinitionKind = "weather_email";
@@ -46,9 +44,9 @@ export type RoutineDefinitionResult =
   | { ok: true; plan: RoutinePlan }
   | { ok: false; reason: string };
 
-export interface RoutineDefinitionEdit {
-  key: string;
-  value: string | null;
+export interface RoutineDefinitionStepConfigEdit {
+  nodeId: string;
+  args: Record<string, unknown>;
 }
 
 const EMAIL_EXTRACT_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -88,21 +86,16 @@ export function planRoutineFromIntent(
   }
 
   const displayName = input.name.trim() || "Austin weather email";
-  return artifactsForWeatherEmail(displayName, recipient);
+  return artifactsForPlan(weatherEmailPlan(displayName, recipient));
 }
 
-export function buildRoutineArtifactsFromPlan(plan: RoutinePlan): RoutinePlanResult {
+export function buildRoutineArtifactsFromPlan(
+  plan: RoutinePlan,
+): RoutinePlanResult {
   if (plan.kind !== "weather_email") {
     return unsupported(`Unsupported routine definition kind: ${plan.kind}`);
   }
-  const recipient = fieldValue(plan, "recipientEmail");
-  if (!recipient) {
-    return unsupported("Enter a recipient email address before saving.");
-  }
-  if (!EMAIL_VALUE_RE.test(recipient)) {
-    return unsupported("Enter a valid recipient email address.");
-  }
-  return artifactsForWeatherEmail(plan.title, recipient);
+  return artifactsForPlan(refreshPlanConfigFields(plan));
 }
 
 export function routineDefinitionFromArtifacts(input: {
@@ -114,6 +107,12 @@ export function routineDefinitionFromArtifacts(input: {
   const manifest = normalizeJsonObject(input.stepManifestJson);
   const definition = normalizeJsonObject(manifest.definition);
   if (definition?.kind === "weather_email") {
+    const manifestPlan = planFromManifestDefinition(
+      input.routineName,
+      definition,
+    );
+    if (manifestPlan.ok) return manifestPlan;
+
     const recipient = String(definition.recipientEmail ?? "").trim();
     if (recipient && EMAIL_VALUE_RE.test(recipient)) {
       return {
@@ -138,106 +137,116 @@ export function routineDefinitionFromArtifacts(input: {
 
 export function applyRoutineDefinitionEdits(
   plan: RoutinePlan,
-  edits: RoutineDefinitionEdit[],
+  edits: RoutineDefinitionStepConfigEdit[],
 ): RoutinePlanResult {
-  const next: RoutinePlan = {
+  const next = refreshPlanConfigFields({
     ...plan,
     steps: plan.steps.map((step) => ({
       ...step,
       args: { ...step.args },
+      configFields: step.configFields.map((field) => ({ ...field })),
     })),
-    editableFields: plan.editableFields.map((field) => ({ ...field })),
-  };
+  });
 
   for (const edit of edits) {
-    if (edit.key !== "recipientEmail") {
-      return unsupported(`Unsupported routine definition field: ${edit.key}`);
+    const step = next.steps.find(
+      (candidate) => candidate.nodeId === edit.nodeId,
+    );
+    if (!step) {
+      return unsupported(`Unsupported routine definition step: ${edit.nodeId}`);
     }
-    const value = edit.value?.trim() ?? "";
-    if (!value) {
-      return unsupported("Enter a recipient email address before saving.");
+
+    const submitted = normalizeJsonObject(edit.args);
+    const fieldsByKey = new Map(
+      step.configFields.map((field) => [field.key, field]),
+    );
+
+    for (const [key, rawValue] of Object.entries(submitted)) {
+      const field = fieldsByKey.get(key);
+      if (!field) {
+        return unsupported(
+          `Unsupported routine definition field: ${edit.nodeId}.${key}`,
+        );
+      }
+
+      const normalized = normalizeConfigValue(field, rawValue);
+      if (!normalized.ok) return normalized;
+
+      if (!field.editable) {
+        if (!sameJson(normalized.value, step.args[key] ?? null)) {
+          return unsupported(`${field.label} is read-only.`);
+        }
+        continue;
+      }
+
+      step.args[key] = normalized.value;
     }
-    if (!EMAIL_VALUE_RE.test(value)) {
-      return unsupported("Enter a valid recipient email address.");
-    }
-    const field = next.editableFields.find((f) => f.key === "recipientEmail");
-    if (field) field.value = value;
   }
 
-  return buildRoutineArtifactsFromPlan(next);
+  const refreshed = refreshPlanConfigFields(next);
+  const validation = validateRequiredConfig(refreshed);
+  if (!validation.ok) return validation;
+
+  return buildRoutineArtifactsFromPlan(refreshed);
 }
 
-function artifactsForWeatherEmail(
-  displayName: string,
-  recipient: string,
-): RoutinePlanResult {
-  const python = getRecipe("python");
-  const email = getRecipe("email_send");
-  if (!python) {
-    return unsupported(
-      "Routine authoring is misconfigured: required recipe python is missing.",
-    );
-  }
-  if (!email) {
-    return unsupported(
-      "Routine authoring is misconfigured: required recipe email_send is missing.",
-    );
+function artifactsForPlan(plan: RoutinePlan): RoutinePlanResult {
+  if (plan.steps.length === 0) {
+    return unsupported("Routine definition must include at least one step.");
   }
 
-  const plan = weatherEmailPlan(displayName, recipient);
-  const fetchStep = plan.steps[0]!;
-  const emailStep = plan.steps[1]!;
-  const fetchState = python.aslEmitter(fetchStep.args, {
-    stateName: fetchStep.nodeId,
-    next: emailStep.nodeId,
-    end: false,
-  });
-  const emailState = email.aslEmitter(emailStep.args, {
-    stateName: emailStep.nodeId,
-    next: null,
-    end: true,
-  });
+  const validation = validateRequiredConfig(plan);
+  if (!validation.ok) return validation;
 
-  const states: Record<string, AslState> = {
-    [fetchStep.nodeId]: {
-      ...fetchState,
-      ResultPath: `$.${fetchStep.nodeId}`,
-    },
-    [emailStep.nodeId]: {
-      ...emailState,
-      ResultPath: `$.${emailStep.nodeId}`,
-    },
-  };
+  const states: Record<string, AslState> = {};
+  for (let index = 0; index < plan.steps.length; index += 1) {
+    const step = plan.steps[index]!;
+    const recipe = getRecipe(step.recipeId);
+    if (!recipe) {
+      return unsupported(
+        `Routine authoring is misconfigured: required recipe ${step.recipeId} is missing.`,
+      );
+    }
+    const nextStep = plan.steps[index + 1] ?? null;
+    const state = recipe.aslEmitter(step.args, {
+      stateName: step.nodeId,
+      next: nextStep?.nodeId ?? null,
+      end: nextStep == null,
+    });
+    states[step.nodeId] = {
+      ...state,
+      ResultPath: `$.${step.nodeId}`,
+    };
+  }
+
+  const description = descriptionForPlan(plan);
+  const markdownSummary = markdownSummaryForPlan({ ...plan, description });
 
   return {
     ok: true,
     artifacts: {
-      plan,
+      plan: refreshPlanConfigFields({ ...plan, description }),
       asl: {
-        Comment: `Routine authored from intent: ${displayName}`,
-        StartAt: fetchStep.nodeId,
+        Comment: `Routine authored from intent: ${plan.title}`,
+        StartAt: plan.steps[0]?.nodeId,
         States: states,
       },
-      markdownSummary: [
-        `# ${displayName}`,
-        "",
-        `Fetches the current weather for Austin, Texas and emails the summary to ${recipient}.`,
-        "",
-        "## Steps",
-        "",
-        "1. Fetch the current Austin weather from wttr.in using the Python sandbox.",
-        "2. Email the weather summary using the tenant email-send Lambda.",
-      ].join("\n"),
+      markdownSummary,
       stepManifest: {
         definition: {
           kind: plan.kind,
-          recipientEmail: recipient,
+          steps: plan.steps.map((step) => ({
+            nodeId: step.nodeId,
+            recipeId: step.recipeId,
+            label: step.label,
+            args: step.args,
+          })),
         },
         steps: plan.steps.map((step) => ({
           nodeId: step.nodeId,
           recipeType: step.recipeId,
           label: step.label,
-          ...(step.recipeId === "email_send" ? { to: step.args.to } : {}),
+          args: step.args,
         })),
       },
     },
@@ -245,7 +254,7 @@ function artifactsForWeatherEmail(
 }
 
 function weatherEmailPlan(displayName: string, recipient: string): RoutinePlan {
-  return {
+  return refreshPlanConfigFields({
     kind: "weather_email",
     title: displayName,
     description: `Fetches the current weather for Austin, Texas and emails the summary to ${recipient}.`,
@@ -253,16 +262,19 @@ function weatherEmailPlan(displayName: string, recipient: string): RoutinePlan {
       {
         nodeId: "FetchAustinWeather",
         recipeId: "python",
+        recipeName: "Run Python code",
         label: "Fetch Austin weather",
         args: {
           code: weatherPython(),
           timeoutSeconds: 30,
           networkAllowlist: ["wttr.in"],
         },
+        configFields: [],
       },
       {
         nodeId: "EmailAustinWeather",
         recipeId: "email_send",
+        recipeName: "Send email",
         label: "Email Austin weather",
         args: {
           to: [recipient],
@@ -270,22 +282,201 @@ function weatherEmailPlan(displayName: string, recipient: string): RoutinePlan {
           bodyPath: "$.FetchAustinWeather.stdoutPreview",
           bodyFormat: "markdown",
         },
+        configFields: [],
       },
     ],
-    editableFields: [
-      {
-        key: "recipientEmail",
-        label: "Recipient email",
-        value: recipient,
-        inputType: "email",
-        stepNodeId: "EmailAustinWeather",
-      },
-    ],
+  });
+}
+
+function planFromManifestDefinition(
+  routineName: string,
+  definition: Record<string, unknown>,
+): RoutineDefinitionResult {
+  if (!Array.isArray(definition.steps)) {
+    return unsupported("Routine definition manifest does not include steps.");
+  }
+
+  const steps: RoutinePlanStep[] = [];
+  for (const value of definition.steps) {
+    const entry = normalizeJsonObject(value);
+    const recipeId = String(entry.recipeId ?? entry.recipeType ?? "").trim();
+    const nodeId = String(entry.nodeId ?? "").trim();
+    const label = String(entry.label ?? nodeId).trim();
+    const args = normalizeJsonObject(entry.args);
+    const recipe = getRecipe(recipeId);
+    if (!nodeId || !recipe) {
+      return unsupported(
+        "Routine definition manifest includes an unknown step.",
+      );
+    }
+    steps.push({
+      nodeId,
+      recipeId,
+      recipeName: recipe.displayName,
+      label,
+      args,
+      configFields: getRecipeConfigFields(recipeId, args),
+    });
+  }
+
+  const plan = refreshPlanConfigFields({
+    kind: "weather_email",
+    title: routineName,
+    description: "",
+    steps,
+  });
+
+  return {
+    ok: true,
+    plan: {
+      ...plan,
+      description: descriptionForPlan(plan),
+    },
   };
 }
 
-function fieldValue(plan: RoutinePlan, key: string): string | null {
-  return plan.editableFields.find((field) => field.key === key)?.value ?? null;
+function refreshPlanConfigFields(plan: RoutinePlan): RoutinePlan {
+  return {
+    ...plan,
+    steps: plan.steps.map((step) => {
+      const recipe = getRecipe(step.recipeId);
+      return {
+        ...step,
+        recipeName: recipe?.displayName ?? step.recipeName ?? step.recipeId,
+        configFields: getRecipeConfigFields(step.recipeId, step.args),
+      };
+    }),
+  };
+}
+
+function validateRequiredConfig(
+  plan: RoutinePlan,
+): { ok: true } | { ok: false; reason: string } {
+  for (const step of plan.steps) {
+    for (const field of step.configFields) {
+      if (!field.required) continue;
+      const normalized = normalizeConfigValue(field, step.args[field.key]);
+      if (!normalized.ok) return normalized;
+    }
+  }
+  return { ok: true };
+}
+
+function normalizeConfigValue(
+  field: RecipeConfigField,
+  rawValue: unknown,
+): { ok: true; value: unknown } | { ok: false; reason: string } {
+  if (field.inputType === "email_array") {
+    const emails = normalizeStringList(rawValue);
+    if (field.required && emails.length === 0) {
+      return unsupported(
+        `Enter at least one email address for ${field.label}.`,
+      );
+    }
+    for (const email of emails) {
+      if (!EMAIL_VALUE_RE.test(email)) {
+        return unsupported(`Enter valid email addresses for ${field.label}.`);
+      }
+    }
+    return { ok: true, value: emails };
+  }
+
+  if (field.inputType === "string_array") {
+    return { ok: true, value: normalizeStringList(rawValue) };
+  }
+
+  if (field.inputType === "number") {
+    const value =
+      typeof rawValue === "number"
+        ? rawValue
+        : typeof rawValue === "string" && rawValue.trim()
+          ? Number(rawValue)
+          : null;
+    if (field.required && value == null) {
+      return unsupported(`Enter a value for ${field.label}.`);
+    }
+    if (value == null) return { ok: true, value: null };
+    if (!Number.isFinite(value)) {
+      return unsupported(`Enter a number for ${field.label}.`);
+    }
+    return { ok: true, value };
+  }
+
+  const value = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+  if (field.required && (!value || typeof value !== "string")) {
+    return unsupported(`Enter a value for ${field.label}.`);
+  }
+  if (field.inputType === "select") {
+    const options = field.options ?? [];
+    if (typeof value !== "string" || !options.includes(value)) {
+      return unsupported(`Choose a valid value for ${field.label}.`);
+    }
+  }
+  return { ok: true, value: value ?? null };
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  return [];
+}
+
+function descriptionForPlan(plan: RoutinePlan): string {
+  if (plan.kind === "weather_email") {
+    const recipient = weatherEmailRecipient(plan);
+    if (recipient) {
+      return `Fetches the current weather for Austin, Texas and emails the summary to ${recipient}.`;
+    }
+  }
+  return plan.description;
+}
+
+function markdownSummaryForPlan(plan: RoutinePlan): string {
+  const recipient = weatherEmailRecipient(plan);
+  if (plan.kind === "weather_email" && recipient) {
+    return [
+      `# ${plan.title}`,
+      "",
+      `Fetches the current weather for Austin, Texas and emails the summary to ${recipient}.`,
+      "",
+      "## Steps",
+      "",
+      "1. Fetch the current Austin weather from wttr.in using the Python sandbox.",
+      "2. Email the weather summary using the tenant email-send Lambda.",
+    ].join("\n");
+  }
+
+  return [
+    `# ${plan.title}`,
+    "",
+    plan.description,
+    "",
+    "## Steps",
+    "",
+    ...plan.steps.map(
+      (step, index) => `${index + 1}. ${step.label} (${step.recipeName}).`,
+    ),
+  ].join("\n");
+}
+
+function weatherEmailRecipient(plan: RoutinePlan): string | null {
+  const emailStep = plan.steps.find((step) => step.recipeId === "email_send");
+  const to = emailStep?.args.to;
+  if (Array.isArray(to) && typeof to[0] === "string") return to[0];
+  return null;
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function normalizeJsonObject(value: unknown): Record<string, unknown> {
