@@ -25,14 +25,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import {
-  routineAslVersions,
-  routines,
-} from "@thinkwork/database-pg/schema";
+import { routineAslVersions, routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
+import { buildRoutineDraftFromIntent } from "../../../lib/routines/routine-draft-authoring.js";
 import {
   CreateStateMachineAliasCommand,
   CreateStateMachineCommand,
@@ -58,9 +56,9 @@ interface CreateRoutineInput {
   owningAgentId?: string;
   name: string;
   description?: string;
-  asl: string;
-  markdownSummary: string;
-  stepManifest: string;
+  asl?: string;
+  markdownSummary?: string;
+  stepManifest?: string;
 }
 
 export async function createRoutine(
@@ -77,24 +75,58 @@ export async function createRoutine(
   // existing tenant-admin role check.
   await requireAdminOrApiKeyCaller(ctx, i.tenantId, "create_routine");
 
-  // Step 2 — validate ASL.
+  // Step 2 — build or validate ASL artifacts. Explicit artifacts remain
+  // the path for chat/agent authoring. Intent-only clients go through the
+  // deterministic MVP composer so we never create active no-op routines.
   let aslJson: unknown;
-  try {
-    aslJson = JSON.parse(i.asl);
-  } catch (err) {
-    throw new Error(`asl is not valid JSON: ${(err as Error).message}`);
-  }
   let stepManifestJson: unknown;
-  try {
-    stepManifestJson = JSON.parse(i.stepManifest);
-  } catch (err) {
-    throw new Error(`stepManifest is not valid JSON: ${(err as Error).message}`);
+  let markdownSummary = i.markdownSummary;
+  const hasExplicitArtifacts =
+    i.asl !== undefined ||
+    i.markdownSummary !== undefined ||
+    i.stepManifest !== undefined;
+  const hasAllExplicitArtifacts =
+    i.asl !== undefined &&
+    i.markdownSummary !== undefined &&
+    i.stepManifest !== undefined;
+
+  if (hasExplicitArtifacts && !hasAllExplicitArtifacts) {
+    throw new Error(
+      "createRoutine requires either all ASL artifacts (asl, markdownSummary, stepManifest) or none of them so server-side authoring can run.",
+    );
+  }
+
+  if (hasAllExplicitArtifacts) {
+    try {
+      aslJson = JSON.parse(i.asl!);
+    } catch (err) {
+      throw new Error(`asl is not valid JSON: ${(err as Error).message}`);
+    }
+    try {
+      stepManifestJson = JSON.parse(i.stepManifest!);
+    } catch (err) {
+      throw new Error(
+        `stepManifest is not valid JSON: ${(err as Error).message}`,
+      );
+    }
+  } else {
+    const draft = buildRoutineDraftFromIntent({
+      name: i.name,
+      intent: i.description ?? i.name,
+    });
+    if (!draft.ok) {
+      throw new Error(draft.reason);
+    }
+    aslJson = draft.artifacts.asl;
+    stepManifestJson = draft.artifacts.stepManifest;
+    markdownSummary = draft.artifacts.markdownSummary;
   }
 
   const validation = await validateRoutineAsl({ asl: aslJson });
   if (!validation.valid) {
     throw new Error(
-      validation.errors.map((e) => e.message).join("\n") || "ASL validation failed",
+      validation.errors.map((e) => e.message).join("\n") ||
+        "ASL validation failed",
     );
   }
 
@@ -103,7 +135,12 @@ export async function createRoutine(
   // same id so resource and row stay in sync.
   const routineId = randomUUID();
   const smName = stateMachineName(env.stage, routineId);
-  const smArn = stateMachineArn(env.region, env.accountId, env.stage, routineId);
+  const smArn = stateMachineArn(
+    env.region,
+    env.accountId,
+    env.stage,
+    routineId,
+  );
   const smAliasArn = stateMachineAliasArn(
     env.region,
     env.accountId,
@@ -173,7 +210,7 @@ export async function createRoutine(
         engine: "step_functions",
         state_machine_arn: smArn,
         state_machine_alias_arn: smAliasArn,
-        documentation_md: i.markdownSummary,
+        documentation_md: markdownSummary!,
         current_version: 1,
       })
       .returning();
@@ -187,7 +224,7 @@ export async function createRoutine(
         version_arn: publishResp.stateMachineVersionArn!,
         alias_was_pointing: null,
         asl_json: aslJson,
-        markdown_summary: i.markdownSummary,
+        markdown_summary: markdownSummary!,
         step_manifest_json: stepManifestJson,
         validation_warnings_json:
           validation.warnings.length > 0 ? validation.warnings : null,

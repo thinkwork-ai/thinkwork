@@ -36,7 +36,10 @@ beforeEach(() => {
   mockSfnSend.mockResolvedValue({ result: "OK", diagnostics: [] });
 });
 
-const aslWith = (states: Record<string, unknown>, startAt = Object.keys(states)[0]) =>
+const aslWith = (
+  states: Record<string, unknown>,
+  startAt = Object.keys(states)[0],
+) =>
   ({
     Comment: "test routine",
     StartAt: startAt,
@@ -76,6 +79,33 @@ describe("validateRoutineAsl — happy path", () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
+
+  it("accepts email_send with a dynamic body path", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith(
+        {
+          SendWeatherEmail: {
+            Type: "Task",
+            Resource: "arn:aws:states:::lambda:invoke",
+            Comment: "recipe:email_send",
+            Parameters: {
+              "FunctionName.$": "$$.Execution.Input.emailSendFunctionName",
+              Payload: {
+                to: ["ericodom37@gmail.com"],
+                subject: "Austin weather update",
+                "body.$": "$.FetchAustinWeather.stdoutPreview",
+                bodyFormat: "markdown",
+              },
+            },
+            End: true,
+          },
+        },
+        "SendWeatherEmail",
+      ),
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 });
 
 describe("validateRoutineAsl — error paths", () => {
@@ -90,7 +120,9 @@ describe("validateRoutineAsl — error paths", () => {
       }),
     });
     expect(result.valid).toBe(false);
-    const arnError = result.errors.find((e) => e.code === "unknown_resource_arn");
+    const arnError = result.errors.find(
+      (e) => e.code === "unknown_resource_arn",
+    );
     expect(arnError).toBeDefined();
     expect(arnError?.stateName).toBe("FetchData");
     // Actionable: human-readable message naming the state and the bad ARN.
@@ -118,7 +150,8 @@ describe("validateRoutineAsl — error paths", () => {
           Resource: "arn:aws:states:::lambda:invoke",
           Comment: "recipe:python",
           Parameters: {
-            "FunctionName.$": "$$.Execution.Input.routineTaskPythonFunctionName",
+            "FunctionName.$":
+              "$$.Execution.Input.routineTaskPythonFunctionName",
             Payload: {
               executionId: "x",
               nodeId: "RunReport",
@@ -199,8 +232,7 @@ describe("validateRoutineAsl — error paths", () => {
         Resource: "arn:aws:states:::states:startExecution.sync:2",
         Comment: "recipe:routine_invoke",
         Parameters: {
-          "StateMachineArn.$":
-            "$$.Execution.Input.routineAliasArns.routine-b",
+          "StateMachineArn.$": "$$.Execution.Input.routineAliasArns.routine-b",
           Input: {},
         },
         End: true,
@@ -222,7 +254,12 @@ describe("validateRoutineAsl — error paths", () => {
     mockSfnSend.mockResolvedValueOnce({
       result: "FAIL",
       diagnostics: [
-        { severity: "ERROR", code: "INVALID_NEXT", message: "Next state X not found", location: "States.A.Next" },
+        {
+          severity: "ERROR",
+          code: "INVALID_NEXT",
+          message: "Next state X not found",
+          location: "States.A.Next",
+        },
       ],
     });
     const result = await validateRoutineAsl({
@@ -234,7 +271,8 @@ describe("validateRoutineAsl — error paths", () => {
     expect(
       result.errors.some(
         (e) =>
-          e.code === "asl_syntax" && e.message.includes("Next state X not found"),
+          e.code === "asl_syntax" &&
+          e.message.includes("Next state X not found"),
       ),
     ).toBe(true);
   });
@@ -259,9 +297,9 @@ describe("validateRoutineAsl — direct self-invocation cycle", () => {
       currentRoutineId: "routine-a",
     });
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === "routine_invoke_cycle"),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === "routine_invoke_cycle")).toBe(
+      true,
+    );
   });
 
   it("detects multi-hop cycles A→B→C→A through the supplied callGraph", async () => {
@@ -286,9 +324,9 @@ describe("validateRoutineAsl — direct self-invocation cycle", () => {
       },
     });
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === "routine_invoke_cycle"),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === "routine_invoke_cycle")).toBe(
+      true,
+    );
   });
 
   it("detects cycles when the LLM emits a literal StateMachineArn instead of the dotted-path template", async () => {
@@ -309,9 +347,9 @@ describe("validateRoutineAsl — direct self-invocation cycle", () => {
       currentRoutineId: "routine-a",
     });
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.code === "routine_invoke_cycle"),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.code === "routine_invoke_cycle")).toBe(
+      true,
+    );
   });
 });
 
@@ -334,8 +372,7 @@ describe("validateRoutineAsl — routine_invoke arg-validation", () => {
     });
     expect(result.valid).toBe(false);
     const argError = result.errors.find(
-      (e) =>
-        e.code === "recipe_arg_invalid" && e.stateName === "InvokeOther",
+      (e) => e.code === "recipe_arg_invalid" && e.stateName === "InvokeOther",
     );
     expect(argError).toBeDefined();
     expect(argError?.message.toLowerCase()).toContain("routineid");

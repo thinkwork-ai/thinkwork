@@ -1,18 +1,16 @@
 /**
  * Admin "new routine" surface (Plan 2026-05-01-007 §U13).
  *
- * v1 ships as a thin form: operator enters name + description, the
- * server creates a placeholder routine via `createRoutine` (Phase B U7
- * requires asl + markdownSummary + stepManifest, so we send a no-op
- * `Succeed`-state ASL), and the operator lands on the routine detail
- * page where they iterate.
+ * v1 ships as a thin form: operator enters name + description, and the
+ * server-side authoring MVP attempts to produce real recipe-backed ASL
+ * through `createRoutine`. Unsupported intents are rejected before any
+ * Step Functions resources are created.
  *
  * Plan §"Files" calls for a full RoutineChatBuilder admin chrome
  * (sharing the mobile ROUTINE_BUILDER_PROMPT). Mobile's chat session
  * infrastructure (createSession / sendToSession) is currently stubbed
- * pending GraphQL migration (per Phase C U10's caveat); shipping the
- * admin chat chrome before that lands would be cargo-cult UI. The
- * residual-findings doc tracks this gap.
+ * pending GraphQL migration (per Phase C U10's caveat); this form is the
+ * non-chat authoring bridge until that lands.
  */
 
 import { useState, useCallback } from "react";
@@ -55,23 +53,11 @@ function NewRoutinePage() {
     setSubmitting(true);
     setError(null);
     try {
-      // Placeholder routine: the chat builder retargets the ASL when the
-      // operator iterates. Phase B U7 requires asl + markdownSummary +
-      // stepManifest in CreateRoutineInput, so we ship a no-op ASL and a
-      // markdown summary that describes the operator's intent.
-      const placeholderAsl = {
-        Comment: "Draft routine — awaiting builder",
-        StartAt: "NoOp",
-        States: { NoOp: { Type: "Succeed" } },
-      };
       const result = await executeCreate({
         input: {
           tenantId,
           name: name.trim(),
           description: description.trim(),
-          asl: JSON.stringify(placeholderAsl),
-          markdownSummary: `# ${name.trim()}\n\n${description.trim()}`,
-          stepManifest: JSON.stringify({}),
         },
       });
       const routineId = result.data?.createRoutine?.id;
@@ -88,7 +74,15 @@ function NewRoutinePage() {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
     }
-  }, [canSubmit, tenantId, submitting, name, description, executeCreate, navigate]);
+  }, [
+    canSubmit,
+    tenantId,
+    submitting,
+    name,
+    description,
+    executeCreate,
+    navigate,
+  ]);
 
   return (
     <div className="space-y-4">
