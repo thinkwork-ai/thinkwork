@@ -1,21 +1,20 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { ArrowLeft, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
+import { PageLayout } from "@/components/PageLayout";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   RoutineDetailQuery,
   TriggerRoutineRunMutation,
 } from "@/lib/graphql-queries";
-import { formatDateTime, relativeTime } from "@/lib/utils";
 import {
   ExecutionList,
   parseStatusFilter,
@@ -66,133 +65,91 @@ function RoutineDetailPage() {
   if (result.fetching || !routine) return <PageSkeleton />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/automations/routines">
-          <Button variant="ghost" size="icon-sm">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+    <PageLayout
+      header={
         <PageHeader
           title={routine.name}
           description={routine.description ?? undefined}
           actions={<StatusBadge status={routine.status.toLowerCase()} />}
         />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="runs">
-            <div className="flex items-center justify-between gap-2">
-              <TabsList>
-                <TabsTrigger value="runs">Runs</TabsTrigger>
-                <TabsTrigger value="triggers">
-                  Scheduled Jobs ({routine.triggers.length})
-                </TabsTrigger>
-              </TabsList>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRunNow}
-                disabled={triggerState.fetching}
-              >
-                <Zap className="h-3.5 w-3.5" />
-                {triggerState.fetching ? "Starting…" : "Test"}
-              </Button>
-            </div>
-            {triggerError && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                {triggerError}
-              </p>
-            )}
-
-            <TabsContent value="runs" className="mt-4">
-              <ExecutionList
-                routineId={routineId}
-                statusFilter={statusFilter}
-                onStatusFilterChange={(next) =>
-                  navigate({
-                    to: "/automations/routines/$routineId",
-                    params: { routineId },
-                    search: next === "all" ? {} : { status: next },
-                    replace: true,
-                  })
-                }
-                emptyCta={
-                  statusFilter === "all" ? (
-                    <Button size="sm" asChild>
-                      <Link to="/automations/schedules" search={{ type: "routine" }}>
-                        Set up a trigger
-                      </Link>
-                    </Button>
-                  ) : null
-                }
-              />
-            </TabsContent>
-
-            <TabsContent value="triggers" className="mt-4">
-              <Card>
-                <CardContent className="pt-4">
-                  {routine.triggers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No scheduled jobs configured.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {routine.triggers.map((t) => (
-                        <div
-                          key={t.id}
-                          className="flex items-center justify-between py-1.5"
-                        >
-                          <span className="text-sm font-medium">
-                            {t.triggerType}
-                          </span>
-                          <Badge variant={t.enabled ? "default" : "secondary"}>
-                            {t.enabled ? "Enabled" : "Disabled"}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+      }
+    >
+      <Tabs defaultValue="runs">
+        <div className="flex items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="runs">Runs</TabsTrigger>
+            <TabsTrigger value="triggers">
+              Scheduled Jobs ({routine.triggers.length})
+            </TabsTrigger>
+          </TabsList>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRunNow}
+            disabled={triggerState.fetching}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {triggerState.fetching ? "Starting…" : "Test"}
+          </Button>
         </div>
+        {triggerError && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+            {triggerError}
+          </p>
+        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Row label="Type" value={routine.type} />
-            {routine.schedule && <Row label="Schedule" value={routine.schedule} />}
-            {routine.agent && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Agent</span>
-                <Identity name={routine.agent.name} size="sm" />
-              </div>
-            )}
-            {routine.team && <Row label="Team" value={routine.team.name} />}
-            {routine.lastRunAt && (
-              <Row label="Last Run" value={relativeTime(routine.lastRunAt)} />
-            )}
-            {routine.nextRunAt && (
-              <Row label="Next Run" value={formatDateTime(routine.nextRunAt)} />
-            )}
-            <Row label="Created" value={formatDateTime(routine.createdAt)} />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+        <TabsContent value="runs" className="mt-4">
+          <ExecutionList
+            routineId={routineId}
+            statusFilter={statusFilter}
+            onStatusFilterChange={(next) =>
+              navigate({
+                to: "/automations/routines/$routineId",
+                params: { routineId },
+                search: next === "all" ? {} : { status: next },
+                replace: true,
+              })
+            }
+            emptyCta={
+              statusFilter === "all" ? (
+                <Button size="sm" asChild>
+                  <Link to="/automations/schedules" search={{ type: "routine" }}>
+                    Set up a trigger
+                  </Link>
+                </Button>
+              ) : null
+            }
+          />
+        </TabsContent>
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
-    </div>
+        <TabsContent value="triggers" className="mt-4">
+          <Card>
+            <CardContent className="pt-4">
+              {routine.triggers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No scheduled jobs configured.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {routine.triggers.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between py-1.5"
+                    >
+                      <span className="text-sm font-medium">
+                        {t.triggerType}
+                      </span>
+                      <Badge variant={t.enabled ? "default" : "secondary"}>
+                        {t.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </PageLayout>
   );
 }

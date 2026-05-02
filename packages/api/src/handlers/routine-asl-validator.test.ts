@@ -91,6 +91,9 @@ describe("validateRoutineAsl — happy path", () => {
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.emailSendFunctionName",
               Payload: {
+                "tenantId.$": "$$.Execution.Input.tenantId",
+                "routineId.$": "$$.Execution.Input.routineId",
+                "executionId.$": "$$.Execution.Id",
                 to: ["ericodom37@gmail.com"],
                 subject: "Austin weather update",
                 "body.$": "$.FetchAustinWeather.stdoutPreview",
@@ -102,6 +105,34 @@ describe("validateRoutineAsl — happy path", () => {
         },
         "SendWeatherEmail",
       ),
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("accepts python with injected execution identity fields", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        FetchAustinWeather: {
+          Type: "Task",
+          Resource: "arn:aws:states:::lambda:invoke",
+          Comment: "recipe:python",
+          Parameters: {
+            "FunctionName.$":
+              "$$.Execution.Input.routineTaskPythonFunctionName",
+            Payload: {
+              "tenantId.$": "$$.Execution.Input.tenantId",
+              "routineId.$": "$$.Execution.Input.routineId",
+              "executionId.$": "$$.Execution.Id",
+              nodeId: "FetchAustinWeather",
+              code: "print('Austin weather')",
+              timeoutSeconds: 60,
+              networkAllowlist: ["wttr.in"],
+            },
+          },
+          End: true,
+        },
+      }),
     });
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
