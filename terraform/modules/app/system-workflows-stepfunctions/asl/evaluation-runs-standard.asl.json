@@ -1,0 +1,46 @@
+{
+  "Comment": "thinkwork-system-workflow:evaluation-runs:2026-05-02.v1",
+  "StartAt": "SnapshotTestPack",
+  "States": {
+    "SnapshotTestPack": {
+      "Type": "Pass",
+      "Comment": "standard:checkpoint:Snapshot test pack",
+      "Result": {
+        "workflowId": "evaluation-runs",
+        "stepType": "checkpoint",
+        "runtime": "standard"
+      },
+      "Next": "RunBatches"
+    },
+    "RunBatches": {
+      "Type": "Pass",
+      "Comment": "express:worker:Run test batches",
+      "Result": {
+        "workflowId": "evaluation-runs",
+        "stepType": "worker",
+        "runtime": "express"
+      },
+      "Next": "AggregateScores"
+    },
+    "AggregateScores": {
+      "Type": "Pass",
+      "Comment": "standard:aggregation:Aggregate scores",
+      "Result": {
+        "workflowId": "evaluation-runs",
+        "stepType": "aggregation",
+        "runtime": "standard"
+      },
+      "Next": "ApplyPassFailGate"
+    },
+    "ApplyPassFailGate": {
+      "Type": "Pass",
+      "Comment": "standard:gate:Apply pass/fail gate",
+      "Result": {
+        "workflowId": "evaluation-runs",
+        "stepType": "gate",
+        "runtime": "standard"
+      },
+      "End": true
+    }
+  }
+}

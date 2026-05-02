@@ -1,0 +1,152 @@
+# System Workflows: ThinkWork-owned operating workflows surfaced under
+# Automations. Routines remain the tenant/agent-authored workflow primitive.
+
+enum SystemWorkflowRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  AWAITING_APPROVAL
+  TIMED_OUT
+}
+
+type SystemWorkflow {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  description: String
+  category: String!
+  owner: String!
+  runtimeShape: String!
+  status: String!
+  activeVersion: String!
+  customizationStatus: String!
+  evidenceStatus: String!
+  configSchemaJson: AWSJSON!
+  extensionPointsJson: AWSJSON!
+  evidenceContractJson: AWSJSON!
+  stepManifestJson: AWSJSON!
+  activeConfig: SystemWorkflowConfig
+  extensionBindings: [SystemWorkflowExtensionBinding!]!
+  lastRun: SystemWorkflowRun
+  recentRuns(limit: Int): [SystemWorkflowRun!]!
+}
+
+type SystemWorkflowConfig {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  versionNumber: Int!
+  status: String!
+  configJson: AWSJSON!
+  createdByActorId: ID
+  createdByActorType: String
+  activatedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+type SystemWorkflowExtensionBinding {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  configId: ID
+  extensionPointId: String!
+  bindingType: String!
+  bindingJson: AWSJSON!
+  status: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SystemWorkflowRun {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: SystemWorkflow
+  configId: ID
+  definitionVersion: String!
+  runtimeShape: String!
+  stateMachineArn: String
+  aliasArn: String
+  versionArn: String
+  sfnExecutionArn: String
+  triggerId: ID
+  triggerSource: String!
+  actorId: ID
+  actorType: String
+  domainRefType: String
+  domainRefId: String
+  inputJson: AWSJSON
+  outputJson: AWSJSON
+  evidenceSummaryJson: AWSJSON!
+  status: String!
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  errorCode: String
+  errorMessage: String
+  totalCostUsdCents: Int
+  stepEvents: [SystemWorkflowStepEvent!]!
+  evidence: [SystemWorkflowEvidence!]!
+  createdAt: AWSDateTime!
+}
+
+type SystemWorkflowStepEvent {
+  id: ID!
+  tenantId: ID!
+  runId: ID!
+  nodeId: String!
+  stepType: String!
+  status: String!
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  inputJson: AWSJSON
+  outputJson: AWSJSON
+  errorJson: AWSJSON
+  costUsdCents: Int
+  retryCount: Int!
+  idempotencyKey: String
+  createdAt: AWSDateTime!
+}
+
+type SystemWorkflowEvidence {
+  id: ID!
+  tenantId: ID!
+  runId: ID!
+  evidenceType: String!
+  title: String!
+  summary: String
+  artifactUri: String
+  artifactJson: AWSJSON!
+  complianceTags: [String!]!
+  idempotencyKey: String
+  createdAt: AWSDateTime!
+}
+
+type SystemWorkflowChangeEvent {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  runId: ID
+  actorId: ID
+  actorType: String
+  changeType: String!
+  beforeJson: AWSJSON
+  afterJson: AWSJSON
+  reason: String
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  systemWorkflows(tenantId: ID!): [SystemWorkflow!]!
+  systemWorkflow(id: ID!, tenantId: ID!): SystemWorkflow
+  systemWorkflowRuns(
+    tenantId: ID!
+    workflowId: ID
+    status: SystemWorkflowRunStatus
+    limit: Int
+    cursor: String
+  ): [SystemWorkflowRun!]!
+  systemWorkflowRun(id: ID!): SystemWorkflowRun
+  systemWorkflowStepEvents(runId: ID!): [SystemWorkflowStepEvent!]!
+  systemWorkflowEvidence(runId: ID!): [SystemWorkflowEvidence!]!
+}
