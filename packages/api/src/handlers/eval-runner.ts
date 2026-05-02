@@ -48,6 +48,12 @@ import {
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
+import {
+  recordEvaluationWorkflowEvidence,
+  recordEvaluationWorkflowStep,
+  updateEvaluationWorkflowRunSummary,
+  type EvalSystemWorkflowContext,
+} from "../lib/system-workflows/evaluation-runs.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -123,6 +129,9 @@ async function resolveEvalRuntimeType(
 
 interface EvalRunnerEvent {
   runId: string;
+  systemWorkflowRunId?: string;
+  systemWorkflowExecutionArn?: string;
+  tenantId?: string;
 }
 
 interface Assertion {
@@ -181,8 +190,9 @@ async function llmJudge(
   rubric: string,
 ): Promise<{ passed: boolean; reason: string; score: number }> {
   try {
-    const { BedrockRuntimeClient, ConverseCommand } =
-      await import("@aws-sdk/client-bedrock-runtime");
+    const { BedrockRuntimeClient, ConverseCommand } = await import(
+      "@aws-sdk/client-bedrock-runtime"
+    );
     const client = new BedrockRuntimeClient({ region: REGION });
     const judgePrompt = `You are an evaluation judge for an AI agent. Evaluate whether the agent's response meets the given criteria.
 
@@ -526,9 +536,13 @@ async function callEvaluator(
 // Handler
 // ---------------------------------------------------------------------------
 
-export async function handler(
-  event: EvalRunnerEvent,
-): Promise<{ ok: boolean; runId: string; error?: string }> {
+export async function handler(event: EvalRunnerEvent): Promise<{
+  ok: boolean;
+  runId: string;
+  error?: string;
+  passRate?: number;
+  passedThreshold?: boolean;
+}> {
   const { runId } = event;
   if (!runId) return { ok: false, runId: "", error: "missing runId" };
 
@@ -540,237 +554,359 @@ export async function handler(
     `[eval-runner] starting runId=${runId} tenant=${run.tenant_id} agent=${run.agent_id}`,
   );
 
-  // Load test cases for this tenant. Filter by category if the run scoped them.
-  const cases = await db
-    .select()
-    .from(evalTestCases)
-    .where(
-      and(
-        eq(evalTestCases.tenant_id, run.tenant_id),
-        eq(evalTestCases.enabled, true),
-        run.categories.length > 0
-          ? inArray(evalTestCases.category, run.categories)
-          : sql`true`,
-      ),
-    );
-
-  const runtimeType = await resolveEvalRuntimeType(run);
-  const runtimeId = await loadRuntimeId(runtimeType);
-  const runtimeArn = `arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${runtimeId}`;
-  const runtimeLogGroup = `${RUNTIME_LOG_GROUP_PREFIX}${runtimeId}-DEFAULT`;
-
-  // Mark running.
-  const startedAt = new Date();
-  await db
-    .update(evalRuns)
-    .set({
-      status: "running",
-      started_at: startedAt,
-      total_tests: cases.length,
-    })
-    .where(eq(evalRuns.id, runId));
-  await notifyEvalRunUpdate({
-    runId,
-    tenantId: run.tenant_id,
-    agentId: run.agent_id,
-    status: "running",
-    totalTests: cases.length,
-  });
-
-  // Run tests with bounded concurrency so the Lambda doesn't hit its 900s
-  // timeout on larger packs. Each test is independent: own session ID, own
-  // DB insert; the only shared state is the aggregate counters below, which
-  // we accumulate once every batch resolves.
-  const CONCURRENCY = 5;
-
-  async function runOneTest(
-    tc: (typeof cases)[number],
-    i: number,
-  ): Promise<{ passed: boolean; costUsd: number }> {
-    const sessionId = uniqueSessionId(runId, tc.id, i);
-    console.log(
-      `[eval-runner] test ${i + 1}/${cases.length} '${tc.name}' session=${sessionId.slice(0, 12)}`,
-    );
-
-    let actualOutput = "";
-    let durationMs = 0;
-    let errorMessage: string | null = null;
-    const assertionResults: AssertionResult[] = [];
-    const evaluatorResults: EvaluatorResult[] = [];
-    let costUsd = 0;
-
-    try {
-      // Resolve which template config to load. Test-case-level pin
-      // wins over run-level. If neither is set, no template config
-      // is applied and the runtime uses its built-in defaults.
-      const templateId = tc.agent_template_id ?? run.agent_template_id ?? null;
-      let templateConfig: AgentTemplateConfig | null = null;
-      if (templateId) {
-        const [tpl] = await db
-          .select({
-            model: agentTemplates.model,
-            config: agentTemplates.config,
-            skills: agentTemplates.skills,
-          })
-          .from(agentTemplates)
-          .where(eq(agentTemplates.id, templateId));
-        if (tpl) {
-          const cfg = (tpl.config ?? {}) as { system_prompt?: string };
-          templateConfig = {
-            model: tpl.model,
-            system_prompt: cfg.system_prompt ?? null,
-            skills: tpl.skills,
-          };
+  const workflowContext: EvalSystemWorkflowContext | null =
+    event.systemWorkflowRunId
+      ? {
+          tenantId: event.tenantId ?? run.tenant_id,
+          runId: event.systemWorkflowRunId,
+          executionArn: event.systemWorkflowExecutionArn ?? null,
         }
-      }
-      const inv = await invokeAgent(
-        runtimeArn,
-        sessionId,
-        run.tenant_id,
-        run.agent_id ?? "eval-test-agent",
-        "dev",
-        tc.query,
-        tc.system_prompt,
-        templateConfig,
+      : null;
+
+  try {
+    // Load test cases for this tenant. Filter by category if the run scoped them.
+    const cases = await db
+      .select()
+      .from(evalTestCases)
+      .where(
+        and(
+          eq(evalTestCases.tenant_id, run.tenant_id),
+          eq(evalTestCases.enabled, true),
+          run.categories.length > 0
+            ? inArray(evalTestCases.category, run.categories)
+            : sql`true`,
+        ),
       );
-      actualOutput = inv.output;
-      durationMs = inv.durationMs;
 
-      // Assertions — deterministic types evaluated locally, llm-rubric judged
-      // by Bedrock (claude-haiku-4-5) with a keyword-heuristic fallback.
-      const assertions = (tc.assertions ?? []) as Assertion[];
-      for (const a of assertions) {
-        const r = await evaluateAssertion(a, actualOutput, tc.query);
-        assertionResults.push({
-          ...a,
-          passed: r.passed,
-          reason: r.reason,
-          score: r.score,
-        });
-      }
-
-      // AgentCore evaluators — wait for spans, then call Evaluate per evaluator.
-      const evaluatorIds = (tc.agentcore_evaluator_ids ?? []) as string[];
-      if (evaluatorIds.length > 0) {
-        const sessionSpans = await waitForSpans(sessionId, runtimeLogGroup);
-        for (const evaluatorId of evaluatorIds) {
-          const result = await callEvaluator(evaluatorId, sessionSpans);
-          evaluatorResults.push(result);
-          const tu = result.token_usage;
-          if (tu?.totalTokens) costUsd += (tu.totalTokens / 1000) * 0.012;
-        }
-      }
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : String(err);
-      console.error(`[eval-runner] test '${tc.name}' failed:`, errorMessage);
-    }
-
-    // Score = average across assertion + evaluator scores (maniflow pattern).
-    // Each assertion contributes score ?? (passed ? 1 : 0); each evaluator
-    // contributes its numeric value if present. Pass/fail = all pass.
-    const assertionsPassed = assertionResults.every((a) => a.passed);
-    const evaluatorsPassed = evaluatorResults.every(
-      (r) => typeof r.value === "number" && r.value >= PASS_THRESHOLD,
-    );
-    const contributingScores: number[] = [
-      ...assertionResults.map((a) => a.score ?? (a.passed ? 1 : 0)),
-      ...evaluatorResults
-        .filter((r) => typeof r.value === "number")
-        .map((r) => r.value as number),
-    ];
-    const score =
-      contributingScores.length > 0
-        ? contributingScores.reduce((s, v) => s + v, 0) /
-          contributingScores.length
-        : assertionsPassed
-          ? 1
-          : 0;
-    const status = errorMessage
-      ? "error"
-      : assertionsPassed && evaluatorsPassed
-        ? "pass"
-        : "fail";
-
-    await db.insert(evalResults).values({
-      run_id: runId,
-      test_case_id: tc.id,
-      status,
-      score: typeof score === "number" ? score.toFixed(4) : null,
-      duration_ms: durationMs,
-      agent_session_id: sessionId,
-      input: tc.query,
-      expected: null,
-      actual_output: actualOutput,
-      evaluator_results: evaluatorResults,
-      assertions: assertionResults,
-      error_message: errorMessage,
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "SnapshotTestPack",
+      stepType: "checkpoint",
+      status: "succeeded",
+      finishedAt: new Date(),
+      outputJson: {
+        evalRunId: runId,
+        totalTests: cases.length,
+        categories: run.categories,
+      },
+      idempotencyKey: `eval:${runId}:snapshot`,
     });
 
-    return { passed: status === "pass", costUsd };
-  }
+    const runtimeType = await resolveEvalRuntimeType(run);
+    const runtimeId = await loadRuntimeId(runtimeType);
+    const runtimeArn = `arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${runtimeId}`;
+    const runtimeLogGroup = `${RUNTIME_LOG_GROUP_PREFIX}${runtimeId}-DEFAULT`;
 
-  let passed = 0;
-  let failed = 0;
-  let totalCostUsd = 0;
+    // Mark running.
+    const startedAt = new Date();
+    await db
+      .update(evalRuns)
+      .set({
+        status: "running",
+        started_at: startedAt,
+        total_tests: cases.length,
+      })
+      .where(eq(evalRuns.id, runId));
+    await notifyEvalRunUpdate({
+      runId,
+      tenantId: run.tenant_id,
+      agentId: run.agent_id,
+      status: "running",
+      totalTests: cases.length,
+    });
 
-  for (let offset = 0; offset < cases.length; offset += CONCURRENCY) {
-    const batch = cases.slice(offset, offset + CONCURRENCY);
-    const results = await Promise.all(
-      batch.map((tc, j) => runOneTest(tc, offset + j)),
-    );
-    for (const r of results) {
-      if (r.passed) passed++;
-      else failed++;
-      totalCostUsd += r.costUsd;
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "RunEvaluation",
+      stepType: "worker",
+      status: "running",
+      startedAt,
+      outputJson: { totalTests: cases.length },
+      idempotencyKey: `eval:${runId}:runner-started`,
+    });
+
+    // Run tests with bounded concurrency so the Lambda doesn't hit its 900s
+    // timeout on larger packs. Each test is independent: own session ID, own
+    // DB insert; the only shared state is the aggregate counters below, which
+    // we accumulate once every batch resolves.
+    const CONCURRENCY = 5;
+
+    async function runOneTest(
+      tc: (typeof cases)[number],
+      i: number,
+    ): Promise<{ passed: boolean; costUsd: number }> {
+      const sessionId = uniqueSessionId(runId, tc.id, i);
+      console.log(
+        `[eval-runner] test ${i + 1}/${cases.length} '${tc.name}' session=${sessionId.slice(0, 12)}`,
+      );
+
+      let actualOutput = "";
+      let durationMs = 0;
+      let errorMessage: string | null = null;
+      const assertionResults: AssertionResult[] = [];
+      const evaluatorResults: EvaluatorResult[] = [];
+      let costUsd = 0;
+
+      try {
+        // Resolve which template config to load. Test-case-level pin
+        // wins over run-level. If neither is set, no template config
+        // is applied and the runtime uses its built-in defaults.
+        const templateId =
+          tc.agent_template_id ?? run.agent_template_id ?? null;
+        let templateConfig: AgentTemplateConfig | null = null;
+        if (templateId) {
+          const [tpl] = await db
+            .select({
+              model: agentTemplates.model,
+              config: agentTemplates.config,
+              skills: agentTemplates.skills,
+            })
+            .from(agentTemplates)
+            .where(eq(agentTemplates.id, templateId));
+          if (tpl) {
+            const cfg = (tpl.config ?? {}) as { system_prompt?: string };
+            templateConfig = {
+              model: tpl.model,
+              system_prompt: cfg.system_prompt ?? null,
+              skills: tpl.skills,
+            };
+          }
+        }
+        const inv = await invokeAgent(
+          runtimeArn,
+          sessionId,
+          run.tenant_id,
+          run.agent_id ?? "eval-test-agent",
+          "dev",
+          tc.query,
+          tc.system_prompt,
+          templateConfig,
+        );
+        actualOutput = inv.output;
+        durationMs = inv.durationMs;
+
+        // Assertions — deterministic types evaluated locally, llm-rubric judged
+        // by Bedrock (claude-haiku-4-5) with a keyword-heuristic fallback.
+        const assertions = (tc.assertions ?? []) as Assertion[];
+        for (const a of assertions) {
+          const r = await evaluateAssertion(a, actualOutput, tc.query);
+          assertionResults.push({
+            ...a,
+            passed: r.passed,
+            reason: r.reason,
+            score: r.score,
+          });
+        }
+
+        // AgentCore evaluators — wait for spans, then call Evaluate per evaluator.
+        const evaluatorIds = (tc.agentcore_evaluator_ids ?? []) as string[];
+        if (evaluatorIds.length > 0) {
+          const sessionSpans = await waitForSpans(sessionId, runtimeLogGroup);
+          for (const evaluatorId of evaluatorIds) {
+            const result = await callEvaluator(evaluatorId, sessionSpans);
+            evaluatorResults.push(result);
+            const tu = result.token_usage;
+            if (tu?.totalTokens) costUsd += (tu.totalTokens / 1000) * 0.012;
+          }
+        }
+      } catch (err) {
+        errorMessage = err instanceof Error ? err.message : String(err);
+        console.error(`[eval-runner] test '${tc.name}' failed:`, errorMessage);
+      }
+
+      // Score = average across assertion + evaluator scores (maniflow pattern).
+      // Each assertion contributes score ?? (passed ? 1 : 0); each evaluator
+      // contributes its numeric value if present. Pass/fail = all pass.
+      const assertionsPassed = assertionResults.every((a) => a.passed);
+      const evaluatorsPassed = evaluatorResults.every(
+        (r) => typeof r.value === "number" && r.value >= PASS_THRESHOLD,
+      );
+      const contributingScores: number[] = [
+        ...assertionResults.map((a) => a.score ?? (a.passed ? 1 : 0)),
+        ...evaluatorResults
+          .filter((r) => typeof r.value === "number")
+          .map((r) => r.value as number),
+      ];
+      const score =
+        contributingScores.length > 0
+          ? contributingScores.reduce((s, v) => s + v, 0) /
+            contributingScores.length
+          : assertionsPassed
+            ? 1
+            : 0;
+      const status = errorMessage
+        ? "error"
+        : assertionsPassed && evaluatorsPassed
+          ? "pass"
+          : "fail";
+
+      await db.insert(evalResults).values({
+        run_id: runId,
+        test_case_id: tc.id,
+        status,
+        score: typeof score === "number" ? score.toFixed(4) : null,
+        duration_ms: durationMs,
+        agent_session_id: sessionId,
+        input: tc.query,
+        expected: null,
+        actual_output: actualOutput,
+        evaluator_results: evaluatorResults,
+        assertions: assertionResults,
+        error_message: errorMessage,
+      });
+
+      return { passed: status === "pass", costUsd };
     }
-  }
 
-  // Aggregate.
-  const completedAt = new Date();
-  const passRate = cases.length > 0 ? passed / cases.length : 0;
-  await db
-    .update(evalRuns)
-    .set({
-      status: "completed",
-      completed_at: completedAt,
+    let passed = 0;
+    let failed = 0;
+    let totalCostUsd = 0;
+
+    for (let offset = 0; offset < cases.length; offset += CONCURRENCY) {
+      const batch = cases.slice(offset, offset + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map((tc, j) => runOneTest(tc, offset + j)),
+      );
+      for (const r of results) {
+        if (r.passed) passed++;
+        else failed++;
+        totalCostUsd += r.costUsd;
+      }
+    }
+
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "RunEvaluation",
+      stepType: "worker",
+      status: "succeeded",
+      finishedAt: new Date(),
+      outputJson: { passed, failed, totalTests: cases.length },
+      idempotencyKey: `eval:${runId}:runner-finished`,
+    });
+
+    // Aggregate.
+    const completedAt = new Date();
+    const passRate = cases.length > 0 ? passed / cases.length : 0;
+    await db
+      .update(evalRuns)
+      .set({
+        status: "completed",
+        completed_at: completedAt,
+        passed,
+        failed,
+        pass_rate: passRate.toFixed(4),
+        cost_usd: totalCostUsd.toFixed(6),
+      })
+      .where(eq(evalRuns.id, runId));
+
+    if (totalCostUsd > 0 && run.agent_id) {
+      await db
+        .insert(costEvents)
+        .values({
+          tenant_id: run.tenant_id,
+          agent_id: run.agent_id,
+          request_id: `eval-run-${runId}`,
+          event_type: "eval_compute",
+          amount_usd: totalCostUsd.toFixed(6),
+          metadata: {
+            source: "eval-runner",
+            run_id: runId,
+            total_tests: cases.length,
+          },
+        })
+        .onConflictDoNothing();
+    }
+
+    const totalCostUsdCents = Math.round(totalCostUsd * 100);
+    const evidenceSummary = {
+      evalRunId: runId,
+      totalTests: cases.length,
       passed,
       failed,
-      pass_rate: passRate.toFixed(4),
-      cost_usd: totalCostUsd.toFixed(6),
-    })
-    .where(eq(evalRuns.id, runId));
+      passRate,
+      totalCostUsdCents,
+    };
+    const passedThreshold = passRate >= PASS_THRESHOLD;
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "AggregateScores",
+      stepType: "aggregation",
+      status: "succeeded",
+      finishedAt: completedAt,
+      outputJson: evidenceSummary,
+      idempotencyKey: `eval:${runId}:aggregate`,
+    });
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "ApplyPassFailGate",
+      stepType: "gate",
+      status: passedThreshold ? "succeeded" : "failed",
+      finishedAt: completedAt,
+      outputJson: {
+        passRate,
+        threshold: PASS_THRESHOLD,
+      },
+      idempotencyKey: `eval:${runId}:pass-fail-gate`,
+    });
+    await recordEvaluationWorkflowEvidence(workflowContext, {
+      evidenceType: "score-summary",
+      title: "Evaluation score summary",
+      summary: `${passed}/${cases.length} tests passed (${(passRate * 100).toFixed(1)}%).`,
+      artifactJson: evidenceSummary,
+      complianceTags: ["evaluation", "quality"],
+      idempotencyKey: `eval:${runId}:score-summary`,
+    });
+    await updateEvaluationWorkflowRunSummary(workflowContext, evidenceSummary);
 
-  if (totalCostUsd > 0 && run.agent_id) {
+    await notifyEvalRunUpdate({
+      runId,
+      tenantId: run.tenant_id,
+      agentId: run.agent_id,
+      status: "completed",
+      totalTests: cases.length,
+      passed,
+      failed,
+      passRate,
+    });
+
+    console.log(
+      `[eval-runner] runId=${runId} done: ${passed}/${cases.length} passed (${(passRate * 100).toFixed(1)}%) cost=$${totalCostUsd.toFixed(4)}`,
+    );
+    return { ok: true, runId, passRate, passedThreshold };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const completedAt = new Date();
     await db
-      .insert(costEvents)
-      .values({
-        tenant_id: run.tenant_id,
-        agent_id: run.agent_id,
-        request_id: `eval-run-${runId}`,
-        event_type: "eval_compute",
-        amount_usd: totalCostUsd.toFixed(6),
-        metadata: {
-          source: "eval-runner",
-          run_id: runId,
-          total_tests: cases.length,
-        },
+      .update(evalRuns)
+      .set({
+        status: "failed",
+        completed_at: completedAt,
+        error_message: message,
       })
-      .onConflictDoNothing();
+      .where(eq(evalRuns.id, runId));
+    await recordEvaluationWorkflowStep(workflowContext, {
+      nodeId: "RunEvaluation",
+      stepType: "worker",
+      status: "failed",
+      finishedAt: completedAt,
+      errorJson: { message },
+      idempotencyKey: `eval:${runId}:runner-failed`,
+    });
+    await recordEvaluationWorkflowEvidence(workflowContext, {
+      evidenceType: "score-summary",
+      title: "Evaluation failed",
+      summary: message,
+      artifactJson: { evalRunId: runId, error: message },
+      complianceTags: ["evaluation", "quality"],
+      idempotencyKey: `eval:${runId}:score-summary`,
+    });
+    await updateEvaluationWorkflowRunSummary(workflowContext, {
+      evalRunId: runId,
+      error: message,
+    });
+    await notifyEvalRunUpdate({
+      runId,
+      tenantId: run.tenant_id,
+      agentId: run.agent_id,
+      status: "failed",
+      errorMessage: message,
+    });
+    console.error(`[eval-runner] runId=${runId} failed:`, message);
+    return { ok: false, runId, error: message, passedThreshold: false };
   }
-
-  await notifyEvalRunUpdate({
-    runId,
-    tenantId: run.tenant_id,
-    agentId: run.agent_id,
-    status: "completed",
-    totalTests: cases.length,
-    passed,
-    failed,
-    passRate,
-  });
-
-  console.log(
-    `[eval-runner] runId=${runId} done: ${passed}/${cases.length} passed (${(passRate * 100).toFixed(1)}%) cost=$${totalCostUsd.toFixed(4)}`,
-  );
-  return { ok: true, runId };
 }

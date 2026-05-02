@@ -25,6 +25,7 @@
     "@aws-sdk/client-secrets-manager": "^3.917.0",
     "@aws-sdk/client-ses": "^3.917.0",
     "@aws-sdk/client-sns": "^3.917.0",
+    "@aws-sdk/client-sfn": "^3.917.0",
     "@aws-sdk/client-ssm": "^3.917.0",
     "@graphql-yoga/plugin-disable-introspection": "^2.22.0",
     "@smithy/node-http-handler": "^4.5.2",
@@ -42,7 +43,6 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
-    "@aws-sdk/client-sfn": "^3.917.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1010.0",
     "@aws-sdk/s3-request-presigner": "^3.1023.0",
     "@envelop/depth-limit": "^7.1.1",

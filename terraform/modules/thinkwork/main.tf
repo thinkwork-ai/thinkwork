@@ -316,10 +316,12 @@ module "system_workflows_stepfunctions" {
   account_id = var.account_id
   region     = var.region
 
-  # Runtime callbacks land with the System Workflow launcher/callback
-  # service. The module provisions state machines and logs now, while
-  # EventBridge callback wiring stays disabled until that Lambda exists.
-  execution_callback_lambda_arn = ""
+  # Constructed from lambda-api's deterministic naming convention to
+  # avoid a module cycle: lambda-api needs the System Workflow state
+  # machine ARNs for launcher env, while this module needs callback/task
+  # Lambda ARNs for Step Functions wiring.
+  execution_callback_lambda_arn = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-system-workflow-execution-callback"
+  eval_runner_lambda_arn        = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
 }
 
 module "hindsight" {

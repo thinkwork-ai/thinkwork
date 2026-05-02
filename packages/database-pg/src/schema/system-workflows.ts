@@ -197,6 +197,16 @@ export const systemWorkflowRuns = pgTable(
       table.domain_ref_type,
       table.domain_ref_id,
     ),
+    uniqueIndex("idx_system_workflow_runs_domain_ref_dedup")
+      .on(
+        table.tenant_id,
+        table.workflow_id,
+        table.domain_ref_type,
+        table.domain_ref_id,
+      )
+      .where(
+        sql`${table.domain_ref_type} IS NOT NULL AND ${table.domain_ref_id} IS NOT NULL`,
+      ),
   ],
 );
 

@@ -43,10 +43,17 @@ variable "execution_callback_lambda_arn" {
   default     = ""
 }
 
+variable "eval_runner_lambda_arn" {
+  description = "ARN of the eval-runner Lambda invoked by the Evaluation Runs System Workflow."
+  type        = string
+  default     = ""
+}
+
 locals {
-  log_group_name = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
-  output_bucket  = "thinkwork-${var.stage}-system-workflow-output"
-  role_name      = "thinkwork-${var.stage}-system-workflows-execution-role"
+  log_group_name         = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
+  output_bucket          = "thinkwork-${var.stage}-system-workflow-output"
+  role_name              = "thinkwork-${var.stage}-system-workflows-execution-role"
+  eval_runner_lambda_arn = var.eval_runner_lambda_arn != "" ? var.eval_runner_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
 
   standard_state_machines = {
     "wiki-build" = {
@@ -54,8 +61,10 @@ locals {
       definition = file("${path.module}/asl/wiki-build-standard.asl.json")
     }
     "evaluation-runs" = {
-      name       = "thinkwork-${var.stage}-system-evaluation-runs"
-      definition = file("${path.module}/asl/evaluation-runs-standard.asl.json")
+      name = "thinkwork-${var.stage}-system-evaluation-runs"
+      definition = templatefile("${path.module}/asl/evaluation-runs-standard.asl.json", {
+        eval_runner_lambda_arn = local.eval_runner_lambda_arn
+      })
     }
     "tenant-agent-activation" = {
       name       = "thinkwork-${var.stage}-system-tenant-agent-activation"
@@ -136,6 +145,13 @@ resource "aws_iam_role_policy" "system_workflows_execution" {
           "s3:PutObject",
         ]
         Resource = "${aws_s3_bucket.system_workflow_output.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction",
+        ]
+        Resource = local.eval_runner_lambda_arn
       },
     ]
   })
