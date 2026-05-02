@@ -1800,6 +1800,7 @@ export type Mutation = {
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
+  updateRoutineDefinition: RoutineDefinition;
   updateTeam: Team;
   updateTenant: Tenant;
   updateTenantMember: TenantMember;
@@ -2613,6 +2614,11 @@ export type MutationUpdateRoutineArgs = {
 };
 
 
+export type MutationUpdateRoutineDefinitionArgs = {
+  input: UpdateRoutineDefinitionInput;
+};
+
+
 export type MutationUpdateTeamArgs = {
   id: Scalars['ID']['input'];
   input: UpdateTeamInput;
@@ -2838,6 +2844,7 @@ export type Query = {
   recipes: Array<Recipe>;
   routine?: Maybe<Routine>;
   routineAslVersion?: Maybe<RoutineAslVersion>;
+  routineDefinition?: Maybe<RoutineDefinition>;
   routineExecution?: Maybe<RoutineExecution>;
   routineExecutions: Array<RoutineExecution>;
   routineStepEvents: Array<RoutineStepEvent>;
@@ -3297,6 +3304,11 @@ export type QueryRoutineAslVersionArgs = {
 };
 
 
+export type QueryRoutineDefinitionArgs = {
+  routineId: Scalars['ID']['input'];
+};
+
+
 export type QueryRoutineExecutionArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3679,6 +3691,40 @@ export type RoutineAslVersion = {
   validationWarningsJson?: Maybe<Scalars['AWSJSON']['output']>;
   versionArn: Scalars['String']['output'];
   versionNumber: Scalars['Int']['output'];
+};
+
+export type RoutineDefinition = {
+  __typename?: 'RoutineDefinition';
+  currentVersion?: Maybe<Scalars['Int']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  editableFields: Array<RoutineDefinitionField>;
+  kind: Scalars['String']['output'];
+  routineId: Scalars['ID']['output'];
+  steps: Array<RoutineDefinitionStep>;
+  title: Scalars['String']['output'];
+  versionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type RoutineDefinitionField = {
+  __typename?: 'RoutineDefinitionField';
+  inputType: Scalars['String']['output'];
+  key: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  stepNodeId?: Maybe<Scalars['String']['output']>;
+  value?: Maybe<Scalars['String']['output']>;
+};
+
+export type RoutineDefinitionFieldInput = {
+  key: Scalars['String']['input'];
+  value?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RoutineDefinitionStep = {
+  __typename?: 'RoutineDefinitionStep';
+  args: Scalars['AWSJSON']['output'];
+  label: Scalars['String']['output'];
+  nodeId: Scalars['String']['output'];
+  recipeId: Scalars['String']['output'];
 };
 
 export enum RoutineEngine {
@@ -4507,6 +4553,11 @@ export type UpdateRecipeInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   templates?: InputMaybe<Scalars['AWSJSON']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateRoutineDefinitionInput = {
+  fields: Array<RoutineDefinitionFieldInput>;
+  routineId: Scalars['ID']['input'];
 };
 
 export type UpdateRoutineInput = {
