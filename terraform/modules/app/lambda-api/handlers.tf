@@ -271,6 +271,7 @@ resource "aws_lambda_function" "handler" {
     "routine-execution-callback",
     "system-workflow-step-callback",
     "system-workflow-execution-callback",
+    "activation-workflow-adapter",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
