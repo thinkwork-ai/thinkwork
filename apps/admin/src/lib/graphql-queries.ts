@@ -768,10 +768,44 @@ export const PlanRoutineDraftMutation = graphql(`
           label
           value
           inputType
+          control
           required
           editable
           options
+          placeholder
+          helpText
+          min
+          max
+          pattern
         }
+      }
+    }
+  }
+`);
+
+export const RoutineRecipeCatalogQuery = graphql(`
+  query RoutineRecipeCatalog($tenantId: ID!) {
+    routineRecipeCatalog(tenantId: $tenantId) {
+      id
+      displayName
+      description
+      category
+      hitlCapable
+      defaultArgs
+      configFields {
+        key
+        label
+        value
+        inputType
+        control
+        required
+        editable
+        options
+        placeholder
+        helpText
+        min
+        max
+        pattern
       }
     }
   }
@@ -817,9 +851,15 @@ export const RoutineDefinitionQuery = graphql(`
           label
           value
           inputType
+          control
           required
           editable
           options
+          placeholder
+          helpText
+          min
+          max
+          pattern
         }
       }
     }
