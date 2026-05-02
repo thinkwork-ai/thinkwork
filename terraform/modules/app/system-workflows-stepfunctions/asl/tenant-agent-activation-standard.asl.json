@@ -4,43 +4,83 @@
   "States": {
     "TrackReadiness": {
       "Type": "Pass",
-      "Comment": "standard:checkpoint:Track readiness",
-      "Result": {
-        "workflowId": "tenant-agent-activation",
-        "stepType": "checkpoint",
-        "runtime": "standard"
+      "Comment": "standard:checkpoint:Track activation readiness",
+      "Parameters": {
+        "activationSessionId.$": "$.input.activationSessionId",
+        "tenantId.$": "$.tenantId",
+        "userId.$": "$.input.userId",
+        "mode.$": "$.input.mode",
+        "focusLayer.$": "$.input.focusLayer",
+        "currentLayer.$": "$.input.currentLayer",
+        "systemWorkflowRunId.$": "$.workflowRunId",
+        "systemWorkflowExecutionArn.$": "$$.Execution.Id",
+        "domainRef.$": "$.domainRef"
       },
       "Next": "RunPolicyChecks"
     },
     "RunPolicyChecks": {
       "Type": "Pass",
-      "Comment": "standard:validation:Run policy checks",
-      "Result": {
-        "workflowId": "tenant-agent-activation",
-        "stepType": "validation",
-        "runtime": "standard"
+      "Comment": "standard:validation:Run activation policy checks",
+      "Parameters": {
+        "activationSessionId.$": "$.activationSessionId",
+        "tenantId.$": "$.tenantId",
+        "userId.$": "$.userId",
+        "mode.$": "$.mode",
+        "focusLayer.$": "$.focusLayer",
+        "currentLayer.$": "$.currentLayer",
+        "systemWorkflowRunId.$": "$.systemWorkflowRunId",
+        "systemWorkflowExecutionArn.$": "$.systemWorkflowExecutionArn",
+        "domainRef.$": "$.domainRef",
+        "policy": {
+          "securityAttestationRequired": true,
+          "launchApprovalRole": "admin"
+        }
       },
       "Next": "ApplyActivationBundle"
     },
     "ApplyActivationBundle": {
-      "Type": "Pass",
-      "Comment": "standard:worker:Apply activation bundle",
-      "Result": {
-        "workflowId": "tenant-agent-activation",
-        "stepType": "worker",
-        "runtime": "standard"
+      "Type": "Task",
+      "Comment": "standard:worker:Record activation workflow evidence",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${activation_workflow_adapter_lambda_arn}",
+        "Payload.$": "$"
       },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "RecordLaunchDecision"
     },
     "RecordLaunchDecision": {
-      "Type": "Pass",
+      "Type": "Choice",
       "Comment": "standard:evidence:Record launch decision",
-      "Result": {
-        "workflowId": "tenant-agent-activation",
-        "stepType": "evidence",
-        "runtime": "standard"
-      },
-      "End": true
+      "Choices": [
+        {
+          "Variable": "$.ok",
+          "BooleanEquals": true,
+          "Next": "ActivationWorkflowSucceeded"
+        }
+      ],
+      "Default": "ActivationWorkflowFailed"
+    },
+    "ActivationWorkflowSucceeded": {
+      "Type": "Succeed"
+    },
+    "ActivationWorkflowFailed": {
+      "Type": "Fail",
+      "Error": "ActivationWorkflowFailed",
+      "Cause": "Tenant/Agent Activation workflow adapter did not pass."
     }
   }
 }

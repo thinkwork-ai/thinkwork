@@ -55,12 +55,19 @@ variable "wiki_compile_lambda_arn" {
   default     = ""
 }
 
+variable "activation_workflow_adapter_lambda_arn" {
+  description = "ARN of the activation-workflow-adapter Lambda invoked by the Tenant/Agent Activation System Workflow."
+  type        = string
+  default     = ""
+}
+
 locals {
-  log_group_name          = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
-  output_bucket           = "thinkwork-${var.stage}-system-workflow-output"
-  role_name               = "thinkwork-${var.stage}-system-workflows-execution-role"
-  eval_runner_lambda_arn  = var.eval_runner_lambda_arn != "" ? var.eval_runner_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
-  wiki_compile_lambda_arn = var.wiki_compile_lambda_arn != "" ? var.wiki_compile_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile"
+  log_group_name                         = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
+  output_bucket                          = "thinkwork-${var.stage}-system-workflow-output"
+  role_name                              = "thinkwork-${var.stage}-system-workflows-execution-role"
+  eval_runner_lambda_arn                 = var.eval_runner_lambda_arn != "" ? var.eval_runner_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
+  wiki_compile_lambda_arn                = var.wiki_compile_lambda_arn != "" ? var.wiki_compile_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile"
+  activation_workflow_adapter_lambda_arn = var.activation_workflow_adapter_lambda_arn != "" ? var.activation_workflow_adapter_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-activation-workflow-adapter"
 
   standard_state_machines = {
     "wiki-build" = {
@@ -76,8 +83,10 @@ locals {
       })
     }
     "tenant-agent-activation" = {
-      name       = "thinkwork-${var.stage}-system-tenant-agent-activation"
-      definition = file("${path.module}/asl/tenant-agent-activation-standard.asl.json")
+      name = "thinkwork-${var.stage}-system-tenant-agent-activation"
+      definition = templatefile("${path.module}/asl/tenant-agent-activation-standard.asl.json", {
+        activation_workflow_adapter_lambda_arn = local.activation_workflow_adapter_lambda_arn
+      })
     }
   }
 }
@@ -163,6 +172,7 @@ resource "aws_iam_role_policy" "system_workflows_execution" {
         Resource = [
           local.eval_runner_lambda_arn,
           local.wiki_compile_lambda_arn,
+          local.activation_workflow_adapter_lambda_arn,
         ]
       },
     ]
