@@ -715,6 +715,8 @@ export const RoutineDetailQuery = graphql(`
       type
       status
       schedule
+      engine
+      currentVersion
       config
       lastRunAt
       nextRunAt
@@ -761,6 +763,15 @@ export const TriggerRoutineRunMutation = graphql(`
       status
       triggerSource
       startedAt
+    }
+  }
+`);
+
+export const RebuildRoutineVersionMutation = graphql(`
+  mutation RebuildRoutineVersion($input: RebuildRoutineVersionInput!) {
+    rebuildRoutineVersion(input: $input) {
+      id
+      versionNumber
     }
   }
 `);

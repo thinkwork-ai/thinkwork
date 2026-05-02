@@ -115,6 +115,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "routines.id",
     tenant_id: "routines.tenant_id",
     name: "routines.name",
+    description: "routines.description",
     engine: "routines.engine",
     state_machine_arn: "routines.state_machine_arn",
     state_machine_alias_arn: "routines.state_machine_alias_arn",
@@ -514,6 +515,147 @@ describe("publishRoutineVersion — version + alias flip", () => {
             stepManifest: JSON.stringify({}),
           },
         },
+        ctx,
+      ),
+    ).rejects.toThrow(/legacy/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rebuildRoutineVersion
+// ---------------------------------------------------------------------------
+
+describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
+  it("rebuilds the persisted Austin weather intent and publishes through the shared version path", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to ericodom37@gmail.com",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:1",
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-v2",
+          routine_id: "routine-a",
+          tenant_id: "tenant-a",
+          version_number: 2,
+        },
+      ]);
+
+    mockSfnSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        stateMachineVersionArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:2",
+      })
+      .mockResolvedValueOnce({});
+
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
+
+    const result = await rebuildRoutineVersion(
+      null,
+      { input: { routineId: "routine-a" } },
+      ctx,
+    );
+
+    expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
+      ctx,
+      "tenant-a",
+      "publish_routine_version",
+    );
+    expect(mockSfnSend).toHaveBeenCalledTimes(3);
+    const updateInput = (mockSfnSend.mock.calls[0][0] as { input: any }).input;
+    const updatedAsl = JSON.parse(updateInput.definition);
+    expect(
+      updatedAsl.States.FetchAustinWeather.Parameters.Payload,
+    ).toMatchObject({
+      "tenantId.$": "$$.Execution.Input.tenantId",
+      "routineId.$": "$$.Execution.Input.routineId",
+      "executionId.$": "$$.Execution.Id",
+    });
+    expect(
+      updatedAsl.States.EmailAustinWeather.Parameters.Payload,
+    ).toMatchObject({
+      "tenantId.$": "$$.Execution.Input.tenantId",
+      "routineId.$": "$$.Execution.Input.routineId",
+      "executionId.$": "$$.Execution.Id",
+      "body.$": "$.FetchAustinWeather.stdoutPreview",
+    });
+    const v = result as { versionNumber?: number; version_number?: number };
+    expect(v.versionNumber ?? v.version_number).toBe(2);
+  });
+
+  it("returns the authoring error and skips SFN calls when the routine metadata cannot be rebuilt", async () => {
+    mockSelectRows.mockReturnValueOnce([
+      {
+        id: "routine-a",
+        tenant_id: "tenant-a",
+        name: "Nightly digest",
+        description: "Summarize new inbox items",
+        engine: "step_functions",
+        state_machine_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+        state_machine_alias_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+        current_version: 1,
+      },
+    ]);
+
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
+
+    await expect(
+      rebuildRoutineVersion(
+        null,
+        { input: { routineId: "routine-a" } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Austin weather email routines/);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+  });
+
+  it("rejects rebuild on a legacy_python routine", async () => {
+    mockSelectRows.mockReturnValueOnce([
+      {
+        id: "routine-legacy",
+        tenant_id: "tenant-a",
+        name: "Legacy routine",
+        description:
+          "Check the weather in Austin and email it to test@example.com",
+        engine: "legacy_python",
+        state_machine_arn: null,
+        state_machine_alias_arn: null,
+        current_version: null,
+      },
+    ]);
+
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
+
+    await expect(
+      rebuildRoutineVersion(
+        null,
+        { input: { routineId: "routine-legacy" } },
         ctx,
       ),
     ).rejects.toThrow(/legacy/i);
