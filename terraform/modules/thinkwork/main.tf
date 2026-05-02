@@ -218,6 +218,7 @@ module "api" {
   job_scheduler_role_arn              = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn         = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn              = module.routines_stepfunctions.log_group_arn
+  agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
   wiki_compile_model_id               = var.wiki_compile_model_id
   company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
   wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
