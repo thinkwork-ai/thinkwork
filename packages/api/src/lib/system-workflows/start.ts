@@ -67,7 +67,15 @@ export function systemWorkflowStateMachineArn(
     .toUpperCase()
     .replace(/-/g, "_")}_STATE_MACHINE_ARN`;
   const direct = process.env[envKey];
-  return direct && direct.length > 0 ? direct : null;
+  if (direct && direct.length > 0) return direct;
+
+  const region = process.env.AWS_REGION;
+  const accountId = process.env.AWS_ACCOUNT_ID;
+  const stage = process.env.STAGE;
+  const workflowName = WORKFLOW_NAME_BY_ID[workflowId];
+  if (!region || !accountId || !stage || !workflowName) return null;
+
+  return `arn:aws:states:${region}:${accountId}:stateMachine:thinkwork-${stage}-system-${workflowName}`;
 }
 
 export function systemWorkflowExecutionName(input: {

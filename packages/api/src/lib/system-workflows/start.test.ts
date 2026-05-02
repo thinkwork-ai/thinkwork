@@ -64,6 +64,16 @@ describe("startSystemWorkflow", () => {
     );
   });
 
+  it("derives the standard state machine ARN from deployment env", () => {
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+    vi.stubEnv("STAGE", "dev");
+
+    expect(systemWorkflowStateMachineArn("tenant-agent-activation")).toBe(
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-system-tenant-agent-activation",
+    );
+  });
+
   it("builds Step Functions-safe execution names", () => {
     expect(
       systemWorkflowExecutionName({
