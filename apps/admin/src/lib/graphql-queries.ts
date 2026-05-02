@@ -748,6 +748,35 @@ export const CreateRoutineMutation = graphql(`
   }
 `);
 
+export const PlanRoutineDraftMutation = graphql(`
+  mutation PlanRoutineDraft($input: PlanRoutineDraftInput!) {
+    planRoutineDraft(input: $input) {
+      title
+      description
+      kind
+      asl
+      markdownSummary
+      stepManifest
+      steps {
+        nodeId
+        recipeId
+        recipeName
+        label
+        args
+        configFields {
+          key
+          label
+          value
+          inputType
+          required
+          editable
+          options
+        }
+      }
+    }
+  }
+`);
+
 export const TriggerRoutineRunMutation = graphql(`
   mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
     triggerRoutineRun(routineId: $routineId, input: $input) {

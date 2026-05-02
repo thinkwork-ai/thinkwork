@@ -56,9 +56,9 @@ interface CreateRoutineInput {
   owningAgentId?: string;
   name: string;
   description?: string;
-  asl?: string;
+  asl?: unknown;
   markdownSummary?: string;
-  stepManifest?: string;
+  stepManifest?: unknown;
 }
 
 export async function createRoutine(
@@ -97,18 +97,8 @@ export async function createRoutine(
   }
 
   if (hasAllExplicitArtifacts) {
-    try {
-      aslJson = JSON.parse(i.asl!);
-    } catch (err) {
-      throw new Error(`asl is not valid JSON: ${(err as Error).message}`);
-    }
-    try {
-      stepManifestJson = JSON.parse(i.stepManifest!);
-    } catch (err) {
-      throw new Error(
-        `stepManifest is not valid JSON: ${(err as Error).message}`,
-      );
-    }
+    aslJson = parseAwsJsonInput(i.asl!, "asl");
+    stepManifestJson = parseAwsJsonInput(i.stepManifest!, "stepManifest");
   } else {
     const draft = buildRoutineDraftFromIntent({
       name: i.name,
@@ -236,4 +226,13 @@ export async function createRoutine(
   });
 
   return snakeToCamel(inserted);
+}
+
+function parseAwsJsonInput(value: unknown, label: string): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    throw new Error(`${label} is not valid JSON: ${(err as Error).message}`);
+  }
 }

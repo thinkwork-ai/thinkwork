@@ -308,6 +308,50 @@ describe("createRoutine — Step Functions live cutover", () => {
     expect(mockSfnSend).toHaveBeenCalledTimes(3);
   });
 
+  it("accepts parsed AWSJSON objects for reviewed draft artifacts", async () => {
+    mockSfnSend
+      .mockResolvedValueOnce({
+        stateMachineArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+      })
+      .mockResolvedValueOnce({
+        stateMachineVersionArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:1",
+      })
+      .mockResolvedValueOnce({});
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Reviewed draft",
+          engine: "step_functions",
+          current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([{ id: "asl-version-1" }]);
+
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
+
+    await createRoutine(
+      null,
+      {
+        input: {
+          tenantId: "tenant-a",
+          name: "Reviewed draft",
+          asl: minimalAsl,
+          markdownSummary: "## Reviewed draft",
+          stepManifest: { definition: { kind: "recipe_graph", steps: [] } },
+        },
+      },
+      ctx,
+    );
+
+    expect(mockValidate).toHaveBeenCalledWith({ asl: minimalAsl });
+    expect(mockSfnSend).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects unsupported intent-only input before SFN side effects", async () => {
     const { createRoutine } =
       await import("../graphql/resolvers/routines/createRoutine.mutation.js");
@@ -665,6 +709,122 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
         ctx,
       ),
     ).rejects.toThrow(/legacy/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// planRoutineDraft
+// ---------------------------------------------------------------------------
+
+describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
+  it("returns a reviewable recipe draft without provisioning Step Functions resources", async () => {
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
+
+    const result = (await planRoutineDraft(
+      null,
+      {
+        input: {
+          tenantId: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to ericodom37@gmail.com.",
+        },
+      },
+      ctx,
+    )) as {
+      kind: string;
+      steps: Array<{
+        recipeId: string;
+        configFields: Array<{ key: string; value: unknown; editable: boolean }>;
+      }>;
+      asl: unknown;
+      stepManifest: unknown;
+    };
+
+    expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
+      ctx,
+      "tenant-a",
+      "create_routine",
+    );
+    expect(mockSfnSend).not.toHaveBeenCalled();
+    expect(result.kind).toBe("recipe_graph");
+    expect(result.steps.map((step) => step.recipeId)).toEqual([
+      "python",
+      "email_send",
+    ]);
+    expect(result.steps[1]?.configFields).toContainEqual(
+      expect.objectContaining({
+        key: "to",
+        value: ["ericodom37@gmail.com"],
+        editable: true,
+      }),
+    );
+    expect(JSON.stringify(result.asl)).toContain("email_send");
+    expect(JSON.stringify(result.stepManifest)).toContain("recipe_graph");
+  });
+
+  it("rebuilds draft artifacts from editable step config", async () => {
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
+
+    const result = (await planRoutineDraft(
+      null,
+      {
+        input: {
+          tenantId: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to old@example.com.",
+          steps: [
+            {
+              nodeId: "EmailAustinWeather",
+              args: {
+                to: ["new@example.com"],
+                subject: "Austin weather update - reviewed",
+              },
+            },
+          ],
+        },
+      },
+      ctx,
+    )) as {
+      steps: Array<{ configFields: Array<{ key: string; value: unknown }> }>;
+      asl: unknown;
+    };
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.asl)).toContain("new@example.com");
+    expect(JSON.stringify(result.asl)).toContain(
+      "Austin weather update - reviewed",
+    );
+    expect(result.steps[1]?.configFields).toContainEqual(
+      expect.objectContaining({
+        key: "subject",
+        value: "Austin weather update - reviewed",
+      }),
+    );
+  });
+
+  it("rejects unsupported draft intents before side effects", async () => {
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
+
+    await expect(
+      planRoutineDraft(
+        null,
+        {
+          input: {
+            tenantId: "tenant-a",
+            name: "Post to Slack",
+            description: "Post a message to Slack every morning.",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/currently supports Austin weather email/i);
 
     expect(mockSfnSend).not.toHaveBeenCalled();
   });
