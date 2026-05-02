@@ -31,6 +31,17 @@ const tableTokens = vi.hoisted(() => ({
 	messages: { __tag: "messages" } as { __tag: string },
 }));
 
+// `sendExternalTaskPush` reaches for the real database via getDb() which is
+// not configured in CI's vitest environment. The writeback fires the push
+// best-effort via `void sendExternalTaskPush(...)`, but the unhandled
+// rejection from a missing DATABASE_URL bubbles up and fails the test.
+// Local runs may incidentally have DATABASE_URL set (from psql work) which
+// masks this in dev. Stub it here so the writeback's own logic is the
+// only thing under test, environment-independently.
+vi.mock("../lib/push-notifications.js", () => ({
+	sendExternalTaskPush: vi.fn(async () => undefined),
+}));
+
 vi.mock("../graphql/utils.js", () => {
 	return {
 		db: {} as never,

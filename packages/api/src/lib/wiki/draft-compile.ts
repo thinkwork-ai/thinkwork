@@ -27,6 +27,7 @@
 import { invokeClaudeWithRetry } from "./bedrock.js";
 import { slugifyTitle } from "./aliases.js";
 import {
+	claimCompileJobById,
 	completeCompileJob,
 	getCompileJob,
 	type WikiCompileJobRow,
@@ -70,6 +71,13 @@ export interface DraftCompileInput {
 	pageTitle: string;
 	currentBodyMd: string;
 	candidates: DraftCompileCandidate[];
+	/**
+	 * Optional: the agent the user was viewing when they triggered enrichment.
+	 * The writeback prefers this agent so the resulting thread lands in the
+	 * user's current view. When absent (legacy callers / fallback), the
+	 * writeback falls back to the user's paired agent or any tenant agent.
+	 */
+	requestingAgentId?: string | null;
 }
 
 /**
@@ -649,12 +657,17 @@ export function parseDraftCompileInput(raw: unknown): DraftCompileInput {
 			citation: parseCitation(co.citation),
 		});
 	}
+	const requestingAgentId =
+		typeof obj.requestingAgentId === "string" && obj.requestingAgentId
+			? obj.requestingAgentId
+			: null;
 	return {
 		pageId,
 		pageTable,
 		pageTitle,
 		currentBodyMd,
 		candidates,
+		...(requestingAgentId ? { requestingAgentId } : {}),
 	};
 }
 
@@ -679,6 +692,7 @@ export async function runDraftCompileJob(
 			pageId: parsedInput.pageId,
 			pageTitle: parsedInput.pageTitle,
 			candidates: parsedInput.candidates,
+			requestingAgentId: parsedInput.requestingAgentId ?? null,
 		};
 		const result = await runDraftCompile(parsedInput, opts.seam);
 
@@ -762,15 +776,9 @@ export async function runDraftCompileJobById(
 			`runDraftCompileJobById: job ${jobId} has trigger=${job.trigger}, expected enrichment_draft`,
 		);
 	}
-	// Terminal-state short-circuits. `failed` must short-circuit too — without
-	// this guard, retrying the handler against an already-failed job would
-	// re-run the agentic compile and double-complete the row. **`running`
-	// must short-circuit too** — Lambda's default async retry (2 attempts)
-	// would re-claim a job whose previous attempt wrote thread+run+S3 but
-	// crashed before completeCompileJob; re-running would duplicate the
-	// thread + workspace_run + S3 sidecar. The `running` state is presumed
-	// to be a previous attempt still in flight or a crash; the reconciler
-	// owns recovery, not the redrive path.
+	// Terminal-state short-circuits. Cheap pre-check before the CAS — keeps
+	// the warm path fast and avoids touching the row when there's nothing
+	// to claim. The CAS below is the source of truth on contested races.
 	if (job.status === "succeeded" || job.status === "skipped") {
 		return { ok: true, jobId: job.id, status: "succeeded" };
 	}
@@ -782,18 +790,28 @@ export async function runDraftCompileJobById(
 			error: job.error ?? "previous attempt failed",
 		};
 	}
-	if (job.status === "running") {
+
+	// Atomic CAS claim. The previous status-check-then-call pattern was
+	// vulnerable to two concurrent Lambda invocations both reading
+	// status='pending' before either could mutate it — both would proceed
+	// into the agentic compile and both writebacks would create separate
+	// thread + workspace_run rows for the same logical run (observed live
+	// in dev — API-249 + API-250 for one Eric enrichment). The CAS narrows
+	// the window to the DB engine's row lock; only the first invoker gets
+	// a non-null result and proceeds. Subsequent invocations refuse.
+	const claimed = await claimCompileJobById(jobId);
+	if (!claimed) {
 		console.warn(
-			`[draft-compile] runDraftCompileJobById: job ${jobId} is already running; skipping redrive (reconciler owns recovery)`,
+			`[draft-compile] runDraftCompileJobById: failed to atomically claim job ${jobId} (concurrent redrive or no longer pending); refusing`,
 		);
 		return {
 			ok: false,
 			jobId: job.id,
 			status: "failed",
-			error: "job already running — refusing redrive",
+			error: "job already claimed by concurrent invocation",
 		};
 	}
-	return runDraftCompileJob(job, opts);
+	return runDraftCompileJob(claimed, opts);
 }
 
 // ---------------------------------------------------------------------------
