@@ -64,6 +64,16 @@ describe("startSystemWorkflow", () => {
     );
   });
 
+  it("derives standard dev Step Function ARNs without a bulky env map", () => {
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+    vi.stubEnv("STAGE", "dev");
+
+    expect(systemWorkflowStateMachineArn("wiki-build")).toBe(
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-system-wiki-build",
+    );
+  });
+
   it("builds Step Functions-safe execution names", () => {
     expect(
       systemWorkflowExecutionName({
