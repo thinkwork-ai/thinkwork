@@ -122,27 +122,23 @@ export function AppSidebar() {
   const threadCount =
     (threadsResult.data as any)?.threadsPaged?.totalCount ?? 0;
 
-  // REST-based active counts for Manage section. Highest-traffic REST call
+  // REST-based active counts for navigation badges. Highest-traffic REST call
   // site in the admin — fires on every tenant-scoped page load. If the auth
   // session hasn't hydrated yet apiFetch throws NotReadyError; we bump a
   // retry counter so the effect re-fires on the next tick once the token is
   // available. Other errors are non-fatal for the cosmetic count badges.
   const [activeScheduledJobs, setActiveScheduledJobs] = useState(0);
-  const [activeWebhooks, setActiveWebhooks] = useState(0);
   const [authRetryTick, setAuthRetryTick] = useState(0);
 
   const fetchManageCounts = useCallback(async () => {
     if (!tenantId) return;
     const extraHeaders = { "x-tenant-id": tenantId };
     try {
-      const [jobs, webhooks] = await Promise.all([
-        apiFetch<{ enabled: boolean }[]>("/api/scheduled-jobs", {
-          extraHeaders,
-        }),
-        apiFetch<{ enabled: boolean }[]>("/api/webhooks", { extraHeaders }),
-      ]);
+      const jobs = await apiFetch<{ enabled: boolean }[]>(
+        "/api/scheduled-jobs",
+        { extraHeaders },
+      );
       setActiveScheduledJobs(jobs.filter((j) => j.enabled).length);
-      setActiveWebhooks(webhooks.filter((w) => w.enabled).length);
     } catch (err) {
       if (err instanceof NotReadyError) {
         // Auth still hydrating — schedule a retry on the next tick.
@@ -207,27 +203,26 @@ export function AppSidebar() {
 
   const automationsItems: NavItem[] = [
     {
+      to: "/automations/schedules",
+      icon: CalendarClock,
+      label: "Scheduled Jobs",
+      badge: activeScheduledJobs,
+    },
+    {
       to: "/automations/routines",
       icon: Repeat,
       label: "Routines",
       badge: routineActiveCount,
     },
     {
-      to: "/automations/schedules",
-      icon: CalendarClock,
-      label: "Schedules",
-      badge: activeScheduledJobs,
-    },
-    {
       to: "/automations/webhooks",
       icon: Webhook,
       label: "Webhooks",
-      badge: activeWebhooks,
     },
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
+    { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/knowledge", icon: Brain, label: "Company Brain" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
