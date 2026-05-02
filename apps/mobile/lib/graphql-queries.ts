@@ -420,41 +420,75 @@ export const RoutineQuery = graphql(`
   }
 `);
 
-export const RoutineRunsQuery = graphql(`
-  query RoutineRuns($routineId: ID!, $limit: Int, $cursor: String) {
-    routineRuns(routineId: $routineId, limit: $limit, cursor: $cursor) {
+// Phase D U13/U14 mobile parity: pull routine_executions + step_events
+// (the substrate that replaced the deprecated RoutineRun/RoutineStep
+// types). Mirrors admin's RoutineExecutionsListQuery /
+// RoutineExecutionDetailQuery so a future shared package is easy.
+export const RoutineExecutionsListQuery = graphql(`
+  query MobileRoutineExecutionsList(
+    $routineId: ID!
+    $status: RoutineExecutionStatus
+    $limit: Int
+    $cursor: String
+  ) {
+    routineExecutions(
+      routineId: $routineId
+      status: $status
+      limit: $limit
+      cursor: $cursor
+    ) {
       id
-      routineId
       status
+      triggerSource
       startedAt
-      completedAt
-      error
-      metadata
+      finishedAt
+      totalLlmCostUsdCents
+      errorCode
       createdAt
     }
   }
 `);
 
-export const RoutineRunDetailQuery = graphql(`
-  query RoutineRunDetail($id: ID!) {
-    routineRun(id: $id) {
+export const RoutineExecutionDetailQuery = graphql(`
+  query MobileRoutineExecutionDetail($id: ID!) {
+    routineExecution(id: $id) {
       id
+      tenantId
       routineId
+      sfnExecutionArn
+      triggerSource
+      inputJson
+      outputJson
       status
       startedAt
-      completedAt
-      error
-      metadata
-      steps {
+      finishedAt
+      errorCode
+      errorMessage
+      totalLlmCostUsdCents
+      stepEvents {
         id
-        stepIndex
-        name
+        nodeId
+        recipeType
         status
-        input
-        output
         startedAt
-        completedAt
-        error
+        finishedAt
+        inputJson
+        outputJson
+        errorJson
+        llmCostUsdCents
+        retryCount
+        stdoutS3Uri
+        stderrS3Uri
+        stdoutPreview
+        truncated
+        createdAt
+      }
+      routine {
+        id
+        name
+        description
+        currentVersion
+        documentationMd
       }
       createdAt
     }
