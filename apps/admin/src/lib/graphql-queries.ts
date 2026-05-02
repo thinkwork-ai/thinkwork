@@ -695,6 +695,7 @@ export const RoutinesListQuery = graphql(`
       lastRunAt
       nextRunAt
       agentId
+      engine
       agent {
         id
         name
@@ -727,14 +728,6 @@ export const RoutineDetailQuery = graphql(`
       team {
         id
         name
-      }
-      runs {
-        id
-        status
-        startedAt
-        completedAt
-        error
-        createdAt
       }
       triggers {
         id
