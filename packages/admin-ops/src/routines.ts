@@ -21,6 +21,8 @@ const ROUTINE_FIELDS = `
   id
   tenantId
   agentId
+  visibility
+  owningAgentId
   name
   description
   status
@@ -29,10 +31,20 @@ const ROUTINE_FIELDS = `
   createdAt
 ` as const;
 
+export type RoutineVisibility = "agent_private" | "tenant_shared";
+
 export interface Routine {
   id: string;
   tenantId: string;
+  /** Primary execution agent. Distinct from owningAgentId (the
+   * authoring/stewardship agent). v0 may set both to the same agent
+   * for agent-stamped routines. */
   agentId: string | null;
+  /** Visibility model: 'agent_private' = only owningAgentId can
+   * invoke; 'tenant_shared' = any agent in the tenant can invoke. */
+  visibility: RoutineVisibility;
+  /** Authoring/stewardship agent. Null on tenant_shared routines. */
+  owningAgentId: string | null;
   name: string;
   description: string | null;
   status: string;
@@ -100,6 +112,13 @@ export async function createAgentRoutine(
       input: {
         tenantId: input.tenantId,
         agentId: input.agentId,
+        // Schema follow-up bundle: stamp the owning agent + agent_private
+        // visibility explicitly so the routine is gated to the calling
+        // agent. The createRoutine resolver also defaults this when
+        // owningAgentId is set, but being explicit makes the intent
+        // legible at the MCP-tool boundary.
+        owningAgentId: input.agentId,
+        visibility: "agent_private",
         name: input.name,
         description: input.description ?? null,
         asl: PLACEHOLDER_ASL,
@@ -160,9 +179,16 @@ export function checkRoutineVisibility(
   if (routine.tenantId !== caller.tenantId) {
     return { ok: false, reason: "different_tenant" };
   }
-  // agentId === null means tenant-shared; any agent in the tenant can
-  // invoke it. agentId set means private — only the owning agent.
-  if (routine.agentId !== null && routine.agentId !== caller.agentId) {
+  // Schema follow-up bundle: visibility column is now the source of
+  // truth. tenant_shared routines accept any agent in the tenant;
+  // agent_private routines are gated on owningAgentId matching the
+  // caller. Backfill maps existing agentId-set rows to agent_private
+  // with owningAgentId = agentId, so old rows continue to behave
+  // identically.
+  if (routine.visibility === "tenant_shared") {
+    return { ok: true };
+  }
+  if (routine.owningAgentId !== null && routine.owningAgentId !== caller.agentId) {
     return { ok: false, reason: "private_to_other_agent" };
   }
   return { ok: true };

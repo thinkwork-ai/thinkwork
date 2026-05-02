@@ -36,6 +36,16 @@ enum RoutineExecutionStatus {
   TIMED_OUT
 }
 
+# Routine visibility model (schema follow-up bundle).
+# Lower-snake values match the literals already baked into
+# admin-ops/checkRoutineVisibility — keeping the enum lower-snake
+# avoids a translation layer between the SQL CHECK constraint, the
+# GraphQL enum, and the MCP tool's runtime check.
+enum RoutineVisibility {
+  agent_private
+  tenant_shared
+}
+
 type Routine {
   id: ID!
   tenantId: ID!
@@ -60,6 +70,12 @@ type Routine {
   documentationMd: String
   # Pointer to the latest published version_number in routine_asl_versions.
   currentVersion: Int
+  # Visibility model (schema follow-up bundle). Splits the conflated
+  # agentId — agentId is the primary execution agent, owningAgentId is
+  # the agent that authored / has stewardship. routine_invoke MCP tool
+  # enforces ownership via these two fields.
+  visibility: RoutineVisibility!
+  owningAgentId: ID
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
   # Nullable in Phase A while the type-resolver lands in Phase B U7. A
@@ -208,6 +224,13 @@ input CreateRoutineInput {
   tenantId: ID!
   teamId: ID
   agentId: ID
+  # Visibility model (schema follow-up bundle). Defaults to agent_private
+  # when owningAgentId is set, tenant_shared otherwise. The MCP
+  # create_routine tool stamps owningAgentId = caller agent id; the
+  # admin/mobile new-routine page lets users leave both blank to mint
+  # a tenant-shared routine.
+  visibility: RoutineVisibility
+  owningAgentId: ID
   name: String!
   description: String
   asl: AWSJSON!

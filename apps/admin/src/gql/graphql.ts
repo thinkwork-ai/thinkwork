@@ -1033,9 +1033,11 @@ export type CreateRoutineInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   markdownSummary: Scalars['String']['input'];
   name: Scalars['String']['input'];
+  owningAgentId?: InputMaybe<Scalars['ID']['input']>;
   stepManifest: Scalars['AWSJSON']['input'];
   teamId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+  visibility?: InputMaybe<RoutineVisibility>;
 };
 
 export type CreateScheduledJobInput = {
@@ -3637,6 +3639,7 @@ export type Routine = {
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   name: Scalars['String']['output'];
   nextRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  owningAgentId?: Maybe<Scalars['ID']['output']>;
   schedule?: Maybe<Scalars['String']['output']>;
   stateMachineAliasArn?: Maybe<Scalars['String']['output']>;
   stateMachineArn?: Maybe<Scalars['String']['output']>;
@@ -3647,6 +3650,7 @@ export type Routine = {
   triggers: Array<RoutineTrigger>;
   type: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+  visibility: RoutineVisibility;
 };
 
 export type RoutineAslVersion = {
@@ -3760,6 +3764,11 @@ export type RoutineTriggerInput = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   triggerType: Scalars['String']['input'];
 };
+
+export enum RoutineVisibility {
+  AgentPrivate = 'agent_private',
+  TenantShared = 'tenant_shared'
+}
 
 export type RunBrainPageEnrichmentInput = {
   limit?: InputMaybe<Scalars['Int']['input']>;
