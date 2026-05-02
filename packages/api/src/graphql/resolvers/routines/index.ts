@@ -1,4 +1,5 @@
 import { createRoutine } from "./createRoutine.mutation.js";
+import { planRoutineDraft } from "./planRoutineDraft.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
 import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
 import { routineDefinition } from "./routineDefinition.query.js";
@@ -26,6 +27,7 @@ export const routineQueries = {
 // triggers/index.ts must drop these from its export so the new resolvers
 // win in the merged Mutation namespace.
 export const routineMutations = {
+  planRoutineDraft,
   createRoutine,
   publishRoutineVersion,
   rebuildRoutineVersion,

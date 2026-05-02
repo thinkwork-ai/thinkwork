@@ -27,7 +27,7 @@ export interface RoutinePlan {
   steps: RoutinePlanStep[];
 }
 
-export type RoutineDefinitionKind = "weather_email";
+export type RoutineDefinitionKind = "recipe_graph" | "weather_email";
 
 export interface RoutinePlanArtifacts {
   plan: RoutinePlan;
@@ -92,9 +92,6 @@ export function planRoutineFromIntent(
 export function buildRoutineArtifactsFromPlan(
   plan: RoutinePlan,
 ): RoutinePlanResult {
-  if (plan.kind !== "weather_email") {
-    return unsupported(`Unsupported routine definition kind: ${plan.kind}`);
-  }
   return artifactsForPlan(refreshPlanConfigFields(plan));
 }
 
@@ -106,7 +103,10 @@ export function routineDefinitionFromArtifacts(input: {
 }): RoutineDefinitionResult {
   const manifest = normalizeJsonObject(input.stepManifestJson);
   const definition = normalizeJsonObject(manifest.definition);
-  if (definition?.kind === "weather_email") {
+  if (
+    definition?.kind === "recipe_graph" ||
+    definition?.kind === "weather_email"
+  ) {
     const manifestPlan = planFromManifestDefinition(
       input.routineName,
       definition,
@@ -255,7 +255,7 @@ function artifactsForPlan(plan: RoutinePlan): RoutinePlanResult {
 
 function weatherEmailPlan(displayName: string, recipient: string): RoutinePlan {
   return refreshPlanConfigFields({
-    kind: "weather_email",
+    kind: "recipe_graph",
     title: displayName,
     description: `Fetches the current weather for Austin, Texas and emails the summary to ${recipient}.`,
     steps: [
@@ -320,7 +320,7 @@ function planFromManifestDefinition(
   }
 
   const plan = refreshPlanConfigFields({
-    kind: "weather_email",
+    kind: "recipe_graph",
     title: routineName,
     description: "",
     steps,

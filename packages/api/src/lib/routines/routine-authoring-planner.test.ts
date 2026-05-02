@@ -22,7 +22,7 @@ describe("routine authoring planner", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
 
-    expect(result.artifacts.plan.kind).toBe("weather_email");
+    expect(result.artifacts.plan.kind).toBe("recipe_graph");
     expect(result.artifacts.plan.steps).toHaveLength(2);
     expect(result.artifacts.plan.steps[0]).toMatchObject({
       nodeId: "FetchAustinWeather",
@@ -51,7 +51,7 @@ describe("routine authoring planner", () => {
     });
     expect(result.artifacts.stepManifest).toMatchObject({
       definition: {
-        kind: "weather_email",
+        kind: "recipe_graph",
         steps: [
           { nodeId: "FetchAustinWeather", recipeId: "python" },
           {
@@ -164,7 +164,7 @@ describe("routine authoring planner", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
-    expect(result.plan.kind).toBe("weather_email");
+    expect(result.plan.kind).toBe("recipe_graph");
     expect(result.plan.steps[1]).toMatchObject({
       nodeId: "EmailAustinWeather",
       args: { to: ["ericodom37@gmail.com"] },
@@ -196,7 +196,7 @@ describe("routine authoring planner", () => {
     expect(result).toMatchObject({
       ok: true,
       plan: {
-        kind: "weather_email",
+        kind: "recipe_graph",
         steps: [
           expect.anything(),
           {

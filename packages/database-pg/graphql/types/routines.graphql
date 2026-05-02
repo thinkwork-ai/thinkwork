@@ -198,6 +198,16 @@ type RoutineDefinition {
   steps: [RoutineDefinitionStep!]!
 }
 
+type RoutineDraft {
+  title: String!
+  description: String
+  kind: String!
+  steps: [RoutineDefinitionStep!]!
+  asl: AWSJSON!
+  markdownSummary: String!
+  stepManifest: AWSJSON!
+}
+
 # ---- Tenant tool inventory (Phase A scaffold; resolver comes in Phase A U4) ----
 #
 # Aggregates the fragmented inventory the chat builder agent + tool_invoke
@@ -271,6 +281,13 @@ input CreateRoutineInput {
   stepManifest: AWSJSON
 }
 
+input PlanRoutineDraftInput {
+  tenantId: ID!
+  name: String!
+  description: String
+  steps: [RoutineDefinitionStepConfigInput!]
+}
+
 # Phase B U7: ASL changes go through publishRoutineVersion. updateRoutine
 # narrows to non-ASL metadata edits. `type` is the legacy
 # routines.type column (heartbeat | scheduled | cron) still consulted
@@ -335,6 +352,7 @@ extend type Query {
 }
 
 extend type Mutation {
+  planRoutineDraft(input: PlanRoutineDraftInput!): RoutineDraft!
   createRoutine(input: CreateRoutineInput!): Routine!
   updateRoutine(id: ID!, input: UpdateRoutineInput!): Routine!
   deleteRoutine(id: ID!): Boolean!
