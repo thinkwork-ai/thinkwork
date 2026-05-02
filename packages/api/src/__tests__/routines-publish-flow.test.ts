@@ -23,6 +23,8 @@ const {
   mockRequireAdminOrApiKeyCaller,
   mockRequireTenantMember,
   mockSelectRows,
+  mockExecuteRows,
+  mockInsertValues,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSfnSend: vi.fn(),
@@ -30,6 +32,8 @@ const {
   mockRequireAdminOrApiKeyCaller: vi.fn(),
   mockRequireTenantMember: vi.fn(),
   mockSelectRows: vi.fn(),
+  mockExecuteRows: vi.fn(),
+  mockInsertValues: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -87,9 +91,12 @@ vi.mock("../graphql/utils.js", () => {
       }),
     }),
     insert: () => ({
-      values: () => ({
-        returning: () => Promise.resolve(mockSelectRows()),
-      }),
+      values: (values: unknown) => {
+        mockInsertValues(values);
+        return {
+          returning: () => Promise.resolve(mockSelectRows()),
+        };
+      },
     }),
     update: () => ({
       set: () => ({
@@ -98,6 +105,7 @@ vi.mock("../graphql/utils.js", () => {
         }),
       }),
     }),
+    execute: () => Promise.resolve({ rows: mockExecuteRows() }),
     transaction: (fn: (tx: unknown) => Promise<unknown>) => {
       mockTransaction();
       return fn(chainSelect());
@@ -142,6 +150,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "routine_executions.tenant_id",
     routine_id: "routine_executions.routine_id",
     sfn_execution_arn: "routine_executions.sfn_execution_arn",
+    routine_asl_version_id: "routine_executions.routine_asl_version_id",
     status: "routine_executions.status",
   },
 }));
@@ -150,6 +159,10 @@ vi.mock("drizzle-orm", () => ({
   eq: (...a: unknown[]) => ({ _eq: a }),
   and: (...a: unknown[]) => ({ _and: a }),
   desc: (col: unknown) => ({ _desc: col }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  }),
 }));
 
 // Stub out the routines env-snapshot reads.
@@ -171,7 +184,10 @@ beforeEach(() => {
   mockRequireAdminOrApiKeyCaller.mockReset();
   mockRequireTenantMember.mockReset();
   mockSelectRows.mockReset();
+  mockExecuteRows.mockReset();
+  mockInsertValues.mockReset();
   mockTransaction.mockReset();
+  mockExecuteRows.mockReturnValue([{ exists: 1 }]);
   // Default: caller is admin, validator passes.
   mockRequireAdminOrApiKeyCaller.mockResolvedValue("admin");
   mockRequireTenantMember.mockResolvedValue("admin");
@@ -224,9 +240,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       ])
       .mockReturnValueOnce([{ id: "asl-version-1" }]);
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     const result = await createRoutine(
       null,
@@ -286,9 +301,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       ])
       .mockReturnValueOnce([{ id: "asl-version-1" }]);
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await createRoutine(
       null,
@@ -333,9 +347,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       ])
       .mockReturnValueOnce([{ id: "asl-version-1" }]);
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await createRoutine(
       null,
@@ -356,9 +369,8 @@ describe("createRoutine — Step Functions live cutover", () => {
   });
 
   it("rejects unsupported intent-only input before SFN side effects", async () => {
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await expect(
       createRoutine(
@@ -391,9 +403,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       warnings: [],
     });
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await expect(
       createRoutine(
@@ -419,9 +430,8 @@ describe("createRoutine — Step Functions live cutover", () => {
       new Error("Tenant admin role required"),
     );
 
-    const { createRoutine } = await import(
-      "../graphql/resolvers/routines/createRoutine.mutation.js"
-    );
+    const { createRoutine } =
+      await import("../graphql/resolvers/routines/createRoutine.mutation.js");
 
     await expect(
       createRoutine(
@@ -488,9 +498,8 @@ describe("publishRoutineVersion — version + alias flip", () => {
       })
       .mockResolvedValueOnce({}); // UpdateStateMachineAlias
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     const result = await publishRoutineVersion(
       null,
@@ -529,9 +538,8 @@ describe("publishRoutineVersion — version + alias flip", () => {
       warnings: [],
     });
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     await expect(
       publishRoutineVersion(
@@ -563,9 +571,8 @@ describe("publishRoutineVersion — version + alias flip", () => {
       },
     ]);
 
-    const { publishRoutineVersion } = await import(
-      "../graphql/resolvers/routines/publishRoutineVersion.mutation.js"
-    );
+    const { publishRoutineVersion } =
+      await import("../graphql/resolvers/routines/publishRoutineVersion.mutation.js");
 
     await expect(
       publishRoutineVersion(
@@ -631,9 +638,8 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
       })
       .mockResolvedValueOnce({});
 
-    const { rebuildRoutineVersion } = await import(
-      "../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js"
-    );
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
 
     const result = await rebuildRoutineVersion(
       null,
@@ -684,9 +690,8 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
       },
     ]);
 
-    const { rebuildRoutineVersion } = await import(
-      "../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js"
-    );
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
 
     await expect(
       rebuildRoutineVersion(null, { input: { routineId: "routine-a" } }, ctx),
@@ -710,9 +715,8 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
       },
     ]);
 
-    const { rebuildRoutineVersion } = await import(
-      "../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js"
-    );
+    const { rebuildRoutineVersion } =
+      await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
 
     await expect(
       rebuildRoutineVersion(
@@ -732,9 +736,8 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
 
 describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
   it("returns the routine recipe catalog for workflow block picking", async () => {
-    const { routineRecipeCatalog } = await import(
-      "../graphql/resolvers/routines/routineRecipeCatalog.query.js"
-    );
+    const { routineRecipeCatalog } =
+      await import("../graphql/resolvers/routines/routineRecipeCatalog.query.js");
 
     const result = (await routineRecipeCatalog(
       null,
@@ -760,9 +763,8 @@ describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
   });
 
   it("returns a reviewable recipe draft without provisioning Step Functions resources", async () => {
-    const { planRoutineDraft } = await import(
-      "../graphql/resolvers/routines/planRoutineDraft.mutation.js"
-    );
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
 
     const result = (await planRoutineDraft(
       null,
@@ -808,9 +810,8 @@ describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
   });
 
   it("rebuilds draft artifacts from editable step config", async () => {
-    const { planRoutineDraft } = await import(
-      "../graphql/resolvers/routines/planRoutineDraft.mutation.js"
-    );
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
 
     const result = (await planRoutineDraft(
       null,
@@ -851,9 +852,8 @@ describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
   });
 
   it("builds draft artifacts from explicit recipe steps without an Austin-weather prompt", async () => {
-    const { planRoutineDraft } = await import(
-      "../graphql/resolvers/routines/planRoutineDraft.mutation.js"
-    );
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
 
     const result = (await planRoutineDraft(
       null,
@@ -895,9 +895,8 @@ describe("planRoutineDraft — recipe-backed pre-publish authoring", () => {
   });
 
   it("rejects unsupported draft intents before side effects", async () => {
-    const { planRoutineDraft } = await import(
-      "../graphql/resolvers/routines/planRoutineDraft.mutation.js"
-    );
+    const { planRoutineDraft } =
+      await import("../graphql/resolvers/routines/planRoutineDraft.mutation.js");
 
     await expect(
       planRoutineDraft(
@@ -970,9 +969,8 @@ describe("routineDefinition — editable product-owned definition", () => {
         },
       ]);
 
-    const { routineDefinition } = await import(
-      "../graphql/resolvers/routines/routineDefinition.query.js"
-    );
+    const { routineDefinition } =
+      await import("../graphql/resolvers/routines/routineDefinition.query.js");
 
     const result = (await routineDefinition(
       null,
@@ -1077,9 +1075,8 @@ describe("routineDefinition — editable product-owned definition", () => {
       })
       .mockResolvedValueOnce({});
 
-    const { updateRoutineDefinition } = await import(
-      "../graphql/resolvers/routines/updateRoutineDefinition.mutation.js"
-    );
+    const { updateRoutineDefinition } =
+      await import("../graphql/resolvers/routines/updateRoutineDefinition.mutation.js");
 
     const result = (await updateRoutineDefinition(
       null,
@@ -1179,9 +1176,8 @@ describe("routineDefinition — editable product-owned definition", () => {
       })
       .mockResolvedValueOnce({});
 
-    const { updateRoutineDefinition } = await import(
-      "../graphql/resolvers/routines/updateRoutineDefinition.mutation.js"
-    );
+    const { updateRoutineDefinition } =
+      await import("../graphql/resolvers/routines/updateRoutineDefinition.mutation.js");
 
     await updateRoutineDefinition(
       null,
@@ -1274,9 +1270,8 @@ describe("routineDefinition — editable product-owned definition", () => {
         },
       ]);
 
-    const { updateRoutineDefinition } = await import(
-      "../graphql/resolvers/routines/updateRoutineDefinition.mutation.js"
-    );
+    const { updateRoutineDefinition } =
+      await import("../graphql/resolvers/routines/updateRoutineDefinition.mutation.js");
 
     await expect(
       updateRoutineDefinition(
@@ -1305,7 +1300,7 @@ describe("routineDefinition — editable product-owned definition", () => {
 // ---------------------------------------------------------------------------
 
 describe("triggerRoutineRun — SFN.StartExecution swap", () => {
-  it("calls SFN StartExecution against the alias ARN and inserts a routine_executions row", async () => {
+  it("calls SFN StartExecution against the captured version ARN and inserts a routine_executions row", async () => {
     mockSelectRows
       .mockReturnValueOnce([
         {
@@ -1316,6 +1311,16 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
           state_machine_alias_arn:
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 3,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-version-3",
+          routine_id: "routine-a",
+          version_number: 3,
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:3",
         },
       ])
       .mockReturnValueOnce([
@@ -1335,9 +1340,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       startDate: new Date(),
     });
 
-    const { triggerRoutineRun } = await import(
-      "../graphql/resolvers/routines/triggerRoutineRun.mutation.js"
-    );
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
 
     const result = await triggerRoutineRun(
       null,
@@ -1354,7 +1358,9 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
     const startCall = mockSfnSend.mock.calls[0][0] as {
       input: { stateMachineArn: string; input: string };
     };
-    expect(startCall.input.stateMachineArn).toContain(":live");
+    expect(startCall.input.stateMachineArn).toBe(
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:3",
+    );
     expect(JSON.parse(startCall.input.input)).toMatchObject({
       tenantId: "tenant-a",
       routineId: "routine-a",
@@ -1364,6 +1370,13 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       adminOpsMcpFunctionName: "thinkwork-dev-api-admin-ops-mcp",
       slackSendFunctionName: "thinkwork-dev-api-slack-send",
     });
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:3",
+        routine_asl_version_id: "asl-version-3",
+      }),
+    );
     expect((result as { status: string }).status).toBe("running");
   });
 
@@ -1378,6 +1391,16 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
           state_machine_alias_arn:
             "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 3,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-version-3",
+          routine_id: "routine-a",
+          version_number: 3,
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:3",
         },
       ])
       .mockReturnValueOnce([{ id: "exec-row-1", status: "running" }]);
@@ -1387,9 +1410,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       startDate: new Date(),
     });
 
-    const { triggerRoutineRun } = await import(
-      "../graphql/resolvers/routines/triggerRoutineRun.mutation.js"
-    );
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
 
     await triggerRoutineRun(
       null,
@@ -1416,6 +1438,94 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
     });
   });
 
+  it("rejects before SFN when the routine has no current ASL version", async () => {
+    mockSelectRows.mockReturnValueOnce([
+      {
+        id: "routine-a",
+        tenant_id: "tenant-a",
+        engine: "step_functions",
+        state_machine_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+        state_machine_alias_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+        current_version: null,
+      },
+    ]);
+
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
+
+    await expect(
+      triggerRoutineRun(null, { routineId: "routine-a" }, ctx),
+    ).rejects.toThrow(/no current ASL version/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+    expect(mockInsertValues).not.toHaveBeenCalled();
+  });
+
+  it("rejects before SFN when the current ASL version row is missing", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 3,
+        },
+      ])
+      .mockReturnValueOnce([]);
+
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
+
+    await expect(
+      triggerRoutineRun(null, { routineId: "routine-a" }, ctx),
+    ).rejects.toThrow(/current ASL version 3 was not found/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+    expect(mockInsertValues).not.toHaveBeenCalled();
+  });
+
+  it("rejects before SFN when migration 0061 has not added the execution version column", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 3,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-version-3",
+          routine_id: "routine-a",
+          version_number: 3,
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:3",
+        },
+      ]);
+    mockExecuteRows.mockReturnValueOnce([]);
+
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
+
+    await expect(
+      triggerRoutineRun(null, { routineId: "routine-a" }, ctx),
+    ).rejects.toThrow(/migration 0061/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+    expect(mockInsertValues).not.toHaveBeenCalled();
+  });
+
   it("rejects trigger on a legacy_python routine with a deprecation error (not a silent fallback)", async () => {
     mockSelectRows.mockReturnValueOnce([
       {
@@ -1426,9 +1536,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       },
     ]);
 
-    const { triggerRoutineRun } = await import(
-      "../graphql/resolvers/routines/triggerRoutineRun.mutation.js"
-    );
+    const { triggerRoutineRun } =
+      await import("../graphql/resolvers/routines/triggerRoutineRun.mutation.js");
 
     await expect(
       triggerRoutineRun(null, { routineId: "routine-legacy" }, ctx),

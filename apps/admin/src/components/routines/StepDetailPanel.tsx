@@ -13,6 +13,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  parseAwsJson,
+  type NormalizedRoutineStep,
+} from "./routineExecutionManifest";
 
 export interface StepEventDetail {
   id: string;
@@ -35,6 +39,7 @@ export interface StepEventDetail {
 
 export interface StepDetailPanelProps {
   nodeId: string;
+  step?: NormalizedRoutineStep;
   /** All events for this node, in chronological order. The component
    * picks the latest as the headline and shows priors as collapsible
    * retry rows. */
@@ -95,13 +100,25 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-export function StepDetailPanel({ nodeId, events }: StepDetailPanelProps) {
+export function StepDetailPanel({
+  nodeId,
+  step,
+  events,
+}: StepDetailPanelProps) {
   if (events.length === 0) {
     return (
       <Card>
-        <CardContent className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
-          No event has landed for <span className="font-mono">{nodeId}</span>{" "}
-          yet — the step may still be running.
+        <CardContent className="space-y-3 py-6 text-sm text-zinc-500 dark:text-zinc-400">
+          <div>
+            No event has landed for{" "}
+            <span className="font-mono">{step?.label ?? nodeId}</span> yet — the
+            step may still be running.
+          </div>
+          {step?.args !== undefined && (
+            <Section title="Saved config">
+              <JsonBlock value={step.args} />
+            </Section>
+          )}
         </CardContent>
       </Card>
     );
@@ -123,15 +140,22 @@ export function StepDetailPanel({ nodeId, events }: StepDetailPanelProps) {
       <CardContent className="space-y-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="font-mono text-sm truncate">{nodeId}</div>
+            <div className="truncate text-sm font-medium">
+              {step?.label ?? nodeId}
+            </div>
             <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              {latest.recipeType}
+              <span className="font-mono">{nodeId}</span>
+              {" · "}
+              {step?.recipeId ?? latest.recipeType}
               {latest.retryCount > 0 ? ` · retries: ${latest.retryCount}` : ""}
             </div>
           </div>
           <Badge
             variant="secondary"
-            className={cn("text-xs capitalize", statusBadgeClass(latest.status))}
+            className={cn(
+              "text-xs capitalize",
+              statusBadgeClass(latest.status),
+            )}
           >
             {latest.status.replace(/_/g, " ")}
           </Badge>
@@ -142,16 +166,29 @@ export function StepDetailPanel({ nodeId, events }: StepDetailPanelProps) {
             label="Duration"
             value={formatDurationMs(latest.startedAt, latest.finishedAt)}
           />
-          <Stat label="LLM cost" value={formatLlmCost(latest.llmCostUsdCents)} />
+          <Stat
+            label="LLM cost"
+            value={formatLlmCost(latest.llmCostUsdCents)}
+          />
           <Stat
             label="Started"
-            value={latest.startedAt ? new Date(latest.startedAt).toLocaleString() : "—"}
+            value={
+              latest.startedAt
+                ? new Date(latest.startedAt).toLocaleString()
+                : "—"
+            }
           />
         </div>
 
         {latest.errorJson !== undefined && latest.errorJson !== null && (
           <Section title="Error">
-            <JsonBlock value={latest.errorJson} />
+            <JsonBlock value={parseAwsJson(latest.errorJson)} />
+          </Section>
+        )}
+
+        {step?.args !== undefined && (
+          <Section title="Saved config">
+            <JsonBlock value={step.args} />
           </Section>
         )}
 
@@ -176,13 +213,13 @@ export function StepDetailPanel({ nodeId, events }: StepDetailPanelProps) {
 
         {latest.inputJson !== undefined && latest.inputJson !== null && (
           <Section title="Input">
-            <JsonBlock value={latest.inputJson} />
+            <JsonBlock value={parseAwsJson(latest.inputJson)} />
           </Section>
         )}
 
         {latest.outputJson !== undefined && latest.outputJson !== null && (
           <Section title="Output">
-            <JsonBlock value={latest.outputJson} />
+            <JsonBlock value={parseAwsJson(latest.outputJson)} />
           </Section>
         )}
 
