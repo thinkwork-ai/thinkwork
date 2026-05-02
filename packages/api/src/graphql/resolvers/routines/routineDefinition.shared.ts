@@ -1,5 +1,4 @@
 import type {
-  RoutineDefinitionField,
   RoutinePlan,
   RoutinePlanStep,
 } from "../../../lib/routines/routine-authoring-planner.js";
@@ -12,7 +11,6 @@ export interface RoutineDefinitionPayload {
   description: string;
   kind: string;
   steps: RoutinePlanStep[];
-  editableFields: RoutineDefinitionField[];
 }
 
 export function routineDefinitionPayload(input: {
@@ -29,6 +27,5 @@ export function routineDefinitionPayload(input: {
     description: input.plan.description,
     kind: input.plan.kind,
     steps: input.plan.steps,
-    editableFields: input.plan.editableFields,
   };
 }

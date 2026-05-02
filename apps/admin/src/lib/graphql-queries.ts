@@ -780,15 +780,18 @@ export const RoutineDefinitionQuery = graphql(`
       steps {
         nodeId
         recipeId
+        recipeName
         label
         args
-      }
-      editableFields {
-        key
-        label
-        value
-        inputType
-        stepNodeId
+        configFields {
+          key
+          label
+          value
+          inputType
+          required
+          editable
+          options
+        }
       }
     }
   }
@@ -801,9 +804,14 @@ export const UpdateRoutineDefinitionMutation = graphql(`
       currentVersion
       versionId
       description
-      editableFields {
-        key
-        value
+      steps {
+        nodeId
+        args
+        configFields {
+          key
+          value
+          editable
+        }
       }
     }
   }

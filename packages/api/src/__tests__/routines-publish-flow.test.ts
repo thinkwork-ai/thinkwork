@@ -634,11 +634,7 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
       await import("../graphql/resolvers/routines/rebuildRoutineVersion.mutation.js");
 
     await expect(
-      rebuildRoutineVersion(
-        null,
-        { input: { routineId: "routine-a" } },
-        ctx,
-      ),
+      rebuildRoutineVersion(null, { input: { routineId: "routine-a" } }, ctx),
     ).rejects.toThrow(/Austin weather email routines/);
 
     expect(mockSfnSend).not.toHaveBeenCalled();
@@ -698,7 +694,29 @@ describe("routineDefinition — editable product-owned definition", () => {
           step_manifest_json: {
             definition: {
               kind: "weather_email",
-              recipientEmail: "ericodom37@gmail.com",
+              steps: [
+                {
+                  nodeId: "FetchAustinWeather",
+                  recipeId: "python",
+                  label: "Fetch Austin weather",
+                  args: {
+                    code: "print('weather')",
+                    timeoutSeconds: 30,
+                    networkAllowlist: ["wttr.in"],
+                  },
+                },
+                {
+                  nodeId: "EmailAustinWeather",
+                  recipeId: "email_send",
+                  label: "Email Austin weather",
+                  args: {
+                    to: ["ericodom37@gmail.com"],
+                    subject: "Austin weather update",
+                    bodyPath: "$.FetchAustinWeather.stdoutPreview",
+                    bodyFormat: "markdown",
+                  },
+                },
+              ],
             },
           },
           asl_json: minimalAsl,
@@ -715,17 +733,19 @@ describe("routineDefinition — editable product-owned definition", () => {
     )) as {
       currentVersion: number;
       versionId: string;
-      editableFields: Array<{ key: string; value: string }>;
-      steps: Array<{ recipeId: string }>;
+      steps: Array<{
+        recipeId: string;
+        configFields: Array<{ key: string; value: unknown }>;
+      }>;
     };
 
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-a");
     expect(result.currentVersion).toBe(3);
     expect(result.versionId).toBe("asl-v3");
-    expect(result.editableFields).toContainEqual(
+    expect(result.steps[1]?.configFields).toContainEqual(
       expect.objectContaining({
-        key: "recipientEmail",
-        value: "ericodom37@gmail.com",
+        key: "to",
+        value: ["ericodom37@gmail.com"],
       }),
     );
     expect(result.steps.map((step) => step.recipeId)).toEqual([
@@ -757,7 +777,29 @@ describe("routineDefinition — editable product-owned definition", () => {
           step_manifest_json: {
             definition: {
               kind: "weather_email",
-              recipientEmail: "old@example.com",
+              steps: [
+                {
+                  nodeId: "FetchAustinWeather",
+                  recipeId: "python",
+                  label: "Fetch Austin weather",
+                  args: {
+                    code: "print('weather')",
+                    timeoutSeconds: 30,
+                    networkAllowlist: ["wttr.in"],
+                  },
+                },
+                {
+                  nodeId: "EmailAustinWeather",
+                  recipeId: "email_send",
+                  label: "Email Austin weather",
+                  args: {
+                    to: ["old@example.com"],
+                    subject: "Austin weather update",
+                    bodyPath: "$.FetchAustinWeather.stdoutPreview",
+                    bodyFormat: "markdown",
+                  },
+                },
+              ],
             },
           },
           asl_json: minimalAsl,
@@ -795,14 +837,19 @@ describe("routineDefinition — editable product-owned definition", () => {
       {
         input: {
           routineId: "routine-a",
-          fields: [{ key: "recipientEmail", value: "new@example.com" }],
+          steps: [
+            {
+              nodeId: "EmailAustinWeather",
+              args: { to: ["new@example.com"] },
+            },
+          ],
         },
       },
       ctx,
     )) as {
       currentVersion: number;
       versionId: string;
-      editableFields: Array<{ key: string; value: string }>;
+      steps: Array<{ configFields: Array<{ key: string; value: unknown }> }>;
     };
 
     expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
@@ -816,10 +863,10 @@ describe("routineDefinition — editable product-owned definition", () => {
     expect(updateInput.definition).not.toContain("old@example.com");
     expect(result.currentVersion).toBe(2);
     expect(result.versionId).toBe("asl-v2");
-    expect(result.editableFields).toContainEqual(
+    expect(result.steps[1]?.configFields).toContainEqual(
       expect.objectContaining({
-        key: "recipientEmail",
-        value: "new@example.com",
+        key: "to",
+        value: ["new@example.com"],
       }),
     );
   });
@@ -847,7 +894,29 @@ describe("routineDefinition — editable product-owned definition", () => {
           step_manifest_json: {
             definition: {
               kind: "weather_email",
-              recipientEmail: "old@example.com",
+              steps: [
+                {
+                  nodeId: "FetchAustinWeather",
+                  recipeId: "python",
+                  label: "Fetch Austin weather",
+                  args: {
+                    code: "print('weather')",
+                    timeoutSeconds: 30,
+                    networkAllowlist: ["wttr.in"],
+                  },
+                },
+                {
+                  nodeId: "EmailAustinWeather",
+                  recipeId: "email_send",
+                  label: "Email Austin weather",
+                  args: {
+                    to: ["old@example.com"],
+                    subject: "Austin weather update",
+                    bodyPath: "$.FetchAustinWeather.stdoutPreview",
+                    bodyFormat: "markdown",
+                  },
+                },
+              ],
             },
           },
           asl_json: minimalAsl,
@@ -863,12 +932,17 @@ describe("routineDefinition — editable product-owned definition", () => {
         {
           input: {
             routineId: "routine-a",
-            fields: [{ key: "recipientEmail", value: "not-an-email" }],
+            steps: [
+              {
+                nodeId: "EmailAustinWeather",
+                args: { to: ["not-an-email"] },
+              },
+            ],
           },
         },
         ctx,
       ),
-    ).rejects.toThrow(/valid recipient email/i);
+    ).rejects.toThrow(/valid email addresses/i);
 
     expect(mockSfnSend).not.toHaveBeenCalled();
   });

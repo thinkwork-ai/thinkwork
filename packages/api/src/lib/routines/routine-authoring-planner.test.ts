@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { validateRoutineAsl } from "../../handlers/routine-asl-validator.js";
 import {
   applyRoutineDefinitionEdits,
+  buildRoutineArtifactsFromPlan,
   planRoutineFromIntent,
   routineDefinitionFromArtifacts,
 } from "./routine-authoring-planner.js";
@@ -21,24 +22,44 @@ describe("routine authoring planner", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reason);
 
-    expect(result.artifacts.plan).toMatchObject({
-      kind: "weather_email",
-      steps: [
-        { nodeId: "FetchAustinWeather", recipeId: "python" },
-        { nodeId: "EmailAustinWeather", recipeId: "email_send" },
-      ],
-      editableFields: [
-        {
-          key: "recipientEmail",
-          value: "ericodom37@gmail.com",
-          inputType: "email",
-        },
-      ],
+    expect(result.artifacts.plan.kind).toBe("weather_email");
+    expect(result.artifacts.plan.steps).toHaveLength(2);
+    expect(result.artifacts.plan.steps[0]).toMatchObject({
+      nodeId: "FetchAustinWeather",
+      recipeId: "python",
+      configFields: expect.arrayContaining([
+        expect.objectContaining({
+          key: "timeoutSeconds",
+          editable: false,
+        }),
+      ]),
+    });
+    expect(result.artifacts.plan.steps[1]).toMatchObject({
+      nodeId: "EmailAustinWeather",
+      recipeId: "email_send",
+      args: {
+        to: ["ericodom37@gmail.com"],
+      },
+      configFields: expect.arrayContaining([
+        expect.objectContaining({
+          key: "to",
+          value: ["ericodom37@gmail.com"],
+          inputType: "email_array",
+          editable: true,
+        }),
+      ]),
     });
     expect(result.artifacts.stepManifest).toMatchObject({
       definition: {
         kind: "weather_email",
-        recipientEmail: "ericodom37@gmail.com",
+        steps: [
+          { nodeId: "FetchAustinWeather", recipeId: "python" },
+          {
+            nodeId: "EmailAustinWeather",
+            recipeId: "email_send",
+            args: { to: ["ericodom37@gmail.com"] },
+          },
+        ],
       },
     });
 
@@ -59,7 +80,10 @@ describe("routine authoring planner", () => {
     if (!result.ok) throw new Error(result.reason);
 
     const edited = applyRoutineDefinitionEdits(result.artifacts.plan, [
-      { key: "recipientEmail", value: "new@example.com" },
+      {
+        nodeId: "EmailAustinWeather",
+        args: { to: ["new@example.com"] },
+      },
     ]);
 
     expect(edited.ok).toBe(true);
@@ -68,11 +92,17 @@ describe("routine authoring planner", () => {
     expect(JSON.stringify(edited.artifacts.asl)).not.toContain(
       "old@example.com",
     );
-    expect(edited.artifacts.stepManifest).toMatchObject({
-      definition: {
-        kind: "weather_email",
-        recipientEmail: "new@example.com",
-      },
+    const manifest = edited.artifacts.stepManifest.definition as {
+      steps: Array<{
+        nodeId: string;
+        recipeId: string;
+        args: Record<string, unknown>;
+      }>;
+    };
+    expect(manifest.steps[1]).toMatchObject({
+      nodeId: "EmailAustinWeather",
+      recipeId: "email_send",
+      args: { to: ["new@example.com"] },
     });
   });
 
@@ -86,16 +116,72 @@ describe("routine authoring planner", () => {
     if (!result.ok) throw new Error(result.reason);
 
     const edited = applyRoutineDefinitionEdits(result.artifacts.plan, [
-      { key: "recipientEmail", value: "new@example.com please" },
+      {
+        nodeId: "EmailAustinWeather",
+        args: { to: ["new@example.com please"] },
+      },
     ]);
 
     expect(edited).toEqual({
       ok: false,
-      reason: "Enter a valid recipient email address.",
+      reason: "Enter valid email addresses for To.",
     });
   });
 
-  it("recovers an editable definition from the step manifest", () => {
+  it("recovers an editable definition from the step-scoped manifest", () => {
+    const result = routineDefinitionFromArtifacts({
+      routineName: "Check Austin Weather",
+      stepManifestJson: {
+        definition: {
+          kind: "weather_email",
+          steps: [
+            {
+              nodeId: "FetchAustinWeather",
+              recipeId: "python",
+              label: "Fetch Austin weather",
+              args: {
+                code: "print('ok')",
+                timeoutSeconds: 30,
+                networkAllowlist: ["wttr.in"],
+              },
+            },
+            {
+              nodeId: "EmailAustinWeather",
+              recipeId: "email_send",
+              label: "Email Austin weather",
+              args: {
+                to: ["ericodom37@gmail.com"],
+                subject: "Austin weather update",
+                bodyPath: "$.FetchAustinWeather.stdoutPreview",
+                bodyFormat: "markdown",
+              },
+            },
+          ],
+        },
+      },
+      aslJson: {},
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.plan.kind).toBe("weather_email");
+    expect(result.plan.steps[1]).toMatchObject({
+      nodeId: "EmailAustinWeather",
+      args: { to: ["ericodom37@gmail.com"] },
+      configFields: expect.arrayContaining([
+        expect.objectContaining({
+          key: "to",
+          value: ["ericodom37@gmail.com"],
+        }),
+        expect.objectContaining({
+          key: "bodyPath",
+          editable: false,
+        }),
+      ]),
+    });
+  });
+
+  it("recovers an editable definition from older recipientEmail manifests", () => {
     const result = routineDefinitionFromArtifacts({
       routineName: "Check Austin Weather",
       stepManifestJson: {
@@ -111,7 +197,13 @@ describe("routine authoring planner", () => {
       ok: true,
       plan: {
         kind: "weather_email",
-        editableFields: [{ key: "recipientEmail", value: "ericodom37@gmail.com" }],
+        steps: [
+          expect.anything(),
+          {
+            nodeId: "EmailAustinWeather",
+            args: { to: ["ericodom37@gmail.com"] },
+          },
+        ],
       },
     });
   });
@@ -134,8 +226,50 @@ describe("routine authoring planner", () => {
     expect(result).toMatchObject({
       ok: true,
       plan: {
-        editableFields: [{ key: "recipientEmail", value: "asl@example.com" }],
+        steps: [
+          expect.anything(),
+          {
+            nodeId: "EmailAustinWeather",
+            args: { to: ["asl@example.com"] },
+          },
+        ],
       },
+    });
+  });
+
+  it("rejects read-only step config edits before rebuilding ASL", () => {
+    const result = planRoutineFromIntent({
+      name: "Check Austin Weather",
+      intent: "Check the weather in Austin and email it to old@example.com.",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+
+    const edited = applyRoutineDefinitionEdits(result.artifacts.plan, [
+      {
+        nodeId: "EmailAustinWeather",
+        args: { bodyPath: "$.SomeOtherState.output" },
+      },
+    ]);
+
+    expect(edited).toEqual({
+      ok: false,
+      reason: "Body source is read-only.",
+    });
+  });
+
+  it("rejects empty plans before emitting invalid ASL", () => {
+    expect(
+      buildRoutineArtifactsFromPlan({
+        kind: "weather_email",
+        title: "Empty",
+        description: "No steps",
+        steps: [],
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "Routine definition must include at least one step.",
     });
   });
 

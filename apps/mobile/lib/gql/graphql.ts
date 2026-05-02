@@ -3697,7 +3697,6 @@ export type RoutineDefinition = {
   __typename?: 'RoutineDefinition';
   currentVersion?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
-  editableFields: Array<RoutineDefinitionField>;
   kind: Scalars['String']['output'];
   routineId: Scalars['ID']['output'];
   steps: Array<RoutineDefinitionStep>;
@@ -3705,26 +3704,30 @@ export type RoutineDefinition = {
   versionId?: Maybe<Scalars['ID']['output']>;
 };
 
-export type RoutineDefinitionField = {
-  __typename?: 'RoutineDefinitionField';
+export type RoutineDefinitionConfigField = {
+  __typename?: 'RoutineDefinitionConfigField';
+  editable: Scalars['Boolean']['output'];
   inputType: Scalars['String']['output'];
   key: Scalars['String']['output'];
   label: Scalars['String']['output'];
-  stepNodeId?: Maybe<Scalars['String']['output']>;
-  value?: Maybe<Scalars['String']['output']>;
-};
-
-export type RoutineDefinitionFieldInput = {
-  key: Scalars['String']['input'];
-  value?: InputMaybe<Scalars['String']['input']>;
+  options?: Maybe<Array<Scalars['String']['output']>>;
+  required: Scalars['Boolean']['output'];
+  value?: Maybe<Scalars['AWSJSON']['output']>;
 };
 
 export type RoutineDefinitionStep = {
   __typename?: 'RoutineDefinitionStep';
   args: Scalars['AWSJSON']['output'];
+  configFields: Array<RoutineDefinitionConfigField>;
   label: Scalars['String']['output'];
   nodeId: Scalars['String']['output'];
   recipeId: Scalars['String']['output'];
+  recipeName: Scalars['String']['output'];
+};
+
+export type RoutineDefinitionStepConfigInput = {
+  args: Scalars['AWSJSON']['input'];
+  nodeId: Scalars['String']['input'];
 };
 
 export enum RoutineEngine {
@@ -4556,8 +4559,8 @@ export type UpdateRecipeInput = {
 };
 
 export type UpdateRoutineDefinitionInput = {
-  fields: Array<RoutineDefinitionFieldInput>;
   routineId: Scalars['ID']['input'];
+  steps: Array<RoutineDefinitionStepConfigInput>;
 };
 
 export type UpdateRoutineInput = {
