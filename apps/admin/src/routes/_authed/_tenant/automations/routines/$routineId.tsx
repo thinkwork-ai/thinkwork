@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "urql";
-import { ArrowLeft } from "lucide-react";
+import { useMutation, useQuery } from "urql";
+import { ArrowLeft, Zap } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -10,7 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RoutineDetailQuery } from "@/lib/graphql-queries";
+import {
+  RoutineDetailQuery,
+  TriggerRoutineRunMutation,
+} from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import {
   ExecutionList,
@@ -42,6 +46,16 @@ function RoutineDetailPage() {
     query: RoutineDetailQuery,
     variables: { id: routineId },
   });
+  const [triggerState, executeTrigger] = useMutation(TriggerRoutineRunMutation);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+
+  const handleRunNow = async () => {
+    setTriggerError(null);
+    const res = await executeTrigger({ routineId, input: null });
+    if (res.error) {
+      setTriggerError(res.error.message.replace(/^\[GraphQL\]\s*/, ""));
+    }
+  };
 
   const routine = result.data?.routine;
   useBreadcrumbs([
@@ -69,12 +83,28 @@ function RoutineDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Tabs defaultValue="runs">
-            <TabsList>
-              <TabsTrigger value="runs">Runs</TabsTrigger>
-              <TabsTrigger value="triggers">
-                Scheduled Jobs ({routine.triggers.length})
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between gap-2">
+              <TabsList>
+                <TabsTrigger value="runs">Runs</TabsTrigger>
+                <TabsTrigger value="triggers">
+                  Scheduled Jobs ({routine.triggers.length})
+                </TabsTrigger>
+              </TabsList>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRunNow}
+                disabled={triggerState.fetching}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                {triggerState.fetching ? "Starting…" : "Test"}
+              </Button>
+            </div>
+            {triggerError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                {triggerError}
+              </p>
+            )}
 
             <TabsContent value="runs" className="mt-4">
               <ExecutionList
