@@ -832,6 +832,12 @@ export const RoutineExecutionDetailQuery = graphql(`
         currentVersion
         documentationMd
       }
+      aslVersion {
+        id
+        versionNumber
+        markdownSummary
+        stepManifestJson
+      }
       createdAt
     }
   }

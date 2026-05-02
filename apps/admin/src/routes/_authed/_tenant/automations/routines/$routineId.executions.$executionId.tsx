@@ -19,10 +19,7 @@ import { useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { ArrowLeft } from "lucide-react";
-import {
-  RoutineExecutionDetailQuery,
-  RoutineAslVersionDetailQuery,
-} from "@/lib/graphql-queries";
+import { RoutineExecutionDetailQuery } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -79,29 +76,13 @@ function ExecutionDetailPage() {
     return () => clearInterval(t);
   }, [isTerminal, executionId, refetchExecution]);
 
-  // Step manifest comes from the routine's latest ASL version. We fetch
-  // it lazily after the execution loads so the routine's currentVersion
-  // is known, then resolve `routineAslVersion(id)` once we can.
-  // Phase B U7 stores the version_arn on the execution row; the routine
-  // also exposes `currentVersion`. For v1 we resolve via the routine's
-  // currentVersion only — accepting that an old execution will render
-  // against the *latest* version's manifest if the routine has been
-  // re-published since. Plan §"Implementation-Time Unknowns" tracks this.
-  const aslVersionId = useMemo(() => {
-    // versionArn isn't a row id; the GraphQL routineAslVersion query
-    // takes the row id, which we don't currently surface. Until Phase E
-    // adds a `RoutineExecution.aslVersion` resolver field, we render
-    // from the routine's current documentationMd + step manifest is
-    // empty (graph derives from events). When the manifest is empty the
-    // graph falls back to events-only rendering — see deriveNodes().
-    return null;
-  }, []);
-  const [{ data: aslData }] = useQuery({
-    query: RoutineAslVersionDetailQuery,
-    variables: { id: aslVersionId ?? "" },
-    pause: !aslVersionId,
-  });
-  const aslVersion = aslData?.routineAslVersion;
+  // Step manifest is now embedded on the execution via the
+  // RoutineExecution.aslVersion resolver field (schema follow-up bundle).
+  // The resolver matches by (state_machine_arn, version_arn) so each
+  // execution renders against the manifest that *actually* backed it,
+  // not the routine's current version. Falls back to events-only graph
+  // rendering when versionArn is null (out-of-band SFN starts).
+  const aslVersion = execution?.aslVersion ?? null;
   const stepManifest = useMemo(() => {
     if (aslVersion?.stepManifestJson) {
       try {

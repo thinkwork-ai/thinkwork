@@ -49,6 +49,13 @@ interface CreateRoutineInput {
   tenantId: string;
   teamId?: string;
   agentId?: string;
+  /** Visibility (schema follow-up bundle). Defaults to 'agent_private'
+   * when owningAgentId resolves to non-null, 'tenant_shared' otherwise. */
+  visibility?: "agent_private" | "tenant_shared";
+  /** Owning agent (schema follow-up bundle). Splits the conflated
+   * agentId field — agentId stays as the primary execution agent. The
+   * MCP create_routine tool stamps owningAgentId = caller agent id. */
+  owningAgentId?: string;
   name: string;
   description?: string;
   asl: string;
@@ -142,6 +149,14 @@ export async function createRoutine(
 
   // Step 6 — DB inserts in a single transaction.
   const inserted = await db.transaction(async (tx) => {
+    // Visibility default: when caller supplied owningAgentId, default
+    // to agent_private; otherwise tenant_shared. Caller can override
+    // explicitly with `visibility`. Mirrors the migration backfill rule
+    // so old rows + new rows resolve to the same shape.
+    const owning_agent_id = i.owningAgentId ?? null;
+    const visibility =
+      i.visibility ?? (owning_agent_id ? "agent_private" : "tenant_shared");
+
     const [routineRow] = await tx
       .insert(routines)
       .values({
@@ -149,6 +164,8 @@ export async function createRoutine(
         tenant_id: i.tenantId,
         team_id: i.teamId,
         agent_id: i.agentId,
+        owning_agent_id,
+        visibility,
         name: i.name,
         description: i.description,
         type: "scheduled",
