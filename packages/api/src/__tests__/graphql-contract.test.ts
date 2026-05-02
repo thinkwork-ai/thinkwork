@@ -71,7 +71,7 @@ describe("GraphQL Schema Contract", () => {
 			// Teams
 			"team", "teams",
 			// Triggers
-			"routines", "routine", "routineRun", "routineRuns",
+			"routines", "routine",
 			"scheduledJobs", "scheduledJob",
 			"threadTurns", "threadTurn", "threadTurnEvents",
 			// Costs
