@@ -52,7 +52,7 @@ function AgentTemplatesPage() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const navigate = useNavigate();
-  useBreadcrumbs([{ label: "Templates" }]);
+  useBreadcrumbs([{ label: "Agent Templates" }]);
 
   const [search, setSearch] = useState("");
   const [useDialogOpen, setUseDialogOpen] = useState(false);
@@ -236,7 +236,7 @@ function AgentTemplatesPage() {
       header={
         <>
           <PageHeader
-            title="Templates"
+            title="Agent Templates"
             description="Define capability and security boundaries for agents"
             actions={
               <>
