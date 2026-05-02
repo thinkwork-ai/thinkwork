@@ -214,36 +214,65 @@ describe("recipe-catalog", () => {
       bodyFormat: "markdown",
     });
 
-    expect(fields).toEqual([
-      expect.objectContaining({
-        key: "to",
-        label: "To",
-        value: ["ericodom37@gmail.com"],
-        inputType: "email_array",
-        required: true,
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "subject",
-        value: "Austin weather update",
-        inputType: "text",
-        required: true,
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "bodyFormat",
-        value: "markdown",
-        inputType: "select",
-        options: ["text", "html", "markdown"],
-        editable: true,
-      }),
-      expect.objectContaining({
-        key: "bodyPath",
-        value: "$.FetchAustinWeather.stdoutPreview",
-        editable: false,
-      }),
-    ]);
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "to",
+          label: "To",
+          value: ["ericodom37@gmail.com"],
+          inputType: "email_array",
+          control: "email_list",
+          required: true,
+          editable: true,
+          helpText: "One recipient per line or comma-separated.",
+        }),
+        expect.objectContaining({
+          key: "subject",
+          value: "Austin weather update",
+          inputType: "text",
+          required: true,
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "body",
+          value: null,
+          inputType: "text",
+          control: "textarea",
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "bodyFormat",
+          value: "markdown",
+          inputType: "select",
+          options: ["text", "html", "markdown"],
+          editable: true,
+        }),
+        expect.objectContaining({
+          key: "bodyPath",
+          value: "$.FetchAustinWeather.stdoutPreview",
+          control: "text",
+          editable: false,
+        }),
+      ]),
+    );
     expect(fields.map((field) => field.key)).not.toContain("cc");
+  });
+
+  it("exposes validation metadata for bounded numeric and patterned fields", () => {
+    expect(getRecipeConfigFields("wait", { seconds: 60 })).toContainEqual(
+      expect.objectContaining({
+        key: "seconds",
+        control: "number",
+        min: 1,
+        max: 31_536_000,
+      }),
+    );
+    expect(getRecipeConfigFields("set_variable")).toContainEqual(
+      expect.objectContaining({
+        key: "name",
+        pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      }),
+    );
   });
 
   it("email_send and python payloads include server-owned routine identity", () => {

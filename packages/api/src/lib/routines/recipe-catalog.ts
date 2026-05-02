@@ -112,13 +112,28 @@ export type RecipeConfigInputType =
   | "string_array"
   | "number";
 
+export type RecipeConfigControl =
+  | "text"
+  | "textarea"
+  | "code"
+  | "select"
+  | "number"
+  | "email_list"
+  | "string_list";
+
 export interface RecipeConfigFieldDefinition {
   key: string;
   label: string;
   inputType: RecipeConfigInputType;
+  control?: RecipeConfigControl;
   required?: boolean;
   editable?: boolean;
   options?: readonly string[];
+  placeholder?: string;
+  helpText?: string;
+  min?: number;
+  max?: number;
+  pattern?: string;
 }
 
 export interface RecipeConfigField {
@@ -126,9 +141,15 @@ export interface RecipeConfigField {
   label: string;
   value: unknown | null;
   inputType: RecipeConfigInputType;
+  control: RecipeConfigControl | null;
   required: boolean;
   editable: boolean;
   options: readonly string[] | null;
+  placeholder: string | null;
+  helpText: string | null;
+  min: number | null;
+  max: number | null;
+  pattern: string | null;
 }
 
 export interface RecipeDefinition {
@@ -265,6 +286,18 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["seconds"],
     },
+    configFields: [
+      {
+        key: "seconds",
+        label: "Seconds",
+        inputType: "number",
+        control: "number",
+        required: true,
+        editable: true,
+        min: 1,
+        max: 31_536_000,
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -297,6 +330,17 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["agentId", "input"],
     },
+    configFields: [
+      {
+        key: "agentId",
+        label: "Agent ID",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+        placeholder: "agent runtime id",
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.agentInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -333,6 +377,25 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["toolId", "toolSource", "args"],
     },
+    configFields: [
+      {
+        key: "toolId",
+        label: "Tool ID",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "toolSource",
+        label: "Tool source",
+        inputType: "select",
+        control: "select",
+        required: true,
+        editable: true,
+        options: ["mcp", "builtin", "skill"],
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.toolInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -371,6 +434,16 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["routineId", "input"],
     },
+    configFields: [
+      {
+        key: "routineId",
+        label: "Routine ID",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.routineInvoke,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -414,6 +487,34 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["method", "apiEndpoint", "connectionArn"],
     },
+    configFields: [
+      {
+        key: "method",
+        label: "Method",
+        inputType: "select",
+        control: "select",
+        required: true,
+        editable: true,
+        options: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      },
+      {
+        key: "apiEndpoint",
+        label: "API endpoint",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+        placeholder: "https://api.example.com/path",
+      },
+      {
+        key: "connectionArn",
+        label: "Connection ARN",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.httpRequest,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -456,6 +557,24 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["sql", "databaseName"],
     },
+    configFields: [
+      {
+        key: "sql",
+        label: "SQL",
+        inputType: "text",
+        control: "code",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "databaseName",
+        label: "Database",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.auroraQuery,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -493,6 +612,17 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["expression"],
     },
+    configFields: [
+      {
+        key: "expression",
+        label: "Expression",
+        inputType: "text",
+        control: "code",
+        required: true,
+        editable: true,
+        helpText: "JSONata expression evaluated against the current state.",
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -524,6 +654,25 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["name", "value"],
     },
+    configFields: [
+      {
+        key: "name",
+        label: "Name",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+        pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      },
+      {
+        key: "value",
+        label: "Value",
+        inputType: "text",
+        control: "textarea",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: null,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -557,6 +706,24 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["channelId", "text"],
     },
+    configFields: [
+      {
+        key: "channelId",
+        label: "Channel ID",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "text",
+        label: "Message",
+        inputType: "text",
+        control: "textarea",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.slackSend,
     aslEmitter: (args, ctx) =>
       markRecipe(
@@ -605,20 +772,32 @@ const _CATALOG: RecipeDefinition[] = [
         key: "to",
         label: "To",
         inputType: "email_array",
+        control: "email_list",
         required: true,
         editable: true,
+        placeholder: "name@example.com",
+        helpText: "One recipient per line or comma-separated.",
       },
       {
         key: "subject",
         label: "Subject",
         inputType: "text",
+        control: "text",
         required: true,
+        editable: true,
+      },
+      {
+        key: "body",
+        label: "Body",
+        inputType: "text",
+        control: "textarea",
         editable: true,
       },
       {
         key: "bodyFormat",
         label: "Body format",
         inputType: "select",
+        control: "select",
         options: ["text", "html", "markdown"],
         editable: true,
       },
@@ -626,7 +805,9 @@ const _CATALOG: RecipeDefinition[] = [
         key: "bodyPath",
         label: "Body source",
         inputType: "text",
+        control: "text",
         editable: false,
+        helpText: "JSONPath source from an earlier step.",
       },
     ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.emailSend,
@@ -683,6 +864,24 @@ const _CATALOG: RecipeDefinition[] = [
       },
       required: ["title", "markdownContext", "decisionSchema"],
     },
+    configFields: [
+      {
+        key: "title",
+        label: "Title",
+        inputType: "text",
+        control: "text",
+        required: true,
+        editable: true,
+      },
+      {
+        key: "markdownContext",
+        label: "Context",
+        inputType: "text",
+        control: "textarea",
+        required: true,
+        editable: true,
+      },
+    ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.inboxApproval,
     aslEmitter: (args, ctx) => {
       const state: AslState = {
@@ -734,15 +933,27 @@ const _CATALOG: RecipeDefinition[] = [
     },
     configFields: [
       {
+        key: "code",
+        label: "Code",
+        inputType: "text",
+        control: "code",
+        required: true,
+        editable: true,
+      },
+      {
         key: "timeoutSeconds",
         label: "Timeout seconds",
         inputType: "number",
+        control: "number",
         editable: false,
+        min: 1,
+        max: 900,
       },
       {
         key: "networkAllowlist",
         label: "Network allowlist",
         inputType: "string_array",
+        control: "string_list",
         editable: false,
       },
     ],
@@ -797,7 +1008,7 @@ export function getRecipe(id: string): RecipeDefinition | undefined {
 
 export function getRecipeConfigFields(
   recipeId: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown> = {},
 ): RecipeConfigField[] {
   const recipe = getRecipe(recipeId);
   if (!recipe?.configFields) return [];
@@ -811,14 +1022,70 @@ export function getRecipeConfigFields(
     label: field.label,
     value: args[field.key] ?? null,
     inputType: field.inputType,
+    control: field.control ?? null,
     required: field.required ?? required.has(field.key),
     editable: field.editable ?? true,
     options: field.options ?? null,
+    placeholder: field.placeholder ?? null,
+    helpText: field.helpText ?? null,
+    min: field.min ?? null,
+    max: field.max ?? null,
+    pattern: field.pattern ?? null,
   }));
 }
 
 export function listRecipes(): readonly RecipeDefinition[] {
   return RECIPE_CATALOG;
+}
+
+export function getRecipeDefaultArgs(
+  recipeId: string,
+): Record<string, unknown> {
+  switch (recipeId) {
+    case "wait":
+      return { seconds: 300 };
+    case "agent_invoke":
+      return { agentId: "", input: {} };
+    case "tool_invoke":
+      return { toolId: "", toolSource: "builtin", args: {} };
+    case "routine_invoke":
+      return { routineId: "", input: {} };
+    case "http_request":
+      return {
+        method: "GET",
+        apiEndpoint: "https://",
+        connectionArn: "",
+      };
+    case "aurora_query":
+      return { sql: "select 1", databaseName: "" };
+    case "transform_json":
+      return { expression: "$" };
+    case "set_variable":
+      return { name: "value", value: "" };
+    case "slack_send":
+      return { channelId: "", text: "" };
+    case "email_send":
+      return {
+        to: [],
+        subject: "",
+        body: "Add email body text.",
+        bodyFormat: "markdown",
+      };
+    case "inbox_approval":
+      return {
+        title: "",
+        markdownContext: "",
+        decisionSchema: { type: "object" },
+      };
+    case "python":
+      return {
+        code: "print('hello from ThinkWork routine')",
+        timeoutSeconds: 60,
+        networkAllowlist: [],
+      };
+    default:
+      return {};
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import { planRoutineDraft } from "./planRoutineDraft.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
 import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
 import { routineDefinition } from "./routineDefinition.query.js";
+import { routineRecipeCatalog } from "./routineRecipeCatalog.query.js";
 import {
   routineAslVersion,
   routineExecution,
@@ -20,6 +21,7 @@ export const routineQueries = {
   routineStepEvents: routineStepEvents_,
   routineAslVersion,
   routineDefinition,
+  routineRecipeCatalog,
   tenantToolInventory,
 };
 

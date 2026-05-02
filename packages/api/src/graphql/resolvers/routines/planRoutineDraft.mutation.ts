@@ -2,6 +2,7 @@ import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import {
   applyRoutineDefinitionEdits,
+  planRoutineFromSteps,
   planRoutineFromIntent,
   type RoutineDefinitionStepConfigEdit,
   type RoutinePlanArtifacts,
@@ -22,14 +23,21 @@ export async function planRoutineDraft(
   const input = args.input;
   await requireAdminOrApiKeyCaller(ctx, input.tenantId, "create_routine");
 
-  const planned = planRoutineFromIntent({
-    name: input.name,
-    intent: input.description ?? input.name,
-  });
+  const hasFullStepGraph = input.steps?.some((step) => step.recipeId);
+  const planned = hasFullStepGraph
+    ? planRoutineFromSteps({
+        name: input.name,
+        description: input.description,
+        steps: input.steps ?? [],
+      })
+    : planRoutineFromIntent({
+        name: input.name,
+        intent: input.description ?? input.name,
+      });
   if (!planned.ok) throw new Error(planned.reason);
 
   const edited =
-    input.steps && input.steps.length > 0
+    !hasFullStepGraph && input.steps && input.steps.length > 0
       ? applyRoutineDefinitionEdits(planned.artifacts.plan, input.steps)
       : planned;
   if (!edited.ok) throw new Error(edited.reason);

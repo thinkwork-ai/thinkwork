@@ -183,9 +183,15 @@ type RoutineDefinitionConfigField {
   label: String!
   value: AWSJSON
   inputType: String!
+  control: String
   required: Boolean!
   editable: Boolean!
   options: [String!]
+  placeholder: String
+  helpText: String
+  min: Float
+  max: Float
+  pattern: String
 }
 
 type RoutineDefinition {
@@ -208,6 +214,32 @@ type RoutineDraft {
   stepManifest: AWSJSON!
 }
 
+type RoutineRecipeConfigField {
+  key: String!
+  label: String!
+  value: AWSJSON
+  inputType: String!
+  control: String
+  required: Boolean!
+  editable: Boolean!
+  options: [String!]
+  placeholder: String
+  helpText: String
+  min: Float
+  max: Float
+  pattern: String
+}
+
+type RoutineRecipe {
+  id: String!
+  displayName: String!
+  description: String!
+  category: String!
+  hitlCapable: Boolean!
+  defaultArgs: AWSJSON!
+  configFields: [RoutineRecipeConfigField!]!
+}
+
 # ---- Tenant tool inventory (Phase A scaffold; resolver comes in Phase A U4) ----
 #
 # Aggregates the fragmented inventory the chat builder agent + tool_invoke
@@ -224,7 +256,7 @@ type TenantToolInventoryAgent {
 
 type TenantToolInventoryTool {
   id: ID!
-  source: String!  # mcp | builtin
+  source: String! # mcp | builtin
   name: String!
   description: String
   argSchemaJson: AWSJSON
@@ -324,6 +356,8 @@ input RebuildRoutineVersionInput {
 
 input RoutineDefinitionStepConfigInput {
   nodeId: String!
+  recipeId: String
+  label: String
   args: AWSJSON!
 }
 
@@ -340,14 +374,25 @@ input DecideRoutineApprovalInput {
 # --- Query / Mutation extensions ---
 
 extend type Query {
-  routines(tenantId: ID!, teamId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
+  routines(
+    tenantId: ID!
+    teamId: ID
+    agentId: ID
+    status: RoutineStatus
+  ): [Routine!]!
   routine(id: ID!): Routine
   # Phase A schema; resolvers ship in Phase B (U7+U9) and Phase A (U4).
   routineExecution(id: ID!): RoutineExecution
-  routineExecutions(routineId: ID!, status: RoutineExecutionStatus, limit: Int, cursor: String): [RoutineExecution!]!
+  routineExecutions(
+    routineId: ID!
+    status: RoutineExecutionStatus
+    limit: Int
+    cursor: String
+  ): [RoutineExecution!]!
   routineStepEvents(executionId: ID!): [RoutineStepEvent!]!
   routineAslVersion(id: ID!): RoutineAslVersion
   routineDefinition(routineId: ID!): RoutineDefinition
+  routineRecipeCatalog(tenantId: ID!): [RoutineRecipe!]!
   tenantToolInventory(tenantId: ID!): TenantToolInventory!
 }
 
@@ -362,12 +407,17 @@ extend type Mutation {
   # backed by a never-populated routine_runs table.
   triggerRoutineRun(routineId: ID!, input: AWSJSON): RoutineExecution!
 
-  setRoutineTrigger(routineId: ID!, input: RoutineTriggerInput!): RoutineTrigger!
+  setRoutineTrigger(
+    routineId: ID!
+    input: RoutineTriggerInput!
+  ): RoutineTrigger!
   deleteRoutineTrigger(id: ID!): Boolean!
 
   # Phase A schema; resolvers ship in Phase B (U7) and Phase B (U8).
   publishRoutineVersion(input: PublishRoutineVersionInput!): RoutineAslVersion!
   rebuildRoutineVersion(input: RebuildRoutineVersionInput!): RoutineAslVersion!
-  updateRoutineDefinition(input: UpdateRoutineDefinitionInput!): RoutineDefinition!
+  updateRoutineDefinition(
+    input: UpdateRoutineDefinitionInput!
+  ): RoutineDefinition!
   decideRoutineApproval(input: DecideRoutineApprovalInput!): InboxItem!
 }

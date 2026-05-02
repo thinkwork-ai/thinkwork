@@ -2860,6 +2860,7 @@ export type Query = {
   routineDefinition?: Maybe<RoutineDefinition>;
   routineExecution?: Maybe<RoutineExecution>;
   routineExecutions: Array<RoutineExecution>;
+  routineRecipeCatalog: Array<RoutineRecipe>;
   routineStepEvents: Array<RoutineStepEvent>;
   routines: Array<Routine>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
@@ -3341,6 +3342,11 @@ export type QueryRoutineExecutionsArgs = {
 };
 
 
+export type QueryRoutineRecipeCatalogArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryRoutineStepEventsArgs = {
   executionId: Scalars['ID']['input'];
 };
@@ -3760,11 +3766,17 @@ export type RoutineDefinition = {
 
 export type RoutineDefinitionConfigField = {
   __typename?: 'RoutineDefinitionConfigField';
+  control?: Maybe<Scalars['String']['output']>;
   editable: Scalars['Boolean']['output'];
+  helpText?: Maybe<Scalars['String']['output']>;
   inputType: Scalars['String']['output'];
   key: Scalars['String']['output'];
   label: Scalars['String']['output'];
+  max?: Maybe<Scalars['Float']['output']>;
+  min?: Maybe<Scalars['Float']['output']>;
   options?: Maybe<Array<Scalars['String']['output']>>;
+  pattern?: Maybe<Scalars['String']['output']>;
+  placeholder?: Maybe<Scalars['String']['output']>;
   required: Scalars['Boolean']['output'];
   value?: Maybe<Scalars['AWSJSON']['output']>;
 };
@@ -3781,7 +3793,9 @@ export type RoutineDefinitionStep = {
 
 export type RoutineDefinitionStepConfigInput = {
   args: Scalars['AWSJSON']['input'];
+  label?: InputMaybe<Scalars['String']['input']>;
   nodeId: Scalars['String']['input'];
+  recipeId?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type RoutineDraft = {
@@ -3834,6 +3848,34 @@ export enum RoutineExecutionStatus {
   Succeeded = 'SUCCEEDED',
   TimedOut = 'TIMED_OUT'
 }
+
+export type RoutineRecipe = {
+  __typename?: 'RoutineRecipe';
+  category: Scalars['String']['output'];
+  configFields: Array<RoutineRecipeConfigField>;
+  defaultArgs: Scalars['AWSJSON']['output'];
+  description: Scalars['String']['output'];
+  displayName: Scalars['String']['output'];
+  hitlCapable: Scalars['Boolean']['output'];
+  id: Scalars['String']['output'];
+};
+
+export type RoutineRecipeConfigField = {
+  __typename?: 'RoutineRecipeConfigField';
+  control?: Maybe<Scalars['String']['output']>;
+  editable: Scalars['Boolean']['output'];
+  helpText?: Maybe<Scalars['String']['output']>;
+  inputType: Scalars['String']['output'];
+  key: Scalars['String']['output'];
+  label: Scalars['String']['output'];
+  max?: Maybe<Scalars['Float']['output']>;
+  min?: Maybe<Scalars['Float']['output']>;
+  options?: Maybe<Array<Scalars['String']['output']>>;
+  pattern?: Maybe<Scalars['String']['output']>;
+  placeholder?: Maybe<Scalars['String']['output']>;
+  required: Scalars['Boolean']['output'];
+  value?: Maybe<Scalars['AWSJSON']['output']>;
+};
 
 export enum RoutineRunStatus {
   Cancelled = 'CANCELLED',
