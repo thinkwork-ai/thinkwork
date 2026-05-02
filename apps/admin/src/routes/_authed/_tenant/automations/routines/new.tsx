@@ -12,6 +12,7 @@ import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -213,7 +214,7 @@ function NewRoutinePage() {
         </Button>
         <PageHeader
           title="New routine"
-          description="Plan from a prompt or assemble recipe blocks directly."
+          description="Plan from a prompt, edit the workflow, then publish it."
         />
       </div>
 
@@ -231,12 +232,12 @@ function NewRoutinePage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Planner prompt</label>
-              <textarea
+              <Textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="e.g. Pull overnight email from the inbox, classify each into urgent/normal, post a digest to #ops, and require approval before sending replies."
                 rows={3}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="min-h-24 resize-y"
               />
             </div>
           </div>
@@ -271,7 +272,7 @@ function NewRoutinePage() {
               <Button onClick={handlePublish} disabled={!canPublish}>
                 {submitting && !planState.fetching
                   ? "Publishing..."
-                  : "Publish routine"}
+                  : "Publish workflow"}
               </Button>
             </div>
           </div>

@@ -132,15 +132,23 @@ export function RoutineDefinitionPanel({
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {definition.description}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {dirty
+              ? "Unsaved changes will not run until you save."
+              : "Test Routine runs the saved workflow."}
+          </p>
         </div>
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={!dirty || updateState.fetching}
-        >
-          <Save className="h-3.5 w-3.5" />
-          {updateState.fetching ? "Saving..." : "Save"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {dirty && <Badge variant="secondary">Unsaved</Badge>}
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={!dirty || updateState.fetching}
+          >
+            <Save className="h-3.5 w-3.5" />
+            {updateState.fetching ? "Saving..." : "Save"}
+          </Button>
+        </div>
       </div>
 
       <div className="p-4">

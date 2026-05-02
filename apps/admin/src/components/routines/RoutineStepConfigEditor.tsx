@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -52,7 +53,7 @@ export function RoutineStepConfigEditor({
       {steps.map((step, index) => (
         <div
           key={step.nodeId}
-          className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]"
+          className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]"
         >
           <div className="min-w-0">
             <div className="flex items-start gap-3">
@@ -67,7 +68,7 @@ export function RoutineStepConfigEditor({
                     onChange={(event) =>
                       onLabelChange(step.nodeId, event.target.value)
                     }
-                    className="h-8"
+                    className="h-8 font-medium"
                   />
                 ) : (
                   <div className="truncate text-sm font-medium">
@@ -130,7 +131,7 @@ export function RoutineStepConfigEditor({
 
           <div className="grid min-w-0 gap-3 md:grid-cols-2">
             {step.configFields.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
+              <div className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-sm text-muted-foreground md:col-span-2">
                 No configurable fields.
               </div>
             ) : (
@@ -166,11 +167,24 @@ function ConfigFieldInput({
 }) {
   const id = `${step.nodeId}-${field.key}`;
   const readOnly = !field.editable;
+  const multiline = shouldUseTextarea(field, value);
+  const monospace = shouldUseMonospace(field);
+  const fullWidth = multiline || field.inputType === "email_array";
 
   return (
-    <label htmlFor={id} className="block min-w-0">
-      <span className="mb-1 flex items-center gap-2 text-sm font-medium">
-        {field.label}
+    <label
+      htmlFor={id}
+      className={cn("block min-w-0", fullWidth && "md:col-span-2")}
+    >
+      <span className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+        <span>
+          {field.label}
+          {field.required && (
+            <span className="ml-0.5 text-destructive" aria-label="required">
+              *
+            </span>
+          )}
+        </span>
         {readOnly && (
           <span className="text-xs font-normal text-muted-foreground">
             Read-only
@@ -190,13 +204,29 @@ function ConfigFieldInput({
             ))}
           </SelectContent>
         </Select>
+      ) : multiline ? (
+        <Textarea
+          id={id}
+          value={value}
+          readOnly={readOnly}
+          rows={textareaRows(field, value)}
+          className={cn(
+            "min-h-20 resize-y",
+            monospace && "font-mono text-xs leading-5",
+            readOnly && "text-muted-foreground",
+          )}
+          onChange={(event) => onChange(event.target.value)}
+        />
       ) : (
         <Input
           id={id}
           type={field.inputType === "number" ? "number" : "text"}
           value={value}
           readOnly={readOnly}
-          className={cn(readOnly && "text-muted-foreground")}
+          className={cn(
+            monospace && "font-mono text-xs",
+            readOnly && "text-muted-foreground",
+          )}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
@@ -262,13 +292,67 @@ function valueForMutation(field: RoutineConfigField, value: string): unknown {
 }
 
 function stringValue(value: unknown): string {
-  if (Array.isArray(value)) return value.join(", ");
+  if (Array.isArray(value)) return value.join("\n");
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return value;
   if (value == null) return "";
-  return JSON.stringify(value);
+  return JSON.stringify(value, null, 2);
 }
 
 function fieldKey(nodeId: string, key: string): string {
   return `${nodeId}.${key}`;
+}
+
+function shouldUseTextarea(field: RoutineConfigField, value: string): boolean {
+  if (
+    field.inputType === "email_array" ||
+    field.inputType === "string_array"
+  ) {
+    return true;
+  }
+
+  const key = field.key.toLowerCase();
+  const label = field.label.toLowerCase();
+  const longValue = value.includes("\n") || value.length > 96;
+  if (longValue) return true;
+  if (key.includes("path") || key.includes("source")) return false;
+
+  return [
+    "body",
+    "code",
+    "sql",
+    "text",
+    "message",
+    "markdowncontext",
+    "expression",
+    "requestbody",
+    "decisionschema",
+    "environment",
+  ].some((token) => key.includes(token) || label.includes(token));
+}
+
+function shouldUseMonospace(field: RoutineConfigField): boolean {
+  const key = field.key.toLowerCase();
+  const label = field.label.toLowerCase();
+  return [
+    "code",
+    "sql",
+    "expression",
+    "json",
+    "schema",
+    "bodypath",
+    "requestbody",
+    "environment",
+  ].some((token) => key.includes(token) || label.includes(token));
+}
+
+function textareaRows(field: RoutineConfigField, value: string): number {
+  if (field.key.toLowerCase().includes("code")) return 8;
+  if (field.key.toLowerCase().includes("sql")) return 6;
+  if (value.includes("\n")) {
+    return Math.min(10, Math.max(3, value.split("\n").length));
+  }
+  return field.inputType === "email_array" || field.inputType === "string_array"
+    ? 3
+    : 4;
 }
