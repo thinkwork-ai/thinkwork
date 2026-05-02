@@ -197,6 +197,7 @@ resource "aws_lambda_function" "handler" {
     "activation-apply-worker",
     "job-schedule-manager",
     "job-trigger",
+    "routine-task-weather-email",
     "webhooks",
     "webhooks-admin",
     "webhook-deliveries-cleanup",

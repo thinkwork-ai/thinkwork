@@ -1,10 +1,20 @@
 import { createRoutine } from "./createRoutine.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
+import {
+  routineAslVersion,
+  routineExecution,
+  routineExecutions,
+  routineStepEvents_,
+} from "./routineExecutions.query.js";
 import { tenantToolInventory } from "./tenantToolInventory.query.js";
 import { triggerRoutineRun } from "./triggerRoutineRun.mutation.js";
 import { updateRoutine } from "./updateRoutine.mutation.js";
 
 export const routineQueries = {
+  routineExecution,
+  routineExecutions,
+  routineStepEvents: routineStepEvents_,
+  routineAslVersion,
   tenantToolInventory,
 };
 

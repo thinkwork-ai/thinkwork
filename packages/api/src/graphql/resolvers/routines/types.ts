@@ -14,9 +14,57 @@
 import { and, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { routineAslVersions } from "@thinkwork/database-pg/schema";
+import {
+  routineAslVersions,
+  routineStepEvents,
+  routines,
+  scheduledJobs,
+} from "@thinkwork/database-pg/schema";
 
 export const routineExecutionTypeResolvers = {
+  routine: async (
+    execution: { routineId?: string },
+    _args: unknown,
+    _ctx: GraphQLContext,
+  ) => {
+    if (!execution.routineId) return null;
+    const [row] = await db
+      .select()
+      .from(routines)
+      .where(eq(routines.id, execution.routineId))
+      .limit(1);
+    return row ? snakeToCamel(row) : null;
+  },
+
+  trigger: async (
+    execution: { triggerId?: string | null },
+    _args: unknown,
+    _ctx: GraphQLContext,
+  ) => {
+    if (!execution.triggerId) return null;
+    const [row] = await db
+      .select()
+      .from(scheduledJobs)
+      .where(eq(scheduledJobs.id, execution.triggerId))
+      .limit(1);
+    return row ? snakeToCamel(row) : null;
+  },
+
+  stepEvents: async (
+    execution: { id?: string },
+    _args: unknown,
+    _ctx: GraphQLContext,
+  ) => {
+    if (!execution.id) return [];
+    const rows = await db
+      .select()
+      .from(routineStepEvents)
+      .where(eq(routineStepEvents.execution_id, execution.id))
+      .orderBy(routineStepEvents.started_at, routineStepEvents.created_at)
+      .limit(1_000);
+    return rows.map(snakeToCamel);
+  },
+
   aslVersion: async (
     execution: { stateMachineArn?: string; versionArn?: string | null },
     _args: unknown,
