@@ -16,11 +16,28 @@ describe("system workflow registry", () => {
 
   it("builds ASL with a ThinkWork definition marker", () => {
     const definition = getSystemWorkflowDefinition("evaluation-runs");
+    const asl = buildSystemWorkflowAsl(definition!);
 
     expect(definition).toBeTruthy();
-    expect(buildSystemWorkflowAsl(definition!).Comment).toBe(
+    expect(asl.Comment).toBe(
       "thinkwork-system-workflow:evaluation-runs:2026-05-02.v1",
     );
+    expect(asl.States.RunEvaluation).toMatchObject({
+      Type: "Task",
+      Resource: "arn:aws:states:::lambda:invoke",
+      Parameters: {
+        FunctionName: "${eval_runner_lambda_arn}",
+        "Payload.$": "$",
+      },
+    });
+    expect(asl.States.ApplyPassFailGate).toMatchObject({
+      Type: "Choice",
+      Default: "EvaluationFailed",
+    });
+    expect(asl.States.EvaluationFailed).toMatchObject({
+      Type: "Fail",
+      Error: "EvaluationThresholdFailed",
+    });
   });
 
   it("validates config against required typed fields", () => {

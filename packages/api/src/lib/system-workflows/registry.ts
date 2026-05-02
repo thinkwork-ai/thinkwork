@@ -1,5 +1,7 @@
 import type { SystemWorkflowDefinition } from "./types.js";
 
+export type SystemWorkflowDefinitionId = SystemWorkflowDefinition["id"];
+
 export const SYSTEM_WORKFLOW_DEFINITIONS: SystemWorkflowDefinition[] = [
   {
     id: "wiki-build",

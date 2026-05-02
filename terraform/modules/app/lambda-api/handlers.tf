@@ -71,6 +71,11 @@ locals {
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
     COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID  = var.company_brain_source_agent_model_id
+    SYSTEM_WORKFLOW_STATE_MACHINE_ARNS = jsonencode({
+      "wiki-build"              = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-wiki-build"
+      "evaluation-runs"         = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-evaluation-runs"
+      "tenant-agent-activation" = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-tenant-agent-activation"
+    })
 
     # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
     # the actual keys live in Secrets Manager and are fetched by
@@ -270,6 +275,8 @@ resource "aws_lambda_function" "handler" {
     # for steps + on the conditional UPDATE for executions.
     "routine-step-callback",
     "routine-execution-callback",
+    "system-workflow-step-callback",
+    "system-workflow-execution-callback",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -600,10 +607,14 @@ locals {
     # recipe path (no wrapper Lambda). Bearer API_AUTH_SECRET. Idempotent
     # via partial unique index on (execution_id, node_id, status,
     # started_at) — see migration 0056.
-    "POST /api/routines/step"         = "routine-step-callback"
-    "OPTIONS /api/routines/step"      = "routine-step-callback"
-    "POST /api/routines/execution"    = "routine-execution-callback"
-    "OPTIONS /api/routines/execution" = "routine-execution-callback"
+    "POST /api/routines/step"                 = "routine-step-callback"
+    "OPTIONS /api/routines/step"              = "routine-step-callback"
+    "POST /api/routines/execution"            = "routine-execution-callback"
+    "OPTIONS /api/routines/execution"         = "routine-execution-callback"
+    "POST /api/system-workflows/steps"        = "system-workflow-step-callback"
+    "OPTIONS /api/system-workflows/steps"     = "system-workflow-step-callback"
+    "POST /api/system-workflows/execution"    = "system-workflow-execution-callback"
+    "OPTIONS /api/system-workflows/execution" = "system-workflow-execution-callback"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"

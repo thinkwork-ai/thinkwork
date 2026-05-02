@@ -291,6 +291,10 @@ build_handler "routine-step-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-step-callback.ts"
 build_handler "routine-execution-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-execution-callback.ts"
+build_handler "system-workflow-step-callback" \
+  "$REPO_ROOT/packages/api/src/handlers/system-workflow-step-callback.ts"
+build_handler "system-workflow-execution-callback" \
+  "$REPO_ROOT/packages/api/src/handlers/system-workflow-execution-callback.ts"
 build_handler "routine-task-weather-email" \
   "$REPO_ROOT/packages/api/src/handlers/routine-task-weather-email.ts"
 

@@ -478,7 +478,7 @@ Test scenarios:
 
 1. Build Units 1-4 as the platform substrate with no live traffic switch. Seed the three definitions and make inert runs queryable.
 2. Build Unit 5 so operators can inspect the inventory, definitions, configs, runs, and evidence before all workflows are live.
-3. Convert Evaluation Runs first. It best demonstrates Standard parent plus Express fan-out and provides the strongest immediate runtime win over a single long async Lambda.
+3. Convert Evaluation Runs first. `docs/plans/2026-05-02-008-feat-system-workflow-runtime-eval-adapter-plan.md` covers the first live conversion slice: launcher/callback runtime plus a Standard parent that invokes the existing eval runner. Express fan-out remains the next Evaluation Runs refinement after this substrate is proven.
 4. Convert Wiki Build second. Keep existing compile behavior stable while adding run/evidence visibility, then introduce Express child stages only for clearly idempotent batches.
 5. Convert Tenant/Agent Activation third. Treat this as the compliance/governance showcase with approvals and attestations.
 6. Finish docs and CLI support after at least one workflow is live, then update docs again after all three adapters are enabled.
