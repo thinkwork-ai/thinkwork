@@ -36,19 +36,22 @@ const columns: ColumnDef<RoutineRow>[] = [
     cell: ({ row }) => (
       <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
     ),
-    size: 100,
+    size: 90,
   },
   {
     accessorKey: "name",
-    header: "Routine",
+    header: "Name",
     cell: ({ row }) => (
-      <div className="space-y-0.5">
-        <div className="font-medium">{row.original.name}</div>
-        {row.original.description && (
-          <div className="max-w-xl truncate text-xs text-muted-foreground">
-            {row.original.description}
-          </div>
-        )}
+      <span className="font-medium whitespace-nowrap">{row.original.name}</span>
+    ),
+    size: 240,
+  },
+  {
+    accessorKey: "description",
+    header: "Description",
+    cell: ({ row }) => (
+      <div className="text-muted-foreground text-sm truncate overflow-hidden">
+        {row.original.description ?? "—"}
       </div>
     ),
   },
@@ -63,7 +66,7 @@ const columns: ColumnDef<RoutineRow>[] = [
       ) : (
         <span className="text-xs text-muted-foreground">Never</span>
       ),
-    size: 120,
+    size: 130,
   },
   {
     accessorKey: "createdAt",
@@ -73,7 +76,7 @@ const columns: ColumnDef<RoutineRow>[] = [
         {relativeTime(row.original.createdAt)}
       </span>
     ),
-    size: 120,
+    size: 90,
   },
 ];
 
@@ -147,6 +150,7 @@ function RoutinesPage() {
         columns={columns}
         data={rows}
         filterValue={search}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({
             to: "/automations/routines/$routineId",
