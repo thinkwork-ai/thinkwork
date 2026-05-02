@@ -5,7 +5,7 @@ description: Two entry points into ThinkWork automations — cron-like schedules
 
 import { Aside } from '@astrojs/starlight/components';
 
-Automations start from one of two entry points into the harness's scheduled-trigger surface: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both end up in the same Step Functions state machine and the same `AUTO-` thread. The difference is all at the front. Routing both entry points through the same downstream pipeline is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
+Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both converge on whichever execution path the trigger's target dictates — a single-turn agent invocation lands in an `AUTO-` thread, a multi-step routine lands as a `routine_executions` row with step-event logging. The difference is all at the front; the downstream model is uniform within its shape. Routing both entry points through the same execution layer is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
 
 ## The two entry points
 
@@ -52,9 +52,11 @@ AWS Scheduler: CreateSchedule (or UpdateSchedule)
         ▼
 When the schedule fires:
 AWS Scheduler → job-trigger Lambda
-        │  (resolves the job row, starts the Step Functions run)
+        │  (resolves the job row; starts a routine SFN execution OR
+        │   wakes the agent for single-turn work)
         ▼
-Step Functions state machine → AgentCore invocation → AUTO- thread
+For routine targets: triggerRoutineRun → SFN.StartExecution → routine_executions
+For agent targets:   AgentCore invocation → AUTO- thread → thread_turns
 ```
 
 The chain exists because schedules are first-class ThinkWork records (`scheduled_jobs` in Aurora), not bare AWS Scheduler entries. The manager Lambda is what keeps the two in sync — if you update a schedule in the admin app, the manager reconciles the change to AWS Scheduler; if you delete a schedule, it removes the Scheduler entry.
