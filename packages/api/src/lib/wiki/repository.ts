@@ -539,6 +539,40 @@ export async function getCompileJob(
 	return (rows[0] as WikiCompileJobRow | undefined) ?? null;
 }
 
+/**
+ * Atomically claim a specific compile job by id. Sets status='running' iff
+ * the row is currently 'pending', returning the updated row. Returns null
+ * when the row is in any other state (already running, succeeded, failed,
+ * skipped) so a concurrent invoker refuses to redrive.
+ *
+ * This is the per-job equivalent of `claimNextCompileJob` (which uses
+ * FOR UPDATE SKIP LOCKED on the queue head). For id-targeted invocations —
+ * Lambda async retry, manual replay — the SKIP LOCKED scan does not apply,
+ * so we use a CAS UPDATE on status. Without this, two concurrent Lambda
+ * invocations of the same jobId can both pass a status check that does not
+ * synchronously mutate, both run the agentic compile, and both trigger the
+ * writeback — duplicating user-visible threads.
+ */
+export async function claimCompileJobById(
+	jobId: string,
+	db: DbClient = defaultDb,
+): Promise<WikiCompileJobRow | null> {
+	if (!isValidUuid(jobId)) return null;
+	const result = await db.execute(sql`
+		UPDATE ${wikiCompileJobs}
+		SET status = 'running',
+		    claimed_at = now(),
+		    started_at = now(),
+		    attempt = attempt + 1
+		WHERE id = ${jobId} AND status = 'pending'
+		RETURNING *
+	`);
+	const row = Array.isArray(result)
+		? result[0]
+		: ((result as { rows?: unknown[] })?.rows?.[0] ?? null);
+	return (row as WikiCompileJobRow | null) ?? null;
+}
+
 /** Mark a job finished (succeeded | failed | skipped), recording metrics. */
 export async function completeCompileJob(
 	args: {

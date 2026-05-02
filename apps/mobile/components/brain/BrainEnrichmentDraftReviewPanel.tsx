@@ -254,16 +254,13 @@ function SectionBlock({
       ? null
       : section.heading;
 
+  // Limit the tap target to the badge row only — the body must NOT capture
+  // taps because (a) it's tall and overlaps with the footer Approve/Reject
+  // buttons, causing accidental retoggles when the user aims for Approve,
+  // and (b) tapping body text to toggle accept/reject is an unobvious UX —
+  // the visible "Accepted" / "Rejected" pill is the deliberate affordance.
   return (
-    <Pressable
-      accessibilityRole={region ? "button" : undefined}
-      accessibilityLabel={
-        region
-          ? `${accepted ? "Reject" : "Accept"} ${section.heading || "(preamble)"} change`
-          : undefined
-      }
-      onPress={onToggle}
-      disabled={!region}
+    <View
       className="rounded-md p-3"
       style={{
         backgroundColor: highlightTint,
@@ -273,7 +270,19 @@ function SectionBlock({
       }}
     >
       {region ? (
-        <RegionBadgeRow region={region} accepted={accepted} colors={colors} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            `${accepted ? "Reject" : "Accept"} ${section.heading || "(preamble)"} change`
+          }
+          onPress={onToggle}
+          // Hit-slop expands the touchable area without growing the visual
+          // bounds; gives the small badge row a comfortable tap target
+          // without bleeding into the markdown body.
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <RegionBadgeRow region={region} accepted={accepted} colors={colors} />
+        </Pressable>
       ) : null}
       {heading ? (
         <Text
@@ -318,7 +327,7 @@ function SectionBlock({
           {section.bodyMd || "_(empty section)_"}
         </Markdown>
       </View>
-    </Pressable>
+    </View>
   );
 }
 

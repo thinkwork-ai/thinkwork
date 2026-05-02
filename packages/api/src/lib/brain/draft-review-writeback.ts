@@ -45,6 +45,7 @@ import {
 	threadTurns,
 	threads,
 } from "../../graphql/utils.js";
+import { sendExternalTaskPush } from "../push-notifications.js";
 import type {
 	DraftCompileCandidate,
 	DraftCompileResult,
@@ -61,6 +62,14 @@ export interface DraftWritebackContext {
 	pageId: string;
 	pageTitle: string;
 	candidates: DraftCompileCandidate[];
+	/**
+	 * Optional: the agent the user was viewing when they triggered enrichment.
+	 * When present + valid for this tenant, the writeback creates the thread
+	 * + workspace_run on this agent so the result lands in the user's current
+	 * view. When absent or invalid, falls back to the user's paired agent or
+	 * any tenant agent (via resolveAgentContext).
+	 */
+	requestingAgentId?: string | null;
 }
 
 export interface DraftWritebackIO {
@@ -121,6 +130,7 @@ export async function writeDraftReviewSuccess(args: {
 		db,
 		tenantId: args.context.job.tenant_id,
 		userId: args.context.job.owner_id,
+		requestingAgentId: args.context.requestingAgentId,
 	});
 
 	const reviewId = randomUUID();
@@ -228,6 +238,23 @@ export async function writeDraftReviewSuccess(args: {
 		},
 	});
 
+	// Fire-and-forget push so a backgrounded mobile client surfaces a banner
+	// for "draft ready" — without this, the user has no signal anything
+	// happened until they re-open the app and check the thread list.
+	// sendExternalTaskPush is itself best-effort (logs but doesn't throw on
+	// missing token / Expo failure), so this never blocks the writeback.
+	void sendExternalTaskPush({
+		userId: args.context.job.owner_id,
+		tenantId: args.context.job.tenant_id,
+		threadId: thread.id,
+		title: `Draft ready: ${args.context.pageTitle}`,
+		body:
+			args.result.regions.length === 1
+				? "1 page region needs review."
+				: `${args.result.regions.length} page regions need review.`,
+		eventKind: PAYLOAD_KIND,
+	});
+
 	return {
 		threadId: thread.id,
 		threadTurnId: turn.id,
@@ -252,6 +279,7 @@ export async function writeDraftReviewNoOp(args: {
 		db,
 		tenantId: args.context.job.tenant_id,
 		userId: args.context.job.owner_id,
+		requestingAgentId: args.context.requestingAgentId,
 	});
 
 	const { thread, turn } = await openThread({
@@ -293,6 +321,15 @@ export async function writeDraftReviewNoOp(args: {
 		})
 		.where(eq(threadTurns.id, turn.id));
 
+	void sendExternalTaskPush({
+		userId: args.context.job.owner_id,
+		tenantId: args.context.job.tenant_id,
+		threadId: thread.id,
+		title: `Brain enrichment: ${args.context.pageTitle}`,
+		body: "No new info to add — the page already covers all the facts.",
+		eventKind: "brain_enrichment_draft_no_op",
+	});
+
 	return {
 		threadId: thread.id,
 		threadTurnId: turn.id,
@@ -317,6 +354,7 @@ export async function writeDraftReviewFailure(args: {
 		db,
 		tenantId: args.context.job.tenant_id,
 		userId: args.context.job.owner_id,
+		requestingAgentId: args.context.requestingAgentId,
 	});
 
 	const { thread, turn } = await openThread({
@@ -360,6 +398,15 @@ export async function writeDraftReviewFailure(args: {
 		})
 		.where(eq(threadTurns.id, turn.id));
 
+	void sendExternalTaskPush({
+		userId: args.context.job.owner_id,
+		tenantId: args.context.job.tenant_id,
+		threadId: thread.id,
+		title: `Brain enrichment failed: ${args.context.pageTitle}`,
+		body: args.error,
+		eventKind: "brain_enrichment_draft_failed",
+	});
+
 	return {
 		threadId: thread.id,
 		threadTurnId: turn.id,
@@ -377,6 +424,7 @@ async function resolveAgentContext(args: {
 	db: DbLike;
 	tenantId: string;
 	userId: string;
+	requestingAgentId?: string | null;
 }): Promise<{
 	tenantSlug: string;
 	agentId: string;
@@ -391,6 +439,32 @@ async function resolveAgentContext(args: {
 		throw new GraphQLError("Tenant not found", {
 			extensions: { code: "NOT_FOUND" },
 		});
+	}
+
+	// Prefer the agent the user was viewing when they triggered enrichment.
+	// Without this, the thread lands on the user's paired agent — which is
+	// often a different agent than the one the user was looking at, making
+	// the result invisible from the view that triggered it (observed live
+	// in dev: enrichment from "Sandbox" agent landed under "Marco" agent).
+	// Lookup is tenant-scoped so a stale or cross-tenant agentId is ignored.
+	if (args.requestingAgentId) {
+		const [requesting] = await args.db
+			.select({ id: agents.id, slug: agents.slug })
+			.from(agents)
+			.where(
+				and(
+					eq(agents.id, args.requestingAgentId),
+					eq(agents.tenant_id, args.tenantId),
+				),
+			)
+			.limit(1);
+		if (requesting) {
+			return {
+				tenantSlug: tenantInfo.slug,
+				agentId: requesting.id,
+				agentSlug: requesting.slug ?? requesting.id,
+			};
+		}
 	}
 
 	const [paired] = await args.db

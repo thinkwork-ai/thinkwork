@@ -151,6 +151,12 @@ export async function runBrainPageEnrichment(args: {
         pageTitle: target.title,
         currentBodyMd: target.bodyMd,
         candidates,
+        // Capture the agent the user was viewing when they triggered this
+        // run. The writeback prefers this agent so the result thread lands
+        // in the user's current view rather than on their paired agent
+        // (which is often a different agent and makes the result
+        // invisible from where the user triggered it).
+        requestingAgentId: args.caller.agentId ?? null,
       },
     },
     db,
