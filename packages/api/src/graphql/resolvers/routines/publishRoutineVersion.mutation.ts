@@ -56,6 +56,10 @@ export interface RoutinePublishArtifacts {
   stepManifestJson: unknown;
 }
 
+export interface RoutinePublishMetadata {
+  description?: string;
+}
+
 export async function publishRoutineVersion(
   _parent: unknown,
   args: { input: PublishRoutineVersionInput },
@@ -119,6 +123,7 @@ export async function publishRoutineArtifacts(
   routine: PublishableRoutine,
   artifacts: RoutinePublishArtifacts,
   ctx: GraphQLContext,
+  metadata: RoutinePublishMetadata = {},
 ): Promise<unknown> {
   const validation = await validateRoutineAsl({
     asl: artifacts.aslJson,
@@ -216,6 +221,9 @@ export async function publishRoutineArtifacts(
       .set({
         current_version: newVersionNumber,
         documentation_md: artifacts.markdownSummary,
+        ...(metadata.description !== undefined
+          ? { description: metadata.description }
+          : {}),
         updated_at: new Date(),
       })
       .where(eq(routines.id, routineId))

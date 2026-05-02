@@ -21,12 +21,14 @@ const {
   mockSfnSend,
   mockValidate,
   mockRequireAdminOrApiKeyCaller,
+  mockRequireTenantMember,
   mockSelectRows,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSfnSend: vi.fn(),
   mockValidate: vi.fn(),
   mockRequireAdminOrApiKeyCaller: vi.fn(),
+  mockRequireTenantMember: vi.fn(),
   mockSelectRows: vi.fn(),
   mockTransaction: vi.fn(),
 }));
@@ -61,6 +63,7 @@ vi.mock("../handlers/routine-asl-validator.js", () => ({
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireAdminOrApiKeyCaller: mockRequireAdminOrApiKeyCaller,
+  requireTenantMember: mockRequireTenantMember,
 }));
 
 // db.transaction(fn) → fn(tx); both db.select() and tx.select() route through
@@ -128,6 +131,11 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     routine_id: "routine_asl_versions.routine_id",
     tenant_id: "routine_asl_versions.tenant_id",
     version_number: "routine_asl_versions.version_number",
+    state_machine_arn: "routine_asl_versions.state_machine_arn",
+    version_arn: "routine_asl_versions.version_arn",
+    asl_json: "routine_asl_versions.asl_json",
+    markdown_summary: "routine_asl_versions.markdown_summary",
+    step_manifest_json: "routine_asl_versions.step_manifest_json",
   },
   routineExecutions: {
     id: "routine_executions.id",
@@ -161,10 +169,12 @@ beforeEach(() => {
   mockSfnSend.mockReset();
   mockValidate.mockReset();
   mockRequireAdminOrApiKeyCaller.mockReset();
+  mockRequireTenantMember.mockReset();
   mockSelectRows.mockReset();
   mockTransaction.mockReset();
   // Default: caller is admin, validator passes.
   mockRequireAdminOrApiKeyCaller.mockResolvedValue("admin");
+  mockRequireTenantMember.mockResolvedValue("admin");
   mockValidate.mockResolvedValue({ valid: true, errors: [], warnings: [] });
 });
 
@@ -659,6 +669,206 @@ describe("rebuildRoutineVersion — server-authored ASL refresh", () => {
         ctx,
       ),
     ).rejects.toThrow(/legacy/i);
+
+    expect(mockSfnSend).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// routineDefinition / updateRoutineDefinition
+// ---------------------------------------------------------------------------
+
+describe("routineDefinition — editable product-owned definition", () => {
+  it("returns the latest editable definition from the published ASL version", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to ericodom37@gmail.com",
+          engine: "step_functions",
+          current_version: 3,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-v3",
+          step_manifest_json: {
+            definition: {
+              kind: "weather_email",
+              recipientEmail: "ericodom37@gmail.com",
+            },
+          },
+          asl_json: minimalAsl,
+        },
+      ]);
+
+    const { routineDefinition } =
+      await import("../graphql/resolvers/routines/routineDefinition.query.js");
+
+    const result = (await routineDefinition(
+      null,
+      { routineId: "routine-a" },
+      ctx,
+    )) as {
+      currentVersion: number;
+      versionId: string;
+      editableFields: Array<{ key: string; value: string }>;
+      steps: Array<{ recipeId: string }>;
+    };
+
+    expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-a");
+    expect(result.currentVersion).toBe(3);
+    expect(result.versionId).toBe("asl-v3");
+    expect(result.editableFields).toContainEqual(
+      expect.objectContaining({
+        key: "recipientEmail",
+        value: "ericodom37@gmail.com",
+      }),
+    );
+    expect(result.steps.map((step) => step.recipeId)).toEqual([
+      "python",
+      "email_send",
+    ]);
+  });
+
+  it("publishes a new ASL version when an editable field changes", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to old@example.com",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-v1",
+          step_manifest_json: {
+            definition: {
+              kind: "weather_email",
+              recipientEmail: "old@example.com",
+            },
+          },
+          asl_json: minimalAsl,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:1",
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-v2",
+          routine_id: "routine-a",
+          tenant_id: "tenant-a",
+          version_number: 2,
+        },
+      ])
+      .mockReturnValueOnce([{ id: "routine-a", current_version: 2 }]);
+
+    mockSfnSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        stateMachineVersionArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:2",
+      })
+      .mockResolvedValueOnce({});
+
+    const { updateRoutineDefinition } =
+      await import("../graphql/resolvers/routines/updateRoutineDefinition.mutation.js");
+
+    const result = (await updateRoutineDefinition(
+      null,
+      {
+        input: {
+          routineId: "routine-a",
+          fields: [{ key: "recipientEmail", value: "new@example.com" }],
+        },
+      },
+      ctx,
+    )) as {
+      currentVersion: number;
+      versionId: string;
+      editableFields: Array<{ key: string; value: string }>;
+    };
+
+    expect(mockRequireAdminOrApiKeyCaller).toHaveBeenCalledWith(
+      ctx,
+      "tenant-a",
+      "publish_routine_version",
+    );
+    expect(mockSfnSend).toHaveBeenCalledTimes(3);
+    const updateInput = (mockSfnSend.mock.calls[0][0] as { input: any }).input;
+    expect(updateInput.definition).toContain("new@example.com");
+    expect(updateInput.definition).not.toContain("old@example.com");
+    expect(result.currentVersion).toBe(2);
+    expect(result.versionId).toBe("asl-v2");
+    expect(result.editableFields).toContainEqual(
+      expect.objectContaining({
+        key: "recipientEmail",
+        value: "new@example.com",
+      }),
+    );
+  });
+
+  it("rejects invalid routine definition edits before SFN side effects", async () => {
+    mockSelectRows
+      .mockReturnValueOnce([
+        {
+          id: "routine-a",
+          tenant_id: "tenant-a",
+          name: "Check Austin Weather",
+          description:
+            "Check the weather in Austin and email it to old@example.com",
+          engine: "step_functions",
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-routine-routine-a:live",
+          current_version: 1,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-v1",
+          step_manifest_json: {
+            definition: {
+              kind: "weather_email",
+              recipientEmail: "old@example.com",
+            },
+          },
+          asl_json: minimalAsl,
+        },
+      ]);
+
+    const { updateRoutineDefinition } =
+      await import("../graphql/resolvers/routines/updateRoutineDefinition.mutation.js");
+
+    await expect(
+      updateRoutineDefinition(
+        null,
+        {
+          input: {
+            routineId: "routine-a",
+            fields: [{ key: "recipientEmail", value: "not-an-email" }],
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/valid recipient email/i);
 
     expect(mockSfnSend).not.toHaveBeenCalled();
   });
