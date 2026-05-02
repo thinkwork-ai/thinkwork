@@ -183,13 +183,23 @@ beforeEach(() => {
 
 describe("buildRoutineExecutionInput", () => {
 	it("adds server-owned routine recipe function names and overrides caller values", () => {
-		const input = buildRoutineExecutionInput({
-			emailSendFunctionName: "caller-controlled",
-			customValue: "kept",
-		});
+		const input = buildRoutineExecutionInput(
+			{
+				emailSendFunctionName: "caller-controlled",
+				tenantId: "caller-tenant",
+				routineId: "caller-routine",
+				customValue: "kept",
+			},
+			{
+				tenantId: "tenant-a",
+				routineId: "routine-a",
+			},
+		);
 
 		expect(input).toMatchObject({
 			customValue: "kept",
+			tenantId: "tenant-a",
+			routineId: "routine-a",
 			inboxApprovalFunctionName:
 				"thinkwork-dev-api-routine-approval-callback",
 			emailSendFunctionName: "thinkwork-dev-api-email-send",

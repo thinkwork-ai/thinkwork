@@ -577,6 +577,8 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
     };
     expect(startCall.input.stateMachineArn).toContain(":live");
     expect(JSON.parse(startCall.input.input)).toMatchObject({
+      tenantId: "tenant-a",
+      routineId: "routine-a",
       inboxApprovalFunctionName: "thinkwork-dev-api-routine-approval-callback",
       emailSendFunctionName: "thinkwork-dev-api-email-send",
       routineTaskPythonFunctionName: "thinkwork-dev-api-routine-task-python",
@@ -613,7 +615,11 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
       null,
       {
         routineId: "routine-a",
-        input: { emailSendFunctionName: "attacker-controlled" },
+        input: {
+          tenantId: "attacker-tenant",
+          routineId: "attacker-routine",
+          emailSendFunctionName: "attacker-controlled",
+        },
       },
       ctx,
     );
@@ -624,6 +630,10 @@ describe("triggerRoutineRun — SFN.StartExecution swap", () => {
     expect(JSON.parse(startCall.input.input).emailSendFunctionName).toBe(
       "thinkwork-dev-api-email-send",
     );
+    expect(JSON.parse(startCall.input.input)).toMatchObject({
+      tenantId: "tenant-a",
+      routineId: "routine-a",
+    });
   });
 
   it("rejects trigger on a legacy_python routine with a deprecation error (not a silent fallback)", async () => {

@@ -602,11 +602,17 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           );
         } else {
           try {
-            const routineInput = buildRoutineExecutionInput({
-              triggerId,
-              triggerSource: "schedule",
-              scheduleName: scheduleName ?? null,
-            });
+            const routineInput = buildRoutineExecutionInput(
+              {
+                triggerId,
+                triggerSource: "schedule",
+                scheduleName: scheduleName ?? null,
+              },
+              {
+                tenantId,
+                routineId,
+              },
+            );
             const startResp = await _SFN_CLIENT.send(
               new StartExecutionCommand({
                 stateMachineArn: routine.state_machine_alias_arn,
@@ -701,9 +707,12 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
 
 export function buildRoutineExecutionInput(
   userInput: Record<string, unknown>,
+  routine: { tenantId: string; routineId: string },
 ): Record<string, unknown> {
   return {
     ...userInput,
+    tenantId: routine.tenantId,
+    routineId: routine.routineId,
     inboxApprovalFunctionName: runtimeFunctionName(
       "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
       "routine-approval-callback",

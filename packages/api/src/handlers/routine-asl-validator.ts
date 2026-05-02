@@ -372,7 +372,16 @@ function reconstructArgsForTask(
   // the user-authored args shape. taskToken/executionId/nodeId/etc. are
   // emitter concerns, not recipe args.
   const stripped = { ...payload };
-  for (const k of ["taskToken.$", "executionId.$", "nodeId"]) {
+  for (const k of [
+    "taskToken.$",
+    "tenantId.$",
+    "tenantId",
+    "routineId.$",
+    "routineId",
+    "executionId.$",
+    "executionId",
+    "nodeId",
+  ]) {
     delete stripped[k];
   }
   if (recipe.id === "tool_invoke") {

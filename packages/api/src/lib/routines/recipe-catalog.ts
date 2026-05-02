@@ -572,6 +572,9 @@ const _CATALOG: RecipeDefinition[] = [
     resourceArnPattern: RESOURCE_ARN_PATTERNS.emailSend,
     aslEmitter: (args, ctx) => {
       const payload: Record<string, unknown> = {
+        "tenantId.$": "$$.Execution.Input.tenantId",
+        "routineId.$": "$$.Execution.Input.routineId",
+        "executionId.$": "$$.Execution.Id",
         to: args.to,
         subject: args.subject,
         bodyFormat: args.bodyFormat ?? "markdown",
@@ -679,6 +682,8 @@ const _CATALOG: RecipeDefinition[] = [
             Parameters: {
               "FunctionName.$": "$$.Execution.Input.routineTaskPythonFunctionName",
               "Payload": {
+                "tenantId.$": "$$.Execution.Input.tenantId",
+                "routineId.$": "$$.Execution.Input.routineId",
                 "executionId.$": "$$.Execution.Id",
                 "nodeId": ctx.stateName,
                 code: args.code,

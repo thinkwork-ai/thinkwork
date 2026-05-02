@@ -53,7 +53,10 @@ export async function triggerRoutineRun(
   // via publishRoutineVersion are picked up automatically. Server-owned
   // runtime fields win over caller input so clients cannot redirect recipe
   // Lambda invocations by passing similarly named keys.
-  const sfnInput = buildRoutineExecutionInput(args.input ?? {});
+  const sfnInput = buildRoutineExecutionInput(args.input ?? {}, {
+    tenantId: routine.tenant_id,
+    routineId: routine.id,
+  });
   const sfn = getSfnClient();
   const startResp = await sfn.send(
     new StartExecutionCommand({
@@ -84,9 +87,12 @@ export async function triggerRoutineRun(
 
 export function buildRoutineExecutionInput(
   userInput: Record<string, unknown>,
+  routine: { tenantId: string; routineId: string },
 ): Record<string, unknown> {
   return {
     ...userInput,
+    tenantId: routine.tenantId,
+    routineId: routine.routineId,
     inboxApprovalFunctionName: runtimeFunctionName(
       "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
       "routine-approval-callback",
