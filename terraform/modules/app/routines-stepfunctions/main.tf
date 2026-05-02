@@ -220,6 +220,9 @@ resource "aws_iam_role_policy" "execution_lambda_invoke" {
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-task-*",
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-resume",
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-approval-callback",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-email-send",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-admin-ops-mcp",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-slack-send",
       ]
     }]
   })

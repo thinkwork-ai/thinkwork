@@ -456,6 +456,7 @@ jobs:
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
             -var "ses_inbound_domain=agents.thinkwork.ai" \
             -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
+            -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}" \
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
 
