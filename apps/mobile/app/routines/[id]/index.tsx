@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, ScrollView, Pressable, Switch, Alert, Clipboard, Platform, Animated, Easing } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRoutine, useRoutineRuns, useUpdateRoutine, useDeleteRoutine, useTriggerRoutineRun } from "@/lib/hooks/use-routines";
+import { useRoutine, useRoutineExecutions, useUpdateRoutine, useDeleteRoutine, useTriggerRoutineRun } from "@/lib/hooks/use-routines";
 import {
   Play,
   ChevronRight,
@@ -23,19 +23,25 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 
-type RunStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "suspended";
+// Phase D U13/U14 mobile parity: routine_executions replaces the
+// deprecated RoutineRun type. Status vocabulary lines up with the
+// schema's RoutineExecutionStatus enum.
+type RunStatus =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "awaiting_approval"
+  | "timed_out";
 type Run = {
   id: string;
-  routineId: string;
-  status: RunStatus;
-  startedAt: any;
-  completedAt?: any;
-  error?: string;
-  triggeredBy?: string;
-  metadata?: any;
-  stepResults?: any;
+  status: string;
+  triggerSource: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  totalLlmCostUsdCents: number | null;
+  errorCode: string | null;
   createdAt: string;
-  [key: string]: any;
 };
 
 const TRIGGER_OPTIONS = [
@@ -115,17 +121,20 @@ function TriggerSelect({
   );
 }
 
-function StatusIcon({ status, size = 16 }: { status: RunStatus; size?: number }) {
+function StatusIcon({ status, size = 16 }: { status: string; size?: number }) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   switch (status) {
-    case "completed":
+    case "succeeded":
       return <CheckCircle size={size} color="#22c55e" />;
     case "failed":
       return <XCircle size={size} color="#ef4444" />;
     case "running":
-      return <Clock size={size} color="#f59e0b" />;
+      return <Clock size={size} color="#3b82f6" />;
+    case "awaiting_approval":
+      return <AlertCircle size={size} color="#a855f7" />;
     case "cancelled":
+    case "timed_out":
       return <AlertCircle size={size} color={colors.mutedForeground} />;
     default:
       return <Clock size={size} color={colors.mutedForeground} />;
@@ -160,15 +169,15 @@ function RunRow({
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
-  const startedAtMs = typeof run.startedAt === "string" ? new Date(run.startedAt).getTime() : run.startedAt;
-  const completedAtMs = run.completedAt ? (typeof run.completedAt === "string" ? new Date(run.completedAt).getTime() : run.completedAt) : undefined;
+  const startedAtMs = run.startedAt ? new Date(run.startedAt).getTime() : Date.now();
+  const finishedAtMs = run.finishedAt ? new Date(run.finishedAt).getTime() : undefined;
 
-  const duration = completedAtMs
-    ? formatDuration(startedAtMs, completedAtMs)
+  const duration = finishedAtMs
+    ? formatDuration(startedAtMs, finishedAtMs)
     : run.status === "running"
-    ? "running..."
-    : "\u2014";
-  const trigger = run.triggeredBy === "manual" ? "Manual" : run.triggeredBy ?? "\u2014";
+      ? "running..."
+      : "\u2014";
+  const trigger = run.triggerSource === "manual" ? "Manual" : (run.triggerSource ?? "\u2014");
 
   return (
     <Pressable
@@ -346,8 +355,8 @@ export default function RoutineDetailScreen() {
   // Trigger count from routine triggers
   const triggerCount = routine?.triggers?.length ?? 0;
 
-  const [{ data: runsData }] = useRoutineRuns(id, { limit: 100 });
-  const runs = runsData?.routineRuns;
+  const [{ data: runsData }] = useRoutineExecutions(id, { limit: 100 });
+  const runs = runsData?.routineExecutions;
 
   const [, updateRoutine] = useUpdateRoutine();
   const [, triggerRoutineRun] = useTriggerRoutineRun();
@@ -588,12 +597,25 @@ export default function RoutineDetailScreen() {
                 </View>
               ) : (
                 <View className="bg-white dark:bg-neutral-900 rounded-xl overflow-hidden mx-4">
-                  {runs.map((run: Run, idx: number) => (
+                  {runs.map((run, idx) => (
                     <RunRow
                       key={run.id}
-                      run={run}
+                      run={{
+                        id: run.id,
+                        status: run.status,
+                        triggerSource: run.triggerSource,
+                        startedAt: run.startedAt ?? null,
+                        finishedAt: run.finishedAt ?? null,
+                        totalLlmCostUsdCents: run.totalLlmCostUsdCents ?? null,
+                        errorCode: run.errorCode ?? null,
+                        createdAt: run.createdAt,
+                      }}
                       isLast={idx === runs.length - 1}
-                      onPress={() => router.push(`/routines/${id}/runs/${run.id}`)}
+                      onPress={() =>
+                        router.push(
+                          `/routines/${id}/executions/${run.id}` as any,
+                        )
+                      }
                     />
                   ))}
                 </View>
