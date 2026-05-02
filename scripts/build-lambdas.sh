@@ -291,6 +291,8 @@ build_handler "routine-step-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-step-callback.ts"
 build_handler "routine-execution-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-execution-callback.ts"
+build_handler "routine-task-weather-email" \
+  "$REPO_ROOT/packages/api/src/handlers/routine-task-weather-email.ts"
 
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"

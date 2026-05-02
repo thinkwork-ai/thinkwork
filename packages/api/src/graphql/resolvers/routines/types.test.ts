@@ -21,13 +21,24 @@ vi.mock("../../utils.js", () => ({
       }),
     }),
   },
-  snakeToCamel: <T,>(row: T): T => row,
+  snakeToCamel: <T>(row: T): T => row,
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   routineAslVersions: {
     state_machine_arn: "state_machine_arn",
     version_arn: "version_arn",
+  },
+  routineStepEvents: {
+    execution_id: "execution_id",
+    started_at: "started_at",
+    created_at: "created_at",
+  },
+  routines: {
+    id: "routines.id",
+  },
+  scheduledJobs: {
+    id: "scheduled_jobs.id",
   },
 }));
 
