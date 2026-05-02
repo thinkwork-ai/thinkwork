@@ -754,6 +754,17 @@ export const CreateRoutineMutation = graphql(`
   }
 `);
 
+export const TriggerRoutineRunMutation = graphql(`
+  mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
+    triggerRoutineRun(routineId: $routineId, input: $input) {
+      id
+      status
+      triggerSource
+      startedAt
+    }
+  }
+`);
+
 // Phase D U13: run-detail surface (plan
 // docs/plans/2026-05-01-007-feat-routines-phase-d-ui-plan.md §U13).
 // One round-trip pulls execution metadata + step events + the routine's
