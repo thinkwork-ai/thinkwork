@@ -768,9 +768,15 @@ export const PlanRoutineDraftMutation = graphql(`
           label
           value
           inputType
+          control
           required
           editable
           options
+          placeholder
+          helpText
+          min
+          max
+          pattern
         }
       }
     }
@@ -791,9 +797,15 @@ export const RoutineRecipeCatalogQuery = graphql(`
         label
         value
         inputType
+        control
         required
         editable
         options
+        placeholder
+        helpText
+        min
+        max
+        pattern
       }
     }
   }
@@ -839,9 +851,15 @@ export const RoutineDefinitionQuery = graphql(`
           label
           value
           inputType
+          control
           required
           editable
           options
+          placeholder
+          helpText
+          min
+          max
+          pattern
         }
       }
     }

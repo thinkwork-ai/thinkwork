@@ -15,11 +15,17 @@ import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 export type RoutineConfigField = {
   key: string;
   label: string;
-  value: unknown | null;
+  value?: unknown | null;
   inputType: string;
+  control?: string | null;
   required: boolean;
   editable: boolean;
   options?: string[] | null;
+  placeholder?: string | null;
+  helpText?: string | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
 };
 
 export type RoutineConfigStep = {
@@ -38,6 +44,7 @@ interface RoutineStepConfigEditorProps {
   onLabelChange?: (nodeId: string, value: string) => void;
   onMoveStep?: (nodeId: string, direction: "up" | "down") => void;
   onRemoveStep?: (nodeId: string) => void;
+  fieldErrors?: Record<string, string>;
 }
 
 export function RoutineStepConfigEditor({
@@ -47,6 +54,7 @@ export function RoutineStepConfigEditor({
   onLabelChange,
   onMoveStep,
   onRemoveStep,
+  fieldErrors = {},
 }: RoutineStepConfigEditorProps) {
   return (
     <div className="divide-y divide-border/70">
@@ -141,6 +149,7 @@ export function RoutineStepConfigEditor({
                   step={step}
                   field={field}
                   value={fieldValues[fieldKey(step.nodeId, field.key)] ?? ""}
+                  error={fieldErrors[fieldKey(step.nodeId, field.key)]}
                   onChange={(value) =>
                     onFieldChange(fieldKey(step.nodeId, field.key), value)
                   }
@@ -158,18 +167,25 @@ function ConfigFieldInput({
   step,
   field,
   value,
+  error,
   onChange,
 }: {
   step: RoutineConfigStep;
   field: RoutineConfigField;
   value: string;
+  error?: string;
   onChange: (value: string) => void;
 }) {
   const id = `${step.nodeId}-${field.key}`;
   const readOnly = !field.editable;
-  const multiline = shouldUseTextarea(field, value);
-  const monospace = shouldUseMonospace(field);
-  const fullWidth = multiline || field.inputType === "email_array";
+  const control = controlForField(field, value);
+  const multiline =
+    control === "textarea" ||
+    control === "code" ||
+    control === "email_list" ||
+    control === "string_list";
+  const monospace = control === "code";
+  const fullWidth = multiline;
 
   return (
     <label
@@ -191,9 +207,13 @@ function ConfigFieldInput({
           </span>
         )}
       </span>
-      {field.inputType === "select" && field.options?.length ? (
+      {control === "select" && field.options?.length ? (
         <Select value={value} onValueChange={onChange} disabled={readOnly}>
-          <SelectTrigger id={id} className="w-full">
+          <SelectTrigger
+            id={id}
+            className="w-full"
+            aria-invalid={Boolean(error)}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -209,7 +229,9 @@ function ConfigFieldInput({
           id={id}
           value={value}
           readOnly={readOnly}
-          rows={textareaRows(field, value)}
+          placeholder={field.placeholder ?? undefined}
+          aria-invalid={Boolean(error)}
+          rows={textareaRows(control, value)}
           className={cn(
             "min-h-20 resize-y",
             monospace && "font-mono text-xs leading-5",
@@ -220,15 +242,29 @@ function ConfigFieldInput({
       ) : (
         <Input
           id={id}
-          type={field.inputType === "number" ? "number" : "text"}
+          type={control === "number" ? "number" : "text"}
           value={value}
           readOnly={readOnly}
+          placeholder={field.placeholder ?? undefined}
+          min={field.min ?? undefined}
+          max={field.max ?? undefined}
+          aria-invalid={Boolean(error)}
           className={cn(
             monospace && "font-mono text-xs",
             readOnly && "text-muted-foreground",
           )}
           onChange={(event) => onChange(event.target.value)}
         />
+      )}
+      {(error || field.helpText) && (
+        <span
+          className={cn(
+            "mt-1 block text-xs",
+            error ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {error ?? field.helpText}
+        </span>
       )}
     </label>
   );
@@ -291,6 +327,27 @@ function valueForMutation(field: RoutineConfigField, value: string): unknown {
   return value;
 }
 
+export function validationErrorsFromSteps(
+  steps: RoutineConfigStep[],
+  values: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    steps
+      .flatMap((step) =>
+        step.configFields.map((field) => {
+          const key = fieldKey(step.nodeId, field.key);
+          const error = validateField(field, values[key] ?? "");
+          return error ? ([key, error] as const) : null;
+        }),
+      )
+      .filter((entry): entry is readonly [string, string] => Boolean(entry)),
+  );
+}
+
+export function hasValidationErrors(errors: Record<string, string>): boolean {
+  return Object.keys(errors).length > 0;
+}
+
 function stringValue(value: unknown): string {
   if (Array.isArray(value)) return value.join("\n");
   if (typeof value === "number") return String(value);
@@ -303,56 +360,90 @@ function fieldKey(nodeId: string, key: string): string {
   return `${nodeId}.${key}`;
 }
 
-function shouldUseTextarea(field: RoutineConfigField, value: string): boolean {
-  if (
-    field.inputType === "email_array" ||
-    field.inputType === "string_array"
-  ) {
-    return true;
+function validateField(
+  field: RoutineConfigField,
+  value: string,
+): string | null {
+  const trimmed = value.trim();
+  if (field.required && !trimmed) return `${field.label} is required.`;
+
+  if (!trimmed) return null;
+
+  if (field.inputType === "email_array" || field.control === "email_list") {
+    const emails = listValues(value);
+    if (field.required && emails.length === 0) {
+      return `${field.label} needs at least one recipient.`;
+    }
+    const invalid = emails.find((email) => !isLikelyEmail(email));
+    if (invalid) return `${invalid} is not a valid email address.`;
   }
 
-  const key = field.key.toLowerCase();
-  const label = field.label.toLowerCase();
-  const longValue = value.includes("\n") || value.length > 96;
-  if (longValue) return true;
-  if (key.includes("path") || key.includes("source")) return false;
+  if (field.inputType === "number" || field.control === "number") {
+    const numericValue = Number(trimmed);
+    if (!Number.isFinite(numericValue))
+      return `${field.label} must be a number.`;
+    if (field.min != null && numericValue < field.min) {
+      return `${field.label} must be at least ${field.min}.`;
+    }
+    if (field.max != null && numericValue > field.max) {
+      return `${field.label} must be at most ${field.max}.`;
+    }
+  }
 
+  if (field.inputType === "select" && field.options?.length) {
+    if (!field.options.includes(value)) {
+      return `${field.label} must be one of ${field.options.join(", ")}.`;
+    }
+  }
+
+  if (field.pattern) {
+    const regex = new RegExp(field.pattern);
+    if (!regex.test(trimmed)) return `${field.label} has an invalid format.`;
+  }
+
+  return null;
+}
+
+function controlForField(field: RoutineConfigField, value: string): string {
+  if (field.control && isKnownControl(field.control)) return field.control;
+  if (field.inputType === "email_array") return "email_list";
+  if (field.inputType === "string_array") return "string_list";
+  if (field.inputType === "select") return "select";
+  if (field.inputType === "number") return "number";
+  if (value.includes("\n") || value.length > 96) return "textarea";
+  return "text";
+}
+
+function listValues(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isLikelyEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isKnownControl(value: string): boolean {
   return [
-    "body",
-    "code",
-    "sql",
     "text",
-    "message",
-    "markdowncontext",
-    "expression",
-    "requestbody",
-    "decisionschema",
-    "environment",
-  ].some((token) => key.includes(token) || label.includes(token));
-}
-
-function shouldUseMonospace(field: RoutineConfigField): boolean {
-  const key = field.key.toLowerCase();
-  const label = field.label.toLowerCase();
-  return [
+    "textarea",
     "code",
-    "sql",
-    "expression",
-    "json",
-    "schema",
-    "bodypath",
-    "requestbody",
-    "environment",
-  ].some((token) => key.includes(token) || label.includes(token));
+    "select",
+    "number",
+    "email_list",
+    "string_list",
+  ].includes(value);
 }
 
-function textareaRows(field: RoutineConfigField, value: string): number {
-  if (field.key.toLowerCase().includes("code")) return 8;
-  if (field.key.toLowerCase().includes("sql")) return 6;
+function textareaRows(control: string, value: string): number {
+  if (control === "code") return 8;
   if (value.includes("\n")) {
     return Math.min(10, Math.max(3, value.split("\n").length));
   }
-  return field.inputType === "email_array" || field.inputType === "string_array"
-    ? 3
-    : 4;
+  if (control === "email_list" || control === "string_list") {
+    return 3;
+  }
+  return 4;
 }

@@ -221,8 +221,10 @@ describe("recipe-catalog", () => {
           label: "To",
           value: ["ericodom37@gmail.com"],
           inputType: "email_array",
+          control: "email_list",
           required: true,
           editable: true,
+          helpText: "One recipient per line or comma-separated.",
         }),
         expect.objectContaining({
           key: "subject",
@@ -235,6 +237,7 @@ describe("recipe-catalog", () => {
           key: "body",
           value: null,
           inputType: "text",
+          control: "textarea",
           editable: true,
         }),
         expect.objectContaining({
@@ -247,11 +250,29 @@ describe("recipe-catalog", () => {
         expect.objectContaining({
           key: "bodyPath",
           value: "$.FetchAustinWeather.stdoutPreview",
+          control: "text",
           editable: false,
         }),
       ]),
     );
     expect(fields.map((field) => field.key)).not.toContain("cc");
+  });
+
+  it("exposes validation metadata for bounded numeric and patterned fields", () => {
+    expect(getRecipeConfigFields("wait", { seconds: 60 })).toContainEqual(
+      expect.objectContaining({
+        key: "seconds",
+        control: "number",
+        min: 1,
+        max: 31_536_000,
+      }),
+    );
+    expect(getRecipeConfigFields("set_variable")).toContainEqual(
+      expect.objectContaining({
+        key: "name",
+        pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      }),
+    );
   });
 
   it("email_send and python payloads include server-owned routine identity", () => {

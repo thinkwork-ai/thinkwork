@@ -29,6 +29,7 @@ interface RoutineWorkflowEditorProps {
   onMoveStep: (nodeId: string, direction: "up" | "down") => void;
   onRemoveStep: (nodeId: string) => void;
   catalogLoading?: boolean;
+  fieldErrors?: Record<string, string>;
 }
 
 export function RoutineWorkflowEditor({
@@ -41,6 +42,7 @@ export function RoutineWorkflowEditor({
   onMoveStep,
   onRemoveStep,
   catalogLoading = false,
+  fieldErrors = {},
 }: RoutineWorkflowEditorProps) {
   const [search, setSearch] = useState("");
   const filteredRecipes = useMemo(
@@ -160,6 +162,7 @@ export function RoutineWorkflowEditor({
             onLabelChange={onLabelChange}
             onMoveStep={onMoveStep}
             onRemoveStep={onRemoveStep}
+            fieldErrors={fieldErrors}
           />
         ) : (
           <div className="px-4 py-12 text-center">
@@ -196,12 +199,9 @@ function filterRecipes(
   const term = search.trim().toLowerCase();
   if (!term) return recipes;
   return recipes.filter((recipe) =>
-    [
-      recipe.id,
-      recipe.displayName,
-      recipe.description,
-      recipe.category,
-    ].some((value) => value.toLowerCase().includes(term)),
+    [recipe.id, recipe.displayName, recipe.description, recipe.category].some(
+      (value) => value.toLowerCase().includes(term),
+    ),
   );
 }
 

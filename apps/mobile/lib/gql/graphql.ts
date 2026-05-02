@@ -3766,11 +3766,17 @@ export type RoutineDefinition = {
 
 export type RoutineDefinitionConfigField = {
   __typename?: 'RoutineDefinitionConfigField';
+  control?: Maybe<Scalars['String']['output']>;
   editable: Scalars['Boolean']['output'];
+  helpText?: Maybe<Scalars['String']['output']>;
   inputType: Scalars['String']['output'];
   key: Scalars['String']['output'];
   label: Scalars['String']['output'];
+  max?: Maybe<Scalars['Float']['output']>;
+  min?: Maybe<Scalars['Float']['output']>;
   options?: Maybe<Array<Scalars['String']['output']>>;
+  pattern?: Maybe<Scalars['String']['output']>;
+  placeholder?: Maybe<Scalars['String']['output']>;
   required: Scalars['Boolean']['output'];
   value?: Maybe<Scalars['AWSJSON']['output']>;
 };
@@ -3856,11 +3862,17 @@ export type RoutineRecipe = {
 
 export type RoutineRecipeConfigField = {
   __typename?: 'RoutineRecipeConfigField';
+  control?: Maybe<Scalars['String']['output']>;
   editable: Scalars['Boolean']['output'];
+  helpText?: Maybe<Scalars['String']['output']>;
   inputType: Scalars['String']['output'];
   key: Scalars['String']['output'];
   label: Scalars['String']['output'];
+  max?: Maybe<Scalars['Float']['output']>;
+  min?: Maybe<Scalars['Float']['output']>;
   options?: Maybe<Array<Scalars['String']['output']>>;
+  pattern?: Maybe<Scalars['String']['output']>;
+  placeholder?: Maybe<Scalars['String']['output']>;
   required: Scalars['Boolean']['output'];
   value?: Maybe<Scalars['AWSJSON']['output']>;
 };

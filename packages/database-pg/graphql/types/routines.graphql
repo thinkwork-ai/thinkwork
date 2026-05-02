@@ -183,9 +183,15 @@ type RoutineDefinitionConfigField {
   label: String!
   value: AWSJSON
   inputType: String!
+  control: String
   required: Boolean!
   editable: Boolean!
   options: [String!]
+  placeholder: String
+  helpText: String
+  min: Float
+  max: Float
+  pattern: String
 }
 
 type RoutineDefinition {
@@ -213,9 +219,15 @@ type RoutineRecipeConfigField {
   label: String!
   value: AWSJSON
   inputType: String!
+  control: String
   required: Boolean!
   editable: Boolean!
   options: [String!]
+  placeholder: String
+  helpText: String
+  min: Float
+  max: Float
+  pattern: String
 }
 
 type RoutineRecipe {

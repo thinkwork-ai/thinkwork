@@ -112,13 +112,28 @@ export type RecipeConfigInputType =
   | "string_array"
   | "number";
 
+export type RecipeConfigControl =
+  | "text"
+  | "textarea"
+  | "code"
+  | "select"
+  | "number"
+  | "email_list"
+  | "string_list";
+
 export interface RecipeConfigFieldDefinition {
   key: string;
   label: string;
   inputType: RecipeConfigInputType;
+  control?: RecipeConfigControl;
   required?: boolean;
   editable?: boolean;
   options?: readonly string[];
+  placeholder?: string;
+  helpText?: string;
+  min?: number;
+  max?: number;
+  pattern?: string;
 }
 
 export interface RecipeConfigField {
@@ -126,9 +141,15 @@ export interface RecipeConfigField {
   label: string;
   value: unknown | null;
   inputType: RecipeConfigInputType;
+  control: RecipeConfigControl | null;
   required: boolean;
   editable: boolean;
   options: readonly string[] | null;
+  placeholder: string | null;
+  helpText: string | null;
+  min: number | null;
+  max: number | null;
+  pattern: string | null;
 }
 
 export interface RecipeDefinition {
@@ -270,8 +291,11 @@ const _CATALOG: RecipeDefinition[] = [
         key: "seconds",
         label: "Seconds",
         inputType: "number",
+        control: "number",
         required: true,
         editable: true,
+        min: 1,
+        max: 31_536_000,
       },
     ],
     resourceArnPattern: null,
@@ -311,8 +335,10 @@ const _CATALOG: RecipeDefinition[] = [
         key: "agentId",
         label: "Agent ID",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
+        placeholder: "agent runtime id",
       },
     ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.agentInvoke,
@@ -356,6 +382,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "toolId",
         label: "Tool ID",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -363,6 +390,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "toolSource",
         label: "Tool source",
         inputType: "select",
+        control: "select",
         required: true,
         editable: true,
         options: ["mcp", "builtin", "skill"],
@@ -411,6 +439,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "routineId",
         label: "Routine ID",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -463,6 +492,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "method",
         label: "Method",
         inputType: "select",
+        control: "select",
         required: true,
         editable: true,
         options: ["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -471,13 +501,16 @@ const _CATALOG: RecipeDefinition[] = [
         key: "apiEndpoint",
         label: "API endpoint",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
+        placeholder: "https://api.example.com/path",
       },
       {
         key: "connectionArn",
         label: "Connection ARN",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -529,6 +562,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "sql",
         label: "SQL",
         inputType: "text",
+        control: "code",
         required: true,
         editable: true,
       },
@@ -536,6 +570,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "databaseName",
         label: "Database",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -582,8 +617,10 @@ const _CATALOG: RecipeDefinition[] = [
         key: "expression",
         label: "Expression",
         inputType: "text",
+        control: "code",
         required: true,
         editable: true,
+        helpText: "JSONata expression evaluated against the current state.",
       },
     ],
     resourceArnPattern: null,
@@ -622,13 +659,16 @@ const _CATALOG: RecipeDefinition[] = [
         key: "name",
         label: "Name",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
+        pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$",
       },
       {
         key: "value",
         label: "Value",
         inputType: "text",
+        control: "textarea",
         required: true,
         editable: true,
       },
@@ -671,6 +711,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "channelId",
         label: "Channel ID",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -678,6 +719,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "text",
         label: "Message",
         inputType: "text",
+        control: "textarea",
         required: true,
         editable: true,
       },
@@ -730,13 +772,17 @@ const _CATALOG: RecipeDefinition[] = [
         key: "to",
         label: "To",
         inputType: "email_array",
+        control: "email_list",
         required: true,
         editable: true,
+        placeholder: "name@example.com",
+        helpText: "One recipient per line or comma-separated.",
       },
       {
         key: "subject",
         label: "Subject",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -744,12 +790,14 @@ const _CATALOG: RecipeDefinition[] = [
         key: "body",
         label: "Body",
         inputType: "text",
+        control: "textarea",
         editable: true,
       },
       {
         key: "bodyFormat",
         label: "Body format",
         inputType: "select",
+        control: "select",
         options: ["text", "html", "markdown"],
         editable: true,
       },
@@ -757,7 +805,9 @@ const _CATALOG: RecipeDefinition[] = [
         key: "bodyPath",
         label: "Body source",
         inputType: "text",
+        control: "text",
         editable: false,
+        helpText: "JSONPath source from an earlier step.",
       },
     ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.emailSend,
@@ -819,6 +869,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "title",
         label: "Title",
         inputType: "text",
+        control: "text",
         required: true,
         editable: true,
       },
@@ -826,6 +877,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "markdownContext",
         label: "Context",
         inputType: "text",
+        control: "textarea",
         required: true,
         editable: true,
       },
@@ -884,6 +936,7 @@ const _CATALOG: RecipeDefinition[] = [
         key: "code",
         label: "Code",
         inputType: "text",
+        control: "code",
         required: true,
         editable: true,
       },
@@ -891,12 +944,16 @@ const _CATALOG: RecipeDefinition[] = [
         key: "timeoutSeconds",
         label: "Timeout seconds",
         inputType: "number",
+        control: "number",
         editable: false,
+        min: 1,
+        max: 900,
       },
       {
         key: "networkAllowlist",
         label: "Network allowlist",
         inputType: "string_array",
+        control: "string_list",
         editable: false,
       },
     ],
@@ -965,9 +1022,15 @@ export function getRecipeConfigFields(
     label: field.label,
     value: args[field.key] ?? null,
     inputType: field.inputType,
+    control: field.control ?? null,
     required: field.required ?? required.has(field.key),
     editable: field.editable ?? true,
     options: field.options ?? null,
+    placeholder: field.placeholder ?? null,
+    helpText: field.helpText ?? null,
+    min: field.min ?? null,
+    max: field.max ?? null,
+    pattern: field.pattern ?? null,
   }));
 }
 

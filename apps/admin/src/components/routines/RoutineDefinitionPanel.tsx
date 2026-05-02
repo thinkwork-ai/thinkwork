@@ -12,6 +12,8 @@ import {
 } from "@/lib/graphql-queries";
 import {
   argsFromStepFields,
+  hasValidationErrors,
+  validationErrorsFromSteps,
   valuesFromSteps,
   type RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
@@ -65,12 +67,21 @@ export function RoutineDefinitionPanel({
     () => stepsForMutation(steps, fieldValues),
     [fieldValues, steps],
   );
+  const validationErrors = useMemo(
+    () => validationErrorsFromSteps(steps, fieldValues),
+    [fieldValues, steps],
+  );
+  const invalid = hasValidationErrors(validationErrors);
 
   const dirty =
     JSON.stringify(originalSnapshot) !== JSON.stringify(editedSnapshot);
 
   const save = async () => {
     if (!definition || !dirty) return;
+    if (invalid) {
+      toast.error("Fix routine configuration errors before saving.");
+      return;
+    }
     const res = await executeUpdate({
       input: {
         routineId,
@@ -143,7 +154,7 @@ export function RoutineDefinitionPanel({
           <Button
             size="sm"
             onClick={save}
-            disabled={!dirty || updateState.fetching}
+            disabled={!dirty || invalid || updateState.fetching}
           >
             <Save className="h-3.5 w-3.5" />
             {updateState.fetching ? "Saving..." : "Save"}
@@ -181,6 +192,7 @@ export function RoutineDefinitionPanel({
               current.filter((step) => step.nodeId !== nodeId),
             )
           }
+          fieldErrors={validationErrors}
           catalogLoading={catalogResult.fetching}
         />
       </div>

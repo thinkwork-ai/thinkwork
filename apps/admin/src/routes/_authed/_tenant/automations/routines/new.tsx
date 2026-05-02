@@ -21,6 +21,8 @@ import {
 } from "@/components/routines/RoutineWorkflowEditor";
 import {
   argsFromStepFields,
+  hasValidationErrors,
+  validationErrorsFromSteps,
   valuesFromSteps,
   type RoutineConfigStep,
 } from "@/components/routines/RoutineStepConfigEditor";
@@ -59,9 +61,15 @@ function NewRoutinePage() {
     [catalogResult.data?.routineRecipeCatalog],
   );
   const steps = draft?.steps ?? [];
+  const validationErrors = useMemo(
+    () => validationErrorsFromSteps(steps, fieldValues),
+    [fieldValues, steps],
+  );
+  const invalid = hasValidationErrors(validationErrors);
   const canPlan =
     name.trim().length > 0 && description.trim().length > 0 && !submitting;
-  const canPublish = name.trim().length > 0 && steps.length > 0 && !submitting;
+  const canPublish =
+    name.trim().length > 0 && steps.length > 0 && !invalid && !submitting;
 
   const replaceSteps = useCallback(
     (nextSteps: RoutineConfigStep[]) => {
@@ -290,6 +298,7 @@ function NewRoutinePage() {
         onLabelChange={handleLabelChange}
         onMoveStep={handleMoveStep}
         onRemoveStep={handleRemoveStep}
+        fieldErrors={validationErrors}
         catalogLoading={catalogResult.fetching}
       />
     </div>
