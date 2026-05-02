@@ -34,7 +34,47 @@ interface SendEmailRequest {
 	quotedBody?: string;
 }
 
-export async function handler(event: APIGatewayProxyEventV2) {
+interface DirectSendEmailRequest {
+	tenantId?: string;
+	routineId?: string;
+	executionId?: string;
+	to?: string[] | string;
+	cc?: string[] | string;
+	subject?: string;
+	body?: string;
+	bodyFormat?: "text" | "html" | "markdown";
+	source?: string;
+}
+
+function isHttpEvent(event: unknown): event is APIGatewayProxyEventV2 {
+	return (
+		typeof event === "object" &&
+		event !== null &&
+		"requestContext" in event &&
+		"headers" in event
+	);
+}
+
+function parseRecipients(value: string[] | string | undefined): string[] {
+	if (Array.isArray(value)) {
+		return value.map((item) => item.trim()).filter(Boolean);
+	}
+	if (typeof value === "string") {
+		return value
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean);
+	}
+	return [];
+}
+
+export async function handler(
+	event: APIGatewayProxyEventV2 | DirectSendEmailRequest = {},
+) {
+	if (!isHttpEvent(event)) {
+		return sendDirectRoutineEmail(event);
+	}
+
 	// Auth
 	const authHeader = event.headers?.authorization || "";
 	if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== THINKWORK_API_SECRET) {
@@ -69,7 +109,7 @@ export async function handler(event: APIGatewayProxyEventV2) {
 	}
 
 	// Validate recipient count (max 5)
-	const recipients = req.to.split(",").map((e) => e.trim()).filter(Boolean);
+	const recipients = parseRecipients(req.to);
 	if (recipients.length > 5) {
 		return {
 			statusCode: 400,
@@ -212,4 +252,56 @@ export async function handler(event: APIGatewayProxyEventV2) {
 			body: JSON.stringify({ error: "Failed to send email" }),
 		};
 	}
+}
+
+async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
+	const recipients = parseRecipients(req.to);
+	const cc = parseRecipients(req.cc);
+	const subject = req.subject?.trim() ?? "";
+	const body = req.body?.trim() ?? "";
+	const source =
+		req.source?.trim() ||
+		process.env.ROUTINE_EMAIL_SOURCE ||
+		"automation@agents.thinkwork.ai";
+
+	if (recipients.length === 0 || !subject || !body) {
+		return {
+			statusCode: 400,
+			body: JSON.stringify({
+				error: "Missing required fields: to, subject, body",
+			}),
+		};
+	}
+	if (recipients.length > 5) {
+		return {
+			statusCode: 400,
+			body: JSON.stringify({ error: "Maximum 5 recipients per email" }),
+		};
+	}
+
+	const { SESClient, SendEmailCommand } = await import("@aws-sdk/client-ses");
+	const ses = new SESClient({});
+	const messageBody =
+		req.bodyFormat === "html"
+			? { Html: { Data: body, Charset: "UTF-8" } }
+			: { Text: { Data: body, Charset: "UTF-8" } };
+
+	const result = await ses.send(
+		new SendEmailCommand({
+			Source: source,
+			Destination: {
+				ToAddresses: recipients,
+				...(cc.length > 0 ? { CcAddresses: cc } : {}),
+			},
+			Message: {
+				Subject: { Data: subject, Charset: "UTF-8" },
+				Body: messageBody,
+			},
+		}),
+	);
+
+	return {
+		messageId: result.MessageId ?? null,
+		status: "sent",
+	};
 }

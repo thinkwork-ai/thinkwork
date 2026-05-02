@@ -204,6 +204,32 @@ describe("recipe-catalog", () => {
       }),
     ).toBe(false);
   });
+
+  it("email_send and python payloads include server-owned routine identity", () => {
+    const email = getRecipe("email_send")!.aslEmitter(
+      {
+        to: ["ericodom37@gmail.com"],
+        subject: "Austin weather update",
+        bodyPath: "$.FetchAustinWeather.stdoutPreview",
+      },
+      { stateName: "EmailAustinWeather", next: null, end: true },
+    );
+    expect((email.Parameters as any).Payload).toMatchObject({
+      "tenantId.$": "$$.Execution.Input.tenantId",
+      "routineId.$": "$$.Execution.Input.routineId",
+      "executionId.$": "$$.Execution.Id",
+    });
+
+    const python = getRecipe("python")!.aslEmitter(
+      { code: "print('ok')" },
+      { stateName: "FetchAustinWeather", next: null, end: true },
+    );
+    expect((python.Parameters as any).Payload).toMatchObject({
+      "tenantId.$": "$$.Execution.Input.tenantId",
+      "routineId.$": "$$.Execution.Input.routineId",
+      "executionId.$": "$$.Execution.Id",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
