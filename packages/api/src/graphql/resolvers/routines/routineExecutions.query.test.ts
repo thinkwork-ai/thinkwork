@@ -12,6 +12,7 @@ const mockWhere = vi.fn();
 const mockOrderBy = vi.fn();
 const mockLimit = vi.fn();
 const mockRequireTenantMember = vi.fn();
+const mockResolveCallerTenantId = vi.fn();
 
 vi.mock("../../utils.js", () => ({
   db: {
@@ -57,6 +58,10 @@ vi.mock("../core/authz.js", () => ({
   requireTenantMember: mockRequireTenantMember,
 }));
 
+vi.mock("../core/resolve-auth-user.js", () => ({
+  resolveCallerTenantId: mockResolveCallerTenantId,
+}));
+
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ and: args }),
   desc: (col: unknown) => ({ desc: col }),
@@ -72,8 +77,10 @@ beforeEach(async () => {
   mockOrderBy.mockReset();
   mockLimit.mockReset();
   mockRequireTenantMember.mockReset();
+  mockResolveCallerTenantId.mockReset();
   vi.resetModules();
 
+  mockResolveCallerTenantId.mockResolvedValue(null);
   mockLimit.mockImplementation(() => Promise.resolve(mockRows()));
   mockOrderBy.mockReturnValue({ limit: mockLimit });
   mockWhere.mockReturnValue({
@@ -133,6 +140,32 @@ describe("routine execution queries", () => {
     await expect(
       resolvers.routineExecution(null, { id: "missing" }, {} as any),
     ).resolves.toBeNull();
+  });
+
+  it("allows a single execution when the resolved caller tenant matches", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "exec-1",
+        tenant_id: "tenant-a",
+        routine_id: "routine-a",
+        trigger_source: "manual",
+        status: "succeeded",
+      },
+    ]);
+    mockResolveCallerTenantId.mockResolvedValue("tenant-a");
+
+    const result = await resolvers.routineExecution(null, { id: "exec-1" }, {
+      auth: { authType: "cognito", tenantId: null },
+    } as any);
+
+    expect(result).toEqual({
+      id: "exec-1",
+      tenantId: "tenant-a",
+      routineId: "routine-a",
+      triggerSource: "manual",
+      status: "succeeded",
+    });
+    expect(mockRequireTenantMember).not.toHaveBeenCalled();
   });
 
   it("returns ordered step events for an execution", async () => {

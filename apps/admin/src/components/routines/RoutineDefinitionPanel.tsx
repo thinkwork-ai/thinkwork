@@ -71,6 +71,7 @@ export function RoutineDefinitionPanel({
     () => validationErrorsFromSteps(steps, fieldValues),
     [fieldValues, steps],
   );
+  const issueCount = Object.keys(validationErrors).length;
   const invalid = hasValidationErrors(validationErrors);
 
   const dirty =
@@ -143,18 +144,36 @@ export function RoutineDefinitionPanel({
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {definition.description}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {dirty
-              ? "Unsaved changes will not run until you save."
-              : "Test Routine runs the saved workflow."}
-          </p>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+            {dirty ? (
+              <Badge variant="secondary">Unsaved changes</Badge>
+            ) : (
+              <Badge variant="outline">Saved workflow</Badge>
+            )}
+            {issueCount > 0 && (
+              <Badge className="border-transparent bg-destructive/10 text-destructive">
+                {issueCount} {issueCount === 1 ? "issue" : "issues"}
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {dirty
+                ? "Save before testing this version."
+                : "Test Routine runs this saved version."}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          {dirty && <Badge variant="secondary">Unsaved</Badge>}
           <Button
             size="sm"
             onClick={save}
             disabled={!dirty || invalid || updateState.fetching}
+            title={
+              invalid
+                ? "Fix configuration issues before saving"
+                : !dirty
+                  ? "No workflow changes to save"
+                  : undefined
+            }
           >
             <Save className="h-3.5 w-3.5" />
             {updateState.fetching ? "Saving..." : "Save"}
