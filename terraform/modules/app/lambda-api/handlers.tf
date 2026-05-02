@@ -71,12 +71,6 @@ locals {
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
     COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID  = var.company_brain_source_agent_model_id
-    SYSTEM_WORKFLOW_STATE_MACHINE_ARNS = jsonencode({
-      "wiki-build"              = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-wiki-build"
-      "evaluation-runs"         = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-evaluation-runs"
-      "tenant-agent-activation" = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-tenant-agent-activation"
-    })
-
     # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
     # the actual keys live in Secrets Manager and are fetched by
     # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
