@@ -17,7 +17,7 @@
  *      in a single transaction.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   routineAslVersions,
   routines,
@@ -39,6 +39,21 @@ interface PublishRoutineVersionInput {
   asl: string;
   markdownSummary: string;
   stepManifest: string;
+}
+
+interface PublishableRoutine {
+  id: string;
+  tenant_id: string;
+  engine: string | null;
+  state_machine_arn: string | null;
+  state_machine_alias_arn: string | null;
+  current_version: number | null;
+}
+
+export interface RoutinePublishArtifacts {
+  aslJson: unknown;
+  markdownSummary: string;
+  stepManifestJson: unknown;
 }
 
 export async function publishRoutineVersion(
@@ -87,19 +102,44 @@ export async function publishRoutineVersion(
     throw new Error(`stepManifest is not valid JSON: ${(err as Error).message}`);
   }
 
+  return publishRoutineArtifacts(
+    i.routineId,
+    routine,
+    {
+      aslJson,
+      markdownSummary: i.markdownSummary,
+      stepManifestJson,
+    },
+    ctx,
+  );
+}
+
+export async function publishRoutineArtifacts(
+  routineId: string,
+  routine: PublishableRoutine,
+  artifacts: RoutinePublishArtifacts,
+  ctx: GraphQLContext,
+): Promise<unknown> {
   const validation = await validateRoutineAsl({
-    asl: aslJson,
-    currentRoutineId: i.routineId,
+    asl: artifacts.aslJson,
+    currentRoutineId: routineId,
   });
   if (!validation.valid) {
     throw new Error(
-      validation.errors.map((e) => e.message).join("\n") || "ASL validation failed",
+      validation.errors.map((e) => e.message).join("\n") ||
+        "ASL validation failed",
     );
   }
 
   // Step 4-6 — SFN: update definition, publish version, flip alias.
   const sfn = getSfnClient();
   const previousVersion = routine.current_version ?? 0;
+  const stateMachineArn = routine.state_machine_arn;
+  if (!stateMachineArn) {
+    throw new Error(
+      `Routine ${routineId} has engine='step_functions' but no state machine ARN — invariant violation.`,
+    );
+  }
 
   // Capture the *prior version ARN* the alias was pointing at so we have
   // usable rollback metadata. (The schema's `alias_was_pointing` column
@@ -112,7 +152,7 @@ export async function publishRoutineVersion(
     .from(routineAslVersions)
     .where(
       and(
-        eq(routineAslVersions.routine_id, i.routineId),
+        eq(routineAslVersions.routine_id, routineId),
         eq(routineAslVersions.version_number, previousVersion),
       ),
     );
@@ -120,13 +160,13 @@ export async function publishRoutineVersion(
 
   await sfn.send(
     new UpdateStateMachineCommand({
-      stateMachineArn: routine.state_machine_arn,
-      definition: JSON.stringify(aslJson),
+      stateMachineArn,
+      definition: JSON.stringify(artifacts.aslJson),
     }),
   );
   const publishResp = await sfn.send(
     new PublishStateMachineVersionCommand({
-      stateMachineArn: routine.state_machine_arn,
+      stateMachineArn,
       description: `v${previousVersion + 1}`,
     }),
   );
@@ -135,7 +175,7 @@ export async function publishRoutineVersion(
   }
   if (!routine.state_machine_alias_arn) {
     throw new Error(
-      `Routine ${i.routineId} has engine='step_functions' but no alias ARN — invariant violation.`,
+      `Routine ${routineId} has engine='step_functions' but no alias ARN — invariant violation.`,
     );
   }
   await sfn.send(
@@ -156,15 +196,15 @@ export async function publishRoutineVersion(
     const [versionRow] = await tx
       .insert(routineAslVersions)
       .values({
-        routine_id: i.routineId,
+        routine_id: routineId,
         tenant_id: routine.tenant_id,
         version_number: newVersionNumber,
-        state_machine_arn: routine.state_machine_arn!,
+        state_machine_arn: stateMachineArn,
         version_arn: publishResp.stateMachineVersionArn!,
         alias_was_pointing: previousAliasPointing,
-        asl_json: aslJson,
-        markdown_summary: i.markdownSummary,
-        step_manifest_json: stepManifestJson,
+        asl_json: artifacts.aslJson,
+        markdown_summary: artifacts.markdownSummary,
+        step_manifest_json: artifacts.stepManifestJson,
         validation_warnings_json:
           validation.warnings.length > 0 ? validation.warnings : null,
         published_by_actor_id: ctx.auth.principalId ?? null,
@@ -175,10 +215,10 @@ export async function publishRoutineVersion(
       .update(routines)
       .set({
         current_version: newVersionNumber,
-        documentation_md: i.markdownSummary,
+        documentation_md: artifacts.markdownSummary,
         updated_at: new Date(),
       })
-      .where(eq(routines.id, i.routineId))
+      .where(eq(routines.id, routineId))
       .returning();
     return versionRow;
   });

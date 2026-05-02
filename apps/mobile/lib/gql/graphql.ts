@@ -1737,6 +1737,7 @@ export type Mutation = {
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   publishRoutineVersion: RoutineAslVersion;
+  rebuildRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2299,6 +2300,11 @@ export type MutationNotifyThreadUpdateArgs = {
 
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
+};
+
+
+export type MutationRebuildRoutineVersionArgs = {
+  input: RebuildRoutineVersionInput;
 };
 
 
@@ -3566,6 +3572,10 @@ export enum QuickActionScope {
   Task = 'task',
   Thread = 'thread'
 }
+
+export type RebuildRoutineVersionInput = {
+  routineId: Scalars['ID']['input'];
+};
 
 export type Recipe = {
   __typename?: 'Recipe';

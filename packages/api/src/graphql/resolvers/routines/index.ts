@@ -1,5 +1,6 @@
 import { createRoutine } from "./createRoutine.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
+import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
 import {
   routineAslVersion,
   routineExecution,
@@ -24,6 +25,7 @@ export const routineQueries = {
 export const routineMutations = {
   createRoutine,
   publishRoutineVersion,
+  rebuildRoutineVersion,
   triggerRoutineRun,
   updateRoutine,
 };
