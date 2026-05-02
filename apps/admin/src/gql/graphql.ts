@@ -2869,6 +2869,12 @@ export type Query = {
   singleAgentPerformance?: Maybe<AgentPerformance>;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
+  systemWorkflow?: Maybe<SystemWorkflow>;
+  systemWorkflowEvidence: Array<SystemWorkflowEvidence>;
+  systemWorkflowRun?: Maybe<SystemWorkflowRun>;
+  systemWorkflowRuns: Array<SystemWorkflowRun>;
+  systemWorkflowStepEvents: Array<SystemWorkflowStepEvent>;
+  systemWorkflows: Array<SystemWorkflow>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -3394,6 +3400,41 @@ export type QuerySkillRunsArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySystemWorkflowArgs = {
+  id: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowEvidenceArgs = {
+  runId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowRunsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<SystemWorkflowRunStatus>;
+  tenantId: Scalars['ID']['input'];
+  workflowId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySystemWorkflowStepEventsArgs = {
+  runId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowsArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4056,6 +4097,153 @@ export type SyncSummary = {
   agentsFailed: Scalars['Int']['output'];
   agentsSynced: Scalars['Int']['output'];
   errors: Array<Scalars['String']['output']>;
+};
+
+export type SystemWorkflow = {
+  __typename?: 'SystemWorkflow';
+  activeConfig?: Maybe<SystemWorkflowConfig>;
+  activeVersion: Scalars['String']['output'];
+  category: Scalars['String']['output'];
+  configSchemaJson: Scalars['AWSJSON']['output'];
+  customizationStatus: Scalars['String']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  evidenceContractJson: Scalars['AWSJSON']['output'];
+  evidenceStatus: Scalars['String']['output'];
+  extensionBindings: Array<SystemWorkflowExtensionBinding>;
+  extensionPointsJson: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  lastRun?: Maybe<SystemWorkflowRun>;
+  name: Scalars['String']['output'];
+  owner: Scalars['String']['output'];
+  recentRuns: Array<SystemWorkflowRun>;
+  runtimeShape: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  stepManifestJson: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+
+export type SystemWorkflowRecentRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type SystemWorkflowChangeEvent = {
+  __typename?: 'SystemWorkflowChangeEvent';
+  actorId?: Maybe<Scalars['ID']['output']>;
+  actorType?: Maybe<Scalars['String']['output']>;
+  afterJson?: Maybe<Scalars['AWSJSON']['output']>;
+  beforeJson?: Maybe<Scalars['AWSJSON']['output']>;
+  changeType: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+  runId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowConfig = {
+  __typename?: 'SystemWorkflowConfig';
+  activatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  configJson: Scalars['AWSJSON']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdByActorId?: Maybe<Scalars['ID']['output']>;
+  createdByActorType?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  versionNumber: Scalars['Int']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowEvidence = {
+  __typename?: 'SystemWorkflowEvidence';
+  artifactJson: Scalars['AWSJSON']['output'];
+  artifactUri?: Maybe<Scalars['String']['output']>;
+  complianceTags: Array<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  evidenceType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  runId: Scalars['ID']['output'];
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+};
+
+export type SystemWorkflowExtensionBinding = {
+  __typename?: 'SystemWorkflowExtensionBinding';
+  bindingJson: Scalars['AWSJSON']['output'];
+  bindingType: Scalars['String']['output'];
+  configId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  extensionPointId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowRun = {
+  __typename?: 'SystemWorkflowRun';
+  actorId?: Maybe<Scalars['ID']['output']>;
+  actorType?: Maybe<Scalars['String']['output']>;
+  aliasArn?: Maybe<Scalars['String']['output']>;
+  configId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionVersion: Scalars['String']['output'];
+  domainRefId?: Maybe<Scalars['String']['output']>;
+  domainRefType?: Maybe<Scalars['String']['output']>;
+  errorCode?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  evidence: Array<SystemWorkflowEvidence>;
+  evidenceSummaryJson: Scalars['AWSJSON']['output'];
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  runtimeShape: Scalars['String']['output'];
+  sfnExecutionArn?: Maybe<Scalars['String']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  stepEvents: Array<SystemWorkflowStepEvent>;
+  tenantId: Scalars['ID']['output'];
+  totalCostUsdCents?: Maybe<Scalars['Int']['output']>;
+  triggerId?: Maybe<Scalars['ID']['output']>;
+  triggerSource: Scalars['String']['output'];
+  versionArn?: Maybe<Scalars['String']['output']>;
+  workflow?: Maybe<SystemWorkflow>;
+  workflowId: Scalars['ID']['output'];
+};
+
+export enum SystemWorkflowRunStatus {
+  AwaitingApproval = 'AWAITING_APPROVAL',
+  Cancelled = 'CANCELLED',
+  Failed = 'FAILED',
+  Running = 'RUNNING',
+  Succeeded = 'SUCCEEDED',
+  TimedOut = 'TIMED_OUT'
+}
+
+export type SystemWorkflowStepEvent = {
+  __typename?: 'SystemWorkflowStepEvent';
+  costUsdCents?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorJson?: Maybe<Scalars['AWSJSON']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  nodeId: Scalars['String']['output'];
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  retryCount: Scalars['Int']['output'];
+  runId: Scalars['ID']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  stepType: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
 };
 
 export type Team = {
@@ -5387,6 +5575,28 @@ export type RoutineExecutionDetailQueryVariables = Exact<{
 
 export type RoutineExecutionDetailQuery = { __typename?: 'Query', routineExecution?: { __typename?: 'RoutineExecution', id: string, tenantId: string, routineId: string, stateMachineArn: string, aliasArn?: string | null, versionArn?: string | null, sfnExecutionArn: string, triggerSource: string, inputJson?: any | null, outputJson?: any | null, status: string, startedAt?: any | null, finishedAt?: any | null, errorCode?: string | null, errorMessage?: string | null, totalLlmCostUsdCents?: number | null, createdAt: any, stepEvents: Array<{ __typename?: 'RoutineStepEvent', id: string, nodeId: string, recipeType: string, status: string, startedAt?: any | null, finishedAt?: any | null, inputJson?: any | null, outputJson?: any | null, errorJson?: any | null, llmCostUsdCents?: number | null, retryCount: number, stdoutS3Uri?: string | null, stderrS3Uri?: string | null, stdoutPreview?: string | null, truncated: boolean, createdAt: any }>, routine?: { __typename?: 'Routine', id: string, name: string, description?: string | null, currentVersion?: number | null, documentationMd?: string | null } | null, aslVersion?: { __typename?: 'RoutineAslVersion', id: string, versionNumber: number, markdownSummary: string, stepManifestJson: any } | null } | null };
 
+export type SystemWorkflowsListQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type SystemWorkflowsListQuery = { __typename?: 'Query', systemWorkflows: Array<{ __typename?: 'SystemWorkflow', id: string, name: string, description?: string | null, category: string, owner: string, runtimeShape: string, status: string, activeVersion: string, customizationStatus: string, evidenceStatus: string, lastRun?: { __typename?: 'SystemWorkflowRun', id: string, status: string, startedAt?: any | null, finishedAt?: any | null, triggerSource: string, createdAt: any } | null }> };
+
+export type SystemWorkflowDetailQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SystemWorkflowDetailQuery = { __typename?: 'Query', systemWorkflow?: { __typename?: 'SystemWorkflow', id: string, tenantId: string, name: string, description?: string | null, category: string, owner: string, runtimeShape: string, status: string, activeVersion: string, customizationStatus: string, evidenceStatus: string, configSchemaJson: any, extensionPointsJson: any, evidenceContractJson: any, stepManifestJson: any, activeConfig?: { __typename?: 'SystemWorkflowConfig', id: string, versionNumber: number, status: string, configJson: any, activatedAt?: any | null, createdAt?: any | null } | null, extensionBindings: Array<{ __typename?: 'SystemWorkflowExtensionBinding', id: string, extensionPointId: string, bindingType: string, status: string, createdAt: any }>, recentRuns: Array<{ __typename?: 'SystemWorkflowRun', id: string, status: string, triggerSource: string, domainRefType?: string | null, domainRefId?: string | null, evidenceSummaryJson: any, startedAt?: any | null, finishedAt?: any | null, errorCode?: string | null, createdAt: any }> } | null };
+
+export type SystemWorkflowRunDetailQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SystemWorkflowRunDetailQuery = { __typename?: 'Query', systemWorkflowRun?: { __typename?: 'SystemWorkflowRun', id: string, tenantId: string, workflowId: string, definitionVersion: string, runtimeShape: string, stateMachineArn?: string | null, aliasArn?: string | null, versionArn?: string | null, sfnExecutionArn?: string | null, triggerSource: string, actorType?: string | null, domainRefType?: string | null, domainRefId?: string | null, inputJson?: any | null, outputJson?: any | null, evidenceSummaryJson: any, status: string, startedAt?: any | null, finishedAt?: any | null, errorCode?: string | null, errorMessage?: string | null, totalCostUsdCents?: number | null, createdAt: any, workflow?: { __typename?: 'SystemWorkflow', id: string, name: string, description?: string | null, stepManifestJson: any } | null, stepEvents: Array<{ __typename?: 'SystemWorkflowStepEvent', id: string, nodeId: string, stepType: string, status: string, startedAt?: any | null, finishedAt?: any | null, inputJson?: any | null, outputJson?: any | null, errorJson?: any | null, costUsdCents?: number | null, retryCount: number, createdAt: any }>, evidence: Array<{ __typename?: 'SystemWorkflowEvidence', id: string, evidenceType: string, title: string, summary?: string | null, artifactUri?: string | null, artifactJson: any, complianceTags: Array<string>, createdAt: any }> } | null };
+
 export type RoutineAslVersionDetailQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -6068,6 +6278,9 @@ export const RoutineDefinitionDocument = {"kind":"Document","definitions":[{"kin
 export const UpdateRoutineDefinitionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateRoutineDefinition"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateRoutineDefinitionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateRoutineDefinition"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineId"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"steps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodeId"}},{"kind":"Field","name":{"kind":"Name","value":"args"}},{"kind":"Field","name":{"kind":"Name","value":"configFields"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"editable"}}]}}]}}]}}]}}]} as unknown as DocumentNode<UpdateRoutineDefinitionMutation, UpdateRoutineDefinitionMutationVariables>;
 export const RoutineExecutionsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineExecutionsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"routineId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"RoutineExecutionStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineExecutions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"routineId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"routineId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"totalLlmCostUsdCents"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<RoutineExecutionsListQuery, RoutineExecutionsListQueryVariables>;
 export const RoutineExecutionDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineExecutionDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineExecution"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"routineId"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"aliasArn"}},{"kind":"Field","name":{"kind":"Name","value":"versionArn"}},{"kind":"Field","name":{"kind":"Name","value":"sfnExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"inputJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"totalLlmCostUsdCents"}},{"kind":"Field","name":{"kind":"Name","value":"stepEvents"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"nodeId"}},{"kind":"Field","name":{"kind":"Name","value":"recipeType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"inputJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"errorJson"}},{"kind":"Field","name":{"kind":"Name","value":"llmCostUsdCents"}},{"kind":"Field","name":{"kind":"Name","value":"retryCount"}},{"kind":"Field","name":{"kind":"Name","value":"stdoutS3Uri"}},{"kind":"Field","name":{"kind":"Name","value":"stderrS3Uri"}},{"kind":"Field","name":{"kind":"Name","value":"stdoutPreview"}},{"kind":"Field","name":{"kind":"Name","value":"truncated"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"routine"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"documentationMd"}}]}},{"kind":"Field","name":{"kind":"Name","value":"aslVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"markdownSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stepManifestJson"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<RoutineExecutionDetailQuery, RoutineExecutionDetailQueryVariables>;
+export const SystemWorkflowsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SystemWorkflowsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemWorkflows"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"owner"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeShape"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"customizationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastRun"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SystemWorkflowsListQuery, SystemWorkflowsListQueryVariables>;
+export const SystemWorkflowDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SystemWorkflowDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemWorkflow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"owner"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeShape"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeVersion"}},{"kind":"Field","name":{"kind":"Name","value":"customizationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceStatus"}},{"kind":"Field","name":{"kind":"Name","value":"configSchemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"extensionPointsJson"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceContractJson"}},{"kind":"Field","name":{"kind":"Name","value":"stepManifestJson"}},{"kind":"Field","name":{"kind":"Name","value":"activeConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"configJson"}},{"kind":"Field","name":{"kind":"Name","value":"activatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"extensionBindings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"extensionPointId"}},{"kind":"Field","name":{"kind":"Name","value":"bindingType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"recentRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"IntValue","value":"25"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"domainRefType"}},{"kind":"Field","name":{"kind":"Name","value":"domainRefId"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceSummaryJson"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SystemWorkflowDetailQuery, SystemWorkflowDetailQueryVariables>;
+export const SystemWorkflowRunDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SystemWorkflowRunDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemWorkflowRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"workflowId"}},{"kind":"Field","name":{"kind":"Name","value":"definitionVersion"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeShape"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"aliasArn"}},{"kind":"Field","name":{"kind":"Name","value":"versionArn"}},{"kind":"Field","name":{"kind":"Name","value":"sfnExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"triggerSource"}},{"kind":"Field","name":{"kind":"Name","value":"actorType"}},{"kind":"Field","name":{"kind":"Name","value":"domainRefType"}},{"kind":"Field","name":{"kind":"Name","value":"domainRefId"}},{"kind":"Field","name":{"kind":"Name","value":"inputJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceSummaryJson"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"totalCostUsdCents"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"workflow"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"stepManifestJson"}}]}},{"kind":"Field","name":{"kind":"Name","value":"stepEvents"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"nodeId"}},{"kind":"Field","name":{"kind":"Name","value":"stepType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"inputJson"}},{"kind":"Field","name":{"kind":"Name","value":"outputJson"}},{"kind":"Field","name":{"kind":"Name","value":"errorJson"}},{"kind":"Field","name":{"kind":"Name","value":"costUsdCents"}},{"kind":"Field","name":{"kind":"Name","value":"retryCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"evidence"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceType"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"artifactJson"}},{"kind":"Field","name":{"kind":"Name","value":"complianceTags"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SystemWorkflowRunDetailQuery, SystemWorkflowRunDetailQueryVariables>;
 export const RoutineAslVersionDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineAslVersionDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineAslVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"aslJson"}},{"kind":"Field","name":{"kind":"Name","value":"markdownSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stepManifestJson"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<RoutineAslVersionDetailQuery, RoutineAslVersionDetailQueryVariables>;
 export const InboxItemsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"InboxItemsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"InboxItemStatus"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"inboxItems"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"requesterType"}},{"kind":"Field","name":{"kind":"Name","value":"requesterId"}},{"kind":"Field","name":{"kind":"Name","value":"entityType"}},{"kind":"Field","name":{"kind":"Name","value":"entityId"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<InboxItemsListQuery, InboxItemsListQueryVariables>;
 export const InboxItemDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"InboxItemDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"inboxItem"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"requesterType"}},{"kind":"Field","name":{"kind":"Name","value":"requesterId"}},{"kind":"Field","name":{"kind":"Name","value":"entityType"}},{"kind":"Field","name":{"kind":"Name","value":"entityId"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"revision"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNotes"}},{"kind":"Field","name":{"kind":"Name","value":"decidedBy"}},{"kind":"Field","name":{"kind":"Name","value":"decidedAt"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"comments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"links"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"linkedType"}},{"kind":"Field","name":{"kind":"Name","value":"linkedId"}}]}},{"kind":"Field","name":{"kind":"Name","value":"linkedThreads"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"identifier"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<InboxItemDetailQuery, InboxItemDetailQueryVariables>;

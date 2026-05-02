@@ -36,6 +36,10 @@ import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { activationQueries, activationMutations } from "./activation/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
+import {
+  systemWorkflowMutations,
+  systemWorkflowQueries,
+} from "./system-workflows/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -62,6 +66,7 @@ export const queryResolvers: Record<string, any> = {
   ...activationQueries,
   ...brainQueries,
   ...routineQueries,
+  ...systemWorkflowQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -88,6 +93,7 @@ export const mutationResolvers: Record<string, any> = {
   ...activationMutations,
   ...brainMutations,
   ...routineMutations,
+  ...systemWorkflowMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
@@ -95,6 +101,10 @@ import { threadTypeResolvers } from "./threads/types.js";
 import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
+import {
+  systemWorkflowRunTypeResolvers,
+  systemWorkflowTypeResolvers,
+} from "./system-workflows/queries.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
   Agent: agentTypeResolvers,
@@ -102,4 +112,6 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
+  SystemWorkflow: systemWorkflowTypeResolvers,
+  SystemWorkflowRun: systemWorkflowRunTypeResolvers,
 };

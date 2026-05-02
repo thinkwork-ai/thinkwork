@@ -935,6 +935,140 @@ export const RoutineExecutionDetailQuery = graphql(`
   }
 `);
 
+export const SystemWorkflowsListQuery = graphql(`
+  query SystemWorkflowsList($tenantId: ID!) {
+    systemWorkflows(tenantId: $tenantId) {
+      id
+      name
+      description
+      category
+      owner
+      runtimeShape
+      status
+      activeVersion
+      customizationStatus
+      evidenceStatus
+      lastRun {
+        id
+        status
+        startedAt
+        finishedAt
+        triggerSource
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SystemWorkflowDetailQuery = graphql(`
+  query SystemWorkflowDetail($tenantId: ID!, $id: ID!) {
+    systemWorkflow(tenantId: $tenantId, id: $id) {
+      id
+      tenantId
+      name
+      description
+      category
+      owner
+      runtimeShape
+      status
+      activeVersion
+      customizationStatus
+      evidenceStatus
+      configSchemaJson
+      extensionPointsJson
+      evidenceContractJson
+      stepManifestJson
+      activeConfig {
+        id
+        versionNumber
+        status
+        configJson
+        activatedAt
+        createdAt
+      }
+      extensionBindings {
+        id
+        extensionPointId
+        bindingType
+        status
+        createdAt
+      }
+      recentRuns(limit: 25) {
+        id
+        status
+        triggerSource
+        domainRefType
+        domainRefId
+        evidenceSummaryJson
+        startedAt
+        finishedAt
+        errorCode
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SystemWorkflowRunDetailQuery = graphql(`
+  query SystemWorkflowRunDetail($id: ID!) {
+    systemWorkflowRun(id: $id) {
+      id
+      tenantId
+      workflowId
+      definitionVersion
+      runtimeShape
+      stateMachineArn
+      aliasArn
+      versionArn
+      sfnExecutionArn
+      triggerSource
+      actorType
+      domainRefType
+      domainRefId
+      inputJson
+      outputJson
+      evidenceSummaryJson
+      status
+      startedAt
+      finishedAt
+      errorCode
+      errorMessage
+      totalCostUsdCents
+      createdAt
+      workflow {
+        id
+        name
+        description
+        stepManifestJson
+      }
+      stepEvents {
+        id
+        nodeId
+        stepType
+        status
+        startedAt
+        finishedAt
+        inputJson
+        outputJson
+        errorJson
+        costUsdCents
+        retryCount
+        createdAt
+      }
+      evidence {
+        id
+        evidenceType
+        title
+        summary
+        artifactUri
+        artifactJson
+        complianceTags
+        createdAt
+      }
+    }
+  }
+`);
+
 export const RoutineAslVersionDetailQuery = graphql(`
   query RoutineAslVersionDetail($id: ID!) {
     routineAslVersion(id: $id) {

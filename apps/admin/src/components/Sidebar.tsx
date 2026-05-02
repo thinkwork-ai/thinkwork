@@ -17,6 +17,7 @@ import {
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
+  Workflow,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -207,6 +208,11 @@ export function AppSidebar() {
       icon: Repeat,
       label: "Routines",
       badge: routineActiveCount,
+    },
+    {
+      to: "/automations/system-workflows",
+      icon: Workflow,
+      label: "System Workflows",
     },
     {
       to: "/automations/schedules",

@@ -2869,6 +2869,12 @@ export type Query = {
   singleAgentPerformance?: Maybe<AgentPerformance>;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
+  systemWorkflow?: Maybe<SystemWorkflow>;
+  systemWorkflowEvidence: Array<SystemWorkflowEvidence>;
+  systemWorkflowRun?: Maybe<SystemWorkflowRun>;
+  systemWorkflowRuns: Array<SystemWorkflowRun>;
+  systemWorkflowStepEvents: Array<SystemWorkflowStepEvent>;
+  systemWorkflows: Array<SystemWorkflow>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -3394,6 +3400,41 @@ export type QuerySkillRunsArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySystemWorkflowArgs = {
+  id: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowEvidenceArgs = {
+  runId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowRunsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<SystemWorkflowRunStatus>;
+  tenantId: Scalars['ID']['input'];
+  workflowId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySystemWorkflowStepEventsArgs = {
+  runId: Scalars['ID']['input'];
+};
+
+
+export type QuerySystemWorkflowsArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4056,6 +4097,153 @@ export type SyncSummary = {
   agentsFailed: Scalars['Int']['output'];
   agentsSynced: Scalars['Int']['output'];
   errors: Array<Scalars['String']['output']>;
+};
+
+export type SystemWorkflow = {
+  __typename?: 'SystemWorkflow';
+  activeConfig?: Maybe<SystemWorkflowConfig>;
+  activeVersion: Scalars['String']['output'];
+  category: Scalars['String']['output'];
+  configSchemaJson: Scalars['AWSJSON']['output'];
+  customizationStatus: Scalars['String']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  evidenceContractJson: Scalars['AWSJSON']['output'];
+  evidenceStatus: Scalars['String']['output'];
+  extensionBindings: Array<SystemWorkflowExtensionBinding>;
+  extensionPointsJson: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  lastRun?: Maybe<SystemWorkflowRun>;
+  name: Scalars['String']['output'];
+  owner: Scalars['String']['output'];
+  recentRuns: Array<SystemWorkflowRun>;
+  runtimeShape: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  stepManifestJson: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+
+export type SystemWorkflowRecentRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type SystemWorkflowChangeEvent = {
+  __typename?: 'SystemWorkflowChangeEvent';
+  actorId?: Maybe<Scalars['ID']['output']>;
+  actorType?: Maybe<Scalars['String']['output']>;
+  afterJson?: Maybe<Scalars['AWSJSON']['output']>;
+  beforeJson?: Maybe<Scalars['AWSJSON']['output']>;
+  changeType: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+  runId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowConfig = {
+  __typename?: 'SystemWorkflowConfig';
+  activatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  configJson: Scalars['AWSJSON']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdByActorId?: Maybe<Scalars['ID']['output']>;
+  createdByActorType?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  versionNumber: Scalars['Int']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowEvidence = {
+  __typename?: 'SystemWorkflowEvidence';
+  artifactJson: Scalars['AWSJSON']['output'];
+  artifactUri?: Maybe<Scalars['String']['output']>;
+  complianceTags: Array<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  evidenceType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  runId: Scalars['ID']['output'];
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+};
+
+export type SystemWorkflowExtensionBinding = {
+  __typename?: 'SystemWorkflowExtensionBinding';
+  bindingJson: Scalars['AWSJSON']['output'];
+  bindingType: Scalars['String']['output'];
+  configId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  extensionPointId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type SystemWorkflowRun = {
+  __typename?: 'SystemWorkflowRun';
+  actorId?: Maybe<Scalars['ID']['output']>;
+  actorType?: Maybe<Scalars['String']['output']>;
+  aliasArn?: Maybe<Scalars['String']['output']>;
+  configId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionVersion: Scalars['String']['output'];
+  domainRefId?: Maybe<Scalars['String']['output']>;
+  domainRefType?: Maybe<Scalars['String']['output']>;
+  errorCode?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  evidence: Array<SystemWorkflowEvidence>;
+  evidenceSummaryJson: Scalars['AWSJSON']['output'];
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  runtimeShape: Scalars['String']['output'];
+  sfnExecutionArn?: Maybe<Scalars['String']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  stepEvents: Array<SystemWorkflowStepEvent>;
+  tenantId: Scalars['ID']['output'];
+  totalCostUsdCents?: Maybe<Scalars['Int']['output']>;
+  triggerId?: Maybe<Scalars['ID']['output']>;
+  triggerSource: Scalars['String']['output'];
+  versionArn?: Maybe<Scalars['String']['output']>;
+  workflow?: Maybe<SystemWorkflow>;
+  workflowId: Scalars['ID']['output'];
+};
+
+export enum SystemWorkflowRunStatus {
+  AwaitingApproval = 'AWAITING_APPROVAL',
+  Cancelled = 'CANCELLED',
+  Failed = 'FAILED',
+  Running = 'RUNNING',
+  Succeeded = 'SUCCEEDED',
+  TimedOut = 'TIMED_OUT'
+}
+
+export type SystemWorkflowStepEvent = {
+  __typename?: 'SystemWorkflowStepEvent';
+  costUsdCents?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorJson?: Maybe<Scalars['AWSJSON']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  inputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  nodeId: Scalars['String']['output'];
+  outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  retryCount: Scalars['Int']['output'];
+  runId: Scalars['ID']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  stepType: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
 };
 
 export type Team = {

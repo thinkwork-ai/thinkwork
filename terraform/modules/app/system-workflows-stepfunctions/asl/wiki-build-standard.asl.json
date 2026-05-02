@@ -1,0 +1,46 @@
+{
+  "Comment": "thinkwork-system-workflow:wiki-build:2026-05-02.v1",
+  "StartAt": "ClaimCompileJob",
+  "States": {
+    "ClaimCompileJob": {
+      "Type": "Pass",
+      "Comment": "standard:checkpoint:Claim compile job",
+      "Result": {
+        "workflowId": "wiki-build",
+        "stepType": "checkpoint",
+        "runtime": "standard"
+      },
+      "Next": "CompilePages"
+    },
+    "CompilePages": {
+      "Type": "Pass",
+      "Comment": "express:worker:Compile pages",
+      "Result": {
+        "workflowId": "wiki-build",
+        "stepType": "worker",
+        "runtime": "express"
+      },
+      "Next": "ValidateGraph"
+    },
+    "ValidateGraph": {
+      "Type": "Pass",
+      "Comment": "express:validation:Validate graph",
+      "Result": {
+        "workflowId": "wiki-build",
+        "stepType": "validation",
+        "runtime": "express"
+      },
+      "Next": "PublishEvidence"
+    },
+    "PublishEvidence": {
+      "Type": "Pass",
+      "Comment": "standard:evidence:Publish evidence",
+      "Result": {
+        "workflowId": "wiki-build",
+        "stepType": "evidence",
+        "runtime": "standard"
+      },
+      "End": true
+    }
+  }
+}
