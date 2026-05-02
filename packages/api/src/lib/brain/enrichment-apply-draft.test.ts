@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeAcceptedRegions,
   parseBrainEnrichmentDraftDecision,
+  wikiSectionsFromBodyMarkdown,
   type BrainEnrichmentDraftPayload,
 } from "./enrichment-apply.js";
 import type { DraftCompileRegion } from "../wiki/draft-compile.js";
@@ -267,6 +268,66 @@ describe("mergeAcceptedRegions", () => {
     expect(result).toBe("## A\n\nproposed-a");
   });
 
+  it("appends accepted regions that are missing from proposedBodyMd", () => {
+    const draft = payload({
+      proposedBodyMd: "## Overview\n\nexisting overview",
+      snapshotMd: "## Overview\n\nexisting overview",
+      regions: [
+        region({
+          id: "rJournal",
+          sectionSlug: "erics-test-journal",
+          sectionHeading: "Eric’s Test Journal",
+          beforeMd: "",
+          afterMd:
+            "A journal entry titled “Eric’s Test Journal” contains street-art content.",
+        }),
+        region({
+          id: "rWork",
+          sectionSlug: "work",
+          sectionHeading: "Work",
+          beforeMd: "",
+          afterMd:
+            "A task titled “Fix MCP Server Calling Issue from Lastmile” was created.",
+        }),
+      ],
+    });
+    const result = mergeAcceptedRegions({
+      draftPayload: draft,
+      decision: {
+        acceptedRegionIds: ["rJournal", "rWork"],
+        rejectedRegionIds: [],
+      },
+    });
+    expect(result).toBe(
+      "## Overview\n\nexisting overview\n\n## Eric’s Test Journal\n\nA journal entry titled “Eric’s Test Journal” contains street-art content.\n\n## Work\n\nA task titled “Fix MCP Server Calling Issue from Lastmile” was created.",
+    );
+  });
+
+  it("does not append missing regions that were rejected", () => {
+    const draft = payload({
+      proposedBodyMd: "## Overview\n\nexisting overview",
+      snapshotMd: "## Overview\n\nexisting overview",
+      regions: [
+        region({
+          id: "rJournal",
+          sectionSlug: "erics-test-journal",
+          sectionHeading: "Eric’s Test Journal",
+          beforeMd: "",
+          afterMd:
+            "A journal entry titled “Eric’s Test Journal” contains street-art content.",
+        }),
+      ],
+    });
+    const result = mergeAcceptedRegions({
+      draftPayload: draft,
+      decision: {
+        acceptedRegionIds: [],
+        rejectedRegionIds: ["rJournal"],
+      },
+    });
+    expect(result).toBe("## Overview\n\nexisting overview");
+  });
+
   it("empty regions array returns proposedBodyMd unchanged", () => {
     const draft = payload({
       proposedBodyMd: "## A\n\nproposed-a",
@@ -324,5 +385,34 @@ describe("mergeAcceptedRegions", () => {
         },
       }),
     ).toBe("## A\n\nproposed-a");
+  });
+});
+
+describe("wikiSectionsFromBodyMarkdown", () => {
+  it("maps the final merged page body into ordered wiki section rows", () => {
+    expect(
+      wikiSectionsFromBodyMarkdown(
+        "## Overview\n\nExisting overview.\n\n## Eric’s Test Journal\n\nJournal summary.\n\n## Work\n\nWork summary.",
+      ),
+    ).toEqual([
+      {
+        section_slug: "overview",
+        heading: "Overview",
+        body_md: "Existing overview.",
+        position: 1,
+      },
+      {
+        section_slug: "eric-s-test-journal",
+        heading: "Eric’s Test Journal",
+        body_md: "Journal summary.",
+        position: 2,
+      },
+      {
+        section_slug: "work",
+        heading: "Work",
+        body_md: "Work summary.",
+        position: 3,
+      },
+    ]);
   });
 });
