@@ -220,6 +220,12 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
+variable "agentcore_code_interpreter_id" {
+  description = "AgentCore Code Interpreter id used by routine-task-python for SFN python recipe states."
+  type        = string
+  default     = ""
+}
+
 variable "mcp_custom_domain" {
   description = <<-EOT
     MCP custom domain (e.g. "mcp.thinkwork.ai"). Empty disables the
@@ -294,6 +300,7 @@ module "thinkwork" {
   wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
   google_places_api_key               = var.google_places_api_key
+  agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
   stripe_price_ids_json = var.stripe_price_ids_json
