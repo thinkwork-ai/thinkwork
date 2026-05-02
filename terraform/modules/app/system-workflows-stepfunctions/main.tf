@@ -49,16 +49,25 @@ variable "eval_runner_lambda_arn" {
   default     = ""
 }
 
+variable "wiki_compile_lambda_arn" {
+  description = "ARN of the wiki-compile Lambda invoked by the Wiki Build System Workflow."
+  type        = string
+  default     = ""
+}
+
 locals {
-  log_group_name         = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
-  output_bucket          = "thinkwork-${var.stage}-system-workflow-output"
-  role_name              = "thinkwork-${var.stage}-system-workflows-execution-role"
-  eval_runner_lambda_arn = var.eval_runner_lambda_arn != "" ? var.eval_runner_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
+  log_group_name          = "/aws/vendedlogs/states/thinkwork-${var.stage}-system-workflows"
+  output_bucket           = "thinkwork-${var.stage}-system-workflow-output"
+  role_name               = "thinkwork-${var.stage}-system-workflows-execution-role"
+  eval_runner_lambda_arn  = var.eval_runner_lambda_arn != "" ? var.eval_runner_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
+  wiki_compile_lambda_arn = var.wiki_compile_lambda_arn != "" ? var.wiki_compile_lambda_arn : "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile"
 
   standard_state_machines = {
     "wiki-build" = {
-      name       = "thinkwork-${var.stage}-system-wiki-build"
-      definition = file("${path.module}/asl/wiki-build-standard.asl.json")
+      name = "thinkwork-${var.stage}-system-wiki-build"
+      definition = templatefile("${path.module}/asl/wiki-build-standard.asl.json", {
+        wiki_compile_lambda_arn = local.wiki_compile_lambda_arn
+      })
     }
     "evaluation-runs" = {
       name = "thinkwork-${var.stage}-system-evaluation-runs"
@@ -151,7 +160,10 @@ resource "aws_iam_role_policy" "system_workflows_execution" {
         Action = [
           "lambda:InvokeFunction",
         ]
-        Resource = local.eval_runner_lambda_arn
+        Resource = [
+          local.eval_runner_lambda_arn,
+          local.wiki_compile_lambda_arn,
+        ]
       },
     ]
   })

@@ -11,6 +11,10 @@ export type SystemWorkflowAsl = {
 export function buildSystemWorkflowAsl(
   definition: SystemWorkflowDefinition,
 ): SystemWorkflowAsl {
+  if (definition.id === "wiki-build") {
+    return buildWikiBuildAsl(definition);
+  }
+
   if (definition.id === "evaluation-runs") {
     return buildEvaluationRunsAsl(definition);
   }
@@ -40,6 +44,76 @@ export function buildSystemWorkflowAsl(
             Type: "Succeed",
           },
         },
+  };
+}
+
+function buildWikiBuildAsl(
+  definition: SystemWorkflowDefinition,
+): SystemWorkflowAsl {
+  return {
+    Comment: `thinkwork-system-workflow:${definition.id}:${definition.activeVersion}`,
+    StartAt: "ClaimCompileJob",
+    States: {
+      ClaimCompileJob: {
+        Type: "Pass",
+        Comment: "standard:checkpoint:Claim compile job",
+        Parameters: {
+          "jobId.$": "$.input.wikiCompileJobId",
+          "tenantId.$": "$.tenantId",
+          "ownerId.$": "$.input.ownerId",
+          "modelId.$": "$.input.modelId",
+          "trigger.$": "$.input.trigger",
+          "systemWorkflowRunId.$": "$.workflowRunId",
+          "systemWorkflowExecutionArn.$": "$$.Execution.Id",
+          "domainRef.$": "$.domainRef",
+        },
+        Next: "CompilePages",
+      },
+      CompilePages: {
+        Type: "Task",
+        Comment: "standard:worker:Compile wiki pages via wiki-compile",
+        Resource: "arn:aws:states:::lambda:invoke",
+        Parameters: {
+          FunctionName: "${wiki_compile_lambda_arn}",
+          "Payload.$": "$",
+        },
+        OutputPath: "$.Payload",
+        Retry: [
+          {
+            ErrorEquals: [
+              "Lambda.ServiceException",
+              "Lambda.AWSLambdaException",
+              "Lambda.SdkClientException",
+              "Lambda.TooManyRequestsException",
+            ],
+            IntervalSeconds: 2,
+            MaxAttempts: 3,
+            BackoffRate: 2,
+          },
+        ],
+        Next: "ValidateGraph",
+      },
+      ValidateGraph: {
+        Type: "Choice",
+        Comment: "standard:validation:Validate graph and compile outcome",
+        Choices: [
+          {
+            Variable: "$.ok",
+            BooleanEquals: true,
+            Next: "PublishEvidence",
+          },
+        ],
+        Default: "WikiBuildFailed",
+      },
+      PublishEvidence: {
+        Type: "Succeed",
+      },
+      WikiBuildFailed: {
+        Type: "Fail",
+        Error: "WikiBuildFailed",
+        Cause: "Wiki compile job did not complete successfully.",
+      },
+    },
   };
 }
 

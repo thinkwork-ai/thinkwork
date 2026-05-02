@@ -14,7 +14,7 @@ describe("system workflow registry", () => {
     ).toEqual(["wiki-build", "evaluation-runs", "tenant-agent-activation"]);
   });
 
-  it("builds ASL with a ThinkWork definition marker", () => {
+  it("builds evaluation ASL with a ThinkWork definition marker and pass/fail gate", () => {
     const definition = getSystemWorkflowDefinition("evaluation-runs");
     const asl = buildSystemWorkflowAsl(definition!);
 
@@ -37,6 +37,32 @@ describe("system workflow registry", () => {
     expect(asl.States.EvaluationFailed).toMatchObject({
       Type: "Fail",
       Error: "EvaluationThresholdFailed",
+    });
+  });
+
+  it("builds wiki-build ASL with a Lambda task and failure gate", () => {
+    const definition = getSystemWorkflowDefinition("wiki-build");
+    const asl = buildSystemWorkflowAsl(definition!);
+
+    expect(definition).toBeTruthy();
+    expect(asl.Comment).toBe(
+      "thinkwork-system-workflow:wiki-build:2026-05-02.v1",
+    );
+    expect(asl.States.CompilePages).toMatchObject({
+      Type: "Task",
+      Resource: "arn:aws:states:::lambda:invoke",
+      Parameters: {
+        FunctionName: "${wiki_compile_lambda_arn}",
+        "Payload.$": "$",
+      },
+    });
+    expect(asl.States.ValidateGraph).toMatchObject({
+      Type: "Choice",
+      Default: "WikiBuildFailed",
+    });
+    expect(asl.States.WikiBuildFailed).toMatchObject({
+      Type: "Fail",
+      Error: "WikiBuildFailed",
     });
   });
 
