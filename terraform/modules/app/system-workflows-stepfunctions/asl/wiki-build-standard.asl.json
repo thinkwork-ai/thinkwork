@@ -5,42 +5,61 @@
     "ClaimCompileJob": {
       "Type": "Pass",
       "Comment": "standard:checkpoint:Claim compile job",
-      "Result": {
-        "workflowId": "wiki-build",
-        "stepType": "checkpoint",
-        "runtime": "standard"
+      "Parameters": {
+        "jobId.$": "$.input.wikiCompileJobId",
+        "tenantId.$": "$.tenantId",
+        "ownerId.$": "$.input.ownerId",
+        "modelId.$": "$.input.modelId",
+        "trigger.$": "$.input.trigger",
+        "systemWorkflowRunId.$": "$.workflowRunId",
+        "systemWorkflowExecutionArn.$": "$$.Execution.Id",
+        "domainRef.$": "$.domainRef"
       },
       "Next": "CompilePages"
     },
     "CompilePages": {
-      "Type": "Pass",
-      "Comment": "express:worker:Compile pages",
-      "Result": {
-        "workflowId": "wiki-build",
-        "stepType": "worker",
-        "runtime": "express"
+      "Type": "Task",
+      "Comment": "standard:worker:Compile wiki pages via wiki-compile",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${wiki_compile_lambda_arn}",
+        "Payload.$": "$"
       },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "ValidateGraph"
     },
     "ValidateGraph": {
-      "Type": "Pass",
-      "Comment": "express:validation:Validate graph",
-      "Result": {
-        "workflowId": "wiki-build",
-        "stepType": "validation",
-        "runtime": "express"
-      },
-      "Next": "PublishEvidence"
+      "Type": "Choice",
+      "Comment": "standard:validation:Validate graph and compile outcome",
+      "Choices": [
+        {
+          "Variable": "$.ok",
+          "BooleanEquals": true,
+          "Next": "PublishEvidence"
+        }
+      ],
+      "Default": "WikiBuildFailed"
     },
     "PublishEvidence": {
-      "Type": "Pass",
-      "Comment": "standard:evidence:Publish evidence",
-      "Result": {
-        "workflowId": "wiki-build",
-        "stepType": "evidence",
-        "runtime": "standard"
-      },
-      "End": true
+      "Type": "Succeed"
+    },
+    "WikiBuildFailed": {
+      "Type": "Fail",
+      "Error": "WikiBuildFailed",
+      "Cause": "Wiki compile job did not complete successfully."
     }
   }
 }
