@@ -5,42 +5,59 @@
     "SnapshotTestPack": {
       "Type": "Pass",
       "Comment": "standard:checkpoint:Snapshot test pack",
-      "Result": {
-        "workflowId": "evaluation-runs",
-        "stepType": "checkpoint",
-        "runtime": "standard"
+      "Parameters": {
+        "runId.$": "$.evalRunId",
+        "tenantId.$": "$.tenantId",
+        "systemWorkflowRunId.$": "$.workflowRunId",
+        "systemWorkflowExecutionArn.$": "$$.Execution.Id",
+        "domainRef.$": "$.domainRef",
+        "input.$": "$.input"
       },
-      "Next": "RunBatches"
+      "Next": "RunEvaluation"
     },
-    "RunBatches": {
-      "Type": "Pass",
-      "Comment": "express:worker:Run test batches",
-      "Result": {
-        "workflowId": "evaluation-runs",
-        "stepType": "worker",
-        "runtime": "express"
+    "RunEvaluation": {
+      "Type": "Task",
+      "Comment": "standard:worker:Run evaluation via eval-runner",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${eval_runner_lambda_arn}",
+        "Payload.$": "$"
       },
-      "Next": "AggregateScores"
-    },
-    "AggregateScores": {
-      "Type": "Pass",
-      "Comment": "standard:aggregation:Aggregate scores",
-      "Result": {
-        "workflowId": "evaluation-runs",
-        "stepType": "aggregation",
-        "runtime": "standard"
-      },
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "ApplyPassFailGate"
     },
     "ApplyPassFailGate": {
-      "Type": "Pass",
+      "Type": "Choice",
       "Comment": "standard:gate:Apply pass/fail gate",
-      "Result": {
-        "workflowId": "evaluation-runs",
-        "stepType": "gate",
-        "runtime": "standard"
-      },
-      "End": true
+      "Choices": [
+        {
+          "Variable": "$.passedThreshold",
+          "BooleanEquals": true,
+          "Next": "EvaluationSucceeded"
+        }
+      ],
+      "Default": "EvaluationFailed"
+    },
+    "EvaluationSucceeded": {
+      "Type": "Succeed"
+    },
+    "EvaluationFailed": {
+      "Type": "Fail",
+      "Error": "EvaluationThresholdFailed",
+      "Cause": "Evaluation pass-rate gate did not pass."
     }
   }
 }

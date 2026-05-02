@@ -633,6 +633,30 @@ resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_system_workflows_stepfunctions" {
+  name = "system-workflows-step-functions"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "SystemWorkflowExecution"
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution",
+          "states:DescribeExecution",
+          "states:GetExecutionHistory",
+        ]
+        Resource = [
+          "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-system-*",
+          "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-system-*:*",
+        ]
+      },
+    ]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #
