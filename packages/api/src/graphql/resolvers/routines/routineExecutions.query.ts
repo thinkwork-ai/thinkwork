@@ -8,6 +8,7 @@ import {
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 export async function routineExecution(
   _parent: unknown,
@@ -20,7 +21,7 @@ export async function routineExecution(
     .where(eq(routineExecutionsTable.id, args.id))
     .limit(1);
   if (row) {
-    await requireTenantMember(ctx, row.tenant_id);
+    await assertCanReadTenant(ctx, row.tenant_id);
   }
   return row ? snakeToCamel(row) : null;
 }
@@ -41,7 +42,7 @@ export async function routineExecutions(
     .where(eq(routines.id, args.routineId))
     .limit(1);
   if (!routine) return [];
-  await requireTenantMember(ctx, routine.tenant_id);
+  await assertCanReadTenant(ctx, routine.tenant_id);
 
   const conditions = [
     eq(routineExecutionsTable.tenant_id, routine.tenant_id),
@@ -80,7 +81,7 @@ export async function routineStepEvents_(
     .where(eq(routineExecutionsTable.id, args.executionId))
     .limit(1);
   if (!execution) return [];
-  await requireTenantMember(ctx, execution.tenant_id);
+  await assertCanReadTenant(ctx, execution.tenant_id);
 
   const rows = await db
     .select()
@@ -102,7 +103,17 @@ export async function routineAslVersion(
     .where(eq(routineAslVersions.id, args.id))
     .limit(1);
   if (row) {
-    await requireTenantMember(ctx, row.tenant_id);
+    await assertCanReadTenant(ctx, row.tenant_id);
   }
   return row ? snakeToCamel(row) : null;
+}
+
+async function assertCanReadTenant(
+  ctx: GraphQLContext,
+  tenantId: string,
+): Promise<void> {
+  const callerTenantId =
+    ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
+  if (callerTenantId === tenantId) return;
+  await requireTenantMember(ctx, tenantId);
 }
