@@ -132,17 +132,23 @@ function RoutinesPage() {
 
   const rows: RoutineRow[] = useMemo(
     () =>
-      routines.map((r) => ({
-        id: r.id,
-        name: r.name,
-        description: r.description ?? null,
-        type: r.type,
-        status: r.status,
-        schedule: r.schedule ?? null,
-        agentName: r.agent?.name ?? null,
-        lastRunAt: r.lastRunAt ?? null,
-        nextRunAt: r.nextRunAt ?? null,
-      })),
+      routines
+        // Phase E U15: hide legacy Python routines. Phase A introduced
+        // the engine partition so the operator-facing list stays focused
+        // on the Step Functions substrate; legacy_python rows are
+        // archived in migration 0057 and not actionable from this UI.
+        .filter((r: any) => r.engine !== "legacy_python")
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description ?? null,
+          type: r.type,
+          status: r.status,
+          schedule: r.schedule ?? null,
+          agentName: r.agent?.name ?? null,
+          lastRunAt: r.lastRunAt ?? null,
+          nextRunAt: r.nextRunAt ?? null,
+        })),
     [routines],
   );
 
