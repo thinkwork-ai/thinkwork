@@ -7,7 +7,12 @@ import {
   threadTurns,
   threads,
 } from "../../graphql/utils.js";
-import { tenantEntityPages, wikiPages } from "@thinkwork/database-pg/schema";
+import { notInArray } from "drizzle-orm";
+import {
+  tenantEntityPages,
+  wikiPageSections,
+  wikiPages,
+} from "@thinkwork/database-pg/schema";
 import {
   composeBodyFromSections,
   parseSections,
@@ -16,6 +21,7 @@ import {
 import type { BrainEnrichmentCandidate } from "./enrichment-service.js";
 
 type DbLike = typeof defaultDb;
+type SectionWriteDb = Pick<DbLike, "delete" | "insert" | "select" | "update">;
 
 interface BrainEnrichmentConfig {
   targetPage?: {
@@ -392,24 +398,36 @@ export function mergeAcceptedRegions(args: {
 }): string {
   const { proposedBodyMd, snapshotMd, regions } = args.draftPayload;
   const decision = args.decision;
+  const proposedSections = parseSections(proposedBodyMd);
+  const proposedSlugs = new Set(proposedSections.map((s) => s.slug));
+  const rejectedSet = new Set(decision?.rejectedRegionIds ?? []);
+
+  const acceptedMissingSections = regions
+    .filter((region) => !proposedSlugs.has(region.sectionSlug))
+    .filter((region) => !rejectedSet.has(region.id))
+    .filter((region) => region.afterMd.trim())
+    .map((region) => ({
+      slug: region.sectionSlug,
+      heading: region.sectionHeading || region.sectionSlug,
+      bodyMd: region.afterMd,
+    }));
 
   // Bulk-accept short-circuit.
   if (
-    !decision ||
-    (decision.rejectedRegionIds.length === 0 && regions.length > 0)
+    acceptedMissingSections.length === 0 &&
+    (!decision ||
+      (decision.rejectedRegionIds.length === 0 && regions.length > 0))
   ) {
     return proposedBodyMd;
   }
 
   // Reject-all short-circuit.
-  const rejectedSet = new Set(decision.rejectedRegionIds);
   const allRegionsRejected =
     regions.length > 0 && regions.every((r) => rejectedSet.has(r.id));
   if (allRegionsRejected) {
     return snapshotMd;
   }
 
-  const proposedSections = parseSections(proposedBodyMd);
   const regionsBySlug = new Map(regions.map((r) => [r.sectionSlug, r]));
 
   const finalSections: Array<{
@@ -436,8 +454,13 @@ export function mergeAcceptedRegions(args: {
     // Brand-new section rejected (empty beforeMd) → omit.
   }
 
+  // The review payload can contain accepted regions whose section did not make
+  // it into proposedBodyMd. The mobile review still renders those regions and
+  // lets the user approve them, so apply must preserve them instead of silently
+  // dropping approved facts.
+  finalSections.push(...acceptedMissingSections);
+
   // Re-append snapshot sections for removed-and-rejected regions.
-  const proposedSlugs = new Set(proposedSections.map((s) => s.slug));
   for (const region of regions) {
     if (proposedSlugs.has(region.sectionSlug)) continue;
     if (!rejectedSet.has(region.id)) continue;
@@ -450,6 +473,22 @@ export function mergeAcceptedRegions(args: {
   }
 
   return composeBodyFromSections(finalSections);
+}
+
+export function wikiSectionsFromBodyMarkdown(bodyMd: string): Array<{
+  section_slug: string;
+  heading: string;
+  body_md: string;
+  position: number;
+}> {
+  return parseSections(bodyMd)
+    .filter((section) => section.slug !== "_preamble")
+    .map((section, index) => ({
+      section_slug: section.slug,
+      heading: section.heading,
+      body_md: section.bodyMd,
+      position: index + 1,
+    }));
 }
 
 export interface ApplyBrainEnrichmentDraftReviewArgs {
@@ -627,23 +666,90 @@ async function replacePageBody(args: {
       );
     }
   } else {
-    const updated = await args.db
-      .update(wikiPages)
-      .set({
-        body_md: args.bodyMd,
-        updated_at: new Date(),
-      })
+    await args.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(wikiPages)
+        .set({
+          body_md: args.bodyMd,
+          updated_at: new Date(),
+        })
+        .where(
+          and(
+            eq(wikiPages.id, args.target.id),
+            eq(wikiPages.tenant_id, args.tenantId),
+          ),
+        )
+        .returning({ id: wikiPages.id });
+      if (updated.length === 0) {
+        throw new Error(
+          `applyBrainEnrichmentDraftReview: target page not found (wiki_pages id=${args.target.id})`,
+        );
+      }
+      await replaceWikiPageSections({
+        db: tx,
+        pageId: args.target.id,
+        bodyMd: args.bodyMd,
+      });
+    });
+  }
+}
+
+async function replaceWikiPageSections(args: {
+  db: SectionWriteDb;
+  pageId: string;
+  bodyMd: string;
+}) {
+  const sections = wikiSectionsFromBodyMarkdown(args.bodyMd);
+  if (sections.length === 0) {
+    await args.db
+      .delete(wikiPageSections)
+      .where(eq(wikiPageSections.page_id, args.pageId));
+    return;
+  }
+
+  await args.db
+    .delete(wikiPageSections)
+    .where(
+      and(
+        eq(wikiPageSections.page_id, args.pageId),
+        notInArray(
+          wikiPageSections.section_slug,
+          sections.map((section) => section.section_slug),
+        ),
+      ),
+    );
+
+  for (const section of sections) {
+    const [existing] = await args.db
+      .select({ id: wikiPageSections.id })
+      .from(wikiPageSections)
       .where(
         and(
-          eq(wikiPages.id, args.target.id),
-          eq(wikiPages.tenant_id, args.tenantId),
+          eq(wikiPageSections.page_id, args.pageId),
+          eq(wikiPageSections.section_slug, section.section_slug),
         ),
       )
-      .returning({ id: wikiPages.id });
-    if (updated.length === 0) {
-      throw new Error(
-        `applyBrainEnrichmentDraftReview: target page not found (wiki_pages id=${args.target.id})`,
-      );
+      .limit(1);
+
+    if (existing) {
+      await args.db
+        .update(wikiPageSections)
+        .set({
+          heading: section.heading,
+          body_md: section.body_md,
+          position: section.position,
+          updated_at: new Date(),
+        })
+        .where(eq(wikiPageSections.id, existing.id));
+    } else {
+      await args.db.insert(wikiPageSections).values({
+        page_id: args.pageId,
+        section_slug: section.section_slug,
+        heading: section.heading,
+        body_md: section.body_md,
+        position: section.position,
+        last_source_at: new Date(),
+      });
     }
   }
 }
