@@ -689,17 +689,9 @@ export const RoutinesListQuery = graphql(`
       id
       name
       description
-      type
       status
-      schedule
       lastRunAt
-      nextRunAt
-      agentId
       engine
-      agent {
-        id
-        name
-      }
       createdAt
     }
   }

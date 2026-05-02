@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Plus, Search, Clock, Bot, CalendarClock } from "lucide-react";
+import { Plus, Search, CalendarClock } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -13,7 +13,6 @@ import { DataTable } from "@/components/ui/data-table";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { RoutinesListQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
@@ -25,12 +24,9 @@ type RoutineRow = {
   id: string;
   name: string;
   description: string | null;
-  type: string;
   status: string;
-  schedule: string | null;
-  agentName: string | null;
   lastRunAt: string | null;
-  nextRunAt: string | null;
+  createdAt: string;
 };
 
 const columns: ColumnDef<RoutineRow>[] = [
@@ -44,52 +40,21 @@ const columns: ColumnDef<RoutineRow>[] = [
   },
   {
     accessorKey: "name",
-    header: "Name",
+    header: "Routine",
     cell: ({ row }) => (
-      <span className="font-medium">{row.original.name}</span>
+      <div className="space-y-0.5">
+        <div className="font-medium">{row.original.name}</div>
+        {row.original.description && (
+          <div className="max-w-xl truncate text-xs text-muted-foreground">
+            {row.original.description}
+          </div>
+        )}
+      </div>
     ),
-  },
-  {
-    accessorKey: "type",
-    header: "Type",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="text-xs">
-        {row.original.type}
-      </Badge>
-    ),
-    size: 100,
-  },
-  {
-    accessorKey: "schedule",
-    header: "Schedule",
-    cell: ({ row }) =>
-      row.original.schedule ? (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Clock className="h-3 w-3 shrink-0" />
-          {row.original.schedule}
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
-    size: 140,
-  },
-  {
-    accessorKey: "agentName",
-    header: "Agent",
-    cell: ({ row }) =>
-      row.original.agentName ? (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Bot className="h-3 w-3 shrink-0" />
-          <span className="truncate max-w-[120px]">{row.original.agentName}</span>
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
-    size: 140,
   },
   {
     accessorKey: "lastRunAt",
-    header: "Last Run",
+    header: "Last Execution",
     cell: ({ row }) =>
       row.original.lastRunAt ? (
         <span className="text-xs text-muted-foreground">
@@ -101,16 +66,13 @@ const columns: ColumnDef<RoutineRow>[] = [
     size: 120,
   },
   {
-    accessorKey: "nextRunAt",
-    header: "Next Run",
-    cell: ({ row }) =>
-      row.original.nextRunAt ? (
-        <span className="text-xs text-muted-foreground">
-          {relativeTime(row.original.nextRunAt)}
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
-      ),
+    accessorKey: "createdAt",
+    header: "Created",
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground">
+        {relativeTime(row.original.createdAt)}
+      </span>
+    ),
     size: 120,
   },
 ];
@@ -142,12 +104,9 @@ function RoutinesPage() {
           id: r.id,
           name: r.name,
           description: r.description ?? null,
-          type: r.type,
           status: r.status,
-          schedule: r.schedule ?? null,
-          agentName: r.agent?.name ?? null,
           lastRunAt: r.lastRunAt ?? null,
-          nextRunAt: r.nextRunAt ?? null,
+          createdAt: r.createdAt,
         })),
     [routines],
   );
