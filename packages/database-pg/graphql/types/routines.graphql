@@ -272,6 +272,10 @@ input PublishRoutineVersionInput {
   stepManifest: AWSJSON!
 }
 
+input RebuildRoutineVersionInput {
+  routineId: ID!
+}
+
 input DecideRoutineApprovalInput {
   inboxItemId: ID!
   decision: AWSJSON!
@@ -305,5 +309,6 @@ extend type Mutation {
 
   # Phase A schema; resolvers ship in Phase B (U7) and Phase B (U8).
   publishRoutineVersion(input: PublishRoutineVersionInput!): RoutineAslVersion!
+  rebuildRoutineVersion(input: RebuildRoutineVersionInput!): RoutineAslVersion!
   decideRoutineApproval(input: DecideRoutineApprovalInput!): InboxItem!
 }
