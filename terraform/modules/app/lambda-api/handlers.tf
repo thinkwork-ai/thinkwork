@@ -126,17 +126,17 @@ locals {
     # follows the per-stage naming convention from the routines-stepfunctions
     # module (Phase A U1).
     "routine-task-python" = {
-      SANDBOX_INTERPRETER_ID         = var.agentcore_code_interpreter_id
-      ROUTINE_OUTPUT_BUCKET          = "thinkwork-${var.stage}-routine-output"
-      ROUTINE_PYTHON_ENV_ALLOWLIST   = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
+      SANDBOX_INTERPRETER_ID       = var.agentcore_code_interpreter_id
+      ROUTINE_OUTPUT_BUCKET        = "thinkwork-${var.stage}-routine-output"
+      ROUTINE_PYTHON_ENV_ALLOWLIST = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
     }
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
     "graphql-http" = {
-      ROUTINES_EXECUTION_ROLE_ARN  = var.routines_execution_role_arn
-      ROUTINES_LOG_GROUP_ARN       = var.routines_log_group_arn
-      AWS_ACCOUNT_ID               = var.account_id
+      ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
+      ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
+      AWS_ACCOUNT_ID              = var.account_id
       # routine-approval-bridge (Phase B U8) calls this function name
       # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
       # The bridge throws if unset — terraform wiring is mandatory.
@@ -145,6 +145,10 @@ locals {
       # inbox_approval recipe Task can find the callback Lambda via
       # $$.Execution.Input.inboxApprovalFunctionName.
       ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
+      EMAIL_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-email-send"
+      ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
+      ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
+      SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
@@ -152,8 +156,12 @@ locals {
     # the routine-approval-callback function name in the SFN execution
     # input so the inbox_approval recipe can fanout to it on .waitForTaskToken.
     "job-trigger" = {
-      AWS_ACCOUNT_ID                         = var.account_id
+      AWS_ACCOUNT_ID                          = var.account_id
       ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
+      EMAIL_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-email-send"
+      ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
+      ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
+      SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
     }
   }
 }

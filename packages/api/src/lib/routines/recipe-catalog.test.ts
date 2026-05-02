@@ -139,9 +139,9 @@ describe("recipe-catalog", () => {
     expect(
       knownResourceArn("arn:aws:states:::states:startExecution.sync:2"),
     ).toBe(true);
-    expect(
-      knownResourceArn("arn:aws:states:::aws-sdk:s3:getObject"),
-    ).toBe(false);
+    expect(knownResourceArn("arn:aws:states:::aws-sdk:s3:getObject")).toBe(
+      false,
+    );
   });
 
   it("RESOURCE_ARN_PATTERNS exposes a deterministic, frozen-ish surface", () => {
@@ -170,9 +170,7 @@ describe("recipe-catalog", () => {
     const recipe = getRecipe("tool_invoke")!;
     const validate = ajv.compile(recipe.argSchema);
     expect(validate({ toolId: "x" })).toBe(false);
-    expect(
-      validate({ toolId: "x", toolSource: "mcp", args: {} }),
-    ).toBe(true);
+    expect(validate({ toolId: "x", toolSource: "mcp", args: {} })).toBe(true);
   });
 
   it("argSchema for python rejects empty code (escape-hatch invariant)", () => {
@@ -180,6 +178,31 @@ describe("recipe-catalog", () => {
     const validate = ajv.compile(recipe.argSchema);
     expect(validate({ code: "" })).toBe(false);
     expect(validate({ code: "print('ok')" })).toBe(true);
+  });
+
+  it("email_send accepts either a literal body or a dynamic bodyPath", () => {
+    const recipe = getRecipe("email_send")!;
+    const validate = ajv.compile(recipe.argSchema);
+    expect(
+      validate({
+        to: ["ericodom37@gmail.com"],
+        subject: "Austin weather update",
+        body: "Current weather...",
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        to: ["ericodom37@gmail.com"],
+        subject: "Austin weather update",
+        bodyPath: "$.FetchAustinWeather.stdoutPreview",
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        to: ["ericodom37@gmail.com"],
+        subject: "Austin weather update",
+      }),
+    ).toBe(false);
   });
 });
 

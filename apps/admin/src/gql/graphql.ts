@@ -1029,12 +1029,12 @@ export type CreateRecipeInput = {
 
 export type CreateRoutineInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
-  asl: Scalars['AWSJSON']['input'];
+  asl?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
-  markdownSummary: Scalars['String']['input'];
+  markdownSummary?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   owningAgentId?: InputMaybe<Scalars['ID']['input']>;
-  stepManifest: Scalars['AWSJSON']['input'];
+  stepManifest?: InputMaybe<Scalars['AWSJSON']['input']>;
   teamId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   visibility?: InputMaybe<RoutineVisibility>;
