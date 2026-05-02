@@ -1,6 +1,7 @@
 import { createRoutine } from "./createRoutine.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
 import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
+import { routineDefinition } from "./routineDefinition.query.js";
 import {
   routineAslVersion,
   routineExecution,
@@ -9,6 +10,7 @@ import {
 } from "./routineExecutions.query.js";
 import { tenantToolInventory } from "./tenantToolInventory.query.js";
 import { triggerRoutineRun } from "./triggerRoutineRun.mutation.js";
+import { updateRoutineDefinition } from "./updateRoutineDefinition.mutation.js";
 import { updateRoutine } from "./updateRoutine.mutation.js";
 
 export const routineQueries = {
@@ -16,6 +18,7 @@ export const routineQueries = {
   routineExecutions,
   routineStepEvents: routineStepEvents_,
   routineAslVersion,
+  routineDefinition,
   tenantToolInventory,
 };
 
@@ -28,4 +31,5 @@ export const routineMutations = {
   rebuildRoutineVersion,
   triggerRoutineRun,
   updateRoutine,
+  updateRoutineDefinition,
 };

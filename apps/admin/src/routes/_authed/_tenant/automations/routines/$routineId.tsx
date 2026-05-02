@@ -17,6 +17,7 @@ import {
   parseStatusFilter,
   type StatusFilterId,
 } from "@/components/routines/ExecutionList";
+import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
 
 export const Route = createFileRoute("/_authed/_tenant/automations/routines/$routineId")({
   component: RoutineDetailPage,
@@ -129,6 +130,11 @@ function RoutineDetailPage() {
           {triggerError}
         </p>
       )}
+
+      <RoutineDefinitionPanel
+        routineId={routineId}
+        onPublished={() => reexecuteRoutine({ requestPolicy: "network-only" })}
+      />
 
       <ExecutionList
         routineId={routineId}

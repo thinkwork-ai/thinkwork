@@ -169,6 +169,32 @@ type RoutineAslVersion {
   createdAt: AWSDateTime!
 }
 
+type RoutineDefinitionStep {
+  nodeId: String!
+  recipeId: String!
+  label: String!
+  args: AWSJSON!
+}
+
+type RoutineDefinitionField {
+  key: String!
+  label: String!
+  value: String
+  inputType: String!
+  stepNodeId: String
+}
+
+type RoutineDefinition {
+  routineId: ID!
+  currentVersion: Int
+  versionId: ID
+  title: String!
+  description: String
+  kind: String!
+  steps: [RoutineDefinitionStep!]!
+  editableFields: [RoutineDefinitionField!]!
+}
+
 # ---- Tenant tool inventory (Phase A scaffold; resolver comes in Phase A U4) ----
 #
 # Aggregates the fragmented inventory the chat builder agent + tool_invoke
@@ -276,6 +302,16 @@ input RebuildRoutineVersionInput {
   routineId: ID!
 }
 
+input RoutineDefinitionFieldInput {
+  key: String!
+  value: String
+}
+
+input UpdateRoutineDefinitionInput {
+  routineId: ID!
+  fields: [RoutineDefinitionFieldInput!]!
+}
+
 input DecideRoutineApprovalInput {
   inboxItemId: ID!
   decision: AWSJSON!
@@ -291,6 +327,7 @@ extend type Query {
   routineExecutions(routineId: ID!, status: RoutineExecutionStatus, limit: Int, cursor: String): [RoutineExecution!]!
   routineStepEvents(executionId: ID!): [RoutineStepEvent!]!
   routineAslVersion(id: ID!): RoutineAslVersion
+  routineDefinition(routineId: ID!): RoutineDefinition
   tenantToolInventory(tenantId: ID!): TenantToolInventory!
 }
 
@@ -310,5 +347,6 @@ extend type Mutation {
   # Phase A schema; resolvers ship in Phase B (U7) and Phase B (U8).
   publishRoutineVersion(input: PublishRoutineVersionInput!): RoutineAslVersion!
   rebuildRoutineVersion(input: RebuildRoutineVersionInput!): RoutineAslVersion!
+  updateRoutineDefinition(input: UpdateRoutineDefinitionInput!): RoutineDefinition!
   decideRoutineApproval(input: DecideRoutineApprovalInput!): InboxItem!
 }
