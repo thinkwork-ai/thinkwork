@@ -15,83 +15,113 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { enqueueCompileJob } from "../../../lib/wiki/repository.js";
+import { startSystemWorkflow } from "../../../lib/system-workflows/start.js";
 import { assertCanAdminWikiScope } from "./auth.js";
 
 interface CompileWikiNowArgs {
-	tenantId: string;
-	userId?: string | null;
-	ownerId?: string | null;
-	modelId?: string | null;
+  tenantId: string;
+  userId?: string | null;
+  ownerId?: string | null;
+  modelId?: string | null;
 }
 
 export const compileWikiNow = async (
-	_parent: unknown,
-	args: CompileWikiNowArgs,
-	ctx: GraphQLContext,
+  _parent: unknown,
+  args: CompileWikiNowArgs,
+  ctx: GraphQLContext,
 ) => {
-	const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
+  const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
 
-	const { job } = await enqueueCompileJob({
-		tenantId,
-		ownerId: userId,
-		trigger: "admin",
-	});
+  const { job } = await enqueueCompileJob({
+    tenantId,
+    ownerId: userId,
+    trigger: "admin",
+  });
 
-	// Treat empty string as "not provided" — the compile pipeline's default
-	// resolution (env var → code default) should kick in, not forward "".
-	const modelId =
-		typeof args.modelId === "string" && args.modelId.length > 0
-			? args.modelId
-			: undefined;
+  // Treat empty string as "not provided" — the compile pipeline's default
+  // resolution (env var → code default) should kick in, not forward "".
+  const modelId =
+    typeof args.modelId === "string" && args.modelId.length > 0
+      ? args.modelId
+      : undefined;
 
-	// Best-effort invoke of the compile Lambda. We don't await because the
-	// dedupe job row gives us our idempotency guarantee; the Lambda handler
-	// can also pick it up via claimNextCompileJob if this invoke fails.
-	invokeWikiCompile(job.id, modelId).catch((err) => {
-		console.warn(
-			`[compileWikiNow] invoke failed (job will be picked up by worker): ${(err as Error)?.message}`,
-		);
-	});
+  try {
+    await startSystemWorkflow({
+      workflowId: "wiki-build",
+      tenantId,
+      triggerSource: "graphql",
+      actorId: ctx.auth.principalId ?? null,
+      actorType: ctx.auth.authType,
+      domainRef: { type: "wiki_compile_job", id: job.id },
+      input: {
+        wikiCompileJobId: job.id,
+        ownerId: userId,
+        modelId: modelId ?? null,
+        trigger: job.trigger,
+      },
+    });
+  } catch (err) {
+    if (!isUnconfiguredSystemWorkflow(err)) throw err;
 
-	return {
-		id: job.id,
-		tenantId: job.tenant_id,
-		userId: job.owner_id,
-		ownerId: job.owner_id,
-		status: job.status,
-		trigger: job.trigger,
-		dedupeKey: job.dedupe_key,
-		attempt: job.attempt,
-		claimedAt: job.claimed_at?.toISOString() ?? null,
-		startedAt: job.started_at?.toISOString() ?? null,
-		finishedAt: job.finished_at?.toISOString() ?? null,
-		error: job.error,
-		metrics: job.metrics,
-		createdAt: job.created_at.toISOString(),
-	};
+    console.warn(
+      `[compileWikiNow] system workflow unavailable, falling back to direct invoke: ${(err as Error)?.message}`,
+    );
+    // Best-effort invoke of the compile Lambda. We don't await because the
+    // dedupe job row gives us our idempotency guarantee; the Lambda handler
+    // can also pick it up via claimNextCompileJob if this invoke fails.
+    invokeWikiCompile(job.id, modelId).catch((invokeErr) => {
+      console.warn(
+        `[compileWikiNow] invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
+      );
+    });
+  }
+
+  return {
+    id: job.id,
+    tenantId: job.tenant_id,
+    userId: job.owner_id,
+    ownerId: job.owner_id,
+    status: job.status,
+    trigger: job.trigger,
+    dedupeKey: job.dedupe_key,
+    attempt: job.attempt,
+    claimedAt: job.claimed_at?.toISOString() ?? null,
+    startedAt: job.started_at?.toISOString() ?? null,
+    finishedAt: job.finished_at?.toISOString() ?? null,
+    error: job.error,
+    metrics: job.metrics,
+    createdAt: job.created_at.toISOString(),
+  };
 };
 
+function isUnconfiguredSystemWorkflow(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    err.message.includes("has no configured state machine ARN")
+  );
+}
+
 async function invokeWikiCompile(
-	jobId: string,
-	modelId?: string,
+  jobId: string,
+  modelId?: string,
 ): Promise<void> {
-	const fnName =
-		process.env.WIKI_COMPILE_FN ??
-		(process.env.STAGE
-			? `thinkwork-${process.env.STAGE}-api-wiki-compile`
-			: null);
-	if (!fnName) return;
-	const { LambdaClient, InvokeCommand } = await import(
-		"@aws-sdk/client-lambda"
-	);
-	const lambda = new LambdaClient({});
-	const payload: { jobId: string; modelId?: string } = { jobId };
-	if (modelId) payload.modelId = modelId;
-	await lambda.send(
-		new InvokeCommand({
-			FunctionName: fnName,
-			InvocationType: "Event",
-			Payload: new TextEncoder().encode(JSON.stringify(payload)),
-		}),
-	);
+  const fnName =
+    process.env.WIKI_COMPILE_FN ??
+    (process.env.STAGE
+      ? `thinkwork-${process.env.STAGE}-api-wiki-compile`
+      : null);
+  if (!fnName) return;
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const lambda = new LambdaClient({});
+  const payload: { jobId: string; modelId?: string } = { jobId };
+  if (modelId) payload.modelId = modelId;
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "Event",
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }),
+  );
 }

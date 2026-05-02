@@ -322,6 +322,7 @@ module "system_workflows_stepfunctions" {
   # Lambda ARNs for Step Functions wiring.
   execution_callback_lambda_arn = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-system-workflow-execution-callback"
   eval_runner_lambda_arn        = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
+  wiki_compile_lambda_arn       = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile"
 }
 
 module "hindsight" {
