@@ -26,6 +26,10 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  normalizeRoutineExecutionManifest,
+  type NormalizedRoutineStep,
+} from "./routineExecutionManifest";
 
 export interface StepEventLite {
   id: string;
@@ -41,7 +45,10 @@ export interface StepNode {
   /** ASL state name — stable per routine version. */
   nodeId: string;
   /** v0 recipe id, if known from the step manifest. */
+  recipeId?: string;
   recipeType?: string;
+  label?: string;
+  args?: unknown;
   /** Latest event for this node (may be undefined when no event has
    * landed yet — the row renders as `pending`). */
   latestEvent?: StepEventLite;
@@ -49,9 +56,9 @@ export interface StepNode {
 
 export interface ExecutionGraphProps {
   /** Step manifest from `routine_asl_versions.step_manifest_json`. The
-   * shape is `{ <nodeId>: { recipeType: string, ... } }`; we only read
-   * the keys + recipeType for graph layout. */
-  stepManifest: Record<string, { recipeType?: string }> | null | undefined;
+   * value may be a legacy node map, a recipe-graph manifest, or an
+   * AWSJSON string. */
+  stepManifest: unknown;
   stepEvents: StepEventLite[];
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string) => void;
@@ -95,16 +102,13 @@ export function latestEventByNode(
  * in V8). When the manifest is empty, we synthesize from the step
  * events themselves so the graph still renders something. */
 export function deriveNodes(
-  stepManifest: Record<string, { recipeType?: string }> | null | undefined,
+  stepManifest: unknown,
   events: StepEventLite[],
 ): StepNode[] {
   const latest = latestEventByNode(events);
-  if (stepManifest && Object.keys(stepManifest).length > 0) {
-    return Object.entries(stepManifest).map(([nodeId, meta]) => ({
-      nodeId,
-      recipeType: meta?.recipeType ?? latest[nodeId]?.recipeType,
-      latestEvent: latest[nodeId],
-    }));
+  const manifestSteps = normalizeRoutineExecutionManifest(stepManifest);
+  if (manifestSteps.length > 0) {
+    return manifestSteps.map((step) => nodeFromManifestStep(step, latest));
   }
   // Fallback: derive from events. Order by earliest startedAt.
   const seen = new Set<string>();
@@ -124,6 +128,20 @@ export function deriveNodes(
     });
   }
   return nodes;
+}
+
+function nodeFromManifestStep(
+  step: NormalizedRoutineStep,
+  latest: Record<string, StepEventLite>,
+): StepNode {
+  return {
+    nodeId: step.nodeId,
+    recipeId: step.recipeId,
+    recipeType: step.recipeType ?? latest[step.nodeId]?.recipeType,
+    label: step.label,
+    args: step.args,
+    latestEvent: latest[step.nodeId],
+  };
 }
 
 interface StatusPresentation {
@@ -239,15 +257,19 @@ export function ExecutionGraph({
                 <span className="text-xs text-zinc-400 tabular-nums">
                   {String(idx + 1).padStart(2, "0")}
                 </span>
-                <span className="font-medium truncate">{node.nodeId}</span>
-                {node.recipeType && (
+                <span className="truncate font-medium">
+                  {node.label ?? node.nodeId}
+                </span>
+                {(node.recipeId ?? node.recipeType) && (
                   <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                    {node.recipeType}
+                    {node.recipeId ?? node.recipeType}
                   </span>
                 )}
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                {presentation.label}
+                {node.label
+                  ? `${node.nodeId} · ${presentation.label}`
+                  : presentation.label}
                 {node.latestEvent?.retryCount
                   ? ` · ${node.latestEvent.retryCount} retr${node.latestEvent.retryCount === 1 ? "y" : "ies"}`
                   : ""}

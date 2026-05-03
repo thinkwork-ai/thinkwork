@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { ArrowRight, RefreshCw, Zap } from "lucide-react";
@@ -17,7 +17,10 @@ import {
   parseStatusFilter,
   type StatusFilterId,
 } from "@/components/routines/ExecutionList";
-import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
+import {
+  RoutineDefinitionPanel,
+  type RoutineDefinitionEditorState,
+} from "@/components/routines/RoutineDefinitionPanel";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/automations/routines/$routineId",
@@ -57,8 +60,32 @@ function RoutineDetailPage() {
   const [executionRefreshKey, setExecutionRefreshKey] = useState(0);
   const [rebuildError, setRebuildError] = useState<string | null>(null);
   const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
+  const [definitionState, setDefinitionState] =
+    useState<RoutineDefinitionEditorState>({
+      ready: false,
+      dirty: false,
+      invalid: false,
+      saving: false,
+      currentVersion: null,
+    });
+
+  const handleDefinitionStateChange = useCallback(
+    (next: RoutineDefinitionEditorState) => setDefinitionState(next),
+    [],
+  );
+
+  const testDisabledReason = definitionState.saving
+    ? "Wait for the workflow save to finish before testing."
+    : definitionState.dirty
+      ? "Save workflow changes before testing this version."
+      : definitionState.invalid
+        ? "Fix configuration issues before testing."
+        : !definitionState.ready
+          ? "Wait for the workflow definition to load before testing."
+          : null;
 
   const handleRunNow = async () => {
+    if (testDisabledReason) return;
     setTriggerError(null);
     setLastTestRun(null);
     const res = await executeTrigger({ routineId, input: null });
@@ -96,6 +123,11 @@ function RoutineDetailPage() {
 
   if (result.fetching || !routine) return <PageSkeleton />;
 
+  const testDisabled =
+    triggerState.fetching ||
+    rebuildState.fetching ||
+    testDisabledReason != null;
+
   const actions = (
     <>
       {routine.engine === "step_functions" && (
@@ -113,7 +145,8 @@ function RoutineDetailPage() {
         size="sm"
         variant="outline"
         onClick={handleRunNow}
-        disabled={triggerState.fetching || rebuildState.fetching}
+        disabled={testDisabled}
+        title={testDisabledReason ?? undefined}
       >
         <Zap className="h-3.5 w-3.5" />
         {triggerState.fetching ? "Starting..." : "Test Routine"}
@@ -149,7 +182,7 @@ function RoutineDetailPage() {
           <div className="min-w-0">
             <div className="font-medium">Test run started</div>
             <div className="mt-0.5 text-muted-foreground">
-              Run {lastTestRun.id.slice(0, 8)} is now visible in the run list.
+              Run {lastTestRun.id.slice(0, 8)} started from the saved workflow.
             </div>
           </div>
           <Button size="sm" variant="outline" asChild>
@@ -167,6 +200,7 @@ function RoutineDetailPage() {
       <RoutineDefinitionPanel
         routineId={routineId}
         onPublished={() => reexecuteRoutine({ requestPolicy: "network-only" })}
+        onStateChange={handleDefinitionStateChange}
       />
 
       <ExecutionList
@@ -182,10 +216,14 @@ function RoutineDetailPage() {
         }
         emptyCta={
           statusFilter === "all" ? (
-            <Button size="sm" asChild>
-              <Link to="/automations/schedules" search={{ type: "routine" }}>
-                Set up a trigger
-              </Link>
+            <Button
+              size="sm"
+              onClick={handleRunNow}
+              disabled={testDisabled}
+              title={testDisabledReason ?? undefined}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Test Routine
             </Button>
           ) : null
         }

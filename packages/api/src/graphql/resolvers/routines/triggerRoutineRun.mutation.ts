@@ -10,8 +10,12 @@
  * RequestResponse semantics — failure surfaces directly, not silently.
  */
 
-import { eq } from "drizzle-orm";
-import { routineExecutions, routines } from "@thinkwork/database-pg/schema";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  routineAslVersions,
+  routineExecutions,
+  routines,
+} from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
@@ -48,11 +52,33 @@ export async function triggerRoutineRun(
       `Routine ${args.routineId} has engine='step_functions' but no alias ARN — invariant violation.`,
     );
   }
+  if (!routine.current_version) {
+    throw new Error(
+      `Routine ${args.routineId} has engine='step_functions' but no current ASL version — invariant violation.`,
+    );
+  }
 
-  // Start the execution against the alias — that way version cutovers
-  // via publishRoutineVersion are picked up automatically. Server-owned
-  // runtime fields win over caller input so clients cannot redirect recipe
-  // Lambda invocations by passing similarly named keys.
+  const [aslVersion] = await db
+    .select()
+    .from(routineAslVersions)
+    .where(
+      and(
+        eq(routineAslVersions.routine_id, routine.id),
+        eq(routineAslVersions.version_number, routine.current_version),
+      ),
+    );
+  if (!aslVersion) {
+    throw new Error(
+      `Routine ${args.routineId} current ASL version ${routine.current_version} was not found — invariant violation.`,
+    );
+  }
+
+  await assertRoutineExecutionAslVersionColumn();
+
+  // Start the execution against the captured version ARN so the row we persist
+  // cannot drift if the live alias flips between lookup and StartExecution.
+  // Server-owned runtime fields win over caller input so clients cannot redirect
+  // recipe Lambda invocations by passing similarly named keys.
   const sfnInput = buildRoutineExecutionInput(args.input ?? {}, {
     tenantId: routine.tenant_id,
     routineId: routine.id,
@@ -60,7 +86,7 @@ export async function triggerRoutineRun(
   const sfn = getSfnClient();
   const startResp = await sfn.send(
     new StartExecutionCommand({
-      stateMachineArn: routine.state_machine_alias_arn,
+      stateMachineArn: aslVersion.version_arn,
       input: JSON.stringify(sfnInput),
     }),
   );
@@ -75,6 +101,8 @@ export async function triggerRoutineRun(
       routine_id: routine.id,
       state_machine_arn: routine.state_machine_arn!,
       alias_arn: routine.state_machine_alias_arn,
+      version_arn: aslVersion.version_arn,
+      routine_asl_version_id: aslVersion.id,
       sfn_execution_arn: startResp.executionArn,
       trigger_source: "manual",
       input_json: args.input ?? {},
@@ -114,6 +142,25 @@ export function buildRoutineExecutionInput(
       "slack-send",
     ),
   };
+}
+
+async function assertRoutineExecutionAslVersionColumn(): Promise<void> {
+  const result = await db.execute(sql`
+    SELECT 1 AS exists
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'routine_executions'
+      AND column_name = 'routine_asl_version_id'
+    LIMIT 1
+  `);
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] }).rows ?? []);
+  if (rows.length === 0) {
+    throw new Error(
+      "Routines runtime is waiting for migration 0061_routine_execution_asl_version_id; routine execution was not started.",
+    );
+  }
 }
 
 function runtimeFunctionName(envName: string, handlerName: string): string {
