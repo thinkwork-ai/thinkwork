@@ -49,7 +49,13 @@ export interface AgentcoreCodeInterpreterOptions {
 	cleanup?: boolean;
 	/** Session timeout in seconds. AgentCore default is 300; max is 28800 (8h). */
 	sessionTimeoutSeconds?: number;
-	/** Default cwd applied when Flue does not pass one. */
+	/**
+	 * Default cwd applied when Flue does not pass one. Used by the SessionEnv
+	 * wrapper for JS-land path resolution (`resolvePath`) — does NOT change
+	 * AgentCore Code Interpreter's actual session cwd, which is fixed by AWS.
+	 * Callers needing a specific shell cwd should pass absolute paths in
+	 * commands directly. Defaults to `/home/user`.
+	 */
 	defaultCwd?: string;
 }
 
