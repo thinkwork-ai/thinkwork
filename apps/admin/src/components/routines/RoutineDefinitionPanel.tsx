@@ -95,6 +95,11 @@ export function RoutineDefinitionPanel({
 
   const dirty =
     JSON.stringify(originalSnapshot) !== JSON.stringify(editedSnapshot);
+  const topologyDirty = useMemo(() => {
+    const originalIds = definition?.steps.map((step) => step.nodeId) ?? [];
+    const editedIds = steps.map((step) => step.nodeId);
+    return JSON.stringify(originalIds) !== JSON.stringify(editedIds);
+  }, [definition?.steps, steps]);
 
   useEffect(() => {
     onStateChange?.({
@@ -223,12 +228,26 @@ export function RoutineDefinitionPanel({
           steps={steps}
           recipes={recipes}
           fieldValues={fieldValues}
+          aslJson={definition.aslJson}
+          stepManifestJson={definition.stepManifestJson}
+          topologyDirty={topologyDirty}
           onFieldChange={(key, value) =>
             setFieldValues((current) => ({ ...current, [key]: value }))
           }
-          onAddRecipe={(recipe) =>
+          onAddRecipe={(recipe, afterNodeId) =>
             setSteps((current) => {
-              const next = [...current, stepFromRecipe(recipe, current)];
+              const step = stepFromRecipe(recipe, current);
+              const index = current.findIndex(
+                (candidate) => candidate.nodeId === afterNodeId,
+              );
+              const next =
+                index < 0
+                  ? [...current, step]
+                  : [
+                      ...current.slice(0, index + 1),
+                      step,
+                      ...current.slice(index + 1),
+                    ];
               setFieldValues((values) => mergeFieldValues(next, values));
               return next;
             })

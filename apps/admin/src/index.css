@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@xyflow/react/dist/style.css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -43,7 +44,7 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Geist Variable", sans-serif;
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -128,7 +129,11 @@
   html {
     height: 100%;
     font-size: 16px;
-    -webkit-tap-highlight-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+    -webkit-tap-highlight-color: color-mix(
+      in oklab,
+      var(--foreground) 20%,
+      transparent
+    );
     @apply font-sans;
   }
   body {

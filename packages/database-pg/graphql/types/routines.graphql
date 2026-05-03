@@ -201,6 +201,9 @@ type RoutineDefinition {
   title: String!
   description: String
   kind: String!
+  aslJson: AWSJSON
+  markdownSummary: String
+  stepManifestJson: AWSJSON
   steps: [RoutineDefinitionStep!]!
 }
 
@@ -361,9 +364,32 @@ input RoutineDefinitionStepConfigInput {
   args: AWSJSON!
 }
 
+input RoutineDefinitionGraphNodeInput {
+  nodeId: String!
+  recipeId: String
+  label: String
+  args: AWSJSON
+  kind: String
+}
+
+input RoutineDefinitionGraphEdgeInput {
+  source: String!
+  target: String!
+  kind: String!
+  condition: AWSJSON
+  label: String
+}
+
+input RoutineDefinitionGraphInput {
+  nodes: [RoutineDefinitionGraphNodeInput!]!
+  edges: [RoutineDefinitionGraphEdgeInput!]!
+  startNodeId: String
+}
+
 input UpdateRoutineDefinitionInput {
   routineId: ID!
   steps: [RoutineDefinitionStepConfigInput!]!
+  graph: RoutineDefinitionGraphInput
 }
 
 input DecideRoutineApprovalInput {

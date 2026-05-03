@@ -840,6 +840,9 @@ export const RoutineDefinitionQuery = graphql(`
       title
       description
       kind
+      aslJson
+      markdownSummary
+      stepManifestJson
       steps {
         nodeId
         recipeId
@@ -873,6 +876,9 @@ export const UpdateRoutineDefinitionMutation = graphql(`
       currentVersion
       versionId
       description
+      aslJson
+      markdownSummary
+      stepManifestJson
       steps {
         nodeId
         args
@@ -967,6 +973,7 @@ export const RoutineExecutionDetailQuery = graphql(`
       aslVersion {
         id
         versionNumber
+        aslJson
         markdownSummary
         stepManifestJson
       }

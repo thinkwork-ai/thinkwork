@@ -52,6 +52,28 @@ export interface RoutineDefinitionStepConfigEdit {
   args: Record<string, unknown>;
 }
 
+export interface RoutineDefinitionGraphNodeEdit {
+  nodeId: string;
+  recipeId?: string | null;
+  label?: string | null;
+  args?: Record<string, unknown> | null;
+  kind?: string | null;
+}
+
+export interface RoutineDefinitionGraphEdgeEdit {
+  source: string;
+  target: string;
+  kind: string;
+  condition?: Record<string, unknown> | null;
+  label?: string | null;
+}
+
+export interface RoutineDefinitionGraphEdit {
+  nodes: RoutineDefinitionGraphNodeEdit[];
+  edges: RoutineDefinitionGraphEdgeEdit[];
+  startNodeId?: string | null;
+}
+
 const EMAIL_EXTRACT_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const EMAIL_VALUE_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
@@ -218,6 +240,13 @@ export function applyRoutineDefinitionEdits(
   return buildRoutineArtifactsFromPlan(refreshed);
 }
 
+export function applyRoutineGraphDefinitionEdits(
+  plan: RoutinePlan,
+  graph: RoutineDefinitionGraphEdit,
+): RoutinePlanResult {
+  return artifactsForGraphEdit(plan, graph);
+}
+
 function artifactsForPlan(plan: RoutinePlan): RoutinePlanResult {
   if (plan.steps.length === 0) {
     return unsupported("Routine definition must include at least one step.");
@@ -279,6 +308,246 @@ function artifactsForPlan(plan: RoutinePlan): RoutinePlanResult {
       },
     },
   };
+}
+
+function artifactsForGraphEdit(
+  basePlan: RoutinePlan,
+  graph: RoutineDefinitionGraphEdit,
+): RoutinePlanResult {
+  if (!Array.isArray(graph.nodes) || graph.nodes.length === 0) {
+    return unsupported(
+      "Routine graph definition must include at least one node.",
+    );
+  }
+
+  const nodesById = new Map<string, RoutineDefinitionGraphNodeEdit>();
+  for (const node of graph.nodes) {
+    const nodeId = String(node.nodeId ?? "").trim();
+    if (!nodeId) return unsupported("Routine graph node is missing a node id.");
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nodeId)) {
+      return unsupported(
+        `Routine graph node ${nodeId} must start with a letter and use only letters, numbers, and underscores.`,
+      );
+    }
+    if (nodesById.has(nodeId)) {
+      return unsupported(`Routine graph has duplicate node id: ${nodeId}`);
+    }
+    nodesById.set(nodeId, { ...node, nodeId });
+  }
+
+  const startNodeId = String(
+    graph.startNodeId ?? graph.nodes[0]?.nodeId ?? "",
+  ).trim();
+  if (!startNodeId || !nodesById.has(startNodeId)) {
+    return unsupported("Routine graph start node is missing or unknown.");
+  }
+
+  for (const edge of graph.edges ?? []) {
+    if (!nodesById.has(edge.source)) {
+      return unsupported(
+        `Routine graph edge source does not exist: ${edge.source}`,
+      );
+    }
+    if (!nodesById.has(edge.target)) {
+      return unsupported(
+        `Routine graph edge target does not exist: ${edge.target}`,
+      );
+    }
+  }
+
+  const baseByNodeId = new Map(
+    basePlan.steps.map((step) => [step.nodeId, step]),
+  );
+  const recipeSteps: RoutinePlanStep[] = [];
+  const states: Record<string, AslState> = {};
+  const outgoing = edgesBySource(graph.edges ?? []);
+
+  for (const node of graph.nodes) {
+    const nodeId = String(node.nodeId).trim();
+    const kind = String(node.kind ?? "")
+      .trim()
+      .toLowerCase();
+    if (kind === "choice" || node.recipeId === "choice") {
+      const choiceState = choiceStateForNode(
+        nodeId,
+        outgoing.get(nodeId) ?? [],
+      );
+      if (!choiceState.ok) return choiceState;
+      states[nodeId] = choiceState.state;
+      continue;
+    }
+    if (kind === "succeed" || kind === "fail" || kind === "pass") {
+      states[nodeId] = controlStateForNode(kind, outgoing.get(nodeId) ?? []);
+      continue;
+    }
+
+    const base = baseByNodeId.get(nodeId);
+    const recipeId = String(node.recipeId ?? base?.recipeId ?? "").trim();
+    const recipe = getRecipe(recipeId);
+    if (!recipe) {
+      return unsupported(`Unknown routine recipe: ${recipeId || nodeId}`);
+    }
+
+    const submitted = normalizeJsonObject(node.args);
+    const submittedArgs = base
+      ? editableArgsForExistingStep(recipeId, base.args, submitted)
+      : { ok: true as const, args: submitted };
+    if (!submittedArgs.ok) return submittedArgs;
+    const args = {
+      ...(base?.args ?? getRecipeDefaultArgs(recipeId)),
+      ...submittedArgs.args,
+    };
+    const label = String(
+      node.label ?? base?.label ?? recipe.displayName,
+    ).trim();
+    const planStep: RoutinePlanStep = {
+      nodeId,
+      recipeId,
+      recipeName: recipe.displayName,
+      label,
+      args,
+      configFields: getRecipeConfigFields(recipeId, args),
+    };
+    recipeSteps.push(planStep);
+
+    const nextEdge = (outgoing.get(nodeId) ?? []).find(
+      (edge) => normalizedEdgeKind(edge.kind) === "next",
+    );
+    const state = recipe.aslEmitter(args, {
+      stateName: nodeId,
+      next: nextEdge?.target ?? null,
+      end: nextEdge == null,
+    });
+    states[nodeId] = {
+      ...state,
+      ResultPath: `$.${nodeId}`,
+    };
+  }
+
+  const refreshed = refreshPlanConfigFields({
+    ...basePlan,
+    steps: recipeSteps,
+  });
+  const validation = validateRequiredConfig(refreshed);
+  if (!validation.ok) return validation;
+  const description = descriptionForPlan(refreshed);
+  const finalPlan = refreshPlanConfigFields({ ...refreshed, description });
+  const markdownSummary = markdownSummaryForPlan(finalPlan);
+
+  return {
+    ok: true,
+    artifacts: {
+      plan: finalPlan,
+      asl: {
+        Comment: `Routine authored from graph: ${finalPlan.title}`,
+        StartAt: startNodeId,
+        States: states,
+      },
+      markdownSummary,
+      stepManifest: {
+        definition: {
+          kind: finalPlan.kind,
+          graph: {
+            startNodeId,
+            nodes: graph.nodes,
+            edges: graph.edges,
+          },
+          steps: finalPlan.steps.map((step) => ({
+            nodeId: step.nodeId,
+            recipeId: step.recipeId,
+            label: step.label,
+            args: step.args,
+          })),
+        },
+        steps: finalPlan.steps.map((step) => ({
+          nodeId: step.nodeId,
+          recipeType: step.recipeId,
+          label: step.label,
+          args: step.args,
+        })),
+      },
+    },
+  };
+}
+
+function choiceStateForNode(
+  nodeId: string,
+  edges: RoutineDefinitionGraphEdgeEdit[],
+): { ok: true; state: AslState } | { ok: false; reason: string } {
+  const choices: Record<string, unknown>[] = [];
+  let defaultTarget: string | null = null;
+  for (const edge of edges) {
+    const kind = normalizedEdgeKind(edge.kind);
+    if (kind === "default") {
+      if (defaultTarget) {
+        return unsupported(
+          `Choice node ${nodeId} has more than one default edge.`,
+        );
+      }
+      defaultTarget = edge.target;
+      continue;
+    }
+    if (kind !== "choice") continue;
+    const condition = normalizeJsonObject(edge.condition);
+    if (Object.keys(condition).length === 0) {
+      return unsupported(
+        `Choice edge ${nodeId} -> ${edge.target} is missing a condition.`,
+      );
+    }
+    choices.push({ ...condition, Next: edge.target });
+  }
+  if (choices.length === 0) {
+    return unsupported(
+      `Choice node ${nodeId} must include at least one choice edge.`,
+    );
+  }
+  if (!defaultTarget) {
+    return unsupported(`Choice node ${nodeId} must include a default edge.`);
+  }
+  return {
+    ok: true,
+    state: {
+      Type: "Choice",
+      Choices: choices,
+      Default: defaultTarget,
+    },
+  };
+}
+
+function controlStateForNode(
+  kind: string,
+  edges: RoutineDefinitionGraphEdgeEdit[],
+): AslState {
+  if (kind === "succeed") return { Type: "Succeed" };
+  if (kind === "fail") return { Type: "Fail" };
+  const next = edges.find((edge) => normalizedEdgeKind(edge.kind) === "next");
+  return next
+    ? { Type: "Pass", Next: next.target }
+    : { Type: "Pass", End: true };
+}
+
+function edgesBySource(
+  edges: RoutineDefinitionGraphEdgeEdit[],
+): Map<string, RoutineDefinitionGraphEdgeEdit[]> {
+  const bySource = new Map<string, RoutineDefinitionGraphEdgeEdit[]>();
+  for (const edge of edges) {
+    const list = bySource.get(edge.source) ?? [];
+    list.push(edge);
+    bySource.set(edge.source, list);
+  }
+  return bySource;
+}
+
+function normalizedEdgeKind(
+  kind: string,
+): "next" | "choice" | "default" | "catch" {
+  const normalized = String(kind ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "default") return "default";
+  if (normalized === "choice" || normalized === "condition") return "choice";
+  if (normalized === "catch" || normalized === "error") return "catch";
+  return "next";
 }
 
 function weatherEmailPlan(displayName: string, recipient: string): RoutinePlan {

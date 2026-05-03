@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { validateRoutineAsl } from "../../handlers/routine-asl-validator.js";
 import {
   applyRoutineDefinitionEdits,
+  applyRoutineGraphDefinitionEdits,
   buildRoutineArtifactsFromPlan,
   planRoutineFromIntent,
   routineDefinitionFromArtifacts,
@@ -256,6 +257,113 @@ describe("routine authoring planner", () => {
     expect(edited).toEqual({
       ok: false,
       reason: "Body source is read-only.",
+    });
+  });
+
+  it("builds Choice ASL from the graph definition edit contract", () => {
+    const result = planRoutineFromIntent({
+      name: "Check Austin Weather",
+      intent: "Check the weather in Austin and email it to old@example.com.",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+
+    const edited = applyRoutineGraphDefinitionEdits(result.artifacts.plan, {
+      startNodeId: "FetchAustinWeather",
+      nodes: [
+        {
+          nodeId: "FetchAustinWeather",
+          recipeId: "python",
+          args: {},
+          label: "Fetch Austin weather",
+        },
+        {
+          nodeId: "ShouldEmail",
+          kind: "choice",
+          label: "Should email",
+        },
+        {
+          nodeId: "EmailAustinWeather",
+          recipeId: "email_send",
+          args: { to: ["new@example.com"] },
+          label: "Email Austin weather",
+        },
+        {
+          nodeId: "Done",
+          kind: "succeed",
+          label: "Done",
+        },
+      ],
+      edges: [
+        { source: "FetchAustinWeather", target: "ShouldEmail", kind: "next" },
+        {
+          source: "ShouldEmail",
+          target: "EmailAustinWeather",
+          kind: "choice",
+          condition: { Variable: "$.sendEmail", BooleanEquals: true },
+        },
+        { source: "ShouldEmail", target: "Done", kind: "default" },
+      ],
+    });
+
+    expect(edited.ok).toBe(true);
+    if (!edited.ok) throw new Error(edited.reason);
+    expect(edited.artifacts.asl).toMatchObject({
+      StartAt: "FetchAustinWeather",
+      States: {
+        FetchAustinWeather: { Next: "ShouldEmail" },
+        ShouldEmail: {
+          Type: "Choice",
+          Choices: [
+            {
+              Variable: "$.sendEmail",
+              BooleanEquals: true,
+              Next: "EmailAustinWeather",
+            },
+          ],
+          Default: "Done",
+        },
+      },
+    });
+    expect(edited.artifacts.stepManifest.definition).toMatchObject({
+      graph: {
+        startNodeId: "FetchAustinWeather",
+      },
+    });
+  });
+
+  it("rejects graph choice edges without a default", () => {
+    const result = planRoutineFromIntent({
+      name: "Check Austin Weather",
+      intent: "Check the weather in Austin and email it to old@example.com.",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+
+    const edited = applyRoutineGraphDefinitionEdits(result.artifacts.plan, {
+      nodes: [
+        { nodeId: "ShouldEmail", kind: "choice" },
+        {
+          nodeId: "EmailAustinWeather",
+          recipeId: "email_send",
+          args: { to: ["new@example.com"] },
+        },
+      ],
+      edges: [
+        {
+          source: "ShouldEmail",
+          target: "EmailAustinWeather",
+          kind: "choice",
+          condition: { Variable: "$.sendEmail", BooleanEquals: true },
+        },
+      ],
+    });
+
+    expect(edited).toEqual({
+      ok: false,
+      reason: "Choice node ShouldEmail must include a default edge.",
     });
   });
 

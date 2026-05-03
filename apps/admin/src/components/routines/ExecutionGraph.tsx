@@ -1,35 +1,9 @@
-/**
- * ExecutionGraph — vertical step-list visualization of a routine execution
- * (Plan 2026-05-01-007 §U13).
- *
- * v1 ships as a vertical stepper: each ASL state name from the step
- * manifest renders as a row, and live status from `routine_step_events`
- * paints the dot + label. We intentionally avoid a fancy DAG renderer
- * for v1 — a vertical list is the right shape for run-watching, scales
- * cleanly to mobile parity, and matches the AGENTS-md pattern of "ship
- * the simple thing first".
- *
- * Step-event rows are append-only and may include multiple statuses for
- * the same node (running → succeeded). We collapse to "latest status per
- * node" for graph rendering and keep the full event list available for
- * the StepDetailPanel.
- */
-
 import { useMemo } from "react";
-import {
-  CheckCircle2,
-  Circle,
-  Clock,
-  Loader2,
-  XCircle,
-  PauseCircle,
-  AlertCircle,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   normalizeRoutineExecutionManifest,
   type NormalizedRoutineStep,
 } from "./routineExecutionManifest";
+import { RoutineFlowCanvas } from "./RoutineFlowCanvas";
 
 export interface StepEventLite {
   id: string;
@@ -55,6 +29,8 @@ export interface StepNode {
 }
 
 export interface ExecutionGraphProps {
+  /** ASL from `routine_asl_versions.asl_json`; preferred topology source. */
+  aslJson?: unknown;
   /** Step manifest from `routine_asl_versions.step_manifest_json`. The
    * value may be a legacy node map, a recipe-graph manifest, or an
    * AWSJSON string. */
@@ -189,60 +165,8 @@ function outputHasNodeResult(output: unknown, nodeId: string): boolean {
   );
 }
 
-interface StatusPresentation {
-  Icon: React.ComponentType<{ className?: string }>;
-  iconClass: string;
-  label: string;
-}
-
-function statusPresentation(status: string | undefined): StatusPresentation {
-  switch (status) {
-    case "running":
-      return {
-        Icon: Loader2,
-        iconClass: "text-blue-500 animate-spin",
-        label: "Running",
-      };
-    case "succeeded":
-      return {
-        Icon: CheckCircle2,
-        iconClass: "text-green-500",
-        label: "Succeeded",
-      };
-    case "failed":
-      return {
-        Icon: XCircle,
-        iconClass: "text-red-500",
-        label: "Failed",
-      };
-    case "cancelled":
-      return {
-        Icon: AlertCircle,
-        iconClass: "text-zinc-500",
-        label: "Cancelled",
-      };
-    case "timed_out":
-      return {
-        Icon: Clock,
-        iconClass: "text-amber-500",
-        label: "Timed out",
-      };
-    case "awaiting_approval":
-      return {
-        Icon: PauseCircle,
-        iconClass: "text-purple-500",
-        label: "Awaiting approval",
-      };
-    default:
-      return {
-        Icon: Circle,
-        iconClass: "text-zinc-300 dark:text-zinc-600",
-        label: "Pending",
-      };
-  }
-}
-
 export function ExecutionGraph({
+  aslJson,
   stepManifest,
   stepEvents,
   executionStatus,
@@ -259,82 +183,40 @@ export function ExecutionGraph({
     [stepManifest, stepEvents, executionStatus, executionOutput],
   );
 
-  if (nodes.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-zinc-200 dark:border-zinc-800 p-6 text-center">
-        <Muted>No steps yet — the execution may still be starting.</Muted>
-      </div>
-    );
-  }
-
   return (
-    <ol className="relative space-y-1 border-l border-zinc-200 dark:border-zinc-800 pl-4">
-      {nodes.map((node, idx) => {
-        const presentation = statusPresentation(node.latestEvent?.status);
-        const Icon = presentation.Icon;
-        const isSelected = selectedNodeId === node.nodeId;
-        const isClickable = !!onSelectNode;
-        const interactiveClass = isClickable
-          ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900"
-          : "";
-        return (
-          <li
-            key={node.nodeId}
-            id={`step-${node.nodeId}`}
-            className={cn(
-              "relative -ml-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors",
-              interactiveClass,
-              isSelected && "bg-zinc-50 dark:bg-zinc-900",
-            )}
-            onClick={() => onSelectNode?.(node.nodeId)}
-            role={isClickable ? "button" : undefined}
-            tabIndex={isClickable ? 0 : undefined}
-            onKeyDown={(e) => {
-              if (!isClickable) return;
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelectNode?.(node.nodeId);
-              }
-            }}
-          >
-            <span
-              aria-hidden
-              className="absolute -left-[19px] flex h-4 w-4 items-center justify-center rounded-full bg-white dark:bg-zinc-950"
-            >
-              <Icon className={cn("h-4 w-4", presentation.iconClass)} />
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400 tabular-nums">
-                  {String(idx + 1).padStart(2, "0")}
-                </span>
-                <span className="truncate font-medium">
-                  {node.label ?? node.nodeId}
-                </span>
-                {(node.recipeId ?? node.recipeType) && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                    {node.recipeId ?? node.recipeType}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                {node.label
-                  ? `${node.nodeId} · ${presentation.label}`
-                  : presentation.label}
-                {node.latestEvent?.retryCount
-                  ? ` · ${node.latestEvent.retryCount} retr${node.latestEvent.retryCount === 1 ? "y" : "ies"}`
-                  : ""}
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <RoutineFlowCanvas
+      mode="execution"
+      aslJson={aslJson ?? linearAslFromNodes(nodes)}
+      stepManifestJson={stepManifest}
+      stepEvents={stepEvents}
+      executionStatus={executionStatus}
+      executionOutput={executionOutput}
+      selectedNodeId={selectedNodeId}
+      onSelectNode={(nodeId) => nodeId && onSelectNode?.(nodeId)}
+      emptyLabel="No steps yet — the execution may still be starting."
+    />
   );
 }
 
-function Muted({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-sm text-zinc-500 dark:text-zinc-400">{children}</span>
-  );
+function linearAslFromNodes(nodes: StepNode[]): Record<string, unknown> {
+  return {
+    StartAt: nodes[0]?.nodeId,
+    States: Object.fromEntries(
+      nodes.map((node, index) => {
+        const next = nodes[index + 1]?.nodeId;
+        return [
+          node.nodeId,
+          {
+            Type: "Task",
+            Comment: node.recipeId
+              ? `recipe:${node.recipeId}`
+              : node.recipeType
+                ? `recipe:${node.recipeType}`
+                : undefined,
+            ...(next ? { Next: next } : { End: true }),
+          },
+        ];
+      }),
+    ),
+  };
 }

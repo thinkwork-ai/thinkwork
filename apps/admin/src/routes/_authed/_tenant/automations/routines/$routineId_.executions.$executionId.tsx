@@ -204,6 +204,7 @@ function ExecutionDetailPage() {
                 Steps
               </h3>
               <ExecutionGraph
+                aslJson={aslVersion?.aslJson}
                 stepManifest={stepManifest}
                 stepEvents={stepEventsLite}
                 executionStatus={execution.status}
