@@ -18,19 +18,24 @@ export function DataTablePagination<TData>({
   table,
   pageSizeOptions = [10, 25, 50, 100],
 }: DataTablePaginationProps<TData>) {
+  const currentPageSize = table.getState().pagination.pageSize;
+  const options = Array.from(
+    new Set([...pageSizeOptions, currentPageSize]),
+  ).sort((a, b) => a - b);
+
   return (
     <div className="flex items-center justify-between py-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Rows per page</span>
         <Select
-          value={`${table.getState().pagination.pageSize}`}
+          value={`${currentPageSize}`}
           onValueChange={(value) => table.setPageSize(Number(value))}
         >
           <SelectTrigger className="h-7 w-[65px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {pageSizeOptions.map((size) => (
+            {options.map((size) => (
               <SelectItem key={size} value={`${size}`} className="text-xs">
                 {size}
               </SelectItem>
