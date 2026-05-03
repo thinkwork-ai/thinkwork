@@ -144,7 +144,7 @@ async function discoverServer(
   cleanup.push(async () => {
     await transport.close().catch((err: unknown) => {
       console.warn(
-        `[agentcore-pi] MCP cleanup failed for ${config.name}: ${safeError(err)}`,
+        `[agentcore-flue] MCP cleanup failed for ${config.name}: ${safeError(err)}`,
       );
     });
   });
@@ -209,7 +209,7 @@ export async function buildMcpTools(
   return discovered.flatMap((result, index) => {
     if (result.status === "fulfilled") return result.value;
     console.warn(
-      `[agentcore-pi] MCP discovery failed for ${configs[index]?.name ?? "unknown"}: ${safeError(result.reason)}`,
+      `[agentcore-flue] MCP discovery failed for ${configs[index]?.name ?? "unknown"}: ${safeError(result.reason)}`,
     );
     return [];
   });

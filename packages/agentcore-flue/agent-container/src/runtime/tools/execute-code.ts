@@ -149,7 +149,7 @@ export function buildExecuteCodeTool(
         }),
       )
       .catch((err: unknown) => {
-        console.warn("[agentcore-pi] execute_code stop session failed", err);
+        console.warn("[agentcore-flue] execute_code stop session failed", err);
       });
     sessionId = undefined;
   });

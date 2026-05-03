@@ -19,7 +19,7 @@ describe("resolveRuntimeFunctionName", () => {
     expect(
       resolveRuntimeFunctionName("strands", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
-        AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
+        AGENTCORE_FLUE_FUNCTION_NAME: "thinkwork-dev-agentcore-flue",
       }),
     ).toBe("thinkwork-dev-agentcore");
   });
@@ -28,16 +28,16 @@ describe("resolveRuntimeFunctionName", () => {
     expect(
       resolveRuntimeFunctionName("pi", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
-        AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
+        AGENTCORE_FLUE_FUNCTION_NAME: "thinkwork-dev-agentcore-flue",
       }),
-    ).toBe("thinkwork-dev-agentcore-pi");
+    ).toBe("thinkwork-dev-agentcore-flue");
   });
 
   it("fails loudly when the selected runtime is not provisioned", () => {
     expect(() =>
       resolveRuntimeFunctionName("pi", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
-        AGENTCORE_PI_FUNCTION_NAME: "",
+        AGENTCORE_FLUE_FUNCTION_NAME: "",
       }),
     ).toThrow(RuntimeNotProvisionedError);
   });

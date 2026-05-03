@@ -17,7 +17,7 @@ Usage:
   bash scripts/update-agentcore-runtime-image.sh \
     --stage dev \
     --region us-east-1 \
-    --runtime strands|pi \
+    --runtime strands|flue \
     --image <ecr-image-uri> \
     [--account-id <aws-account-id>] \
     [--wait-seconds 900]
@@ -49,9 +49,9 @@ if [[ -z "$STAGE" || -z "$RUNTIME" || -z "$IMAGE" ]]; then
 fi
 
 case "$RUNTIME" in
-  strands|pi) ;;
+  strands|flue) ;;
   *)
-    echo "ERROR: --runtime must be 'strands' or 'pi' (got '$RUNTIME')" >&2
+    echo "ERROR: --runtime must be 'strands' or 'flue' (got '$RUNTIME')" >&2
     exit 2
     ;;
 esac
@@ -80,9 +80,9 @@ if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
     --output text 2>/dev/null || echo "")
 fi
 
-create_pi_runtime() {
+create_flue_runtime() {
   if [[ -z "$ACCOUNT_ID" ]]; then
-    echo "ERROR: --account-id is required to create the Pi AgentCore runtime" >&2
+    echo "ERROR: --account-id is required to create the Flue AgentCore runtime" >&2
     exit 2
   fi
 
@@ -134,8 +134,8 @@ update_runtime() {
 }
 
 if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
-  if [[ "$RUNTIME" == "pi" ]]; then
-    create_pi_runtime
+  if [[ "$RUNTIME" == "flue" ]]; then
+    create_flue_runtime
   else
     echo "ERROR: no ${RUNTIME} AgentCore runtime found in SSM (${ssm_name}) or runtime list" >&2
     exit 1

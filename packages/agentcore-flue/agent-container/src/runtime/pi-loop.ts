@@ -117,7 +117,7 @@ export async function runPiAgent(
       );
     } catch (err) {
       console.warn(
-        "[agentcore-pi] workspace bootstrap failed (continuing with stale local tree)",
+        "[agentcore-flue] workspace bootstrap failed (continuing with stale local tree)",
         err,
       );
     }
@@ -231,13 +231,13 @@ export async function runPiAgent(
     (result) => {
       if (!result.retained && result.error) {
         console.warn(
-          "[agentcore-pi] retainFullThread failed (non-blocking)",
+          "[agentcore-flue] retainFullThread failed (non-blocking)",
           result.error,
         );
       }
     },
     (err) => {
-      console.warn("[agentcore-pi] retainFullThread unexpected error", err);
+      console.warn("[agentcore-flue] retainFullThread unexpected error", err);
     },
   );
 
