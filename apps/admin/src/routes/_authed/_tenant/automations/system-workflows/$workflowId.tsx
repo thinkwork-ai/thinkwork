@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -10,7 +10,6 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { RoutineFlowCanvas } from "@/components/routines/RoutineFlowCanvas";
 import { DataTable } from "@/components/ui/data-table";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SystemWorkflowDetailQuery } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
@@ -241,7 +240,6 @@ function SystemWorkflowDetailPage() {
         </TabsList>
 
         <TabsContent value="activity" className="space-y-3">
-          <h2 className="text-sm font-semibold">Recent Runs</h2>
           <DataTable
             columns={runColumns}
             data={runRows}
@@ -365,14 +363,6 @@ function SystemWorkflowDetailPage() {
           </section>
         </TabsContent>
       </Tabs>
-
-      <div className="mt-6">
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/automations/system-workflows">
-            Back to System Workflows
-          </Link>
-        </Button>
-      </div>
     </PageLayout>
   );
 }
