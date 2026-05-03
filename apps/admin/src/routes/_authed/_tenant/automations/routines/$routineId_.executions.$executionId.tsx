@@ -16,6 +16,7 @@
  */
 
 import { useState, useMemo, useEffect } from "react";
+import type React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { ArrowLeft } from "lucide-react";
@@ -35,6 +36,10 @@ import {
   type StepEventDetail,
 } from "@/components/routines/StepDetailPanel";
 import { MarkdownSummary } from "@/components/routines/MarkdownSummary";
+import {
+  normalizeRoutineExecutionManifest,
+  parseAwsJson,
+} from "@/components/routines/routineExecutionManifest";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute(
@@ -86,19 +91,11 @@ function ExecutionDetailPage() {
   // not the routine's current version. Falls back to events-only graph
   // rendering when versionArn is null (out-of-band SFN starts).
   const aslVersion = execution?.aslVersion ?? null;
-  const stepManifest = useMemo(() => {
-    if (aslVersion?.stepManifestJson) {
-      try {
-        return JSON.parse(aslVersion.stepManifestJson) as Record<
-          string,
-          { recipeType?: string }
-        >;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }, [aslVersion]);
+  const stepManifest = aslVersion?.stepManifestJson ?? null;
+  const manifestSteps = useMemo(
+    () => normalizeRoutineExecutionManifest(stepManifest),
+    [stepManifest],
+  );
 
   useBreadcrumbs(
     routine
@@ -121,6 +118,19 @@ function ExecutionDetailPage() {
         <Card>
           <CardContent className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
             {error?.message ?? "No execution row matches that id."}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (execution.routineId !== routineId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Execution not found" />
+        <Card>
+          <CardContent className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+            That execution does not belong to this routine.
           </CardContent>
         </Card>
       </div>
@@ -163,6 +173,13 @@ function ExecutionDetailPage() {
         .filter((ev) => ev.nodeId === selectedNodeId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     : [];
+  const selectedStep = selectedNodeId
+    ? manifestSteps.find((step) => step.nodeId === selectedNodeId)
+    : undefined;
+  const summaryMarkdown =
+    aslVersion?.markdownSummary ?? routine?.documentationMd ?? "";
+  const executionOutput = parseAwsJson(execution.outputJson);
+  const executionInput = parseAwsJson(execution.inputJson);
 
   return (
     <div className="space-y-4">
@@ -198,12 +215,36 @@ function ExecutionDetailPage() {
           {selectedNodeId && (
             <StepDetailPanel
               nodeId={selectedNodeId}
+              step={selectedStep}
               events={eventsForSelected}
             />
           )}
         </div>
 
         <div className="space-y-4">
+          {(execution.outputJson != null ||
+            execution.errorCode ||
+            execution.errorMessage) && (
+            <Card>
+              <CardContent className="space-y-3 py-4">
+                <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
+                  Run result
+                </h3>
+                {execution.errorCode && (
+                  <Row label="Error code" value={execution.errorCode} />
+                )}
+                {execution.errorMessage && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                    {execution.errorMessage}
+                  </div>
+                )}
+                {execution.outputJson != null && (
+                  <JsonBlock value={executionOutput} />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardContent className="space-y-3 py-4 text-sm">
               <Row label="Trigger" value={execution.triggerSource} />
@@ -236,17 +277,22 @@ function ExecutionDetailPage() {
               {execution.errorCode && (
                 <Row label="Error" value={execution.errorCode} />
               )}
+              {execution.inputJson != null && (
+                <Section title="Input">
+                  <JsonBlock value={executionInput} />
+                </Section>
+              )}
             </CardContent>
           </Card>
 
-          {(routine?.documentationMd ?? "").length > 0 && (
+          {summaryMarkdown.length > 0 && (
             <Card>
               <CardContent className="py-4">
                 <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-                  Summary
+                  Version summary
                 </h3>
                 <MarkdownSummary
-                  markdown={routine?.documentationMd ?? ""}
+                  markdown={summaryMarkdown}
                   onAnchorClick={(nodeId) => setSelectedNodeId(nodeId)}
                 />
               </CardContent>
@@ -263,6 +309,37 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-2">
       <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
       <span className="text-right">{value}</span>
+    </div>
+  );
+}
+
+function JsonBlock({ value }: { value: unknown }) {
+  let pretty: string;
+  try {
+    pretty = JSON.stringify(value, null, 2);
+  } catch {
+    pretty = String(value);
+  }
+  return (
+    <pre className="max-h-64 overflow-auto rounded bg-zinc-50 p-2 text-xs leading-snug dark:bg-zinc-900 dark:text-zinc-200">
+      {pretty}
+    </pre>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        {title}
+      </div>
+      {children}
     </div>
   );
 }

@@ -3,12 +3,9 @@
  *
  * Surfaces fields that aren't a direct column read — currently the
  * `RoutineExecution.aslVersion` pointer that closes the run-detail
- * step-manifest gap (D U13 residual). The execution row carries
- * `state_machine_arn` + `version_arn`; together those uniquely match
- * a `routine_asl_versions` row, so the resolver does a simple SELECT
- * keyed on the pair. Returns null for executions whose `version_arn`
- * was never recorded (out-of-band SFN executions, or rows that
- * pre-date the version-arn capture in Phase B U7).
+ * step-manifest gap. New execution rows carry `routine_asl_version_id`
+ * for deterministic historical lookup; older rows fall back to the
+ * original `state_machine_arn` + `version_arn` pair.
  */
 
 import { and, eq } from "drizzle-orm";
@@ -66,10 +63,23 @@ export const routineExecutionTypeResolvers = {
   },
 
   aslVersion: async (
-    execution: { stateMachineArn?: string; versionArn?: string | null },
+    execution: {
+      stateMachineArn?: string;
+      versionArn?: string | null;
+      routineAslVersionId?: string | null;
+    },
     _args: unknown,
     _ctx: GraphQLContext,
   ) => {
+    if (execution.routineAslVersionId) {
+      const [row] = await db
+        .select()
+        .from(routineAslVersions)
+        .where(eq(routineAslVersions.id, execution.routineAslVersionId))
+        .limit(1);
+      if (row) return snakeToCamel(row);
+    }
+
     if (!execution.stateMachineArn || !execution.versionArn) {
       return null;
     }

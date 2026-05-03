@@ -25,11 +25,21 @@ import {
 interface RoutineDefinitionPanelProps {
   routineId: string;
   onPublished?: () => void;
+  onStateChange?: (state: RoutineDefinitionEditorState) => void;
+}
+
+export interface RoutineDefinitionEditorState {
+  ready: boolean;
+  dirty: boolean;
+  invalid: boolean;
+  saving: boolean;
+  currentVersion: number | null;
 }
 
 export function RoutineDefinitionPanel({
   routineId,
   onPublished,
+  onStateChange,
 }: RoutineDefinitionPanelProps) {
   const { tenantId } = useTenant();
   const [queryResult, refetch] = useQuery({
@@ -46,6 +56,15 @@ export function RoutineDefinitionPanel({
     UpdateRoutineDefinitionMutation,
   );
   const definition = queryResult.data?.routineDefinition;
+  const queryErrorMessage = queryResult.error?.message.replace(
+    /^\[GraphQL\]\s*/,
+    "",
+  );
+  const definitionQueryUnsupported =
+    !!queryErrorMessage &&
+    (queryErrorMessage.includes('Cannot query field "routineDefinition"') ||
+      queryErrorMessage.includes('Cannot query field "configFields"') ||
+      queryErrorMessage.includes('Cannot query field "recipeName"'));
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [steps, setSteps] = useState<RoutineConfigStep[]>([]);
 
@@ -76,6 +95,28 @@ export function RoutineDefinitionPanel({
 
   const dirty =
     JSON.stringify(originalSnapshot) !== JSON.stringify(editedSnapshot);
+
+  useEffect(() => {
+    onStateChange?.({
+      ready:
+        !!definition ||
+        definitionQueryUnsupported ||
+        (!queryResult.fetching && !queryResult.error),
+      dirty,
+      invalid,
+      saving: updateState.fetching,
+      currentVersion: definition?.currentVersion ?? null,
+    });
+  }, [
+    definition,
+    definitionQueryUnsupported,
+    dirty,
+    invalid,
+    onStateChange,
+    queryResult.error,
+    queryResult.fetching,
+    updateState.fetching,
+  ]);
 
   const save = async () => {
     if (!definition || !dirty) return;
@@ -111,12 +152,8 @@ export function RoutineDefinitionPanel({
   }
 
   if (queryResult.error) {
-    const message = queryResult.error.message.replace(/^\[GraphQL\]\s*/, "");
-    if (
-      message.includes('Cannot query field "routineDefinition"') ||
-      message.includes('Cannot query field "configFields"') ||
-      message.includes('Cannot query field "recipeName"')
-    ) {
+    const message = queryErrorMessage ?? "Unable to load routine definition.";
+    if (definitionQueryUnsupported) {
       return null;
     }
     return (

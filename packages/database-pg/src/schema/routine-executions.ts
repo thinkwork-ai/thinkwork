@@ -30,6 +30,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { routines } from "./routines";
 import { scheduledJobs } from "./scheduled-jobs";
+import { routineAslVersions } from "./routine-asl-versions";
 
 export const routineExecutions = pgTable(
 	"routine_executions",
@@ -49,6 +50,12 @@ export const routineExecutions = pgTable(
 		state_machine_arn: text("state_machine_arn").notNull(),
 		alias_arn: text("alias_arn"),
 		version_arn: text("version_arn"),
+		// Exact routine_asl_versions row used when this execution was started.
+		// Nullable for pre-column rows and out-of-band executions; resolvers
+		// fall back to version_arn matching in those cases.
+		routine_asl_version_id: uuid("routine_asl_version_id").references(
+			() => routineAslVersions.id,
+		),
 		// SFN execution ARN. Unique per execution; used to correlate
 		// EventBridge state-change events back to this row.
 		sfn_execution_arn: text("sfn_execution_arn").notNull(),
@@ -82,6 +89,9 @@ export const routineExecutions = pgTable(
 			table.routine_id,
 			table.started_at,
 		),
+		index("idx_routine_executions_asl_version").on(
+			table.routine_asl_version_id,
+		),
 		index("idx_routine_executions_tenant_started").on(
 			table.tenant_id,
 			table.started_at,
@@ -103,6 +113,10 @@ export const routineExecutionsRelations = relations(
 		trigger: one(scheduledJobs, {
 			fields: [routineExecutions.trigger_id],
 			references: [scheduledJobs.id],
+		}),
+		aslVersion: one(routineAslVersions, {
+			fields: [routineExecutions.routine_asl_version_id],
+			references: [routineAslVersions.id],
 		}),
 	}),
 );
