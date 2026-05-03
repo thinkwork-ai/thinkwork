@@ -206,6 +206,8 @@ function ExecutionDetailPage() {
               <ExecutionGraph
                 stepManifest={stepManifest}
                 stepEvents={stepEventsLite}
+                executionStatus={execution.status}
+                executionOutput={executionOutput}
                 selectedNodeId={selectedNodeId}
                 onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
               />

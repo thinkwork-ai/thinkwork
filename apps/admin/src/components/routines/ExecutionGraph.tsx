@@ -60,8 +60,19 @@ export interface ExecutionGraphProps {
    * AWSJSON string. */
   stepManifest: unknown;
   stepEvents: StepEventLite[];
+  /** Overall routine execution status. Used only to infer completed
+   * output-backed steps when no explicit step callback event exists. */
+  executionStatus?: string | null;
+  /** Parsed Step Functions output. Some Lambda-backed recipes return
+   * useful per-step output but do not currently emit routine_step_events. */
+  executionOutput?: unknown;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string) => void;
+}
+
+export interface DeriveNodesOptions {
+  executionStatus?: string | null;
+  executionOutput?: unknown;
 }
 
 /** Collapse multi-event-per-node to the latest event by `started_at`
@@ -104,11 +115,14 @@ export function latestEventByNode(
 export function deriveNodes(
   stepManifest: unknown,
   events: StepEventLite[],
+  options: DeriveNodesOptions = {},
 ): StepNode[] {
   const latest = latestEventByNode(events);
   const manifestSteps = normalizeRoutineExecutionManifest(stepManifest);
   if (manifestSteps.length > 0) {
-    return manifestSteps.map((step) => nodeFromManifestStep(step, latest));
+    return manifestSteps.map((step) =>
+      nodeFromManifestStep(step, latest, options),
+    );
   }
   // Fallback: derive from events. Order by earliest startedAt.
   const seen = new Set<string>();
@@ -133,15 +147,46 @@ export function deriveNodes(
 function nodeFromManifestStep(
   step: NormalizedRoutineStep,
   latest: Record<string, StepEventLite>,
+  options: DeriveNodesOptions,
 ): StepNode {
+  const latestEvent =
+    latest[step.nodeId] ?? inferredSucceededEvent(step, options);
   return {
     nodeId: step.nodeId,
     recipeId: step.recipeId,
-    recipeType: step.recipeType ?? latest[step.nodeId]?.recipeType,
+    recipeType: step.recipeType ?? latestEvent?.recipeType,
     label: step.label,
     args: step.args,
-    latestEvent: latest[step.nodeId],
+    latestEvent,
   };
+}
+
+function inferredSucceededEvent(
+  step: NormalizedRoutineStep,
+  options: DeriveNodesOptions,
+): StepEventLite | undefined {
+  if (options.executionStatus !== "succeeded") return undefined;
+  if (!outputHasNodeResult(options.executionOutput, step.nodeId)) {
+    return undefined;
+  }
+  return {
+    id: `inferred:${step.nodeId}`,
+    nodeId: step.nodeId,
+    recipeType: step.recipeType ?? step.recipeId ?? "unknown",
+    status: "succeeded",
+    startedAt: null,
+    finishedAt: null,
+    retryCount: 0,
+  };
+}
+
+function outputHasNodeResult(output: unknown, nodeId: string): boolean {
+  return (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    Object.prototype.hasOwnProperty.call(output, nodeId)
+  );
 }
 
 interface StatusPresentation {
@@ -200,12 +245,18 @@ function statusPresentation(status: string | undefined): StatusPresentation {
 export function ExecutionGraph({
   stepManifest,
   stepEvents,
+  executionStatus,
+  executionOutput,
   selectedNodeId,
   onSelectNode,
 }: ExecutionGraphProps) {
   const nodes = useMemo(
-    () => deriveNodes(stepManifest, stepEvents),
-    [stepManifest, stepEvents],
+    () =>
+      deriveNodes(stepManifest, stepEvents, {
+        executionStatus,
+        executionOutput,
+      }),
+    [stepManifest, stepEvents, executionStatus, executionOutput],
   );
 
   if (nodes.length === 0) {
