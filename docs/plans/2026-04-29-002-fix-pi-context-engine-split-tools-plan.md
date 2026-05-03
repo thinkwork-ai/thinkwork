@@ -1,6 +1,7 @@
 ---
 title: "Fix Pi Context Engine Split Tools"
-status: active
+status: superseded
+superseded_by: docs/plans/2026-05-03-005-feat-flue-runtime-production-wiring-plan.md
 created: "2026-04-29"
 owner: "codex"
 origin: "Mobile e2e verification after context engine deploy"
