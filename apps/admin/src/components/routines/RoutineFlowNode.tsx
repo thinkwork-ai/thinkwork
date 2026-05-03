@@ -22,6 +22,11 @@ export function RoutineFlowNode({ data, selected }: NodeProps) {
   const node = data as unknown as RoutineFlowNodeData;
   const presentation = nodePresentation(node);
   const Icon = presentation.Icon;
+  const compact =
+    node.kind === "start" ||
+    node.kind === "end" ||
+    node.kind === "succeed" ||
+    node.kind === "fail";
 
   if (node.kind === "group") {
     return (
@@ -34,18 +39,19 @@ export function RoutineFlowNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative min-h-[72px] w-[210px] rounded-md border bg-background px-3 py-3 shadow-sm transition-colors",
+        "relative h-full w-full rounded-md border bg-background shadow-sm transition-colors",
+        compact ? "px-3 py-2.5" : "px-3 py-3",
         selected ? "border-primary ring-2 ring-primary/25" : "border-border/80",
       )}
     >
       <Handle
         type="target"
-        position={Position.Left}
+        position={Position.Top}
         className="!h-2.5 !w-2.5 !border-background !bg-muted-foreground"
       />
       <Handle
         type="source"
-        position={Position.Right}
+        position={Position.Bottom}
         className="!h-2.5 !w-2.5 !border-background !bg-muted-foreground"
       />
       <div className="flex min-w-0 items-start gap-2.5">

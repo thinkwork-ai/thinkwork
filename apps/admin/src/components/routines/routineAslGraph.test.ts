@@ -43,6 +43,15 @@ describe("buildRoutineAslGraph", () => {
         ["EmailAustinWeather", "EmailAustinWeather.__end"],
       ]),
     );
+    const fetchNode = graph.nodes.find(
+      (node) => node.id === "FetchAustinWeather",
+    );
+    const emailNode = graph.nodes.find(
+      (node) => node.id === "EmailAustinWeather",
+    );
+
+    expect(emailNode?.position.y).toBeGreaterThan(fetchNode?.position.y ?? 0);
+    expect(centerX(emailNode)).toBe(centerX(fetchNode));
   });
 
   it("labels choice and default edges", () => {
@@ -83,3 +92,9 @@ describe("buildRoutineAslGraph", () => {
     expect(graph.error).toMatch(/missing StartAt/i);
   });
 });
+
+function centerX(
+  node: ReturnType<typeof buildRoutineAslGraph>["nodes"][number] | undefined,
+) {
+  return node ? node.position.x + node.width / 2 : undefined;
+}

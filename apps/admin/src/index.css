@@ -206,6 +206,50 @@
   background: oklch(0.5 0 0) !important;
 }
 
+.routine-flow-canvas .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  box-shadow: none;
+}
+
+.routine-flow-canvas .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.routine-flow-canvas .react-flow__controls-button:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.routine-flow-canvas .react-flow__controls-button svg {
+  fill: currentColor;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.routine-flow-canvas .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.routine-flow-canvas .react-flow__attribution {
+  border: 1px solid var(--border);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-sm) 0 0 0;
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  color: var(--muted-foreground);
+}
+
+.routine-flow-canvas .react-flow__attribution a {
+  color: inherit;
+}
+
 [data-slot="dialog-content"] {
   transition: max-width 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }

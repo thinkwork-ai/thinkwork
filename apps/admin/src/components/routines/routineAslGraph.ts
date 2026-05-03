@@ -73,8 +73,8 @@ export function buildRoutineAslGraph(
       stateName: "__start",
       label: "Start",
       kind: "start",
-      width: 120,
-      height: 52,
+      width: 160,
+      height: 76,
     }),
   ];
   const edges: RoutineGraphEdge[] = [
@@ -143,8 +143,8 @@ export function buildRoutineAslGraph(
         stateName: endId,
         label: "End",
         kind: "end",
-        width: 120,
-        height: 52,
+        width: 160,
+        height: 76,
       }),
     );
     edges.push({
@@ -307,7 +307,7 @@ function layoutNodes(
   edges: RoutineGraphEdge[],
 ): RoutineGraphNode[] {
   const graph = new Graph().setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({ rankdir: "LR", nodesep: 64, ranksep: 78 });
+  graph.setGraph({ rankdir: "TB", nodesep: 52, ranksep: 94 });
   for (const node of nodes) {
     graph.setNode(node.id, { width: node.width, height: node.height });
   }
@@ -316,7 +316,7 @@ function layoutNodes(
   }
   layout(graph);
 
-  return nodes.map((node) => {
+  const positioned = nodes.map((node) => {
     const laidOut = graph.node(node.id);
     if (!laidOut) return node;
     return {
@@ -327,6 +327,43 @@ function layoutNodes(
       },
     };
   });
+
+  return alignStraightRuns(positioned, edges);
+}
+
+function alignStraightRuns(
+  nodes: RoutineGraphNode[],
+  edges: RoutineGraphEdge[],
+): RoutineGraphNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const incoming = new Map<string, number>();
+  const outgoing = new Map<string, number>();
+
+  for (const edge of edges) {
+    incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
+    outgoing.set(edge.source, (outgoing.get(edge.source) ?? 0) + 1);
+  }
+
+  for (const edge of edges) {
+    if (!isStraightRunEdge(edge)) continue;
+    if ((outgoing.get(edge.source) ?? 0) !== 1) continue;
+    if ((incoming.get(edge.target) ?? 0) !== 1) continue;
+
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) continue;
+
+    target.position = {
+      ...target.position,
+      x: source.position.x + source.width / 2 - target.width / 2,
+    };
+  }
+
+  return nodes;
+}
+
+function isStraightRunEdge(edge: RoutineGraphEdge): boolean {
+  return edge.kind === "start" || edge.kind === "next" || edge.kind === "end";
 }
 
 function manifestByNode(value: unknown) {

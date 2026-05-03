@@ -86,7 +86,7 @@ export function RoutineFlowCanvas({
   return (
     <div
       className={cn(
-        "relative h-[min(70vh,680px)] min-h-[420px] overflow-hidden rounded-md border border-border/80 bg-background",
+        "routine-flow-canvas relative h-[min(70vh,680px)] min-h-[420px] overflow-hidden rounded-md border border-border/80 bg-background",
         className,
       )}
     >
@@ -160,12 +160,14 @@ function toFlowEdges(graph: RoutineAslGraph): Edge[] {
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    type: "smoothstep",
+    type:
+      edge.kind === "choice" || edge.kind === "default" || edge.kind === "catch"
+        ? "bezier"
+        : "straight",
     label: edge.label,
-    animated: edge.kind === "start",
     style: {
       strokeWidth: edge.kind === "choice" || edge.kind === "default" ? 2 : 1.5,
-      stroke: edge.kind === "catch" ? "hsl(var(--destructive))" : undefined,
+      stroke: edge.kind === "catch" ? "var(--destructive)" : undefined,
     },
     labelStyle: {
       fontSize: 11,
