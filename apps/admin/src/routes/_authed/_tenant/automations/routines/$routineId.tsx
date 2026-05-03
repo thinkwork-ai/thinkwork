@@ -166,6 +166,7 @@ function RoutineDetailPage() {
 
   return (
     <PageLayout
+      contentClassName="overflow-hidden pb-4"
       header={
         <PageHeader
           title={routine.name}
@@ -207,8 +208,11 @@ function RoutineDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="activity" className="space-y-4">
-        <TabsList variant="line" className="w-full justify-start border-b">
+      <Tabs defaultValue="activity" className="h-full min-h-0 gap-4">
+        <TabsList
+          variant="line"
+          className="w-full shrink-0 justify-start border-b"
+        >
           <TabsTrigger value="activity" className="flex-none px-3">
             Activity
           </TabsTrigger>
@@ -220,7 +224,7 @@ function RoutineDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="activity">
+        <TabsContent value="activity" className="overflow-y-auto">
           <ExecutionList
             routineId={routineId}
             statusFilter={statusFilter}
@@ -249,17 +253,18 @@ function RoutineDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="workflow">
+        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
           <RoutineDefinitionPanel
             routineId={routineId}
             onPublished={() =>
               reexecuteRoutine({ requestPolicy: "network-only" })
             }
             onStateChange={handleDefinitionStateChange}
+            layout="workspace"
           />
         </TabsContent>
 
-        <TabsContent value="config" className="space-y-4">
+        <TabsContent value="config" className="space-y-4 overflow-y-auto">
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="space-y-3 rounded-md border p-4">
               <h2 className="text-sm font-semibold">Definition</h2>

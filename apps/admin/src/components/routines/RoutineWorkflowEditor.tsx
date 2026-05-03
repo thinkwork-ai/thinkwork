@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RoutineFlowCanvas } from "./RoutineFlowCanvas";
 import { RoutineFlowInspector } from "./RoutineFlowInspector";
 import { RoutineAddStepCommand } from "./RoutineAddStepCommand";
+import { cn } from "@/lib/utils";
 import type {
   RoutineConfigField,
   RoutineConfigStep,
@@ -36,6 +37,9 @@ interface RoutineWorkflowEditorProps {
   onRemoveStep: (nodeId: string) => void;
   catalogLoading?: boolean;
   fieldErrors?: Record<string, string>;
+  layout?: "default" | "workspace";
+  sidebarHeader?: ReactNode;
+  className?: string;
 }
 
 export function RoutineWorkflowEditor({
@@ -51,6 +55,9 @@ export function RoutineWorkflowEditor({
   onRemoveStep,
   catalogLoading = false,
   fieldErrors = {},
+  layout = "default",
+  sidebarHeader,
+  className,
 }: RoutineWorkflowEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     () => steps[0]?.nodeId ?? null,
@@ -93,40 +100,40 @@ export function RoutineWorkflowEditor({
     setAddAfterNodeId(afterNodeId);
     setAddOpen(true);
   };
+  const workspace = layout === "workspace";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Workflow className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Workflow</h2>
-          </div>
-          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            <Badge variant="secondary">
-              {steps.length} {steps.length === 1 ? "step" : "steps"}
-            </Badge>
-            {configurableFieldCount > 0 && (
-              <Badge variant="outline">
-                {configuredFieldCount}/{configurableFieldCount} configured
-              </Badge>
-            )}
-            {issueCount > 0 ? (
-              <Badge className="border-transparent bg-destructive/10 text-destructive">
-                <AlertCircle className="h-3 w-3" />
-                {issueCount} {issueCount === 1 ? "issue" : "issues"}
-              </Badge>
-            ) : steps.length > 0 ? (
-              <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-3 w-3" />
-                No issues
-              </Badge>
-            ) : null}
+    <div
+      className={cn(
+        workspace ? "flex h-full min-h-0 flex-col" : "space-y-4",
+        className,
+      )}
+    >
+      {!workspace && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Workflow</h2>
+            </div>
+            <div className="mt-2">
+              <WorkflowSummary
+                steps={steps}
+                configuredFieldCount={configuredFieldCount}
+                configurableFieldCount={configurableFieldCount}
+                issueCount={issueCount}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]",
+          workspace ? "min-h-0 flex-1" : "",
+        )}
+      >
         <RoutineFlowCanvas
           mode="authoring"
           aslJson={graphAsl}
@@ -134,22 +141,31 @@ export function RoutineWorkflowEditor({
           selectedNodeId={selectedNodeId}
           onSelectNode={setSelectedNodeId}
           onAddStepAfter={openAddStep}
+          className={workspace ? "h-full min-h-0" : undefined}
           emptyLabel={
             catalogLoading
               ? "Loading routine recipes..."
               : "No workflow steps yet"
           }
         />
-        <RoutineFlowInspector
-          mode="authoring"
-          selectedNodeId={selectedNodeId}
-          steps={steps}
-          fieldValues={fieldValues}
-          fieldErrors={fieldErrors}
-          onFieldChange={onFieldChange}
-          onLabelChange={onLabelChange}
-          onRemoveStep={onRemoveStep}
-        />
+        <div
+          className={cn(
+            "min-h-0",
+            workspace ? "space-y-3 overflow-y-auto pr-1" : "",
+          )}
+        >
+          {sidebarHeader}
+          <RoutineFlowInspector
+            mode="authoring"
+            selectedNodeId={selectedNodeId}
+            steps={steps}
+            fieldValues={fieldValues}
+            fieldErrors={fieldErrors}
+            onFieldChange={onFieldChange}
+            onLabelChange={onLabelChange}
+            onRemoveStep={onRemoveStep}
+          />
+        </div>
       </div>
 
       <RoutineAddStepCommand
@@ -160,6 +176,42 @@ export function RoutineWorkflowEditor({
           setSelectedNodeId(onAddRecipe(recipe, addAfterNodeId));
         }}
       />
+    </div>
+  );
+}
+
+function WorkflowSummary({
+  steps,
+  configuredFieldCount,
+  configurableFieldCount,
+  issueCount,
+}: {
+  steps: RoutineConfigStep[];
+  configuredFieldCount: number;
+  configurableFieldCount: number;
+  issueCount: number;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap gap-2">
+      <Badge variant="secondary">
+        {steps.length} {steps.length === 1 ? "step" : "steps"}
+      </Badge>
+      {configurableFieldCount > 0 && (
+        <Badge variant="outline">
+          {configuredFieldCount}/{configurableFieldCount} configured
+        </Badge>
+      )}
+      {issueCount > 0 ? (
+        <Badge className="border-transparent bg-destructive/10 text-destructive">
+          <AlertCircle className="h-3 w-3" />
+          {issueCount} {issueCount === 1 ? "issue" : "issues"}
+        </Badge>
+      ) : steps.length > 0 ? (
+        <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="h-3 w-3" />
+          No issues
+        </Badge>
+      ) : null}
     </div>
   );
 }

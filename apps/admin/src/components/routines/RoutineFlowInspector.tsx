@@ -14,6 +14,7 @@ import {
   type RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
 import type { StepEventLite } from "./ExecutionGraph";
+import { cn } from "@/lib/utils";
 
 interface RoutineFlowInspectorProps {
   mode: "authoring" | "execution";
@@ -26,6 +27,7 @@ interface RoutineFlowInspectorProps {
   onRemoveStep?: (nodeId: string) => void;
   stepEvents?: StepEventLite[];
   executionOutput?: unknown;
+  className?: string;
 }
 
 export function RoutineFlowInspector({
@@ -39,10 +41,16 @@ export function RoutineFlowInspector({
   onRemoveStep,
   stepEvents = [],
   executionOutput,
+  className,
 }: RoutineFlowInspectorProps) {
   if (!selectedNodeId) {
     return (
-      <aside className="rounded-md border border-border/70 bg-card/50 p-4">
+      <aside
+        className={cn(
+          "rounded-md border border-border/70 bg-card/50 p-4",
+          className,
+        )}
+      >
         <div className="flex items-center gap-2 text-sm font-medium">
           <Info className="h-4 w-4 text-muted-foreground" />
           Select a node
@@ -59,15 +67,34 @@ export function RoutineFlowInspector({
       (event) => event.nodeId === selectedNodeId,
     );
     const latest = events[events.length - 1];
+    const step = steps.find((candidate) => candidate.nodeId === selectedNodeId);
     return (
-      <aside className="rounded-md border border-border/70 bg-card/50 p-4">
+      <aside
+        className={cn(
+          "rounded-md border border-border/70 bg-card/50 p-4",
+          className,
+        )}
+      >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold">{selectedNodeId}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Run detail</p>
+            <h3 className="truncate text-sm font-semibold">
+              {step?.label ?? selectedNodeId}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {step?.recipeName ?? step?.recipeId ?? "Run detail"}
+            </p>
           </div>
           {latest && <Badge variant="outline">{latest.status}</Badge>}
         </div>
+        <dl className="mt-4 divide-y divide-border/70 rounded-md border border-border/70 text-sm">
+          <DetailRow label="Node ID" value={selectedNodeId} monospace />
+          {step?.recipeName && (
+            <DetailRow label="Type" value={step.recipeName} />
+          )}
+          {step?.recipeId && (
+            <DetailRow label="Runtime" value={step.recipeId} monospace />
+          )}
+        </dl>
         {events.length === 0 ? (
           <div className="mt-4 rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
             No step event has been recorded for this node.
@@ -112,7 +139,12 @@ export function RoutineFlowInspector({
   const step = steps.find((candidate) => candidate.nodeId === selectedNodeId);
   if (!step) {
     return (
-      <aside className="rounded-md border border-border/70 bg-card/50 p-4">
+      <aside
+        className={cn(
+          "rounded-md border border-border/70 bg-card/50 p-4",
+          className,
+        )}
+      >
         <div className="flex items-center gap-2 text-sm font-medium">
           <AlertCircle className="h-4 w-4 text-muted-foreground" />
           Unsupported node
@@ -133,6 +165,7 @@ export function RoutineFlowInspector({
       onLabelChange={onLabelChange}
       onRemoveStep={onRemoveStep}
       selectedNodeId={selectedNodeId}
+      className={className}
     />
   );
 }
@@ -145,6 +178,7 @@ function AuthoringInspector({
   onLabelChange,
   onRemoveStep,
   selectedNodeId,
+  className,
 }: {
   step: RoutineConfigStep;
   fieldValues: Record<string, string>;
@@ -153,6 +187,7 @@ function AuthoringInspector({
   onLabelChange?: (nodeId: string, value: string) => void;
   onRemoveStep?: (nodeId: string) => void;
   selectedNodeId: string;
+  className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const editableFields = step.configFields.filter((field) => field.editable);
@@ -168,7 +203,9 @@ function AuthoringInspector({
   );
 
   return (
-    <aside className="rounded-md border border-border/70 bg-card/50">
+    <aside
+      className={cn("rounded-md border border-border/70 bg-card/50", className)}
+    >
       <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border/70 p-4">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold">{step.label}</h3>

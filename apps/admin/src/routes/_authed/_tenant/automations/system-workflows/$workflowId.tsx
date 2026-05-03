@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
@@ -9,10 +9,12 @@ import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { RoutineFlowCanvas } from "@/components/routines/RoutineFlowCanvas";
+import { RoutineFlowInspector } from "@/components/routines/RoutineFlowInspector";
 import { DataTable } from "@/components/ui/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SystemWorkflowDetailQuery } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
+import type { RoutineConfigStep } from "@/components/routines/RoutineStepConfigEditor";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/automations/system-workflows/$workflowId",
@@ -91,6 +93,22 @@ function buildSystemWorkflowAsl(stepManifestJson: unknown) {
   };
 }
 
+function systemWorkflowSteps(stepManifestJson: unknown): RoutineConfigStep[] {
+  return asList(stepManifestJson)
+    .filter((step) => typeof step.nodeId === "string" && step.nodeId.trim())
+    .map((step) => ({
+      nodeId: step.nodeId,
+      recipeId: String(step.runtime ?? step.stepType ?? "system"),
+      recipeName: label(String(step.stepType ?? "System step")),
+      label: String(step.label ?? step.nodeId),
+      args: {
+        runtime: step.runtime,
+        stepType: step.stepType,
+      },
+      configFields: [],
+    }));
+}
+
 const runColumns: ColumnDef<RunRow>[] = [
   {
     accessorKey: "status",
@@ -153,6 +171,9 @@ function SystemWorkflowDetailPage() {
   const { tenantId } = useTenant();
   const { workflowId } = Route.useParams();
   const navigate = useNavigate();
+  const [selectedWorkflowNodeId, setSelectedWorkflowNodeId] = useState<
+    string | null
+  >(null);
 
   const [result] = useQuery({
     query: SystemWorkflowDetailQuery,
@@ -183,6 +204,24 @@ function SystemWorkflowDetailPage() {
     () => buildSystemWorkflowAsl(workflow?.stepManifestJson),
     [workflow?.stepManifestJson],
   );
+  const workflowSteps = useMemo(
+    () => systemWorkflowSteps(workflow?.stepManifestJson),
+    [workflow?.stepManifestJson],
+  );
+
+  useEffect(() => {
+    if (workflowSteps.length === 0) {
+      setSelectedWorkflowNodeId(null);
+      return;
+    }
+    if (
+      !selectedWorkflowNodeId ||
+      (!selectedWorkflowNodeId.endsWith(".__end") &&
+        !workflowSteps.some((step) => step.nodeId === selectedWorkflowNodeId))
+    ) {
+      setSelectedWorkflowNodeId(workflowSteps[0]?.nodeId ?? null);
+    }
+  }, [selectedWorkflowNodeId, workflowSteps]);
 
   const runRows: RunRow[] = useMemo(
     () =>
@@ -218,6 +257,7 @@ function SystemWorkflowDetailPage() {
 
   return (
     <PageLayout
+      contentClassName="overflow-hidden pb-4"
       header={
         <PageHeader
           title={workflow.name}
@@ -226,8 +266,11 @@ function SystemWorkflowDetailPage() {
         />
       }
     >
-      <Tabs defaultValue="activity" className="space-y-4">
-        <TabsList variant="line" className="w-full justify-start border-b">
+      <Tabs defaultValue="activity" className="h-full min-h-0 gap-4">
+        <TabsList
+          variant="line"
+          className="w-full shrink-0 justify-start border-b"
+        >
           <TabsTrigger value="activity" className="flex-none px-3">
             Activity
           </TabsTrigger>
@@ -239,7 +282,7 @@ function SystemWorkflowDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="activity" className="space-y-3">
+        <TabsContent value="activity" className="overflow-y-auto">
           <DataTable
             columns={runColumns}
             data={runRows}
@@ -259,16 +302,27 @@ function SystemWorkflowDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="workflow">
-          <RoutineFlowCanvas
-            mode="execution"
-            aslJson={workflowAsl}
-            stepManifestJson={workflow.stepManifestJson}
-            emptyLabel="No system workflow manifest available."
-          />
+        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
+          <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <RoutineFlowCanvas
+              mode="execution"
+              aslJson={workflowAsl}
+              stepManifestJson={workflow.stepManifestJson}
+              selectedNodeId={selectedWorkflowNodeId}
+              onSelectNode={setSelectedWorkflowNodeId}
+              className="h-full min-h-0"
+              emptyLabel="No system workflow manifest available."
+            />
+            <RoutineFlowInspector
+              mode="execution"
+              selectedNodeId={selectedWorkflowNodeId}
+              steps={workflowSteps}
+              className="h-full overflow-y-auto"
+            />
+          </div>
         </TabsContent>
 
-        <TabsContent value="config" className="space-y-4">
+        <TabsContent value="config" className="space-y-4 overflow-y-auto">
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="space-y-3 rounded-md border p-4">
               <h2 className="text-sm font-semibold">Definition</h2>
