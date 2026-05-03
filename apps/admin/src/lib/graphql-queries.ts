@@ -866,6 +866,18 @@ export const RoutineDefinitionQuery = graphql(`
   }
 `);
 
+export const RoutineDefinitionArtifactsQuery = graphql(`
+  query RoutineDefinitionArtifacts($routineId: ID!) {
+    routineDefinition(routineId: $routineId) {
+      routineId
+      versionId
+      aslJson
+      markdownSummary
+      stepManifestJson
+    }
+  }
+`);
+
 export const UpdateRoutineDefinitionMutation = graphql(`
   mutation UpdateRoutineDefinition($input: UpdateRoutineDefinitionInput!) {
     updateRoutineDefinition(input: $input) {
@@ -967,6 +979,7 @@ export const RoutineExecutionDetailQuery = graphql(`
       aslVersion {
         id
         versionNumber
+        aslJson
         markdownSummary
         stepManifestJson
       }

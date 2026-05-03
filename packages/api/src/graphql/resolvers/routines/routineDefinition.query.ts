@@ -1,8 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import {
-  routineAslVersions,
-  routines,
-} from "@thinkwork/database-pg/schema";
+import { routineAslVersions, routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
@@ -58,5 +55,8 @@ export async function routineDefinition(
     currentVersion: routine.current_version,
     versionId: version.id,
     plan: definition.plan,
+    aslJson: version.asl_json,
+    markdownSummary: version.markdown_summary,
+    stepManifestJson: version.step_manifest_json,
   });
 }

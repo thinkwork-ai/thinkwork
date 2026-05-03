@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@xyflow/react/dist/style.css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -43,7 +44,7 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Geist Variable", sans-serif;
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -128,7 +129,11 @@
   html {
     height: 100%;
     font-size: 16px;
-    -webkit-tap-highlight-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+    -webkit-tap-highlight-color: color-mix(
+      in oklab,
+      var(--foreground) 20%,
+      transparent
+    );
     @apply font-sans;
   }
   body {
@@ -199,6 +204,50 @@
 }
 .scrollbar-auto-hide:hover::-webkit-scrollbar-thumb:hover {
   background: oklch(0.5 0 0) !important;
+}
+
+.routine-flow-canvas .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  box-shadow: none;
+}
+
+.routine-flow-canvas .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.routine-flow-canvas .react-flow__controls-button:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.routine-flow-canvas .react-flow__controls-button svg {
+  fill: currentColor;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.routine-flow-canvas .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.routine-flow-canvas .react-flow__attribution {
+  border: 1px solid var(--border);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-sm) 0 0 0;
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  color: var(--muted-foreground);
+}
+
+.routine-flow-canvas .react-flow__attribution a {
+  color: inherit;
 }
 
 [data-slot="dialog-content"] {

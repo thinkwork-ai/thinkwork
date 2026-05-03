@@ -3755,10 +3755,13 @@ export type RoutineAslVersion = {
 
 export type RoutineDefinition = {
   __typename?: 'RoutineDefinition';
+  aslJson?: Maybe<Scalars['AWSJSON']['output']>;
   currentVersion?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
   kind: Scalars['String']['output'];
+  markdownSummary?: Maybe<Scalars['String']['output']>;
   routineId: Scalars['ID']['output'];
+  stepManifestJson?: Maybe<Scalars['AWSJSON']['output']>;
   steps: Array<RoutineDefinitionStep>;
   title: Scalars['String']['output'];
   versionId?: Maybe<Scalars['ID']['output']>;
@@ -3779,6 +3782,28 @@ export type RoutineDefinitionConfigField = {
   placeholder?: Maybe<Scalars['String']['output']>;
   required: Scalars['Boolean']['output'];
   value?: Maybe<Scalars['AWSJSON']['output']>;
+};
+
+export type RoutineDefinitionGraphEdgeInput = {
+  condition?: InputMaybe<Scalars['AWSJSON']['input']>;
+  kind: Scalars['String']['input'];
+  label?: InputMaybe<Scalars['String']['input']>;
+  source: Scalars['String']['input'];
+  target: Scalars['String']['input'];
+};
+
+export type RoutineDefinitionGraphInput = {
+  edges: Array<RoutineDefinitionGraphEdgeInput>;
+  nodes: Array<RoutineDefinitionGraphNodeInput>;
+  startNodeId?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RoutineDefinitionGraphNodeInput = {
+  args?: InputMaybe<Scalars['AWSJSON']['input']>;
+  kind?: InputMaybe<Scalars['String']['input']>;
+  label?: InputMaybe<Scalars['String']['input']>;
+  nodeId: Scalars['String']['input'];
+  recipeId?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type RoutineDefinitionStep = {
@@ -4813,6 +4838,7 @@ export type UpdateRecipeInput = {
 };
 
 export type UpdateRoutineDefinitionInput = {
+  graph?: InputMaybe<RoutineDefinitionGraphInput>;
   routineId: Scalars['ID']['input'];
   steps: Array<RoutineDefinitionStepConfigInput>;
 };

@@ -21,6 +21,9 @@ export function normalizeRoutineExecutionManifest(
   manifestValue: unknown,
 ): NormalizedRoutineStep[] {
   const manifest = parseAwsJson(manifestValue);
+  const topLevelSteps = stepsFromArray(manifest);
+  if (topLevelSteps.length > 0) return topLevelSteps;
+
   if (!isRecord(manifest)) return [];
 
   const definitionSteps = stepsFromDefinition(manifest.definition);
@@ -55,7 +58,11 @@ function stepFromRecord(
   value: Record<string, unknown>,
 ): NormalizedRoutineStep {
   const recipeId = stringValue(value.recipeId);
-  const recipeType = stringValue(value.recipeType) ?? recipeId;
+  const recipeType =
+    stringValue(value.recipeType) ??
+    recipeId ??
+    stringValue(value.stepType) ??
+    stringValue(value.runtime);
   return {
     nodeId,
     recipeId,
