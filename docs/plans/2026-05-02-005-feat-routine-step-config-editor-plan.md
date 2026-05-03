@@ -1,7 +1,7 @@
 ---
 title: "feat: Routine step configuration editor"
 type: feat
-status: active
+status: completed
 date: 2026-05-02
 origin: docs/plans/2026-05-02-004-feat-routine-definition-editing-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-02-004-feat-routine-definition-editing-plan.md
 ## Overview
 
 Refactor the merged routine Definition MVP from top-level routine fields into a generic recipe-step configuration editor. The current Austin weather routine should remain one planner output, but the editable source of truth must be each step's recipe args, with field metadata derived from `recipe-catalog.ts`.
+
+## Closeout Status
+
+Completed. Config moved from routine-level editable fields to per-step `configFields`, with recipe catalog metadata as the source of truth. This is the model used by the later draft authoring and graph editor work.
 
 This keeps the product direction honest: routines are recipe graphs, not one-off forms. `email_send.to` should be edited as configuration on the `EmailAustinWeather` step, and future recipes should become editable by adding catalog metadata, not by hardcoding routine-kind-specific UI.
 
