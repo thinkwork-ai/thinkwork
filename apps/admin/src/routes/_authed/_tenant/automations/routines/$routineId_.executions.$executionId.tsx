@@ -15,7 +15,7 @@
  * per the Implementation-Time Unknowns section of the plan.
  */
 
-import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { RoutineExecutionDetailQuery } from "@/lib/graphql-queries";
@@ -33,12 +33,10 @@ import {
   StepDetailPanel,
   type StepEventDetail,
 } from "@/components/routines/StepDetailPanel";
-import { MarkdownSummary } from "@/components/routines/MarkdownSummary";
 import {
   normalizeRoutineExecutionManifest,
   parseAwsJson,
 } from "@/components/routines/routineExecutionManifest";
-import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/automations/routines/$routineId_/executions/$executionId",
@@ -178,10 +176,7 @@ function ExecutionDetailPage() {
   const selectedStep = selectedNodeId
     ? manifestSteps.find((step) => step.nodeId === selectedNodeId)
     : undefined;
-  const summaryMarkdown =
-    aslVersion?.markdownSummary ?? routine?.documentationMd ?? "";
   const executionOutput = parseAwsJson(execution.outputJson);
-  const executionInput = parseAwsJson(execution.inputJson);
 
   return (
     <PageLayout
@@ -194,7 +189,7 @@ function ExecutionDetailPage() {
         />
       }
     >
-      <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid h-full min-h-0 gap-4 xl:grid-cols-2">
         <ExecutionGraph
           aslJson={aslVersion?.aslJson}
           stepManifest={stepManifest}
@@ -206,165 +201,24 @@ function ExecutionDetailPage() {
           className="h-full min-h-0"
         />
 
-        <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
+        <div className="min-h-0 overflow-hidden">
           {selectedNodeId ? (
             <StepDetailPanel
               nodeId={selectedNodeId}
               step={selectedStep}
               events={eventsForSelected}
+              executionOutput={executionOutput}
+              className="h-full"
             />
           ) : (
-            <Card>
+            <Card className="h-full">
               <CardContent className="py-6 text-sm text-muted-foreground">
                 Select a step to see its result.
-              </CardContent>
-            </Card>
-          )}
-
-          <RunResultCard
-            triggerSource={execution.triggerSource}
-            startedAt={execution.startedAt ?? null}
-            finishedAt={execution.finishedAt ?? null}
-            costCents={execution.totalLlmCostUsdCents ?? null}
-            errorCode={execution.errorCode ?? null}
-            errorMessage={execution.errorMessage ?? null}
-            input={executionInput}
-            output={executionOutput}
-            hasInput={execution.inputJson != null}
-            hasOutput={execution.outputJson != null}
-          />
-
-          {summaryMarkdown.length > 0 && (
-            <Card>
-              <CardContent className="py-4">
-                <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-                  Version summary
-                </h3>
-                <div className="max-h-72 overflow-y-auto pr-1">
-                  <MarkdownSummary
-                    markdown={summaryMarkdown}
-                    onAnchorClick={(nodeId) => setSelectedNodeId(nodeId)}
-                  />
-                </div>
               </CardContent>
             </Card>
           )}
         </div>
       </div>
     </PageLayout>
-  );
-}
-
-function RunResultCard({
-  triggerSource,
-  startedAt,
-  finishedAt,
-  costCents,
-  errorCode,
-  errorMessage,
-  input,
-  output,
-  hasInput,
-  hasOutput,
-}: {
-  triggerSource: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  costCents: number | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  input: unknown;
-  output: unknown;
-  hasInput: boolean;
-  hasOutput: boolean;
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-3 py-4 text-sm">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-          Run result
-        </h3>
-        <Row label="Trigger" value={triggerSource} />
-        <Row
-          label="Started"
-          value={
-            startedAt
-              ? `${formatDateTime(startedAt)} (${relativeTime(startedAt)})`
-              : "—"
-          }
-        />
-        <Row
-          label="Finished"
-          value={
-            finishedAt
-              ? `${formatDateTime(finishedAt)} (${relativeTime(finishedAt)})`
-              : "—"
-          }
-        />
-        <Row label="LLM cost" value={formatLlmCost(costCents)} />
-        {errorCode && <Row label="Error code" value={errorCode} />}
-        {errorMessage && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            {errorMessage}
-          </div>
-        )}
-        {hasOutput && (
-          <Section title="Output">
-            <JsonBlock value={output} />
-          </Section>
-        )}
-        {hasInput && (
-          <Section title="Input">
-            <JsonBlock value={input} />
-          </Section>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
-      <span className="text-right">{value}</span>
-    </div>
-  );
-}
-
-function JsonBlock({ value }: { value: unknown }) {
-  let pretty: string;
-  try {
-    pretty = JSON.stringify(value, null, 2);
-  } catch {
-    pretty = String(value);
-  }
-  return (
-    <pre className="max-h-64 overflow-auto rounded bg-zinc-50 p-2 text-xs leading-snug dark:bg-zinc-900 dark:text-zinc-200">
-      {pretty}
-    </pre>
-  );
-}
-
-function formatLlmCost(cents: number | null): string {
-  if (cents == null) return "—";
-  if (cents < 100) return `${cents}¢`;
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        {title}
-      </div>
-      {children}
-    </div>
   );
 }
