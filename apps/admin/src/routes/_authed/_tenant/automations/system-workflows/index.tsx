@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { SystemWorkflowsListQuery } from "@/lib/graphql-queries";
@@ -23,14 +24,9 @@ export const Route = createFileRoute(
 type SystemWorkflowRow = {
   id: string;
   name: string;
-  description: string | null;
   category: string;
-  owner: string;
-  runtimeShape: string;
   status: string;
   activeVersion: string;
-  customizationStatus: string;
-  evidenceStatus: string;
   lastRunAt: string | null;
   lastRunStatus: string | null;
 };
@@ -57,40 +53,31 @@ const columns: ColumnDef<SystemWorkflowRow>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="font-medium whitespace-nowrap">{row.original.name}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {row.original.description ?? "ThinkWork-owned workflow"}
-        </div>
       </div>
     ),
-    size: 280,
+    size: 320,
   },
   {
     accessorKey: "category",
     header: "Category",
     cell: ({ row }) => (
-      <span className="text-sm">{label(row.original.category)}</span>
+      <Badge variant="secondary" className="text-xs">
+        {label(row.original.category)}
+      </Badge>
     ),
-    size: 110,
-  },
-  {
-    accessorKey: "runtimeShape",
-    header: "Runtime",
-    cell: ({ row }) => (
-      <span className="text-sm">{label(row.original.runtimeShape)}</span>
-    ),
-    size: 150,
+    size: 160,
   },
   {
     accessorKey: "lastRunAt",
     header: "Last Run",
     cell: ({ row }) => (
-      <div className="text-xs text-muted-foreground">
+      <span className="text-xs text-muted-foreground">
         {row.original.lastRunAt
           ? relativeTime(row.original.lastRunAt)
           : "Never"}
-      </div>
+      </span>
     ),
-    size: 110,
+    size: 120,
   },
   {
     accessorKey: "lastRunStatus",
@@ -104,7 +91,7 @@ const columns: ColumnDef<SystemWorkflowRow>[] = [
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
       ),
-    size: 110,
+    size: 130,
   },
   {
     accessorKey: "activeVersion",
@@ -114,33 +101,7 @@ const columns: ColumnDef<SystemWorkflowRow>[] = [
         {row.original.activeVersion}
       </span>
     ),
-    size: 130,
-  },
-  {
-    accessorKey: "evidenceStatus",
-    header: "Evidence",
-    cell: ({ row }) => (
-      <span className="text-sm">{label(row.original.evidenceStatus)}</span>
-    ),
-    size: 110,
-  },
-  {
-    accessorKey: "customizationStatus",
-    header: "Customization",
-    cell: ({ row }) => (
-      <span className="text-sm">{label(row.original.customizationStatus)}</span>
-    ),
-    size: 130,
-  },
-  {
-    accessorKey: "owner",
-    header: "Owner",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.owner}
-      </span>
-    ),
-    size: 100,
+    size: 150,
   },
 ];
 
@@ -162,14 +123,9 @@ function SystemWorkflowsPage() {
       (result.data?.systemWorkflows ?? []).map((workflow) => ({
         id: workflow.id,
         name: workflow.name,
-        description: workflow.description ?? null,
         category: workflow.category,
-        owner: workflow.owner,
-        runtimeShape: workflow.runtimeShape,
         status: workflow.status,
         activeVersion: workflow.activeVersion,
-        customizationStatus: workflow.customizationStatus,
-        evidenceStatus: workflow.evidenceStatus,
         lastRunAt:
           workflow.lastRun?.startedAt ?? workflow.lastRun?.createdAt ?? null,
         lastRunStatus: workflow.lastRun?.status ?? null,
