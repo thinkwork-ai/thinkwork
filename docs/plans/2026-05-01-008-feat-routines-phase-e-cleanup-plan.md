@@ -1,7 +1,7 @@
 ---
 title: "feat: Routines rebuild Phase E — cleanup and observability"
 type: feat
-status: active
+status: completed
 date: 2026-05-01
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -14,11 +14,11 @@ Final cleanup and observability for the Routines rebuild. Archive legacy Python-
 
 ## Closeout Status
 
-Partially complete; keep this plan active. U15's legacy archival and deprecated `RoutineRun` / `RoutineStep` cleanup landed through follow-up work, including mobile parity so old GraphQL consumers could be removed safely. U16 remains open: no admin `python()` usage dashboard or signature-clustering query is currently implemented.
+Completed for cleanup closeout. U15's legacy archival and deprecated `RoutineRun` / `RoutineStep` cleanup landed through follow-up work, including mobile parity so old GraphQL consumers could be removed safely. U16 is now a roadmap item rather than a blocker for the Routine MVP: no admin `python()` usage dashboard or signature-clustering query is currently implemented.
 
-## Next Implementation Slice
+## Roadmap Implementation Slice
 
-Implement U16 as the next routine PR. Keep it narrowly scoped to observability and recipe-promotion signal; do not reopen authoring or execution behavior in this slice.
+U16 is roadmap observability work, not the next required Routine MVP slice. When it is prioritized, keep it narrowly scoped to recipe-promotion signal; do not reopen authoring or execution behavior in this slice.
 
 ### Recommended Scope
 
@@ -168,7 +168,7 @@ Units carried verbatim from the master plan. U-IDs preserved.
 
 **Goal:** Operator dashboard surfacing `python()` step frequency + signature clusters across the tenant's routines, with drill-down to the routines using each pattern and promotion-candidate badges.
 
-**Status:** Open. No `pythonUsageDashboard` GraphQL query or admin route exists yet.
+**Status:** Roadmap. No `pythonUsageDashboard` GraphQL query or admin route exists yet.
 
 **Requirements:** R26, R27, AE6
 
