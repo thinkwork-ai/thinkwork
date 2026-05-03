@@ -1,7 +1,7 @@
 ---
 title: "feat: Routines rebuild Phase C — authoring"
 type: feat
-status: active
+status: superseded
 date: 2026-05-01
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Summary
 
 Retarget the existing mobile chat builder to emit ASL instead of Python `code`, replace the routine-builder system prompt for the v0 recipe vocabulary, wire validator feedback into the chat session for live correction, and ship `create_routine` + `routine_invoke` MCP tools (inert by env flag) so agents can self-stamp and call routines on subsequent turns. After Phase C, end users on mobile can describe a routine in natural language and have it created via the new ASL pipeline; agents can author routines via MCP. The admin chat surface lands in Phase D alongside the nav restructure.
+
+## Closeout Status
+
+Superseded by the admin-first recipe authoring sequence (`2026-05-02-002`, `2026-05-02-004`, `2026-05-02-005`, `2026-05-02-006`, `2026-05-02-007`, `2026-05-02-008`, `2026-05-02-009`, and `2026-05-02-011`). The recipe-catalog prompt and agent MCP tool shells exist, but the original mobile chat live-validator loop is still deferred because the mobile chat session plumbing remains stubbed. Treat future mobile conversational authoring and agent runtime activation as new focused work, not as blockers for the shipped admin Routine MVP.
 
 ---
 

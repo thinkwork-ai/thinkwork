@@ -1,7 +1,7 @@
 ---
 title: "feat: Routines rebuild Phase A — substrate"
 type: feat
-status: active
+status: completed
 date: 2026-05-01
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Summary
 
 Land the foundations for the Step Functions Routines rebuild: greenfield Terraform module (IAM execution role with tenant ABAC, log groups, S3 routine-output bucket), four new Drizzle tables (`routine_executions`, `routine_step_events`, `routine_asl_versions`, `routine_approval_tokens`), GraphQL schema additions with codegen across consumers, the v0 recipe catalog as an in-repo TS module, and the `routine-asl-validator` Lambda. Nothing user-visible — pure substrate that unblocks Phase B runtime work.
+
+## Closeout Status
+
+Completed. The Step Functions substrate, routine execution/version/step-event schema, GraphQL surfaces, recipe catalog, and ASL validator landed through the Phase A follow-up PRs. Later plans built on this substrate rather than replacing it.
 
 ---
 

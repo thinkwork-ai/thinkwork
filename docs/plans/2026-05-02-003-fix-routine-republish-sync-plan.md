@@ -1,7 +1,7 @@
 ---
 title: "fix: Keep routine republish state synchronized"
 type: fix
-status: active
+status: completed
 date: 2026-05-02
 origin: docs/brainstorms/2026-05-01-routines-step-functions-rebuild-requirements.md
 ---
@@ -11,6 +11,10 @@ origin: docs/brainstorms/2026-05-01-routines-step-functions-rebuild-requirements
 ## Overview
 
 The Austin weather routine succeeded only after manually updating the Step Functions definition, publishing a new version, and retargeting the `live` alias. That manual escape hatch proves the runtime plumbing works, but it bypasses `routine_asl_versions`, `routines.current_version`, validation warnings, actor attribution, and any UI or API that expects the database to be the source of routine version history.
+
+## Closeout Status
+
+Completed. Rebuild/republish became product-owned and flows through the same validation, Step Functions version, live-alias, and database version metadata path as normal publishing.
 
 This plan makes that refresh product-owned: callers can rebuild the currently configured routine from its persisted metadata/intent and publish the rebuilt ASL through the existing `publishRoutineVersion` transaction, so Step Functions, the `live` alias, and ThinkWork's DB version metadata stay synchronized.
 

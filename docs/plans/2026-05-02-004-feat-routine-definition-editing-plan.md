@@ -1,7 +1,7 @@
 ---
 title: "feat: Routine definition editing MVP"
 type: feat
-status: active
+status: completed
 date: 2026-05-02
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Overview
 
 Add a product-owned routine definition surface so operators can inspect the latest published Step Functions routine, see the recipe steps that define it, edit supported parameters such as recipient email, and republish without touching raw ASL. At the same time, replace the one-off Austin-weather detector with a small authoring planner that selects from the recipe catalog and emits a structured editable definition before recipe emitters produce ASL.
+
+## Closeout Status
+
+Completed. Routine definitions became visible and editable through product-owned GraphQL/UI paths, with ASL remaining generated infrastructure. The following step-config plan corrected the initial top-level field model into per-step recipe config.
 
 This is the bridge between the current deterministic Austin-weather MVP and the fuller Phase C/D chat builder. The key product shift: routine definition becomes a first-class, editable recipe graph, while Step Functions ASL remains generated infrastructure.
 

@@ -12,6 +12,25 @@ origin: docs/brainstorms/2026-05-01-routines-step-functions-rebuild-requirements
 
 Implementation plan for a five-phase rebuild of Routines as first-class AWS Step Functions state machines: substrate (Terraform/IAM/schema/validator/recipe catalog) → runtime (Task wrappers, publish flow, trigger swap, HITL bridge) → authoring (MCP tools, builder retarget, admin chat) → UI (Automations nav, run-detail graph, run-list) → cleanup/observability (legacy archival, `python()` dashboard). Sixteen implementation units sequenced for inert-to-live seam swaps so each PR can land on `main` without breaking the prior path.
 
+## Closeout Status
+
+The deployed admin Routine MVP is complete: Step Functions-backed routines can be authored from recipe catalog metadata, edited as step-owned config, tested from the admin UI, and inspected through version-backed execution detail. The Austin weather/email routine has passed deployed end-to-end verification through the Test Routine button.
+
+The full original rebuild plan is still **active** because Phase E's `python()` usage dashboard and recipe-promotion loop remain open, and because the original mobile conversational builder / agent runtime activation path was superseded by the admin-first authoring sequence rather than fully verified.
+
+### Completed
+
+- Phase A substrate: Terraform/IAM, routine execution/version/event schema, GraphQL types, recipe catalog, validator.
+- Phase B runtime: create/publish/rebuild/test paths, Step Functions version/alias flow, execution ingestion.
+- Phase D UI: admin Automations/Routines surfaces, run list/detail, mobile run list/detail parity, version-backed execution rendering.
+- Admin authoring follow-ups: recipe-backed draft authoring, per-step config fields, graph editor, builder polish, validation, execution-aware editing, output-backed step-status reconciliation.
+
+### Remaining
+
+- Phase E U16: operator-only `python()` usage dashboard with signature clusters, drill-down, and recipe-promotion candidates.
+- Agent runtime activation: flip and verify `ROUTINES_AGENT_TOOLS_ENABLED` for `create_routine` / `routine_invoke` after runtime warm-flush.
+- Mobile conversational authoring: finish the live validator-feedback loop once the mobile chat-session GraphQL plumbing is no longer stubbed.
+
 **This master plan is the design artifact.** Execution is split across five phase-scoped plans that can each be `/lfg`'d or `/ce-work`'d independently in dependency order:
 
 - Phase A (Substrate, U1-U5): `docs/plans/2026-05-01-004-feat-routines-phase-a-substrate-plan.md`
