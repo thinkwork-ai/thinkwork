@@ -9,6 +9,7 @@ import {
 import { AlertCircle, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/context/ThemeContext";
 import { cn } from "@/lib/utils";
 import {
   buildRoutineAslGraph,
@@ -41,6 +42,7 @@ export function RoutineFlowCanvas({
   emptyLabel = "No workflow graph available.",
   ...graphInput
 }: RoutineFlowCanvasProps) {
+  const { theme } = useTheme();
   const graph = useMemo(() => buildRoutineAslGraph(graphInput), [graphInput]);
   const nodes = useMemo(
     () => toFlowNodes(graph, selectedNodeId),
@@ -114,6 +116,7 @@ export function RoutineFlowCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        colorMode={theme}
         fitView
         fitViewOptions={{ padding: 0.18 }}
         minZoom={0.35}

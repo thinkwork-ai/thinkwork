@@ -39,20 +39,22 @@ export function RoutineFlowNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative h-full w-full rounded-md border bg-background shadow-sm transition-colors",
+        "relative h-full w-full rounded-md border bg-card text-card-foreground shadow-sm shadow-black/10 transition-colors dark:bg-zinc-900/95 dark:shadow-black/40",
         compact ? "px-3 py-2.5" : "px-3 py-3",
-        selected ? "border-primary ring-2 ring-primary/25" : "border-border/80",
+        selected
+          ? "border-primary ring-2 ring-primary/35 shadow-md shadow-primary/10"
+          : "border-border/90 dark:border-zinc-600/80",
       )}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2.5 !w-2.5 !border-background !bg-muted-foreground"
+        className="!h-2.5 !w-2.5 !border-card !bg-muted-foreground dark:!border-zinc-900 dark:!bg-zinc-300"
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!h-2.5 !w-2.5 !border-background !bg-muted-foreground"
+        className="!h-2.5 !w-2.5 !border-card !bg-muted-foreground dark:!border-zinc-900 dark:!bg-zinc-300"
       />
       <div className="flex min-w-0 items-start gap-2.5">
         <span
@@ -73,7 +75,10 @@ export function RoutineFlowNode({ data, selected }: NodeProps) {
             </div>
           )}
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+            <Badge
+              variant="outline"
+              className="h-5 border-border/80 bg-background/60 px-1.5 text-[10px] dark:border-zinc-600/70 dark:bg-zinc-950/60"
+            >
               {presentation.label}
             </Badge>
             {node.status && (
@@ -99,55 +104,63 @@ function nodePresentation(node: RoutineGraphNode) {
       return {
         Icon: Play,
         label: "Start",
-        iconClass: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700",
+        iconClass:
+          "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
       };
     case "end":
       return {
         Icon: Square,
         label: "End",
-        iconClass: "border-zinc-500/25 bg-zinc-500/10 text-zinc-700",
+        iconClass:
+          "border-zinc-500/35 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
       };
     case "choice":
       return {
         Icon: GitBranch,
         label: "Choice",
-        iconClass: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+        iconClass:
+          "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
       };
     case "map":
       return {
         Icon: Map,
         label: "Map",
-        iconClass: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700",
+        iconClass:
+          "border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
       };
     case "parallel":
       return {
         Icon: Layers,
         label: "Parallel",
-        iconClass: "border-violet-500/25 bg-violet-500/10 text-violet-700",
+        iconClass:
+          "border-violet-500/35 bg-violet-500/10 text-violet-700 dark:text-violet-300",
       };
     case "fail":
       return {
         Icon: XCircle,
         label: "Fail",
-        iconClass: "border-red-500/25 bg-red-500/10 text-red-700",
+        iconClass:
+          "border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300",
       };
     case "succeed":
       return {
         Icon: CheckCircle2,
         label: "Succeed",
-        iconClass: "border-green-500/25 bg-green-500/10 text-green-700",
+        iconClass:
+          "border-green-500/35 bg-green-500/10 text-green-700 dark:text-green-300",
       };
     case "pass":
       return {
         Icon: Circle,
         label: "Pass",
-        iconClass: "border-blue-500/25 bg-blue-500/10 text-blue-700",
+        iconClass:
+          "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
       };
     default:
       return {
         Icon: Workflow,
         label: "Task",
-        iconClass: "border-primary/25 bg-primary/10 text-primary",
+        iconClass: "border-primary/40 bg-primary/10 text-primary",
       };
   }
 }
