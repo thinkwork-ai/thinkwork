@@ -22,7 +22,7 @@
  * v1 keeps concurrency = 1 (sequential). p-limit can be added later.
  */
 
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   evalRuns,
@@ -132,6 +132,9 @@ interface EvalRunnerEvent {
   systemWorkflowRunId?: string;
   systemWorkflowExecutionArn?: string;
   tenantId?: string;
+  input?: {
+    testCaseIds?: unknown;
+  } | null;
 }
 
 interface Assertion {
@@ -178,6 +181,14 @@ function uniqueSessionId(
 const JUDGE_MODEL_ID =
   process.env.EVAL_JUDGE_MODEL_ID ??
   "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+export function selectedTestCaseIdsFromEvent(event: EvalRunnerEvent): string[] {
+  const ids = event.input?.testCaseIds;
+  if (!Array.isArray(ids)) return [];
+  return ids.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
+}
 
 /**
  * LLM-as-judge for `llm-rubric` assertions. Asks the judge model to score
@@ -564,19 +575,23 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       : null;
 
   try {
-    // Load test cases for this tenant. Filter by category if the run scoped them.
+    // Load test cases for this tenant. Specific test-case picks win over
+    // category filters so CLI/API smoke runs can target a single case.
+    const selectedTestCaseIds = selectedTestCaseIdsFromEvent(event);
+    const caseConditions = [
+      eq(evalTestCases.tenant_id, run.tenant_id),
+      eq(evalTestCases.enabled, true),
+    ];
+    if (selectedTestCaseIds.length > 0) {
+      caseConditions.push(inArray(evalTestCases.id, selectedTestCaseIds));
+    } else if (run.categories.length > 0) {
+      caseConditions.push(inArray(evalTestCases.category, run.categories));
+    }
+
     const cases = await db
       .select()
       .from(evalTestCases)
-      .where(
-        and(
-          eq(evalTestCases.tenant_id, run.tenant_id),
-          eq(evalTestCases.enabled, true),
-          run.categories.length > 0
-            ? inArray(evalTestCases.category, run.categories)
-            : sql`true`,
-        ),
-      );
+      .where(and(...caseConditions));
 
     await recordEvaluationWorkflowStep(workflowContext, {
       nodeId: "SnapshotTestPack",
@@ -587,6 +602,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         evalRunId: runId,
         totalTests: cases.length,
         categories: run.categories,
+        testCaseIds: selectedTestCaseIds,
       },
       idempotencyKey: `eval:${runId}:snapshot`,
     });
