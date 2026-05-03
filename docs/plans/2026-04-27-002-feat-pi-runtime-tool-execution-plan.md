@@ -1,6 +1,7 @@
 ---
 title: "Pi Runtime Tool Execution Parity"
-status: active
+status: superseded
+superseded_by: docs/plans/2026-05-03-005-feat-flue-runtime-production-wiring-plan.md
 created: 2026-04-27
 origin: user request in Codex session
 ---

@@ -1,7 +1,8 @@
 ---
 title: "feat: Add Pi-based parallel AgentCore runtime alongside Strands"
 type: feat
-status: active
+status: superseded
+superseded_by: docs/plans/2026-05-03-005-feat-flue-runtime-production-wiring-plan.md
 date: 2026-04-26
 deepened: 2026-04-26
 origin: docs/brainstorms/2026-04-26-pi-agent-runtime-parallel-substrate-requirements.md
