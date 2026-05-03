@@ -85,6 +85,42 @@ describe("buildRoutineAslGraph", () => {
     );
   });
 
+  it("overlays top-level system workflow manifests", () => {
+    const graph = buildRoutineAslGraph({
+      aslJson: {
+        StartAt: "ClaimCompileJob",
+        States: {
+          ClaimCompileJob: { Type: "Pass", Next: "CompilePages" },
+          CompilePages: { Type: "Pass", End: true },
+        },
+      },
+      stepManifestJson: [
+        {
+          nodeId: "ClaimCompileJob",
+          label: "Claim compile job",
+          stepType: "checkpoint",
+          runtime: "standard",
+        },
+        {
+          nodeId: "CompilePages",
+          label: "Compile pages",
+          stepType: "worker",
+          runtime: "express",
+        },
+      ],
+    });
+
+    expect(graph.nodes.map((node) => [node.id, node.label])).toEqual(
+      expect.arrayContaining([
+        ["ClaimCompileJob", "Claim compile job"],
+        ["CompilePages", "Compile pages"],
+      ]),
+    );
+    expect(
+      graph.nodes.find((node) => node.id === "CompilePages")?.subtitle,
+    ).toBe("worker");
+  });
+
   it("returns an explicit graph error for malformed ASL", () => {
     const graph = buildRoutineAslGraph({ aslJson: { States: {} } });
 
