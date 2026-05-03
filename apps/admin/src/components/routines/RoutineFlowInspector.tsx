@@ -273,6 +273,7 @@ function AuthoringInspector({
             onLabelChange={onLabelChange}
             fieldErrors={fieldErrors}
             selectedNodeId={selectedNodeId}
+            layout="stacked"
           />
         </SheetContent>
       </Sheet>
