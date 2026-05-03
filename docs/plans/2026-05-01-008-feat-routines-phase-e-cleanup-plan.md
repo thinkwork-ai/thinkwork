@@ -12,11 +12,15 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 
 Final cleanup and observability for the Routines rebuild. Archive legacy Python-script routines and remove the deprecated GraphQL types + code paths. Ship the operator-only `python()` usage dashboard that surfaces frequency + signature clusters across the tenant's routines, drives the recipe-promotion loop, and surfaces promoted-recipe candidates for refactor.
 
+## Closeout Status
+
+Partially complete; keep this plan active. U15's legacy archival and deprecated `RoutineRun` / `RoutineStep` cleanup landed through follow-up work, including mobile parity so old GraphQL consumers could be removed safely. U16 remains open: no admin `python()` usage dashboard or signature-clustering query is currently implemented.
+
 ---
 
 ## Problem Frame
 
-Phase E of the master plan (`docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md`). After Phases A-D, the new Step Functions runtime is live across mobile + admin + agents. Legacy Python-script routines coexist with the new ones in storage and code; the deprecated GraphQL types still ship in the schema; and ThinkWork engineering has no observable signal for which `python()` patterns customers are reaching for repeatedly. Phase E removes the legacy clutter and gives ops the data needed to drive recipe curation.
+Phase E of the master plan (`docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md`). After Phases A-D, the new Step Functions runtime is live across admin and mobile surfaces, with agent tool shells present but still requiring runtime activation verification. U15 removed the legacy clutter that blocked schema cleanup; U16 still needs to give ops the data needed to drive recipe curation by showing which `python()` patterns customers are reaching for repeatedly.
 
 ---
 
@@ -55,8 +59,8 @@ R-IDs trace to the origin requirements doc.
 Defer to the master plan's "Context & Research" section. Phase-E-specific highlights:
 
 - `packages/database-pg/src/schema/routines.ts` — `engine` partition column from Phase A U2 segregates legacy from new
-- `packages/api/src/graphql/resolvers/triggers/routineRuns.query.ts` and `routineRun.query.ts` — legacy resolvers to delete
-- `packages/database-pg/graphql/types/routines.graphql` — deprecated types `RoutineRun` and `RoutineStep` (still shipping post-A; removed here)
+- `packages/api/src/graphql/resolvers/triggers/index.ts` — residual comment mentions the now-removed legacy `routineRun` / `routineRuns` query surfaces
+- `packages/database-pg/graphql/types/routines.graphql` — deprecated `RoutineRun` and `RoutineStep` types have been removed; only `RoutineStepEvent` remains
 - `apps/admin/src/routes/_authed/_tenant/automations/routines/index.tsx` — list filter `engine = 'step_functions'`
 - `apps/admin/src/routes/_authed/_tenant/analytics.tsx` — admin-only dashboard pattern
 - `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md` — survey live consumers before destructive change
@@ -83,7 +87,7 @@ All Phase E open questions resolved in the master plan.
 ### Deferred to Implementation
 
 - Pre-archival survey: which tenants have legacy routines, how many active, and whether any are pinned demos. Surface count + tenant breakdown before applying the migration.
-- Whether to drop the `RoutineRun`/`RoutineStep` types in the same PR as the archival migration or as a follow-up — decide based on whether any consumer still imports them at the time of the PR.
+- U15 already removed the deprecated `RoutineRun` / `RoutineStep` consumers and types after mobile parity landed.
 
 ---
 
@@ -94,6 +98,8 @@ Units carried verbatim from the master plan. U-IDs preserved.
 - U15. **Legacy Python routine archival + deprecation**
 
 **Goal:** Mark legacy Python routines as archived (R24), remove the deprecated GraphQL fields and code paths (R25), surface deprecation warnings in any remaining consumer.
+
+**Status:** Completed. See `docs/residual-review-findings/feat-routines-phase-d-mobile-parity.md` for the mobile parity and deprecated-type cleanup closeout notes.
 
 **Requirements:** R24, R25
 
@@ -129,6 +135,8 @@ Units carried verbatim from the master plan. U-IDs preserved.
 - U16. **`python()` usage dashboard (admin only)**
 
 **Goal:** Operator dashboard surfacing `python()` step frequency + signature clusters across the tenant's routines, with drill-down to the routines using each pattern and promotion-candidate badges.
+
+**Status:** Open. No `pythonUsageDashboard` GraphQL query or admin route exists yet.
 
 **Requirements:** R26, R27, AE6
 

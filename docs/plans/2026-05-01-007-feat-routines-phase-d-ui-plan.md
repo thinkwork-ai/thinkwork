@@ -1,7 +1,7 @@
 ---
 title: "feat: Routines rebuild Phase D — UI"
 type: feat
-status: active
+status: completed
 date: 2026-05-01
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Summary
 
 Land the customer-facing surfaces. Restructure admin nav so Automations becomes a real parent section with Routines / Schedules / Webhooks children (replacing the current single "Automations" label that points at scheduled-jobs alone). Build the admin chat surface for operators inside the new section. Build the run-detail surface (Step Functions execution graph + agent-authored markdown summary + per-node panel sourced from `routine_step_events`) on both admin and mobile per R23. Build the run list with status filters and near-real-time updates. After Phase D, the customer-facing "agentic → robotic" demo is fully feasible.
+
+## Closeout Status
+
+Completed for the shipped UI scope. Admin Automations navigation, Routine list/detail cleanup, run list, execution detail graph, mobile run list/detail parity, and execution-aware version rendering landed. Authoring evolved into the recipe-backed workflow editor rather than the original admin chat-only sketch.
 
 ---
 

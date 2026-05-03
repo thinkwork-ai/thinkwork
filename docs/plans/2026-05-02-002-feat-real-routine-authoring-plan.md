@@ -1,7 +1,7 @@
 ---
 title: "feat: Real routine authoring MVP"
 type: feat
-status: active
+status: completed
 date: 2026-05-02
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Overview
 
 Replace the current no-op routine creation path with a real recipe-backed authoring path for the first supported routine shape. Admin and mobile "new routine" surfaces should either create a Step Functions routine with executable ASL or return an actionable unsupported-intent message. They should no longer mint a `Succeed` placeholder that looks active but does no useful work.
+
+## Closeout Status
+
+Completed. This removed the no-op routine creation trap and established the first product-owned recipe-backed authoring path. Later authoring plans generalized the model beyond the Austin weather/email proof case.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "feat: Routines rebuild Phase B — runtime"
 type: feat
-status: active
+status: completed
 date: 2026-05-01
 origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ---
@@ -11,6 +11,10 @@ origin: docs/plans/2026-05-01-003-feat-routines-step-functions-rebuild-plan.md
 ## Summary
 
 Wire the live Step Functions runtime: Task wrapper Lambdas (`routine-task-python` with mandatory S3 offload, `routine-resume` for HITL `SendTaskSuccess`/`SendTaskFailure`), publish flow (`createRoutine` / `publishRoutineVersion` / `updateRoutine` resolvers replacing the legacy Python-code path), trigger fan-in swap (`triggerRoutineRun` mutation + `job-trigger.ts` ROUTINE_RUNNER_URL stub replacement), HITL bridge (`inbox_approval` recipe + `routine-approval-bridge.ts` + token persistence), and step-event ingestion (callback REST endpoints). After Phase B, routines are creatable and executable end-to-end via the GraphQL API even before any UI ships.
+
+## Closeout Status
+
+Completed. Product-owned create/publish/rebuild/test flows now route through the Step Functions versioning path, manual Test Routine starts real executions, and deployed end-to-end Austin weather/email runs have succeeded from the admin UI.
 
 ---
 
