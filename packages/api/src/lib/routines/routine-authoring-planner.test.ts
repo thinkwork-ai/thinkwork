@@ -367,6 +367,26 @@ describe("routine authoring planner", () => {
     });
   });
 
+  it("rejects graph edits that contain only control nodes", () => {
+    const result = planRoutineFromIntent({
+      name: "Check Austin Weather",
+      intent: "Check the weather in Austin and email it to old@example.com.",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+
+    const edited = applyRoutineGraphDefinitionEdits(result.artifacts.plan, {
+      nodes: [{ nodeId: "Done", kind: "succeed" }],
+      edges: [],
+    });
+
+    expect(edited).toEqual({
+      ok: false,
+      reason: "Routine graph definition must include at least one recipe node.",
+    });
+  });
+
   it("rejects empty plans before emitting invalid ASL", () => {
     expect(
       buildRoutineArtifactsFromPlan({

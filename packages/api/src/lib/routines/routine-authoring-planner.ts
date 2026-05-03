@@ -423,6 +423,11 @@ function artifactsForGraphEdit(
       ResultPath: `$.${nodeId}`,
     };
   }
+  if (recipeSteps.length === 0) {
+    return unsupported(
+      "Routine graph definition must include at least one recipe node.",
+    );
+  }
 
   const refreshed = refreshPlanConfigFields({
     ...basePlan,

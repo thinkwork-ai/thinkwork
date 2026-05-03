@@ -30,7 +30,7 @@ interface RoutineWorkflowEditorProps {
   onAddRecipe: (
     recipe: RoutineRecipeCatalogItem,
     afterNodeId?: string | null,
-  ) => void;
+  ) => string | null;
   onLabelChange: (nodeId: string, value: string) => void;
   onMoveStep: (nodeId: string, direction: "up" | "down") => void;
   onRemoveStep: (nodeId: string) => void;
@@ -157,8 +157,7 @@ export function RoutineWorkflowEditor({
         recipes={recipes}
         onOpenChange={setAddOpen}
         onSelectRecipe={(recipe) => {
-          onAddRecipe(recipe, addAfterNodeId);
-          setSelectedNodeId(null);
+          setSelectedNodeId(onAddRecipe(recipe, addAfterNodeId));
         }}
       />
     </div>

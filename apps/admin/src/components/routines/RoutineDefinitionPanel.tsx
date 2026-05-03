@@ -234,9 +234,11 @@ export function RoutineDefinitionPanel({
           onFieldChange={(key, value) =>
             setFieldValues((current) => ({ ...current, [key]: value }))
           }
-          onAddRecipe={(recipe, afterNodeId) =>
+          onAddRecipe={(recipe, afterNodeId) => {
+            let insertedNodeId: string | null = null;
             setSteps((current) => {
               const step = stepFromRecipe(recipe, current);
+              insertedNodeId = step.nodeId;
               const index = current.findIndex(
                 (candidate) => candidate.nodeId === afterNodeId,
               );
@@ -250,8 +252,9 @@ export function RoutineDefinitionPanel({
                     ];
               setFieldValues((values) => mergeFieldValues(next, values));
               return next;
-            })
-          }
+            });
+            return insertedNodeId;
+          }}
           onLabelChange={(nodeId, value) =>
             setSteps((current) =>
               current.map((step) =>
