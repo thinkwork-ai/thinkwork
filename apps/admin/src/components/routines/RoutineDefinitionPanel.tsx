@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useTenant } from "@/context/TenantContext";
 import {
   RoutineRecipeCatalogQuery,
+  RoutineDefinitionArtifactsQuery,
   RoutineDefinitionQuery,
   UpdateRoutineDefinitionMutation,
 } from "@/lib/graphql-queries";
@@ -44,6 +45,11 @@ export function RoutineDefinitionPanel({
   const { tenantId } = useTenant();
   const [queryResult, refetch] = useQuery({
     query: RoutineDefinitionQuery,
+    variables: { routineId },
+    requestPolicy: "cache-and-network",
+  });
+  const [artifactResult, refetchArtifacts] = useQuery({
+    query: RoutineDefinitionArtifactsQuery,
     variables: { routineId },
     requestPolicy: "cache-and-network",
   });
@@ -144,6 +150,7 @@ export function RoutineDefinitionPanel({
     const version = res.data?.updateRoutineDefinition.currentVersion;
     toast.success(version ? `Published version ${version}.` : "Published.");
     refetch({ requestPolicy: "network-only" });
+    refetchArtifacts({ requestPolicy: "network-only" });
     onPublished?.();
   };
 
@@ -171,6 +178,7 @@ export function RoutineDefinitionPanel({
   if (!definition) return null;
 
   const recipes = catalogResult.data?.routineRecipeCatalog ?? [];
+  const artifactDefinition = artifactResult.data?.routineDefinition;
 
   return (
     <section className="mb-5 rounded-lg border border-border/70 bg-card/40">
@@ -228,8 +236,8 @@ export function RoutineDefinitionPanel({
           steps={steps}
           recipes={recipes}
           fieldValues={fieldValues}
-          aslJson={definition.aslJson}
-          stepManifestJson={definition.stepManifestJson}
+          aslJson={artifactDefinition?.aslJson}
+          stepManifestJson={artifactDefinition?.stepManifestJson}
           topologyDirty={topologyDirty}
           onFieldChange={(key, value) =>
             setFieldValues((current) => ({ ...current, [key]: value }))

@@ -840,9 +840,6 @@ export const RoutineDefinitionQuery = graphql(`
       title
       description
       kind
-      aslJson
-      markdownSummary
-      stepManifestJson
       steps {
         nodeId
         recipeId
@@ -869,6 +866,18 @@ export const RoutineDefinitionQuery = graphql(`
   }
 `);
 
+export const RoutineDefinitionArtifactsQuery = graphql(`
+  query RoutineDefinitionArtifacts($routineId: ID!) {
+    routineDefinition(routineId: $routineId) {
+      routineId
+      versionId
+      aslJson
+      markdownSummary
+      stepManifestJson
+    }
+  }
+`);
+
 export const UpdateRoutineDefinitionMutation = graphql(`
   mutation UpdateRoutineDefinition($input: UpdateRoutineDefinitionInput!) {
     updateRoutineDefinition(input: $input) {
@@ -876,9 +885,6 @@ export const UpdateRoutineDefinitionMutation = graphql(`
       currentVersion
       versionId
       description
-      aslJson
-      markdownSummary
-      stepManifestJson
       steps {
         nodeId
         args
