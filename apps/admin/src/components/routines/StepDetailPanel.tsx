@@ -44,6 +44,7 @@ export interface StepDetailPanelProps {
    * picks the latest as the headline and shows priors as collapsible
    * retry rows. */
   events: StepEventDetail[];
+  className?: string;
 }
 
 function formatDurationMs(start?: string | null, end?: string | null): string {
@@ -104,10 +105,11 @@ export function StepDetailPanel({
   nodeId,
   step,
   events,
+  className,
 }: StepDetailPanelProps) {
   if (events.length === 0) {
     return (
-      <Card>
+      <Card className={className}>
         <CardContent className="space-y-3 py-6 text-sm text-zinc-500 dark:text-zinc-400">
           <div>
             No event has landed for{" "}
@@ -136,7 +138,7 @@ export function StepDetailPanel({
   const priors = sorted.slice(0, -1);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardContent className="space-y-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">

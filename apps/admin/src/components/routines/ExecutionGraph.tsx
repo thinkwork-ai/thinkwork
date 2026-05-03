@@ -44,6 +44,7 @@ export interface ExecutionGraphProps {
   executionOutput?: unknown;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string) => void;
+  className?: string;
 }
 
 export interface DeriveNodesOptions {
@@ -173,6 +174,7 @@ export function ExecutionGraph({
   executionOutput,
   selectedNodeId,
   onSelectNode,
+  className,
 }: ExecutionGraphProps) {
   const nodes = useMemo(
     () =>
@@ -193,6 +195,7 @@ export function ExecutionGraph({
       executionOutput={executionOutput}
       selectedNodeId={selectedNodeId}
       onSelectNode={(nodeId) => nodeId && onSelectNode?.(nodeId)}
+      className={className}
       emptyLabel="No steps yet — the execution may still be starting."
     />
   );

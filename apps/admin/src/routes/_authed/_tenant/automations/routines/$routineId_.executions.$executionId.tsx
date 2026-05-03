@@ -15,17 +15,15 @@
  * per the Implementation-Time Unknowns section of the plan.
  */
 
-import { useState, useMemo, useEffect } from "react";
-import type React from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { ArrowLeft } from "lucide-react";
 import { RoutineExecutionDetailQuery } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
+import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ExecutionGraph,
@@ -96,6 +94,12 @@ function ExecutionDetailPage() {
     () => normalizeRoutineExecutionManifest(stepManifest),
     [stepManifest],
   );
+  useEffect(() => {
+    if (selectedNodeId) return;
+    const firstStep =
+      manifestSteps[0]?.nodeId ?? execution?.stepEvents[0]?.nodeId ?? null;
+    if (firstStep) setSelectedNodeId(firstStep);
+  }, [execution?.stepEvents, manifestSteps, selectedNodeId]);
 
   useBreadcrumbs(
     routine
@@ -113,27 +117,25 @@ function ExecutionDetailPage() {
   if (fetching && !execution) return <PageSkeleton />;
   if (error || !execution) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Execution not found" />
+      <PageLayout header={<PageHeader title="Execution not found" />}>
         <Card>
           <CardContent className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
             {error?.message ?? "No execution row matches that id."}
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
     );
   }
 
   if (execution.routineId !== routineId) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Execution not found" />
+      <PageLayout header={<PageHeader title="Execution not found" />}>
         <Card>
           <CardContent className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
             That execution does not belong to this routine.
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -182,111 +184,55 @@ function ExecutionDetailPage() {
   const executionInput = parseAwsJson(execution.inputJson);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Link to="/automations/routines/$routineId" params={{ routineId }}>
-          <Button variant="ghost" size="icon-sm">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+    <PageLayout
+      contentClassName="overflow-hidden pb-4"
+      header={
         <PageHeader
           title={routine?.name ?? "Execution"}
           description={`Execution ${executionId.slice(0, 8)} · ${execution.triggerSource}`}
           actions={<StatusBadge status={execution.status.toLowerCase()} />}
         />
-      </div>
+      }
+    >
+      <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <ExecutionGraph
+          aslJson={aslVersion?.aslJson}
+          stepManifest={stepManifest}
+          stepEvents={stepEventsLite}
+          executionStatus={execution.status}
+          executionOutput={executionOutput}
+          selectedNodeId={selectedNodeId}
+          onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+          className="h-full min-h-0"
+        />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <Card>
-            <CardContent className="space-y-4 py-4">
-              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-                Steps
-              </h3>
-              <ExecutionGraph
-                aslJson={aslVersion?.aslJson}
-                stepManifest={stepManifest}
-                stepEvents={stepEventsLite}
-                executionStatus={execution.status}
-                executionOutput={executionOutput}
-                selectedNodeId={selectedNodeId}
-                onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-              />
-            </CardContent>
-          </Card>
-
-          {selectedNodeId && (
+        <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
+          {selectedNodeId ? (
             <StepDetailPanel
               nodeId={selectedNodeId}
               step={selectedStep}
               events={eventsForSelected}
             />
-          )}
-        </div>
-
-        <div className="space-y-4">
-          {(execution.outputJson != null ||
-            execution.errorCode ||
-            execution.errorMessage) && (
+          ) : (
             <Card>
-              <CardContent className="space-y-3 py-4">
-                <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-                  Run result
-                </h3>
-                {execution.errorCode && (
-                  <Row label="Error code" value={execution.errorCode} />
-                )}
-                {execution.errorMessage && (
-                  <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-                    {execution.errorMessage}
-                  </div>
-                )}
-                {execution.outputJson != null && (
-                  <JsonBlock value={executionOutput} />
-                )}
+              <CardContent className="py-6 text-sm text-muted-foreground">
+                Select a step to see its result.
               </CardContent>
             </Card>
           )}
 
-          <Card>
-            <CardContent className="space-y-3 py-4 text-sm">
-              <Row label="Trigger" value={execution.triggerSource} />
-              <Row
-                label="Started"
-                value={
-                  execution.startedAt
-                    ? `${formatDateTime(execution.startedAt)} (${relativeTime(execution.startedAt)})`
-                    : "—"
-                }
-              />
-              <Row
-                label="Finished"
-                value={
-                  execution.finishedAt
-                    ? `${formatDateTime(execution.finishedAt)} (${relativeTime(execution.finishedAt)})`
-                    : "—"
-                }
-              />
-              <Row
-                label="LLM cost"
-                value={
-                  execution.totalLlmCostUsdCents != null
-                    ? execution.totalLlmCostUsdCents < 100
-                      ? `${execution.totalLlmCostUsdCents}¢`
-                      : `$${(execution.totalLlmCostUsdCents / 100).toFixed(2)}`
-                    : "—"
-                }
-              />
-              {execution.errorCode && (
-                <Row label="Error" value={execution.errorCode} />
-              )}
-              {execution.inputJson != null && (
-                <Section title="Input">
-                  <JsonBlock value={executionInput} />
-                </Section>
-              )}
-            </CardContent>
-          </Card>
+          <RunResultCard
+            triggerSource={execution.triggerSource}
+            startedAt={execution.startedAt ?? null}
+            finishedAt={execution.finishedAt ?? null}
+            costCents={execution.totalLlmCostUsdCents ?? null}
+            errorCode={execution.errorCode ?? null}
+            errorMessage={execution.errorMessage ?? null}
+            input={executionInput}
+            output={executionOutput}
+            hasInput={execution.inputJson != null}
+            hasOutput={execution.outputJson != null}
+          />
 
           {summaryMarkdown.length > 0 && (
             <Card>
@@ -294,16 +240,86 @@ function ExecutionDetailPage() {
                 <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
                   Version summary
                 </h3>
-                <MarkdownSummary
-                  markdown={summaryMarkdown}
-                  onAnchorClick={(nodeId) => setSelectedNodeId(nodeId)}
-                />
+                <div className="max-h-72 overflow-y-auto pr-1">
+                  <MarkdownSummary
+                    markdown={summaryMarkdown}
+                    onAnchorClick={(nodeId) => setSelectedNodeId(nodeId)}
+                  />
+                </div>
               </CardContent>
             </Card>
           )}
         </div>
       </div>
-    </div>
+    </PageLayout>
+  );
+}
+
+function RunResultCard({
+  triggerSource,
+  startedAt,
+  finishedAt,
+  costCents,
+  errorCode,
+  errorMessage,
+  input,
+  output,
+  hasInput,
+  hasOutput,
+}: {
+  triggerSource: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  costCents: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  input: unknown;
+  output: unknown;
+  hasInput: boolean;
+  hasOutput: boolean;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-3 py-4 text-sm">
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
+          Run result
+        </h3>
+        <Row label="Trigger" value={triggerSource} />
+        <Row
+          label="Started"
+          value={
+            startedAt
+              ? `${formatDateTime(startedAt)} (${relativeTime(startedAt)})`
+              : "—"
+          }
+        />
+        <Row
+          label="Finished"
+          value={
+            finishedAt
+              ? `${formatDateTime(finishedAt)} (${relativeTime(finishedAt)})`
+              : "—"
+          }
+        />
+        <Row label="LLM cost" value={formatLlmCost(costCents)} />
+        {errorCode && <Row label="Error code" value={errorCode} />}
+        {errorMessage && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+            {errorMessage}
+          </div>
+        )}
+        {hasOutput && (
+          <Section title="Output">
+            <JsonBlock value={output} />
+          </Section>
+        )}
+        {hasInput && (
+          <Section title="Input">
+            <JsonBlock value={input} />
+          </Section>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -330,12 +346,18 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
+function formatLlmCost(cents: number | null): string {
+  if (cents == null) return "—";
+  if (cents < 100) return `${cents}¢`;
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 function Section({
   title,
   children,
 }: {
-  title: React.ReactNode;
-  children: React.ReactNode;
+  title: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="space-y-1">
