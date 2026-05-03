@@ -29,9 +29,10 @@ export function normalizeRoutineExecutionManifest(
   const stepsArray = stepsFromArray(manifest.steps);
   if (stepsArray.length > 0) return stepsArray;
 
-  return Object.entries(manifest)
-    .filter(([nodeId, meta]) => nodeId !== "definition" && isRecord(meta))
-    .map(([nodeId, meta]) => stepFromRecord(nodeId, meta));
+  return Object.entries(manifest).flatMap(([nodeId, meta]) => {
+    if (nodeId === "definition" || !isRecord(meta)) return [];
+    return [stepFromRecord(nodeId, meta)];
+  });
 }
 
 function stepsFromDefinition(value: unknown): NormalizedRoutineStep[] {
