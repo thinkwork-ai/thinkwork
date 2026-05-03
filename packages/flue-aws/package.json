@@ -1,0 +1,20 @@
+{
+  "name": "@thinkwork/flue-aws",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS-side Flue connectors. Spike-only: AgentCore Code Interpreter SandboxFactory. See docs/solutions/architecture-patterns/flue-fr9a-integration-spike-verdict-2026-05-03.md.",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.1028.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
+  }
+}
