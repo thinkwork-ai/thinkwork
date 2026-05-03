@@ -210,11 +210,6 @@ export function AppSidebar() {
       badge: routineActiveCount,
     },
     {
-      to: "/automations/system-workflows",
-      icon: Workflow,
-      label: "System Workflows",
-    },
-    {
       to: "/automations/schedules",
       icon: CalendarClock,
       label: "Scheduled Jobs",
@@ -224,6 +219,11 @@ export function AppSidebar() {
       to: "/automations/webhooks",
       icon: Webhook,
       label: "Webhooks",
+    },
+    {
+      to: "/automations/system-workflows",
+      icon: Workflow,
+      label: "System Workflows",
     },
   ];
 
