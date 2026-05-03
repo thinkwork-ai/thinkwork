@@ -9,7 +9,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { checkRoutineVisibility, type Routine } from "./routines.js";
+import type { AdminOpsClient } from "./client.js";
+import {
+  buildAgentRoutineIntent,
+  checkRoutineVisibility,
+  createAgentRoutine,
+  triggerRoutineRun,
+  type Routine,
+} from "./routines.js";
 
 const TENANT_A = "11111111-1111-1111-1111-111111111111";
 const TENANT_B = "22222222-2222-2222-2222-222222222222";
@@ -109,3 +116,123 @@ describe("checkRoutineVisibility", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe("createAgentRoutine", () => {
+  it("submits intent-only createRoutine input so the API planner builds ASL artifacts", async () => {
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const created = routine({
+      name: "Check Austin Weather",
+      description:
+        "Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+    });
+    const client = fakeClient(async (query, variables) => {
+      calls.push({ query, variables });
+      return { createRoutine: created };
+    });
+
+    const result = await createAgentRoutine(client, {
+      tenantId: TENANT_A,
+      agentId: AGENT_OWNER,
+      name: "Check Austin Weather",
+      description: "Daily weather check",
+      intent: "Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+      suggestedSteps: ["Fetch Austin weather", "Email the summary"],
+    });
+
+    expect(result).toBe(created);
+    expect(calls).toHaveLength(1);
+    const input = calls[0]!.variables!.input as Record<string, unknown>;
+    expect(input).toMatchObject({
+      tenantId: TENANT_A,
+      agentId: AGENT_OWNER,
+      owningAgentId: AGENT_OWNER,
+      visibility: "agent_private",
+      name: "Check Austin Weather",
+    });
+    expect(input.description).toBe(
+      [
+        "Daily weather check",
+        "",
+        "Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+        "",
+        "Suggested steps:",
+        "- Fetch Austin weather",
+        "- Email the summary",
+      ].join("\n"),
+    );
+    expect(input).not.toHaveProperty("asl");
+    expect(input).not.toHaveProperty("markdownSummary");
+    expect(input).not.toHaveProperty("stepManifest");
+  });
+
+  it("builds an intent string without blank suggested steps", () => {
+    expect(
+      buildAgentRoutineIntent({
+        intent: "Fetch Austin weather and email it.",
+        suggestedSteps: ["Fetch weather", "  ", "Send email"],
+      }),
+    ).toBe(
+      [
+        "Fetch Austin weather and email it.",
+        "",
+        "Suggested steps:",
+        "- Fetch weather",
+        "- Send email",
+      ].join("\n"),
+    );
+  });
+
+  it("omits the suggested-steps section when every suggested step is blank", () => {
+    expect(
+      buildAgentRoutineIntent({
+        intent: "Fetch Austin weather and email it.",
+        suggestedSteps: ["  ", "\t"],
+      }),
+    ).toBe("Fetch Austin weather and email it.");
+  });
+});
+
+describe("triggerRoutineRun", () => {
+  it("serializes args as AWSJSON input", async () => {
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const execution = {
+      id: "execution-id",
+      status: "running",
+      triggerSource: "agent_tool",
+      startedAt: "2026-05-03T00:00:00.000Z",
+    };
+    const client = fakeClient(async (query, variables) => {
+      calls.push({ query, variables });
+      return { triggerRoutineRun: execution };
+    });
+
+    const result = await triggerRoutineRun(client, {
+      routineId: "routine-id",
+      args: { location: "Austin", units: "imperial" },
+    });
+
+    expect(result).toBe(execution);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.variables).toEqual({
+      routineId: "routine-id",
+      input: JSON.stringify({ location: "Austin", units: "imperial" }),
+    });
+  });
+});
+
+function fakeClient(
+  graphql: (
+    query: string,
+    variables?: Record<string, unknown>,
+  ) => Promise<unknown>,
+): AdminOpsClient {
+  return {
+    apiUrl: "https://api.test",
+    tenantId: TENANT_A,
+    fetch: async () => {
+      throw new Error("fetch not expected");
+    },
+    graphql: graphql as AdminOpsClient["graphql"],
+    withTenant: () => fakeClient(graphql),
+  };
+}

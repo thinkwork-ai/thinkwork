@@ -690,14 +690,14 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 		// avoiding a half-rolled-out window where agents try to invoke
 		// tools that aren't ready.
 		//
-		// Visibility (v0): a routine with `agentId` set is private to that
-		// agent; `agentId === null` means tenant-shared. routine_invoke
-		// runs `checkRoutineVisibility` against the caller's agentId
-		// before delegating to triggerRoutineRun.
+		// Visibility: agent_private routines are gated on owningAgentId;
+		// tenant_shared routines are callable by any agent in the tenant.
+		// routine_invoke runs checkRoutineVisibility before delegating to
+		// triggerRoutineRun.
 		{
 			name: "create_routine",
 			description:
-				"Create a new agent-private routine (Phase B Step Functions runtime). The new routine is stamped with the caller's agentId and starts as a no-op `Succeed` state machine; the agent iterates the ASL via subsequent publishRoutineVersion calls. Returns the created routine. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+				"Create a new agent-private routine from a supported natural-language intent using the recipe-backed Routine authoring path. Returns the created executable routine, or an authoring error for unsupported intents. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
 			inputSchema: {
 				type: "object",
 				properties: {
@@ -757,20 +757,20 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 						"tenantId required: pass via args or use a tenant-pinned admin key.",
 					);
 				}
-				const markdownSummary = buildAgentStampMarkdown(a);
 				return routineOps.createAgentRoutine(client, {
 					tenantId,
 					agentId: a.agentId,
 					name: a.name,
 					description: a.description,
-					markdownSummary,
+					intent: a.intent,
+					suggestedSteps: a.suggestedSteps,
 				});
 			},
 		},
 		{
 			name: "routine_invoke",
 			description:
-				"Trigger a routine execution. The routine must be owned by the caller's agent (private) or tenant-shared (agentId=null). Returns a routine execution lite (id, status, triggerSource, startedAt). Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+				"Trigger a routine execution. The routine must be owned by the caller's agent (agent_private by owningAgentId) or tenant-shared. Returns a routine execution lite (id, status, triggerSource, startedAt). Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
 			inputSchema: {
 				type: "object",
 				properties: {
@@ -835,7 +835,7 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 }
 
 // ---------------------------------------------------------------------------
-// Phase C U11: agent-tool gate + agent-stamp helper
+// Phase C U11: agent-tool gate
 // ---------------------------------------------------------------------------
 
 function routinesAgentToolsEnabled(): boolean {
@@ -852,30 +852,6 @@ function notYetEnabled(toolName: string): {
 		tool: toolName,
 		message: `${toolName} is defined but disabled — flip ROUTINES_AGENT_TOOLS_ENABLED=true on the runtime to activate.`,
 	};
-}
-
-/** Build the operator-facing markdown summary for an agent-stamped
- * routine. The chat builder regenerates this on the next
- * publishRoutineVersion; the v0 placeholder reflects the agent's
- * stated intent and any suggested steps so the routine isn't an
- * empty shell on the routines list. Exported for tests. */
-export function buildAgentStampMarkdown(input: {
-	name: string;
-	intent: string;
-	suggestedSteps?: string[];
-}): string {
-	const lines = [`# ${input.name}`, "", `**Intent:** ${input.intent.trim()}`, ""];
-	if (input.suggestedSteps && input.suggestedSteps.length > 0) {
-		lines.push("**Suggested steps:**");
-		for (const step of input.suggestedSteps) {
-			lines.push(`- ${step}`);
-		}
-		lines.push("");
-	}
-	lines.push(
-		"_Created via the agent-stamp MCP tool. The owning agent will iterate the routine via publishRoutineVersion._",
-	);
-	return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
