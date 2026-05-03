@@ -13,9 +13,10 @@
  */
 
 import {
-  Client,
-  cacheExchange,
-  fetchExchange,
+  CombinedError,
+  type Client,
+  type DocumentInput,
+  stringifyDocument,
   type OperationResult,
   type TypedDocumentNode,
 } from "@urql/core";
@@ -56,20 +57,7 @@ export async function getGqlClient(
   const url = `${baseUrl.replace(/\/+$/, "")}/graphql`;
   const auth = await resolveAuth({ stage: opts.stage, region });
 
-  const client = new Client({
-    url,
-    exchanges: [cacheExchange, fetchExchange],
-    fetchOptions: () => ({
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...auth.headers,
-      },
-    }),
-    // CLI calls are short-lived and we want server truth on every run —
-    // bypass the in-memory cache to avoid stale reads between quick commands.
-    requestPolicy: "network-only",
-  });
+  const client = createCliGqlClient(url, auth.headers);
 
   return {
     client,
@@ -77,6 +65,28 @@ export async function getGqlClient(
     tenantId: auth.tenantId,
     tenantSlug: auth.tenantSlug,
   };
+}
+
+export function createCliGqlClient(
+  url: string,
+  headers: Record<string, string>,
+): Client {
+  return {
+    query: <Data, Variables extends Record<string, unknown>>(
+      doc: DocumentInput<Data, Variables>,
+      variables: Variables,
+    ) => ({
+      toPromise: () =>
+        executeGraphql<Data, Variables>(url, headers, doc, variables),
+    }),
+    mutation: <Data, Variables extends Record<string, unknown>>(
+      doc: DocumentInput<Data, Variables>,
+      variables: Variables,
+    ) => ({
+      toPromise: () =>
+        executeGraphql<Data, Variables>(url, headers, doc, variables),
+    }),
+  } as unknown as Client;
 }
 
 /**
@@ -89,7 +99,7 @@ export async function gqlQuery<Data, Variables extends Record<string, unknown>>(
   doc: TypedDocumentNode<Data, Variables>,
   variables: Variables,
 ): Promise<Data> {
-  const res = await client.query(doc, variables).toPromise();
+  const res = await client.query(serializeDocument(doc), variables).toPromise();
   return unwrap(res);
 }
 
@@ -98,8 +108,102 @@ export async function gqlMutate<Data, Variables extends Record<string, unknown>>
   doc: TypedDocumentNode<Data, Variables>,
   variables: Variables,
 ): Promise<Data> {
-  const res = await client.mutation(doc, variables).toPromise();
+  const res = await client.mutation(serializeDocument(doc), variables).toPromise();
   return unwrap(res);
+}
+
+function serializeDocument<Data, Variables extends Record<string, unknown>>(
+  doc: DocumentInput<Data, Variables>,
+): string {
+  return stringifyDocument(doc);
+}
+
+async function executeGraphql<Data, Variables extends Record<string, unknown>>(
+  url: string,
+  headers: Record<string, string>,
+  doc: DocumentInput<Data, Variables>,
+  variables: Variables,
+): Promise<OperationResult<Data>> {
+  const query = serializeDocument(doc);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+
+    const text = await response.text();
+    let payload: {
+      data?: Data;
+      errors?: Array<{ message?: string } | string>;
+      extensions?: Record<string, unknown>;
+    } = {};
+
+    if (text) {
+      try {
+        payload = JSON.parse(text) as typeof payload;
+      } catch {
+        return makeNetworkErrorResult(
+          `GraphQL request failed with non-JSON response: ${text}`,
+          response,
+        );
+      }
+    }
+
+    if (payload.errors?.length) {
+      return {
+        data: payload.data,
+        error: new CombinedError({
+          graphQLErrors: payload.errors as any,
+          response,
+        }),
+        extensions: payload.extensions,
+        stale: false,
+        hasNext: false,
+      } as OperationResult<Data>;
+    }
+
+    if (!response.ok) {
+      return makeNetworkErrorResult(
+        `GraphQL request failed with HTTP ${response.status}`,
+        response,
+      );
+    }
+
+    return {
+      data: payload.data,
+      error: undefined,
+      extensions: payload.extensions,
+      stale: false,
+      hasNext: false,
+    } as OperationResult<Data>;
+  } catch (err) {
+    return {
+      error: new CombinedError({
+        networkError: err instanceof Error ? err : new Error(String(err)),
+      }),
+      stale: false,
+      hasNext: false,
+    } as OperationResult<Data>;
+  }
+}
+
+function makeNetworkErrorResult<Data>(
+  message: string,
+  response: Response,
+): OperationResult<Data> {
+  return {
+    error: new CombinedError({
+      networkError: new Error(message),
+      response,
+    }),
+    stale: false,
+    hasNext: false,
+  } as OperationResult<Data>;
 }
 
 function unwrap<Data>(res: OperationResult<Data>): Data {
