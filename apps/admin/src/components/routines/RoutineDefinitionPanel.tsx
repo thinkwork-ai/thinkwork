@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Save, Settings2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Save, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useTenant } from "@/context/TenantContext";
 import {
   RoutineRecipeCatalogQuery,
+  RoutineDefinitionArtifactsQuery,
   RoutineDefinitionQuery,
   UpdateRoutineDefinitionMutation,
 } from "@/lib/graphql-queries";
@@ -26,6 +27,7 @@ interface RoutineDefinitionPanelProps {
   routineId: string;
   onPublished?: () => void;
   onStateChange?: (state: RoutineDefinitionEditorState) => void;
+  layout?: "default" | "workspace";
 }
 
 export interface RoutineDefinitionEditorState {
@@ -40,10 +42,16 @@ export function RoutineDefinitionPanel({
   routineId,
   onPublished,
   onStateChange,
+  layout = "default",
 }: RoutineDefinitionPanelProps) {
   const { tenantId } = useTenant();
   const [queryResult, refetch] = useQuery({
     query: RoutineDefinitionQuery,
+    variables: { routineId },
+    requestPolicy: "cache-and-network",
+  });
+  const [artifactResult, refetchArtifacts] = useQuery({
+    query: RoutineDefinitionArtifactsQuery,
     variables: { routineId },
     requestPolicy: "cache-and-network",
   });
@@ -92,9 +100,26 @@ export function RoutineDefinitionPanel({
   );
   const issueCount = Object.keys(validationErrors).length;
   const invalid = hasValidationErrors(validationErrors);
+  const configurableFieldCount = steps.reduce(
+    (count, step) => count + step.configFields.length,
+    0,
+  );
+  const configuredFieldCount = steps.reduce(
+    (count, step) =>
+      count +
+      step.configFields.filter((field) =>
+        (fieldValues[fieldKey(step.nodeId, field.key)] ?? "").trim(),
+      ).length,
+    0,
+  );
 
   const dirty =
     JSON.stringify(originalSnapshot) !== JSON.stringify(editedSnapshot);
+  const topologyDirty = useMemo(() => {
+    const originalIds = definition?.steps.map((step) => step.nodeId) ?? [];
+    const editedIds = steps.map((step) => step.nodeId);
+    return JSON.stringify(originalIds) !== JSON.stringify(editedIds);
+  }, [definition?.steps, steps]);
 
   useEffect(() => {
     onStateChange?.({
@@ -139,6 +164,7 @@ export function RoutineDefinitionPanel({
     const version = res.data?.updateRoutineDefinition.currentVersion;
     toast.success(version ? `Published version ${version}.` : "Published.");
     refetch({ requestPolicy: "network-only" });
+    refetchArtifacts({ requestPolicy: "network-only" });
     onPublished?.();
   };
 
@@ -166,6 +192,125 @@ export function RoutineDefinitionPanel({
   if (!definition) return null;
 
   const recipes = catalogResult.data?.routineRecipeCatalog ?? [];
+  const artifactDefinition = artifactResult.data?.routineDefinition;
+  const workspace = layout === "workspace";
+  const saveButton = (
+    <Button
+      size="sm"
+      onClick={save}
+      disabled={!dirty || invalid || updateState.fetching}
+      title={
+        invalid
+          ? "Fix configuration issues before saving"
+          : !dirty
+            ? "No workflow changes to save"
+            : undefined
+      }
+    >
+      <Save className="h-3.5 w-3.5" />
+      {updateState.fetching ? "Saving..." : "Save"}
+    </Button>
+  );
+
+  if (workspace) {
+    return (
+      <section className="h-full min-h-0">
+        <RoutineWorkflowEditor
+          steps={steps}
+          recipes={recipes}
+          fieldValues={fieldValues}
+          aslJson={artifactDefinition?.aslJson}
+          stepManifestJson={artifactDefinition?.stepManifestJson}
+          topologyDirty={topologyDirty}
+          layout="workspace"
+          sidebarHeader={
+            <div className="rounded-md border border-border/70 bg-card/50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-semibold">
+                      Definition
+                    </span>
+                    {definition.currentVersion && (
+                      <Badge variant="outline">
+                        v{definition.currentVersion}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2 flex min-w-0 flex-wrap gap-2">
+                    {dirty ? (
+                      <Badge variant="secondary">Unsaved changes</Badge>
+                    ) : (
+                      <Badge variant="outline">Saved workflow</Badge>
+                    )}
+                    {configurableFieldCount > 0 && (
+                      <Badge variant="outline">
+                        {configuredFieldCount}/{configurableFieldCount}{" "}
+                        configured
+                      </Badge>
+                    )}
+                    {issueCount > 0 ? (
+                      <Badge className="border-transparent bg-destructive/10 text-destructive">
+                        <AlertCircle className="h-3 w-3" />
+                        {issueCount} {issueCount === 1 ? "issue" : "issues"}
+                      </Badge>
+                    ) : (
+                      <Badge className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" />
+                        No issues
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0">{saveButton}</div>
+              </div>
+            </div>
+          }
+          onFieldChange={(key, value) =>
+            setFieldValues((current) => ({ ...current, [key]: value }))
+          }
+          onAddRecipe={(recipe, afterNodeId) => {
+            let insertedNodeId: string | null = null;
+            setSteps((current) => {
+              const step = stepFromRecipe(recipe, current);
+              insertedNodeId = step.nodeId;
+              const index = current.findIndex(
+                (candidate) => candidate.nodeId === afterNodeId,
+              );
+              const next =
+                index < 0
+                  ? [...current, step]
+                  : [
+                      ...current.slice(0, index + 1),
+                      step,
+                      ...current.slice(index + 1),
+                    ];
+              setFieldValues((values) => mergeFieldValues(next, values));
+              return next;
+            });
+            return insertedNodeId;
+          }}
+          onLabelChange={(nodeId, value) =>
+            setSteps((current) =>
+              current.map((step) =>
+                step.nodeId === nodeId ? { ...step, label: value } : step,
+              ),
+            )
+          }
+          onMoveStep={(nodeId, direction) =>
+            setSteps((current) => moveStep(current, nodeId, direction))
+          }
+          onRemoveStep={(nodeId) =>
+            setSteps((current) =>
+              current.filter((step) => step.nodeId !== nodeId),
+            )
+          }
+          fieldErrors={validationErrors}
+          catalogLoading={catalogResult.fetching}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="mb-5 rounded-lg border border-border/70 bg-card/40">
@@ -199,23 +344,7 @@ export function RoutineDefinitionPanel({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={save}
-            disabled={!dirty || invalid || updateState.fetching}
-            title={
-              invalid
-                ? "Fix configuration issues before saving"
-                : !dirty
-                  ? "No workflow changes to save"
-                  : undefined
-            }
-          >
-            <Save className="h-3.5 w-3.5" />
-            {updateState.fetching ? "Saving..." : "Save"}
-          </Button>
-        </div>
+        <div className="flex items-center gap-2">{saveButton}</div>
       </div>
 
       <div className="p-4">
@@ -223,16 +352,33 @@ export function RoutineDefinitionPanel({
           steps={steps}
           recipes={recipes}
           fieldValues={fieldValues}
+          aslJson={artifactDefinition?.aslJson}
+          stepManifestJson={artifactDefinition?.stepManifestJson}
+          topologyDirty={topologyDirty}
           onFieldChange={(key, value) =>
             setFieldValues((current) => ({ ...current, [key]: value }))
           }
-          onAddRecipe={(recipe) =>
+          onAddRecipe={(recipe, afterNodeId) => {
+            let insertedNodeId: string | null = null;
             setSteps((current) => {
-              const next = [...current, stepFromRecipe(recipe, current)];
+              const step = stepFromRecipe(recipe, current);
+              insertedNodeId = step.nodeId;
+              const index = current.findIndex(
+                (candidate) => candidate.nodeId === afterNodeId,
+              );
+              const next =
+                index < 0
+                  ? [...current, step]
+                  : [
+                      ...current.slice(0, index + 1),
+                      step,
+                      ...current.slice(index + 1),
+                    ];
               setFieldValues((values) => mergeFieldValues(next, values));
               return next;
-            })
-          }
+            });
+            return insertedNodeId;
+          }}
           onLabelChange={(nodeId, value) =>
             setSteps((current) =>
               current.map((step) =>
@@ -323,6 +469,10 @@ function jsonObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function fieldKey(nodeId: string, fieldKeyValue: string): string {
+  return `${nodeId}.${fieldKeyValue}`;
 }
 
 function uniqueNodeId(

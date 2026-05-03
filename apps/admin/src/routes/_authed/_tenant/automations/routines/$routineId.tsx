@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   RebuildRoutineVersionMutation,
   RoutineDetailQuery,
@@ -21,6 +22,8 @@ import {
   RoutineDefinitionPanel,
   type RoutineDefinitionEditorState,
 } from "@/components/routines/RoutineDefinitionPanel";
+import { StatusBadge } from "@/components/StatusBadge";
+import { formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/automations/routines/$routineId",
@@ -37,6 +40,13 @@ export const Route = createFileRoute(
     return status === "all" ? {} : { status };
   },
 });
+
+function label(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 function RoutineDetailPage() {
   const { routineId } = Route.useParams();
@@ -156,6 +166,7 @@ function RoutineDetailPage() {
 
   return (
     <PageLayout
+      contentClassName="overflow-hidden pb-4"
       header={
         <PageHeader
           title={routine.name}
@@ -197,38 +208,160 @@ function RoutineDetailPage() {
         </div>
       )}
 
-      <RoutineDefinitionPanel
-        routineId={routineId}
-        onPublished={() => reexecuteRoutine({ requestPolicy: "network-only" })}
-        onStateChange={handleDefinitionStateChange}
-      />
+      <Tabs defaultValue="activity" className="h-full min-h-0 gap-4">
+        <TabsList
+          variant="line"
+          className="w-full shrink-0 justify-start border-b"
+        >
+          <TabsTrigger value="activity" className="flex-none px-3">
+            Activity
+          </TabsTrigger>
+          <TabsTrigger value="workflow" className="flex-none px-3">
+            Workflow
+          </TabsTrigger>
+          <TabsTrigger value="config" className="flex-none px-3">
+            Config
+          </TabsTrigger>
+        </TabsList>
 
-      <ExecutionList
-        routineId={routineId}
-        statusFilter={statusFilter}
-        onStatusFilterChange={(next) =>
-          navigate({
-            to: "/automations/routines/$routineId",
-            params: { routineId },
-            search: next === "all" ? {} : { status: next },
-            replace: true,
-          })
-        }
-        emptyCta={
-          statusFilter === "all" ? (
-            <Button
-              size="sm"
-              onClick={handleRunNow}
-              disabled={testDisabled}
-              title={testDisabledReason ?? undefined}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              Test Routine
-            </Button>
-          ) : null
-        }
-        refreshKey={executionRefreshKey}
-      />
+        <TabsContent value="activity" className="overflow-y-auto">
+          <ExecutionList
+            routineId={routineId}
+            statusFilter={statusFilter}
+            onStatusFilterChange={(next) =>
+              navigate({
+                to: "/automations/routines/$routineId",
+                params: { routineId },
+                search: next === "all" ? {} : { status: next },
+                replace: true,
+              })
+            }
+            emptyCta={
+              statusFilter === "all" ? (
+                <Button
+                  size="sm"
+                  onClick={handleRunNow}
+                  disabled={testDisabled}
+                  title={testDisabledReason ?? undefined}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Test Routine
+                </Button>
+              ) : null
+            }
+            refreshKey={executionRefreshKey}
+          />
+        </TabsContent>
+
+        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
+          <RoutineDefinitionPanel
+            routineId={routineId}
+            onPublished={() =>
+              reexecuteRoutine({ requestPolicy: "network-only" })
+            }
+            onStateChange={handleDefinitionStateChange}
+            layout="workspace"
+          />
+        </TabsContent>
+
+        <TabsContent value="config" className="space-y-4 overflow-y-auto">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <section className="space-y-3 rounded-md border p-4">
+              <h2 className="text-sm font-semibold">Definition</h2>
+              <dl className="grid gap-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Engine</dt>
+                  <dd>{label(routine.engine)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Version</dt>
+                  <dd>{routine.currentVersion ?? "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Type</dt>
+                  <dd>{label(routine.type)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Status</dt>
+                  <dd>
+                    <StatusBadge status={routine.status.toLowerCase()} />
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="space-y-3 rounded-md border p-4">
+              <h2 className="text-sm font-semibold">Ownership</h2>
+              <dl className="grid gap-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Agent</dt>
+                  <dd>{routine.agent?.name ?? "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Team</dt>
+                  <dd>{routine.team?.name ?? "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Created</dt>
+                  <dd>{formatDateTime(routine.createdAt)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Updated</dt>
+                  <dd>{formatDateTime(routine.updatedAt)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="space-y-3 rounded-md border p-4">
+              <h2 className="text-sm font-semibold">Schedule</h2>
+              <dl className="grid gap-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Schedule</dt>
+                  <dd>{routine.schedule ?? "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Last run</dt>
+                  <dd>
+                    {routine.lastRunAt
+                      ? formatDateTime(routine.lastRunAt)
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Next run</dt>
+                  <dd>
+                    {routine.nextRunAt
+                      ? formatDateTime(routine.nextRunAt)
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+
+          <section className="space-y-3 rounded-md border p-4">
+            <h2 className="text-sm font-semibold">Triggers</h2>
+            {routine.triggers.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {routine.triggers.map((trigger) => (
+                  <div key={trigger.id} className="rounded border px-3 py-2">
+                    <div className="text-sm font-medium">
+                      {label(trigger.triggerType)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {trigger.enabled ? "Enabled" : "Disabled"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No triggers configured.
+              </p>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 }

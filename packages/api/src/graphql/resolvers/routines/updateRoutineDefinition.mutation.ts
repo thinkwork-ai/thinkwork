@@ -5,7 +5,9 @@ import { db } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import {
   applyRoutineDefinitionEdits,
+  applyRoutineGraphDefinitionEdits,
   routineDefinitionFromArtifacts,
+  type RoutineDefinitionGraphEdit,
   type RoutineDefinitionStepConfigEdit,
 } from "../../../lib/routines/routine-authoring-planner.js";
 import { publishRoutineArtifacts } from "./publishRoutineVersion.mutation.js";
@@ -14,6 +16,7 @@ import { routineDefinitionPayload } from "./routineDefinition.shared.js";
 interface UpdateRoutineDefinitionInput {
   routineId: string;
   steps: RoutineDefinitionStepConfigEdit[];
+  graph?: RoutineDefinitionGraphEdit | null;
 }
 
 export async function updateRoutineDefinition(
@@ -66,7 +69,9 @@ export async function updateRoutineDefinition(
     throw new Error(definition.reason);
   }
 
-  const edited = applyRoutineDefinitionEdits(definition.plan, steps);
+  const edited = args.input.graph
+    ? applyRoutineGraphDefinitionEdits(definition.plan, args.input.graph)
+    : applyRoutineDefinitionEdits(definition.plan, steps);
   if (!edited.ok) {
     throw new Error(edited.reason);
   }
@@ -91,5 +96,8 @@ export async function updateRoutineDefinition(
       (routine.current_version ?? 0) + 1,
     versionId: published.id ?? null,
     plan: edited.artifacts.plan,
+    aslJson: edited.artifacts.asl,
+    markdownSummary: edited.artifacts.markdownSummary,
+    stepManifestJson: edited.artifacts.stepManifest,
   });
 }

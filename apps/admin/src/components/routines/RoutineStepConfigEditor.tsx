@@ -53,6 +53,7 @@ interface RoutineStepConfigEditorProps {
   fieldErrors?: Record<string, string>;
   selectedNodeId?: string | null;
   onSelectStep?: (nodeId: string) => void;
+  layout?: "split" | "stacked";
 }
 
 export function RoutineStepConfigEditor({
@@ -65,9 +66,12 @@ export function RoutineStepConfigEditor({
   fieldErrors = {},
   selectedNodeId,
   onSelectStep,
+  layout = "split",
 }: RoutineStepConfigEditorProps) {
+  const stacked = layout === "stacked";
+
   return (
-    <div className="space-y-3 p-3">
+    <div className={cn("space-y-3", stacked ? "p-4" : "p-3")}>
       {steps.map((step, index) => {
         const stepErrors = step.configFields.filter(
           (field) => fieldErrors[fieldKey(step.nodeId, field.key)],
@@ -84,15 +88,23 @@ export function RoutineStepConfigEditor({
           <article
             key={step.nodeId}
             className={cn(
-              "grid gap-4 rounded-lg border px-4 py-4 transition-colors lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]",
+              "rounded-lg border px-4 py-4 transition-colors",
+              stacked
+                ? "space-y-4"
+                : "grid gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]",
               selected
                 ? "border-ring bg-muted/35 shadow-sm"
                 : "border-border/70 bg-background/40 hover:bg-muted/20",
             )}
             onFocusCapture={() => onSelectStep?.(step.nodeId)}
           >
-            <div className="min-w-0">
-              <div className="flex items-start gap-3">
+            <div className={cn("min-w-0", stacked && "border-b pb-3")}>
+              <div
+                className={cn(
+                  "flex gap-3",
+                  stacked ? "items-center" : "items-start",
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => onSelectStep?.(step.nodeId)}
@@ -106,7 +118,12 @@ export function RoutineStepConfigEditor({
                 >
                   {index + 1}
                 </button>
-                <div className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    "min-w-0 flex-1",
+                    stacked && "flex items-center gap-2",
+                  )}
+                >
                   {onLabelChange ? (
                     <Input
                       aria-label={`${step.recipeName} step label`}
@@ -121,10 +138,17 @@ export function RoutineStepConfigEditor({
                       {step.label}
                     </div>
                   )}
-                  <div className="truncate text-xs text-muted-foreground">
-                    {step.recipeName}
-                  </div>
-                  <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                  {!stacked && (
+                    <div className="truncate text-xs text-muted-foreground">
+                      {step.recipeName}
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "flex min-w-0 flex-wrap gap-1.5",
+                      stacked ? "shrink-0" : "mt-2",
+                    )}
+                  >
                     {stepErrors > 0 ? (
                       <Badge className="border-transparent bg-destructive/10 text-destructive">
                         <AlertCircle className="h-3 w-3" />
@@ -146,58 +170,70 @@ export function RoutineStepConfigEditor({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "font-mono",
-                    step.recipeId === "email_send" &&
-                      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                  )}
-                >
-                  {step.recipeId}
-                </Badge>
-                {onMoveStep && (
-                  <>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label={`Move ${step.label} up`}
-                      disabled={index === 0}
-                      onClick={() => onMoveStep(step.nodeId, "up")}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label={`Move ${step.label} down`}
-                      disabled={index === steps.length - 1}
-                      onClick={() => onMoveStep(step.nodeId, "down")}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </>
-                )}
-                {onRemoveStep && (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={`Remove ${step.label}`}
-                    onClick={() => onRemoveStep(step.nodeId)}
+              {!stacked && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-mono",
+                      step.recipeId === "email_send" &&
+                        "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    )}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
+                    {step.recipeId}
+                  </Badge>
+                  {onMoveStep && (
+                    <>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Move ${step.label} up`}
+                        disabled={index === 0}
+                        onClick={() => onMoveStep(step.nodeId, "up")}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Move ${step.label} down`}
+                        disabled={index === steps.length - 1}
+                        onClick={() => onMoveStep(step.nodeId, "down")}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                  {onRemoveStep && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Remove ${step.label}`}
+                      onClick={() => onRemoveStep(step.nodeId)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+            <div
+              className={cn(
+                "grid min-w-0 gap-3",
+                stacked ? "grid-cols-1" : "md:grid-cols-2",
+              )}
+            >
               {step.configFields.length === 0 ? (
-                <div className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-sm text-muted-foreground md:col-span-2">
+                <div
+                  className={cn(
+                    "rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-sm text-muted-foreground",
+                    !stacked && "md:col-span-2",
+                  )}
+                >
                   No configurable fields.
                 </div>
               ) : (
@@ -209,6 +245,7 @@ export function RoutineStepConfigEditor({
                     value={fieldValues[fieldKey(step.nodeId, field.key)] ?? ""}
                     error={fieldErrors[fieldKey(step.nodeId, field.key)]}
                     changed={fieldChanged(step.nodeId, field, fieldValues)}
+                    stacked={stacked}
                     onChange={(value) =>
                       onFieldChange(fieldKey(step.nodeId, field.key), value)
                     }
@@ -229,6 +266,7 @@ function ConfigFieldInput({
   value,
   error,
   changed,
+  stacked,
   onChange,
 }: {
   step: RoutineConfigStep;
@@ -236,6 +274,7 @@ function ConfigFieldInput({
   value: string;
   error?: string;
   changed?: boolean;
+  stacked?: boolean;
   onChange: (value: string) => void;
 }) {
   const id = `${step.nodeId}-${field.key}`;
@@ -252,7 +291,7 @@ function ConfigFieldInput({
   return (
     <label
       htmlFor={id}
-      className={cn("block min-w-0", fullWidth && "md:col-span-2")}
+      className={cn("block min-w-0", !stacked && fullWidth && "md:col-span-2")}
     >
       <span className="mb-1.5 flex min-w-0 items-center gap-2 text-sm font-medium">
         <span>
@@ -301,6 +340,7 @@ function ConfigFieldInput({
           rows={textareaRows(control, value)}
           className={cn(
             "min-h-20 resize-y",
+            stacked && control === "code" && "min-h-[360px]",
             monospace && "font-mono text-xs leading-5",
             readOnly && "text-muted-foreground",
           )}
