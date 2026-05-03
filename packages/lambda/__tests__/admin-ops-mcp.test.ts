@@ -92,6 +92,8 @@ describe("admin-ops-mcp Lambda", () => {
 	beforeEach(() => {
 		// Default: no matching tenant key. Tests override per-case.
 		dbLookupResult = [];
+		global.fetch = originalFetch;
+		delete process.env.ROUTINES_AGENT_TOOLS_ENABLED;
 	});
 
 	it("rejects non-POST methods", async () => {
@@ -228,6 +230,8 @@ describe("admin-ops-mcp Lambda", () => {
 			"templates_accept_update",
 			"artifacts_list",
 			"artifacts_get",
+			"create_routine",
+			"routine_invoke",
 		];
 		for (const n of mustHave) {
 			expect(names, `missing tool: ${n}`).toContain(n);
@@ -398,6 +402,294 @@ describe("admin-ops-mcp Lambda", () => {
 		);
 		const body = JSON.parse(res.body ?? "{}");
 		expect(body.error?.code).toBe(-32601);
+	});
+
+	it("create_routine stays inert when ROUTINES_AGENT_TOOLS_ENABLED is disabled", async () => {
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi.fn() as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 40,
+					method: "tools/call",
+					params: {
+						name: "create_routine",
+						arguments: {
+							agentId: "agent-uuid",
+							name: "Check Austin Weather",
+							intent: "Fetch Austin weather and email the summary.",
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		expect(global.fetch).not.toHaveBeenCalled();
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(false);
+		const payload = JSON.parse(body.result.content[0].text);
+		expect(payload).toMatchObject({
+			error: "not_yet_enabled",
+			tool: "create_routine",
+		});
+	});
+
+	it("routine_invoke stays inert when ROUTINES_AGENT_TOOLS_ENABLED is disabled", async () => {
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi.fn() as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 44,
+					method: "tools/call",
+					params: {
+						name: "routine_invoke",
+						arguments: {
+							agentId: "agent-uuid",
+							routineId: "routine-id",
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		expect(global.fetch).not.toHaveBeenCalled();
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(false);
+		const payload = JSON.parse(body.result.content[0].text);
+		expect(payload).toMatchObject({
+			error: "not_yet_enabled",
+			tool: "routine_invoke",
+		});
+	});
+
+	it("enabled create_routine rejects underspecified intent before GraphQL", async () => {
+		process.env.ROUTINES_AGENT_TOOLS_ENABLED = "true";
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi.fn() as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 45,
+					method: "tools/call",
+					params: {
+						name: "create_routine",
+						arguments: {
+							agentId: "agent-uuid",
+							name: "Too vague",
+							intent: "weather",
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		expect(global.fetch).not.toHaveBeenCalled();
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(true);
+		expect(body.result.content[0].text).toContain(
+			"intent must be at least 10 chars",
+		);
+	});
+
+	it("enabled create_routine delegates to createRoutine without placeholder ASL artifacts", async () => {
+		process.env.ROUTINES_AGENT_TOOLS_ENABLED = "true";
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					data: {
+						createRoutine: {
+							id: "routine-id",
+							tenantId: "tenant-uuid",
+							agentId: "agent-uuid",
+							visibility: "agent_private",
+							owningAgentId: "agent-uuid",
+							name: "Check Austin Weather",
+							description: "Fetch Austin weather and email the summary.",
+							status: "active",
+							engine: "step_functions",
+							currentVersion: 1,
+							createdAt: "2026-05-03T00:00:00.000Z",
+						},
+					},
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			),
+		) as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 41,
+					method: "tools/call",
+					params: {
+						name: "create_routine",
+						arguments: {
+							agentId: "agent-uuid",
+							name: "Check Austin Weather",
+							description: "Daily weather check",
+							intent:
+								"Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(false);
+		const fetchCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+		const request = JSON.parse((fetchCall[1] as RequestInit).body as string);
+		const input = request.variables.input;
+		expect(input).toMatchObject({
+			tenantId: "tenant-uuid",
+			agentId: "agent-uuid",
+			owningAgentId: "agent-uuid",
+			visibility: "agent_private",
+			name: "Check Austin Weather",
+		});
+		expect(input.description).toContain("Daily weather check");
+		expect(input.description).toContain(
+			"Fetch Austin weather and email the summary to ericodom37@gmail.com.",
+		);
+		expect(input).not.toHaveProperty("asl");
+		expect(input).not.toHaveProperty("markdownSummary");
+		expect(input).not.toHaveProperty("stepManifest");
+	});
+
+	it("enabled routine_invoke rejects a routine private to another agent", async () => {
+		process.env.ROUTINES_AGENT_TOOLS_ENABLED = "true";
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					data: {
+						routine: {
+							id: "routine-id",
+							tenantId: "tenant-uuid",
+							agentId: "owner-agent",
+							visibility: "agent_private",
+							owningAgentId: "owner-agent",
+							name: "Private routine",
+							description: null,
+							status: "active",
+							engine: "step_functions",
+							currentVersion: 1,
+							createdAt: "2026-05-03T00:00:00.000Z",
+						},
+					},
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			),
+		) as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 42,
+					method: "tools/call",
+					params: {
+						name: "routine_invoke",
+						arguments: {
+							agentId: "other-agent",
+							routineId: "routine-id",
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(true);
+		expect(body.result.content[0].text).toContain("private_to_other_agent");
+		expect(global.fetch).toHaveBeenCalledTimes(1);
+	});
+
+	it("enabled routine_invoke forwards args to triggerRoutineRun after visibility passes", async () => {
+		process.env.ROUTINES_AGENT_TOOLS_ENABLED = "true";
+		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+		global.fetch = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						data: {
+							routine: {
+								id: "routine-id",
+								tenantId: "tenant-uuid",
+								agentId: "owner-agent",
+								visibility: "agent_private",
+								owningAgentId: "owner-agent",
+								name: "Private routine",
+								description: null,
+								status: "active",
+								engine: "step_functions",
+								currentVersion: 1,
+								createdAt: "2026-05-03T00:00:00.000Z",
+							},
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						data: {
+							triggerRoutineRun: {
+								id: "execution-id",
+								status: "running",
+								triggerSource: "agent_tool",
+								startedAt: "2026-05-03T00:00:00.000Z",
+							},
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
+			) as unknown as typeof fetch;
+
+		const res = await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 43,
+					method: "tools/call",
+					params: {
+						name: "routine_invoke",
+						arguments: {
+							agentId: "owner-agent",
+							routineId: "routine-id",
+							args: { location: "Austin", units: "imperial" },
+						},
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.result.isError).toBe(false);
+		expect(global.fetch).toHaveBeenCalledTimes(2);
+		const triggerCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1]!;
+		const request = JSON.parse((triggerCall[1] as RequestInit).body as string);
+		expect(request.variables).toEqual({
+			routineId: "routine-id",
+			input: JSON.stringify({ location: "Austin", units: "imperial" }),
+		});
 	});
 
 	it("tools/call downstream REST failure surfaces as isError=true content", async () => {

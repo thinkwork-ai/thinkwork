@@ -38,8 +38,8 @@ Start with agent runtime activation unless product priorities change. The admin 
 1. Confirm `packages/lambda/admin-ops-mcp.ts` still lists `create_routine` and `routine_invoke`.
 2. Confirm `ROUTINES_AGENT_TOOLS_ENABLED` is disabled in the target runtime.
 3. Plan the runtime warm-flush and env flip.
-4. Verify `tools/list`, then a private `create_routine`, then `routine_invoke` against that routine.
-5. Record whether the created routine is still a placeholder or uses the recipe-backed authoring path; if placeholder, route agent creation through the current recipe draft planner before enabling broadly.
+4. Verify `tools/list`, then a private recipe-backed `create_routine`, then `routine_invoke` against that routine.
+5. Inspect the created routine's execution detail to confirm it uses the recipe-authored ASL version and not a placeholder `Succeed` state.
 
 If the next session is about mobile conversational authoring, treat it as a separate plan. The mobile prompt is ASL/recipe-aware, but `apps/mobile/app/routines/new.tsx` and `builder-chat.tsx` still carry chat-session TODOs; finish the GraphQL chat plumbing before promising live validator feedback.
 

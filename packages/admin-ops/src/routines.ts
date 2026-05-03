@@ -6,13 +6,11 @@
  * The MCP tool definitions in `packages/lambda/admin-ops-mcp.ts` import
  * from here so the dispatch path is mechanical.
  *
- * Visibility model (v0):
- *   - `agentId` set on a routine = private to that agent
- *   - `agentId` null = tenant-shared
+ * Visibility model:
+ *   - `visibility = agent_private` + `owningAgentId` = private to that agent
+ *   - `visibility = tenant_shared` = tenant-wide
  * The MCP `routine_invoke` tool enforces that the caller's agentId
- * matches `routine.agentId` (or that the routine is tenant-shared)
- * before invoking. A first-class `visibility` enum + `owning_agent_id`
- * column is a Phase E schema follow-up.
+ * matches `routine.owningAgentId` before invoking private routines.
  */
 
 import type { AdminOpsClient } from "./client.js";
@@ -86,24 +84,17 @@ export interface CreateAgentRoutineInput {
   agentId: string;
   name: string;
   description?: string;
-  /** Operator-facing markdown summary. agent-stamp builds this from
-   * the agent's intent + suggested-step list. */
-  markdownSummary: string;
+  /** Natural-language description used by createRoutine's server-side
+   * recipe planner. */
+  intent: string;
+  suggestedSteps?: string[];
 }
-
-/** Placeholder ASL for newly-created agent-stamped routines. The agent
- * iterates the routine via the chat builder + publishRoutineVersion
- * after the initial create. Mirrors apps/admin/src/routes/.../new.tsx. */
-const PLACEHOLDER_ASL = JSON.stringify({
-  Comment: "Agent-stamped draft routine — awaiting iteration",
-  StartAt: "NoOp",
-  States: { NoOp: { Type: "Succeed" } },
-});
 
 export async function createAgentRoutine(
   client: AdminOpsClient,
   input: CreateAgentRoutineInput,
 ): Promise<Routine> {
+  const intent = buildAgentRoutineIntent(input);
   const data = await client.graphql<{ createRoutine: Routine }>(
     `mutation($input: CreateRoutineInput!) {
        createRoutine(input: $input) { ${ROUTINE_FIELDS} }
@@ -120,14 +111,32 @@ export async function createAgentRoutine(
         owningAgentId: input.agentId,
         visibility: "agent_private",
         name: input.name,
-        description: input.description ?? null,
-        asl: PLACEHOLDER_ASL,
-        markdownSummary: input.markdownSummary,
-        stepManifest: JSON.stringify({}),
+        description: intent,
       },
     },
   );
   return data.createRoutine;
+}
+
+export function buildAgentRoutineIntent(input: {
+  description?: string;
+  intent: string;
+  suggestedSteps?: string[];
+}): string {
+  const lines: string[] = [];
+  const description = input.description?.trim();
+  if (description) {
+    lines.push(description, "");
+  }
+  lines.push(input.intent.trim());
+  const suggestedSteps = (input.suggestedSteps ?? [])
+    .map((step) => step.trim())
+    .filter((step) => step.length > 0);
+  if (suggestedSteps.length > 0) {
+    lines.push("", "Suggested steps:");
+    for (const step of suggestedSteps) lines.push(`- ${step}`);
+  }
+  return lines.join("\n");
 }
 
 export interface TriggerRoutineRunInput {
