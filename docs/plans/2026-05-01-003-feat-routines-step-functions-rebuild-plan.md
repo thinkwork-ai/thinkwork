@@ -31,6 +31,27 @@ The full original rebuild plan is still **active** because Phase E's `python()` 
 - Agent runtime activation: flip and verify `ROUTINES_AGENT_TOOLS_ENABLED` for `create_routine` / `routine_invoke` after runtime warm-flush.
 - Mobile conversational authoring: finish the live validator-feedback loop once the mobile chat-session GraphQL plumbing is no longer stubbed.
 
+## Next Session Pickup
+
+Start with Phase E U16 unless product priorities change. The admin Routine MVP is already shipped and verified, so the next high-leverage slice is observability for recipe promotion:
+
+1. Implement `pythonUsageDashboard(tenantId: ID!, windowDays: Int)` in GraphQL.
+2. Aggregate `routine_step_events` where `recipe_type = 'python'`, grouped by a deterministic signature hash from step input.
+3. Add an admin-only route under Automations, likely `/automations/python-usage`, following the existing Analytics dashboard pattern.
+4. Show empty state, cluster rows, total `python()` usage, last seen, and drill-down links to affected routines/executions.
+5. Add focused tests for query aggregation, tenant scoping, empty state, and signature stability.
+6. Run `pnpm --filter @thinkwork/api test`, `pnpm --filter @thinkwork/admin typecheck`, and any GraphQL codegen/typecheck required by schema changes.
+
+If the next session is about agent tools instead, first verify the current inert surface before changing behavior:
+
+1. Confirm `packages/lambda/admin-ops-mcp.ts` still lists `create_routine` and `routine_invoke`.
+2. Confirm `ROUTINES_AGENT_TOOLS_ENABLED` is disabled in the target runtime.
+3. Plan the runtime warm-flush and env flip.
+4. Verify `tools/list`, then a private `create_routine`, then `routine_invoke` against that routine.
+5. Record whether the created routine is still a placeholder or uses the recipe-backed authoring path; if placeholder, route agent creation through the current recipe draft planner before enabling broadly.
+
+If the next session is about mobile conversational authoring, treat it as a separate plan. The mobile prompt is ASL/recipe-aware, but `apps/mobile/app/routines/new.tsx` and `builder-chat.tsx` still carry chat-session TODOs; finish the GraphQL chat plumbing before promising live validator feedback.
+
 **This master plan is the design artifact.** Execution is split across five phase-scoped plans that can each be `/lfg`'d or `/ce-work`'d independently in dependency order:
 
 - Phase A (Substrate, U1-U5): `docs/plans/2026-05-01-004-feat-routines-phase-a-substrate-plan.md`

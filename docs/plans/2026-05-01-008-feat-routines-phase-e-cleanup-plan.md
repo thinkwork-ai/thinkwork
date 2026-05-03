@@ -16,6 +16,38 @@ Final cleanup and observability for the Routines rebuild. Archive legacy Python-
 
 Partially complete; keep this plan active. U15's legacy archival and deprecated `RoutineRun` / `RoutineStep` cleanup landed through follow-up work, including mobile parity so old GraphQL consumers could be removed safely. U16 remains open: no admin `python()` usage dashboard or signature-clustering query is currently implemented.
 
+## Next Implementation Slice
+
+Implement U16 as the next routine PR. Keep it narrowly scoped to observability and recipe-promotion signal; do not reopen authoring or execution behavior in this slice.
+
+### Recommended Scope
+
+- Add `pythonUsageDashboard(tenantId: ID!, windowDays: Int): PythonUsageDashboard!`.
+- Query only `routine_step_events` for `recipe_type = 'python'` in the requested window.
+- Group rows by deterministic signature hash. For v0, use stable fields already present in `input_json`; include code/function shape and network allowlist when present. Do not add LLM summarization yet.
+- Return totals, clusters, last seen, count, percent of total `python()` use, and top routine/execution links.
+- Add an admin Automations page for the dashboard with an empty state when there are no `python()` steps.
+- Keep route and resolver admin-only via the existing tenant-admin patterns.
+
+### Suggested Files
+
+- `packages/database-pg/graphql/types/routines.graphql`
+- `packages/api/src/graphql/resolvers/routines/pythonUsageDashboard.query.ts`
+- `packages/api/src/graphql/resolvers/routines/index.ts`
+- `packages/api/src/__tests__/routines-publish-flow.test.ts` or a focused routines dashboard test file
+- `apps/admin/src/lib/graphql-queries.ts`
+- `apps/admin/src/routes/_authed/_tenant/automations/python-usage/index.tsx`
+- generated GraphQL files for admin/API/CLI/mobile if schema/codegen requires them
+
+### Verification
+
+- Unit test: empty tenant returns zero totals and no clusters.
+- Unit test: multiple `python` step events with the same signature cluster together.
+- Unit test: tenant scoping prevents cross-tenant counts.
+- UI manual check: dashboard empty state and populated table render without schedule/webhook concepts leaking into Routines.
+- Run codegen if GraphQL schema changes.
+- Run API tests that cover the new resolver and admin typecheck.
+
 ---
 
 ## Problem Frame
