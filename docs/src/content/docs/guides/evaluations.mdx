@@ -15,10 +15,13 @@ Runs are first-class objects stored in Postgres. Every run has per-test results 
 User clicks "Run Evaluation" in Studio      ← or `thinkwork eval run`
   ↓ GraphQL: startEvalRun(tenantId, input)
   ↓ eval_runs row inserted (status=pending)
-  ↓ fire eval-runner Lambda (async event)
+  ↓ System Workflow: evaluation-runs Standard Step Functions parent
+  ↓ SnapshotTestPack checkpoint records selected categories / testCaseIds
+  ↓ RunEvaluation Task invokes eval-runner Lambda
   ↓
 eval-runner (concurrency=5 per run):
-  1. Load test cases for the run (tenant-scoped, filtered by categories)
+  1. Load test cases for the run:
+     explicit testCaseIds first, then categories, then all enabled cases
   2. For each test case, in parallel batches:
      a. InvokeAgentRuntimeCommand on AgentCore with the test case query
      b. Wait for OTel spans to land in CloudWatch (session.id attribute)
@@ -27,7 +30,8 @@ eval-runner (concurrency=5 per run):
      e. Per-test AgentCore evaluators → EvaluateCommand(sessionSpans)
      f. Insert eval_results row with all scores + reasons
   3. Update eval_runs aggregates (passed / failed / pass_rate / cost_usd)
-  4. Notify AppSync so subscribed UI tabs live-update
+  4. Record System Workflow step events + score-summary evidence
+  5. Notify AppSync so subscribed UI tabs live-update
 ```
 
 The eval test agent is a generic AgentCore runtime; the **agent template** you pick in the Run dialog determines which workspace, tools, and default model the runtime loads. Different templates expose different tool surfaces — that matters for tests like "the agent should refuse to web-search" where the template must actually lack the `web_search` tool.
@@ -140,6 +144,12 @@ thinkwork eval run --stage dev --agent-template tpl-ops --all \
 # Machine-readable output (stdout = JSON, everything else → stderr)
 thinkwork eval run --stage dev --agent-template tpl-ops --category red-team --json \
   | jq .runId
+
+# Run a specific test case only
+thinkwork eval run --stage dev \
+  --agent-template tpl-ops \
+  --test-case tc-email-calendar-01 \
+  --watch
 ```
 
 #### Command surface
@@ -195,6 +205,7 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 | Schema | `packages/database-pg/src/schema/evaluations.ts` |
 | GraphQL types | `packages/database-pg/graphql/types/evaluations.graphql` |
 | Resolvers | `packages/api/src/graphql/resolvers/evaluations/index.ts` |
+| System Workflow runtime | `packages/api/src/lib/system-workflows/*` |
 | Lambda | `packages/api/src/handlers/eval-runner.ts` |
 | AppSync notify | `packages/api/src/lib/eval-notify.ts` |
 | Seeds | `seeds/eval-test-cases/*.json` (9 files, 96 cases) |
@@ -205,6 +216,7 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 **Runtime dependencies** (AWS, us-east-1):
 
 - Bedrock AgentCore Runtime — hosts the eval test agent; invoked per test case via `InvokeAgentRuntimeCommand`. Session IDs are deterministic per `(runId, testCaseId, index)`.
+- AWS Step Functions — `evaluation-runs` is started as a ThinkWork System Workflow so the run is inspectable under Automations with step events, execution ARN, pass/fail gate, and score-summary evidence.
 - CloudWatch Transaction Search — must be enabled (X-Ray destination = `CloudWatchLogs`, 100% sampling) so eval-runner can query spans by `attributes.session.id`.
 - Bedrock AgentCore Evaluations — 16 built-in evaluators pre-provisioned at `arn:aws:bedrock-agentcore:::evaluator/Builtin.*`. No `CreateEvaluator` calls.
 - Bedrock Runtime — Converse API against `claude-haiku-4-5` for the llm-rubric judge. Requires `bedrock:InvokeModel` on both `foundation-model/*` and `inference-profile/*` in **every** region the cross-region profile can route to — the IAM policy uses a region wildcard.
