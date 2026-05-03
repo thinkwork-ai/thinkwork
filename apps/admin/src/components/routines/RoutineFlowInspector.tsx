@@ -179,12 +179,13 @@ function AuthoringInspector({
         <div className="flex shrink-0 gap-2">
           <Button
             type="button"
-            size="sm"
+            size="icon-sm"
             variant="outline"
+            aria-label={`Edit ${step.label}`}
+            title="Edit step"
             onClick={() => setEditing(true)}
           >
             <Pencil className="h-3.5 w-3.5" />
-            Edit step
           </Button>
           {onRemoveStep && (
             <Button

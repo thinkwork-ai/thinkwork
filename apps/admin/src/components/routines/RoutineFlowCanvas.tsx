@@ -120,6 +120,9 @@ export function RoutineFlowCanvas({
         maxZoom={1.4}
         nodesDraggable={false}
         nodesConnectable={false}
+        zoomOnScroll={false}
+        panOnScroll
+        panOnScrollSpeed={0.85}
         elementsSelectable
         onNodeClick={(_, node) => {
           const data = node.data as unknown as RoutineGraphNode;
