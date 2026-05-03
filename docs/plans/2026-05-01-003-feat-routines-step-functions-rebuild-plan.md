@@ -16,7 +16,7 @@ Implementation plan for a five-phase rebuild of Routines as first-class AWS Step
 
 The deployed admin Routine MVP is complete: Step Functions-backed routines can be authored from recipe catalog metadata, edited as step-owned config, tested from the admin UI, and inspected through version-backed execution detail. The Austin weather/email routine has passed deployed end-to-end verification through the Test Routine button.
 
-The full original rebuild plan is still **active** because Phase E's `python()` usage dashboard and recipe-promotion loop remain open, and because the original mobile conversational builder / agent runtime activation path was superseded by the admin-first authoring sequence rather than fully verified.
+The admin Routine MVP is shipped. The remaining work is no longer one linear "finish the rebuild" track: agent runtime activation is the next concrete verification slice, mobile conversational authoring needs its own follow-up plan, and Phase E's `python()` usage dashboard / recipe-promotion loop is a roadmap item.
 
 ### Completed
 
@@ -25,11 +25,25 @@ The full original rebuild plan is still **active** because Phase E's `python()` 
 - Phase D UI: admin Automations/Routines surfaces, run list/detail, mobile run list/detail parity, version-backed execution rendering.
 - Admin authoring follow-ups: recipe-backed draft authoring, per-step config fields, graph editor, builder polish, validation, execution-aware editing, output-backed step-status reconciliation.
 
-### Remaining
+### Remaining / Roadmap
 
-- Phase E U16: operator-only `python()` usage dashboard with signature clusters, drill-down, and recipe-promotion candidates.
-- Agent runtime activation: flip and verify `ROUTINES_AGENT_TOOLS_ENABLED` for `create_routine` / `routine_invoke` after runtime warm-flush.
-- Mobile conversational authoring: finish the live validator-feedback loop once the mobile chat-session GraphQL plumbing is no longer stubbed.
+- Next concrete slice: agent runtime activation. Flip and verify `ROUTINES_AGENT_TOOLS_ENABLED` for `create_routine` / `routine_invoke` after runtime warm-flush.
+- Separate product plan: mobile conversational authoring. Finish the live validator-feedback loop once the mobile chat-session GraphQL plumbing is no longer stubbed.
+- Roadmap: Phase E U16 operator-only `python()` usage dashboard with signature clusters, drill-down, and recipe-promotion candidates.
+
+## Next Session Pickup
+
+Start with agent runtime activation unless product priorities change. The admin Routine MVP is already shipped and verified; the remaining near-term risk is whether the agent-facing MCP tools can safely author and invoke routines in the live runtime.
+
+1. Confirm `packages/lambda/admin-ops-mcp.ts` still lists `create_routine` and `routine_invoke`.
+2. Confirm `ROUTINES_AGENT_TOOLS_ENABLED` is disabled in the target runtime.
+3. Plan the runtime warm-flush and env flip.
+4. Verify `tools/list`, then a private recipe-backed `create_routine`, then `routine_invoke` against that routine.
+5. Inspect the created routine's execution detail to confirm it uses the recipe-authored ASL version and not a placeholder `Succeed` state.
+
+If the next session is about mobile conversational authoring, treat it as a separate plan. The mobile prompt is ASL/recipe-aware, but `apps/mobile/app/routines/new.tsx` and `builder-chat.tsx` still carry chat-session TODOs; finish the GraphQL chat plumbing before promising live validator feedback.
+
+If the next session is about Phase E U16, treat it as roadmap/observability work rather than an MVP blocker. Implement `pythonUsageDashboard`, aggregate `routine_step_events` where `recipe_type = 'python'`, and add an admin-only Automations dashboard for recipe-promotion signals.
 
 **This master plan is the design artifact.** Execution is split across five phase-scoped plans that can each be `/lfg`'d or `/ce-work`'d independently in dependency order:
 
