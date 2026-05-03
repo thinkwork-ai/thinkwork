@@ -98,8 +98,13 @@ export function RoutineStepConfigEditor({
             )}
             onFocusCapture={() => onSelectStep?.(step.nodeId)}
           >
-            <div className={cn("min-w-0", stacked && "border-b pb-4")}>
-              <div className="flex items-start gap-3">
+            <div className={cn("min-w-0", stacked && "border-b pb-3")}>
+              <div
+                className={cn(
+                  "flex gap-3",
+                  stacked ? "items-center" : "items-start",
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => onSelectStep?.(step.nodeId)}
@@ -113,7 +118,12 @@ export function RoutineStepConfigEditor({
                 >
                   {index + 1}
                 </button>
-                <div className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    "min-w-0 flex-1",
+                    stacked && "flex items-center gap-2",
+                  )}
+                >
                   {onLabelChange ? (
                     <Input
                       aria-label={`${step.recipeName} step label`}
@@ -128,10 +138,17 @@ export function RoutineStepConfigEditor({
                       {step.label}
                     </div>
                   )}
-                  <div className="truncate text-xs text-muted-foreground">
-                    {step.recipeName}
-                  </div>
-                  <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                  {!stacked && (
+                    <div className="truncate text-xs text-muted-foreground">
+                      {step.recipeName}
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "flex min-w-0 flex-wrap gap-1.5",
+                      stacked ? "shrink-0" : "mt-2",
+                    )}
+                  >
                     {stepErrors > 0 ? (
                       <Badge className="border-transparent bg-destructive/10 text-destructive">
                         <AlertCircle className="h-3 w-3" />
@@ -153,53 +170,55 @@ export function RoutineStepConfigEditor({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "font-mono",
-                    step.recipeId === "email_send" &&
-                      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                  )}
-                >
-                  {step.recipeId}
-                </Badge>
-                {onMoveStep && (
-                  <>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label={`Move ${step.label} up`}
-                      disabled={index === 0}
-                      onClick={() => onMoveStep(step.nodeId, "up")}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label={`Move ${step.label} down`}
-                      disabled={index === steps.length - 1}
-                      onClick={() => onMoveStep(step.nodeId, "down")}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </>
-                )}
-                {onRemoveStep && (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={`Remove ${step.label}`}
-                    onClick={() => onRemoveStep(step.nodeId)}
+              {!stacked && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-mono",
+                      step.recipeId === "email_send" &&
+                        "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    )}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
+                    {step.recipeId}
+                  </Badge>
+                  {onMoveStep && (
+                    <>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Move ${step.label} up`}
+                        disabled={index === 0}
+                        onClick={() => onMoveStep(step.nodeId, "up")}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Move ${step.label} down`}
+                        disabled={index === steps.length - 1}
+                        onClick={() => onMoveStep(step.nodeId, "down")}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                  {onRemoveStep && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Remove ${step.label}`}
+                      onClick={() => onRemoveStep(step.nodeId)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div
