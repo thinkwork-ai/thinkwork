@@ -112,7 +112,7 @@ function nodePresentation(node: RoutineGraphNode) {
         Icon: Square,
         label: "End",
         iconClass:
-          "border-zinc-500/35 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
+          "border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300",
       };
     case "choice":
       return {
