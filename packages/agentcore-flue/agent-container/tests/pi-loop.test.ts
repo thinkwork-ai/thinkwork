@@ -91,7 +91,7 @@ describe("runPiAgent", () => {
     expect(result.response.tool_invocations).toEqual(result.tool_invocations);
   });
 
-  describe("U3-Pi auto-retain wiring", () => {
+  describe("Flue auto-retain wiring", () => {
     let mockLambda: LambdaClient;
     // `send` is overloaded on the AWS SDK client; vi.spyOn's generic
     // constraint on M doesn't model overloaded callable signatures.

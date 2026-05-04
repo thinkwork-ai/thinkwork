@@ -52,21 +52,33 @@ UPDATE agent_templates
 SET runtime = 'flue', updated_at = NOW()
 WHERE runtime = 'pi';
 
--- Confirm zero rows remain on the old value. If this query returns any
--- rows, the deploy must abort and operators must investigate before the
--- API code update lands. We leave the assertion to the deploy workflow
--- — psql -v ON_ERROR_STOP=1 + the check below — rather than a CHECK
--- constraint, because the column is `text` not enum and adding a CHECK
--- here would be a schema change outside U3's scope.
+-- Confirm zero rows remain on the old value. The DO block raises an
+-- exception when any row survived, which (combined with psql's
+-- ON_ERROR_STOP=1 + --single-transaction) aborts the migration and
+-- rolls back the UPDATEs above. Without this gate, a stale row would
+-- silently persist and the new dispatcher would map it to Strands via
+-- the default branch in normalizeAgentRuntimeType.
 \echo '-- post-migration verification: any rows still on pi? --'
-SELECT
-  'agents'        AS table_name,
-  COUNT(*)        AS still_pi
-FROM agents
-WHERE runtime = 'pi'
-UNION ALL
-SELECT
-  'agent_templates' AS table_name,
-  COUNT(*)          AS still_pi
-FROM agent_templates
-WHERE runtime = 'pi';
+DO $$
+DECLARE
+  agents_remaining     bigint;
+  templates_remaining  bigint;
+BEGIN
+  SELECT COUNT(*) INTO agents_remaining
+  FROM agents
+  WHERE runtime = 'pi';
+
+  SELECT COUNT(*) INTO templates_remaining
+  FROM agent_templates
+  WHERE runtime = 'pi';
+
+  RAISE NOTICE 'agents still on pi: %', agents_remaining;
+  RAISE NOTICE 'agent_templates still on pi: %', templates_remaining;
+
+  IF agents_remaining > 0 OR templates_remaining > 0 THEN
+    RAISE EXCEPTION
+      'plan §005 U3 migration verification failed: % agents and % agent_templates still have runtime = ''pi''. Investigate before the dispatcher Lambda is updated — the new normalizer would silently coerce these rows to ''strands''.',
+      agents_remaining, templates_remaining;
+  END IF;
+END
+$$;

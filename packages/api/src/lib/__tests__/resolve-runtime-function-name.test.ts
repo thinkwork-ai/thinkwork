@@ -11,10 +11,15 @@ describe("normalizeAgentRuntimeType", () => {
     expect(normalizeAgentRuntimeType("strands")).toBe("strands");
     expect(normalizeAgentRuntimeType(null)).toBe("strands");
     expect(normalizeAgentRuntimeType("unknown")).toBe("strands");
-    // Pi values still in flight from before the U3 migration get
-    // normalized to strands; the SQL data migration backfills the
-    // column to `flue` so this branch is only reachable for
-    // fixtures or stale wire payloads.
+  });
+
+  it("coerces stale 'pi' payloads to 'strands' as a one-way migration aid", () => {
+    // Pi values still in flight from before the U3 migration (mid-deploy
+    // warm Lambda containers, replayed in-flight invocations, fixture
+    // residue) get normalized to strands. The SQL data migration
+    // backfills `agents.runtime` to `flue` so this branch is only
+    // reachable for stale wire payloads. Once the cutover window has
+    // drained, this assertion can be removed.
     expect(normalizeAgentRuntimeType("pi")).toBe("strands");
   });
 });
