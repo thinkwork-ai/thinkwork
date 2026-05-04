@@ -15,7 +15,9 @@ const TENANT = "11111111-2222-3333-4444-555555555555";
 const EXECUTION_ARN =
   "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-routine:abc-123";
 
-function base(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function base(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     tenantId: TENANT,
     executionArn: EXECUTION_ARN,
@@ -146,6 +148,7 @@ describe("shapeStepCallback — happy paths", () => {
       "email_send",
       "inbox_approval",
       "python",
+      "typescript",
       "agent_invoke",
       "tool_invoke",
       "routine_invoke",

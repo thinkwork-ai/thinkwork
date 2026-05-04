@@ -30,6 +30,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
+import { prepareRoutineCredentialArtifacts } from "../../../lib/routines/credential-bindings.js";
 import { buildRoutineDraftFromIntent } from "../../../lib/routines/routine-draft-authoring.js";
 import {
   CreateStateMachineAliasCommand,
@@ -111,6 +112,18 @@ export async function createRoutine(
     stepManifestJson = draft.artifacts.stepManifest;
     markdownSummary = draft.artifacts.markdownSummary;
   }
+
+  const prepared = await prepareRoutineCredentialArtifacts({
+    tenantId: i.tenantId,
+    artifacts: {
+      aslJson,
+      markdownSummary: markdownSummary!,
+      stepManifestJson,
+    },
+  });
+  aslJson = prepared.artifacts.aslJson;
+  stepManifestJson = prepared.artifacts.stepManifestJson;
+  markdownSummary = prepared.artifacts.markdownSummary;
 
   const validation = await validateRoutineAsl({ asl: aslJson });
   if (!validation.valid) {
@@ -217,7 +230,9 @@ export async function createRoutine(
         markdown_summary: markdownSummary!,
         step_manifest_json: stepManifestJson,
         validation_warnings_json:
-          validation.warnings.length > 0 ? validation.warnings : null,
+          validation.warnings.length > 0 || prepared.warnings.length > 0
+            ? [...validation.warnings, ...prepared.warnings]
+            : null,
         published_by_actor_id: ctx.auth.principalId ?? null,
         published_by_actor_type: ctx.auth.authType ?? null,
       })

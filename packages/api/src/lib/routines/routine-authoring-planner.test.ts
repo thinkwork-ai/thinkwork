@@ -107,6 +107,40 @@ describe("routine authoring planner", () => {
     });
   });
 
+  it("keeps credential bindings as handles in ASL and step manifests", () => {
+    const result = buildRoutineArtifactsFromPlan({
+      kind: "recipe_graph",
+      title: "PDI fuel order",
+      description: "Transform and submit a fuel order to PDI.",
+      steps: [
+        {
+          nodeId: "AddFuelOrder",
+          recipeId: "python",
+          recipeName: "Run Python code",
+          label: "Add fuel order",
+          args: {
+            code: "print(credentials['pdi']['partnerId'])",
+            credentialBindings: [
+              {
+                alias: "pdi",
+                credentialId: "pdi-soap",
+                requiredFields: ["apiUrl", "username", "password", "partnerId"],
+              },
+            ],
+          },
+          configFields: [],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    const serialized = JSON.stringify(result.artifacts);
+    expect(serialized).toContain("pdi-soap");
+    expect(serialized).toContain('"alias":"pdi"');
+    expect(serialized).not.toContain("super-secret-password");
+  });
+
   it("rejects recipient edits that contain extra prose around an email", () => {
     const result = planRoutineFromIntent({
       name: "Check Austin Weather",

@@ -1,8 +1,8 @@
 /**
- * routine-task-python — `python()` recipe Task wrapper Lambda
+ * routine-task-python — code recipe Task wrapper Lambda
  * (Plan 2026-05-01-005 §U6).
  *
- * Step Functions invokes this Lambda for every `python` recipe state in
+ * Step Functions invokes this Lambda for every Python/TypeScript code recipe state in
  * a routine ASL. The wrapper:
  *
  *   1. Snapshots SANDBOX_INTERPRETER_ID, ROUTINE_OUTPUT_BUCKET, and
@@ -43,6 +43,12 @@ import {
 } from "@aws-sdk/client-bedrock-agentcore";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
+  GetSecretValueCommand,
+  SecretsManagerClient,
+} from "@aws-sdk/client-secrets-manager";
+import { and, eq, inArray, or } from "drizzle-orm";
+import { getDb, schema } from "@thinkwork/database-pg";
+import {
   postStepCallback,
   type StepCallbackEnv,
 } from "./routine-step-callback-client.js";
@@ -60,16 +66,26 @@ export interface PythonTaskInput {
   executionId: string;
   /** ASL state name. Used as the per-step S3 prefix. */
   nodeId: string;
-  /** User Python code, verbatim. */
+  /** Code language. Defaults to python for old ASL payloads. */
+  language?: "python" | "typescript";
+  /** User code, verbatim. */
   code: string;
   /** Optional caller-supplied env. Only keys in `envAllowlist` flow
    * through to the sandbox; other keys are silently dropped. */
   environment?: Record<string, string>;
+  /** Tenant credential handles to expose to user code as `credentials`. */
+  credentialBindings?: CredentialBindingInput[];
   /** Optional override for the 4KB preview cap; tests only. */
   previewCapBytes?: number;
   /** Hard timeout for the user code, in seconds. AgentCore enforces; the
    * wrapper passes through. Defaults to 300s. */
   timeoutSeconds?: number;
+}
+
+export interface CredentialBindingInput {
+  alias: string;
+  credentialId: string;
+  requiredFields?: string[];
 }
 
 export interface PythonTaskOptions {
@@ -86,8 +102,14 @@ export interface PythonTaskOptions {
    * lambda-api wires both env vars. Failure to POST never fails the
    * Task — see routine-step-callback-client.ts. */
   stepCallback?: StepCallbackEnv;
+  credentialResolver?: (
+    tenantId: string,
+    bindings: CredentialBindingInput[],
+    secretsManager: SecretsManagerClient,
+  ) => Promise<Record<string, Record<string, unknown>>>;
   agentCoreClient?: BedrockAgentCoreClient;
   s3Client?: S3Client;
+  secretsManagerClient?: SecretsManagerClient;
 }
 
 export interface PythonTaskResult {
@@ -116,6 +138,11 @@ const _UUID_RE =
 /** ASL state names are bounded to printable ASCII without `/` per Step
  * Functions docs; reject anything that could path-traverse the S3 key. */
 const _NODE_ID_RE = /^[A-Za-z0-9_.-]{1,80}$/;
+const _CREDENTIAL_ALIAS_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const _UUID_HANDLE_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const { tenantCredentials } = schema;
 
 // Module-scope clients so warm Lambda invocations reuse the TCP pool.
 // requestTimeout caps each AWS API call so a stalled SFN/AgentCore
@@ -125,6 +152,9 @@ const _DEFAULT_AGENTCORE_CLIENT = new BedrockAgentCoreClient({
   requestHandler: { requestTimeout: 60_000, connectionTimeout: 5_000 },
 });
 const _DEFAULT_S3_CLIENT = new S3Client({
+  requestHandler: { requestTimeout: 10_000, connectionTimeout: 5_000 },
+});
+const _DEFAULT_SECRETS_CLIENT = new SecretsManagerClient({
   requestHandler: { requestTimeout: 10_000, connectionTimeout: 5_000 },
 });
 
@@ -139,6 +169,9 @@ export async function invokePythonTask(
   const { interpreterId, bucket, envAllowlist = [] } = options;
   const agentCore = options.agentCoreClient ?? _DEFAULT_AGENTCORE_CLIENT;
   const s3 = options.s3Client ?? _DEFAULT_S3_CLIENT;
+  const secretsManager =
+    options.secretsManagerClient ?? _DEFAULT_SECRETS_CLIENT;
+  const language = input.language === "typescript" ? "typescript" : "python";
 
   // Defense in depth: the recipe catalog populates tenantId from
   // $$.Execution.Input, but a malicious / malformed ASL could feed a
@@ -160,6 +193,21 @@ export async function invokePythonTask(
   const previewCap = input.previewCapBytes ?? DEFAULT_PREVIEW_CAP_BYTES;
   const sfnExecutionId = extractExecutionId(input.executionId);
   const keyPrefix = `${input.tenantId}/${sfnExecutionId}/${input.nodeId}`;
+  let credentials: Record<string, Record<string, unknown>>;
+  try {
+    credentials = await (
+      options.credentialResolver ?? resolveCredentialBindings
+    )(
+      input.tenantId,
+      Array.isArray(input.credentialBindings) ? input.credentialBindings : [],
+      secretsManager,
+    );
+  } catch (err) {
+    return failWith(
+      "credential_resolution_failed",
+      (err as Error).message ?? "unknown",
+    );
+  }
 
   // Step-callback fires before + after the sandbox invoke so the
   // run-detail UI sees the step transition `running → succeeded/failed`.
@@ -175,7 +223,7 @@ export async function invokePythonTask(
       tenantId: input.tenantId,
       executionArn: input.executionId,
       nodeId: input.nodeId,
-      recipeType: "python",
+      recipeType: language,
       status: "running",
       startedAt,
     });
@@ -187,8 +235,7 @@ export async function invokePythonTask(
     const start = await agentCore.send(
       new StartCodeInterpreterSessionCommand({
         codeInterpreterIdentifier: interpreterId,
-        sessionTimeoutSeconds:
-          input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
+        sessionTimeoutSeconds: input.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
       }),
     );
     if (!start.sessionId) {
@@ -214,6 +261,8 @@ export async function invokePythonTask(
       input.code,
       input.environment,
       envAllowlist,
+      language,
+      credentials,
     );
     const invoke = await agentCore.send(
       new InvokeCodeInterpreterCommand({
@@ -222,7 +271,7 @@ export async function invokePythonTask(
         name: "executeCode",
         arguments: {
           code: codeWithEnv,
-          language: "python",
+          language,
         },
       }),
     );
@@ -297,8 +346,14 @@ export async function invokePythonTask(
   const s3PartialFailure = !stdoutOk || !stderrOk;
   if (s3PartialFailure) {
     const reasons: string[] = [];
-    if (!stdoutOk) reasons.push(`stdout: ${(stdoutPut as PromiseRejectedResult).reason?.message ?? "unknown"}`);
-    if (!stderrOk) reasons.push(`stderr: ${(stderrPut as PromiseRejectedResult).reason?.message ?? "unknown"}`);
+    if (!stdoutOk)
+      reasons.push(
+        `stdout: ${(stdoutPut as PromiseRejectedResult).reason?.message ?? "unknown"}`,
+      );
+    if (!stderrOk)
+      reasons.push(
+        `stderr: ${(stderrPut as PromiseRejectedResult).reason?.message ?? "unknown"}`,
+      );
     console.warn(
       `[routine-task-python] S3 offload partial failure for ${keyPrefix}: ${reasons.join("; ")}`,
     );
@@ -339,7 +394,7 @@ export async function invokePythonTask(
       tenantId: input.tenantId,
       executionArn: input.executionId,
       nodeId: input.nodeId,
-      recipeType: "python",
+      recipeType: language,
       status,
       startedAt,
       finishedAt: new Date().toISOString(),
@@ -368,9 +423,9 @@ interface ParsedStream {
   errorMessage?: string;
 }
 
-async function parseStream(
-  response: { stream?: AsyncIterable<CodeInterpreterStreamOutput> },
-): Promise<ParsedStream> {
+async function parseStream(response: {
+  stream?: AsyncIterable<CodeInterpreterStreamOutput>;
+}): Promise<ParsedStream> {
   const out: ParsedStream = { stdout: "", stderr: "", exitCode: 0 };
   if (!response.stream) return out;
 
@@ -399,10 +454,16 @@ async function parseStream(
     if ("conflictException" in event && event.conflictException) {
       return errorEnvelopeToParsed(event.conflictException.message);
     }
-    if ("resourceNotFoundException" in event && event.resourceNotFoundException) {
+    if (
+      "resourceNotFoundException" in event &&
+      event.resourceNotFoundException
+    ) {
       return errorEnvelopeToParsed(event.resourceNotFoundException.message);
     }
-    if ("serviceQuotaExceededException" in event && event.serviceQuotaExceededException) {
+    if (
+      "serviceQuotaExceededException" in event &&
+      event.serviceQuotaExceededException
+    ) {
       return errorEnvelopeToParsed(event.serviceQuotaExceededException.message);
     }
 
@@ -487,16 +548,32 @@ function buildCodeWithEnvPrelude(
   code: string,
   env: Record<string, string> | undefined,
   allowlist: string[],
+  language: "python" | "typescript" = "python",
+  credentials: Record<string, Record<string, unknown>> = {},
 ): string {
-  if (!env || allowlist.length === 0) return code;
   const allowed = new Set(allowlist);
   const filtered: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) {
+  for (const [k, v] of Object.entries(env ?? {})) {
     if (allowed.has(k)) filtered[k] = v;
   }
-  if (Object.keys(filtered).length === 0) return code;
-  const literal = JSON.stringify(filtered);
-  const prelude = `import os\nos.environ.update(${literal})\n`;
+  if (
+    Object.keys(filtered).length === 0 &&
+    Object.keys(credentials).length === 0
+  ) {
+    return code;
+  }
+  if (language === "typescript") {
+    const envLiteral = JSON.stringify(filtered);
+    const credentialsLiteral = JSON.stringify(credentials);
+    const prelude =
+      `const credentials = ${credentialsLiteral};\n` +
+      `const __thinkworkEnv = ${envLiteral};\n` +
+      `if (typeof process !== "undefined" && process.env) Object.assign(process.env, __thinkworkEnv);\n`;
+    return prelude + code;
+  }
+  const envLiteral = JSON.stringify(JSON.stringify(filtered));
+  const credentialsLiteral = JSON.stringify(JSON.stringify(credentials));
+  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
 
   // Skip past any leading `from __future__ import ...` lines (and
   // surrounding blank lines / comments). Future imports MUST be first.
@@ -519,6 +596,123 @@ function buildCodeWithEnvPrelude(
   ].join("\n");
 }
 
+async function resolveCredentialBindings(
+  tenantId: string,
+  bindings: CredentialBindingInput[],
+  secretsManager: SecretsManagerClient,
+): Promise<Record<string, Record<string, unknown>>> {
+  if (bindings.length === 0) return {};
+
+  const handles = bindings
+    .map((binding) => binding.credentialId)
+    .filter(Boolean);
+  if (handles.length === 0) return {};
+  const uuidHandles = handles.filter((handle) => _UUID_HANDLE_RE.test(handle));
+  const slugHandles = handles.filter((handle) => !_UUID_HANDLE_RE.test(handle));
+  const handleFilter =
+    uuidHandles.length > 0 && slugHandles.length > 0
+      ? or(
+          inArray(tenantCredentials.id, uuidHandles),
+          inArray(tenantCredentials.slug, slugHandles),
+        )
+      : uuidHandles.length > 0
+        ? inArray(tenantCredentials.id, uuidHandles)
+        : inArray(tenantCredentials.slug, slugHandles);
+  const rows = await getDb()
+    .select({
+      id: tenantCredentials.id,
+      tenant_id: tenantCredentials.tenant_id,
+      slug: tenantCredentials.slug,
+      display_name: tenantCredentials.display_name,
+      status: tenantCredentials.status,
+      secret_ref: tenantCredentials.secret_ref,
+    })
+    .from(tenantCredentials)
+    .where(and(eq(tenantCredentials.tenant_id, tenantId), handleFilter));
+
+  const byHandle = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    byHandle.set(row.id, row);
+    byHandle.set(row.slug, row);
+  }
+
+  const credentials: Record<string, Record<string, unknown>> = {};
+  const usedCredentialIds: string[] = [];
+  const seenAliases = new Set<string>();
+  for (const binding of bindings) {
+    const alias = String(binding.alias ?? "").trim();
+    if (!_CREDENTIAL_ALIAS_RE.test(alias)) {
+      throw new Error(
+        `Credential alias '${alias}' must be a safe code identifier`,
+      );
+    }
+    if (seenAliases.has(alias)) {
+      throw new Error(`Credential alias '${alias}' is declared more than once`);
+    }
+    seenAliases.add(alias);
+    const credential = byHandle.get(String(binding.credentialId ?? "").trim());
+    if (!credential) {
+      throw new Error(
+        `Credential '${binding.credentialId}' was not found for this tenant`,
+      );
+    }
+    if (credential.tenant_id !== tenantId || credential.status !== "active") {
+      throw new Error(
+        `Credential '${credential.display_name}' is not active for this tenant`,
+      );
+    }
+    const payload = await readCredentialSecret(
+      secretsManager,
+      credential.secret_ref,
+      credential.display_name,
+    );
+    for (const field of binding.requiredFields ?? []) {
+      const value = payload[field];
+      if (value === undefined || value === null || value === "") {
+        throw new Error(
+          `Credential '${credential.display_name}' is missing required field '${field}'`,
+        );
+      }
+    }
+    credentials[alias] = payload;
+    usedCredentialIds.push(credential.id);
+  }
+
+  if (usedCredentialIds.length > 0) {
+    await getDb()
+      .update(tenantCredentials)
+      .set({ last_used_at: new Date(), updated_at: new Date() })
+      .where(
+        and(
+          eq(tenantCredentials.tenant_id, tenantId),
+          inArray(tenantCredentials.id, usedCredentialIds),
+        ),
+      );
+  }
+
+  return credentials;
+}
+
+async function readCredentialSecret(
+  secretsManager: SecretsManagerClient,
+  secretRef: string,
+  displayName: string,
+): Promise<Record<string, unknown>> {
+  const result = await secretsManager.send(
+    new GetSecretValueCommand({ SecretId: secretRef }),
+  );
+  if (!result.SecretString) {
+    throw new Error(`Credential '${displayName}' has an empty secret payload`);
+  }
+  const parsed = JSON.parse(result.SecretString) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      `Credential '${displayName}' secret payload must be a JSON object`,
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
 function trimPreview(
   text: string,
   capBytes: number,
@@ -535,10 +729,7 @@ function trimPreview(
   };
 }
 
-function failWith(
-  errorClass: string,
-  errorMessage: string,
-): PythonTaskResult {
+function failWith(errorClass: string, errorMessage: string): PythonTaskResult {
   return {
     exitCode: -1,
     stdoutS3Uri: null,
@@ -556,7 +747,9 @@ function failWith(
 // and the handler is intentionally not exposed as an HTTP route.
 // ---------------------------------------------------------------------------
 
-export async function handler(event: PythonTaskInput): Promise<PythonTaskResult> {
+export async function handler(
+  event: PythonTaskInput,
+): Promise<PythonTaskResult> {
   // Snapshot env at handler entry; never re-read in async paths
   // (per feedback_completion_callback_snapshot_pattern).
   const interpreterId = process.env.SANDBOX_INTERPRETER_ID ?? "";

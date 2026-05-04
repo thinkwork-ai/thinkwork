@@ -34,6 +34,7 @@ export type JsonSchema7Type = {
   type?: string | string[];
   properties?: Record<string, JsonSchema7Type>;
   required?: string[];
+  anyOf?: JsonSchema7Type[];
   additionalProperties?: boolean | JsonSchema7Type;
   items?: JsonSchema7Type | JsonSchema7Type[];
   enum?: unknown[];
@@ -110,13 +111,16 @@ export type RecipeConfigInputType =
   | "email_array"
   | "select"
   | "string_array"
-  | "number";
+  | "number"
+  | "credential_bindings";
 
 export type RecipeConfigControl =
   | "text"
   | "textarea"
   | "code"
   | "select"
+  | "credential_select"
+  | "credential_bindings"
   | "number"
   | "email_list"
   | "string_list";
@@ -243,6 +247,9 @@ export const RESOURCE_ARN_PATTERNS = Object.freeze({
   routineInvoke: /^arn:aws:states:::states:startExecution\.sync:2$/,
   // python() — thin Lambda wrapping InvokeCodeInterpreter.
   python: /^arn:aws:states:::lambda:invoke$/,
+  // typescript() — same code-task Lambda, but the payload selects the
+  // TypeScript runtime in AgentCore Code Interpreter.
+  typescript: /^arn:aws:states:::lambda:invoke$/,
   // inbox_approval — .waitForTaskToken on a Lambda that creates the
   // inbox row and stores the task token.
   inboxApproval: /^arn:aws:states:::lambda:invoke\.waitForTaskToken$/,
@@ -258,14 +265,129 @@ export const RESOURCE_ARN_PATTERNS = Object.freeze({
 
 const STR = { type: "string" } as const;
 const STR_NONEMPTY = { type: "string", minLength: 1 } as const;
+export const HTTP_CREDENTIAL_CONNECTION_PREFIX =
+  "thinkwork://credential-connection/";
 const UUID = {
   type: "string",
   pattern:
     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
 } as const;
+const CREDENTIAL_BINDING_SCHEMA: JsonSchema7Type = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    alias: {
+      type: "string",
+      pattern: "^[A-Za-z_][A-Za-z0-9_]*$",
+      minLength: 1,
+    },
+    credentialId: STR_NONEMPTY,
+    requiredFields: {
+      type: "array",
+      items: {
+        type: "string",
+        pattern: "^[A-Za-z_][A-Za-z0-9_]*$",
+      },
+    },
+  },
+  required: ["alias", "credentialId"],
+};
+
+const CODE_STEP_CONFIG_FIELDS: readonly RecipeConfigFieldDefinition[] = [
+  {
+    key: "code",
+    label: "Code",
+    inputType: "text",
+    control: "code",
+    required: true,
+    editable: true,
+  },
+  {
+    key: "timeoutSeconds",
+    label: "Timeout seconds",
+    inputType: "number",
+    control: "number",
+    editable: false,
+    min: 1,
+    max: 900,
+  },
+  {
+    key: "networkAllowlist",
+    label: "Network allowlist",
+    inputType: "string_array",
+    control: "string_list",
+    editable: false,
+  },
+  {
+    key: "credentialBindings",
+    label: "Credential bindings",
+    inputType: "credential_bindings",
+    control: "credential_bindings",
+    editable: true,
+    helpText:
+      "Bind tenant credentials by alias. Code receives only declared aliases at runtime.",
+  },
+];
+
+const CODE_STEP_ARG_SCHEMA: JsonSchema7Type = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    code: STR_NONEMPTY,
+    timeoutSeconds: { type: "integer", minimum: 1, maximum: 900 },
+    networkAllowlist: {
+      type: "array",
+      items: STR_NONEMPTY,
+    },
+    environment: { type: "object" },
+    credentialBindings: {
+      type: "array",
+      items: CREDENTIAL_BINDING_SCHEMA,
+    },
+  },
+  required: ["code"],
+};
+
+function emitCodeTask(
+  language: "python" | "typescript",
+  args: Record<string, unknown>,
+  ctx: AslEmitContext,
+): AslState {
+  return {
+    Type: "Task",
+    Resource: "arn:aws:states:::lambda:invoke",
+    Parameters: {
+      "FunctionName.$": "$$.Execution.Input.routineTaskPythonFunctionName",
+      Payload: {
+        "tenantId.$": "$$.Execution.Input.tenantId",
+        "routineId.$": "$$.Execution.Input.routineId",
+        "executionId.$": "$$.Execution.Id",
+        nodeId: ctx.stateName,
+        language,
+        code: args.code,
+        timeoutSeconds: args.timeoutSeconds ?? 60,
+        networkAllowlist: Array.isArray(args.networkAllowlist)
+          ? args.networkAllowlist
+          : [],
+        ...(Array.isArray(args.credentialBindings) &&
+        args.credentialBindings.length > 0
+          ? { credentialBindings: args.credentialBindings }
+          : {}),
+        ...(args.environment ? { environment: args.environment } : {}),
+      },
+    },
+    ResultSelector: {
+      "exitCode.$": "$.Payload.exitCode",
+      "stdoutS3Uri.$": "$.Payload.stdoutS3Uri",
+      "stderrS3Uri.$": "$.Payload.stderrS3Uri",
+      "stdoutPreview.$": "$.Payload.stdoutPreview",
+      "truncated.$": "$.Payload.truncated",
+    },
+  };
+}
 
 /**
- * Catalog (12 recipes). Listed in category order so chat-builder UI render
+ * Catalog (13 recipes). Listed in category order so chat-builder UI render
  * stays predictable. Order is **not** load-bearing — lookups go through
  * `getRecipe(id)`.
  */
@@ -484,8 +606,10 @@ const _CATALOG: RecipeDefinition[] = [
         queryParameters: { type: "object" },
         requestBody: {},
         connectionArn: STR_NONEMPTY,
+        credentialId: STR_NONEMPTY,
       },
-      required: ["method", "apiEndpoint", "connectionArn"],
+      required: ["method", "apiEndpoint"],
+      anyOf: [{ required: ["connectionArn"] }, { required: ["credentialId"] }],
     },
     configFields: [
       {
@@ -511,13 +635,29 @@ const _CATALOG: RecipeDefinition[] = [
         label: "Connection ARN",
         inputType: "text",
         control: "text",
-        required: true,
+        required: false,
         editable: true,
+      },
+      {
+        key: "credentialId",
+        label: "ThinkWork credential",
+        inputType: "text",
+        control: "credential_select",
+        required: false,
+        editable: true,
+        helpText:
+          "Select an active tenant credential. Publish resolves it to an EventBridge connection ARN.",
       },
     ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.httpRequest,
-    aslEmitter: (args, ctx) =>
-      markRecipe(
+    aslEmitter: (args, ctx) => {
+      const connectionArn =
+        typeof args.connectionArn === "string" && args.connectionArn.trim()
+          ? args.connectionArn
+          : typeof args.credentialId === "string" && args.credentialId.trim()
+            ? `${HTTP_CREDENTIAL_CONNECTION_PREFIX}${args.credentialId.trim()}`
+            : "";
+      return markRecipe(
         applySequencing(
           {
             Type: "Task",
@@ -525,7 +665,7 @@ const _CATALOG: RecipeDefinition[] = [
             Parameters: {
               ApiEndpoint: args.apiEndpoint,
               Method: args.method,
-              Authentication: { ConnectionArn: args.connectionArn },
+              Authentication: { ConnectionArn: connectionArn },
               ...(args.headers ? { Headers: args.headers } : {}),
               ...(args.queryParameters
                 ? { QueryParameters: args.queryParameters }
@@ -538,7 +678,8 @@ const _CATALOG: RecipeDefinition[] = [
           ctx,
         ),
         "http_request",
-      ),
+      );
+    },
   },
   {
     id: "aurora_query",
@@ -917,80 +1058,29 @@ const _CATALOG: RecipeDefinition[] = [
       "Execute Python code in an AgentCore code sandbox. Output is captured to S3; the state returns only {exitCode, stdoutS3Uri, stderrS3Uri, stdoutPreview, truncated}. Use as the escape hatch when no first-class recipe fits.",
     category: "escape_hatch",
     hitlCapable: false,
-    argSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        code: STR_NONEMPTY,
-        timeoutSeconds: { type: "integer", minimum: 1, maximum: 900 },
-        networkAllowlist: {
-          type: "array",
-          items: STR_NONEMPTY,
-        },
-        environment: { type: "object" },
-      },
-      required: ["code"],
-    },
-    configFields: [
-      {
-        key: "code",
-        label: "Code",
-        inputType: "text",
-        control: "code",
-        required: true,
-        editable: true,
-      },
-      {
-        key: "timeoutSeconds",
-        label: "Timeout seconds",
-        inputType: "number",
-        control: "number",
-        editable: false,
-        min: 1,
-        max: 900,
-      },
-      {
-        key: "networkAllowlist",
-        label: "Network allowlist",
-        inputType: "string_array",
-        control: "string_list",
-        editable: false,
-      },
-    ],
+    argSchema: CODE_STEP_ARG_SCHEMA,
+    configFields: CODE_STEP_CONFIG_FIELDS,
     resourceArnPattern: RESOURCE_ARN_PATTERNS.python,
     aslEmitter: (args, ctx) =>
       markRecipe(
-        applySequencing(
-          {
-            Type: "Task",
-            Resource: "arn:aws:states:::lambda:invoke",
-            Parameters: {
-              "FunctionName.$":
-                "$$.Execution.Input.routineTaskPythonFunctionName",
-              Payload: {
-                "tenantId.$": "$$.Execution.Input.tenantId",
-                "routineId.$": "$$.Execution.Input.routineId",
-                "executionId.$": "$$.Execution.Id",
-                nodeId: ctx.stateName,
-                code: args.code,
-                timeoutSeconds: args.timeoutSeconds ?? 60,
-                networkAllowlist: Array.isArray(args.networkAllowlist)
-                  ? args.networkAllowlist
-                  : [],
-                ...(args.environment ? { environment: args.environment } : {}),
-              },
-            },
-            ResultSelector: {
-              "exitCode.$": "$.Payload.exitCode",
-              "stdoutS3Uri.$": "$.Payload.stdoutS3Uri",
-              "stderrS3Uri.$": "$.Payload.stderrS3Uri",
-              "stdoutPreview.$": "$.Payload.stdoutPreview",
-              "truncated.$": "$.Payload.truncated",
-            },
-          },
-          ctx,
-        ),
+        applySequencing(emitCodeTask("python", args, ctx), ctx),
         "python",
+      ),
+  },
+  {
+    id: "typescript",
+    displayName: "Run TypeScript code",
+    description:
+      "Execute TypeScript code in an AgentCore code sandbox. Output is captured to S3 with the same result shape as Python code steps.",
+    category: "escape_hatch",
+    hitlCapable: false,
+    argSchema: CODE_STEP_ARG_SCHEMA,
+    configFields: CODE_STEP_CONFIG_FIELDS,
+    resourceArnPattern: RESOURCE_ARN_PATTERNS.typescript,
+    aslEmitter: (args, ctx) =>
+      markRecipe(
+        applySequencing(emitCodeTask("typescript", args, ctx), ctx),
+        "typescript",
       ),
   },
 ];
@@ -1055,6 +1145,7 @@ export function getRecipeDefaultArgs(
         method: "GET",
         apiEndpoint: "https://",
         connectionArn: "",
+        credentialId: "",
       };
     case "aurora_query":
       return { sql: "select 1", databaseName: "" };
@@ -1082,6 +1173,14 @@ export function getRecipeDefaultArgs(
         code: "print('hello from ThinkWork routine')",
         timeoutSeconds: 60,
         networkAllowlist: [],
+        credentialBindings: [],
+      };
+    case "typescript":
+      return {
+        code: "console.log('hello from ThinkWork routine');",
+        timeoutSeconds: 60,
+        networkAllowlist: [],
+        credentialBindings: [],
       };
     default:
       return {};
