@@ -37,6 +37,10 @@ import { activationQueries, activationMutations } from "./activation/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
+  tenantCredentialMutations,
+  tenantCredentialQueries,
+} from "./tenant-credentials/index.js";
+import {
   systemWorkflowMutations,
   systemWorkflowQueries,
 } from "./system-workflows/index.js";
@@ -66,6 +70,7 @@ export const queryResolvers: Record<string, any> = {
   ...activationQueries,
   ...brainQueries,
   ...routineQueries,
+  ...tenantCredentialQueries,
   ...systemWorkflowQueries,
 };
 
@@ -93,6 +98,7 @@ export const mutationResolvers: Record<string, any> = {
   ...activationMutations,
   ...brainMutations,
   ...routineMutations,
+  ...tenantCredentialMutations,
   ...systemWorkflowMutations,
 };
 
