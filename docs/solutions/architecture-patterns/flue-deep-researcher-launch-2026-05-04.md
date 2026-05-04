@@ -75,7 +75,7 @@ aws bedrock-agentcore list-agent-runtimes --region us-east-1 \
 
 Expect `runtimeStatus: "ACTIVE"` for the `dev` stage's agentcore-flue runtime.
 
-**Operator note — AgentCore deploy race vs Strands env vars:** if you see warm-container "missing THINKWORK_API_URL" errors in CloudWatch immediately post-deploy, force a warm-flush per `feedback_avoid_fire_and_forget_lambda_invokes` and rely on the 15-minute reconciler. This is documented in `docs/solutions/integration-issues/agentcore-deploy-race-strands-env-vars-2026-04-22.md`.
+**Operator note — warm-container env-injection timing:** if you see "missing THINKWORK_API_URL / API_AUTH_SECRET" errors in CloudWatch immediately post-deploy, this matches the warm-container env-injection race documented in `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`. The mitigation is the entry-snapshot pattern (capture env vars at coroutine entry, not after the agent turn) plus the 15-minute reconciler that flips stalled `skill_runs` rows. Force a warm-flush only if the symptom persists past the reconciler window.
 
 ---
 
@@ -179,17 +179,27 @@ EOF
 )"
 ```
 
-**Verification — bearer-scrub contract:** after the invocation, grep CloudWatch logs for the test bearer literal. The handler U16 wiring should ensure no match:
+**Verification — bearer-scrub contract:** after the invocation, grep CloudWatch logs for any leak of the active bearer. Run BOTH filters — `Bearer ey` catches JWT-style tokens (most common); the literal-active-bearer grep catches non-JWT formats (Okta / Cognito opaque tokens) that the JWT prefix would miss:
 
 ```bash
+LOG_GROUP="/aws/bedrock-agentcore/agentcore-flue-dev"
+START_TIME="$(date -v-10M +%s)000"
+
+# Filter 1 — JWT-shaped bearer prefix.
 aws logs filter-log-events --region us-east-1 \
-  --log-group-name "/aws/bedrock-agentcore/agentcore-flue-dev" \
-  --filter-pattern "Bearer ey" \
-  --start-time "$(date -v-10M +%s)000" \
-  --query 'events[*].message' --output text
+  --log-group-name "$LOG_GROUP" --filter-pattern "Bearer ey" \
+  --start-time "$START_TIME" --query 'events[*].message' --output text
+
+# Filter 2 — literal active bearer (substitute the actual token used in
+# the invocation). CloudWatch Logs filter syntax does not support
+# regex; literal substring match is the universal path.
+ACTIVE_BEARER="<bearer-used-in-test-invocation>"
+aws logs filter-log-events --region us-east-1 \
+  --log-group-name "$LOG_GROUP" --filter-pattern "$ACTIVE_BEARER" \
+  --start-time "$START_TIME" --query 'events[*].message' --output text
 ```
 
-Expect zero matches. Any match indicates the U16 scrubbing-fetch interceptor missed a path; **block the launch** and triage before proceeding.
+Expect zero matches from BOTH filters. Any match indicates the U16 scrubbing-fetch interceptor missed a path; **block the launch** and triage before proceeding.
 
 ---
 
@@ -240,7 +250,14 @@ The expected execution chain:
 
 3. Record p50, p95, p99 in the **Measurement Log** below.
 
-**Operator note:** `Date.now()` deltas around `StartCodeInterpreterSession` calls in `agentcore-flue` are NOT yet instrumented. If the structured logger does not emit `session_task_started` / `StartCodeInterpreterSession_complete` events with elapsed_ms, the operator wires that instrumentation as a one-line change to `packages/agentcore-flue/agent-container/src/server.ts` BEFORE step 6 — the launch is the right time to add the instrumentation since the live latency budget is what matters.
+**Operator note — instrumentation prerequisite:** `Date.now()` deltas around `StartCodeInterpreterSession` calls in `agentcore-flue` are NOT yet wired. The structured logger exists but no code path emits `session_task_started` / `StartCodeInterpreterSession_complete` events with `elapsed_ms`. Before step 6 the operator must:
+
+1. Identify the call sites (likely in `packages/agentcore-flue/agent-container/src/server.ts` near the runLoop and in the SandboxFactory paths from U8) where `StartCodeInterpreterSession` is invoked — there may be more than one per turn (`session.task()` sub-agent fan-out).
+2. Wrap each call site with `const t0 = Date.now(); ...; logStructured({event: "...", elapsed_ms: Date.now() - t0})`.
+3. Pick a stable event-name vocabulary the CloudWatch Logs Insights query above can parse — recommended: `session_task_started`, `StartCodeInterpreterSession_complete`.
+4. Land that instrumentation as a separate small PR (it's not a one-line change but should be a single short commit) before running the cold-start sample. The launch is the right time to wire it because live latency is the data we need to capture.
+
+If you'd rather measure cold-start without code changes, AgentCore X-Ray traces capture the SDK call duration — but X-Ray needs to be enabled on the runtime first; check `aws bedrock-agentcore get-agent-runtime` for the trace-enabled flag.
 
 ---
 
@@ -315,8 +332,8 @@ The deep researcher's traffic is one of the inputs to that comparison; this runb
 - **Origin brainstorm:** [docs/brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md](../../brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md)
 - **FR-9a spike verdict:** [docs/solutions/architecture-patterns/flue-fr9a-integration-spike-verdict-2026-05-03.md](./flue-fr9a-integration-spike-verdict-2026-05-03.md)
 - **Bearer-scrub egress wiring:** Plan §005 U16 (`packages/agentcore-flue/agent-container/src/scrubbing-fetch.ts`)
-- **Runtime selector dispatcher:** `packages/api/src/lib/resolveRuntimeFunctionName.ts`
-- **AgentCore deploy race documentation:** `docs/solutions/integration-issues/agentcore-deploy-race-strands-env-vars-2026-04-22.md`
+- **Runtime selector dispatcher:** `packages/api/src/lib/resolve-runtime-function-name.ts`
+- **Warm-container env-injection timing:** `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`
 
 ---
 
