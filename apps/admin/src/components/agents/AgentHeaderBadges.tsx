@@ -16,7 +16,7 @@ import { AgentContextPolicyBadge } from "./AgentContextPolicyBadge";
 
 const HARNESS_OPTIONS = [
   { value: AgentRuntime.Strands, label: "Strands" },
-  { value: AgentRuntime.Pi, label: "Pi" },
+  { value: AgentRuntime.Flue, label: "Flue" },
 ];
 
 interface AgentHeaderBadgesProps {

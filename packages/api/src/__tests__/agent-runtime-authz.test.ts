@@ -89,20 +89,20 @@ describe("updateAgentRuntime", () => {
       { tenant_id: "tenant-A", runtime: "strands" },
     ]);
     mockUpdateRows.mockReturnValue([
-      { id: "agent-1", tenant_id: "tenant-A", runtime: "pi" },
+      { id: "agent-1", tenant_id: "tenant-A", runtime: "flue" },
     ]);
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("user-1");
 
     const result = await updateAgentRuntime(
       null,
-      { id: "agent-1", runtime: "PI" },
+      { id: "agent-1", runtime: "FLUE" },
       CTX,
     );
 
     expect(mockRequireTenantAdmin).toHaveBeenCalledWith(CTX, "tenant-A");
-    expect(lastUpdateSetRef.value).toMatchObject({ runtime: "pi" });
-    expect(result.runtime).toBe("PI");
+    expect(lastUpdateSetRef.value).toMatchObject({ runtime: "flue" });
+    expect(result.runtime).toBe("FLUE");
     expect(mockRecordActivity).toHaveBeenCalledWith(
       "tenant-A",
       "user",
@@ -110,7 +110,7 @@ describe("updateAgentRuntime", () => {
       "agent.runtime_changed",
       "agent",
       "agent-1",
-      { from: "strands", to: "pi" },
+      { from: "strands", to: "flue" },
     );
   });
 
@@ -125,7 +125,7 @@ describe("updateAgentRuntime", () => {
     );
 
     await expect(
-      updateAgentRuntime(null, { id: "agent-1", runtime: "PI" }, CTX),
+      updateAgentRuntime(null, { id: "agent-1", runtime: "FLUE" }, CTX),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
 
     expect(updateCallRef.value).toBe(0);
@@ -135,7 +135,7 @@ describe("updateAgentRuntime", () => {
     mockSelectRows.mockReturnValue([]);
 
     await expect(
-      updateAgentRuntime(null, { id: "missing-agent", runtime: "PI" }, CTX),
+      updateAgentRuntime(null, { id: "missing-agent", runtime: "FLUE" }, CTX),
     ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
 
     expect(mockRequireTenantAdmin).not.toHaveBeenCalled();

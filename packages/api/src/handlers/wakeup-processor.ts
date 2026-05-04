@@ -104,7 +104,7 @@ async function invokeAgentCore(
   runtimeType: AgentRuntimeType = "strands",
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
   let functionName = AGENTCORE_FUNCTION_NAME;
-  if (runtimeType === "pi") {
+  if (runtimeType === "flue") {
     try {
       functionName = resolveRuntimeFunctionName(runtimeType);
     } catch (err) {

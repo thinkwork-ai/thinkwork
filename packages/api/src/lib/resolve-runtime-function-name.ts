@@ -1,9 +1,9 @@
-export type AgentRuntimeType = "strands" | "pi";
+export type AgentRuntimeType = "strands" | "flue";
 
 export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
     super(
-      runtimeType === "pi"
+      runtimeType === "flue"
         ? "Flue runtime not yet provisioned in this stage."
         : "Strands runtime not provisioned in this stage.",
     );
@@ -12,7 +12,7 @@ export class RuntimeNotProvisionedError extends Error {
 }
 
 export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
-  return value === "pi" ? "pi" : "strands";
+  return value === "flue" ? "flue" : "strands";
 }
 
 export function resolveRuntimeFunctionName(
@@ -25,7 +25,7 @@ export function resolveRuntimeFunctionName(
   > = process.env,
 ): string {
   const functionName =
-    runtimeType === "pi"
+    runtimeType === "flue"
       ? env.AGENTCORE_FLUE_FUNCTION_NAME
       : env.AGENTCORE_FUNCTION_NAME;
 

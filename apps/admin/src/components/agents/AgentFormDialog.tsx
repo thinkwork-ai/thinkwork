@@ -275,10 +275,10 @@ export function AgentFormDialog({
                             Strands
                           </SelectItem>
                           <SelectItem
-                            value={AgentRuntime.Pi}
+                            value={AgentRuntime.Flue}
                             className="text-sm"
                           >
-                            Pi
+                            Flue
                           </SelectItem>
                         </SelectContent>
                       </Select>

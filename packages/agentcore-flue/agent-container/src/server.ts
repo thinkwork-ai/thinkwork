@@ -42,7 +42,7 @@ async function handleInvocation(
     console.error("[agentcore-flue] invocation failed", err);
     sendJson(res, 500, {
       error: err instanceof Error ? err.message : String(err),
-      runtime: "pi",
+      runtime: "flue",
     });
   }
 }
@@ -52,7 +52,7 @@ export function createServer() {
     if (req.method === "GET" && req.url === "/ping") {
       sendJson(res, 200, {
         status: "Healthy",
-        runtime: "pi",
+        runtime: "flue",
         time_of_last_update: Math.floor(Date.now() / 1000),
       });
       return;

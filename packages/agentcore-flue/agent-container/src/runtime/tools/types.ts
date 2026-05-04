@@ -40,7 +40,7 @@ export interface PiToolInvocation {
   is_error?: boolean;
   started_at?: string;
   finished_at?: string;
-  runtime: "pi";
+  runtime: "flue";
   source?: string;
   server_name?: string;
 }

@@ -427,6 +427,41 @@ jobs:
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
+      # Plan §005 U3 — agents.runtime backfill `pi` → `flue`. Runs BEFORE the
+      # Terraform apply that updates the dispatcher Lambda code so the new
+      # AgentRuntimeType union (`strands` | `flue`) never sees a `pi` value
+      # it can't route. Idempotent: WHERE runtime = 'pi' is a no-op once the
+      # rows are gone, so subsequent deploys are clean.
+      #
+      # Skips cleanly on greenfield (no existing terraform state → no DB
+      # endpoint output → step exits 0 without running psql). Once the
+      # stage has applied terraform-apply once, subsequent runs of this
+      # step have a real DB endpoint and apply the backfill.
+      - name: Install psql (U3 backfill)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Backfill agents.runtime pi → flue (plan §005 U3)
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          source ../../../scripts/lib/terraform-output.sh
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            echo "Skipping pi → flue backfill: no existing DB outputs (greenfield apply)."
+            exit 0
+          fi
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+          # ON_ERROR_STOP=1 + --single-transaction so a partial failure rolls
+          # the whole migration back rather than leaving rows half-migrated.
+          psql "$DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            --single-transaction \
+            -f ../../../packages/database-pg/drizzle/0062_migrate_pi_to_flue.sql
+
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:

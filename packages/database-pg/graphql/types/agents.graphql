@@ -16,7 +16,7 @@ enum AgentStatus {
 
 enum AgentRuntime {
   STRANDS
-  PI
+  FLUE
 }
 
 type Agent {

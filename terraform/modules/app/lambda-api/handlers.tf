@@ -44,10 +44,18 @@ locals {
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
     AGENTCORE_FLUE_FUNCTION_NAME       = var.agentcore_flue_function_name
-    WORKSPACE_BUCKET                   = var.bucket_name
-    HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
-    MEMORY_ENGINE                      = var.memory_engine
+    # SSM parameter names for the Bedrock AgentCore Runtime IDs (one per
+    # runtime type). deploy.yml's "Update AgentCore Runtimes" job writes
+    # these in `update-agentcore-runtime-image.sh`. eval-runner reads them
+    # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
+    # invocation against the right runtime — pre-U3 the flue path was
+    # dead because the env var was never wired here.
+    AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+    AGENTCORE_RUNTIME_SSM_FLUE    = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
+    WORKSPACE_BUCKET              = var.bucket_name
+    HINDSIGHT_ENDPOINT            = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID           = var.agentcore_memory_id
+    MEMORY_ENGINE                 = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
