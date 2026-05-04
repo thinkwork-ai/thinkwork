@@ -485,7 +485,7 @@ def _load_runtime_id_from_ssm():
     global RUNTIME_IDS
     ssm = boto3.client("ssm", region_name=AWS_REGION)
 
-    for runtime_type in ("claude", "code", "claw", "pi", "sdk"):
+    for runtime_type in ("claude", "code", "claw", "flue", "sdk"):
         if runtime_type in RUNTIME_IDS:
             continue
         ssm_path = f"/thinkwork/{STACK_NAME}/agentcore/runtime-id-{runtime_type}"

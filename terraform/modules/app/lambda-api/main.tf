@@ -308,8 +308,8 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
       Resource = compact([
         var.agentcore_function_arn,
         "${var.agentcore_function_arn}:*",
-        var.agentcore_pi_function_arn,
-        var.agentcore_pi_function_arn != "" ? "${var.agentcore_pi_function_arn}:*" : "",
+        var.agentcore_flue_function_arn,
+        var.agentcore_flue_function_arn != "" ? "${var.agentcore_flue_function_arn}:*" : "",
       ])
     }]
   })

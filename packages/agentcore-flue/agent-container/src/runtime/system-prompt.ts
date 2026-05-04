@@ -27,7 +27,7 @@ export function composeSystemPrompt(
     typeof payload.instance_id === "string" ? payload.instance_id.trim() : "";
 
   return [
-    `You are ${name}, running inside ThinkWork's Pi AgentCore runtime.`,
+    `You are ${name}, running inside ThinkWork's Flue AgentCore runtime.`,
     tenant ? `Tenant: ${tenant}.` : "",
     instance ? `Workspace instance: ${instance}.` : "",
     "Answer the user's request directly and concisely. Use only capabilities available in this runtime.",

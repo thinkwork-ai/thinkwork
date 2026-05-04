@@ -440,7 +440,7 @@ async function getSkillRunInvokeFnName(
     return _skillRunInvokeFnName[runtimeType] ?? null;
   }
   if (runtimeType === "pi") {
-    _skillRunInvokeFnName.pi = process.env.AGENTCORE_PI_FUNCTION_NAME || null;
+    _skillRunInvokeFnName.pi = process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
     return _skillRunInvokeFnName.pi;
   }
   // Reuse the same Lambda as chat invocation — there's exactly one
