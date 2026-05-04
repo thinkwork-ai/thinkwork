@@ -181,6 +181,7 @@ resource "aws_iam_role_policy" "lambda_secrets" {
         Action = [
           "secretsmanager:CreateSecret",
           "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
           "secretsmanager:GetSecretValue"
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"

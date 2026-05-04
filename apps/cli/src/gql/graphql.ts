@@ -1071,6 +1071,15 @@ export type CreateTeamInput = {
   type?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type CreateTenantCredentialInput = {
+  displayName: Scalars['String']['input'];
+  kind: TenantCredentialKind;
+  metadataJson?: InputMaybe<Scalars['AWSJSON']['input']>;
+  secretJson: Scalars['AWSJSON']['input'];
+  slug?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
 export type CreateTenantInput = {
   name: Scalars['String']['input'];
   plan?: InputMaybe<Scalars['String']['input']>;
@@ -1694,6 +1703,7 @@ export type Mutation = {
   createScheduledJob: ScheduledJob;
   createTeam: Team;
   createTenant: Tenant;
+  createTenantCredential: TenantCredential;
   createThread: Thread;
   createThreadLabel: ThreadLabel;
   createWakeupRequest: AgentWakeupRequest;
@@ -1718,6 +1728,7 @@ export type Mutation = {
   deleteRoutineTrigger: Scalars['Boolean']['output'];
   deleteRun: Scalars['Boolean']['output'];
   deleteTeam: Scalars['Boolean']['output'];
+  deleteTenantCredential: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
@@ -1765,6 +1776,7 @@ export type Mutation = {
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
+  rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
@@ -1804,6 +1816,7 @@ export type Mutation = {
   updateRoutineDefinition: RoutineDefinition;
   updateTeam: Team;
   updateTenant: Tenant;
+  updateTenantCredential: TenantCredential;
   updateTenantMember: TenantMember;
   /**
    * Platform-operator-only mutation — see UpdateTenantPolicyInput. Changes
@@ -2034,6 +2047,11 @@ export type MutationCreateTenantArgs = {
 };
 
 
+export type MutationCreateTenantCredentialArgs = {
+  input: CreateTenantCredentialInput;
+};
+
+
 export type MutationCreateThreadArgs = {
   input: CreateThreadInput;
 };
@@ -2157,6 +2175,11 @@ export type MutationDeleteRunArgs = {
 
 
 export type MutationDeleteTeamArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteTenantCredentialArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2431,6 +2454,11 @@ export type MutationRollbackAgentVersionArgs = {
 };
 
 
+export type MutationRotateTenantCredentialArgs = {
+  input: RotateTenantCredentialInput;
+};
+
+
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
 };
@@ -2634,6 +2662,12 @@ export type MutationUpdateTeamArgs = {
 export type MutationUpdateTenantArgs = {
   id: Scalars['ID']['input'];
   input: UpdateTenantInput;
+};
+
+
+export type MutationUpdateTenantCredentialArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateTenantCredentialInput;
 };
 
 
@@ -2881,6 +2915,7 @@ export type Query = {
   templateSyncDiff: TemplateSyncDiff;
   tenant?: Maybe<Tenant>;
   tenantBySlug?: Maybe<Tenant>;
+  tenantCredentials: Array<TenantCredential>;
   tenantEntityFacets: TenantEntityFacetConnection;
   tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
@@ -3470,6 +3505,12 @@ export type QueryTenantBySlugArgs = {
 };
 
 
+export type QueryTenantCredentialsArgs = {
+  status?: InputMaybe<TenantCredentialStatus>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryTenantEntityFacetsArgs = {
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -3704,6 +3745,11 @@ export type RoleChange = {
   __typename?: 'RoleChange';
   current?: Maybe<Scalars['String']['output']>;
   target?: Maybe<Scalars['String']['output']>;
+};
+
+export type RotateTenantCredentialInput = {
+  id: Scalars['ID']['input'];
+  secretJson: Scalars['AWSJSON']['input'];
 };
 
 export type Routine = {
@@ -4422,6 +4468,40 @@ export type Tenant = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type TenantCredential = {
+  __typename?: 'TenantCredential';
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByUserId?: Maybe<Scalars['ID']['output']>;
+  deletedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  displayName: Scalars['String']['output'];
+  eventbridgeConnectionArn?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  kind: TenantCredentialKind;
+  lastUsedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastValidatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  metadataJson: Scalars['AWSJSON']['output'];
+  schemaJson: Scalars['AWSJSON']['output'];
+  slug: Scalars['String']['output'];
+  status: TenantCredentialStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum TenantCredentialKind {
+  ApiKey = 'api_key',
+  BasicAuth = 'basic_auth',
+  BearerToken = 'bearer_token',
+  Json = 'json',
+  SoapPartner = 'soap_partner',
+  WebhookSigningSecret = 'webhook_signing_secret'
+}
+
+export enum TenantCredentialStatus {
+  Active = 'active',
+  Deleted = 'deleted',
+  Disabled = 'disabled'
+}
+
 export type TenantEntityFacetConnection = {
   __typename?: 'TenantEntityFacetConnection';
   edges: Array<TenantEntityFacetEdge>;
@@ -4860,6 +4940,13 @@ export type UpdateTeamInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateTenantCredentialInput = {
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  metadataJson?: InputMaybe<Scalars['AWSJSON']['input']>;
+  slug?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<TenantCredentialStatus>;
 };
 
 export type UpdateTenantInput = {
