@@ -462,6 +462,32 @@ jobs:
             --single-transaction \
             -f ../../../packages/database-pg/drizzle/0062_migrate_pi_to_flue.sql
 
+      # Plan §005 U4 — adds threads.session_data jsonb so AuroraSessionStore
+      # has a column to write into. Idempotent (`ADD COLUMN IF NOT EXISTS`),
+      # so the same skip-on-greenfield short-circuit + repeat-run safety as
+      # the U3 step. Runs BEFORE terraform-apply so the agentcore-flue Lambda
+      # never picks up code that references a column the schema doesn't have
+      # yet.
+      - name: Add threads.session_data column (plan §005 U4)
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          source ../../../scripts/lib/terraform-output.sh
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            echo "Skipping threads.session_data column add: no existing DB outputs (greenfield apply)."
+            exit 0
+          fi
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+          psql "$DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            --single-transaction \
+            -f ../../../packages/database-pg/drizzle/0063_threads_session_data.sql
+
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:
