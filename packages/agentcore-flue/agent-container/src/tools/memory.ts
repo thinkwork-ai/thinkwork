@@ -125,6 +125,15 @@ function normalise(record: unknown): NormalisedRecord | null {
   const text = extractText(record);
   if (!text) return null;
   const r = record as Record<string, unknown>;
+  // The SDK exposes `memoryStrategyId` on `MemoryRecordSummary`; older
+  // Strands code used `strategy`. Read both so a Strands-shaped fixture
+  // and a real SDK response both produce a meaningful tag.
+  const strategy =
+    typeof r.memoryStrategyId === "string"
+      ? r.memoryStrategyId
+      : typeof r.strategy === "string"
+        ? r.strategy
+        : "managed";
   return {
     text,
     score: typeof r.score === "number" ? r.score : undefined,
@@ -134,7 +143,7 @@ function normalise(record: unknown): NormalisedRecord | null {
         : typeof r.id === "string"
           ? r.id
           : undefined,
-    strategy: typeof r.strategy === "string" ? r.strategy : "managed",
+    strategy,
   };
 }
 
@@ -280,6 +289,7 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
       const namespace = namespaceFor(context.userId);
 
       let records: NormalisedRecord[] = [];
+      let semanticErr: unknown;
       try {
         const semantic = await context.client.send(
           new RetrieveMemoryRecordsCommand({
@@ -295,25 +305,42 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
         records = summaries
           .map((r) => normalise(r))
           .filter((r): r is NormalisedRecord => r !== null);
-      } catch {
-        // Fall through to list. Strands does the same — semantic
-        // search may not be configured for this memory id, in which
-        // case list is the only option.
+      } catch (err) {
+        // Capture the error so the list-fallback path can re-raise if
+        // the list call also fails. Strands silently falls through too,
+        // but at least surfaces the original cause when both fail.
+        semanticErr = err;
         records = [];
       }
 
       if (records.length === 0) {
-        const list = await context.client.send(
-          new ListMemoryRecordsCommand({
-            memoryId: context.memoryId,
-            namespace,
-          }),
-        );
-        const summaries = list.memoryRecordSummaries ?? [];
-        records = summaries
-          .map((r) => normalise(r))
-          .filter((r): r is NormalisedRecord => r !== null);
-        records.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+        try {
+          const list = await context.client.send(
+            new ListMemoryRecordsCommand({
+              memoryId: context.memoryId,
+              namespace,
+              maxResults: topK,
+            }),
+          );
+          const summaries = list.memoryRecordSummaries ?? [];
+          records = summaries
+            .map((r) => normalise(r))
+            .filter((r): r is NormalisedRecord => r !== null);
+          // List responses don't populate `score`; sort is defensive in
+          // case a future SDK revision adds it. Otherwise the stable
+          // server order survives.
+          records.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+        } catch (listErr) {
+          // Both calls failed. Prefer surfacing the original semantic
+          // error — that's the call the caller actually intended.
+          throw new MemoryToolError(
+            `recall failed against memory id '${context.memoryId}': ${
+              semanticErr instanceof Error
+                ? semanticErr.message
+                : String(semanticErr ?? listErr)
+            }`,
+          );
+        }
       }
 
       const top = records.slice(0, topK);

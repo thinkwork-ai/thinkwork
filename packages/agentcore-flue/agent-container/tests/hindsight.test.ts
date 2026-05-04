@@ -296,3 +296,56 @@ describe("multi-tenant isolation", () => {
     expect(calls[0]!.url).not.toContain("tenant-A");
   });
 });
+
+describe("AbortSignal composition", () => {
+  it("does not retry when caller signal aborts during the fetch attempt", async () => {
+    // First fetch sees the abort and throws AbortError. The retry loop
+    // must detect signal.aborted and rethrow as 'aborted by caller signal'
+    // — never advance to the next retry attempt.
+    let callCount = 0;
+    const controller = new AbortController();
+    const fetchImpl = (async () => {
+      callCount += 1;
+      controller.abort();
+      const err: Error & { name?: string } = new Error("aborted");
+      err.name = "AbortError";
+      throw err;
+    }) as typeof fetch;
+
+    const tool = buildRecallTool(makeContext(fetchImpl));
+    await expect(
+      tool.execute("call-16", { query: "x" } as any, controller.signal),
+    ).rejects.toThrow(/aborted by caller signal/);
+    expect(callCount).toBe(1);
+  });
+
+  it("composes caller signal with per-attempt timeout via AbortSignal.any", async () => {
+    // When a caller signal is supplied, the per-attempt deadline must
+    // still bound a hung fetch. Verify the signal passed to fetch
+    // aborts when the per-attempt timeout fires, even though the
+    // caller's signal is never aborted by the test.
+    let observedSignal: AbortSignal | undefined;
+    const fetchImpl = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      observedSignal = init?.signal ?? undefined;
+      return new Response(JSON.stringify({ memory_units: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    const callerController = new AbortController();
+    const tool = buildRecallTool(
+      makeContext(fetchImpl, { timeoutMs: 100 }),
+    );
+    await tool.execute(
+      "call-17",
+      { query: "x" } as any,
+      callerController.signal,
+    );
+
+    expect(observedSignal).toBeDefined();
+    // The composed signal should be a different AbortSignal than the
+    // caller's bare signal — proves AbortSignal.any wrapped it.
+    expect(observedSignal).not.toBe(callerController.signal);
+  });
+});

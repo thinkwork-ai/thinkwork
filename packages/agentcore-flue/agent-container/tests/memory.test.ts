@@ -295,3 +295,69 @@ describe("recall — namespace + tenant isolation", () => {
     expect(retrieveInput.namespace).not.toContain("tenant-A");
   });
 });
+
+describe("recall — strategy field handling", () => {
+  it("reads memoryStrategyId from production SDK responses", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand).resolves({
+      memoryRecordSummaries: [
+        {
+          content: { text: "User likes hot tea" },
+          memoryStrategyId: "semantic-v1",
+        } as any,
+      ],
+    });
+
+    const tool = buildRecallTool(makeContext());
+    const result = await tool.execute("call-17", { query: "x" } as any);
+    const text = (result.content[0]! as { text: string }).text;
+    expect(text).toContain("[semantic-v1]");
+    expect(text).toContain("User likes hot tea");
+  });
+
+  it("falls back to 'managed' when no strategy field is present", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand).resolves({
+      memoryRecordSummaries: [
+        { content: { text: "Plain record" } } as any,
+      ],
+    });
+
+    const tool = buildRecallTool(makeContext());
+    const result = await tool.execute("call-18", { query: "x" } as any);
+    const text = (result.content[0]! as { text: string }).text;
+    expect(text).toContain("[managed]");
+  });
+});
+
+describe("recall — both calls fail surfaces semantic error", () => {
+  it("throws MemoryToolError naming the original semantic failure when both calls fail", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand).rejects(
+      new Error("AccessDeniedException: not authorized to RetrieveMemoryRecords"),
+    );
+    ACClient.on(ListMemoryRecordsCommand).rejects(
+      new Error("AccessDeniedException: not authorized to ListMemoryRecords"),
+    );
+
+    const tool = buildRecallTool(makeContext());
+    await expect(
+      tool.execute("call-19", { query: "x" } as any),
+    ).rejects.toThrow(/AccessDeniedException.*RetrieveMemoryRecords/);
+  });
+});
+
+describe("recall — list fallback respects topK", () => {
+  it("passes maxResults: topK to ListMemoryRecords", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand).resolves({
+      memoryRecordSummaries: [],
+    });
+    ACClient.on(ListMemoryRecordsCommand).resolves({
+      memoryRecordSummaries: [],
+    });
+
+    const tool = buildRecallTool(makeContext());
+    await tool.execute("call-20", { query: "x", top_k: 5 } as any);
+
+    const listInput = ACClient.commandCalls(ListMemoryRecordsCommand)[0]!
+      .args[0].input;
+    expect(listInput.maxResults).toBe(5);
+  });
+});

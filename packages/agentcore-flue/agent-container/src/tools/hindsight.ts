@@ -150,13 +150,26 @@ async function postJson(
 
     let response: Response;
     try {
+      // Compose caller signal with per-attempt timeout so the docblock
+      // "fresh signal per attempt" contract holds even when the caller
+      // passes a signal: their cancellation still wins, but a hung
+      // attempt still aborts after `timeoutMs`.
+      const attemptSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs);
       response = await fetchImpl(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: signal ?? AbortSignal.timeout(timeoutMs),
+        signal: attemptSignal,
       });
     } catch (err) {
+      // Caller-initiated abort is terminal — never retry. Detect by
+      // checking the caller's signal directly; AbortSignal.any propagates
+      // the abort without attribution, so signal.aborted is the truth.
+      if (signal?.aborted) {
+        throw new HindsightToolError("Hindsight call aborted by caller signal");
+      }
       lastError =
         err instanceof Error
           ? err
