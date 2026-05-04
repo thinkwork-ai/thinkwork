@@ -103,6 +103,22 @@ export class AuroraSessionStore implements SessionStore {
           "per FR-4a.",
       );
     }
+    if (!opts.clusterArn || typeof opts.clusterArn !== "string") {
+      throw new AuroraSessionStoreError(
+        "load",
+        "AuroraSessionStore: clusterArn is required and must be a non-empty string. " +
+          "Wire DB_CLUSTER_ARN in terraform/modules/app/agentcore-flue/main.tf and " +
+          "thread it through to the construction site.",
+      );
+    }
+    if (!opts.secretArn || typeof opts.secretArn !== "string") {
+      throw new AuroraSessionStoreError(
+        "load",
+        "AuroraSessionStore: secretArn is required and must be a non-empty string. " +
+          "Wire DB_SECRET_ARN in terraform/modules/app/agentcore-flue/main.tf and " +
+          "thread it through to the construction site.",
+      );
+    }
     this.tenantId = opts.tenantId;
     this.clusterArn = opts.clusterArn;
     this.secretArn = opts.secretArn;
@@ -111,9 +127,15 @@ export class AuroraSessionStore implements SessionStore {
   }
 
   async save(id: string, data: SessionData): Promise<void> {
+    // Note on `updated_at`: Flue saves session state on every agent-loop
+    // tick, which can be many writes per user-visible turn. We deliberately
+    // do NOT bump `threads.updated_at` here — that column drives the admin
+    // UI's "last activity" sort, and a Flue tick isn't a user-facing thread
+    // event. If we ever need a runtime-state freshness signal, add a
+    // `session_updated_at` column instead.
     const sql =
       "UPDATE threads " +
-      "SET session_data = CAST(:session_data AS jsonb), updated_at = NOW() " +
+      "SET session_data = CAST(:session_data AS jsonb) " +
       "WHERE id = CAST(:thread_id AS uuid) " +
       "AND tenant_id = CAST(:tenant_id AS uuid)";
 
@@ -194,8 +216,9 @@ export class AuroraSessionStore implements SessionStore {
     const raw = cell.stringValue;
     if (!raw) return null;
 
+    let parsed: unknown;
     try {
-      return JSON.parse(raw) as SessionData;
+      parsed = JSON.parse(raw);
     } catch (err) {
       throw new AuroraSessionStoreError(
         "load",
@@ -203,14 +226,21 @@ export class AuroraSessionStore implements SessionStore {
         err,
       );
     }
+    // Defensive guard: if some out-of-band writer stored the literal jsonb
+    // value `null` (vs SQL NULL), JSON.parse returns the JS null and the
+    // caller would otherwise see it as a valid SessionData of null shape.
+    // Treat it the same as "no session yet" so Flue starts fresh.
+    if (parsed === null) return null;
+    return parsed as SessionData;
   }
 
   async delete(id: string): Promise<void> {
     // Clear session_data without removing the thread row — message history,
     // assignments, and labels all stay so the admin UI's thread view
     // continues to render. Flue can re-save() if it resumes the thread.
+    // Same `updated_at` rationale as save(): runtime state, not user-facing.
     const sql =
-      "UPDATE threads SET session_data = NULL, updated_at = NOW() " +
+      "UPDATE threads SET session_data = NULL " +
       "WHERE id = CAST(:thread_id AS uuid) " +
       "AND tenant_id = CAST(:tenant_id AS uuid)";
 

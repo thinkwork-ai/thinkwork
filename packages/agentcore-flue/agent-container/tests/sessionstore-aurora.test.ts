@@ -171,6 +171,28 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
         }),
     ).toThrow(/tenantId/i);
   });
+
+  it("throws when clusterArn is empty (Terraform comment promises this)", () => {
+    expect(
+      () =>
+        new AuroraSessionStore({
+          tenantId: TENANT_A,
+          clusterArn: "",
+          secretArn: SECRET_ARN,
+        }),
+    ).toThrow(/clusterArn/i);
+  });
+
+  it("throws when secretArn is empty", () => {
+    expect(
+      () =>
+        new AuroraSessionStore({
+          tenantId: TENANT_A,
+          clusterArn: CLUSTER_ARN,
+          secretArn: "",
+        }),
+    ).toThrow(/secretArn/i);
+  });
 });
 
 describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
@@ -279,6 +301,24 @@ describe("AuroraSessionStore — load returns null for missing rows", () => {
     const loaded = await store.load(THREAD_S);
     expect(loaded).toBeNull();
   });
+
+  it("treats the jsonb literal `null` as 'no session yet' (not as a SessionData of null shape)", async () => {
+    // Some out-of-band writer could store the jsonb literal `null` (vs SQL
+    // NULL). RDS Data API returns it as the string "null", which JSON.parse
+    // resolves to JS null. Without the defensive guard, the caller would
+    // see a non-null cell pass through and try to access SessionData fields
+    // on a null reference. The guard maps it back to "no session yet".
+    RDS.on(ExecuteStatementCommand).resolves({
+      records: [[{ stringValue: "null" }]],
+    });
+    const store = new AuroraSessionStore({
+      tenantId: TENANT_A,
+      clusterArn: CLUSTER_ARN,
+      secretArn: SECRET_ARN,
+    });
+    const loaded = await store.load(THREAD_S);
+    expect(loaded).toBeNull();
+  });
 });
 
 describe("AuroraSessionStore.delete", () => {
@@ -302,6 +342,34 @@ describe("AuroraSessionStore.delete", () => {
     expect(lastSql).toMatch(/UPDATE threads/);
     expect(lastSql).toMatch(/SET session_data\s*=\s*NULL/);
     expect(lastSql).not.toMatch(/DELETE FROM threads/);
+  });
+
+  it("includes tenant_id in the WHERE predicate (FR-4a parity with save/load)", async () => {
+    let lastSql = "";
+    let lastTenantParam: string | null = null;
+    RDS.on(ExecuteStatementCommand).callsFake((input) => {
+      lastSql = (input as { sql?: string }).sql ?? "";
+      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+        name?: string;
+        value?: { stringValue?: string };
+      }>;
+      lastTenantParam =
+        params.find((p) => p.name === "tenant_id")?.value?.stringValue ?? null;
+      return { numberOfRecordsUpdated: 1 };
+    });
+
+    const store = new AuroraSessionStore({
+      tenantId: TENANT_A,
+      clusterArn: CLUSTER_ARN,
+      secretArn: SECRET_ARN,
+    });
+    await store.delete(THREAD_S);
+
+    // A future refactor that drops the predicate would erase another
+    // tenant's session_data — this assertion locks the predicate in
+    // place even if the surrounding SQL changes.
+    expect(lastSql).toMatch(/WHERE\s+id\s*=\s*CAST\(:thread_id\s+AS\s+uuid\)\s+AND\s+tenant_id\s*=\s*CAST\(:tenant_id\s+AS\s+uuid\)/);
+    expect(lastTenantParam).toBe(TENANT_A);
   });
 });
 
