@@ -347,7 +347,8 @@ jobs:
               --query "agentRuntimes[?agentRuntimeName=='${RUNTIME_NAME}'].agentRuntimeId | [0]" \
               --output text 2>/dev/null || echo "")
           fi
-          ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-role"
+          # Flue's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
+          ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-flue-role"
           if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
             echo "Creating Flue AgentCore runtime $RUNTIME_NAME with $NEW_IMAGE"
             RUNTIME_ID=$(aws bedrock-agentcore-control create-agent-runtime \

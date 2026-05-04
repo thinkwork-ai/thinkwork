@@ -86,7 +86,8 @@ create_flue_runtime() {
     exit 2
   fi
 
-  local role_arn="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-role"
+  # Flue's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
+  local role_arn="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-flue-role"
   echo "Creating ${RUNTIME} AgentCore runtime ${runtime_name} with ${IMAGE}"
   runtime_id=$(aws bedrock-agentcore-control create-agent-runtime \
     --region "$REGION" \

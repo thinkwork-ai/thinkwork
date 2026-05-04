@@ -203,9 +203,9 @@ module "api" {
   api_auth_secret                     = var.api_auth_secret
   db_password                         = var.db_password
   agentcore_function_name             = module.agentcore.agentcore_function_name
-  agentcore_flue_function_name        = module.agentcore.agentcore_flue_function_name
+  agentcore_flue_function_name        = module.agentcore_flue.flue_function_name
   agentcore_function_arn              = module.agentcore.agentcore_function_arn
-  agentcore_flue_function_arn         = module.agentcore.agentcore_flue_function_arn
+  agentcore_flue_function_arn         = module.agentcore_flue.flue_function_arn
   hindsight_endpoint                  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                 = module.agentcore_memory.memory_id
   memory_engine                       = local.resolved_memory_engine
@@ -275,6 +275,52 @@ module "agentcore" {
   # broke terraform apply on every merge since #389).
   api_endpoint    = module.api.api_endpoint
   api_auth_secret = var.api_auth_secret
+}
+
+################################################################################
+# AgentCore Flue — Plan §005 U2 splits the Flue Lambda + log group + IAM role
+# + event-invoke config out of the Strands `agentcore-runtime` module into a
+# dedicated module so Flue can carry its own permissions surface independently.
+# The shared ECR repo and async DLQ stay with `module.agentcore` and are
+# injected here.
+################################################################################
+
+module "agentcore_flue" {
+  source = "../app/agentcore-flue"
+
+  stage       = var.stage
+  account_id  = var.account_id
+  region      = var.region
+  bucket_name = module.s3.bucket_name
+
+  ecr_repository_url = module.agentcore.ecr_repository_url
+  async_dlq_arn      = module.agentcore.agentcore_async_dlq_arn
+
+  hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id = module.agentcore_memory.memory_id
+  memory_engine       = local.resolved_memory_engine
+
+  api_endpoint    = module.api.api_endpoint
+  api_auth_secret = var.api_auth_secret
+}
+
+# Plan §005 U2 — cross-module state migration. The Flue resources moved from
+# `module.agentcore` to `module.agentcore_flue`; the underlying AWS resource
+# attributes (function_name, log group name, ARN) are unchanged from U1, so
+# this is pure state-address realignment without destroy+create.
+moved {
+  from = module.agentcore.aws_cloudwatch_log_group.agentcore_flue
+  to   = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
+}
+
+moved {
+  from = module.agentcore.aws_lambda_function.agentcore_flue
+  to   = module.agentcore_flue.aws_lambda_function.agentcore_flue
+}
+
+moved {
+  from = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_flue
+  to   = module.agentcore_flue.aws_lambda_function_event_invoke_config.agentcore_flue
 }
 
 module "crons" {

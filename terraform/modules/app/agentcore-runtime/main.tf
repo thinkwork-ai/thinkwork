@@ -275,15 +275,6 @@ resource "aws_cloudwatch_log_group" "agentcore" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "agentcore_flue" {
-  name              = "/thinkwork/${var.stage}/agentcore-flue"
-  retention_in_days = 30
-
-  tags = {
-    Name = "thinkwork-${var.stage}-agentcore-flue-logs"
-  }
-}
-
 ################################################################################
 # Lambda Container Image
 ################################################################################
@@ -318,37 +309,6 @@ resource "aws_lambda_function" "agentcore" {
 
   tags = {
     Name = "thinkwork-${var.stage}-agentcore"
-  }
-}
-
-resource "aws_lambda_function" "agentcore_flue" {
-  function_name = "thinkwork-${var.stage}-agentcore-flue"
-  role          = aws_iam_role.agentcore.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.agentcore.repository_url}:flue-latest"
-  timeout       = 900
-  memory_size   = 2048
-
-  environment {
-    variables = {
-      PORT                   = "8080"
-      AWS_LWA_PORT           = "8080"
-      AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
-      AGENTCORE_FILES_BUCKET = var.bucket_name
-      MEMORY_ENGINE          = var.memory_engine
-      MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
-      THINKWORK_API_URL      = var.api_endpoint
-      API_AUTH_SECRET        = var.api_auth_secret
-    }
-  }
-
-  logging_config {
-    log_group  = aws_cloudwatch_log_group.agentcore_flue.name
-    log_format = "Text"
-  }
-
-  tags = {
-    Name = "thinkwork-${var.stage}-agentcore-flue"
   }
 }
 
@@ -417,18 +377,6 @@ resource "aws_lambda_function_event_invoke_config" "agentcore" {
   }
 }
 
-resource "aws_lambda_function_event_invoke_config" "agentcore_flue" {
-  function_name                = aws_lambda_function.agentcore_flue.function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.agentcore_async_dlq.arn
-    }
-  }
-}
-
 ################################################################################
 # Outputs
 ################################################################################
@@ -453,16 +401,6 @@ output "agentcore_function_arn" {
   value       = aws_lambda_function.agentcore.arn
 }
 
-output "agentcore_flue_function_name" {
-  description = "Flue AgentCore Lambda function name (for direct SDK invoke)"
-  value       = aws_lambda_function.agentcore_flue.function_name
-}
-
-output "agentcore_flue_function_arn" {
-  description = "Flue AgentCore Lambda function ARN"
-  value       = aws_lambda_function.agentcore_flue.arn
-}
-
 output "agentcore_async_dlq_arn" {
   description = "SQS queue ARN that catches failed kind=run_skill async invokes"
   value       = aws_sqs_queue.agentcore_async_dlq.arn
@@ -473,26 +411,9 @@ output "agentcore_async_dlq_url" {
   value       = aws_sqs_queue.agentcore_async_dlq.url
 }
 
-################################################################################
-# Plan §005 U1 — `agentcore-pi` → `agentcore-flue` rename. State migration only;
-# the underlying Lambda function_name attribute also changes from
-# `thinkwork-${stage}-agentcore-pi` to `thinkwork-${stage}-agentcore-flue`,
-# which is a force-replace at AWS. The `moved` blocks below keep Terraform
-# state aligned across the address change so existing tags, IAM bindings, and
-# log-group references migrate cleanly without an unrelated destroy/create.
-################################################################################
-
-moved {
-  from = aws_cloudwatch_log_group.agentcore_pi
-  to   = aws_cloudwatch_log_group.agentcore_flue
-}
-
-moved {
-  from = aws_lambda_function.agentcore_pi
-  to   = aws_lambda_function.agentcore_flue
-}
-
-moved {
-  from = aws_lambda_function_event_invoke_config.agentcore_pi
-  to   = aws_lambda_function_event_invoke_config.agentcore_flue
-}
+# Plan §005 U1 → U2 — the `agentcore_flue` resources that previously lived here
+# (renamed from `agentcore_pi` in U1) moved out to `../agentcore-flue/main.tf` in
+# U2. Cross-module state migration is declared in `terraform/modules/thinkwork/main.tf`
+# via `moved {}` blocks at the parent composition layer. The U1 in-module `moved`
+# blocks (`agentcore_pi` → `agentcore_flue`) were applied on the U1 deploy and
+# are no longer needed here — the resources have left the module entirely.
