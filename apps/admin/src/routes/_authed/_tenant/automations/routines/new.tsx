@@ -6,7 +6,9 @@ import {
   CreateRoutineMutation,
   PlanRoutineDraftMutation,
   RoutineRecipeCatalogQuery,
+  TenantCredentialsQuery,
 } from "@/lib/graphql-queries";
+import { TenantCredentialStatus } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -24,6 +26,7 @@ import {
   hasValidationErrors,
   validationErrorsFromSteps,
   valuesFromSteps,
+  type RoutineCredentialOption,
   type RoutineConfigStep,
 } from "@/components/routines/RoutineStepConfigEditor";
 
@@ -50,6 +53,14 @@ function NewRoutinePage() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [credentialResult] = useQuery({
+    query: TenantCredentialsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      status: TenantCredentialStatus.Active,
+    },
+    pause: !tenantId,
+  });
 
   useBreadcrumbs([
     { label: "Routines", href: "/automations/routines" },
@@ -59,6 +70,10 @@ function NewRoutinePage() {
   const recipes = useMemo(
     () => catalogResult.data?.routineRecipeCatalog ?? [],
     [catalogResult.data?.routineRecipeCatalog],
+  );
+  const credentialOptions = useMemo(
+    () => credentialOptionsFromQuery(credentialResult.data?.tenantCredentials),
+    [credentialResult.data?.tenantCredentials],
   );
   const steps = draft?.steps ?? [];
   const validationErrors = useMemo(
@@ -174,6 +189,7 @@ function NewRoutinePage() {
     (recipe: RoutineRecipeCatalogItem) => {
       const nextStep = stepFromRecipe(recipe, steps);
       replaceSteps([...steps, nextStep]);
+      return nextStep.nodeId;
     },
     [replaceSteps, steps],
   );
@@ -291,6 +307,7 @@ function NewRoutinePage() {
         steps={steps}
         recipes={recipes}
         fieldValues={fieldValues}
+        credentialOptions={credentialOptions}
         onFieldChange={(key, value) =>
           setFieldValues((current) => ({ ...current, [key]: value }))
         }
@@ -303,6 +320,27 @@ function NewRoutinePage() {
       />
     </div>
   );
+}
+
+function credentialOptionsFromQuery(
+  credentials:
+    | Array<{
+        id: string;
+        slug: string;
+        displayName: string;
+        kind: string;
+        status?: string | null;
+      }>
+    | null
+    | undefined,
+): RoutineCredentialOption[] {
+  return (credentials ?? []).map((credential) => ({
+    id: credential.id,
+    slug: credential.slug,
+    displayName: credential.displayName,
+    kind: credential.kind,
+    status: credential.status,
+  }));
 }
 
 type RoutineDraft = {
