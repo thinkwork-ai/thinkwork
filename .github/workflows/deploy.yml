@@ -348,8 +348,32 @@ jobs:
               --output text 2>/dev/null || echo "")
           fi
           # Flue's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
-          ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-flue-role"
+          # The role is provisioned by terraform module
+          # `terraform/modules/app/agentcore-flue/main.tf` (resource
+          # `aws_iam_role.agentcore_flue`). On the FIRST deploy of this stage
+          # after the U2 module landed, terraform-apply creates the role —
+          # but build-container runs BEFORE terraform-apply in the same
+          # workflow run, so the role does not yet exist when this step
+          # fires. The fallback below detects the missing role and reuses
+          # the existing runtime's roleArn (which currently points at the
+          # shared Strands role); the next deploy after terraform-apply
+          # creates the role will pick up the canonical Flue role on the
+          # update path. New stages where the role doesn't exist AND no
+          # runtime exists yet (greenfield) must run terraform-apply once
+          # before this step can create the runtime.
+          DESIRED_ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-flue-role"
+          ROLE_ARN="$DESIRED_ROLE_ARN"
+          if ! aws iam get-role \
+            --role-name "thinkwork-${{ env.STAGE }}-agentcore-flue-role" \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            ROLE_ARN=""  # signal "use existing / skip creation"
+            echo "Flue IAM role not yet provisioned; will fall back to current runtime's role on the update path. Greenfield create path will fail loudly."
+          fi
           if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
+            if [ -z "$ROLE_ARN" ]; then
+              echo "Cannot create greenfield Flue runtime: $DESIRED_ROLE_ARN does not exist. Run terraform-apply for the agentcore-flue module first to provision it, then retry."
+              exit 1
+            fi
             echo "Creating Flue AgentCore runtime $RUNTIME_NAME with $NEW_IMAGE"
             RUNTIME_ID=$(aws bedrock-agentcore-control create-agent-runtime \
               --region ${{ env.AWS_REGION }} \
@@ -376,7 +400,13 @@ jobs:
             # every update so an existing dev runtime created in U1 against
             # the shared `agentcore-role` reconciles to the canonical Flue
             # role. Reading roleArn from CURRENT (the prior pattern) preserved
-            # the stale role indefinitely.
+            # the stale role indefinitely. Fallback: when the new role does
+            # not exist yet (terraform-apply hasn't run on this stage), keep
+            # the runtime's CURRENT role so the update succeeds anyway.
+            if [ -z "$ROLE_ARN" ]; then
+              ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
+              echo "Reusing existing role: $ROLE_ARN (canonical Flue role will be adopted on the next deploy after terraform-apply creates it)"
+            fi
             NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
             SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
             aws bedrock-agentcore-control update-agent-runtime \
