@@ -67,6 +67,14 @@ afterEach(() => {
  * full event vocabulary (see U13 for the typed-parse follow-up). The
  * connector only reads the `result` discriminator, so the test fixture
  * stays minimal and focused on what `consumeStream` actually inspects.
+ *
+ * SINGLE-USE: the returned `stream` is an async generator that can be
+ * iterated exactly once. Tests that issue more than one
+ * `InvokeCodeInterpreterCommand` against a single mock registration MUST
+ * use `.callsFake(() => streamEvents([...]))` (via `streamFactory` below)
+ * so each call mints a fresh generator. Using `.resolves(streamEvents(...))`
+ * with multi-invoke tests silently degrades to consumeStream defaults
+ * (exitCode:0, stdout:"") on the 2nd+ call.
  */
 function streamEvents(
 	events: Array<Record<string, unknown>>,
@@ -76,6 +84,18 @@ function streamEvents(
 			for (const ev of events) yield ev;
 		})() as unknown as InvokeCodeInterpreterCommandOutput["stream"],
 	};
+}
+
+/**
+ * Returns a thunk that mints a fresh `streamEvents(...)` response on every
+ * call. Use with `.callsFake(streamFactory([...]))` for any test that
+ * issues multiple `InvokeCodeInterpreterCommand` invocations against the
+ * same mock registration.
+ */
+function streamFactory(
+	events: Array<Record<string, unknown>>,
+): () => Partial<InvokeCodeInterpreterCommandOutput> {
+	return () => streamEvents(events);
 }
 
 describe("agentcoreCodeInterpreter — exec (R1, happy path)", () => {
@@ -246,8 +266,10 @@ describe("agentcoreCodeInterpreter — writeFile (R2, happy path + wire shape)",
 
 		const client = new BedrockAgentCoreClient({ region: "us-east-1" });
 		const api = new AgentcoreCodeInterpreterApi(client, INTERPRETER_ID, 300);
+		// Matches readFile's regex specificity (path + exitCode + stderr)
+		// so both verbs verify the same connector error contract.
 		await expect(api.writeFile("/tmp/forbidden", "data")).rejects.toThrow(
-			/writeFile failed.*permission denied/,
+			/writeFile failed for \/tmp\/forbidden: exitCode=1.*permission denied/,
 		);
 	});
 });
@@ -459,12 +481,19 @@ describe("agentcoreCodeInterpreter — factory + SessionEnv shape (integration)"
 });
 
 describe("agentcoreCodeInterpreter — session lifecycle (regression)", () => {
-	it("only calls StartCodeInterpreterSession once across multiple operations on the same SessionEnv", async () => {
-		acMock.on(InvokeCodeInterpreterCommand).resolves(
-			streamEvents([
+	it("only calls StartCodeInterpreterSession once across multiple operations AND parses each consumeStream response (regression: shared async generator must not exhaust)", async () => {
+		// `.callsFake(streamFactory(...))` mints a fresh async generator per
+		// invocation. Using `.resolves(streamEvents(...))` would share one
+		// already-consumed generator across all 3 calls — only the first
+		// would parse the configured response, calls 2-3 would silently
+		// fall through to consumeStream defaults (stdout:"", exitCode:0).
+		// Asserting all 3 returns equal the non-default sentinel
+		// {stdout:"ok\n", exitCode:0} guards that regression.
+		acMock.on(InvokeCodeInterpreterCommand).callsFake(
+			streamFactory([
 				{
 					result: {
-						structuredContent: { exitCode: 0, stdout: "", stderr: "" },
+						structuredContent: { exitCode: 0, stdout: "ok\n", stderr: "" },
 					},
 				},
 			]),
@@ -472,12 +501,33 @@ describe("agentcoreCodeInterpreter — session lifecycle (regression)", () => {
 
 		const client = new BedrockAgentCoreClient({ region: "us-east-1" });
 		const api = new AgentcoreCodeInterpreterApi(client, INTERPRETER_ID, 300);
-		await api.exec("true");
-		await api.exec("true");
-		await api.exec("true");
+		const r1 = await api.exec("true");
+		const r2 = await api.exec("true");
+		const r3 = await api.exec("true");
+
+		const sentinel = { stdout: "ok\n", stderr: "", exitCode: 0 };
+		expect(r1).toEqual(sentinel);
+		expect(r2).toEqual(sentinel);
+		expect(r3).toEqual(sentinel);
 
 		const startCalls = acMock.commandCalls(StartCodeInterpreterSessionCommand);
 		expect(startCalls).toHaveLength(1);
+		const invokeCalls = acMock.commandCalls(InvokeCodeInterpreterCommand);
+		expect(invokeCalls).toHaveLength(3);
+	});
+
+	it("ensureSession throws when StartCodeInterpreterSession returns an empty response (defensive contract pin)", async () => {
+		// Override the beforeEach default so Start returns `{}` with no
+		// sessionId. The connector's defensive throw at
+		// agentcore-codeinterpreter.ts:129-133 should fire on the first
+		// operation that triggers ensureSession.
+		acMock.on(StartCodeInterpreterSessionCommand).resolves({});
+
+		const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+		const api = new AgentcoreCodeInterpreterApi(client, INTERPRETER_ID, 300);
+		await expect(api.exec("true")).rejects.toThrow(
+			/did not return a sessionId from StartCodeInterpreterSession/,
+		);
 	});
 
 	it("forwards env exports as a `export K=V && cmd` shell prefix on exec()", async () => {
