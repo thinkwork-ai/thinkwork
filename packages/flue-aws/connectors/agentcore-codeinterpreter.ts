@@ -24,9 +24,11 @@
  */
 import {
 	BedrockAgentCoreClient,
+	type CodeInterpreterStreamOutput,
 	InvokeCodeInterpreterCommand,
 	StartCodeInterpreterSessionCommand,
 	StopCodeInterpreterSessionCommand,
+	type ToolResultStructuredContent,
 } from "@aws-sdk/client-bedrock-agentcore";
 import type {
 	FileStat,
@@ -61,16 +63,27 @@ export interface AgentcoreCodeInterpreterOptions {
 
 // ─── Stream parsing ─────────────────────────────────────────────────────────
 
+/**
+ * Accumulated parse of a single AgentCore Code Interpreter stream.
+ *
+ * `structured` is the SDK's `ToolResultStructuredContent` (typed:
+ * `stdout` / `stderr` / `exitCode` / `taskId` / `taskStatus` /
+ * `executionTime`) intersected with optional `files` and `content`
+ * fields the runtime carries for `readFiles` / `listFiles` invocations
+ * but the SDK type does not formalize. The intersection lets downstream
+ * `readFile` / `readdir` read those non-SDK fields without an additional
+ * cast on the typed envelope.
+ */
 interface ParsedStreamResult {
 	stdout: string;
 	stderr: string;
 	exitCode: number;
-	structured: Record<string, unknown> | undefined;
+	structured: (ToolResultStructuredContent & { files?: unknown; content?: unknown }) | undefined;
 	textBlocks: string[];
 }
 
 async function consumeStream(
-	stream: AsyncIterable<unknown> | undefined,
+	stream: AsyncIterable<CodeInterpreterStreamOutput> | undefined,
 ): Promise<ParsedStreamResult> {
 	const out: ParsedStreamResult = {
 		stdout: "",
@@ -82,22 +95,38 @@ async function consumeStream(
 	if (!stream) return out;
 
 	for await (const event of stream) {
-		const e = event as Record<string, unknown>;
-		const result = e.result as Record<string, unknown> | undefined;
-		if (!result) continue;
+		// Discriminated-union narrowing: `CodeInterpreterStreamOutput` is a
+		// union of `ResultMember`, eight exception members
+		// (AccessDenied/Conflict/InternalServer/ResourceNotFound/
+		// ServiceQuotaExceeded/Throttling/Validation), and `$UnknownMember`.
+		// `ResultMember` is the only variant the connector inspects today;
+		// other variants are silently skipped to preserve current behavior.
+		// Surfacing exception-member events as caller-visible errors is a
+		// future enhancement, intentionally out of scope for U13.
+		if (!("result" in event) || event.result === undefined) continue;
+		const result = event.result; // narrowed to `CodeInterpreterResult`
 
-		const sc = result.structuredContent as Record<string, unknown> | undefined;
+		// `structuredContent` is the SDK's typed envelope
+		// (`ToolResultStructuredContent` — `stdout`, `stderr`, `exitCode`,
+		// `taskId`, `taskStatus`, `executionTime`). Runtime payloads from
+		// `readFiles` / `listFiles` carry additional `files` / `content`
+		// fields that the SDK type does not formalize; `ParsedStreamResult.
+		// structured` widens to a `ToolResultStructuredContent & { files?:
+		// unknown; content?: unknown }` intersection so downstream
+		// `readFile` / `readdir` can read them with a single defensive cast
+		// at the read site (no boundary cast needed here).
+		const sc = result.structuredContent;
 		if (sc) {
 			out.structured = sc;
-			if (typeof sc.stdout === "string") out.stdout += sc.stdout;
-			if (typeof sc.stderr === "string") out.stderr += sc.stderr;
-			if (typeof sc.exitCode === "number") out.exitCode = sc.exitCode;
+			out.stdout += sc.stdout ?? "";
+			out.stderr += sc.stderr ?? "";
+			if (sc.exitCode !== undefined) out.exitCode = sc.exitCode;
 		}
 
-		const content = result.content as Array<Record<string, unknown>> | undefined;
+		const content = result.content;
 		if (Array.isArray(content)) {
 			for (const block of content) {
-				if (typeof block.text === "string") {
+				if (block.text !== undefined) {
 					out.textBlocks.push(block.text);
 					if (!sc) out.stdout += block.text;
 				}
@@ -160,7 +189,7 @@ class AgentcoreCodeInterpreterApi implements SandboxApi {
 				arguments: args as never,
 			}),
 		);
-		return consumeStream(response.stream as AsyncIterable<unknown> | undefined);
+		return consumeStream(response.stream);
 	}
 
 	// ─── SessionEnv core ────────────────────────────────────────────────────
