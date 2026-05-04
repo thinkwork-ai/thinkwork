@@ -331,6 +331,39 @@ describe("invokePythonTask — edge cases", () => {
     expect(invokeCallArg.arguments.code).not.toContain("FORBIDDEN_KEY");
   });
 
+  it("injects the current state input into TypeScript code as input", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({ stdout: "ok", exitCode: 0 }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    await invokePythonTask(
+      {
+        ...baseInput,
+        language: "typescript",
+        code: "console.log(input.order_id)",
+        input: { order_id: "order-123" },
+      },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+      },
+    );
+
+    const invokeCallArg = (
+      mockAgentCoreSend.mock.calls[1][0] as {
+        input: { arguments: { code: string; language: string } };
+      }
+    ).input;
+    expect(invokeCallArg.arguments.language).toBe("typescript");
+    expect(invokeCallArg.arguments.code).toContain("const input");
+    expect(invokeCallArg.arguments.code).toContain("order-123");
+  });
+
   it("injects resolved credential bindings into TypeScript code as credentials", async () => {
     mockAgentCoreSend
       .mockResolvedValueOnce(defaultStartResponse())

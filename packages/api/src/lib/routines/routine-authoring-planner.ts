@@ -5,6 +5,9 @@ import {
   type AslState,
   type RecipeConfigField,
 } from "./recipe-catalog.js";
+import pdiFuelOrderWorkflow from "./n8n/pdi-fuel-order-fixture.json";
+import { mapN8nWorkflowToRoutinePlan } from "./n8n/workflow-mapper.js";
+import type { N8nWorkflow } from "./n8n/workflow-types.js";
 
 export interface RoutinePlanInput {
   name: string;
@@ -26,6 +29,7 @@ export interface RoutinePlan {
   title: string;
   description: string;
   steps: RoutinePlanStep[];
+  metadata?: Record<string, unknown>;
 }
 
 export type RoutineDefinitionKind = "recipe_graph" | "weather_email";
@@ -88,6 +92,17 @@ export function planRoutineFromIntent(
   }
 
   const normalized = intent.toLowerCase();
+  if (isPdiFuelOrderIntent(input.name, intent)) {
+    const mapped = mapN8nWorkflowToRoutinePlan(
+      pdiFuelOrderWorkflow as unknown as N8nWorkflow,
+      {
+        name: input.name.trim() || "PDI Fuel Order",
+      },
+    );
+    if (!mapped.ok) return mapped;
+    return buildRoutineArtifactsFromPlan(mapped.plan);
+  }
+
   if (!normalized.includes("weather") || !normalized.includes("austin")) {
     return unsupported(
       "This authoring MVP currently supports Austin weather email routines. Try: check the weather in Austin and email it to name@example.com.",
@@ -292,6 +307,7 @@ function artifactsForPlan(plan: RoutinePlan): RoutinePlanResult {
       stepManifest: {
         definition: {
           kind: plan.kind,
+          ...(plan.metadata ? { metadata: plan.metadata } : {}),
           steps: plan.steps.map((step) => ({
             nodeId: step.nodeId,
             recipeId: step.recipeId,
@@ -452,6 +468,7 @@ function artifactsForGraphEdit(
       stepManifest: {
         definition: {
           kind: finalPlan.kind,
+          ...(finalPlan.metadata ? { metadata: finalPlan.metadata } : {}),
           graph: {
             startNodeId,
             nodes: graph.nodes,
@@ -625,6 +642,7 @@ function planFromManifestDefinition(
     kind: "recipe_graph",
     title: routineName,
     description: "",
+    metadata: normalizeJsonObject(definition.metadata),
     steps,
   });
 
@@ -878,6 +896,11 @@ function weatherEmailRecipient(plan: RoutinePlan): string | null {
   const to = emailStep?.args.to;
   if (Array.isArray(to) && typeof to[0] === "string") return to[0];
   return null;
+}
+
+function isPdiFuelOrderIntent(name: string, intent: string): boolean {
+  const haystack = `${name} ${intent}`.toLowerCase();
+  return haystack.includes("pdi") && haystack.includes("fuel");
 }
 
 function sameJson(a: unknown, b: unknown): boolean {
