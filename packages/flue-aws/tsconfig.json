@@ -2,11 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
-    "baseUrl": ".",
-    "paths": {
-      "@flue/sdk/sandbox": ["./src/flue-types.ts"]
-    }
+    "rootDir": "."
   },
   "include": ["src/**/*.ts", "connectors/**/*.ts"],
   "exclude": ["node_modules", "dist"]

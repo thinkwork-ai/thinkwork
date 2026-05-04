@@ -34,7 +34,7 @@ import type {
 	SandboxFactory,
 	SessionEnv,
 	ShellResult,
-} from "@flue/sdk/sandbox";
+} from "../src/flue-types.js";
 
 // ─── Options ────────────────────────────────────────────────────────────────
 

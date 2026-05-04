@@ -16,6 +16,7 @@
     "@mariozechner/pi-agent-core": "0.70.2",
     "@mariozechner/pi-ai": "0.70.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@thinkwork/flue-aws": "workspace:*",
     "typebox": "^1.1.33"
   },
   "devDependencies": {
