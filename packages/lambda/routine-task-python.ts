@@ -42,12 +42,14 @@ import {
   StopCodeInterpreterSessionCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
-import { and, eq, inArray, or } from "drizzle-orm";
-import { getDb, schema } from "@thinkwork/database-pg";
+  resolveRoutineCredentialBindings,
+  type CredentialBindingInput,
+  type ResolveRoutineCredentialBindingsInput,
+  type ResolvedRoutineCredentials,
+} from "./routine-credential-resolver.js";
+import { createRoutineOutputRedactor } from "./routine-output-redactor.js";
 import {
   postStepCallback,
   type StepCallbackEnv,
@@ -82,12 +84,6 @@ export interface PythonTaskInput {
   timeoutSeconds?: number;
 }
 
-export interface CredentialBindingInput {
-  alias: string;
-  credentialId: string;
-  requiredFields?: string[];
-}
-
 export interface PythonTaskOptions {
   /** AgentCore Code Interpreter id; resolved at handler entry from
    * `SANDBOX_INTERPRETER_ID`. Tests inject directly. */
@@ -103,10 +99,8 @@ export interface PythonTaskOptions {
    * Task — see routine-step-callback-client.ts. */
   stepCallback?: StepCallbackEnv;
   credentialResolver?: (
-    tenantId: string,
-    bindings: CredentialBindingInput[],
-    secretsManager: SecretsManagerClient,
-  ) => Promise<Record<string, Record<string, unknown>>>;
+    input: ResolveRoutineCredentialBindingsInput,
+  ) => Promise<ResolvedRoutineCredentials>;
   agentCoreClient?: BedrockAgentCoreClient;
   s3Client?: S3Client;
   secretsManagerClient?: SecretsManagerClient;
@@ -138,11 +132,6 @@ const _UUID_RE =
 /** ASL state names are bounded to printable ASCII without `/` per Step
  * Functions docs; reject anything that could path-traverse the S3 key. */
 const _NODE_ID_RE = /^[A-Za-z0-9_.-]{1,80}$/;
-const _CREDENTIAL_ALIAS_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const _UUID_HANDLE_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const { tenantCredentials } = schema;
 
 // Module-scope clients so warm Lambda invocations reuse the TCP pool.
 // requestTimeout caps each AWS API call so a stalled SFN/AgentCore
@@ -193,21 +182,6 @@ export async function invokePythonTask(
   const previewCap = input.previewCapBytes ?? DEFAULT_PREVIEW_CAP_BYTES;
   const sfnExecutionId = extractExecutionId(input.executionId);
   const keyPrefix = `${input.tenantId}/${sfnExecutionId}/${input.nodeId}`;
-  let credentials: Record<string, Record<string, unknown>>;
-  try {
-    credentials = await (
-      options.credentialResolver ?? resolveCredentialBindings
-    )(
-      input.tenantId,
-      Array.isArray(input.credentialBindings) ? input.credentialBindings : [],
-      secretsManager,
-    );
-  } catch (err) {
-    return failWith(
-      "credential_resolution_failed",
-      (err as Error).message ?? "unknown",
-    );
-  }
 
   // Step-callback fires before + after the sandbox invoke so the
   // run-detail UI sees the step transition `running → succeeded/failed`.
@@ -229,6 +203,35 @@ export async function invokePythonTask(
     });
   }
 
+  let resolvedCredentials: ResolvedRoutineCredentials;
+  try {
+    resolvedCredentials = await (
+      options.credentialResolver ?? resolveRoutineCredentialBindings
+    )({
+      tenantId: input.tenantId,
+      bindings: Array.isArray(input.credentialBindings)
+        ? input.credentialBindings
+        : [],
+      secretsManager,
+    });
+  } catch (err) {
+    const result = failWith(
+      "credential_resolution_failed",
+      (err as Error).message ?? "unknown",
+    );
+    await postTerminalStepCallback(input, {
+      stepCallback,
+      language,
+      startedAt,
+      result,
+    });
+    return result;
+  }
+  const redactor = createRoutineOutputRedactor([
+    resolvedCredentials.credentials,
+    resolvedCredentials.redactionValues,
+  ]);
+
   // ---- 1. Start session ------------------------------------------------
   let sessionId: string;
   try {
@@ -239,14 +242,31 @@ export async function invokePythonTask(
       }),
     );
     if (!start.sessionId) {
-      return failWith("sandbox_session_start_failed", "no sessionId returned");
+      const result = failWith(
+        "sandbox_session_start_failed",
+        "no sessionId returned",
+      );
+      await postTerminalStepCallback(input, {
+        stepCallback,
+        language,
+        startedAt,
+        result,
+      });
+      return result;
     }
     sessionId = start.sessionId;
   } catch (err) {
-    return failWith(
+    const result = failWith(
       "sandbox_session_start_failed",
       (err as Error).message ?? "unknown",
     );
+    await postTerminalStepCallback(input, {
+      stepCallback,
+      language,
+      startedAt,
+      result,
+    });
+    return result;
   }
 
   // ---- 2 + 3. Invoke + parse stream + 4. Stop --------------------------
@@ -262,7 +282,7 @@ export async function invokePythonTask(
       input.environment,
       envAllowlist,
       language,
-      credentials,
+      resolvedCredentials.credentials,
     );
     const invoke = await agentCore.send(
       new InvokeCodeInterpreterCommand({
@@ -277,14 +297,14 @@ export async function invokePythonTask(
     );
 
     const parsed = await parseStream(invoke);
-    stdout = parsed.stdout;
-    stderr = parsed.stderr;
+    stdout = redactor.redact(parsed.stdout);
+    stderr = redactor.redact(parsed.stderr);
     exitCode = parsed.exitCode;
     invokeErrorClass = parsed.errorClass;
-    invokeErrorMessage = parsed.errorMessage;
+    invokeErrorMessage = redactor.redact(parsed.errorMessage);
   } catch (err) {
     invokeErrorClass = "sandbox_invoke_failed";
-    invokeErrorMessage = (err as Error).message ?? "unknown";
+    invokeErrorMessage = redactor.redact((err as Error).message ?? "unknown");
     exitCode = -1;
   } finally {
     try {
@@ -305,15 +325,22 @@ export async function invokePythonTask(
   }
 
   if (invokeErrorClass) {
-    return {
+    const result: PythonTaskResult = {
       exitCode: -1,
       stdoutS3Uri: null,
       stderrS3Uri: null,
       stdoutPreview: "",
       truncated: false,
       errorClass: invokeErrorClass,
-      errorMessage: invokeErrorMessage,
+      errorMessage: redactor.redact(invokeErrorMessage),
     };
+    await postTerminalStepCallback(input, {
+      stepCallback,
+      language,
+      startedAt,
+      result,
+    });
+    return result;
   }
 
   // ---- 5. S3 offload ---------------------------------------------------
@@ -328,7 +355,7 @@ export async function invokePythonTask(
       new PutObjectCommand({
         Bucket: bucket,
         Key: stdoutKey,
-        Body: stdout,
+        Body: redactor.redact(stdout),
         ContentType: "text/plain; charset=utf-8",
       }),
     ),
@@ -336,7 +363,7 @@ export async function invokePythonTask(
       new PutObjectCommand({
         Bucket: bucket,
         Key: stderrKey,
-        Body: stderr,
+        Body: redactor.redact(stderr),
         ContentType: "text/plain; charset=utf-8",
       }),
     ),
@@ -348,18 +375,21 @@ export async function invokePythonTask(
     const reasons: string[] = [];
     if (!stdoutOk)
       reasons.push(
-        `stdout: ${(stdoutPut as PromiseRejectedResult).reason?.message ?? "unknown"}`,
+        `stdout: ${redactor.redact((stdoutPut as PromiseRejectedResult).reason?.message ?? "unknown")}`,
       );
     if (!stderrOk)
       reasons.push(
-        `stderr: ${(stderrPut as PromiseRejectedResult).reason?.message ?? "unknown"}`,
+        `stderr: ${redactor.redact((stderrPut as PromiseRejectedResult).reason?.message ?? "unknown")}`,
       );
     console.warn(
       `[routine-task-python] S3 offload partial failure for ${keyPrefix}: ${reasons.join("; ")}`,
     );
   }
 
-  const { preview, truncated } = trimPreview(stdout, previewCap);
+  const { preview, truncated } = trimPreview(
+    redactor.redact(stdout),
+    previewCap,
+  );
 
   const result: PythonTaskResult = {
     exitCode,
@@ -380,33 +410,12 @@ export async function invokePythonTask(
       : {}),
   };
 
-  // ---- step-callback: status=succeeded | failed -----------------------
-  // Recipe-aware status: a non-zero exitCode is a sandbox-side failure
-  // (user code threw). The SFN Task itself succeeded — its output
-  // includes errorClass/errorMessage. Surface as `failed` step so the
-  // run-detail UI can render the failure inline without waiting for SFN
-  // state-machine-level failure (which only fires if the recipe doesn't
-  // catch the non-zero exit).
-  if (stepCallback) {
-    const status: "succeeded" | "failed" =
-      result.exitCode === 0 && !result.errorClass ? "succeeded" : "failed";
-    await postStepCallback(stepCallback, {
-      tenantId: input.tenantId,
-      executionArn: input.executionId,
-      nodeId: input.nodeId,
-      recipeType: language,
-      status,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      stdoutS3Uri: result.stdoutS3Uri ?? undefined,
-      stderrS3Uri: result.stderrS3Uri ?? undefined,
-      stdoutPreview: result.stdoutPreview,
-      truncated: result.truncated,
-      errorJson: result.errorClass
-        ? { errorClass: result.errorClass, errorMessage: result.errorMessage }
-        : undefined,
-    });
-  }
+  await postTerminalStepCallback(input, {
+    stepCallback,
+    language,
+    startedAt,
+    result,
+  });
 
   return result;
 }
@@ -529,6 +538,41 @@ function errorEnvelopeToParsed(message: string | undefined): ParsedStream {
   };
 }
 
+async function postTerminalStepCallback(
+  input: PythonTaskInput,
+  args: {
+    stepCallback: StepCallbackEnv | undefined;
+    language: "python" | "typescript";
+    startedAt: string;
+    result: PythonTaskResult;
+  },
+): Promise<void> {
+  if (!args.stepCallback) return;
+  const status: "succeeded" | "failed" =
+    args.result.exitCode === 0 && !args.result.errorClass
+      ? "succeeded"
+      : "failed";
+  await postStepCallback(args.stepCallback, {
+    tenantId: input.tenantId,
+    executionArn: input.executionId,
+    nodeId: input.nodeId,
+    recipeType: args.language,
+    status,
+    startedAt: args.startedAt,
+    finishedAt: new Date().toISOString(),
+    stdoutS3Uri: args.result.stdoutS3Uri ?? undefined,
+    stderrS3Uri: args.result.stderrS3Uri ?? undefined,
+    stdoutPreview: args.result.stdoutPreview,
+    truncated: args.result.truncated,
+    errorJson: args.result.errorClass
+      ? {
+          errorClass: args.result.errorClass,
+          errorMessage: args.result.errorMessage,
+        }
+      : undefined,
+  });
+}
+
 /** Extract the SFN execution id (everything after the last `:` in the
  * execution ARN). Returns the full ARN if unparseable. */
 function extractExecutionId(executionArn: string): string {
@@ -594,123 +638,6 @@ function buildCodeWithEnvPrelude(
     prelude.trimEnd(),
     ...lines.slice(insertAt),
   ].join("\n");
-}
-
-async function resolveCredentialBindings(
-  tenantId: string,
-  bindings: CredentialBindingInput[],
-  secretsManager: SecretsManagerClient,
-): Promise<Record<string, Record<string, unknown>>> {
-  if (bindings.length === 0) return {};
-
-  const handles = bindings
-    .map((binding) => binding.credentialId)
-    .filter(Boolean);
-  if (handles.length === 0) return {};
-  const uuidHandles = handles.filter((handle) => _UUID_HANDLE_RE.test(handle));
-  const slugHandles = handles.filter((handle) => !_UUID_HANDLE_RE.test(handle));
-  const handleFilter =
-    uuidHandles.length > 0 && slugHandles.length > 0
-      ? or(
-          inArray(tenantCredentials.id, uuidHandles),
-          inArray(tenantCredentials.slug, slugHandles),
-        )
-      : uuidHandles.length > 0
-        ? inArray(tenantCredentials.id, uuidHandles)
-        : inArray(tenantCredentials.slug, slugHandles);
-  const rows = await getDb()
-    .select({
-      id: tenantCredentials.id,
-      tenant_id: tenantCredentials.tenant_id,
-      slug: tenantCredentials.slug,
-      display_name: tenantCredentials.display_name,
-      status: tenantCredentials.status,
-      secret_ref: tenantCredentials.secret_ref,
-    })
-    .from(tenantCredentials)
-    .where(and(eq(tenantCredentials.tenant_id, tenantId), handleFilter));
-
-  const byHandle = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) {
-    byHandle.set(row.id, row);
-    byHandle.set(row.slug, row);
-  }
-
-  const credentials: Record<string, Record<string, unknown>> = {};
-  const usedCredentialIds: string[] = [];
-  const seenAliases = new Set<string>();
-  for (const binding of bindings) {
-    const alias = String(binding.alias ?? "").trim();
-    if (!_CREDENTIAL_ALIAS_RE.test(alias)) {
-      throw new Error(
-        `Credential alias '${alias}' must be a safe code identifier`,
-      );
-    }
-    if (seenAliases.has(alias)) {
-      throw new Error(`Credential alias '${alias}' is declared more than once`);
-    }
-    seenAliases.add(alias);
-    const credential = byHandle.get(String(binding.credentialId ?? "").trim());
-    if (!credential) {
-      throw new Error(
-        `Credential '${binding.credentialId}' was not found for this tenant`,
-      );
-    }
-    if (credential.tenant_id !== tenantId || credential.status !== "active") {
-      throw new Error(
-        `Credential '${credential.display_name}' is not active for this tenant`,
-      );
-    }
-    const payload = await readCredentialSecret(
-      secretsManager,
-      credential.secret_ref,
-      credential.display_name,
-    );
-    for (const field of binding.requiredFields ?? []) {
-      const value = payload[field];
-      if (value === undefined || value === null || value === "") {
-        throw new Error(
-          `Credential '${credential.display_name}' is missing required field '${field}'`,
-        );
-      }
-    }
-    credentials[alias] = payload;
-    usedCredentialIds.push(credential.id);
-  }
-
-  if (usedCredentialIds.length > 0) {
-    await getDb()
-      .update(tenantCredentials)
-      .set({ last_used_at: new Date(), updated_at: new Date() })
-      .where(
-        and(
-          eq(tenantCredentials.tenant_id, tenantId),
-          inArray(tenantCredentials.id, usedCredentialIds),
-        ),
-      );
-  }
-
-  return credentials;
-}
-
-async function readCredentialSecret(
-  secretsManager: SecretsManagerClient,
-  secretRef: string,
-  displayName: string,
-): Promise<Record<string, unknown>> {
-  const result = await secretsManager.send(
-    new GetSecretValueCommand({ SecretId: secretRef }),
-  );
-  if (!result.SecretString) {
-    throw new Error(`Credential '${displayName}' has an empty secret payload`);
-  }
-  const parsed = JSON.parse(result.SecretString) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(
-      `Credential '${displayName}' secret payload must be a JSON object`,
-    );
-  }
-  return parsed as Record<string, unknown>;
 }
 
 function trimPreview(
