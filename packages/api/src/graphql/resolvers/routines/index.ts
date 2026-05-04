@@ -1,4 +1,5 @@
 import { createRoutine } from "./createRoutine.mutation.js";
+import { importN8nRoutine } from "./importN8nRoutine.mutation.js";
 import { planRoutineDraft } from "./planRoutineDraft.mutation.js";
 import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
 import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
@@ -31,6 +32,7 @@ export const routineQueries = {
 export const routineMutations = {
   planRoutineDraft,
   createRoutine,
+  importN8nRoutine,
   publishRoutineVersion,
   rebuildRoutineVersion,
   triggerRoutineRun,

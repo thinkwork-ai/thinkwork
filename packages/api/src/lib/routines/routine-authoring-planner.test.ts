@@ -141,6 +141,38 @@ describe("routine authoring planner", () => {
     expect(serialized).not.toContain("super-secret-password");
   });
 
+  it("plans the PDI Fuel Order n8n migration draft from intent", () => {
+    const result = planRoutineFromIntent({
+      name: "PDI Fuel Order",
+      intent: "Migrate the PDI Fuel Order n8n workflow.",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.artifacts.plan.steps).toMatchObject([
+      { nodeId: "TransformOrderToPDI", recipeId: "typescript" },
+      { nodeId: "AddFuelOrder", recipeId: "typescript" },
+    ]);
+    expect(result.artifacts.stepManifest).toMatchObject({
+      definition: {
+        metadata: {
+          migration: {
+            sourceWorkflowName: "PDI Fuel Order",
+            credentialRequirements: [
+              {
+                credentialType: "PDIApi",
+                requiredFields: ["apiUrl", "username", "password", "partnerId"],
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(result.artifacts)).not.toContain(
+      "super-secret-password",
+    );
+  });
+
   it("rejects recipient edits that contain extra prose around an email", () => {
     const result = planRoutineFromIntent({
       name: "Check Austin Weather",

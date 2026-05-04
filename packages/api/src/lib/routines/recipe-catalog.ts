@@ -365,6 +365,7 @@ function emitCodeTask(
         nodeId: ctx.stateName,
         language,
         code: args.code,
+        "input.$": "$",
         timeoutSeconds: args.timeoutSeconds ?? 60,
         networkAllowlist: Array.isArray(args.networkAllowlist)
           ? args.networkAllowlist

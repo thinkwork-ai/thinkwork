@@ -72,6 +72,8 @@ export interface PythonTaskInput {
   language?: "python" | "typescript";
   /** User code, verbatim. */
   code: string;
+  /** Current Step Functions state input. Exposed to sandbox code as `input`. */
+  input?: unknown;
   /** Optional caller-supplied env. Only keys in `envAllowlist` flow
    * through to the sandbox; other keys are silently dropped. */
   environment?: Record<string, string>;
@@ -283,6 +285,7 @@ export async function invokePythonTask(
       envAllowlist,
       language,
       resolvedCredentials.credentials,
+      input.input,
     );
     const invoke = await agentCore.send(
       new InvokeCodeInterpreterCommand({
@@ -594,30 +597,36 @@ function buildCodeWithEnvPrelude(
   allowlist: string[],
   language: "python" | "typescript" = "python",
   credentials: Record<string, Record<string, unknown>> = {},
+  executionInput?: unknown,
 ): string {
   const allowed = new Set(allowlist);
   const filtered: Record<string, string> = {};
   for (const [k, v] of Object.entries(env ?? {})) {
     if (allowed.has(k)) filtered[k] = v;
   }
+  const hasExecutionInput = executionInput !== undefined;
   if (
     Object.keys(filtered).length === 0 &&
-    Object.keys(credentials).length === 0
+    Object.keys(credentials).length === 0 &&
+    !hasExecutionInput
   ) {
     return code;
   }
   if (language === "typescript") {
     const envLiteral = JSON.stringify(filtered);
     const credentialsLiteral = JSON.stringify(credentials);
+    const inputLiteral = JSON.stringify(executionInput ?? null);
     const prelude =
       `const credentials = ${credentialsLiteral};\n` +
+      `const input = ${inputLiteral};\n` +
       `const __thinkworkEnv = ${envLiteral};\n` +
       `if (typeof process !== "undefined" && process.env) Object.assign(process.env, __thinkworkEnv);\n`;
     return prelude + code;
   }
   const envLiteral = JSON.stringify(JSON.stringify(filtered));
   const credentialsLiteral = JSON.stringify(JSON.stringify(credentials));
-  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
+  const inputLiteral = JSON.stringify(JSON.stringify(executionInput ?? null));
+  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\ninput = json.loads(${inputLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
 
   // Skip past any leading `from __future__ import ...` lines (and
   // surrounding blank lines / comments). Future imports MUST be first.

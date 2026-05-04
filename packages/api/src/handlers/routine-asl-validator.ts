@@ -387,6 +387,8 @@ function reconstructArgsForTask(
     "executionId",
     "nodeId",
     "language",
+    "input.$",
+    "input",
   ]) {
     delete stripped[k];
   }
