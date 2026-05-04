@@ -42,7 +42,15 @@ COPY packages/flue-aws/tsconfig.json packages/flue-aws/tsconfig.json
 COPY packages/flue-aws/src/ packages/flue-aws/src/
 COPY packages/flue-aws/connectors/ packages/flue-aws/connectors/
 
-RUN corepack enable && pnpm install --filter @thinkwork/agentcore-flue --prod=false --frozen-lockfile
+# Both packages must be in the install filter so their devDependencies
+# (in particular, typescript / tsc) land in node_modules. Filtering on
+# `@thinkwork/agentcore-flue` alone pulls in `@thinkwork/flue-aws`'s
+# RUNTIME deps via the workspace edge but skips its devDeps — the next
+# `tsc --build` step then fails with `sh: 1: tsc: not found`.
+RUN corepack enable && pnpm install \
+    --filter @thinkwork/agentcore-flue \
+    --filter @thinkwork/flue-aws \
+    --prod=false --frozen-lockfile
 # Build flue-aws first so its dist/ exists for the runtime import path
 # (package.json's `import` condition points at dist/src/index.js — vitest
 # tolerates raw .ts via the `types` condition, but plain Node ESM does not).
