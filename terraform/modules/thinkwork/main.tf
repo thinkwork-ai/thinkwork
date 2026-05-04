@@ -315,19 +315,25 @@ module "agentcore_flue" {
 # attributes (function_name, log group name, ARN) are unchanged from U1, so
 # this is pure state-address realignment without destroy+create.
 #
-# Two pairs of `moved {}` blocks per resource cover the two starting states:
-#   * Stages that applied U1 (e.g. dev) have state at
-#     `module.agentcore.aws_*.agentcore_flue` — the second block in each
-#     pair migrates them.
+# Two `moved {}` blocks per resource form a CHAIN that covers both possible
+# starting states:
 #   * Stages that never applied U1 (operator-managed greenfield, or any
 #     stage that skipped the U1 deploy) have state at
-#     `module.agentcore.aws_*.agentcore_pi` — the first block in each pair
-#     migrates them directly to the new module without orphaning the U1
-#     log-group history.
-# Terraform picks whichever `from` matches current state.
+#     `module.agentcore.aws_*.agentcore_pi` — the first block migrates that
+#     to `module.agentcore.aws_*.agentcore_flue` (U1's destination), then
+#     the second block migrates THAT to the new module.
+#   * Stages that applied U1 (e.g. dev) have state at
+#     `module.agentcore.aws_*.agentcore_flue` — only the second block
+#     fires.
+#
+# Terraform follows the chain transitively. The earlier shape (both
+# blocks pointing directly at `module.agentcore_flue.…`) was rejected
+# with "Ambiguous move statements" because each destination can only have
+# one source — chaining through the intermediate disambiguates while still
+# covering both starting states.
 moved {
   from = module.agentcore.aws_cloudwatch_log_group.agentcore_pi
-  to   = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
+  to   = module.agentcore.aws_cloudwatch_log_group.agentcore_flue
 }
 
 moved {
@@ -337,7 +343,7 @@ moved {
 
 moved {
   from = module.agentcore.aws_lambda_function.agentcore_pi
-  to   = module.agentcore_flue.aws_lambda_function.agentcore_flue
+  to   = module.agentcore.aws_lambda_function.agentcore_flue
 }
 
 moved {
@@ -347,7 +353,7 @@ moved {
 
 moved {
   from = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_pi
-  to   = module.agentcore_flue.aws_lambda_function_event_invoke_config.agentcore_flue
+  to   = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_flue
 }
 
 moved {
