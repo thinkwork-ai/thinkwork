@@ -303,6 +303,10 @@ function lintRecipeArgs(
       stateName: name,
     });
   }
+
+  if (recipe.id === "python" || recipe.id === "typescript") {
+    lintCredentialBindings(name, target, errors);
+  }
 }
 
 function derivePayloadForArgCheck(
@@ -333,7 +337,8 @@ function derivePayloadForArgCheck(
       recipe.id === "slack_send" ||
       recipe.id === "email_send" ||
       recipe.id === "inbox_approval" ||
-      recipe.id === "python"
+      recipe.id === "python" ||
+      recipe.id === "typescript"
     ) {
       const payload = params.Payload as Record<string, unknown> | undefined;
       if (!payload) return undefined;
@@ -381,6 +386,7 @@ function reconstructArgsForTask(
     "executionId.$",
     "executionId",
     "nodeId",
+    "language",
   ]) {
     delete stripped[k];
   }
@@ -435,6 +441,33 @@ function reconstructRoutineInvokeArgs(
     }
   }
   return routineId === undefined ? { input } : { routineId, input };
+}
+
+function lintCredentialBindings(
+  name: string,
+  target: unknown,
+  errors: ValidationError[],
+): void {
+  if (!target || typeof target !== "object" || Array.isArray(target)) return;
+  const bindings = (target as { credentialBindings?: unknown })
+    .credentialBindings;
+  if (!Array.isArray(bindings)) return;
+  const aliases = new Set<string>();
+  for (const binding of bindings) {
+    if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+      continue;
+    }
+    const alias = String((binding as { alias?: unknown }).alias ?? "");
+    if (!alias) continue;
+    if (aliases.has(alias)) {
+      errors.push({
+        code: "credential_alias_duplicate",
+        message: `State '${name}': credential alias '${alias}' is declared more than once.`,
+        stateName: name,
+      });
+    }
+    aliases.add(alias);
+  }
 }
 
 function lintJsonataExpression(

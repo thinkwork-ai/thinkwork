@@ -137,6 +137,78 @@ describe("validateRoutineAsl — happy path", () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
+
+  it("accepts python credential bindings by handle without secret material", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        AddFuelOrder: {
+          Type: "Task",
+          Resource: "arn:aws:states:::lambda:invoke",
+          Comment: "recipe:python",
+          Parameters: {
+            "FunctionName.$":
+              "$$.Execution.Input.routineTaskPythonFunctionName",
+            Payload: {
+              "tenantId.$": "$$.Execution.Input.tenantId",
+              "routineId.$": "$$.Execution.Input.routineId",
+              "executionId.$": "$$.Execution.Id",
+              nodeId: "AddFuelOrder",
+              code: "print(credentials['pdi']['partnerId'])",
+              credentialBindings: [
+                {
+                  alias: "pdi",
+                  credentialId: "pdi-soap",
+                  requiredFields: [
+                    "apiUrl",
+                    "username",
+                    "password",
+                    "partnerId",
+                  ],
+                },
+              ],
+            },
+          },
+          End: true,
+        },
+      }),
+    });
+    expect(result.valid).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("super-secret");
+  });
+
+  it("accepts typescript credential bindings by handle without secret material", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        AddFuelOrder: {
+          Type: "Task",
+          Resource: "arn:aws:states:::lambda:invoke",
+          Comment: "recipe:typescript",
+          Parameters: {
+            "FunctionName.$":
+              "$$.Execution.Input.routineTaskPythonFunctionName",
+            Payload: {
+              "tenantId.$": "$$.Execution.Input.tenantId",
+              "routineId.$": "$$.Execution.Input.routineId",
+              "executionId.$": "$$.Execution.Id",
+              nodeId: "AddFuelOrder",
+              language: "typescript",
+              code: "console.log(credentials.pdi.partnerId);",
+              credentialBindings: [
+                {
+                  alias: "pdi",
+                  credentialId: "pdi-soap",
+                  requiredFields: ["partnerId"],
+                },
+              ],
+            },
+          },
+          End: true,
+        },
+      }),
+    });
+    expect(result.valid).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("super-secret");
+  });
 });
 
 describe("validateRoutineAsl — error paths", () => {
@@ -199,6 +271,36 @@ describe("validateRoutineAsl — error paths", () => {
     );
     expect(argError).toBeDefined();
     expect(argError?.message.toLowerCase()).toContain("code");
+  });
+
+  it("rejects duplicate credential aliases inside one code step", async () => {
+    const result = await validateRoutineAsl({
+      asl: aslWith({
+        AddFuelOrder: {
+          Type: "Task",
+          Resource: "arn:aws:states:::lambda:invoke",
+          Comment: "recipe:python",
+          Parameters: {
+            "FunctionName.$":
+              "$$.Execution.Input.routineTaskPythonFunctionName",
+            Payload: {
+              code: "print('fuel')",
+              credentialBindings: [
+                { alias: "pdi", credentialId: "pdi-soap" },
+                { alias: "pdi", credentialId: "pdi-backup" },
+              ],
+            },
+          },
+          End: true,
+        },
+      }),
+    });
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (error) => error.code === "credential_alias_duplicate",
+      ),
+    ).toBe(true);
   });
 
   it("returns parse error when JSONata expression is malformed", async () => {

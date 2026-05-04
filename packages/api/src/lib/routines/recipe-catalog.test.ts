@@ -17,6 +17,7 @@ import {
   findRecipeByArn,
   getRecipe,
   getRecipeConfigFields,
+  HTTP_CREDENTIAL_CONNECTION_PREFIX,
   knownResourceArn,
   listRecipes,
   readRecipeMarker,
@@ -39,9 +40,9 @@ const ASL_TASK_KINDS = new Set([
 ]);
 
 describe("recipe-catalog", () => {
-  it("exports exactly 12 recipes", () => {
-    expect(RECIPE_CATALOG.length).toBe(12);
-    expect(listRecipes().length).toBe(12);
+  it("exports exactly 13 recipes", () => {
+    expect(RECIPE_CATALOG.length).toBe(13);
+    expect(listRecipes().length).toBe(13);
   });
 
   it("uses unique recipe ids", () => {
@@ -62,6 +63,7 @@ describe("recipe-catalog", () => {
       "email_send",
       "inbox_approval",
       "python",
+      "typescript",
     ];
     for (const id of required) {
       expect(getRecipe(id), `missing v0 recipe: ${id}`).toBeDefined();
@@ -153,6 +155,7 @@ describe("recipe-catalog", () => {
       "toolInvoke",
       "routineInvoke",
       "python",
+      "typescript",
       "inboxApproval",
       "httpRequest",
       "auroraQuery",
@@ -179,6 +182,64 @@ describe("recipe-catalog", () => {
     const validate = ajv.compile(recipe.argSchema);
     expect(validate({ code: "" })).toBe(false);
     expect(validate({ code: "print('ok')" })).toBe(true);
+    expect(
+      validate({
+        code: "print(credentials['pdi']['partnerId'])",
+        credentialBindings: [
+          {
+            alias: "pdi",
+            credentialId: "pdi-soap",
+            requiredFields: ["apiUrl", "username", "password", "partnerId"],
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        code: "print('nope')",
+        credentialBindings: [{ alias: "not-safe-alias", credentialId: "pdi" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("argSchema for typescript supports credential bindings", () => {
+    const recipe = getRecipe("typescript")!;
+    const validate = ajv.compile(recipe.argSchema);
+    expect(validate({ code: "" })).toBe(false);
+    expect(
+      validate({
+        code: "console.log(credentials.pdi.partnerId);",
+        credentialBindings: [
+          {
+            alias: "pdi",
+            credentialId: "pdi-soap",
+            requiredFields: ["apiUrl", "username", "password", "partnerId"],
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("http_request can reference a ThinkWork credential without emitting raw auth", () => {
+    const recipe = getRecipe("http_request")!;
+    const validate = ajv.compile(recipe.argSchema);
+    const args = {
+      method: "POST",
+      apiEndpoint: "https://api.example.test/orders",
+      credentialId: "pdi-api",
+      requestBody: { ok: true },
+    };
+    expect(validate(args)).toBe(true);
+    const state = recipe.aslEmitter(args, {
+      stateName: "CallApi",
+      next: null,
+      end: true,
+    });
+    expect((state.Parameters as any).Authentication.ConnectionArn).toBe(
+      `${HTTP_CREDENTIAL_CONNECTION_PREFIX}pdi-api`,
+    );
+    expect(JSON.stringify(state)).not.toContain("password");
+    expect(JSON.stringify(state)).not.toContain("Authorization");
   });
 
   it("email_send accepts either a literal body or a dynamic bodyPath", () => {
@@ -275,7 +336,7 @@ describe("recipe-catalog", () => {
     );
   });
 
-  it("email_send and python payloads include server-owned routine identity", () => {
+  it("email_send and code-step payloads include server-owned routine identity", () => {
     const email = getRecipe("email_send")!.aslEmitter(
       {
         to: ["ericodom37@gmail.com"],
@@ -298,6 +359,18 @@ describe("recipe-catalog", () => {
       "tenantId.$": "$$.Execution.Input.tenantId",
       "routineId.$": "$$.Execution.Input.routineId",
       "executionId.$": "$$.Execution.Id",
+      language: "python",
+    });
+
+    const typescript = getRecipe("typescript")!.aslEmitter(
+      { code: "console.log('ok')" },
+      { stateName: "FetchAustinWeather", next: null, end: true },
+    );
+    expect((typescript.Parameters as any).Payload).toMatchObject({
+      "tenantId.$": "$$.Execution.Input.tenantId",
+      "routineId.$": "$$.Execution.Input.routineId",
+      "executionId.$": "$$.Execution.Id",
+      language: "typescript",
     });
   });
 });

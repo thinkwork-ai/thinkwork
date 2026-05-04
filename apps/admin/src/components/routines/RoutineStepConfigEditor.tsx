@@ -283,9 +283,10 @@ function ConfigFieldInput({
   const multiline =
     control === "textarea" ||
     control === "code" ||
+    control === "credential_bindings" ||
     control === "email_list" ||
     control === "string_list";
-  const monospace = control === "code";
+  const monospace = control === "code" || control === "credential_bindings";
   const fullWidth = multiline;
 
   return (
@@ -324,6 +325,34 @@ function ConfigFieldInput({
           </SelectTrigger>
           <SelectContent>
             {field.options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : control === "credential_select" ? (
+        <Select
+          value={value || "__none__"}
+          onValueChange={(next) => onChange(next === "__none__" ? "" : next)}
+          disabled={readOnly || !field.options?.length}
+        >
+          <SelectTrigger
+            id={id}
+            className="w-full"
+            aria-invalid={Boolean(error)}
+          >
+            <SelectValue
+              placeholder={
+                field.options?.length
+                  ? "Select credential"
+                  : "No active credentials"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">No credential</SelectItem>
+            {(field.options ?? []).map((option) => (
               <SelectItem key={option} value={option}>
                 {option}
               </SelectItem>
@@ -384,7 +413,7 @@ export function valuesFromSteps(
     steps.flatMap((step) =>
       step.configFields.map((field) => [
         fieldKey(step.nodeId, field.key),
-        stringValue(field.value),
+        stringValueForField(field, field.value),
       ]),
     ),
   );
@@ -417,9 +446,16 @@ function fieldChanged(
   values: Record<string, string>,
 ): boolean {
   const key = fieldKey(nodeId, field.key);
-  const next = valueForMutation(field, values[key] ?? "");
-  const original = valueForMutation(field, stringValue(field.value));
-  return JSON.stringify(next) !== JSON.stringify(original);
+  try {
+    const next = valueForMutation(field, values[key] ?? "");
+    const original = valueForMutation(
+      field,
+      stringValueForField(field, field.value),
+    );
+    return JSON.stringify(next) !== JSON.stringify(original);
+  } catch {
+    return true;
+  }
 }
 
 function valueForMutation(field: RoutineConfigField, value: string): unknown {
@@ -431,6 +467,10 @@ function valueForMutation(field: RoutineConfigField, value: string): unknown {
   }
   if (field.inputType === "number") {
     return value.trim() ? Number(value) : null;
+  }
+  if (field.inputType === "credential_bindings") {
+    if (!value.trim()) return [];
+    return JSON.parse(value);
   }
   return value;
 }
@@ -454,6 +494,16 @@ export function validationErrorsFromSteps(
 
 export function hasValidationErrors(errors: Record<string, string>): boolean {
   return Object.keys(errors).length > 0;
+}
+
+function stringValueForField(
+  field: RoutineConfigField,
+  value: unknown,
+): string {
+  if (field.inputType === "credential_bindings") {
+    return JSON.stringify(value ?? [], null, 2);
+  }
+  return stringValue(value);
 }
 
 function stringValue(value: unknown): string {
@@ -498,6 +548,37 @@ function validateField(
     }
   }
 
+  if (field.inputType === "credential_bindings") {
+    try {
+      const parsed = trimmed ? JSON.parse(value) : [];
+      if (!Array.isArray(parsed)) {
+        return `${field.label} must be a JSON array.`;
+      }
+      const aliases = new Set<string>();
+      for (const item of parsed) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return `${field.label} entries must be JSON objects.`;
+        }
+        const alias = String((item as { alias?: unknown }).alias ?? "");
+        const credentialId = String(
+          (item as { credentialId?: unknown }).credentialId ?? "",
+        );
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
+          return "Credential aliases must be safe code identifiers.";
+        }
+        if (aliases.has(alias)) {
+          return `Credential alias ${alias} is duplicated.`;
+        }
+        aliases.add(alias);
+        if (!credentialId.trim()) {
+          return "Each credential binding needs a credentialId.";
+        }
+      }
+    } catch (err) {
+      return `${field.label} must be valid JSON: ${(err as Error).message}`;
+    }
+  }
+
   if (field.inputType === "select" && field.options?.length) {
     if (!field.options.includes(value)) {
       return `${field.label} must be one of ${field.options.join(", ")}.`;
@@ -539,6 +620,8 @@ function isKnownControl(value: string): boolean {
     "textarea",
     "code",
     "select",
+    "credential_select",
+    "credential_bindings",
     "number",
     "email_list",
     "string_list",
@@ -546,6 +629,7 @@ function isKnownControl(value: string): boolean {
 }
 
 function textareaRows(control: string, value: string): number {
+  if (control === "credential_bindings") return 6;
   if (control === "code") return 8;
   if (value.includes("\n")) {
     return Math.min(10, Math.max(3, value.split("\n").length));

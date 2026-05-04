@@ -15,9 +15,10 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAgentCoreSend, mockS3Send } = vi.hoisted(() => ({
+const { mockAgentCoreSend, mockS3Send, mockSecretsSend } = vi.hoisted(() => ({
   mockAgentCoreSend: vi.fn(),
   mockS3Send: vi.fn(),
+  mockSecretsSend: vi.fn(),
 }));
 
 vi.mock("@aws-sdk/client-bedrock-agentcore", () => ({
@@ -44,9 +45,16 @@ vi.mock("@aws-sdk/client-s3", () => ({
   },
 }));
 
-import {
-  StopCodeInterpreterSessionCommand,
-} from "@aws-sdk/client-bedrock-agentcore";
+vi.mock("@aws-sdk/client-secrets-manager", () => ({
+  SecretsManagerClient: class {
+    send = mockSecretsSend;
+  },
+  GetSecretValueCommand: class GetSecretValueCommand {
+    constructor(public input: unknown) {}
+  },
+}));
+
+import { StopCodeInterpreterSessionCommand } from "@aws-sdk/client-bedrock-agentcore";
 import {
   invokePythonTask,
   type PythonTaskInput,
@@ -63,6 +71,7 @@ const baseInput: PythonTaskInput = {
 beforeEach(() => {
   mockAgentCoreSend.mockReset();
   mockS3Send.mockReset();
+  mockSecretsSend.mockReset();
   // Default: S3 always succeeds, sandbox session start succeeds.
   mockS3Send.mockResolvedValue({});
 });
@@ -81,14 +90,12 @@ function defaultStartResponse() {
   return { sessionId: "session-123" };
 }
 
-function structuredContentEvent(
-  structured: {
-    stdout?: string;
-    stderr?: string;
-    exitCode?: number;
-    executionTime?: number;
-  },
-) {
+function structuredContentEvent(structured: {
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  executionTime?: number;
+}) {
   return {
     result: {
       content: [],
@@ -146,8 +153,8 @@ describe("invokePythonTask — happy path", () => {
     expect(result.stdoutPreview.length).toBe(4096);
     // S3 receives the full stdout under PutObjectCommand.
     const s3Calls = mockS3Send.mock.calls;
-    const stdoutPut = s3Calls.find(
-      (c) => (c[0] as { input: { Key: string } }).input.Key.endsWith("stdout.log"),
+    const stdoutPut = s3Calls.find((c) =>
+      (c[0] as { input: { Key: string } }).input.Key.endsWith("stdout.log"),
     );
     expect(stdoutPut).toBeDefined();
     expect((stdoutPut![0] as { input: { Body: string } }).input.Body).toBe(
@@ -215,13 +222,13 @@ describe("invokePythonTask — edge cases", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdoutPreview).toBe("");
     // Verify stderr.log was written to S3.
-    const stderrPut = mockS3Send.mock.calls.find(
-      (c) => (c[0] as { input: { Key: string } }).input.Key.endsWith("stderr.log"),
+    const stderrPut = mockS3Send.mock.calls.find((c) =>
+      (c[0] as { input: { Key: string } }).input.Key.endsWith("stderr.log"),
     );
     expect(stderrPut).toBeDefined();
-    expect(
-      (stderrPut![0] as { input: { Body: string } }).input.Body,
-    ).toBe("Traceback...");
+    expect((stderrPut![0] as { input: { Body: string } }).input.Body).toBe(
+      "Traceback...",
+    );
   });
 
   it("falls back to streaming text-block content when structuredContent is missing", async () => {
@@ -275,9 +282,11 @@ describe("invokePythonTask — edge cases", () => {
       },
     );
 
-    const invokeCallArg = (mockAgentCoreSend.mock.calls[1][0] as {
-      input: { arguments: { code: string } };
-    }).input;
+    const invokeCallArg = (
+      mockAgentCoreSend.mock.calls[1][0] as {
+        input: { arguments: { code: string } };
+      }
+    ).input;
     // The wrapper prepends `os.environ.update({...})` only with allowlisted
     // keys. Verify the user code is preceded by an env block that includes
     // TENANT_NAME and excludes FORBIDDEN_KEY.
@@ -285,6 +294,84 @@ describe("invokePythonTask — edge cases", () => {
     expect(invokeCallArg.arguments.code).toContain("alpha");
     expect(invokeCallArg.arguments.code).not.toContain("FORBIDDEN_KEY");
     expect(invokeCallArg.arguments.code).not.toContain("leak");
+  });
+
+  it("invokes the TypeScript interpreter and injects allowlisted env into process.env", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({ stdout: "ok", exitCode: 0 }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    await invokePythonTask(
+      {
+        ...baseInput,
+        language: "typescript",
+        code: "console.log(process.env.TENANT_NAME)",
+        environment: { TENANT_NAME: "alpha", FORBIDDEN_KEY: "leak" },
+      },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+        envAllowlist: ["TENANT_NAME"],
+      },
+    );
+
+    const invokeCallArg = (
+      mockAgentCoreSend.mock.calls[1][0] as {
+        input: { arguments: { code: string; language: string } };
+      }
+    ).input;
+    expect(invokeCallArg.arguments.language).toBe("typescript");
+    expect(invokeCallArg.arguments.code).toContain("Object.assign");
+    expect(invokeCallArg.arguments.code).toContain("TENANT_NAME");
+    expect(invokeCallArg.arguments.code).not.toContain("FORBIDDEN_KEY");
+  });
+
+  it("injects resolved credential bindings into TypeScript code as credentials", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({ stdout: "ok", exitCode: 0 }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    await invokePythonTask(
+      {
+        ...baseInput,
+        language: "typescript",
+        code: "console.log(credentials.pdi.partnerId)",
+        credentialBindings: [
+          {
+            alias: "pdi",
+            credentialId: "pdi-soap",
+            requiredFields: ["partnerId"],
+          },
+        ],
+      },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+        credentialResolver: async () => ({
+          pdi: { partnerId: "123", password: "super-secret-password" },
+        }),
+      },
+    );
+
+    const invokeCallArg = (
+      mockAgentCoreSend.mock.calls[1][0] as {
+        input: { arguments: { code: string; language: string } };
+      }
+    ).input;
+    expect(invokeCallArg.arguments.language).toBe("typescript");
+    expect(invokeCallArg.arguments.code).toContain("const credentials");
+    expect(invokeCallArg.arguments.code).toContain("partnerId");
+    expect(invokeCallArg.arguments.code).toContain("super-secret-password");
   });
 });
 

@@ -78,6 +78,7 @@ const ALLOWED_RECIPES = new Set([
   "email_send",
   "inbox_approval",
   "python",
+  "typescript",
   "agent_invoke",
   "tool_invoke",
   "routine_invoke",
@@ -227,9 +228,7 @@ export type ShapeResult =
   | { ok: true; value: ShapedStepEvent }
   | { ok: false; error: string };
 
-export function shapeStepCallback(
-  body: Record<string, unknown>,
-): ShapeResult {
+export function shapeStepCallback(body: Record<string, unknown>): ShapeResult {
   const tenant_id = asString(body.tenantId);
   if (!tenant_id || !UUID_RE.test(tenant_id)) {
     return { ok: false, error: "tenantId: valid UUID required" };
