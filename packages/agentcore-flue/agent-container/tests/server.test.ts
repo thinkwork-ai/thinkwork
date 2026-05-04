@@ -91,7 +91,28 @@ describe("handleInvocation — payload validation", () => {
 // ---------------------------------------------------------------------------
 
 describe("handleInvocation — happy path", () => {
-  it("returns the agent loop's content + completion callback fires once", async () => {
+  it("chat-turn invocation returns 200 and SKIPS the completion callback (chat-agent-invoke owns turn writeback)", async () => {
+    let fetchCalled = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      fetchCalled += 1;
+      return new Response();
+    }) as unknown as typeof fetch;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD(),
+      deps: makeDeps({ fetchImpl }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    expect(body.runtime).toBe("flue");
+    expect((body.response as Record<string, unknown>).content).toBe(
+      "stub response",
+    );
+    expect(fetchCalled).toBe(0);
+  });
+
+  it("skill_run invocation fires the completion callback exactly once with the camelCase shape + HMAC header", async () => {
     const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
     const fetchImpl: typeof fetch = (async (
       url: unknown,
@@ -106,34 +127,69 @@ describe("handleInvocation — happy path", () => {
     }) as unknown as typeof fetch;
 
     const result = await handleInvocation({
-      payload: VALID_PAYLOAD(),
+      payload: VALID_PAYLOAD({
+        skill_run_id: "run-uuid-1",
+        completion_hmac_secret: "test-hmac-secret",
+      }),
       deps: makeDeps({ fetchImpl }),
     });
 
     expect(result.statusCode).toBe(200);
-    const body = result.body as Record<string, unknown>;
-    expect(body.runtime).toBe("flue");
-    expect((body.response as Record<string, unknown>).content).toBe(
-      "stub response",
-    );
     expect(fetchCalls).toHaveLength(1);
 
     const [callUrl, init] = fetchCalls[0]!;
     expect(callUrl).toBe("https://api.example.com/api/skills/complete");
     expect(init?.method).toBe("POST");
-    const body2 = JSON.parse((init?.body ?? "") as string);
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.authorization).toMatch(/^Bearer /);
+    expect(headers["x-skill-run-signature"]).toMatch(/^sha256=[0-9a-f]+$/);
+
+    const body2 = JSON.parse((init?.body ?? "") as string) as Record<
+      string,
+      unknown
+    >;
     expect(body2).toMatchObject({
-      skill_run_id: "thread-1",
-      tenant_id: "tenant-1",
-      user_id: "user-1",
-      agent_id: "agent-1",
-      runtime: "flue",
-      status: "ok",
+      runId: "run-uuid-1",
+      tenantId: "tenant-1",
+      status: "complete",
     });
-    expect(typeof body2.latency_ms).toBe("number");
+    // snake_case keys must NOT appear — the endpoint silently drops them.
+    expect(body2.skill_run_id).toBeUndefined();
+    expect(body2.tenant_id).toBeUndefined();
   });
 
-  it("falls back to no callback when secrets are missing (warn, not error)", async () => {
+  it("skill_run failure path posts status='failed' with failureReason", async () => {
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        skill_run_id: "run-uuid-2",
+        completion_hmac_secret: "h",
+      }),
+      deps: makeDeps({
+        fetchImpl,
+        runAgentLoop: (async () => {
+          throw new Error("agent boom");
+        }) as unknown as typeof import("../src/server.js").runAgentLoop,
+      }),
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(fetchCalls).toHaveLength(1);
+    const init = fetchCalls[0]?.[1];
+    const body2 = JSON.parse((init?.body ?? "") as string);
+    expect(body2.status).toBe("failed");
+    expect(body2.failureReason).toContain("agent boom");
+  });
+
+  it("falls back to no callback when secrets are missing on skill_run invocation", async () => {
     let fetchCalled = 0;
     const fetchImpl: typeof fetch = (async () => {
       fetchCalled += 1;
@@ -141,6 +197,8 @@ describe("handleInvocation — happy path", () => {
     }) as unknown as typeof fetch;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
+        skill_run_id: "run-uuid-3",
+        completion_hmac_secret: "h",
         thinkwork_api_url: "",
         thinkwork_api_secret: "",
       }),
@@ -184,7 +242,12 @@ describe("handleInvocation — handle store lifecycle", () => {
       };
 
     const result = await handleInvocation({
-      payload: VALID_PAYLOAD({ mcp_configs: fakeMcpConfigs }),
+      payload: VALID_PAYLOAD({
+        mcp_configs: fakeMcpConfigs,
+        // Skill-run identifiers so the error-path completion callback fires.
+        skill_run_id: "run-uuid-handle-test",
+        completion_hmac_secret: "h",
+      }),
       deps: makeDeps({
         connectMcpServerFactory: async (args) => {
           // Capture the headers sent — must be handle-shaped, never bearer.
@@ -204,7 +267,7 @@ describe("handleInvocation — handle store lifecycle", () => {
     expect(agentLoopCalled).toBe(1);
     expect(capturedHandleStore).not.toBeNull();
     expect(capturedHandleStore!.size).toBe(0);
-    // 401 wasn't surfaced — the fetch was for the error-path completion.
+    // Skill-run completion callback fired once on the error path.
     expect(fetchCalls).toBe(1);
   });
 });
@@ -321,6 +384,10 @@ describe("postCompletion", () => {
       agentSlug: "agent-slug",
       traceId: "trace-1",
     },
+    runContext: {
+      runId: "run-1",
+      hmacSecret: "hmac-secret-do-not-leak",
+    },
   };
 
   it("includes Bearer header but NEVER logs the bearer value on 401", async () => {
@@ -347,6 +414,7 @@ describe("postCompletion", () => {
             content: "x",
             modelId: "m",
             toolsCalled: [],
+            toolInvocations: [],
           },
           latencyMs: 100,
         },
@@ -379,7 +447,7 @@ describe("postCompletion", () => {
       ...baseArgs,
       result: {
         status: "ok",
-        runResult: { content: "x", modelId: "m", toolsCalled: [] },
+        runResult: { content: "x", modelId: "m", toolsCalled: [], toolInvocations: [] },
         latencyMs: 100,
       },
       fetchImpl,
@@ -399,7 +467,7 @@ describe("postCompletion", () => {
       secrets: { apiUrl: "", apiAuthSecret: "" },
       result: {
         status: "ok",
-        runResult: { content: "x", modelId: "m", toolsCalled: [] },
+        runResult: { content: "x", modelId: "m", toolsCalled: [], toolInvocations: [] },
         latencyMs: 100,
       },
       fetchImpl,
@@ -455,6 +523,7 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
       workspaceSkills: [],
       connectMcpServer: connect,
       sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
     });
 
     expect(captured).toHaveLength(1);
@@ -488,6 +557,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     content: "stub response",
     modelId: "amazon-bedrock/test-model",
     toolsCalled: (tools ?? []).map((t: AgentTool<any>) => t.name).slice(0, 1),
+    toolInvocations: [],
   });
 
   return {

@@ -95,6 +95,25 @@ const PORT = Number(process.env.PORT || 8080);
 // Types — payload + response shapes the handler exposes.
 // ---------------------------------------------------------------------------
 
+/**
+ * Tool-invocation record. Mirrors `PiToolInvocation` from the deleted
+ * pi-mono runtime — `chat-agent-invoke.ts:721/754` reads these fields off
+ * the response and persists them onto `thread_turns.tool_invocations`. The
+ * Flue runtime must keep emitting them or the admin UI / eval-runner /
+ * thread inspector all lose tool visibility.
+ */
+export interface ToolInvocationRecord {
+  id: string;
+  name: string;
+  tool_name: string;
+  args?: unknown;
+  result?: unknown;
+  is_error?: boolean;
+  started_at?: string;
+  finished_at?: string;
+  runtime: "flue";
+}
+
 export interface InvocationResponse {
   response: {
     role: "assistant";
@@ -103,10 +122,14 @@ export interface InvocationResponse {
     model: string;
     usage?: Usage;
     tools_called?: string[];
+    tool_invocations?: ToolInvocationRecord[];
+    hindsight_usage?: unknown[];
   };
   runtime: "flue";
   flue_usage?: Usage;
   tools_called?: string[];
+  tool_invocations?: ToolInvocationRecord[];
+  hindsight_usage?: unknown[];
 }
 
 interface HistoryMessage {
@@ -249,6 +272,14 @@ export interface AssembleToolsArgs {
   workspaceSkills: WorkspaceSkill[];
   connectMcpServer: ConnectMcpServerFn;
   sessionStoreFactory: (opts: AuroraSessionStoreOptions) => AuroraSessionStore;
+  /**
+   * Per-invocation cleanup queue, allocated by the caller and shared with the
+   * MCP connect factory. Tool builders push teardown closures here; the
+   * trusted handler drains it in `finally`. Required so MCP transport
+   * teardown lands in the SAME array the handler drains — not a private
+   * array owned by the factory.
+   */
+  cleanup: Array<() => Promise<void>>;
 }
 
 /**
@@ -261,7 +292,7 @@ export async function assembleTools(
   args: AssembleToolsArgs,
 ): Promise<AssembledToolBundle> {
   const tools: AgentTool<any>[] = [];
-  const cleanup: Array<() => Promise<void>> = [];
+  const cleanup = args.cleanup;
   const handleStore = new HandleStore();
 
   // Run-skill (U5) — only adds the tool if the workspace has scripts.
@@ -374,6 +405,7 @@ export interface RunAgentLoopResult {
   usage?: Usage;
   modelId: string;
   toolsCalled: string[];
+  toolInvocations: ToolInvocationRecord[];
 }
 
 export async function runAgentLoop(
@@ -381,6 +413,7 @@ export async function runAgentLoop(
 ): Promise<RunAgentLoopResult> {
   const model = resolveModel(args.modelId);
   const toolsCalled = new Set<string>();
+  const toolInvocations: ToolInvocationRecord[] = [];
 
   const agent = new Agent({
     initialState: {
@@ -404,6 +437,36 @@ export async function runAgentLoop(
   agent.subscribe((event: AgentEvent) => {
     if (event.type === "tool_execution_start") {
       toolsCalled.add(event.toolName);
+      toolInvocations.push({
+        id: event.toolCallId,
+        name: event.toolName,
+        tool_name: event.toolName,
+        args: event.args,
+        started_at: new Date().toISOString(),
+        runtime: "flue",
+      });
+    }
+    if (event.type === "tool_execution_end") {
+      const existing = toolInvocations.find((item) => item.id === event.toolCallId);
+      const finished = new Date().toISOString();
+      if (existing) {
+        existing.result = event.result;
+        existing.is_error = event.isError;
+        existing.finished_at = finished;
+      } else {
+        // Defensive — start event was lost (out-of-order delivery / mock test);
+        // record what we have so the response shape stays consistent with
+        // chat-agent-invoke's expectations.
+        toolInvocations.push({
+          id: event.toolCallId,
+          name: event.toolName,
+          tool_name: event.toolName,
+          result: event.result,
+          is_error: event.isError,
+          finished_at: finished,
+          runtime: "flue",
+        });
+      }
     }
   });
 
@@ -417,20 +480,61 @@ export async function runAgentLoop(
     usage: assistant?.usage,
     modelId: model.id,
     toolsCalled: [...toolsCalled],
+    toolInvocations,
   };
 }
 
 // ---------------------------------------------------------------------------
 // Completion callback — POST /api/skills/complete with snapshotted secret.
+//
+// IMPORTANT contract (mirrored from
+// `packages/agentcore-strands/agent-container/container-sources/run_skill_dispatch.py`
+// and validated against `packages/api/src/handlers/skills.ts`'s
+// `completeSkillRunService`):
+//
+//   - Body uses camelCase: `runId`, `tenantId`, `status`, `failureReason?`,
+//     `deliveredArtifactRef?`. Snake_case keys are silently ignored by the
+//     endpoint and surface as a 400.
+//   - Status enum is `complete | failed | cancelled | cost_bounded_error`.
+//     `ok`/`error` are NOT accepted — they map to `complete`/`failed`.
+//   - Auth is `Authorization: Bearer <api_auth_secret>` PLUS a per-run
+//     `X-Skill-Run-Signature: sha256=<hmac>` header. The HMAC is computed
+//     over the runId using the `completion_hmac_secret` shipped in the
+//     run_skill envelope. A leaked API_AUTH_SECRET alone cannot forge a
+//     completion for a different tenant.
+//   - This callback ONLY fires for skill_run invocations (those carrying
+//     `skill_run_id` + `completion_hmac_secret` in the payload). Plain
+//     chat-turn invocations are completed by chat-agent-invoke once it
+//     receives the /invocations response — Flue must not double-write.
 // ---------------------------------------------------------------------------
+
+export interface SkillRunContext {
+  /** skill_runs.id — the row the callback updates. */
+  runId: string;
+  /** Per-run HMAC secret shipped in the run_skill envelope. */
+  hmacSecret: string;
+}
+
+export type CompletionStatus =
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;
   identity: IdentitySnapshot;
+  /**
+   * Skill-run identifiers. `null` means this is a chat-turn invocation —
+   * postCompletion is a no-op (chat-agent-invoke owns turn completion).
+   */
+  runContext: SkillRunContext | null;
   result:
     | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
     | { status: "error"; error: unknown; latencyMs: number };
   fetchImpl: typeof fetch;
+  /** Per-attempt timeout (default 15s). Bounds the postCompletion stall. */
+  attemptTimeoutMs?: number;
 }
 
 export class CompletionCallbackAuthError extends Error {
@@ -441,18 +545,58 @@ export class CompletionCallbackAuthError extends Error {
 }
 
 const COMPLETION_RETRY_DELAYS_MS = [200, 600, 1500] as const;
+const DEFAULT_COMPLETION_ATTEMPT_TIMEOUT_MS = 15_000;
 
 /**
- * POST `/api/skills/complete` with the snapshotted secret. 401 surfaces as
- * `CompletionCallbackAuthError` (per `feedback_avoid_fire_and_forget_lambda_invokes`)
- * so a runtime-side mismatch with API_AUTH_SECRET fails the invocation
- * loudly instead of silently dropping observability data. Other failures
- * retry with bounded backoff.
+ * Map the agent loop's success/error result onto the completion endpoint's
+ * status enum.
+ */
+function asCompletionStatus(result: CompletionCallbackArgs["result"]): {
+  status: CompletionStatus;
+  failureReason: string | null;
+} {
+  if (result.status === "ok") {
+    return { status: "complete", failureReason: null };
+  }
+  const message =
+    result.error instanceof Error ? result.error.message : String(result.error);
+  return { status: "failed", failureReason: message.slice(0, 500) };
+}
+
+/**
+ * Per-run HMAC of the runId. Mirrors run_skill_dispatch.py's signature
+ * computation so the server's `verifyCompletionHmac` accepts it.
+ */
+function computeCompletionHmac(runId: string, hmacSecret: string): string {
+  // `crypto` is dynamically required so test-only paths that never call this
+  // function don't have to load the module.
+  const { createHmac } = require("node:crypto") as {
+    createHmac: typeof import("node:crypto").createHmac;
+  };
+  return createHmac("sha256", hmacSecret).update(runId).digest("hex");
+}
+
+/**
+ * POST `/api/skills/complete` with the snapshotted secret + per-run HMAC.
+ *
+ * 401 surfaces as `CompletionCallbackAuthError`
+ * (per `feedback_avoid_fire_and_forget_lambda_invokes`) so a runtime-side
+ * auth mismatch fails the invocation loudly instead of silently dropping
+ * observability data. Other failures retry with bounded backoff. Each
+ * attempt is bounded by `attemptTimeoutMs` (default 15s) so a hung
+ * upstream cannot stall the Lambda for the full retry window.
  */
 export async function postCompletion(
   args: CompletionCallbackArgs,
 ): Promise<void> {
-  const { secrets, identity, result, fetchImpl } = args;
+  const { secrets, identity, runContext, result, fetchImpl } = args;
+  const attemptTimeoutMs =
+    args.attemptTimeoutMs ?? DEFAULT_COMPLETION_ATTEMPT_TIMEOUT_MS;
+
+  if (!runContext) {
+    // Chat-turn invocation — chat-agent-invoke owns the writeback. Nothing to do.
+    return;
+  }
   if (!secrets.apiUrl || !secrets.apiAuthSecret) {
     logStructured({
       level: "warn",
@@ -463,29 +607,40 @@ export async function postCompletion(
     });
     return;
   }
+  // Refuse to send the bearer over plaintext HTTP. localhost / dev rigs that
+  // intentionally use http should override THINKWORK_API_URL with https.
+  let parsedApiUrl: URL;
+  try {
+    parsedApiUrl = new URL(secrets.apiUrl);
+  } catch {
+    logStructured({
+      level: "error",
+      event: "completion_callback_invalid_url",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+    return;
+  }
+  if (parsedApiUrl.protocol !== "https:") {
+    logStructured({
+      level: "error",
+      event: "completion_callback_insecure_url",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+      protocol: parsedApiUrl.protocol,
+    });
+    return;
+  }
+
   const url = `${secrets.apiUrl.replace(/\/$/, "")}/api/skills/complete`;
+  const { status, failureReason } = asCompletionStatus(result);
   const body = JSON.stringify({
-    skill_run_id: identity.threadId,
-    tenant_id: identity.tenantId,
-    user_id: identity.userId,
-    agent_id: identity.agentId,
-    runtime: "flue",
-    status: result.status,
-    latency_ms: result.latencyMs,
-    token_usage:
-      result.status === "ok"
-        ? {
-            input_tokens: result.runResult.usage?.input ?? 0,
-            output_tokens: result.runResult.usage?.output ?? 0,
-          }
-        : { input_tokens: 0, output_tokens: 0 },
-    error_message:
-      result.status === "error"
-        ? result.error instanceof Error
-          ? result.error.message
-          : String(result.error)
-        : undefined,
+    runId: runContext.runId,
+    tenantId: identity.tenantId,
+    status,
+    ...(failureReason !== null ? { failureReason } : {}),
   });
+  const signature = computeCompletionHmac(runContext.runId, runContext.hmacSecret);
 
   const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
@@ -497,8 +652,10 @@ export async function postCompletion(
           // The Authorization header value never appears in logStructured —
           // the per-key redactor strips it before any log emission.
           authorization: `Bearer ${secrets.apiAuthSecret}`,
+          "x-skill-run-signature": `sha256=${signature}`,
         },
         body,
+        signal: AbortSignal.timeout(attemptTimeoutMs),
       });
       if (response.status === 401) {
         // Don't log the response text — it can echo the bearer back.
@@ -512,9 +669,15 @@ export async function postCompletion(
         event: "completion_callback_non_2xx",
         tenantId: identity.tenantId,
         threadId: identity.threadId,
+        runId: runContext.runId,
         statusCode: response.status,
         attempt,
       });
+      // 4xx other than 401 are terminal — the request body is malformed and
+      // retrying won't change that. Bail without retrying.
+      if (response.status >= 400 && response.status < 500) {
+        return;
+      }
     } catch (err) {
       if (err instanceof CompletionCallbackAuthError) {
         // 401 is terminal. Surface to the handler — no retry.
@@ -525,15 +688,44 @@ export async function postCompletion(
         event: "completion_callback_failed",
         tenantId: identity.tenantId,
         threadId: identity.threadId,
+        runId: runContext.runId,
         attempt,
         error: err instanceof Error ? err.message : String(err),
       });
     }
     if (attempt < totalAttempts - 1) {
-      const delay = COMPLETION_RETRY_DELAYS_MS[attempt] ?? 0;
+      // Add ±25% jitter so N concurrent failed invocations don't thunder-herd
+      // against the API at the same backoff timestamps.
+      const baseDelay = COMPLETION_RETRY_DELAYS_MS[attempt] ?? 0;
+      const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
+      const delay = Math.max(0, Math.round(baseDelay + jitter));
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
+  // All retries exhausted — log a terminal-failure event so an operator sees
+  // it. The 15-min skill-runs reconciler is the backstop.
+  logStructured({
+    level: "error",
+    event: "completion_callback_exhausted",
+    tenantId: identity.tenantId,
+    threadId: identity.threadId,
+    runId: runContext.runId,
+    attempts: totalAttempts,
+  });
+}
+
+/**
+ * Pull the run_skill envelope out of the invocation payload, if present.
+ * Returns null for chat-turn invocations (where these fields aren't set).
+ * Both fields must be present and non-empty for the callback to fire.
+ */
+export function extractSkillRunContext(
+  payload: Record<string, unknown>,
+): SkillRunContext | null {
+  const runId = asString(payload.skill_run_id);
+  const hmacSecret = asString(payload.completion_hmac_secret);
+  if (!runId || !hmacSecret) return null;
+  return { runId, hmacSecret };
 }
 
 // ---------------------------------------------------------------------------
@@ -608,9 +800,32 @@ export async function handleInvocation(
     };
   }
 
-  // Workspace S3 sync — best-effort; failure logs and continues with the
-  // stale local tree.
-  if (env.workspaceBucket && identity.tenantSlug && identity.agentSlug) {
+  // Workspace S3 sync — required for tenant isolation when WORKSPACE_BUCKET
+  // is configured. Lambda warm containers persist `/tmp/workspace` across
+  // invocations, so a turn that skips the per-tenant sync (because
+  // tenant_slug or instance_id is missing from the payload) would discover
+  // the prior tenant's SKILL.md files and leak them into the system prompt.
+  // Fail-closed: if the bucket is configured but the payload doesn't carry
+  // the slugs, refuse the invocation.
+  if (env.workspaceBucket) {
+    if (!identity.tenantSlug || !identity.agentSlug) {
+      logStructured({
+        level: "error",
+        event: "workspace_sync_required_but_unscoped",
+        tenantId: identity.tenantId,
+        agentId: identity.agentId,
+        hasTenantSlug: Boolean(identity.tenantSlug),
+        hasAgentSlug: Boolean(identity.agentSlug),
+      });
+      return {
+        statusCode: 400,
+        body: {
+          error:
+            "Flue invocation requires `tenant_slug` and `instance_id` (agent slug) when WORKSPACE_BUCKET is configured. Refusing to proceed against a potentially cross-tenant /tmp/workspace.",
+          runtime: "flue",
+        },
+      };
+    }
     try {
       const s3 = deps.s3ClientFactory(env.awsRegion);
       await bootstrap(
@@ -692,9 +907,17 @@ export async function handleInvocation(
     }
   }
 
+  // Allocate the per-invocation cleanup queue here (the same array the
+  // handler's `finally` block drains). The MCP connect factory and tool
+  // builders share this reference, so transport teardown closures land in
+  // the array we actually drain — not a private array owned by the
+  // factory. This was a real defect in an earlier draft that the multi-
+  // reviewer pass caught (correctness + reliability + maintainability +
+  // adversarial + agent-native + kieran-typescript all flagged it).
+  const cleanup: Array<() => Promise<void>> = [];
+
   const connectMcpServer =
-    deps.connectMcpServerFactory ??
-    createConnectMcpServer({ cleanup: [] });
+    deps.connectMcpServerFactory ?? createConnectMcpServer({ cleanup });
 
   // Build tools last so any setup failure above short-circuits before
   // we touch the HandleStore.
@@ -708,6 +931,7 @@ export async function handleInvocation(
       workspaceSkills,
       connectMcpServer,
       sessionStoreFactory,
+      cleanup,
     });
   } catch (err) {
     logStructured({
@@ -764,6 +988,11 @@ export async function handleInvocation(
 
   const latencyMs = Date.now() - start;
 
+  // Skill-run invocations carry a runId + HMAC; chat-turn invocations don't.
+  // postCompletion is a no-op for the latter — chat-agent-invoke owns the
+  // chat-turn writeback.
+  const runContext = extractSkillRunContext(args.payload);
+
   if (runError !== undefined || !runResult) {
     // Try to fire the completion callback (status=error). 401 from the
     // callback throws — that's an auth-config bug we want loud, not a
@@ -772,6 +1001,7 @@ export async function handleInvocation(
       await postCompletion({
         secrets,
         identity,
+        runContext,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
       });
@@ -796,14 +1026,23 @@ export async function handleInvocation(
   await postCompletion({
     secrets,
     identity,
+    runContext,
     result: { status: "ok", runResult, latencyMs },
     fetchImpl,
   });
+
+  // The placeholder dispatch in U9 has no Hindsight retain pipeline yet;
+  // U16's worker integration will populate this. Pass an empty array so
+  // chat-agent-invoke's `responseData?.hindsight_usage || invokeResult.hindsight_usage || []`
+  // fallback (chat-agent-invoke.ts:629) keeps working.
+  const hindsightUsage: unknown[] = [];
 
   const responseBody: InvocationResponse = {
     runtime: "flue",
     flue_usage: runResult.usage,
     tools_called: runResult.toolsCalled,
+    tool_invocations: runResult.toolInvocations,
+    hindsight_usage: hindsightUsage,
     response: {
       role: "assistant",
       content: runResult.content,
@@ -811,6 +1050,8 @@ export async function handleInvocation(
       model: runResult.modelId,
       usage: runResult.usage,
       tools_called: runResult.toolsCalled,
+      tool_invocations: runResult.toolInvocations,
+      hindsight_usage: hindsightUsage,
     },
   };
   return { statusCode: 200, body: responseBody as unknown as Record<string, unknown> };
@@ -829,10 +1070,30 @@ function sendJson(res: http.ServerResponse, statusCode: number, body: unknown) {
   res.end(encoded);
 }
 
+/**
+ * Lambda's request payload is capped at 6MB; AgentCore's runtime caps at a
+ * comparable size. Honour that here so a malformed/oversized request fails
+ * fast with 413 rather than buffering arbitrary bytes into memory.
+ */
+const MAX_INVOCATION_BODY_BYTES = 6 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("invocation payload exceeded MAX_INVOCATION_BODY_BYTES");
+    this.name = "PayloadTooLargeError";
+  }
+}
+
 async function readBody(req: http.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > MAX_INVOCATION_BODY_BYTES) {
+      throw new PayloadTooLargeError();
+    }
+    chunks.push(buf);
   }
   return Buffer.concat(chunks).toString("utf8");
 }
@@ -841,7 +1102,20 @@ async function handleHttpInvocation(
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ) {
-  const body = await readBody(req);
+  let body: string;
+  try {
+    body = await readBody(req);
+  } catch (err) {
+    if (err instanceof PayloadTooLargeError) {
+      sendJson(res, 413, { error: err.message, runtime: "flue" });
+      return;
+    }
+    sendJson(res, 400, {
+      error: err instanceof Error ? err.message : "request read failed",
+      runtime: "flue",
+    });
+    return;
+  }
   let payload: Record<string, unknown>;
   try {
     payload = JSON.parse(body) as Record<string, unknown>;

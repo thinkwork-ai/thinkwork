@@ -193,13 +193,37 @@ describe("validateMcpUrl", () => {
 
   it.each([
     ["https://[::1]/", "loopback-host"],
+    ["https://[::]/", "loopback-host"],
     ["https://[fe80::1]/", "link-local-host"],
+    ["https://[febf::1]/", "link-local-host"],
     ["https://[fc00::1]/", "private-host"],
     ["https://[fd00::1]/", "private-host"],
     ["https://[::ffff:127.0.0.1]/", "loopback-host"],
     ["https://[::ffff:10.0.0.1]/", "private-host"],
   ])("rejects private IPv6 %s as %s", (url, reason) => {
     expect(validateMcpUrl(url).reason).toBe(reason);
+  });
+
+  it.each([
+    ["https://100.64.0.1/", "private-host"],
+    ["https://100.127.255.255/", "private-host"],
+    ["https://198.18.0.1/", "private-host"],
+    ["https://198.19.255.255/", "private-host"],
+  ])("rejects CGNAT/benchmark range %s as %s", (url, reason) => {
+    expect(validateMcpUrl(url).reason).toBe(reason);
+  });
+
+  it("does not reject 100.63.x (outside CGNAT range)", () => {
+    expect(validateMcpUrl("https://100.63.0.1/").ok).toBe(true);
+  });
+
+  it("does not reject 198.20.x (outside benchmark range)", () => {
+    expect(validateMcpUrl("https://198.20.0.1/").ok).toBe(true);
+  });
+
+  it("strips trailing dots before classifying — localhost. is rejected", () => {
+    expect(validateMcpUrl("https://localhost./").reason).toBe("loopback-host");
+    expect(validateMcpUrl("https://localhost../").reason).toBe("loopback-host");
   });
 
   it.each([
@@ -293,6 +317,47 @@ describe("logStructured", () => {
     const parsed = JSON.parse(out.lines()[0]!.trim());
     expect(parsed.error).not.toContain("xyz");
     expect(parsed.error).toContain("[redacted]");
+  });
+
+  it("redacts Basic / Token / ApiKey schemes and cookie/api-key/query tokens", () => {
+    const out = captureStdout();
+    logStructured(
+      {
+        level: "warn",
+        event: "leak",
+        msg1: "Authorization: Basic dXNlcjpwYXNz",
+        msg2: "header Token abc123def",
+        msg3: "ApiKey 0123456789abcdef",
+        msg4: "cookie: session=secret-do-not-leak",
+        msg5: "url: https://api.example.com/x?api_key=keyleak123&token=tokleak456",
+      },
+      out.stream,
+    );
+    const parsed = JSON.parse(out.lines()[0]!.trim()) as Record<string, string>;
+    expect(parsed.msg1).not.toContain("dXNlcjpwYXNz");
+    expect(parsed.msg2).not.toContain("abc123def");
+    expect(parsed.msg3).not.toContain("0123456789abcdef");
+    expect(parsed.msg4).not.toContain("secret-do-not-leak");
+    expect(parsed.msg5).not.toContain("keyleak123");
+    expect(parsed.msg5).not.toContain("tokleak456");
+  });
+
+  it("redacts nested objects and arrays containing Authorization headers", () => {
+    const out = captureStdout();
+    logStructured(
+      {
+        level: "warn",
+        event: "nested",
+        ctx: {
+          inner: { Authorization: "Bearer nested-bearer-leak" },
+        },
+        list: [{ Authorization: "Bearer in-array-leak" }],
+      },
+      out.stream,
+    );
+    const written = out.lines()[0] ?? "";
+    expect(written).not.toContain("nested-bearer-leak");
+    expect(written).not.toContain("in-array-leak");
   });
 
   it("preserves arrays unchanged (does not coerce to header-like)", () => {

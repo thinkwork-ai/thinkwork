@@ -220,6 +220,18 @@ const PRIVATE_IPV4_PREDICATES: ReadonlyArray<{
     reason: "private-host",
     match: ([a, b]) => a === 192 && b === 168,
   },
+  // 100.64.0.0/10 — Carrier-Grade NAT (RFC 6598). Used by AWS PrivateLink,
+  // EKS pod CIDRs, and many corp VPNs; routes to non-public infrastructure.
+  {
+    reason: "private-host",
+    match: ([a, b]) => a === 100 && b >= 64 && b <= 127,
+  },
+  // 198.18.0.0/15 — benchmarking (RFC 2544). Should never appear on the
+  // public internet; if a payload supplies one we treat it as suspicious.
+  {
+    reason: "private-host",
+    match: ([a, b]) => a === 198 && (b === 18 || b === 19),
+  },
   // 0.0.0.0/8 — "this network"; treated as private because it routes to
   // localhost on most stacks.
   {
@@ -259,8 +271,12 @@ function classifyIpv6(host: string): McpUrlRejection | null {
     : host;
   const lowered = stripped.toLowerCase();
   if (lowered === "::1" || lowered === "0:0:0:0:0:0:0:1") return "loopback-host";
-  if (lowered.startsWith("fe80:") || lowered.startsWith("fe80::"))
-    return "link-local-host";
+  // Unspecified address — never legally routable.
+  if (lowered === "::" || lowered === "0:0:0:0:0:0:0:0") return "loopback-host";
+  // Link-local — fe80::/10. Per RFC 4291 the prefix is fe8x..febx (the
+  // /10 covers all variants where the high two bits of the third nibble
+  // are `10`). The earlier `fe80:` startsWith only covered fe80::/16.
+  if (/^fe[89ab][0-9a-f]?:/i.test(lowered)) return "link-local-host";
   // ULAs — fc00::/7 (fc... or fd...). Match any leading hex pair so
   // `fc00::1`, `fd12:abcd::1`, etc. all resolve.
   if (/^fc[0-9a-f]{0,2}:|^fd[0-9a-f]{0,2}:/i.test(lowered)) return "private-host";
@@ -328,21 +344,29 @@ export function validateMcpUrl(url: string): McpUrlValidation {
     return { ok: false, reason: "invalid-url" };
   }
   // Node's URL parser keeps brackets on IPv6 hostnames; strip them so
-  // `isIP` can recognise the address family.
+  // `isIP` can recognise the address family. Also strip trailing dots
+  // ("FQDN absolute" form): most resolvers map `localhost.` to 127.0.0.1
+  // identically to `localhost`, so the dot must not bypass the loopback
+  // classification. Strip after the IPv6-bracket check so we don't strip
+  // legitimate IPv6 hostnames.
   const unbracketed =
     host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  const ipFamily = isIP(unbracketed);
+  const normalised = unbracketed.replace(/\.+$/, "");
+  if (!normalised) {
+    return { ok: false, reason: "invalid-url" };
+  }
+  const ipFamily = isIP(normalised);
   if (ipFamily === 4) {
-    const reason = classifyIpv4(unbracketed);
+    const reason = classifyIpv4(normalised);
     if (reason) return { ok: false, reason };
   } else if (ipFamily === 6) {
-    const reason = classifyIpv6(unbracketed);
+    const reason = classifyIpv6(normalised);
     if (reason) return { ok: false, reason };
   } else {
-    const reason = classifyHostname(unbracketed);
+    const reason = classifyHostname(normalised);
     if (reason) return { ok: false, reason };
   }
-  return { ok: true, host: unbracketed.toLowerCase() };
+  return { ok: true, host: normalised.toLowerCase() };
 }
 
 // ---------------------------------------------------------------------------
@@ -366,33 +390,83 @@ const REDACTED = "[redacted]";
  * Match common shapes of leaked secrets:
  *  - `Authorization: Bearer xxx` / `Authorization=Bearer xxx`
  *  - `Authorization: xxx` (with no scheme)
- *  - `Bearer xxx` (standalone, e.g. inside a stringified header value)
- *  - `api-key: xxx`, `access-token=xxx`, etc.
+ *  - `Bearer xxx` / `Token xxx` / `Basic xxx` / `ApiKey xxx` (standalone)
+ *  - `api-key: xxx`, `access-token=xxx`, `cookie: foo=bar`
+ *  - URL-style: `?api_key=xxx` / `&token=xxx`
  *
  * Each match is replaced with `<keyword>=[redacted]` so reading the log line
  * makes the redaction obvious without leaking the prefix or the token.
+ *
+ * The patterns target the formats that real upstream errors echo back —
+ * the goal is "make it hard to leak", not formal completeness.
  */
 const SENSITIVE_KEY_VALUE_PATTERN =
-  /(authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[:=]\s*(?:bearer\s+)?[^\s",]+/gi;
-const SENSITIVE_BEARER_PATTERN = /\bbearer\s+[^\s",]+/gi;
+  /(authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|cookie|set-cookie)\s*[:=]\s*(?:bearer\s+|token\s+|basic\s+|apikey\s+)?[^\s",;]+/gi;
+const SENSITIVE_AUTH_SCHEME_PATTERN =
+  /\b(bearer|token|basic|apikey)\s+[A-Za-z0-9._\-+/=]+/gi;
+const SENSITIVE_QUERY_TOKEN_PATTERN =
+  /([?&](?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret))=[^&\s",]+/gi;
 
-/** Strip Authorization / api-key fragments embedded in any free-text value. */
+/** Strip Authorization / api-key / token-query fragments from any free-text value. */
 export function redactSensitive(value: unknown): unknown {
   if (typeof value !== "string") return value;
   return value
     .replace(SENSITIVE_KEY_VALUE_PATTERN, (match) => {
       const keyword = match.match(
-        /(authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token)/i,
+        /(authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|cookie|set-cookie)/i,
       );
       return `${keyword?.[1] ?? "secret"}=[redacted]`;
     })
-    .replace(SENSITIVE_BEARER_PATTERN, "Bearer [redacted]");
+    .replace(SENSITIVE_AUTH_SCHEME_PATTERN, (_match, scheme: string) => {
+      // Preserve original casing of the scheme keyword so the reader can
+      // tell which header value was redacted (Bearer vs Basic, etc.).
+      return `${scheme} [redacted]`;
+    })
+    .replace(SENSITIVE_QUERY_TOKEN_PATTERN, (_match, prefixKey: string) => {
+      return `${prefixKey}=[redacted]`;
+    });
+}
+
+const SENSITIVE_HEADER_KEYS = new Set([
+  "authorization",
+  "proxy-authorization",
+  "x-api-key",
+  "cookie",
+  "set-cookie",
+  "x-skill-run-signature",
+]);
+
+/** Recursively redact a value: header-key strip, inline-pattern strip, and nested traversal. */
+function redactDeep(value: unknown, depth = 0): unknown {
+  // Cap recursion so a circular or very deep structure can't lock the logger.
+  if (depth > 5) return "[depth-limit]";
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return redactSensitive(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => redactDeep(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_HEADER_KEYS.has(k.toLowerCase())) {
+        out[k] = REDACTED;
+      } else {
+        out[k] = redactDeep(v, depth + 1);
+      }
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
  * Emit a JSON-line log entry. CloudWatch picks up stdout. Sensitive fields
  * (Authorization-shaped) are scrubbed in-place. The `level` and `event` fields
  * are required — `event` should be a stable name an alarm can match on.
+ *
+ * Redaction is recursive through nested objects + arrays so a payload like
+ * `{ ctx: { Authorization: "..." } }` or `[{ Authorization: "..." }]` does
+ * not leak. Depth is capped at 6 to bound work on pathological inputs.
  */
 export function logStructured(
   fields: LogFields,
@@ -404,30 +478,7 @@ export function logStructured(
       sanitised[key] = value;
       continue;
     }
-    // Header object fields get per-key redaction so an Authorization header
-    // never reaches stdout in the clear.
-    if (
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value)
-    ) {
-      const headerLike: Record<string, unknown> = {};
-      for (const [hk, hv] of Object.entries(value as Record<string, unknown>)) {
-        const hkLower = hk.toLowerCase();
-        if (
-          hkLower === "authorization" ||
-          hkLower === "proxy-authorization" ||
-          hkLower === "x-api-key"
-        ) {
-          headerLike[hk] = REDACTED;
-        } else {
-          headerLike[hk] = redactSensitive(hv);
-        }
-      }
-      sanitised[key] = headerLike;
-      continue;
-    }
-    sanitised[key] = redactSensitive(value);
+    sanitised[key] = redactDeep(value);
   }
   // Add a wall-clock timestamp last so alarms can sort.
   sanitised.ts = new Date().toISOString();
