@@ -39,6 +39,32 @@ SELECT
 FROM agent_templates
 WHERE runtime = 'pi';
 
+-- Loosen the CHECK constraints on both runtime columns BEFORE the
+-- UPDATE — the existing constraints only allow ('strands', 'pi'), so
+-- setting runtime = 'flue' otherwise hits:
+--
+--   ERROR: new row for relation "agents" violates check constraint
+--   "agents_runtime_check"
+--
+-- We allow the union {strands, flue, pi} during the migration so the
+-- partial-fail rollback (--single-transaction) can leave the system in
+-- a consistent state even if the UPDATE aborts mid-way. After the
+-- post-migration verification (DO block below) confirms zero rows
+-- remain on 'pi', the constraints could be tightened to
+-- {strands, flue}; we keep 'pi' tolerated for one release cycle so
+-- rollback to a pre-U3 dispatcher stays available.
+\echo '-- loosening agents.runtime CHECK constraint to allow flue --'
+ALTER TABLE agents DROP CONSTRAINT IF EXISTS agents_runtime_check;
+ALTER TABLE agents
+  ADD CONSTRAINT agents_runtime_check
+  CHECK (runtime IN ('strands', 'flue', 'pi'));
+
+\echo '-- loosening agent_templates.runtime CHECK constraint to allow flue --'
+ALTER TABLE agent_templates DROP CONSTRAINT IF EXISTS agent_templates_runtime_check;
+ALTER TABLE agent_templates
+  ADD CONSTRAINT agent_templates_runtime_check
+  CHECK (runtime IN ('strands', 'flue', 'pi'));
+
 -- Apply the rename. Both updates run inside an implicit transaction
 -- (psql --single-transaction) so a partial failure rolls the whole
 -- migration back without leaving the system in mixed state.
