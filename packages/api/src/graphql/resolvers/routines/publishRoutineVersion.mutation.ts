@@ -18,14 +18,12 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import {
-  routineAslVersions,
-  routines,
-} from "@thinkwork/database-pg/schema";
+import { routineAslVersions, routines } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
+import { prepareRoutineCredentialArtifacts } from "../../../lib/routines/credential-bindings.js";
 import {
   PublishStateMachineVersionCommand,
   ROUTINE_ALIAS_NAME,
@@ -103,7 +101,9 @@ export async function publishRoutineVersion(
   try {
     stepManifestJson = JSON.parse(i.stepManifest);
   } catch (err) {
-    throw new Error(`stepManifest is not valid JSON: ${(err as Error).message}`);
+    throw new Error(
+      `stepManifest is not valid JSON: ${(err as Error).message}`,
+    );
   }
 
   return publishRoutineArtifacts(
@@ -125,6 +125,12 @@ export async function publishRoutineArtifacts(
   ctx: GraphQLContext,
   metadata: RoutinePublishMetadata = {},
 ): Promise<unknown> {
+  const prepared = await prepareRoutineCredentialArtifacts({
+    tenantId: routine.tenant_id,
+    artifacts,
+  });
+  artifacts = prepared.artifacts;
+
   const validation = await validateRoutineAsl({
     asl: artifacts.aslJson,
     currentRoutineId: routineId,
@@ -211,7 +217,9 @@ export async function publishRoutineArtifacts(
         markdown_summary: artifacts.markdownSummary,
         step_manifest_json: artifacts.stepManifestJson,
         validation_warnings_json:
-          validation.warnings.length > 0 ? validation.warnings : null,
+          validation.warnings.length > 0 || prepared.warnings.length > 0
+            ? [...validation.warnings, ...prepared.warnings]
+            : null,
         published_by_actor_id: ctx.auth.principalId ?? null,
         published_by_actor_type: ctx.auth.authType ?? null,
       })
