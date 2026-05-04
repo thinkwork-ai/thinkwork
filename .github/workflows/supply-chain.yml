@@ -1,0 +1,42 @@
+name: Supply Chain
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # Bound the job: pnpm install --frozen-lockfile against a warm registry
+    # cache completes in well under 2 minutes; 15 leaves headroom for cold
+    # starts and brief network degradation without bleeding into a 6-hour
+    # default-timeout hang on a registry outage. Mirrors the timeout-minutes
+    # convention used in deploy.yml.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      # `pnpm install --frozen-lockfile` is the first integrity gate: pnpm
+      # verifies every package's lockfile-pinned `integrity:` SHA against
+      # the artifact downloaded from the registry. A drift here is a
+      # registry compromise or a hand-edited lockfile.
+      #
+      # `--ignore-scripts` is load-bearing for THIS workflow specifically:
+      # the verify-supply-chain.sh step that follows reads only local
+      # files (lockfile + baseline) and never executes installed packages,
+      # so we can refuse to run third-party lifecycle scripts here. The
+      # repo's normal test/typecheck/lint/deploy workflows still run with
+      # scripts enabled where they need them; this hardening is scoped to
+      # the integrity-verification surface.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # The baseline check is the second gate: an explicit allow-list of
+      # trusted-handler critical-path packages. A drift in the lockfile
+      # itself (intentional version bump or supply-chain compromise)
+      # surfaces as `integrity mismatch` and forces the maintainer to
+      # acknowledge the change in scripts/supply-chain-baseline.txt.
+      - run: bash scripts/verify-supply-chain.sh
