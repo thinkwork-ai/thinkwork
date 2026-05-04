@@ -19,11 +19,14 @@
  */
 
 /** OAuth 2.0 / RFC 6750 Bearer header shape. Matches `Bearer ` + 20+ chars
- *  drawn from the unreserved set. 20 chars is the conservative floor used
- *  by major IdPs (Auth0, Okta, Google) — short enough to catch trimmed
- *  fragments, long enough to avoid matching legitimate text like
+ *  drawn from the RFC 6750 `token68` grammar (`A-Z` / `a-z` / `0-9` /
+ *  `-` / `.` / `_` / `~` / `+` / `/` plus optional `=` padding). Common
+ *  bearer formats covered: standard JWTs (`A-Za-z0-9._-`), base64-padded
+ *  JWTs (adds `=`), and Okta / Cognito opaque tokens (uses `+` and `/`).
+ *  20 chars is the conservative floor used by major IdPs (Auth0, Okta,
+ *  Google) — long enough to avoid matching legitimate prose like
  *  `Bearer with me a moment`. */
-const BEARER_HEADER_PATTERN = /Bearer [A-Za-z0-9._-]{20,}/g;
+const BEARER_HEADER_PATTERN = /Bearer [A-Za-z0-9._~+/=-]{20,}/g;
 const REDACTED = "Bearer [REDACTED]";
 
 /**

@@ -964,6 +964,28 @@ export async function handleInvocation(
       handleStore,
     });
   } catch (err) {
+    // U16 — assembleTools may have minted handles into `handleStore`
+    // before failing (e.g., MCP transport opened then listTools timed
+    // out). The runLoop's finally block is unreachable on this path, so
+    // clear the store + drain any partial cleanup closures HERE to
+    // honor the U7 invariant: `try { … } finally { handleStore.clear() }`
+    // on every handleInvocation exit path.
+    handleStore.clear();
+    for (const fn of cleanup.reverse()) {
+      try {
+        await fn();
+      } catch (cleanupErr) {
+        logStructured({
+          level: "warn",
+          event: "cleanup_failed",
+          tenantId: identity.tenantId,
+          error:
+            cleanupErr instanceof Error
+              ? cleanupErr.message
+              : String(cleanupErr),
+        });
+      }
+    }
     logStructured({
       level: "error",
       event: "tool_assembly_failed",

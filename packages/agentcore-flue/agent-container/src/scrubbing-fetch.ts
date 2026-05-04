@@ -70,11 +70,35 @@ export function createScrubbingFetch(
 
 		const response = await delegate(input, effectiveInit);
 
-		// Stream the body once, scrub, and return a new Response. We can't
-		// modify the original body in place (Response.body is a ReadableStream
-		// the SDK reads to completion). Cloning before .text() would also
-		// work but requires double-buffering; reading and rebuilding is the
-		// conservative path for unit-test predictability.
+		// Content-type-aware scrubbing. Buffering `response.text()` consumes
+		// the underlying ReadableStream — that's correct for JSON RPC bodies
+		// (the SDK reads them to completion via `await response.json()`)
+		// but BREAKS server-sent-events (text/event-stream) and any other
+		// streaming content type by collapsing the live stream into a
+		// finite snapshot. The MCP wire protocol uses JSON for the RPC
+		// channel where bearer reflection is the realistic threat (e.g.,
+		// 401 with `Bearer <token>` echoed in the error body); SSE is for
+		// server-initiated push notifications and is unlikely to carry a
+		// reflected bearer in practice.
+		//
+		// Decision: buffer-and-scrub JSON; pass non-JSON through unchanged.
+		// SSE-event bearer scrub is tracked as residual review work; an
+		// in-stream TransformStream-based scrub is the next iteration.
+		const contentType = response.headers.get("content-type") ?? "";
+		// MCP `streamable-http` SDK paths (per
+		// @modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js):
+		//   - `application/json` → SDK calls `await response.json()` (buffered)
+		//   - `text/event-stream` → SDK pipes `response.body` through
+		//     TextDecoderStream + EventSourceParserStream (streaming)
+		// Buffering the SSE body would block the SDK from receiving
+		// server-initiated events until the connection closes. Restrict
+		// scrub to JSON only.
+		const shouldBuffer = contentType.includes("application/json");
+
+		if (!shouldBuffer) {
+			return response;
+		}
+
 		const rawBody = await response.text();
 		const scrubbed = scrubBearerStrings(rawBody, swap?.activeBearer);
 
@@ -122,8 +146,20 @@ function swapAuthorizationHeader(
 
 	const bearer = handleStore.resolve(handle);
 
-	const out: Record<string, string> = { ...flat };
-	delete out[authKey];
+	// Strip ALL case variants of `authorization` before installing the
+	// canonical `Authorization`. A caller that supplied both
+	// `Authorization` and `authorization` would otherwise leave the
+	// non-canonical key alongside the swapped one — at the wire level
+	// the SDK transport iterates `Object.entries(headers)` and the
+	// remaining lowercase key would override depending on iteration
+	// order. Defensive: HTTP header names are case-insensitive per
+	// RFC 7230, so multiple casings represent the same header and only
+	// one (the canonical) should reach the transport.
+	const out: Record<string, string> = {};
+	for (const [key, val] of Object.entries(flat)) {
+		if (key.toLowerCase() === "authorization") continue;
+		out[key] = val;
+	}
 	out["Authorization"] = `Bearer ${bearer}`;
 
 	return { headers: out, activeBearer: bearer };

@@ -50,6 +50,15 @@ describe("scrubBearerStrings — Bearer-prefix regex", () => {
 		expect(out).toBe("first=Bearer [REDACTED]\nsecond=Bearer [REDACTED]");
 	});
 
+	it("redacts RFC 6750 token68 grammar with `+`, `/`, `=` (Okta / Cognito opaque tokens, base64-padded JWTs)", () => {
+		const okta = "Bearer aB0/cD1+eF2=gH3=iJ4kLmNo";
+		const padded = "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig==";
+		const slash = "Bearer abc/def+ghi/jkl/mno+pqr/";
+		expect(scrubBearerStrings(okta)).toBe("Bearer [REDACTED]");
+		expect(scrubBearerStrings(padded)).toBe("Bearer [REDACTED]");
+		expect(scrubBearerStrings(slash)).toBe("Bearer [REDACTED]");
+	});
+
 	it("does not redact short Bearer-shaped substrings (< 20 chars)", () => {
 		// Short tokens are not the secret category we target (real OAuth
 		// IdPs emit much longer values); avoiding them prevents the
@@ -309,6 +318,7 @@ describe("createScrubbingFetch — response-body scrub (BEARER LEAK CONTRACT)", 
 		const baseFetch: typeof fetch = async () =>
 			new Response(
 				"leaked: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signaturePadding",
+				{ headers: { "Content-Type": "application/json" } },
 			);
 
 		const scrubbing = createScrubbingFetch({ handleStore, baseFetch });
@@ -316,6 +326,99 @@ describe("createScrubbingFetch — response-body scrub (BEARER LEAK CONTRACT)", 
 		const body = await response.text();
 
 		expect(body).toBe("leaked: Bearer [REDACTED]");
+	});
+});
+
+describe("createScrubbingFetch — content-type-aware buffering (SSE streaming preservation)", () => {
+	it("passes through `text/event-stream` responses unchanged (does not buffer the streaming body)", async () => {
+		const handleStore = new HandleStore();
+		const bearer = "AnotherBearerToken-PaddingPaddingPad";
+		const handle = handleStore.mint(bearer);
+
+		// SSE responses are streaming; buffering via response.text()
+		// would block the SDK's EventSourceParserStream from receiving
+		// server-initiated events. Verify the returned Response is the
+		// original (passthrough) — same body reference.
+		const sseResponse = new Response("data: chunk1\n\ndata: chunk2\n\n", {
+			headers: { "Content-Type": "text/event-stream" },
+		});
+		const baseFetch: typeof fetch = async () => sseResponse;
+
+		const scrubbing = createScrubbingFetch({ handleStore, baseFetch });
+		const response = await scrubbing("https://mcp.example.com/", {
+			headers: { Authorization: `${McpHandleAuthScheme} ${handle}` },
+		});
+
+		expect(response).toBe(sseResponse);
+	});
+
+	it("buffers and scrubs `application/json` responses (the MCP RPC channel)", async () => {
+		const handleStore = new HandleStore();
+		const bearer = "FakeJwt.PayloadOnly.SignaturePart_DoNotEcho";
+		const handle = handleStore.mint(bearer);
+
+		const baseFetch: typeof fetch = async () =>
+			new Response(
+				JSON.stringify({ error: "unauthorized", echo: bearer }),
+				{
+					status: 401,
+					headers: { "Content-Type": "application/json" },
+				},
+			);
+
+		const scrubbing = createScrubbingFetch({ handleStore, baseFetch });
+		const response = await scrubbing("https://mcp.example.com/", {
+			headers: { Authorization: `${McpHandleAuthScheme} ${handle}` },
+		});
+
+		const body = await response.text();
+		expect(body).not.toContain(bearer);
+		expect(body).toContain("[REDACTED]");
+	});
+
+	it("passes through binary content (application/octet-stream) unchanged", async () => {
+		const handleStore = new HandleStore();
+		const handle = handleStore.mint("aaaaaaaaaaaaaaaaaaaaaaaa");
+
+		const binaryResponse = new Response(new Uint8Array([0, 1, 2, 3, 4]), {
+			headers: { "Content-Type": "application/octet-stream" },
+		});
+		const baseFetch: typeof fetch = async () => binaryResponse;
+
+		const scrubbing = createScrubbingFetch({ handleStore, baseFetch });
+		const response = await scrubbing("https://mcp.example.com/", {
+			headers: { Authorization: `${McpHandleAuthScheme} ${handle}` },
+		});
+
+		expect(response).toBe(binaryResponse);
+	});
+});
+
+describe("createScrubbingFetch — duplicate-casing Authorization collision", () => {
+	it("strips all case variants of `authorization` before installing the canonical Authorization", async () => {
+		const handleStore = new HandleStore();
+		const bearer = "AnotherBearerToken-PaddingPaddingPad";
+		const handle = handleStore.mint(bearer);
+
+		let captured: Record<string, string> | undefined;
+		const baseFetch: typeof fetch = async (_input, init) => {
+			captured = init?.headers as Record<string, string>;
+			return new Response("", { status: 200 });
+		};
+
+		const scrubbing = createScrubbingFetch({ handleStore, baseFetch });
+		// Caller supplies BOTH `Authorization` and `authorization` (a
+		// proxy or test fixture might do this). Both must be stripped
+		// before installing the canonical bearer.
+		await scrubbing("https://mcp.example.com/", {
+			headers: {
+				Authorization: `${McpHandleAuthScheme} ${handle}`,
+				authorization: "stale value",
+			},
+		});
+
+		expect(captured?.Authorization).toBe(`Bearer ${bearer}`);
+		expect(captured?.authorization).toBeUndefined();
 	});
 });
 
