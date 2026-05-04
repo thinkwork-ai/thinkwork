@@ -358,7 +358,11 @@ describe("invokePythonTask — edge cases", () => {
         interpreterId: "ipi-shared",
         bucket: "thinkwork-dev-routine-output",
         credentialResolver: async () => ({
-          pdi: { partnerId: "123", password: "super-secret-password" },
+          credentials: {
+            pdi: { partnerId: "123", password: "super-secret-password" },
+          },
+          redactionValues: ["123", "super-secret-password"],
+          credentialIds: ["credential-1"],
         }),
       },
     );
@@ -372,6 +376,53 @@ describe("invokePythonTask — edge cases", () => {
     expect(invokeCallArg.arguments.code).toContain("const credentials");
     expect(invokeCallArg.arguments.code).toContain("partnerId");
     expect(invokeCallArg.arguments.code).toContain("super-secret-password");
+  });
+
+  it("redacts credential values before S3 offload and stdout preview", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({
+            stdout: "password=super-secret-password\n",
+            stderr: "token=ghp_123456789012345678901234\n",
+            exitCode: 0,
+          }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    const result = await invokePythonTask(
+      {
+        ...baseInput,
+        credentialBindings: [{ alias: "pdi", credentialId: "pdi-soap" }],
+      },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+        credentialResolver: async () => ({
+          credentials: {
+            pdi: { password: "super-secret-password" },
+          },
+          redactionValues: ["super-secret-password"],
+          credentialIds: ["credential-1"],
+        }),
+      },
+    );
+
+    expect(result.stdoutPreview).toBe("password=<redacted>\n");
+    const stdoutPut = mockS3Send.mock.calls.find((c) =>
+      (c[0] as { input: { Key: string } }).input.Key.endsWith("stdout.log"),
+    );
+    const stderrPut = mockS3Send.mock.calls.find((c) =>
+      (c[0] as { input: { Key: string } }).input.Key.endsWith("stderr.log"),
+    );
+    expect((stdoutPut![0] as { input: { Body: string } }).input.Body).toBe(
+      "password=<redacted>\n",
+    );
+    expect((stderrPut![0] as { input: { Body: string } }).input.Body).toBe(
+      "token=<redacted>\n",
+    );
   });
 });
 
@@ -396,6 +447,48 @@ describe("invokePythonTask — error paths", () => {
     expect(result.exitCode).toBe(-1);
     expect(result.errorClass).toBe("sandbox_invoke_failed");
     expect(result.errorMessage).toContain("transient AWS error");
+  });
+
+  it("records a failed step callback when credential resolution fails before sandbox invoke", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await invokePythonTask(
+        {
+          ...baseInput,
+          credentialBindings: [{ alias: "pdi", credentialId: "pdi-soap" }],
+        },
+        {
+          interpreterId: "ipi-shared",
+          bucket: "thinkwork-dev-routine-output",
+          stepCallback: {
+            apiUrl: "https://api.example.test",
+            authSecret: "callback-secret",
+          },
+          credentialResolver: async () => {
+            throw new Error(
+              "Credential 'PDI SOAP' is missing required field 'password'",
+            );
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(-1);
+      expect(result.errorClass).toBe("credential_resolution_failed");
+      expect(mockAgentCoreSend).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const failedBody = JSON.parse(
+        (fetchMock.mock.calls[1][1] as { body: string }).body,
+      );
+      expect(failedBody.status).toBe("failed");
+      expect(failedBody.errorJson).toMatchObject({
+        errorClass: "credential_resolution_failed",
+      });
+      expect(JSON.stringify(failedBody)).not.toContain("callback-secret");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("returns exitCode 0 even if both S3 PutObject calls fail — sandbox output is still successful", async () => {
