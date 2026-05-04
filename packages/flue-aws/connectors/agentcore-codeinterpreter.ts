@@ -28,6 +28,7 @@ import {
 	InvokeCodeInterpreterCommand,
 	StartCodeInterpreterSessionCommand,
 	StopCodeInterpreterSessionCommand,
+	type ToolResultStructuredContent,
 } from "@aws-sdk/client-bedrock-agentcore";
 import type {
 	FileStat,
@@ -62,11 +63,22 @@ export interface AgentcoreCodeInterpreterOptions {
 
 // ─── Stream parsing ─────────────────────────────────────────────────────────
 
+/**
+ * Accumulated parse of a single AgentCore Code Interpreter stream.
+ *
+ * `structured` is the SDK's `ToolResultStructuredContent` (typed:
+ * `stdout` / `stderr` / `exitCode` / `taskId` / `taskStatus` /
+ * `executionTime`) intersected with optional `files` and `content`
+ * fields the runtime carries for `readFiles` / `listFiles` invocations
+ * but the SDK type does not formalize. The intersection lets downstream
+ * `readFile` / `readdir` read those non-SDK fields without an additional
+ * cast on the typed envelope.
+ */
 interface ParsedStreamResult {
 	stdout: string;
 	stderr: string;
 	exitCode: number;
-	structured: Record<string, unknown> | undefined;
+	structured: (ToolResultStructuredContent & { files?: unknown; content?: unknown }) | undefined;
 	textBlocks: string[];
 }
 
@@ -96,17 +108,16 @@ async function consumeStream(
 
 		// `structuredContent` is the SDK's typed envelope
 		// (`ToolResultStructuredContent` — `stdout`, `stderr`, `exitCode`,
-		// `taskId`, `taskStatus`, `executionTime`). Runtime payloads also
-		// carry a non-SDK `files` field that downstream `readFile` /
-		// `readdir` reads via defensive narrowing on the accumulated
-		// `out.structured` envelope. The single coercion below converts the
-		// SDK type to the loose `Record<string, unknown>` accumulator the
-		// `ParsedStreamResult` interface uses; this cast is on a properly-
-		// narrowed `CodeInterpreterResult.structuredContent` field, NOT on
-		// a raw stream event (the U13 prohibition).
+		// `taskId`, `taskStatus`, `executionTime`). Runtime payloads from
+		// `readFiles` / `listFiles` carry additional `files` / `content`
+		// fields that the SDK type does not formalize; `ParsedStreamResult.
+		// structured` widens to a `ToolResultStructuredContent & { files?:
+		// unknown; content?: unknown }` intersection so downstream
+		// `readFile` / `readdir` can read them with a single defensive cast
+		// at the read site (no boundary cast needed here).
 		const sc = result.structuredContent;
 		if (sc) {
-			out.structured = sc as unknown as Record<string, unknown>;
+			out.structured = sc;
 			out.stdout += sc.stdout ?? "";
 			out.stderr += sc.stderr ?? "";
 			if (sc.exitCode !== undefined) out.exitCode = sc.exitCode;
