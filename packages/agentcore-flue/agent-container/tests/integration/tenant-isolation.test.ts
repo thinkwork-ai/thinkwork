@@ -102,7 +102,7 @@ describe("AuroraSessionStore — concurrent tenant isolation (audit item #1)", (
     });
   });
 
-  it("10 concurrent saves with alternating tenants thread the right tenantId+agentId on every command", async () => {
+  it("10 interleaved saves with alternating tenants thread the right tenantId+agentId on every command", async () => {
     const tenants = ["tenant-A", "tenant-B"] as const;
     const agents = ["agent-A", "agent-B"] as const;
 
@@ -145,21 +145,37 @@ describe("AuroraSessionStore — concurrent tenant isolation (audit item #1)", (
     // Every recorded command must have the tenant+agent pair matching the
     // thread_id it carried. If the store leaked state across instances we
     // would see, e.g., tenant-A.id parameters with tenant-B's threadId.
+    //
+    // The SDK's SqlParameter.value is a discriminated union (Field) where
+    // `stringValue` lives only on the StringValueMember branch. We narrow
+    // explicitly so a future shift to a different parameter type
+    // (longValue, booleanValue, …) surfaces as a typed test failure rather
+    // than silently reading `undefined` and false-passing the
+    // cross-contamination assertion.
     for (const call of calls) {
-      const params = (call.args[0].input.parameters ?? []) as Array<{
-        name?: string;
-        value?: { stringValue?: string };
-      }>;
-      const byName = new Map(
-        params.map((p) => [p.name, p.value?.stringValue]),
-      );
+      const params = call.args[0].input.parameters ?? [];
+      const byName = new Map<string, string>();
+      for (const param of params) {
+        if (!param.name || !param.value) continue;
+        if (!("stringValue" in param.value)) {
+          throw new Error(
+            `tenant-isolation test: SqlParameter ${param.name} carries a non-string value; ` +
+              "the AuroraSessionStore contract expects all four bound parameters to be StringValueMember.",
+          );
+        }
+        const stringValue = param.value.stringValue;
+        if (typeof stringValue !== "string") continue;
+        byName.set(param.name, stringValue);
+      }
       const recordedThreadId = byName.get("thread_id");
       const recordedTenantId = byName.get("tenant_id");
       const recordedAgentId = byName.get("agent_id");
       const expected = expectations.find((e) => e.threadId === recordedThreadId);
-      expect(expected, `unrecognised thread_id ${recordedThreadId}`).toBeDefined();
-      expect(recordedTenantId).toBe(expected!.tenantId);
-      expect(recordedAgentId).toBe(expected!.agentId);
+      if (!expected) {
+        throw new Error(`unrecognised thread_id ${recordedThreadId}`);
+      }
+      expect(recordedTenantId).toBe(expected.tenantId);
+      expect(recordedAgentId).toBe(expected.agentId);
     }
   });
 
@@ -221,7 +237,22 @@ describe("HandleStore — per-invocation isolation (audit item #2)", () => {
     expect(b.resolve(handleB)).toBe("bearer-B");
   });
 
-  it("10 parallel mint+resolve cycles per store stay isolated", async () => {
+  it("revoke() on one store does not affect another store's handles", () => {
+    const a = new HandleStore();
+    const b = new HandleStore();
+    const handleA1 = a.mint("bearer-A1");
+    const handleA2 = a.mint("bearer-A2");
+    const handleB = b.mint("bearer-B");
+    a.revoke(handleA1);
+    expect(() => a.resolve(handleA1)).toThrow(HandleStoreError);
+    // Other entries on the same store are untouched.
+    expect(a.resolve(handleA2)).toBe("bearer-A2");
+    // Store B is completely unaffected.
+    expect(b.resolve(handleB)).toBe("bearer-B");
+    expect(b.size).toBe(1);
+  });
+
+  it("10 interleaved mint+resolve cycles per store stay isolated", async () => {
     const a = new HandleStore();
     const b = new HandleStore();
     const cycles = await Promise.all(
@@ -277,14 +308,25 @@ describe("HandleStore — per-invocation isolation (audit item #2)", () => {
 
     expect(headersByStore[0]).toHaveLength(1);
     expect(headersByStore[1]).toHaveLength(1);
-    const handle0 = headersByStore[0]![0]!.Authorization!.replace(/^Handle /, "");
-    const handle1 = headersByStore[1]![0]!.Authorization!.replace(/^Handle /, "");
+    // Explicit guards instead of an unreadable `headersByStore[0]![0]!.Authorization!`
+    // chain. Each `?` would silently coerce a missing key into `undefined.replace`
+    // — better to surface a typed assertion failure pinpointing the actual gap.
+    const auth0 = headersByStore[0]?.[0]?.Authorization;
+    const auth1 = headersByStore[1]?.[0]?.Authorization;
+    expect(auth0, "store-0 Authorization header missing").toBeDefined();
+    expect(auth1, "store-1 Authorization header missing").toBeDefined();
+    const handle0 = auth0!.replace(/^Handle /, "");
+    const handle1 = auth1!.replace(/^Handle /, "");
     expect(handle0).not.toBe(handle1);
-    expect(stores[0]!.resolve(handle0)).toBe("bearer-0");
-    expect(stores[1]!.resolve(handle1)).toBe("bearer-1");
+    const store0 = stores[0];
+    const store1 = stores[1];
+    expect(store0).toBeDefined();
+    expect(store1).toBeDefined();
+    expect(store0!.resolve(handle0)).toBe("bearer-0");
+    expect(store1!.resolve(handle1)).toBe("bearer-1");
     // Cross-store resolution must fail — the load-bearing isolation invariant.
-    expect(() => stores[0]!.resolve(handle1)).toThrow();
-    expect(() => stores[1]!.resolve(handle0)).toThrow();
+    expect(() => store0!.resolve(handle1)).toThrow();
+    expect(() => store1!.resolve(handle0)).toThrow();
   });
 });
 
@@ -420,6 +462,16 @@ describe("Audit grep — module-level mutable state", () => {
 
   it("module-level `new Map()` (empty/dynamic) is forbidden in src/", () => {
     const matches = grepLines(FLUE_SRC, "new Map(");
+    // Vacuous-pass guard: if `src/` is renamed or `cwd` drifts, git grep
+    // returns zero matches and BOTH this test and the structural rule it
+    // enforces silently no-op. Assert at least one Map construction is
+    // visible — the codebase actually uses Map (e.g., the HandleStore at
+    // src/mcp.ts) so any zero-match outcome is a misconfiguration, not a
+    // clean tree.
+    expect(
+      matches.length,
+      "audit grep saw zero `new Map(` matches in src/ — likely a path-resolution misconfiguration; the audit would silently pass without detecting real module-level state",
+    ).toBeGreaterThan(0);
     const suspicious = matches.filter(
       (m) => isModuleLevel(m.line) && !isLiteralInitialization(m.line, "Map"),
     );
@@ -435,6 +487,19 @@ describe("Audit grep — module-level mutable state", () => {
 
   it("module-level `new Set()` (empty/dynamic) is forbidden in src/", () => {
     const matches = grepLines(FLUE_SRC, "new Set(");
+    // Same vacuous-pass guard as the Map test above. The src/ tree
+    // contains at least one constant-literal Set initialization (e.g.,
+    // SENSITIVE_HEADER_KEYS in handler-context.ts on the U9 branch); a
+    // zero-match outcome here indicates the path scope drifted.
+    // We accept zero matches on origin/main today (no Set literals at
+    // module scope yet) but log to make the gap visible.
+    if (matches.length === 0) {
+      // Intentionally non-fatal: the trusted-handler tree may genuinely
+      // have no Set constructions. The vacuous-pass risk is documented
+      // in the residual-risks list rather than enforced here, since the
+      // Map test already covers the same path-resolution invariant.
+      return;
+    }
     const suspicious = matches.filter(
       (m) => isModuleLevel(m.line) && !isLiteralInitialization(m.line, "Set"),
     );
@@ -454,20 +519,22 @@ describe("Audit grep — module-level mutable state", () => {
 // ---------------------------------------------------------------------------
 
 describe("Deferred multi-tenant isolation tests (need U9 + U16)", () => {
+  // Each placeholder names the blocker U-ID + a one-line hint for the
+  // implementer who picks it up after the dependency lands.
   it.todo(
-    "U9: 10+ concurrent /invocations against the trusted handler with alternating tenants — sentinel writes do not cross-tenant-leak",
+    "U9: 10+ concurrent handleInvocation() calls with alternating tenant_id surface no cross-tenant sentinel — Promise.all of handleInvocation, each writing a unique sentinel via run_skill, then assert no other tenant's sentinel is reachable",
   );
   it.todo(
-    "U9: agent-supplied tenantId in payload body cannot override the bound IdentitySnapshot — server.ts ignores any user-controlled override",
+    "U9: agent-supplied tenantId in payload body cannot override the bound IdentitySnapshot — call handleInvocation with tenant_id=A AND a payload field also claiming tenant_id=B; assert all downstream side effects use A",
   );
   it.todo(
-    "U16: session.task() sub-agent inherits trusted-handler tenantId; agent prompt cannot widen scope",
+    "U16: session.task() sub-agent inherits trusted-handler tenantId — spawn a sub-agent inside a wrapped session, attempt to override tenantId in the sub-agent prompt, assert resulting Aurora calls still use the parent's tenantId",
   );
   it.todo(
-    "U16: worker-thread fetch interceptor resolves Handle->Bearer ONLY against the per-invocation HandleStore — handles minted in one invocation are unresolvable from another worker",
+    "U16: worker-thread fetch interceptor resolves Handle->Bearer only against the per-invocation HandleStore — mint a handle in invocation A, attempt resolution in worker for invocation B, assert HandleStoreError",
   );
   it.todo(
-    "U16: response-body scrubber strips any bearer-shaped substring that the MCP server may echo back",
+    "U16: response-body scrubber strips bearer-shaped substrings — synthesize an MCP response body containing `Bearer <fixture>` and assert the final ToolResult passed to the agent loop replaces the bearer with `[redacted]`",
   );
 });
 
@@ -483,8 +550,11 @@ interface GrepMatch {
 
 function grepLines(rootDir: string, needle: string): GrepMatch[] {
   // Use git grep so we get the same ignore semantics as `git grep` in CI.
-  // The command exits non-zero when there are no matches; treat that as
-  // "no hits" rather than a hard error.
+  // The command exits non-zero on three signals:
+  //   1   = no matches (treated as "zero hits", not an error)
+  //   128 = not a git repository (clear diagnostic — the audit cannot run)
+  //   ENOENT-ish = git not on PATH (CI image without git tooling)
+  // Other exit codes are unexpected and re-thrown.
   let output = "";
   try {
     output = execFileSync(
@@ -497,8 +567,24 @@ function grepLines(rootDir: string, needle: string): GrepMatch[] {
       },
     );
   } catch (err) {
-    const e = err as { status?: number; stdout?: string };
+    const e = err as {
+      status?: number;
+      code?: string;
+      stderr?: string;
+    };
     if (e.status === 1) return [];
+    if (e.status === 128) {
+      throw new Error(
+        `verify-tenant-isolation: git grep requires a git repository (cwd=${path.dirname(rootDir)}). ` +
+          `The audit grep test is not portable to non-git checkouts; ` +
+          `stderr from git: ${e.stderr ?? "(empty)"}`,
+      );
+    }
+    if (e.code === "ENOENT") {
+      throw new Error(
+        "verify-tenant-isolation: `git` is not on PATH; the audit grep test depends on git for ignore semantics.",
+      );
+    }
     throw err;
   }
   const matches: GrepMatch[] = [];
