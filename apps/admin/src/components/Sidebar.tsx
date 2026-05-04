@@ -18,6 +18,7 @@ import {
   LayoutTemplate,
   ShieldCheck,
   Workflow,
+  KeyRound,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -219,6 +220,11 @@ export function AppSidebar() {
       to: "/automations/webhooks",
       icon: Webhook,
       label: "Webhooks",
+    },
+    {
+      to: "/automations/credentials",
+      icon: KeyRound,
+      label: "Credentials",
     },
     {
       to: "/automations/system-workflows",

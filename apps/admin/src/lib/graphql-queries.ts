@@ -811,6 +811,94 @@ export const RoutineRecipeCatalogQuery = graphql(`
   }
 `);
 
+// ---------------------------------------------------------------------------
+// Tenant Credentials
+// ---------------------------------------------------------------------------
+
+export const TenantCredentialsQuery = graphql(`
+  query TenantCredentials($tenantId: ID!, $status: TenantCredentialStatus) {
+    tenantCredentials(tenantId: $tenantId, status: $status) {
+      id
+      tenantId
+      displayName
+      slug
+      kind
+      status
+      metadataJson
+      schemaJson
+      eventbridgeConnectionArn
+      lastUsedAt
+      lastValidatedAt
+      createdAt
+      updatedAt
+      deletedAt
+    }
+  }
+`);
+
+export const CredentialRoutineUsageQuery = graphql(`
+  query CredentialRoutineUsage($tenantId: ID!) {
+    routines(tenantId: $tenantId) {
+      id
+      name
+      status
+      config
+      engine
+      updatedAt
+    }
+  }
+`);
+
+export const CreateTenantCredentialMutation = graphql(`
+  mutation CreateTenantCredential($input: CreateTenantCredentialInput!) {
+    createTenantCredential(input: $input) {
+      id
+      displayName
+      slug
+      kind
+      status
+      metadataJson
+      eventbridgeConnectionArn
+      lastValidatedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateTenantCredentialMutation = graphql(`
+  mutation UpdateTenantCredential(
+    $id: ID!
+    $input: UpdateTenantCredentialInput!
+  ) {
+    updateTenantCredential(id: $id, input: $input) {
+      id
+      displayName
+      slug
+      status
+      metadataJson
+      updatedAt
+    }
+  }
+`);
+
+export const RotateTenantCredentialMutation = graphql(`
+  mutation RotateTenantCredential($input: RotateTenantCredentialInput!) {
+    rotateTenantCredential(input: $input) {
+      id
+      status
+      lastValidatedAt
+      updatedAt
+    }
+  }
+`);
+
+export const DeleteTenantCredentialMutation = graphql(`
+  mutation DeleteTenantCredential($id: ID!) {
+    deleteTenantCredential(id: $id)
+  }
+`);
+
 export const TriggerRoutineRunMutation = graphql(`
   mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
     triggerRoutineRun(routineId: $routineId, input: $input) {
