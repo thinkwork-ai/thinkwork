@@ -73,6 +73,7 @@ import {
   type McpServerConfig,
 } from "./mcp.js";
 import { createConnectMcpServer } from "./mcp-connect.js";
+import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildHindsightTools } from "./tools/hindsight.js";
 import { buildMemoryTools } from "./tools/memory.js";
 import {
@@ -280,6 +281,15 @@ export interface AssembleToolsArgs {
    * array owned by the factory.
    */
   cleanup: Array<() => Promise<void>>;
+  /**
+   * U16 — Per-invocation `HandleStore` allocated by the caller. The
+   * scrubbing fetch passed into `createConnectMcpServer` resolves
+   * handles against THIS store; if assembleTools created its own
+   * private one, the fetch would hold a stale reference and resolve
+   * would always fail. Must be the same instance across the
+   * trusted-handler / MCP-connect / buildMcpTools triangle.
+   */
+  handleStore: HandleStore;
 }
 
 /**
@@ -293,7 +303,10 @@ export async function assembleTools(
 ): Promise<AssembledToolBundle> {
   const tools: AgentTool<any>[] = [];
   const cleanup = args.cleanup;
-  const handleStore = new HandleStore();
+  // U16 — caller allocates the HandleStore so the scrubbing fetch
+  // closure (built alongside `connectMcpServer` in handleInvocation)
+  // resolves handles against the same store this build mints into.
+  const handleStore = args.handleStore;
 
   // Run-skill (U5) — only adds the tool if the workspace has scripts.
   const runSkill = buildRunSkillTool({
@@ -916,8 +929,24 @@ export async function handleInvocation(
   // adversarial + agent-native + kieran-typescript all flagged it).
   const cleanup: Array<() => Promise<void>> = [];
 
+  // U16 — Allocate the per-invocation HandleStore here (was previously
+  // created inside assembleTools). Both the scrubbing fetch
+  // (createScrubbingFetch below) and the MCP tool builder
+  // (assembleTools → buildMcpTools) need to share this same instance
+  // so the egress fetch resolves the handle the build minted. The
+  // handler's `finally` block already calls `bundle.handleStore.clear()`
+  // which now operates on the same store.
+  const handleStore = new HandleStore();
+
+  // U16 — Egress fetch interceptor. Swaps `Authorization: Handle <uuid>`
+  // for `Bearer <bearer>` at HTTP-call time and scrubs response bodies
+  // for bearer-shaped strings + the literal active bearer. Production
+  // path; tests inject `connectMcpServerFactory` to bypass entirely.
+  const scrubbingFetch = createScrubbingFetch({ handleStore });
+
   const connectMcpServer =
-    deps.connectMcpServerFactory ?? createConnectMcpServer({ cleanup });
+    deps.connectMcpServerFactory ??
+    createConnectMcpServer({ cleanup, fetch: scrubbingFetch });
 
   // Build tools last so any setup failure above short-circuits before
   // we touch the HandleStore.
@@ -932,8 +961,31 @@ export async function handleInvocation(
       connectMcpServer,
       sessionStoreFactory,
       cleanup,
+      handleStore,
     });
   } catch (err) {
+    // U16 — assembleTools may have minted handles into `handleStore`
+    // before failing (e.g., MCP transport opened then listTools timed
+    // out). The runLoop's finally block is unreachable on this path, so
+    // clear the store + drain any partial cleanup closures HERE to
+    // honor the U7 invariant: `try { … } finally { handleStore.clear() }`
+    // on every handleInvocation exit path.
+    handleStore.clear();
+    for (const fn of cleanup.reverse()) {
+      try {
+        await fn();
+      } catch (cleanupErr) {
+        logStructured({
+          level: "warn",
+          event: "cleanup_failed",
+          tenantId: identity.tenantId,
+          error:
+            cleanupErr instanceof Error
+              ? cleanupErr.message
+              : String(cleanupErr),
+        });
+      }
+    }
     logStructured({
       level: "error",
       event: "tool_assembly_failed",
