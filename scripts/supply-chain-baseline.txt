@@ -1,0 +1,27 @@
+# Supply-chain integrity baseline for the upstream agent-runtime substrate.
+#
+# Plan §005 U10 (FR-3a): explicit pin of the integrity hash for every package
+# that participates in the trusted-handler critical path. CI compares each
+# entry below against the matching `integrity:` field in pnpm-lock.yaml; any
+# drift fails the build and surfaces as `integrity mismatch` for an
+# operator to triage.
+#
+# Format (one entry per line):
+#   <name>@<version> <integrity>
+#
+# Whitespace separates the two columns. Lines starting with `#` and blank
+# lines are ignored. Update this file in the same PR that bumps the
+# corresponding package version; the SLA in
+# `docs/solutions/integration-issues/flue-supply-chain-integrity-2026-05-04.md`
+# documents the upgrade-review gate.
+#
+# Trust tiers (see SLA doc):
+#   - @mariozechner/pi-agent-core, @mariozechner/pi-ai
+#       Manual upgrade-review gate. Every version bump requires changelog +
+#       diff review by a named reviewer before merge.
+#   - @modelcontextprotocol/sdk
+#       Lockfile integrity is the primary control; standard CVE response.
+
+@mariozechner/pi-agent-core@0.70.2 sha512-g1hIdKyDwmQOoBGO0R4OhpemKeMENeK0vE5FJtuQKqEcsdCAkVBgZAK6aZUARYZVxMA718JS6WPLFWoddzjD7g==
+@mariozechner/pi-ai@0.70.2 sha512-+30LRPjXsXF+oI96DvGWMbdPGeqoLJvadh6UPev7wx2DzhC9FEqXkQcoMZ0usbCm7E9pl8ua8a9s/pQ5ikaUbg==
+@modelcontextprotocol/sdk@1.29.0 sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==
