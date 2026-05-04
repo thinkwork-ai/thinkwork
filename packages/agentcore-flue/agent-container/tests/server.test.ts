@@ -6,7 +6,7 @@ import {
   handleInvocation,
   postCompletion,
 } from "../src/server.js";
-import type { ConnectMcpServerFn } from "../src/mcp.js";
+import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 // ---------------------------------------------------------------------------
@@ -524,6 +524,7 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
       connectMcpServer: connect,
       sessionStoreFactory: () => ({}) as never,
       cleanup: [],
+      handleStore: new HandleStore(),
     });
 
     expect(captured).toHaveLength(1);
