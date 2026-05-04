@@ -1,0 +1,28 @@
+name: Supply Chain
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      # `pnpm install --frozen-lockfile` is the first integrity gate: pnpm
+      # verifies every package's lockfile-pinned `integrity:` SHA against
+      # the artifact downloaded from the registry. A drift here is a
+      # registry compromise or a hand-edited lockfile.
+      - run: pnpm install --frozen-lockfile
+      # The baseline check is the second gate: an explicit allow-list of
+      # trusted-handler critical-path packages. A drift in the lockfile
+      # itself (intentional version bump or supply-chain compromise)
+      # surfaces as `integrity mismatch` and forces the maintainer to
+      # acknowledge the change in scripts/supply-chain-baseline.txt.
+      - run: bash scripts/verify-supply-chain.sh
