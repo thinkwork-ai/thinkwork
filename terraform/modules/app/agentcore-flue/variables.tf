@@ -77,3 +77,15 @@ variable "memory_engine" {
     error_message = "memory_engine must be 'hindsight' or 'agentcore'."
   }
 }
+
+variable "db_cluster_arn" {
+  description = "Aurora DB cluster ARN. Injected as DB_CLUSTER_ARN so AuroraSessionStore (plan §005 U4) can target the cluster via the RDS Data API. The cluster's IAM resource scope (thinkwork-<stage>-db-* in agentcore-flue's role policy) covers any cluster-id suffix."
+  type        = string
+  default     = ""
+}
+
+variable "db_secret_arn" {
+  description = "Secrets Manager ARN for the Aurora cluster credentials. Injected as DB_SECRET_ARN so AuroraSessionStore can authenticate against the cluster via the RDS Data API. Matches the secret graphql-http already consumes — single source of truth."
+  type        = string
+  default     = ""
+}
