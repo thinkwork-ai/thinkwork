@@ -6,11 +6,16 @@ import {
 } from "../resolve-runtime-function-name.js";
 
 describe("normalizeAgentRuntimeType", () => {
-  it("keeps pi and defaults everything else to strands", () => {
-    expect(normalizeAgentRuntimeType("pi")).toBe("pi");
+  it("keeps flue and defaults everything else to strands", () => {
+    expect(normalizeAgentRuntimeType("flue")).toBe("flue");
     expect(normalizeAgentRuntimeType("strands")).toBe("strands");
     expect(normalizeAgentRuntimeType(null)).toBe("strands");
     expect(normalizeAgentRuntimeType("unknown")).toBe("strands");
+    // Pi values still in flight from before the U3 migration get
+    // normalized to strands; the SQL data migration backfills the
+    // column to `flue` so this branch is only reachable for
+    // fixtures or stale wire payloads.
+    expect(normalizeAgentRuntimeType("pi")).toBe("strands");
   });
 });
 
@@ -24,9 +29,9 @@ describe("resolveRuntimeFunctionName", () => {
     ).toBe("thinkwork-dev-agentcore");
   });
 
-  it("uses the Pi function for pi runtime", () => {
+  it("uses the Flue function for flue runtime", () => {
     expect(
-      resolveRuntimeFunctionName("pi", {
+      resolveRuntimeFunctionName("flue", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
         AGENTCORE_FLUE_FUNCTION_NAME: "thinkwork-dev-agentcore-flue",
       }),
@@ -35,7 +40,7 @@ describe("resolveRuntimeFunctionName", () => {
 
   it("fails loudly when the selected runtime is not provisioned", () => {
     expect(() =>
-      resolveRuntimeFunctionName("pi", {
+      resolveRuntimeFunctionName("flue", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
         AGENTCORE_FLUE_FUNCTION_NAME: "",
       }),

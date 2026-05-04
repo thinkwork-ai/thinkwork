@@ -85,7 +85,7 @@ describe("runPiAgent", () => {
       args: { query: "OpenAI" },
       result: { details: { result_count: 1 } },
       is_error: false,
-      runtime: "pi",
+      runtime: "flue",
       source: "builtin",
     });
     expect(result.response.tool_invocations).toEqual(result.tool_invocations);
@@ -188,7 +188,7 @@ describe("runPiAgent", () => {
         },
       );
       // Caller still gets a clean result; the failure logged but did not throw.
-      expect(result.runtime).toBe("pi");
+      expect(result.runtime).toBe("flue");
       await new Promise((r) => setImmediate(r));
       expect(warnSpy).toHaveBeenCalled();
       warnSpy.mockRestore();

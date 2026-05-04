@@ -40,7 +40,7 @@ export const agents = pgTable(
     type: text("type").notNull().default("agent"),
     /** "user" = created by tenant admins, "system" = platform-managed (eval test agent, etc.) */
     source: text("source").notNull().default("user"),
-    /** Agent runtime substrate. Strands remains the default; Pi is opt-in per agent. */
+    /** Agent runtime substrate. Strands remains the default; Flue is opt-in per agent. */
     runtime: text("runtime").notNull().default("strands"),
     status: text("status").notNull().default("idle"),
     system_prompt: text("system_prompt"),
