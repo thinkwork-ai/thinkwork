@@ -21,7 +21,7 @@
 #   bash scripts/post-deploy.sh --stage <name>          # warn-only (default)
 #   bash scripts/post-deploy.sh --stage dev --strict    # exit 1 on drift
 #   bash scripts/post-deploy.sh --stage dev --region us-east-1 --json
-#   bash scripts/post-deploy.sh --stage dev --runtime pi --min-source-sha <commit>
+#   bash scripts/post-deploy.sh --stage dev --runtime flue --min-source-sha <commit>
 
 set -euo pipefail
 
@@ -69,9 +69,9 @@ fi
 # Terraform module creates one per deployment and the name format has been
 # stable since the maniflow→thinkwork rename.
 case "$RUNTIME" in
-  strands|pi) ;;
+  strands|flue) ;;
   *)
-    echo "ERROR: --runtime must be 'strands' or 'pi' (got '$RUNTIME')" >&2
+    echo "ERROR: --runtime must be 'strands' or 'flue' (got '$RUNTIME')" >&2
     exit 2
     ;;
 esac

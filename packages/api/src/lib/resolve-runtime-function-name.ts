@@ -4,7 +4,7 @@ export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
     super(
       runtimeType === "pi"
-        ? "Pi runtime not yet provisioned in this stage."
+        ? "Flue runtime not yet provisioned in this stage."
         : "Strands runtime not provisioned in this stage.",
     );
     this.name = "RuntimeNotProvisionedError";
@@ -20,13 +20,13 @@ export function resolveRuntimeFunctionName(
   env: Partial<
     Pick<
       NodeJS.ProcessEnv,
-      "AGENTCORE_FUNCTION_NAME" | "AGENTCORE_PI_FUNCTION_NAME"
+      "AGENTCORE_FUNCTION_NAME" | "AGENTCORE_FLUE_FUNCTION_NAME"
     >
   > = process.env,
 ): string {
   const functionName =
     runtimeType === "pi"
-      ? env.AGENTCORE_PI_FUNCTION_NAME
+      ? env.AGENTCORE_FLUE_FUNCTION_NAME
       : env.AGENTCORE_FUNCTION_NAME;
 
   if (!functionName) {

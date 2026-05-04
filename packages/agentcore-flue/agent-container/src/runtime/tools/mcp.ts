@@ -59,7 +59,7 @@ function parseMcpConfigs(value: unknown): McpConfig[] {
 
 function requestInitFor(config: McpConfig): RequestInit {
   const headers: Record<string, string> = {
-    "user-agent": "Thinkwork-Pi/1.0",
+    "user-agent": "Thinkwork-Flue/1.0",
   };
   const token = config.auth?.token;
   if (token) {
@@ -122,7 +122,7 @@ async function connectMcp(config: McpConfig): Promise<{
   client: McpClient;
   transport: Transport;
 }> {
-  const client = new Client({ name: "thinkwork-pi", version: "0.0.0" });
+  const client = new Client({ name: "thinkwork-flue", version: "0.0.0" });
   const url = new URL(config.url);
   const requestInit = requestInitFor(config);
   const transport =
@@ -144,7 +144,7 @@ async function discoverServer(
   cleanup.push(async () => {
     await transport.close().catch((err: unknown) => {
       console.warn(
-        `[agentcore-pi] MCP cleanup failed for ${config.name}: ${safeError(err)}`,
+        `[agentcore-flue] MCP cleanup failed for ${config.name}: ${safeError(err)}`,
       );
     });
   });
@@ -209,7 +209,7 @@ export async function buildMcpTools(
   return discovered.flatMap((result, index) => {
     if (result.status === "fulfilled") return result.value;
     console.warn(
-      `[agentcore-pi] MCP discovery failed for ${configs[index]?.name ?? "unknown"}: ${safeError(result.reason)}`,
+      `[agentcore-flue] MCP discovery failed for ${configs[index]?.name ?? "unknown"}: ${safeError(result.reason)}`,
     );
     return [];
   });

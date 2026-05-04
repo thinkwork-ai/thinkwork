@@ -1,6 +1,6 @@
-# AgentCore Pi runtime — Node.js runtime powered by badlogic/pi-mono.
+# AgentCore Flue runtime — Node.js runtime powered by badlogic/pi-mono.
 # Build from monorepo root:
-#   docker build -f packages/agentcore-pi/agent-container/Dockerfile .
+#   docker build -f packages/agentcore-flue/agent-container/Dockerfile .
 
 FROM node:20-bookworm-slim
 
@@ -14,12 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/agentcore-pi/package.json packages/agentcore-pi/package.json
-COPY packages/agentcore-pi/tsconfig.json packages/agentcore-pi/tsconfig.json
-COPY packages/agentcore-pi/agent-container/src/ packages/agentcore-pi/agent-container/src/
+COPY packages/agentcore-flue/package.json packages/agentcore-flue/package.json
+COPY packages/agentcore-flue/tsconfig.json packages/agentcore-flue/tsconfig.json
+COPY packages/agentcore-flue/agent-container/src/ packages/agentcore-flue/agent-container/src/
 
-RUN corepack enable && pnpm install --filter @thinkwork/agentcore-pi --prod=false --frozen-lockfile
-RUN pnpm --filter @thinkwork/agentcore-pi build
+RUN corepack enable && pnpm install --filter @thinkwork/agentcore-flue --prod=false --frozen-lockfile
+RUN pnpm --filter @thinkwork/agentcore-flue build
 
 ENV PORT=8080
 ENV AWS_REGION=us-east-1
@@ -37,4 +37,4 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 ENV AWS_LWA_PORT=8080
 ENV AWS_LWA_READINESS_CHECK_PATH=/ping
 
-CMD ["node", "/app/packages/agentcore-pi/dist/agent-container/src/server.js"]
+CMD ["node", "/app/packages/agentcore-flue/dist/agent-container/src/server.js"]

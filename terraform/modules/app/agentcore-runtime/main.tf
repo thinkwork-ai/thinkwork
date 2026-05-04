@@ -275,12 +275,12 @@ resource "aws_cloudwatch_log_group" "agentcore" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "agentcore_pi" {
-  name              = "/thinkwork/${var.stage}/agentcore-pi"
+resource "aws_cloudwatch_log_group" "agentcore_flue" {
+  name              = "/thinkwork/${var.stage}/agentcore-flue"
   retention_in_days = 30
 
   tags = {
-    Name = "thinkwork-${var.stage}-agentcore-pi-logs"
+    Name = "thinkwork-${var.stage}-agentcore-flue-logs"
   }
 }
 
@@ -321,11 +321,11 @@ resource "aws_lambda_function" "agentcore" {
   }
 }
 
-resource "aws_lambda_function" "agentcore_pi" {
-  function_name = "thinkwork-${var.stage}-agentcore-pi"
+resource "aws_lambda_function" "agentcore_flue" {
+  function_name = "thinkwork-${var.stage}-agentcore-flue"
   role          = aws_iam_role.agentcore.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.agentcore.repository_url}:pi-latest"
+  image_uri     = "${aws_ecr_repository.agentcore.repository_url}:flue-latest"
   timeout       = 900
   memory_size   = 2048
 
@@ -343,12 +343,12 @@ resource "aws_lambda_function" "agentcore_pi" {
   }
 
   logging_config {
-    log_group  = aws_cloudwatch_log_group.agentcore_pi.name
+    log_group  = aws_cloudwatch_log_group.agentcore_flue.name
     log_format = "Text"
   }
 
   tags = {
-    Name = "thinkwork-${var.stage}-agentcore-pi"
+    Name = "thinkwork-${var.stage}-agentcore-flue"
   }
 }
 
@@ -417,8 +417,8 @@ resource "aws_lambda_function_event_invoke_config" "agentcore" {
   }
 }
 
-resource "aws_lambda_function_event_invoke_config" "agentcore_pi" {
-  function_name                = aws_lambda_function.agentcore_pi.function_name
+resource "aws_lambda_function_event_invoke_config" "agentcore_flue" {
+  function_name                = aws_lambda_function.agentcore_flue.function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
 
@@ -453,14 +453,14 @@ output "agentcore_function_arn" {
   value       = aws_lambda_function.agentcore.arn
 }
 
-output "agentcore_pi_function_name" {
-  description = "Pi AgentCore Lambda function name (for direct SDK invoke)"
-  value       = aws_lambda_function.agentcore_pi.function_name
+output "agentcore_flue_function_name" {
+  description = "Flue AgentCore Lambda function name (for direct SDK invoke)"
+  value       = aws_lambda_function.agentcore_flue.function_name
 }
 
-output "agentcore_pi_function_arn" {
-  description = "Pi AgentCore Lambda function ARN"
-  value       = aws_lambda_function.agentcore_pi.arn
+output "agentcore_flue_function_arn" {
+  description = "Flue AgentCore Lambda function ARN"
+  value       = aws_lambda_function.agentcore_flue.arn
 }
 
 output "agentcore_async_dlq_arn" {
@@ -471,4 +471,28 @@ output "agentcore_async_dlq_arn" {
 output "agentcore_async_dlq_url" {
   description = "SQS queue URL for operator inspection of failed async invokes"
   value       = aws_sqs_queue.agentcore_async_dlq.url
+}
+
+################################################################################
+# Plan §005 U1 — `agentcore-pi` → `agentcore-flue` rename. State migration only;
+# the underlying Lambda function_name attribute also changes from
+# `thinkwork-${stage}-agentcore-pi` to `thinkwork-${stage}-agentcore-flue`,
+# which is a force-replace at AWS. The `moved` blocks below keep Terraform
+# state aligned across the address change so existing tags, IAM bindings, and
+# log-group references migrate cleanly without an unrelated destroy/create.
+################################################################################
+
+moved {
+  from = aws_cloudwatch_log_group.agentcore_pi
+  to   = aws_cloudwatch_log_group.agentcore_flue
+}
+
+moved {
+  from = aws_lambda_function.agentcore_pi
+  to   = aws_lambda_function.agentcore_flue
+}
+
+moved {
+  from = aws_lambda_function_event_invoke_config.agentcore_pi
+  to   = aws_lambda_function_event_invoke_config.agentcore_flue
 }

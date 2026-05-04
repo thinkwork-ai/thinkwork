@@ -39,7 +39,7 @@ async function handleInvocation(
     const result = await runPiAgent(payload, env);
     sendJson(res, 200, result);
   } catch (err) {
-    console.error("[agentcore-pi] invocation failed", err);
+    console.error("[agentcore-flue] invocation failed", err);
     sendJson(res, 500, {
       error: err instanceof Error ? err.message : String(err),
       runtime: "pi",
@@ -69,6 +69,6 @@ export function createServer() {
 
 if (process.env.NODE_ENV !== "test") {
   createServer().listen(PORT, "0.0.0.0", () => {
-    console.log(`[agentcore-pi] listening on :${PORT}`);
+    console.log(`[agentcore-flue] listening on :${PORT}`);
   });
 }

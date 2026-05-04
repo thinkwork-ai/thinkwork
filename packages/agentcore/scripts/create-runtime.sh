@@ -2,7 +2,7 @@
 # Create an AgentCore Runtime for a given SST stage.
 #
 # Usage:
-#   bash scripts/create-runtime.sh --stage main --runtime pi
+#   bash scripts/create-runtime.sh --stage main --runtime flue
 #   bash scripts/create-runtime.sh --stage ericodom --runtime chat
 #
 # The --stage flag determines resource names:
@@ -37,9 +37,9 @@ fi
 
 # Validate runtime type
 case "$RUNTIME" in
-  chat|code|pi|sdk|strands) ;;
+  chat|code|flue|sdk|strands) ;;
   *)
-    echo "Error: --runtime must be 'chat', 'code', 'pi', 'sdk', or 'strands' (got '$RUNTIME')"
+    echo "Error: --runtime must be 'chat', 'code', 'flue', 'sdk', or 'strands' (got '$RUNTIME')"
     exit 1
     ;;
 esac

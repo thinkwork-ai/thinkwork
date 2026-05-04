@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash scripts/build-and-push.sh --stage main --runtime sdk
-#   bash scripts/build-and-push.sh --stage ericodom --runtime pi
+#   bash scripts/build-and-push.sh --stage ericodom --runtime flue
 #
 # The --stage flag determines the ECR repository:
 #   thinkwork-{stage}-agentcore (managed by Terraform —
@@ -11,7 +11,7 @@
 #
 # The --runtime flag selects the Dockerfile:
 #   sdk (default) → packages/agentcore-sdk/agent-container/Dockerfile
-#   pi            → packages/agentcore-pi/agent-container/Dockerfile
+#   flue          → packages/agentcore-flue/agent-container/Dockerfile
 #
 # Must be run from the monorepo root (packages/agentcore/scripts/../..).
 set -euo pipefail
@@ -44,14 +44,14 @@ case "$RUNTIME" in
   sdk)
     DOCKERFILE="packages/agentcore-sdk/agent-container/Dockerfile"
     ;;
-  pi)
-    DOCKERFILE="packages/agentcore-pi/agent-container/Dockerfile"
+  flue)
+    DOCKERFILE="packages/agentcore-flue/agent-container/Dockerfile"
     ;;
   strands)
     DOCKERFILE="packages/agentcore-strands/agent-container/Dockerfile"
     ;;
   *)
-    echo "Error: --runtime must be 'sdk', 'pi', or 'strands' (got '$RUNTIME')"
+    echo "Error: --runtime must be 'sdk', 'flue', or 'strands' (got '$RUNTIME')"
     exit 1
     ;;
 esac
