@@ -75,7 +75,7 @@ const ALL_CAPABILITIES: Capability[] = [
 
 function usage(exitCode = 2): never {
   console.error(`Usage:
-  pnpm --filter @thinkwork/api pi:capability-smoke -- \\
+  pnpm --filter @thinkwork/api flue:capability-smoke -- \\
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
     [--sender-id <human-user-id>] \\

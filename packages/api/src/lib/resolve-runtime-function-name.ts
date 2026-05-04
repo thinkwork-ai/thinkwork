@@ -4,7 +4,7 @@ export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
     super(
       runtimeType === "pi"
-        ? "Pi runtime not yet provisioned in this stage."
+        ? "Flue runtime not yet provisioned in this stage."
         : "Strands runtime not provisioned in this stage.",
     );
     this.name = "RuntimeNotProvisionedError";

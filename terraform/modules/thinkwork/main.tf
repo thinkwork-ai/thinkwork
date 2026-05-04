@@ -203,9 +203,9 @@ module "api" {
   api_auth_secret                     = var.api_auth_secret
   db_password                         = var.db_password
   agentcore_function_name             = module.agentcore.agentcore_function_name
-  agentcore_flue_function_name          = module.agentcore.agentcore_flue_function_name
+  agentcore_flue_function_name        = module.agentcore.agentcore_flue_function_name
   agentcore_function_arn              = module.agentcore.agentcore_function_arn
-  agentcore_flue_function_arn           = module.agentcore.agentcore_flue_function_arn
+  agentcore_flue_function_arn         = module.agentcore.agentcore_flue_function_arn
   hindsight_endpoint                  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                 = module.agentcore_memory.memory_id
   memory_engine                       = local.resolved_memory_engine

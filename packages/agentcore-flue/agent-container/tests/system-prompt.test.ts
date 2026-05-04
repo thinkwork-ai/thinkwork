@@ -17,7 +17,7 @@ describe("composeSystemPrompt", () => {
     ).toContain("Workspace skills are available.");
   });
 
-  it("builds a default Pi runtime prompt", () => {
+  it("builds a default Flue runtime prompt", () => {
     const prompt = composeSystemPrompt(
       {
         agent_name: "Researcher",
@@ -27,7 +27,7 @@ describe("composeSystemPrompt", () => {
       "Workspace skills are available.",
     );
     expect(prompt).toContain("Researcher");
-    expect(prompt).toContain("Pi AgentCore runtime");
+    expect(prompt).toContain("Flue AgentCore runtime");
     expect(prompt).toContain("Tenant: acme");
     expect(prompt).toContain("Workspace skills are available.");
   });
