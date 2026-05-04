@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   RoutineStepConfigEditor,
+  type RoutineCredentialOption,
   type RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
 import type { StepEventLite } from "./ExecutionGraph";
@@ -22,6 +23,7 @@ interface RoutineFlowInspectorProps {
   steps?: RoutineConfigStep[];
   fieldValues?: Record<string, string>;
   fieldErrors?: Record<string, string>;
+  credentialOptions?: RoutineCredentialOption[];
   onFieldChange?: (key: string, value: string) => void;
   onLabelChange?: (nodeId: string, value: string) => void;
   onRemoveStep?: (nodeId: string) => void;
@@ -36,6 +38,7 @@ export function RoutineFlowInspector({
   steps = [],
   fieldValues = {},
   fieldErrors = {},
+  credentialOptions = [],
   onFieldChange,
   onLabelChange,
   onRemoveStep,
@@ -161,6 +164,7 @@ export function RoutineFlowInspector({
       step={step}
       fieldValues={fieldValues}
       fieldErrors={fieldErrors}
+      credentialOptions={credentialOptions}
       onFieldChange={onFieldChange ?? (() => undefined)}
       onLabelChange={onLabelChange}
       onRemoveStep={onRemoveStep}
@@ -174,6 +178,7 @@ function AuthoringInspector({
   step,
   fieldValues,
   fieldErrors,
+  credentialOptions,
   onFieldChange,
   onLabelChange,
   onRemoveStep,
@@ -183,6 +188,7 @@ function AuthoringInspector({
   step: RoutineConfigStep;
   fieldValues: Record<string, string>;
   fieldErrors: Record<string, string>;
+  credentialOptions: RoutineCredentialOption[];
   onFieldChange: (key: string, value: string) => void;
   onLabelChange?: (nodeId: string, value: string) => void;
   onRemoveStep?: (nodeId: string) => void;
@@ -310,6 +316,7 @@ function AuthoringInspector({
             onFieldChange={onFieldChange}
             onLabelChange={onLabelChange}
             fieldErrors={fieldErrors}
+            credentialOptions={credentialOptions}
             selectedNodeId={selectedNodeId}
             layout="stacked"
           />

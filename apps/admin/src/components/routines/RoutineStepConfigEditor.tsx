@@ -15,8 +15,13 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  Plus,
   Trash2,
 } from "lucide-react";
+import {
+  RoutineCodeEditor,
+  type RoutineCodeLanguage,
+} from "./RoutineCodeEditor";
 
 export type RoutineConfigField = {
   key: string;
@@ -43,6 +48,14 @@ export type RoutineConfigStep = {
   configFields: RoutineConfigField[];
 };
 
+export type RoutineCredentialOption = {
+  id: string;
+  slug: string;
+  displayName: string;
+  kind: string;
+  status?: string | null;
+};
+
 interface RoutineStepConfigEditorProps {
   steps: RoutineConfigStep[];
   fieldValues: Record<string, string>;
@@ -54,6 +67,7 @@ interface RoutineStepConfigEditorProps {
   selectedNodeId?: string | null;
   onSelectStep?: (nodeId: string) => void;
   layout?: "split" | "stacked";
+  credentialOptions?: RoutineCredentialOption[];
 }
 
 export function RoutineStepConfigEditor({
@@ -67,6 +81,7 @@ export function RoutineStepConfigEditor({
   selectedNodeId,
   onSelectStep,
   layout = "split",
+  credentialOptions = [],
 }: RoutineStepConfigEditorProps) {
   const stacked = layout === "stacked";
 
@@ -246,6 +261,7 @@ export function RoutineStepConfigEditor({
                     error={fieldErrors[fieldKey(step.nodeId, field.key)]}
                     changed={fieldChanged(step.nodeId, field, fieldValues)}
                     stacked={stacked}
+                    credentialOptions={credentialOptions}
                     onChange={(value) =>
                       onFieldChange(fieldKey(step.nodeId, field.key), value)
                     }
@@ -267,6 +283,7 @@ function ConfigFieldInput({
   error,
   changed,
   stacked,
+  credentialOptions,
   onChange,
 }: {
   step: RoutineConfigStep;
@@ -275,26 +292,28 @@ function ConfigFieldInput({
   error?: string;
   changed?: boolean;
   stacked?: boolean;
+  credentialOptions?: RoutineCredentialOption[];
   onChange: (value: string) => void;
 }) {
   const id = `${step.nodeId}-${field.key}`;
+  const labelId = `${id}-label`;
   const readOnly = !field.editable;
   const control = controlForField(field, value);
   const multiline =
     control === "textarea" ||
-    control === "code" ||
-    control === "credential_bindings" ||
     control === "email_list" ||
     control === "string_list";
-  const monospace = control === "code" || control === "credential_bindings";
-  const fullWidth = multiline;
+  const fullWidth =
+    multiline || control === "code" || control === "credential_bindings";
 
   return (
-    <label
-      htmlFor={id}
+    <div
       className={cn("block min-w-0", !stacked && fullWidth && "md:col-span-2")}
     >
-      <span className="mb-1.5 flex min-w-0 items-center gap-2 text-sm font-medium">
+      <span
+        id={labelId}
+        className="mb-1.5 flex min-w-0 items-center gap-2 text-sm font-medium"
+      >
         <span>
           {field.label}
           {field.required && (
@@ -320,6 +339,7 @@ function ConfigFieldInput({
             id={id}
             className="w-full"
             aria-invalid={Boolean(error)}
+            aria-labelledby={labelId}
           >
             <SelectValue />
           </SelectTrigger>
@@ -341,6 +361,7 @@ function ConfigFieldInput({
             id={id}
             className="w-full"
             aria-invalid={Boolean(error)}
+            aria-labelledby={labelId}
           >
             <SelectValue
               placeholder={
@@ -359,6 +380,28 @@ function ConfigFieldInput({
             ))}
           </SelectContent>
         </Select>
+      ) : control === "code" ? (
+        <RoutineCodeEditor
+          id={id}
+          value={value}
+          readOnly={readOnly}
+          error={Boolean(error)}
+          stacked={stacked}
+          labelledBy={labelId}
+          language={codeLanguageForStep(step)}
+          onChange={onChange}
+        />
+      ) : control === "credential_bindings" ? (
+        <CredentialBindingsEditor
+          value={value}
+          readOnly={readOnly}
+          credentialOptions={credentialOptionsForField(
+            field,
+            credentialOptions ?? [],
+          )}
+          error={Boolean(error)}
+          onChange={onChange}
+        />
       ) : multiline ? (
         <Textarea
           id={id}
@@ -366,11 +409,10 @@ function ConfigFieldInput({
           readOnly={readOnly}
           placeholder={field.placeholder ?? undefined}
           aria-invalid={Boolean(error)}
+          aria-labelledby={labelId}
           rows={textareaRows(control, value)}
           className={cn(
             "min-h-20 resize-y",
-            stacked && control === "code" && "min-h-[360px]",
-            monospace && "font-mono text-xs leading-5",
             readOnly && "text-muted-foreground",
           )}
           onChange={(event) => onChange(event.target.value)}
@@ -385,10 +427,8 @@ function ConfigFieldInput({
           min={field.min ?? undefined}
           max={field.max ?? undefined}
           aria-invalid={Boolean(error)}
-          className={cn(
-            monospace && "font-mono text-xs",
-            readOnly && "text-muted-foreground",
-          )}
+          aria-labelledby={labelId}
+          className={cn(readOnly && "text-muted-foreground")}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
@@ -402,7 +442,7 @@ function ConfigFieldInput({
           {error ?? field.helpText}
         </span>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -469,8 +509,7 @@ function valueForMutation(field: RoutineConfigField, value: string): unknown {
     return value.trim() ? Number(value) : null;
   }
   if (field.inputType === "credential_bindings") {
-    if (!value.trim()) return [];
-    return JSON.parse(value);
+    return parseCredentialBindings(value);
   }
   return value;
 }
@@ -501,7 +540,7 @@ function stringValueForField(
   value: unknown,
 ): string {
   if (field.inputType === "credential_bindings") {
-    return JSON.stringify(value ?? [], null, 2);
+    return stringifyCredentialBindings(Array.isArray(value) ? value : []);
   }
   return stringValue(value);
 }
@@ -550,19 +589,11 @@ function validateField(
 
   if (field.inputType === "credential_bindings") {
     try {
-      const parsed = trimmed ? JSON.parse(value) : [];
-      if (!Array.isArray(parsed)) {
-        return `${field.label} must be a JSON array.`;
-      }
+      const bindings = parseCredentialBindings(value);
       const aliases = new Set<string>();
-      for (const item of parsed) {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
-          return `${field.label} entries must be JSON objects.`;
-        }
-        const alias = String((item as { alias?: unknown }).alias ?? "");
-        const credentialId = String(
-          (item as { credentialId?: unknown }).credentialId ?? "",
-        );
+      for (const binding of bindings) {
+        const alias = binding.alias;
+        const credentialId = binding.credentialId;
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
           return "Credential aliases must be safe code identifiers.";
         }
@@ -572,6 +603,12 @@ function validateField(
         aliases.add(alias);
         if (!credentialId.trim()) {
           return "Each credential binding needs a credentialId.";
+        }
+        const invalidRequiredField = (binding.requiredFields ?? []).find(
+          (fieldName) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(fieldName),
+        );
+        if (invalidRequiredField) {
+          return "Required fields must be safe code identifiers.";
         }
       }
     } catch (err) {
@@ -629,8 +666,6 @@ function isKnownControl(value: string): boolean {
 }
 
 function textareaRows(control: string, value: string): number {
-  if (control === "credential_bindings") return 6;
-  if (control === "code") return 8;
   if (value.includes("\n")) {
     return Math.min(10, Math.max(3, value.split("\n").length));
   }
@@ -638,4 +673,275 @@ function textareaRows(control: string, value: string): number {
     return 3;
   }
   return 4;
+}
+
+type CredentialBindingValue = {
+  alias: string;
+  credentialId: string;
+  requiredFields?: string[];
+};
+
+export function codeLanguageForStep(
+  step: Pick<RoutineConfigStep, "recipeId">,
+): RoutineCodeLanguage {
+  return step.recipeId === "typescript" ? "typescript" : "python";
+}
+
+export function parseCredentialBindings(
+  value: string,
+): CredentialBindingValue[] {
+  if (!value.trim()) return [];
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error("Credential bindings must be a JSON array.");
+  }
+  return parsed.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Credential binding entries must be JSON objects.");
+    }
+    const raw = item as {
+      alias?: unknown;
+      credentialId?: unknown;
+      requiredFields?: unknown;
+    };
+    const requiredFields = Array.isArray(raw.requiredFields)
+      ? raw.requiredFields.map((field) => String(field).trim()).filter(Boolean)
+      : [];
+    return {
+      alias: String(raw.alias ?? "").trim(),
+      credentialId: String(raw.credentialId ?? "").trim(),
+      ...(requiredFields.length > 0 ? { requiredFields } : {}),
+    };
+  });
+}
+
+export function stringifyCredentialBindings(
+  bindings: readonly CredentialBindingValue[],
+): string {
+  return JSON.stringify(bindings, null, 2);
+}
+
+function CredentialBindingsEditor({
+  value,
+  readOnly,
+  credentialOptions,
+  error,
+  onChange,
+}: {
+  value: string;
+  readOnly: boolean;
+  credentialOptions: RoutineCredentialOption[];
+  error: boolean;
+  onChange: (value: string) => void;
+}) {
+  let bindings: CredentialBindingValue[];
+  try {
+    bindings = parseCredentialBindings(value);
+  } catch {
+    return (
+      <Textarea
+        value={value}
+        readOnly={readOnly}
+        aria-invalid={error}
+        rows={6}
+        className="min-h-28 resize-y font-mono text-xs leading-5"
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+
+  const updateBinding = (
+    index: number,
+    patch: Partial<CredentialBindingValue>,
+  ) => {
+    const next = bindings.map((binding, candidateIndex) =>
+      candidateIndex === index
+        ? normalizeBinding({ ...binding, ...patch })
+        : binding,
+    );
+    onChange(stringifyCredentialBindings(next));
+  };
+
+  const removeBinding = (index: number) => {
+    onChange(
+      stringifyCredentialBindings(
+        bindings.filter((_, candidateIndex) => candidateIndex !== index),
+      ),
+    );
+  };
+
+  const addBinding = () => {
+    const credential = credentialOptions[0];
+    const alias = uniqueCredentialAlias(
+      credential?.slug
+        ? aliasFromCredentialSlug(credential.slug)
+        : "credential",
+      bindings,
+    );
+    onChange(
+      stringifyCredentialBindings([
+        ...bindings,
+        normalizeBinding({
+          alias,
+          credentialId: credential?.slug ?? "",
+          requiredFields: [],
+        }),
+      ]),
+    );
+  };
+
+  return (
+    <div
+      className={cn(
+        "space-y-2 rounded-md border p-2",
+        error ? "border-destructive" : "border-input",
+        readOnly && "opacity-80",
+      )}
+      aria-invalid={error}
+    >
+      {bindings.length === 0 ? (
+        <div className="rounded border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
+          No credential bindings.
+        </div>
+      ) : (
+        bindings.map((binding, index) => (
+          <div
+            key={index}
+            className="grid gap-2 rounded-md border border-border/70 bg-background/60 p-2 sm:grid-cols-[minmax(92px,0.8fr)_minmax(160px,1.2fr)_minmax(140px,1fr)_auto]"
+          >
+            <Input
+              value={binding.alias}
+              readOnly={readOnly}
+              aria-label={`Credential binding ${index + 1} alias`}
+              placeholder="alias"
+              className="h-8 font-mono text-xs"
+              onChange={(event) =>
+                updateBinding(index, { alias: event.target.value })
+              }
+            />
+            <Select
+              value={binding.credentialId || "__none__"}
+              disabled={readOnly || credentialOptions.length === 0}
+              onValueChange={(next) =>
+                updateBinding(index, {
+                  credentialId: next === "__none__" ? "" : next,
+                })
+              }
+            >
+              <SelectTrigger
+                className="h-8 w-full"
+                aria-label={`Credential binding ${index + 1} credential`}
+              >
+                <SelectValue placeholder="Select credential" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No credential</SelectItem>
+                {optionForMissingHandle(binding, credentialOptions)}
+                {credentialOptions.map((option) => (
+                  <SelectItem key={option.slug} value={option.slug}>
+                    {option.displayName} ({option.slug})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={(binding.requiredFields ?? []).join(", ")}
+              readOnly={readOnly}
+              aria-label={`Credential binding ${index + 1} required fields`}
+              placeholder="required fields"
+              className="h-8 font-mono text-xs"
+              onChange={(event) =>
+                updateBinding(index, {
+                  requiredFields: listValues(event.target.value),
+                })
+              }
+            />
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              disabled={readOnly}
+              aria-label={`Remove credential binding ${index + 1}`}
+              onClick={() => removeBinding(index)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))
+      )}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={readOnly}
+        onClick={addBinding}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add binding
+      </Button>
+    </div>
+  );
+}
+
+function credentialOptionsForField(
+  field: RoutineConfigField,
+  credentialOptions: RoutineCredentialOption[],
+): RoutineCredentialOption[] {
+  if (credentialOptions.length > 0) return credentialOptions;
+  return (field.options ?? []).map((option) => ({
+    id: option,
+    slug: option,
+    displayName: option,
+    kind: "credential",
+  }));
+}
+
+function optionForMissingHandle(
+  binding: CredentialBindingValue,
+  options: RoutineCredentialOption[],
+) {
+  if (
+    !binding.credentialId ||
+    options.some((option) => option.slug === binding.credentialId)
+  ) {
+    return null;
+  }
+  return (
+    <SelectItem value={binding.credentialId}>
+      {binding.credentialId} (unavailable)
+    </SelectItem>
+  );
+}
+
+function normalizeBinding(
+  binding: CredentialBindingValue,
+): CredentialBindingValue {
+  const requiredFields = (binding.requiredFields ?? [])
+    .map((field) => field.trim())
+    .filter(Boolean);
+  return {
+    alias: binding.alias.trim(),
+    credentialId: binding.credentialId.trim(),
+    ...(requiredFields.length > 0 ? { requiredFields } : {}),
+  };
+}
+
+function aliasFromCredentialSlug(slug: string): string {
+  const alias = slug.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
+  return alias.replace(/^_+$/, "") || "credential";
+}
+
+function uniqueCredentialAlias(
+  baseAlias: string,
+  bindings: readonly CredentialBindingValue[],
+): string {
+  const used = new Set(bindings.map((binding) => binding.alias));
+  if (!used.has(baseAlias)) return baseAlias;
+  let index = 2;
+  let candidate = `${baseAlias}_${index}`;
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = `${baseAlias}_${index}`;
+  }
+  return candidate;
 }
