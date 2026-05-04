@@ -11,13 +11,26 @@
  * U8's job is just the wiring contract: payload → connector instance.
  */
 
-import { describe, expect, it } from "vitest";
-import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mockClient } from "aws-sdk-client-mock";
+import {
+  BedrockAgentCoreClient,
+  StartCodeInterpreterSessionCommand,
+} from "@aws-sdk/client-bedrock-agentcore";
 import {
   resolveSandboxFactory,
   SandboxFactoryError,
   type FlueInvocationPayload,
 } from "../src/runtime/sandbox-factory.js";
+
+const ACClient = mockClient(BedrockAgentCoreClient);
+
+beforeEach(() => {
+  ACClient.reset();
+});
+afterEach(() => {
+  ACClient.reset();
+});
 
 const VALID_INTERPRETER_ID = "thinkwork_dev_0015953e_pub-5rETNEk2Vt";
 
@@ -37,16 +50,23 @@ describe("resolveSandboxFactory — happy path", () => {
   });
 
   it("constructs the connector with the interpreter id from the payload", () => {
+    // Structural conformance only. StartCodeInterpreterSession fires
+    // lazily inside the connector (on first SessionEnv operation, not on
+    // createSessionEnv itself), so a true plumbing test would require
+    // exercising SessionEnv shell/file APIs end-to-end. That coverage
+    // lives in (a) the FR-9a spike's real-AWS verdict and (b) U9's
+    // deploy-smoke. Here we lock in the contract that resolveSandbox-
+    // Factory returns *something* SandboxFactory-shaped — a regression
+    // that dropped payload.sandbox_interpreter_id on the floor would
+    // also fail the fail-closed tests below, since the helper would
+    // attempt to construct the connector with `undefined` and our
+    // validation block would catch it before the connector call.
     const client = new BedrockAgentCoreClient({ region: "us-east-1" });
     const customId = "thinkwork_prod_abcdef-XYZ123";
     const factory = resolveSandboxFactory(
       payload({ sandbox_interpreter_id: customId }),
       { client },
     );
-    // Structural conformance only — the connector's own spike covers
-    // the wire-format details. We don't reach into private fields here;
-    // the SandboxFactory contract (createSessionEnv) is the seam Flue
-    // consumes downstream.
     expect(factory.createSessionEnv).toBeDefined();
   });
 
@@ -79,6 +99,18 @@ describe("resolveSandboxFactory — fail-closed validation (contract violation u
     const client = new BedrockAgentCoreClient({ region: "us-east-1" });
     expect(() =>
       resolveSandboxFactory(payload({ sandbox_interpreter_id: "" }), { client }),
+    ).toThrow(SandboxFactoryError);
+  });
+
+  it("throws when sandbox_interpreter_id is whitespace-only", () => {
+    // AWS would otherwise return a less actionable ValidationException
+    // somewhere deep in the InvokeCodeInterpreter call. Surface the
+    // misconfiguration upstream with the typed SandboxFactoryError.
+    const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+    expect(() =>
+      resolveSandboxFactory(payload({ sandbox_interpreter_id: "   \t\n" }), {
+        client,
+      }),
     ).toThrow(SandboxFactoryError);
   });
 

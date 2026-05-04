@@ -66,7 +66,7 @@ export function resolveSandboxFactory(
     interpreterId === undefined ||
     interpreterId === null ||
     typeof interpreterId !== "string" ||
-    interpreterId.length === 0
+    interpreterId.trim().length === 0
   ) {
     throw new SandboxFactoryError(
       "Flue invocation payload missing `sandbox_interpreter_id`. This field " +
