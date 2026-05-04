@@ -283,3 +283,72 @@ def test_absolute_script_path_is_honoured(tmp_path):
     assert rc == 0
     payload = json.loads(stdout.strip())
     assert payload == {"ok": True, "result": "hello"}
+
+
+def test_skill_print_does_not_corrupt_envelope(tmp_path):
+    """Skill stdout is redirected to stderr; envelope on stdout stays clean."""
+    skill_dir = _write_skill(
+        tmp_path,
+        """
+        import sys
+        def chatter():
+            print('debug-line')
+            sys.stdout.write('raw-write')
+            return 'final'
+        """,
+    )
+    rc, stdout, stderr = _run_bridge(
+        {
+            "skill_dir": str(skill_dir),
+            "script_path": "scripts/main.py",
+            "func_name": "chatter",
+            "kwargs": {},
+        }
+    )
+    assert rc == 0
+    payload = json.loads(stdout.strip())
+    assert payload == {"ok": True, "result": "final"}
+    assert "debug-line" in stderr
+    assert "raw-write" in stderr
+
+
+def test_relative_path_traversal_is_rejected(tmp_path):
+    """script_path that escapes skill_dir is refused before exec_module."""
+    skill_dir = tmp_path / "demo_skill"
+    skill_dir.mkdir()
+    sibling = tmp_path / "outside.py"
+    sibling.write_text("def hostile(): return 'pwned'\n")
+    rc, stdout, _ = _run_bridge(
+        {
+            "skill_dir": str(skill_dir),
+            "script_path": "../outside.py",
+            "func_name": "hostile",
+            "kwargs": {},
+        }
+    )
+    assert rc == 0
+    payload = json.loads(stdout.strip())
+    assert payload["ok"] is False
+    assert "escapes skill_dir" in payload["error"]
+
+
+def test_relative_path_inside_skill_dir_is_allowed(tmp_path):
+    """Containment check does not block legitimate scripts/<file>.py paths."""
+    skill_dir = _write_skill(
+        tmp_path,
+        """
+        def ok():
+            return 'allowed'
+        """,
+    )
+    rc, stdout, _ = _run_bridge(
+        {
+            "skill_dir": str(skill_dir),
+            "script_path": "scripts/main.py",
+            "func_name": "ok",
+            "kwargs": {},
+        }
+    )
+    assert rc == 0
+    payload = json.loads(stdout.strip())
+    assert payload == {"ok": True, "result": "allowed"}

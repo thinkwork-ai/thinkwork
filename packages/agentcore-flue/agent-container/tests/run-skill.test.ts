@@ -475,7 +475,122 @@ describe("buildRunSkillTool — timeout + abort", () => {
       controller.signal,
     );
     setTimeout(() => controller.abort(), 50);
-    await expect(promise).rejects.toThrow();
+    await expect(promise).rejects.toThrow(/aborted by caller/);
+  });
+
+  it("rejects synchronously when the abort signal is already aborted", async () => {
+    const skillDir = writeSkill(
+      "preaborted",
+      "def wait(): return 'never'\n",
+    );
+    const tool = buildRunSkillTool({
+      skills: [
+        {
+          skillId: "preaborted",
+          description: "Pre-aborted.",
+          skillDir,
+          scripts: [
+            { name: "wait", path: "scripts/main.py", description: "Wait." },
+          ],
+        },
+      ],
+      bridgeScriptPath: BRIDGE_SCRIPT_PATH,
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      tool!.execute(
+        "call-pre-abort",
+        { skill_id: "preaborted" } as any,
+        controller.signal,
+      ),
+    ).rejects.toThrow(/aborted before spawn/);
+  });
+});
+
+describe("buildRunSkillTool — channel hygiene", () => {
+  it("does not corrupt the JSON envelope when the skill writes to stdout", async () => {
+    const skillDir = writeSkill(
+      "noisy",
+      "import sys\ndef chatter():\n    print('debug-1')\n    print('debug-2', flush=True)\n    sys.stdout.write('raw-write')\n    return 'final'\n",
+    );
+    const tool = buildRunSkillTool({
+      skills: [
+        {
+          skillId: "noisy",
+          description: "Prints debug to stdout.",
+          skillDir,
+          scripts: [
+            { name: "chatter", path: "scripts/main.py", description: "Chatter." },
+          ],
+        },
+      ],
+      bridgeScriptPath: BRIDGE_SCRIPT_PATH,
+    });
+    const result = await tool!.execute(
+      "call-stdout-clean",
+      { skill_id: "noisy" } as any,
+    );
+    expect(result.content).toEqual([{ type: "text", text: "final" }]);
+  });
+
+  it("rejects a script_path that escapes skill_dir", async () => {
+    const skillDir = writeSkill(
+      "escaping",
+      "def safe(): return 'inside'\n",
+    );
+    const tool = buildRunSkillTool({
+      skills: [
+        {
+          skillId: "escaping",
+          description: "Path escape attempt.",
+          skillDir,
+          scripts: [
+            {
+              name: "anything",
+              path: "../../../etc/passwd",
+              description: "Path-traversal attempt.",
+            },
+          ],
+        },
+      ],
+      bridgeScriptPath: BRIDGE_SCRIPT_PATH,
+    });
+    await expect(
+      tool!.execute("call-traversal", { skill_id: "escaping" } as any),
+    ).rejects.toThrow(/escapes skill_dir/);
+  });
+
+  it("propagates stderr in the error message when the bridge envelope is ok:false", async () => {
+    const skillDir = writeSkill(
+      "stderr-leaker",
+      "import sys\ndef boom():\n    sys.stderr.write('SENTINEL_STDERR\\n')\n    raise RuntimeError('boom')\n",
+    );
+    const tool = buildRunSkillTool({
+      skills: [
+        {
+          skillId: "stderr-leaker",
+          description: "Writes to stderr then raises.",
+          skillDir,
+          scripts: [
+            { name: "boom", path: "scripts/main.py", description: "Boom." },
+          ],
+        },
+      ],
+      bridgeScriptPath: BRIDGE_SCRIPT_PATH,
+    });
+    let captured: Error | null = null;
+    try {
+      await tool!.execute(
+        "call-stderr",
+        { skill_id: "stderr-leaker" } as any,
+      );
+    } catch (err) {
+      captured = err as Error;
+    }
+    expect(captured).not.toBeNull();
+    expect(captured?.message).toContain("boom");
+    expect(captured?.message).toContain("SENTINEL_STDERR");
   });
 });
 

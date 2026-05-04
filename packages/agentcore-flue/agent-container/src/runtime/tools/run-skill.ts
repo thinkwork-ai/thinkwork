@@ -34,15 +34,38 @@ const __dirname = path.dirname(__filename);
 /** Default subprocess timeout (60s). Overridable per call via env. */
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-/** Default location of the bridge script inside the container image. */
-const DEFAULT_BRIDGE_SCRIPT_PATH = path.resolve(
-  __dirname,
-  "..",
-  "..",
-  "..",
-  "skill-bridge",
-  "run_skill.py",
-);
+/**
+ * Default location of the bridge script.
+ *
+ * Resolution finds the nearest enclosing `agent-container/` segment in
+ * `__dirname` and joins `skill-bridge/run_skill.py` to it. This works
+ * for both source-runtime (vitest at `agent-container/src/...`) and
+ * dist-runtime (Lambda at `agent-container/dist/agent-container/src/...`
+ * after `tsc --build` — note Bedrock AgentCore copies the worker into a
+ * deeper path than plain `tsc` would produce). Callers (U9 wiring) may
+ * still override via `bridgeScriptPath` to pin an absolute path.
+ */
+function defaultBridgeScriptPath(): string {
+  const marker = `${path.sep}agent-container${path.sep}`;
+  const idx = __dirname.lastIndexOf(marker);
+  if (idx === -1) {
+    return path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "skill-bridge",
+      "run_skill.py",
+    );
+  }
+  return path.join(
+    __dirname.slice(0, idx + marker.length - 1),
+    "skill-bridge",
+    "run_skill.py",
+  );
+}
+
+const DEFAULT_BRIDGE_SCRIPT_PATH = defaultBridgeScriptPath();
 
 /** Default Python interpreter. */
 const DEFAULT_PYTHON_BIN = "python3";
@@ -185,21 +208,41 @@ async function runBridge(
   const { pythonBin, bridgeScriptPath, timeoutMs, env, signal } = options;
 
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new RunSkillError("Skill subprocess aborted before spawn"));
+      return;
+    }
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
+    let settled = false;
 
     const child = spawn(pythonBin, [bridgeScriptPath], {
       env: env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    const settle = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      action();
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // ignore — process may have already exited
+      }
     }, timeoutMs);
 
     const onAbort = () => {
+      aborted = true;
       try {
         child.kill("SIGKILL");
       } catch {
@@ -207,9 +250,16 @@ async function runBridge(
       }
     };
     if (signal) {
-      if (signal.aborted) onAbort();
-      else signal.addEventListener("abort", onAbort);
+      signal.addEventListener("abort", onAbort);
     }
+
+    // Swallow EPIPE / write-after-end on stdin: if the bridge dies fast
+    // (SyntaxError on import, OOM, abort-before-write), the stdin write
+    // below races the subprocess close. Without this listener, the EPIPE
+    // becomes an uncaught exception and crashes the parent Lambda.
+    child.stdin?.on("error", () => {
+      // intentionally silent — close handler reports the actual cause
+    });
 
     child.stdout?.on("data", (chunk) => {
       stdout += chunk.toString("utf8");
@@ -219,63 +269,75 @@ async function runBridge(
     });
 
     child.on("error", (err) => {
-      clearTimeout(timer);
-      if (signal) signal.removeEventListener("abort", onAbort);
-      reject(new RunSkillError(`Failed to spawn skill bridge: ${err.message}`));
+      settle(() =>
+        reject(
+          new RunSkillError(`Failed to spawn skill bridge: ${err.message}`),
+        ),
+      );
     });
 
     child.on("close", (code) => {
-      clearTimeout(timer);
-      if (signal) signal.removeEventListener("abort", onAbort);
+      settle(() => {
+        if (timedOut) {
+          reject(
+            new RunSkillError(
+              `Skill subprocess timed out after ${timeoutMs}ms`,
+            ),
+          );
+          return;
+        }
 
-      if (timedOut) {
-        reject(
-          new RunSkillError(
-            `Skill subprocess timed out after ${timeoutMs}ms`,
-          ),
-        );
-        return;
-      }
+        if (aborted) {
+          reject(new RunSkillError("Skill subprocess aborted by caller"));
+          return;
+        }
 
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        reject(
-          new RunSkillError(
-            `Skill bridge exited (code=${code}) with no stdout. stderr: ${stderr.trim() || "(empty)"}`,
-          ),
-        );
-        return;
-      }
+        const trimmed = stdout.trim();
+        if (!trimmed) {
+          reject(
+            new RunSkillError(
+              `Skill bridge exited (code=${code}) with no stdout. stderr: ${stderr.trim() || "(empty)"}`,
+            ),
+          );
+          return;
+        }
 
-      let parsed: BridgeResult;
-      try {
-        parsed = JSON.parse(trimmed) as BridgeResult;
-      } catch (err) {
-        reject(
-          new RunSkillError(
-            `Skill bridge returned non-JSON stdout: ${(err as Error).message}. ` +
-              `stdout: ${trimmed.slice(0, 500)}`,
-          ),
-        );
-        return;
-      }
+        let parsed: BridgeResult;
+        try {
+          parsed = JSON.parse(trimmed) as BridgeResult;
+        } catch (err) {
+          reject(
+            new RunSkillError(
+              `Skill bridge returned non-JSON stdout: ${(err as Error).message}. ` +
+                `stdout: ${trimmed.slice(0, 500)}`,
+            ),
+          );
+          return;
+        }
 
-      if (!parsed.ok) {
-        reject(
-          new RunSkillError(
-            parsed.error ?? "Skill execution failed without an error message",
-            parsed.traceback,
-          ),
-        );
-        return;
-      }
+        if (parsed.ok !== true) {
+          const errorMsg =
+            parsed.error ?? "Skill execution failed without an error message";
+          const stderrTail = stderr.trim();
+          const fullMsg = stderrTail
+            ? `${errorMsg} (stderr: ${stderrTail.slice(-500)})`
+            : errorMsg;
+          reject(new RunSkillError(fullMsg, parsed.traceback));
+          return;
+        }
 
-      resolve(parsed.result);
+        resolve(parsed.result);
+      });
     });
 
-    // Send envelope and close stdin so the bridge sees EOF.
-    child.stdin?.write(JSON.stringify(envelope));
-    child.stdin?.end();
+    // Send envelope and close stdin so the bridge sees EOF. EPIPE on
+    // the write/end is captured by the stdin error listener above.
+    try {
+      child.stdin?.write(JSON.stringify(envelope));
+      child.stdin?.end();
+    } catch {
+      // synchronous throw on broken pipe — ignore; close handler reports cause
+    }
   });
 }
 

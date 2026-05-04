@@ -35,6 +35,7 @@ runtime environment; the bridge does not install or resolve them.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
@@ -129,6 +130,29 @@ def main() -> int:
         else os.path.join(skill_dir, script_path)
     )
 
+    # Path-traversal containment: when script_path is relative, the
+    # resolved file must live under skill_dir. Defends against a
+    # tampered manifest entry like script_path: "../../etc/passwd"
+    # that would otherwise be exec_module'd by importlib. Absolute
+    # paths bypass this check and rely on the manifest being trusted —
+    # the manifest builder (U9) is responsible for never emitting an
+    # absolute path the operator has not whitelisted.
+    if not os.path.isabs(script_path):
+        real_full = os.path.realpath(full_path)
+        real_skill = os.path.realpath(skill_dir)
+        if not real_full.startswith(real_skill + os.sep) and real_full != real_skill:
+            _emit(
+                {
+                    "ok": False,
+                    "error": (
+                        f"Script path escapes skill_dir: {script_path!r} "
+                        f"resolves outside {skill_dir!r}"
+                    ),
+                    "traceback": "",
+                }
+            )
+            return 0
+
     if not os.path.isfile(full_path):
         _emit(
             {
@@ -151,8 +175,14 @@ def main() -> int:
         )
         return 0
 
+    # Redirect skill stdout to stderr for the duration of the call so
+    # `print()` from the skill (or its imports) does not interleave with
+    # the JSON envelope on stdout. Strands gets in-process stdout
+    # multiplexing for free; the subprocess bridge has to defend the
+    # channel explicitly.
     try:
-        result = func(**kwargs)
+        with contextlib.redirect_stdout(sys.stderr):
+            result = func(**kwargs)
     except BaseException as exc:  # noqa: BLE001 — surface any skill failure
         _emit(
             {
