@@ -12,6 +12,7 @@ import {
   Plus,
   Moon,
   Sun,
+  KeyRound,
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useDialog } from "@/context/DialogContext";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { label: "Inbox", to: "/inbox", icon: Inbox },
   { label: "Agents", to: "/agents", icon: Bot },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
+  { label: "Credentials", to: "/automations/credentials", icon: KeyRound },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
   { label: "Org Chart", to: "/org", icon: Network },
   { label: "Settings", to: "/settings", icon: Settings },
