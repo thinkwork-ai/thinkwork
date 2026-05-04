@@ -78,7 +78,7 @@ vi.mock("../graphql/utils.js", () => {
   // `.limit` / `.orderBy` chaining for the few resolvers that use them.
   // Drizzle's real query builder is thenable; we recreate that here.
   const makeWhereResult = () => {
-    const promise = Promise.resolve(mockSelectRows());
+    const promise = Promise.resolve(mockSelectRows() ?? []);
     return Object.assign(promise, {
       limit: () => Promise.resolve(mockSelectRows()),
       orderBy: () => ({ limit: () => Promise.resolve(mockSelectRows()) }),
@@ -116,6 +116,15 @@ vi.mock("../graphql/utils.js", () => {
     eq: (...a: unknown[]) => ({ _eq: a }),
     and: (...a: unknown[]) => ({ _and: a }),
     routines: { id: "id", tenant_id: "tenant_id" },
+    tenantCredentials: {
+      tenant_id: "tenant_credentials.tenant_id",
+      slug: "tenant_credentials.slug",
+      display_name: "tenant_credentials.display_name",
+      kind: "tenant_credentials.kind",
+      status: "tenant_credentials.status",
+      eventbridge_connection_arn:
+        "tenant_credentials.eventbridge_connection_arn",
+    },
     threadTurns: { id: "id" },
     snakeToCamel: (row: unknown) => row,
   };
