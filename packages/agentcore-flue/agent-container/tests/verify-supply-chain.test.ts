@@ -120,6 +120,67 @@ describe("verify-supply-chain.sh", () => {
     expect(result.stderr).toContain("baseline file not found");
   });
 
+  it("failure path: missing lockfile file exits non-zero with a descriptive error", () => {
+    const result = runScript([
+      BASELINE_PATH,
+      "/tmp/this-lockfile-does-not-exist-supply-chain-test",
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("lockfile not found");
+  });
+
+  it("failure path: malformed baseline (single column) exits non-zero", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
+    const tmpBaseline = path.join(tmpDir, "baseline.txt");
+    writeFileSync(tmpBaseline, "@thinkwork/onlyname@1.0.0\n");
+    const result = runScript([tmpBaseline]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/malformed baseline entry/);
+  });
+
+  it("failure path: extra columns (e.g. inline comment) reject the entry rather than silently truncating", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
+    const tmpBaseline = path.join(tmpDir, "baseline.txt");
+    const real = readFileSync(BASELINE_PATH, "utf8");
+    const firstReal = real
+      .split("\n")
+      .find((line) => line.startsWith("@"))!;
+    // Append a third token that should NOT be silently dropped.
+    writeFileSync(tmpBaseline, `${firstReal} suspicious-third-column\n`);
+    const result = runScript([tmpBaseline]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/expected 2 columns, got 3/);
+  });
+
+  it("failure path: non-sha512 baseline integrity rejected", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
+    const tmpBaseline = path.join(tmpDir, "baseline.txt");
+    writeFileSync(
+      tmpBaseline,
+      "@mariozechner/pi-agent-core@0.70.2 sha256-shorterhashthatshouldbedisallowed\n",
+    );
+    const result = runScript([tmpBaseline]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("not a sha512- value");
+  });
+
+  it("CRLF baseline does not produce a false integrity-mismatch", () => {
+    // A Windows-edited baseline with CRLF line endings would historically
+    // surface as `integrity mismatch` against an apparently-identical hash
+    // (the CR was being included in `expected_integrity`). The fix strips
+    // trailing CR before parsing.
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
+    const tmpBaseline = path.join(tmpDir, "baseline.txt");
+    const real = readFileSync(BASELINE_PATH, "utf8");
+    const firstReal = real
+      .split("\n")
+      .find((line) => line.startsWith("@"))!;
+    writeFileSync(tmpBaseline, `${firstReal}\r\n`);
+    const result = runScript([tmpBaseline]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/verified 1 package/);
+  });
+
   it("failure path: baseline references a package not in the lockfile exits non-zero", () => {
     const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
     const tmpBaseline = path.join(tmpDir, "baseline.txt");

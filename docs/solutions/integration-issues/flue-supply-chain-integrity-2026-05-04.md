@@ -80,6 +80,12 @@ If the CVE workaround requires modifying Flue source (because the upstream packa
 
 _None as of 2026-05-04._
 
+### When the response requires credential rotation
+
+If the CVE forensics indicate that a deployed credential may have been exfiltrated (e.g., a malicious package version exposed `process.env`), rotate via the established runbook rather than inventing a parallel procedure:
+
+- `docs/solutions/security/rotate-api-auth-secret-2026-04-24.md` covers the GitHub Secret → tfvars → terraform-apply order, the GHA-vars-snapshot-at-trigger constraint, and the warm-container ~15-minute flush window. Reference this runbook from any incident report; do not duplicate its steps here.
+
 ## Graceful degradation
 
 Some failure modes are not malicious but still trigger `verify-supply-chain.sh` — the most common are an upstream package losing provenance (maintainer change, signing rotation, registry takedown). The graceful path:
