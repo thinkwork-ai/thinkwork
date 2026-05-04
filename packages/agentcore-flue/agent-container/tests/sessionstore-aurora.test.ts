@@ -159,6 +159,7 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: "",
+          agentId: AGENT_X,
           clusterArn: CLUSTER_ARN,
           secretArn: SECRET_ARN,
         }),
@@ -170,10 +171,35 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: null as unknown as string,
+          agentId: AGENT_X,
           clusterArn: CLUSTER_ARN,
           secretArn: SECRET_ARN,
         }),
     ).toThrow(/tenantId/i);
+  });
+
+  it("throws when agentId is empty", () => {
+    expect(
+      () =>
+        new AuroraSessionStore({
+          tenantId: TENANT_A,
+          agentId: "",
+          clusterArn: CLUSTER_ARN,
+          secretArn: SECRET_ARN,
+        }),
+    ).toThrow(/agentId/i);
+  });
+
+  it("throws when agentId is null", () => {
+    expect(
+      () =>
+        new AuroraSessionStore({
+          tenantId: TENANT_A,
+          agentId: null as unknown as string,
+          clusterArn: CLUSTER_ARN,
+          secretArn: SECRET_ARN,
+        }),
+    ).toThrow(/agentId/i);
   });
 
   it("throws when clusterArn is empty (Terraform comment promises this)", () => {
