@@ -9,13 +9,16 @@ import {
   RoutineRecipeCatalogQuery,
   RoutineDefinitionArtifactsQuery,
   RoutineDefinitionQuery,
+  TenantCredentialsQuery,
   UpdateRoutineDefinitionMutation,
 } from "@/lib/graphql-queries";
+import { TenantCredentialStatus } from "@/gql/graphql";
 import {
   argsFromStepFields,
   hasValidationErrors,
   validationErrorsFromSteps,
   valuesFromSteps,
+  type RoutineCredentialOption,
   type RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
 import {
@@ -58,6 +61,14 @@ export function RoutineDefinitionPanel({
   const [catalogResult] = useQuery({
     query: RoutineRecipeCatalogQuery,
     variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const [credentialResult] = useQuery({
+    query: TenantCredentialsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      status: TenantCredentialStatus.Active,
+    },
     pause: !tenantId,
   });
   const [updateState, executeUpdate] = useMutation(
@@ -192,6 +203,9 @@ export function RoutineDefinitionPanel({
   if (!definition) return null;
 
   const recipes = catalogResult.data?.routineRecipeCatalog ?? [];
+  const credentialOptions = credentialOptionsFromQuery(
+    credentialResult.data?.tenantCredentials,
+  );
   const artifactDefinition = artifactResult.data?.routineDefinition;
   const workspace = layout === "workspace";
   const saveButton = (
@@ -218,6 +232,7 @@ export function RoutineDefinitionPanel({
         <RoutineWorkflowEditor
           steps={steps}
           recipes={recipes}
+          credentialOptions={credentialOptions}
           fieldValues={fieldValues}
           aslJson={artifactDefinition?.aslJson}
           stepManifestJson={artifactDefinition?.stepManifestJson}
@@ -351,6 +366,7 @@ export function RoutineDefinitionPanel({
         <RoutineWorkflowEditor
           steps={steps}
           recipes={recipes}
+          credentialOptions={credentialOptions}
           fieldValues={fieldValues}
           aslJson={artifactDefinition?.aslJson}
           stepManifestJson={artifactDefinition?.stepManifestJson}
@@ -400,6 +416,27 @@ export function RoutineDefinitionPanel({
       </div>
     </section>
   );
+}
+
+function credentialOptionsFromQuery(
+  credentials:
+    | Array<{
+        id: string;
+        slug: string;
+        displayName: string;
+        kind: string;
+        status?: string | null;
+      }>
+    | null
+    | undefined,
+): RoutineCredentialOption[] {
+  return (credentials ?? []).map((credential) => ({
+    id: credential.id,
+    slug: credential.slug,
+    displayName: credential.displayName,
+    kind: credential.kind,
+    status: credential.status,
+  }));
 }
 
 function stepsForMutation(

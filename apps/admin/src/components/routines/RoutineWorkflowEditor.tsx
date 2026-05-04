@@ -6,6 +6,7 @@ import { RoutineFlowInspector } from "./RoutineFlowInspector";
 import { RoutineAddStepCommand } from "./RoutineAddStepCommand";
 import { cn } from "@/lib/utils";
 import type {
+  RoutineCredentialOption,
   RoutineConfigField,
   RoutineConfigStep,
 } from "./RoutineStepConfigEditor";
@@ -37,6 +38,7 @@ interface RoutineWorkflowEditorProps {
   onRemoveStep: (nodeId: string) => void;
   catalogLoading?: boolean;
   fieldErrors?: Record<string, string>;
+  credentialOptions?: RoutineCredentialOption[];
   layout?: "default" | "workspace";
   sidebarHeader?: ReactNode;
   className?: string;
@@ -55,6 +57,7 @@ export function RoutineWorkflowEditor({
   onRemoveStep,
   catalogLoading = false,
   fieldErrors = {},
+  credentialOptions = [],
   layout = "default",
   sidebarHeader,
   className,
@@ -161,6 +164,7 @@ export function RoutineWorkflowEditor({
             steps={steps}
             fieldValues={fieldValues}
             fieldErrors={fieldErrors}
+            credentialOptions={credentialOptions}
             onFieldChange={onFieldChange}
             onLabelChange={onLabelChange}
             onRemoveStep={onRemoveStep}

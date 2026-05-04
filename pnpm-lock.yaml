@@ -29,6 +29,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.5
+        version: 6.2.5
       '@codemirror/lang-json':
         specifier: ^6.0.2
         version: 6.0.2
