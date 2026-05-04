@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Fuel, Sparkles } from "lucide-react";
 import {
   CreateRoutineMutation,
   PlanRoutineDraftMutation,
@@ -125,6 +125,14 @@ function NewRoutinePage() {
       setSubmitting(false);
     }
   }, [canPlan, tenantId, name, description, executePlan]);
+
+  const handleUsePdiMigrationDraft = useCallback(() => {
+    setName("PDI Fuel Order");
+    setDescription("Migrate the PDI Fuel Order n8n workflow.");
+    setDraft(null);
+    setFieldValues({});
+    setError(null);
+  }, []);
 
   const handlePublish = useCallback(async () => {
     if (!canPublish || !tenantId) return;
@@ -286,6 +294,15 @@ function NewRoutinePage() {
                 disabled={submitting}
               >
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUsePdiMigrationDraft}
+                disabled={submitting}
+              >
+                <Fuel className="h-4 w-4" />
+                PDI Fuel Order
               </Button>
               <Button onClick={handlePlan} disabled={!canPlan}>
                 <Sparkles className="h-4 w-4" />

@@ -1,0 +1,92 @@
+{
+  "id": "_JUTpWjHOd4jtUSQ66sYr",
+  "name": "PDI Fuel Order",
+  "active": true,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "PDI Fuel Order Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pdi-fuel-order",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "lastmile-transform",
+      "name": "Transform Order to PDI",
+      "type": "n8n-nodes-lastmile.lastMile",
+      "typeVersion": 1,
+      "position": [320, 0],
+      "parameters": {
+        "resource": "transformations",
+        "operation": "transformOrderToPDI",
+        "orderJson": "={{ $json.body ?? $json }}",
+        "destinationType": 1,
+        "originType": 0,
+        "includeItemTypes": ["fuelItems"],
+        "additionalOptions": {
+          "defaultDeliveryTime": "06:00:00",
+          "defaultUnitPrice": 0,
+          "defaultFreightUnitPrice": 0,
+          "idPrefix": "PDI:"
+        }
+      }
+    },
+    {
+      "id": "pdi-add-fuel-order",
+      "name": "Add Fuel Order",
+      "type": "n8n-nodes-lastmile.pdi",
+      "typeVersion": 1,
+      "position": [640, 0],
+      "parameters": {
+        "resource": "order",
+        "operation": "addFuelOrder",
+        "order": "={{ $json }}",
+        "targetOrderStatus": 5,
+        "options": {
+          "includeDebug": false
+        }
+      },
+      "credentials": {
+        "PDIApi": {
+          "id": "pdi-credential",
+          "name": "PDI API"
+        }
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      }
+    }
+  ],
+  "connections": {
+    "PDI Fuel Order Webhook": {
+      "main": [
+        [{ "node": "Transform Order to PDI", "type": "main", "index": 0 }]
+      ]
+    },
+    "Transform Order to PDI": {
+      "main": [[{ "node": "Add Fuel Order", "type": "main", "index": 0 }]]
+    },
+    "Add Fuel Order": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    },
+    "Respond to Webhook": {
+      "main": [[]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

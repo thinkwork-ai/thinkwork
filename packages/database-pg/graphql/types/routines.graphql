@@ -323,6 +323,15 @@ input PlanRoutineDraftInput {
   steps: [RoutineDefinitionStepConfigInput!]
 }
 
+input ImportN8nRoutineInput {
+  tenantId: ID!
+  workflowUrl: String!
+  name: String
+  description: String
+  n8nCredentialSlug: String
+  pdiCredentialSlug: String
+}
+
 # Phase B U7: ASL changes go through publishRoutineVersion. updateRoutine
 # narrows to non-ASL metadata edits. `type` is the legacy
 # routines.type column (heartbeat | scheduled | cron) still consulted
@@ -425,6 +434,7 @@ extend type Query {
 extend type Mutation {
   planRoutineDraft(input: PlanRoutineDraftInput!): RoutineDraft!
   createRoutine(input: CreateRoutineInput!): Routine!
+  importN8nRoutine(input: ImportN8nRoutineInput!): Routine!
   updateRoutine(id: ID!, input: UpdateRoutineInput!): Routine!
   deleteRoutine(id: ID!): Boolean!
   # Phase B U7 cutover: returns RoutineExecution! (the row pre-emptively
