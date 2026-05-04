@@ -51,6 +51,11 @@ resource "aws_iam_role" "agentcore_flue" {
 }
 
 resource "aws_iam_role_policy" "agentcore_flue" {
+  # Sibling policy: ../agentcore-runtime/main.tf `aws_iam_role_policy.agentcore`.
+  # The two policies share ~83% of statements (S3, Bedrock, AgentCore Memory,
+  # Code Interpreter, Logs, X-Ray, ECR, SSM, MemoryRetain). Flue adds Aurora
+  # Data API + Secrets Manager for U4 SessionStore. Keep both surfaces in
+  # sync for shared statements; let Flue-only additions diverge here.
   name = "agentcore-flue-permissions"
   role = aws_iam_role.agentcore_flue.id
 

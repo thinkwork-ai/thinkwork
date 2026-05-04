@@ -203,9 +203,9 @@ module "api" {
   api_auth_secret                     = var.api_auth_secret
   db_password                         = var.db_password
   agentcore_function_name             = module.agentcore.agentcore_function_name
-  agentcore_flue_function_name        = module.agentcore_flue.flue_function_name
+  agentcore_flue_function_name        = module.agentcore_flue.agentcore_flue_function_name
   agentcore_function_arn              = module.agentcore.agentcore_function_arn
-  agentcore_flue_function_arn         = module.agentcore_flue.flue_function_arn
+  agentcore_flue_function_arn         = module.agentcore_flue.agentcore_flue_function_arn
   hindsight_endpoint                  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                 = module.agentcore_memory.memory_id
   memory_engine                       = local.resolved_memory_engine
@@ -308,14 +308,40 @@ module "agentcore_flue" {
 # `module.agentcore` to `module.agentcore_flue`; the underlying AWS resource
 # attributes (function_name, log group name, ARN) are unchanged from U1, so
 # this is pure state-address realignment without destroy+create.
+#
+# Two pairs of `moved {}` blocks per resource cover the two starting states:
+#   * Stages that applied U1 (e.g. dev) have state at
+#     `module.agentcore.aws_*.agentcore_flue` — the second block in each
+#     pair migrates them.
+#   * Stages that never applied U1 (operator-managed greenfield, or any
+#     stage that skipped the U1 deploy) have state at
+#     `module.agentcore.aws_*.agentcore_pi` — the first block in each pair
+#     migrates them directly to the new module without orphaning the U1
+#     log-group history.
+# Terraform picks whichever `from` matches current state.
+moved {
+  from = module.agentcore.aws_cloudwatch_log_group.agentcore_pi
+  to   = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
+}
+
 moved {
   from = module.agentcore.aws_cloudwatch_log_group.agentcore_flue
   to   = module.agentcore_flue.aws_cloudwatch_log_group.agentcore_flue
 }
 
 moved {
+  from = module.agentcore.aws_lambda_function.agentcore_pi
+  to   = module.agentcore_flue.aws_lambda_function.agentcore_flue
+}
+
+moved {
   from = module.agentcore.aws_lambda_function.agentcore_flue
   to   = module.agentcore_flue.aws_lambda_function.agentcore_flue
+}
+
+moved {
+  from = module.agentcore.aws_lambda_function_event_invoke_config.agentcore_pi
+  to   = module.agentcore_flue.aws_lambda_function_event_invoke_config.agentcore_flue
 }
 
 moved {

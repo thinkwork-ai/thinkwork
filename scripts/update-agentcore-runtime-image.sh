@@ -68,6 +68,22 @@ fi
 runtime_name="thinkwork_${STAGE}_${RUNTIME}"
 ssm_name="/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}"
 
+# Canonical IAM role per runtime type — used on both create and update paths
+# so an existing runtime created against an earlier role naming reconciles to
+# the canonical role on every deploy. Flue's role split out of the Strands
+# `agentcore-role` in plan §005 U2; reading the role from `get-agent-runtime`
+# (the prior pattern) preserved the stale role indefinitely.
+case "$RUNTIME" in
+  flue)    canonical_role_name="thinkwork-${STAGE}-agentcore-flue-role" ;;
+  strands) canonical_role_name="thinkwork-${STAGE}-agentcore-role" ;;
+  *)       canonical_role_name="thinkwork-${STAGE}-agentcore-role" ;;
+esac
+if [[ -n "$ACCOUNT_ID" ]]; then
+  canonical_role_arn="arn:aws:iam::${ACCOUNT_ID}:role/${canonical_role_name}"
+else
+  canonical_role_arn=""
+fi
+
 runtime_id=$(aws ssm get-parameter \
   --name "$ssm_name" \
   --region "$REGION" \
@@ -81,19 +97,17 @@ if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
 fi
 
 create_flue_runtime() {
-  if [[ -z "$ACCOUNT_ID" ]]; then
+  if [[ -z "$canonical_role_arn" ]]; then
     echo "ERROR: --account-id is required to create the Flue AgentCore runtime" >&2
     exit 2
   fi
 
-  # Flue's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
-  local role_arn="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-flue-role"
   echo "Creating ${RUNTIME} AgentCore runtime ${runtime_name} with ${IMAGE}"
   runtime_id=$(aws bedrock-agentcore-control create-agent-runtime \
     --region "$REGION" \
     --agent-runtime-name "$runtime_name" \
     --agent-runtime-artifact "containerConfiguration={containerUri=$IMAGE}" \
-    --role-arn "$role_arn" \
+    --role-arn "$canonical_role_arn" \
     --network-configuration "networkMode=PUBLIC" \
     --protocol-configuration "serverProtocol=HTTP" \
     --query agentRuntimeId \
@@ -107,22 +121,30 @@ create_flue_runtime() {
 }
 
 update_runtime() {
-  local current role_arn network_mode server_protocol
+  local current network_mode server_protocol role_arn
   current=$(aws bedrock-agentcore-control get-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
     --output json)
 
-  role_arn=$(echo "$current" | jq -r '.roleArn // empty')
   network_mode=$(echo "$current" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
   server_protocol=$(echo "$current" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
 
-  if [[ -z "$role_arn" ]]; then
-    echo "ERROR: existing runtime ${runtime_id} did not report roleArn" >&2
-    exit 2
+  # Force the canonical role for this runtime type. If --account-id wasn't
+  # passed, fall back to whatever role the runtime already has — preserves
+  # the prior behavior for callers that don't know the account ID up front
+  # (e.g. ad-hoc operator invocations).
+  if [[ -n "$canonical_role_arn" ]]; then
+    role_arn="$canonical_role_arn"
+  else
+    role_arn=$(echo "$current" | jq -r '.roleArn // empty')
+    if [[ -z "$role_arn" ]]; then
+      echo "ERROR: existing runtime ${runtime_id} did not report roleArn and --account-id was not provided" >&2
+      exit 2
+    fi
   fi
 
-  echo "Updating ${RUNTIME} AgentCore runtime ${runtime_id} to ${IMAGE}"
+  echo "Updating ${RUNTIME} AgentCore runtime ${runtime_id} to ${IMAGE} with role ${role_arn}"
   aws bedrock-agentcore-control update-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \

@@ -372,7 +372,11 @@ jobs:
               --region ${{ env.AWS_REGION }} \
               --agent-runtime-id "$RUNTIME_ID" \
               --output json)
-            ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn // empty')
+            # Plan §005 U2: force the role to the new agentcore-flue-role on
+            # every update so an existing dev runtime created in U1 against
+            # the shared `agentcore-role` reconciles to the canonical Flue
+            # role. Reading roleArn from CURRENT (the prior pattern) preserved
+            # the stale role indefinitely.
             NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
             SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
             aws bedrock-agentcore-control update-agent-runtime \
