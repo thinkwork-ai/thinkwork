@@ -44,6 +44,18 @@ export interface CreateConnectMcpServerOptions {
   /** Override `callTool` timeout (default 60s). */
   callToolTimeoutMs?: number;
   /**
+   * U16 — fetch interceptor used at MCP egress. Trusted-handler builds
+   * one bound to the per-invocation `HandleStore` and bearer-scrubber
+   * (see `createScrubbingFetch` in `scrubbing-fetch.ts`); the SDK
+   * transports below pass it through to their internal HTTP layer via
+   * the `opts.fetch` constructor option, replacing the default
+   * `globalThis.fetch`. When omitted, the transports fall through to
+   * the global fetch — that path emits handle-shaped Authorization to
+   * the wire (which the MCP server rejects), so production callers
+   * MUST supply this.
+   */
+  fetch?: typeof fetch;
+  /**
    * Test seam — inject a custom transport factory. Production callers omit
    * this; the factory selects between StreamableHTTP and SSE based on the
    * `transport` hint U7 forwards from the McpServerConfig.
@@ -59,18 +71,24 @@ export interface TransportFactoryArgs {
   url: URL;
   headers: Record<string, string>;
   transport: "streamable-http" | "sse";
+  /** U16 — egress fetch interceptor; threaded through to the SDK transports. */
+  fetch?: typeof fetch;
 }
 
 function defaultTransportFactory(args: TransportFactoryArgs): Transport {
-  const { url, headers, transport } = args;
+  const { url, headers, transport, fetch: customFetch } = args;
   const requestInit: RequestInit = { headers };
   if (transport === "sse") {
     return new SSEClientTransport(url, {
       requestInit,
       eventSourceInit: requestInit as never,
+      fetch: customFetch,
     });
   }
-  return new StreamableHTTPClientTransport(url, { requestInit });
+  return new StreamableHTTPClientTransport(url, {
+    requestInit,
+    fetch: customFetch,
+  });
 }
 
 function defaultClientFactory(): Client {
@@ -140,6 +158,7 @@ export function createConnectMcpServer(
   const transportFactory =
     options.transportFactory ?? defaultTransportFactory;
   const clientFactory = options.clientFactory ?? defaultClientFactory;
+  const customFetch = options.fetch;
 
   return async function connectMcpServer(
     args: ConnectMcpServerArgs,
@@ -149,6 +168,7 @@ export function createConnectMcpServer(
       url,
       headers: args.headers,
       transport: args.transport ?? "streamable-http",
+      fetch: customFetch,
     });
     const client = clientFactory();
     await client.connect(transport);
