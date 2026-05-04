@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
   ChevronDown,
@@ -54,7 +55,7 @@ import { listBuiltinTools, type BuiltinTool } from "@/lib/builtin-tools-api";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { Switch } from "@/components/ui/switch";
-import { ContextEngineSubAgentPanel } from "@/components/ContextEngineSubAgentPanel";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Select,
   SelectContent,
@@ -62,6 +63,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  FAMILY_LABELS,
+  WEB_SEARCH_PROVIDER_ID,
+  WEB_SEARCH_PROVIDER_PENDING_KEY,
+  WEB_SEARCH_TOOL_SLUG,
+  backendDefaultProviderIds as getBackendDefaultProviderIds,
+  contextSourceRows,
+  defaultSelectedProviderIds,
+  isPendingWebSearchProvider,
+  memoryConfig,
+  providerIdsForQuery,
+  providerSelectable,
+  providerSourceKey,
+  resultSourceKey,
+  visibleContextProviders,
+  type ContextSourceRow,
+  type ProviderBadgeState,
+} from "./-context-engine-sources";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/knowledge/context-engine",
@@ -78,27 +97,6 @@ const FAMILY_ICONS = {
   web: Search,
   "sub-agent": Bot,
 } as const;
-
-const FAMILY_LABELS: Record<string, string> = {
-  memory: "Memory",
-  wiki: "Pages",
-  "knowledge-base": "Knowledge Base",
-  workspace: "Workspace",
-  mcp: "MCP",
-  web: "Web",
-  "sub-agent": "Sub-agent",
-};
-
-const WEB_SEARCH_PROVIDER_ID = "builtin:web-search";
-const WEB_SEARCH_TOOL_SLUG = "web-search";
-const WEB_SEARCH_PROVIDER_PENDING_KEY = "contextProviderPending";
-
-type ProviderBadgeState =
-  | ContextProviderStatus["state"]
-  | "available"
-  | "disabled"
-  | "live"
-  | "planned";
 
 type SourceAgentTraceStep = {
   id?: string;
@@ -118,82 +116,13 @@ function statusClasses(state: ProviderBadgeState) {
   if (state === "skipped" || state === "disabled") {
     return "bg-muted text-muted-foreground";
   }
-  if (state === "stale" || state === "planned") {
+  if (state === "stale") {
     return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
   }
   if (state === "timeout") {
     return "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400";
   }
   return "bg-destructive/15 text-destructive";
-}
-
-function providerBadge(provider: ContextProviderSummary): {
-  label: string;
-  state: ProviderBadgeState;
-} {
-  if (isPendingWebSearchProvider(provider)) {
-    return provider.enabled === false
-      ? { label: "disabled", state: "disabled" }
-      : { label: "waiting on API", state: "stale" };
-  }
-  if (provider.enabled === false)
-    return { label: "disabled", state: "disabled" };
-  if (provider.family === "sub-agent") {
-    return provider.subAgent?.seamState === "live"
-      ? { label: "live", state: "live" }
-      : { label: "planned", state: "planned" };
-  }
-  return { label: "available", state: "available" };
-}
-
-function providerDescription(provider: ContextProviderSummary) {
-  if (provider.id === WEB_SEARCH_PROVIDER_ID) {
-    if (isPendingWebSearchProvider(provider)) {
-      return "Exa Research is enabled under Built-in Tools, but this API has not returned its Context Engine adapter yet.";
-    }
-    return "Runs external research through the tenant-configured Exa Web Search built-in.";
-  }
-  if (provider.family === "memory") {
-    return `Hindsight ${memoryConfig(provider).queryMode}, ${memoryConfig(provider).timeoutMs.toLocaleString()} ms`;
-  }
-  if (provider.family === "workspace") {
-    return "Requires an agent, template, or defaults workspace target.";
-  }
-  if (provider.family === "knowledge-base") {
-    return "Runs against tenant and agent-linked Bedrock Knowledge Bases.";
-  }
-  if (provider.family === "mcp") {
-    return "Approved at the individual read-only/search-safe tool level.";
-  }
-  if (provider.family === "sub-agent") {
-    return provider.subAgent?.seamState === "live"
-      ? "Searches compiled Company Brain pages with typo-tolerant hybrid retrieval."
-      : "Planned source adapter; connector and tools are not wired yet.";
-  }
-  return "Fast compiled page lookup remains separate from raw page inspection.";
-}
-
-function providerSourceKey(
-  provider: Pick<ContextProviderSummary, "family" | "sourceFamily">,
-) {
-  return provider.sourceFamily ?? provider.family;
-}
-
-function resultSourceKey(
-  item: Pick<ContextHit | ContextProviderStatus, "family" | "sourceFamily">,
-) {
-  return item.sourceFamily ?? item.family;
-}
-
-function isPendingWebSearchProvider(provider: ContextProviderSummary) {
-  return (
-    provider.id === WEB_SEARCH_PROVIDER_ID &&
-    provider.config?.[WEB_SEARCH_PROVIDER_PENDING_KEY] === true
-  );
-}
-
-function providerSelectable(provider: ContextProviderSummary) {
-  return provider.enabled !== false && !isPendingWebSearchProvider(provider);
 }
 
 function withBuiltinWebSearchFallback(
@@ -211,7 +140,8 @@ function withBuiltinWebSearchFallback(
     id: WEB_SEARCH_PROVIDER_ID,
     family: "mcp",
     sourceFamily: "web",
-    displayName: webSearchTool.provider === "exa" ? "Exa Research" : "Web Search",
+    displayName:
+      webSearchTool.provider === "exa" ? "Exa Research" : "Web Search",
     enabled: webSearchTool.enabled,
     defaultEnabled: false,
     config: {
@@ -481,38 +411,9 @@ function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
-function defaultSelectedProviderIds(providers: ContextProviderSummary[]) {
-  return providers
-    .filter(
-      (provider) => providerSelectable(provider) && provider.defaultEnabled,
-    )
-    .map((provider) => provider.id);
-}
-
 function memoryModeForHit(hit: ContextHit) {
   const mode = hit.provenance?.metadata?.mode;
   return mode === "recall" || mode === "reflect" ? mode : null;
-}
-
-function memoryConfig(provider?: ContextProviderSummary | null) {
-  const config = provider?.config ?? {};
-  return {
-    queryMode:
-      config.queryMode === "recall" || config.queryMode === "reflect"
-        ? config.queryMode
-        : "reflect",
-    timeoutMs:
-      typeof config.timeoutMs === "number" && Number.isFinite(config.timeoutMs)
-        ? config.timeoutMs
-        : 15_000,
-    includeLegacyBanks: config.includeLegacyBanks === true,
-  };
-}
-
-function sameIds(left: string[], right: string[]) {
-  if (left.length !== right.length) return false;
-  const rightSet = new Set(right);
-  return left.every((item) => rightSet.has(item));
 }
 
 function MarkdownPreview({ children }: { children: string }) {
@@ -591,7 +492,15 @@ function ContextEnginePage() {
           );
           setProviders(providersWithFallback);
           setSelectedProviderIds((current) => {
-            if (current.length > 0) return current;
+            const visibleProviderIds = new Set(
+              visibleContextProviders(providersWithFallback).map(
+                (provider) => provider.id,
+              ),
+            );
+            const visibleCurrent = current.filter((id) =>
+              visibleProviderIds.has(id),
+            );
+            if (visibleCurrent.length > 0) return visibleCurrent;
             return defaultSelectedProviderIds(providersWithFallback);
           });
           const memoryProvider = providersWithFallback.find(
@@ -638,14 +547,19 @@ function ContextEnginePage() {
     };
   }, [tenantId]);
 
+  const visibleProviders = useMemo(
+    () => visibleContextProviders(providers),
+    [providers],
+  );
+
   const selectedProviders = useMemo(
     () =>
       selectedProviderIds
-        .map((id) => providers.find((provider) => provider.id === id))
+        .map((id) => visibleProviders.find((provider) => provider.id === id))
         .filter((provider): provider is ContextProviderSummary =>
           Boolean(provider),
         ),
-    [providers, selectedProviderIds],
+    [selectedProviderIds, visibleProviders],
   );
 
   const memorySelected = selectedProviders.some(
@@ -653,6 +567,10 @@ function ContextEnginePage() {
   );
   const defaultProviderIds = useMemo(
     () => defaultSelectedProviderIds(providers),
+    [providers],
+  );
+  const backendProviderDefaultIds = useMemo(
+    () => getBackendDefaultProviderIds(providers),
     [providers],
   );
   const persistedMemoryConfig = useMemo(
@@ -755,9 +673,11 @@ function ContextEnginePage() {
     try {
       setResult(
         await queryContextEngine(clean, {
-          providerIds: sameIds(selectedProviderIds, defaultProviderIds)
-            ? undefined
-            : selectedProviderIds,
+          providerIds: providerIdsForQuery({
+            selectedProviderIds,
+            visibleDefaultProviderIds: defaultProviderIds,
+            backendDefaultProviderIds: backendProviderDefaultIds,
+          }),
           memoryQueryMode: memorySelected ? memoryQueryMode : undefined,
           memoryIncludeLegacyBanks: memorySelected
             ? persistedMemoryConfig.includeLegacyBanks
@@ -775,6 +695,96 @@ function ContextEnginePage() {
   const configProvider = providers.find(
     (provider) => provider.id === configProviderId,
   );
+  const sourceRows = useMemo(() => contextSourceRows(providers), [providers]);
+  const sourceColumns = useMemo<ColumnDef<ContextSourceRow>[]>(
+    () => [
+      {
+        accessorKey: "provider.displayName",
+        header: "Source",
+        cell: ({ row }) => {
+          const Icon =
+            FAMILY_ICONS[row.original.sourceKey as keyof typeof FAMILY_ICONS] ??
+            Search;
+          return (
+            <div className="flex min-w-0 items-start gap-2 py-1">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {row.original.provider.displayName}
+                </p>
+                <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                  {row.original.description}
+                </p>
+              </div>
+            </div>
+          );
+        },
+        size: 420,
+      },
+      {
+        accessorKey: "familyLabel",
+        header: "Family",
+        cell: ({ row }) => (
+          <Badge variant="outline" className="font-mono text-[11px]">
+            {row.original.provider.family}
+            {row.original.provider.sourceFamily &&
+            row.original.provider.sourceFamily !== row.original.provider.family
+              ? `:${row.original.provider.sourceFamily}`
+              : ""}
+          </Badge>
+        ),
+        size: 150,
+      },
+      {
+        accessorKey: "provider.defaultEnabled",
+        header: "Default",
+        cell: ({ row }) => (
+          <Badge variant="secondary" className="text-[11px]">
+            {row.original.provider.defaultEnabled ? "default" : "opt-in"}
+          </Badge>
+        ),
+        size: 110,
+      },
+      {
+        accessorKey: "badge.label",
+        header: "Status",
+        cell: ({ row }) => (
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <Badge
+              variant="secondary"
+              className={`text-xs ${statusClasses(row.original.badge.state)}`}
+            >
+              {row.original.badge.label}
+            </Badge>
+            {row.original.lastTestSummary && (
+              <span className="truncate text-xs text-muted-foreground">
+                {row.original.lastTestSummary}
+              </span>
+            )}
+          </div>
+        ),
+        size: 170,
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) =>
+          row.original.configurable ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => openProviderConfig(row.original.provider)}
+            >
+              <Settings2 className="h-4 w-4" />
+              Configure
+            </Button>
+          ) : null,
+        size: 120,
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-4">
@@ -789,7 +799,7 @@ function ContextEnginePage() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled={providersLoading || providers.length === 0}
+                    disabled={providersLoading || visibleProviders.length === 0}
                     className="flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm font-normal whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50 sm:w-44 [&_svg]:pointer-events-none [&_svg]:shrink-0"
                   >
                     <span className="min-w-0 truncate">Adapters</span>
@@ -807,7 +817,7 @@ function ContextEnginePage() {
                 <DropdownMenuContent align="start" className="w-72">
                   <DropdownMenuLabel>Company Brain sources</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {providers.map((provider) => {
+                  {visibleProviders.map((provider) => {
                     const Icon =
                       FAMILY_ICONS[
                         providerSourceKey(provider) as keyof typeof FAMILY_ICONS
@@ -1044,96 +1054,19 @@ function ContextEnginePage() {
         </p>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {providersLoading ? (
-          <Card size="sm">
-            <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading providers...
-            </CardContent>
-          </Card>
-        ) : (
-          providers.map((provider) => {
-            const Icon =
-              FAMILY_ICONS[
-                providerSourceKey(provider) as keyof typeof FAMILY_ICONS
-              ] ?? Search;
-            const badge = providerBadge(provider);
-            const isPlannedSubAgent =
-              provider.family === "sub-agent" &&
-              provider.subAgent?.seamState !== "live";
-            return (
-              <Card key={provider.id} size="sm">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <CardTitle className="truncate text-sm">
-                        {provider.displayName}
-                      </CardTitle>
-                    </div>
-                    <Badge
-                      variant="secondary"
-                      className={`shrink-0 text-xs ${statusClasses(badge.state)}`}
-                    >
-                      {badge.label}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-[11px]">
-                      {provider.family}
-                      {provider.sourceFamily &&
-                      provider.sourceFamily !== provider.family
-                        ? `:${provider.sourceFamily}`
-                        : ""}
-                    </Badge>
-                    <Badge variant="secondary" className="text-[11px]">
-                      {provider.defaultEnabled ? "default" : "opt-in"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {providerDescription(provider)}
-                  </p>
-                  {provider.lastTestState && (
-                    <p className="text-xs text-muted-foreground">
-                      Last test: {provider.lastTestState}
-                      {provider.lastTestLatencyMs != null
-                        ? ` · ${provider.lastTestLatencyMs.toLocaleString()} ms`
-                        : ""}
-                    </p>
-                  )}
-                  {isPlannedSubAgent ? (
-                    <Badge
-                      variant="outline"
-                      className="mt-1 w-fit text-[11px] text-muted-foreground"
-                    >
-                      Not wired
-                    </Badge>
-                  ) : provider.family !== "mcp" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-1"
-                      onClick={() => openProviderConfig(provider)}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                      Configure
-                    </Button>
-                  ) : null}
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
-      </div>
-
-      <ContextEngineSubAgentPanel
-        providers={providers}
-        statuses={result?.providers ?? []}
-      />
+      {providersLoading ? (
+        <div className="flex items-center gap-2 rounded-md border px-3 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading providers...
+        </div>
+      ) : (
+        <DataTable
+          columns={sourceColumns}
+          data={sourceRows}
+          pageSize={0}
+          tableClassName="table-fixed"
+        />
+      )}
 
       <Dialog
         open={Boolean(resultDialog)}
