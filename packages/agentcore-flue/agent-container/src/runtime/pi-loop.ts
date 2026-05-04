@@ -32,7 +32,7 @@ export interface PiRuntimeResult {
   response: {
     role: "assistant";
     content: string;
-    runtime: "pi";
+    runtime: "flue";
     model: string;
     usage?: Usage;
     tools_called?: string[];
@@ -43,7 +43,7 @@ export interface PiRuntimeResult {
   tools_called?: string[];
   tool_invocations?: PiToolInvocation[];
   hindsight_usage?: ToolRuntimeState["hindsightUsage"];
-  runtime: "pi";
+  runtime: "flue";
 }
 
 interface HistoryMessage {
@@ -153,7 +153,7 @@ export async function runPiAgent(
     onPayload: (bedrockPayload) => ({
       ...(bedrockPayload as Record<string, unknown>),
       requestMetadata: {
-        runtime: "pi",
+        runtime: "flue",
         git_sha: env.gitSha,
       },
     }),
@@ -167,7 +167,7 @@ export async function runPiAgent(
         tool_name: event.toolName,
         args: event.args,
         started_at: new Date().toISOString(),
-        runtime: "pi",
+        runtime: "flue",
         source: event.toolName.startsWith("hindsight_")
           ? "hindsight"
           : event.toolName === "web_search"
@@ -190,7 +190,7 @@ export async function runPiAgent(
           id: event.toolCallId,
           name: event.toolName,
           tool_name: event.toolName,
-          runtime: "pi",
+          runtime: "flue",
         } as PiToolInvocation);
       invocation.result = event.result;
       invocation.is_error = event.isError;
@@ -246,7 +246,7 @@ export async function runPiAgent(
   ];
 
   return {
-    runtime: "pi",
+    runtime: "flue",
     pi_usage: assistant?.usage,
     tools_called: toolsCalled,
     tool_invocations: toolState.toolInvocations,
@@ -254,7 +254,7 @@ export async function runPiAgent(
     response: {
       role: "assistant",
       content,
-      runtime: "pi",
+      runtime: "flue",
       model: model.id,
       usage: assistant?.usage,
       tools_called: toolsCalled,

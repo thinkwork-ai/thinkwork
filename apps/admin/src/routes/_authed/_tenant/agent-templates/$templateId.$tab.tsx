@@ -797,7 +797,7 @@ function TemplateEditorPage() {
                           <SelectItem value={AgentRuntime.Strands}>
                             Strands
                           </SelectItem>
-                          <SelectItem value={AgentRuntime.Pi}>Pi</SelectItem>
+                          <SelectItem value={AgentRuntime.Flue}>Flue</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

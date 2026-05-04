@@ -324,7 +324,7 @@ export type AgentPerformance = {
 };
 
 export enum AgentRuntime {
-  Pi = 'PI',
+  Flue = 'FLUE',
   Strands = 'STRANDS'
 }
 

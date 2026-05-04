@@ -439,9 +439,9 @@ async function getSkillRunInvokeFnName(
   if (_skillRunInvokeFnName[runtimeType] !== undefined) {
     return _skillRunInvokeFnName[runtimeType] ?? null;
   }
-  if (runtimeType === "pi") {
-    _skillRunInvokeFnName.pi = process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
-    return _skillRunInvokeFnName.pi;
+  if (runtimeType === "flue") {
+    _skillRunInvokeFnName.flue = process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
+    return _skillRunInvokeFnName.flue;
   }
   // Reuse the same Lambda as chat invocation — there's exactly one
   // agentcore-invoke Lambda, it just handles multiple envelope kinds.

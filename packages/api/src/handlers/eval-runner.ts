@@ -64,7 +64,7 @@ const ACCOUNT_ID = process.env.AWS_ACCOUNT_ID || "487219502366";
 const SSM_RUNTIME_ID_STRANDS =
   process.env.AGENTCORE_RUNTIME_SSM_STRANDS ||
   "/thinkwork/dev/agentcore/runtime-id-strands";
-const SSM_RUNTIME_ID_PI = process.env.AGENTCORE_RUNTIME_SSM_PI || "";
+const SSM_RUNTIME_ID_FLUE = process.env.AGENTCORE_RUNTIME_SSM_FLUE || "";
 const SPANS_LOG_GROUP = process.env.SPANS_LOG_GROUP || "aws/spans";
 const RUNTIME_LOG_GROUP_PREFIX = "/aws/bedrock-agentcore/runtimes/";
 const SPAN_WAIT_INITIAL_MS = 30_000;
@@ -84,7 +84,7 @@ const cachedRuntimeIds: Partial<Record<AgentRuntimeType, string>> = {};
 async function loadRuntimeId(runtimeType: AgentRuntimeType): Promise<string> {
   if (cachedRuntimeIds[runtimeType]) return cachedRuntimeIds[runtimeType];
   const parameterName =
-    runtimeType === "pi" ? SSM_RUNTIME_ID_PI : SSM_RUNTIME_ID_STRANDS;
+    runtimeType === "flue" ? SSM_RUNTIME_ID_FLUE : SSM_RUNTIME_ID_STRANDS;
   if (!parameterName)
     throw new Error(
       `${runtimeType} AgentCore runtime SSM parameter is not configured`,

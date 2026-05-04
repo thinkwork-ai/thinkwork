@@ -274,7 +274,7 @@ describe("resolveAgentRuntimeConfig", () => {
   });
 
   it("uses the agent runtime selector when present", async () => {
-    stageAgentRow({ runtime: "pi" });
+    stageAgentRow({ runtime: "flue" });
     stageTemplateRow({ runtime: "strands" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
@@ -284,12 +284,12 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("pi");
+    expect(cfg.runtimeType).toBe("flue");
   });
 
   it("falls back to the template runtime before defaulting to Strands", async () => {
     stageAgentRow({ runtime: null });
-    stageTemplateRow({ runtime: "pi" });
+    stageTemplateRow({ runtime: "flue" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // skills
@@ -298,12 +298,12 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("pi");
+    expect(cfg.runtimeType).toBe("flue");
   });
 
   it("defaults unknown runtime values to Strands", async () => {
     stageAgentRow({ runtime: "unknown" });
-    stageTemplateRow({ runtime: "pi" });
+    stageTemplateRow({ runtime: "flue" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // skills
