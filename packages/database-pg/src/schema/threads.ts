@@ -62,6 +62,16 @@ export const threads = pgTable(
 		 *   }>
 		 */
 		metadata: jsonb("metadata"),
+		/**
+		 * Flue agent runtime state — `SessionData` blob persisted by
+		 * `AuroraSessionStore` (plan §005 U4). NULL for pre-Flue threads
+		 * and for threads where Flue's `delete(id)` has been called.
+		 *
+		 * One-to-one with thread: every Flue session is bound to exactly
+		 * one thread row, and `tenant_id` on this same row provides the
+		 * fail-closed scoping the AuroraSessionStore enforces.
+		 */
+		session_data: jsonb("session_data"),
 		due_at: timestamp("due_at", { withTimezone: true }),
 		started_at: timestamp("started_at", { withTimezone: true }),
 		completed_at: timestamp("completed_at", { withTimezone: true }),

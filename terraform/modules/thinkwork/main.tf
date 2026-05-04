@@ -302,6 +302,12 @@ module "agentcore_flue" {
 
   api_endpoint    = module.api.api_endpoint
   api_auth_secret = var.api_auth_secret
+
+  # Plan §005 U4 — AuroraSessionStore uses the RDS Data API. Cluster ARN
+  # + secret come from the existing aurora-postgres module so Flue and
+  # graphql-http hit the same cluster + same credential rotation surface.
+  db_cluster_arn = module.database.db_cluster_arn
+  db_secret_arn  = module.database.graphql_db_secret_arn
 }
 
 # Plan §005 U2 — cross-module state migration. The Flue resources moved from

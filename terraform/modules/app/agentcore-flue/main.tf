@@ -265,6 +265,12 @@ resource "aws_lambda_function" "agentcore_flue" {
       MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
       THINKWORK_API_URL      = var.api_endpoint
       API_AUTH_SECRET        = var.api_auth_secret
+      # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist
+      # Flue's SessionData blobs against threads.session_data. Empty during
+      # the first greenfield apply (DB cluster doesn't exist yet); the
+      # constructor fail-closes if either is missing at runtime.
+      DB_CLUSTER_ARN = var.db_cluster_arn
+      DB_SECRET_ARN  = var.db_secret_arn
     }
   }
 
