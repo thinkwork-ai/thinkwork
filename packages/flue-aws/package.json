@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "description": "AWS-side Flue connectors. Spike-only: AgentCore Code Interpreter SandboxFactory. See docs/solutions/architecture-patterns/flue-fr9a-integration-spike-verdict-2026-05-03.md.",
+  "main": "./dist/src/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
