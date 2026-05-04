@@ -20,6 +20,8 @@ const RDS = mockClient(RDSDataClient);
 
 const TENANT_A = "11111111-1111-1111-1111-111111111111";
 const TENANT_B = "22222222-2222-2222-2222-222222222222";
+const AGENT_X = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const AGENT_Y = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const THREAD_S = "33333333-3333-3333-3333-333333333333";
 const CLUSTER_ARN = "arn:aws:rds:us-east-1:000000000000:cluster:thinkwork-test-db";
 const SECRET_ARN = "arn:aws:secretsmanager:us-east-1:000000000000:secret:thinkwork-test-db";
@@ -83,6 +85,7 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -119,6 +122,7 @@ describe("AuroraSessionStore.save → load (happy path)", () => {
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -177,6 +181,7 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: TENANT_A,
+      agentId: AGENT_X,
           clusterArn: "",
           secretArn: SECRET_ARN,
         }),
@@ -188,6 +193,7 @@ describe("AuroraSessionStore — fail-closed missing tenantId", () => {
       () =>
         new AuroraSessionStore({
           tenantId: TENANT_A,
+      agentId: AGENT_X,
           clusterArn: CLUSTER_ARN,
           secretArn: "",
         }),
@@ -225,11 +231,13 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
 
     const storeA = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
     const storeB = new AuroraSessionStore({
       tenantId: TENANT_B,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -266,6 +274,7 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
 
     const storeA = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -277,11 +286,95 @@ describe("AuroraSessionStore — cross-tenant isolation (FR-4a)", () => {
   });
 });
 
+describe("AuroraSessionStore — agent reassignment isolation (adv-001)", () => {
+  it("agent_X cannot load a session that was written when threads.agent_id = agent_Y", async () => {
+    // Simulate threads.agent_id = AGENT_Y in the DB (e.g. an
+    // escalateThread mutation reassigned the thread). A store bound to
+    // AGENT_X must see "no session" because the predicate filters out
+    // the row.
+    RDS.on(ExecuteStatementCommand).callsFake((input) => {
+      const sql = (input as { sql?: string }).sql ?? "";
+      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+        name?: string;
+        value?: { stringValue?: string };
+      }>;
+      const get = (name: string) =>
+        params.find((p) => p.name === name)?.value?.stringValue ?? null;
+      if (sql.startsWith("SELECT session_data")) {
+        if (get("agent_id") === AGENT_Y) {
+          return {
+            records: [
+              [{ stringValue: JSON.stringify(sampleData({ leafId: "agentY-leaf" })) }],
+            ],
+          };
+        }
+        // AGENT_X (or anyone else) gets row-not-found.
+        return { records: [] };
+      }
+      throw new Error(`unmocked SQL: ${sql}`);
+    });
+
+    const storeX = new AuroraSessionStore({
+      tenantId: TENANT_A,
+      agentId: AGENT_X,
+      clusterArn: CLUSTER_ARN,
+      secretArn: SECRET_ARN,
+    });
+    const storeY = new AuroraSessionStore({
+      tenantId: TENANT_A,
+      agentId: AGENT_Y,
+      clusterArn: CLUSTER_ARN,
+      secretArn: SECRET_ARN,
+    });
+
+    expect(await storeX.load(THREAD_S)).toBeNull();
+    expect((await storeY.load(THREAD_S))?.leafId).toBe("agentY-leaf");
+  });
+
+  it("save() throws when the thread has been reassigned to a different agent mid-flight", async () => {
+    let lastUpdate: { tenant_id: string | null; agent_id: string | null; thread_id: string | null } | null = null;
+    RDS.on(ExecuteStatementCommand).callsFake((input) => {
+      const sql = (input as { sql?: string }).sql ?? "";
+      const params = ((input as { parameters?: unknown[] }).parameters ?? []) as Array<{
+        name?: string;
+        value?: { stringValue?: string };
+      }>;
+      const get = (name: string) =>
+        params.find((p) => p.name === name)?.value?.stringValue ?? null;
+      if (sql.startsWith("UPDATE threads")) {
+        lastUpdate = {
+          tenant_id: get("tenant_id"),
+          thread_id: get("thread_id"),
+          agent_id: get("agent_id"),
+        };
+        // The thread now belongs to AGENT_Y; AGENT_X's UPDATE matches zero rows.
+        return { numberOfRecordsUpdated: get("agent_id") === AGENT_Y ? 1 : 0 };
+      }
+      throw new Error(`unmocked SQL: ${sql}`);
+    });
+
+    const storeX = new AuroraSessionStore({
+      tenantId: TENANT_A,
+      agentId: AGENT_X,
+      clusterArn: CLUSTER_ARN,
+      secretArn: SECRET_ARN,
+    });
+
+    await expect(storeX.save(THREAD_S, sampleData())).rejects.toThrow(/different agent/i);
+    expect(lastUpdate).toMatchObject({
+      tenant_id: TENANT_A,
+      agent_id: AGENT_X,
+      thread_id: THREAD_S,
+    });
+  });
+});
+
 describe("AuroraSessionStore — load returns null for missing rows", () => {
   it("returns null when the thread has no session_data yet", async () => {
     RDS.on(ExecuteStatementCommand).resolves({ records: [] });
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -295,6 +388,7 @@ describe("AuroraSessionStore — load returns null for missing rows", () => {
     });
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -313,6 +407,7 @@ describe("AuroraSessionStore — load returns null for missing rows", () => {
     });
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -331,6 +426,7 @@ describe("AuroraSessionStore.delete", () => {
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -360,6 +456,7 @@ describe("AuroraSessionStore.delete", () => {
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -379,6 +476,7 @@ describe("AuroraSessionStore — error path", () => {
 
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });
@@ -391,6 +489,7 @@ describe("AuroraSessionStore — interface conformance", () => {
   it("structurally matches Flue's SessionStore interface (save/load/delete)", () => {
     const store = new AuroraSessionStore({
       tenantId: TENANT_A,
+      agentId: AGENT_X,
       clusterArn: CLUSTER_ARN,
       secretArn: SECRET_ARN,
     });

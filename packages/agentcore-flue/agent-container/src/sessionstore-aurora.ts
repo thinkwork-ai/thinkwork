@@ -9,33 +9,46 @@
  *   - `SessionData` blob ↔ `threads.session_data` (jsonb, NULL when no Flue
  *     loop has run for that thread yet)
  *   - Tenant scoping ↔ `threads.tenant_id` (already indexed)
+ *   - Agent scoping ↔ `threads.agent_id` (already indexed)
  *
- * The blob lives in the same row as the thread's product metadata so
- * thread lifecycle (assign, close, archive) atomically clears Flue's
- * state — no extra junction table to keep in sync. Pre-Flue threads
- * coexist with `session_data IS NULL`.
+ * Session identity is the `(thread, tenant, agent)` tuple, NOT just
+ * `(thread, tenant)`. Pre-Flue threads coexist with `session_data IS NULL`.
+ *
+ * Why bind agentId in addition to tenantId:
+ *   - `escalateThread`, `delegateThread`, and `updateThread` mutations all
+ *     change `threads.agent_id` without touching `session_data`. Without
+ *     an agent-scoped predicate, the new agent would inherit the prior
+ *     agent's session — a fail-open coupling between two distinct agent
+ *     identities. With the predicate, load() returns null after
+ *     reassignment, the new agent starts fresh, and save() throws if a
+ *     stale loop tries to write back over the reassigned thread.
+ *   - Mirrors the FR-4a fail-closed pattern: explicit scoping, no implicit
+ *     trust on row-level identity beyond what the dispatcher snapshotted.
  *
  * Why a column on `threads` instead of a new table:
- *   - Session is 1:1 with thread (every Flue session belongs to exactly
- *     one thread; threads are the user-facing conversation primitive).
+ *   - Session is 1:1 with the (thread, agent) pair (every Flue session
+ *     belongs to exactly one thread + one agent; threads are the user-
+ *     facing conversation primitive).
  *   - `tenant_id` and `agent_id` already live on the row; no duplication.
  *   - Postgres TOASTs large jsonb values, so wide rows don't bloat the
  *     base table.
  *   - Single writer per thread (one Flue loop at a time), so
  *     read-modify-write contention isn't a concern at this scale.
  *
- * Tenant isolation (FR-4a):
- *   - The `tenantId` constructor argument is bound at instantiation. Empty
- *     or null fails closed — the dispatcher MUST snapshot
- *     `ctx.auth.tenantId` (or fall back to `resolveCallerTenantId(ctx)`)
- *     before constructing the store.
- *   - Every save/load/delete includes `tenant_id = :tenant_id` in the
- *     predicate so cross-tenant access surfaces as a row-not-found, not as
- *     a successful read of another tenant's data.
+ * Tenant + agent isolation (FR-4a):
+ *   - `tenantId` and `agentId` are bound at instantiation. Empty or null
+ *     fails closed — the dispatcher MUST snapshot `ctx.auth.tenantId`
+ *     (or fall back to `resolveCallerTenantId(ctx)`) and the invocation's
+ *     `agentId` before constructing the store.
+ *   - Every save/load/delete includes
+ *     `tenant_id = :tenant_id AND agent_id = :agent_id`
+ *     in the predicate so cross-tenant OR cross-agent access surfaces as
+ *     a row-not-found rather than a successful read of another scope's data.
  *   - `save()` errors when `numberOfRecordsUpdated === 0`. This catches
- *     two cases: the thread doesn't exist, AND the thread exists under a
- *     different tenant. Either way Flue's caller sees a typed error rather
- *     than a silent no-op.
+ *     three cases: the thread doesn't exist, the thread exists under a
+ *     different tenant, OR the thread has been reassigned to a different
+ *     agent since this loop started. Either way Flue's caller sees a typed
+ *     error rather than a silent no-op.
  *
  * Connection model:
  *   - Uses AWS RDS Data API (HTTP-based). No VPC plumbing on the agentcore-
@@ -62,6 +75,13 @@ export interface AuroraSessionStoreOptions {
    * construct an unscoped store.
    */
   tenantId: string;
+  /**
+   * Agent ID snapshot — bound at constructor time. Pairs with `tenantId`
+   * to express the (thread, tenant, agent) tuple Flue's session is keyed
+   * on. Missing or empty fail-closes; the dispatcher must snapshot the
+   * invocation's `agentId` before constructing the store.
+   */
+  agentId: string;
   /** Aurora DB cluster ARN — RDS Data API target. */
   clusterArn: string;
   /** Secrets Manager ARN holding the DB credentials. */
@@ -88,6 +108,7 @@ export class AuroraSessionStoreError extends Error {
 
 export class AuroraSessionStore implements SessionStore {
   private readonly tenantId: string;
+  private readonly agentId: string;
   private readonly clusterArn: string;
   private readonly secretArn: string;
   private readonly database: string;
@@ -101,6 +122,16 @@ export class AuroraSessionStore implements SessionStore {
           "The dispatcher must snapshot ctx.auth.tenantId (or call " +
           "resolveCallerTenantId) before constructing the store — fail-closed " +
           "per FR-4a.",
+      );
+    }
+    if (!opts.agentId || typeof opts.agentId !== "string") {
+      throw new AuroraSessionStoreError(
+        "load",
+        "AuroraSessionStore: agentId is required and must be a non-empty string. " +
+          "Flue's session is keyed on the (thread, tenant, agent) tuple — the " +
+          "dispatcher must snapshot the invocation's agentId before constructing " +
+          "the store. Without it, an escalate/delegate that changes threads.agent_id " +
+          "would let the new agent inherit the prior agent's session.",
       );
     }
     if (!opts.clusterArn || typeof opts.clusterArn !== "string") {
@@ -120,6 +151,7 @@ export class AuroraSessionStore implements SessionStore {
       );
     }
     this.tenantId = opts.tenantId;
+    this.agentId = opts.agentId;
     this.clusterArn = opts.clusterArn;
     this.secretArn = opts.secretArn;
     this.database = opts.database ?? "thinkwork";
@@ -137,7 +169,8 @@ export class AuroraSessionStore implements SessionStore {
       "UPDATE threads " +
       "SET session_data = CAST(:session_data AS jsonb) " +
       "WHERE id = CAST(:thread_id AS uuid) " +
-      "AND tenant_id = CAST(:tenant_id AS uuid)";
+      "AND tenant_id = CAST(:tenant_id AS uuid) " +
+      "AND agent_id = CAST(:agent_id AS uuid)";
 
     let result;
     try {
@@ -150,6 +183,7 @@ export class AuroraSessionStore implements SessionStore {
           parameters: [
             { name: "thread_id", value: { stringValue: id } },
             { name: "tenant_id", value: { stringValue: this.tenantId } },
+            { name: "agent_id", value: { stringValue: this.agentId } },
             {
               name: "session_data",
               value: { stringValue: JSON.stringify(data) },
@@ -165,16 +199,19 @@ export class AuroraSessionStore implements SessionStore {
       );
     }
 
-    // numberOfRecordsUpdated is 0 when either the thread doesn't exist OR
-    // the thread exists under a different tenant. Flue treats both as
-    // "you can't write here" — the caller should surface to the user
-    // rather than retry silently.
+    // numberOfRecordsUpdated is 0 when any of three predicates miss:
+    // (a) the thread doesn't exist, (b) the thread exists under a different
+    // tenant, or (c) the thread has been reassigned to a different agent
+    // since this loop started (e.g. an escalateThread mutation flipped
+    // agent_id mid-flight). Flue treats all three as "you can't write here"
+    // — the caller surfaces to the user rather than retrying silently.
     const updated = result.numberOfRecordsUpdated ?? 0;
     if (updated === 0) {
       throw new AuroraSessionStoreError(
         "save",
-        `Aurora SessionStore save matched no thread row for tenant=${this.tenantId} thread=${id}. ` +
-          "Either the thread doesn't exist or it belongs to a different tenant.",
+        `Aurora SessionStore save matched no thread row for tenant=${this.tenantId} agent=${this.agentId} thread=${id}. ` +
+          "Either the thread doesn't exist, it belongs to a different tenant, " +
+          "or it has been reassigned to a different agent.",
       );
     }
   }
@@ -183,7 +220,8 @@ export class AuroraSessionStore implements SessionStore {
     const sql =
       "SELECT session_data FROM threads " +
       "WHERE id = CAST(:thread_id AS uuid) " +
-      "AND tenant_id = CAST(:tenant_id AS uuid)";
+      "AND tenant_id = CAST(:tenant_id AS uuid) " +
+      "AND agent_id = CAST(:agent_id AS uuid)";
 
     let result;
     try {
@@ -196,6 +234,7 @@ export class AuroraSessionStore implements SessionStore {
           parameters: [
             { name: "thread_id", value: { stringValue: id } },
             { name: "tenant_id", value: { stringValue: this.tenantId } },
+            { name: "agent_id", value: { stringValue: this.agentId } },
           ],
         }),
       );
@@ -242,7 +281,8 @@ export class AuroraSessionStore implements SessionStore {
     const sql =
       "UPDATE threads SET session_data = NULL " +
       "WHERE id = CAST(:thread_id AS uuid) " +
-      "AND tenant_id = CAST(:tenant_id AS uuid)";
+      "AND tenant_id = CAST(:tenant_id AS uuid) " +
+      "AND agent_id = CAST(:agent_id AS uuid)";
 
     try {
       await this.client.send(
@@ -254,6 +294,7 @@ export class AuroraSessionStore implements SessionStore {
           parameters: [
             { name: "thread_id", value: { stringValue: id } },
             { name: "tenant_id", value: { stringValue: this.tenantId } },
+            { name: "agent_id", value: { stringValue: this.agentId } },
           ],
         }),
       );
