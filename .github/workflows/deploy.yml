@@ -597,6 +597,49 @@ jobs:
             --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
             --wait-seconds 900
 
+  # ── Flue runtime end-to-end smoke ───────────────────────────────
+  # Invokes the deployed Flue dispatcher Lambda with a populated
+  # payload mirroring chat-agent-invoke's shape and asserts the
+  # response includes a USER.md fingerprint. Catches the class of
+  # bugs that shipped silently on 2026-05-05: LWA routing, Bedrock
+  # IAM, Sonnet 4.5 inference-profile prefix, missing workspace
+  # prompt loader. Each of those individually was caught only when
+  # an operator clicked through the admin UI and saw a wrong answer.
+  # This gate makes them deploy-blockers instead of operator-noticed.
+  #
+  # Scope: dev only (uses Marco's tenant + agent IDs). Other stages
+  # would need SMOKE_* env vars set; the wrapper script refuses to
+  # run when STAGE != dev without those overrides.
+  flue-smoke-test:
+    name: Flue Smoke Test
+    needs: [update-agentcore-runtimes]
+    if: >-
+      always()
+      && needs.update-agentcore-runtimes.result == 'success'
+      && env.STAGE == 'dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run Flue smoke
+        run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
+
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
   # terraform-apply has ensured the cluster exists. Fails the deploy if
