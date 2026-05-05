@@ -39,6 +39,7 @@ interface TenantCredentialRuntimeRow {
 
 const ALIAS_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const REQUIRED_FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_ALIASES = new Set(["__proto__", "prototype", "constructor"]);
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HTTP_COMPATIBLE_KINDS = new Set([
@@ -150,11 +151,11 @@ export function validateReferenceShape(
         message: `State '${reference.nodeId ?? reference.alias}' is missing a credential handle.`,
       });
     }
-    if (!ALIAS_RE.test(reference.alias)) {
+    if (!isSafeCredentialAlias(reference.alias)) {
       issues.push({
         code: "credential_alias_invalid",
         stateName: reference.nodeId,
-        message: `Credential alias '${reference.alias}' must be a safe code identifier.`,
+        message: `Credential variable '${reference.alias}' must be a safe code identifier.`,
       });
     }
     const nodeKey = reference.nodeId ?? "(unknown)";
@@ -163,7 +164,7 @@ export function validateReferenceShape(
       issues.push({
         code: "credential_alias_duplicate",
         stateName: reference.nodeId,
-        message: `State '${nodeKey}' declares duplicate credential alias '${reference.alias}'.`,
+        message: `State '${nodeKey}' declares duplicate credential variable '${reference.alias}'.`,
       });
     }
     aliases.add(reference.alias);
@@ -182,6 +183,10 @@ export function validateReferenceShape(
   }
 
   return issues;
+}
+
+function isSafeCredentialAlias(alias: string): boolean {
+  return ALIAS_RE.test(alias) && !RESERVED_ALIASES.has(alias);
 }
 
 function validateReferenceCredentials(
