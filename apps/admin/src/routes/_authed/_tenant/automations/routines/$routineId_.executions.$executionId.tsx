@@ -18,6 +18,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
+import { PanelRight } from "lucide-react";
 import { RoutineExecutionDetailQuery } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -25,6 +26,14 @@ import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   ExecutionGraph,
   type StepEventLite,
@@ -54,6 +63,7 @@ const TERMINAL_STATUSES = new Set([
 function ExecutionDetailPage() {
   const { routineId, executionId } = Route.useParams();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [{ data, fetching, error }, refetchExecution] = useQuery({
     query: RoutineExecutionDetailQuery,
@@ -177,6 +187,22 @@ function ExecutionDetailPage() {
     ? manifestSteps.find((step) => step.nodeId === selectedNodeId)
     : undefined;
   const executionOutput = parseAwsJson(execution.outputJson);
+  const renderStepDetails = () =>
+    selectedNodeId ? (
+      <StepDetailPanel
+        nodeId={selectedNodeId}
+        step={selectedStep}
+        events={eventsForSelected}
+        executionOutput={executionOutput}
+        className="h-full rounded-none border-0 bg-transparent shadow-none"
+      />
+    ) : (
+      <Card className="h-full rounded-none border-0 bg-transparent shadow-none">
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          Select a step to see its result.
+        </CardContent>
+      </Card>
+    );
 
   return (
     <PageLayout
@@ -189,7 +215,7 @@ function ExecutionDetailPage() {
         />
       }
     >
-      <div className="grid h-full min-h-0 gap-4 xl:grid-cols-2">
+      <div className="relative h-full min-h-0 overflow-hidden rounded-md border border-border/80 bg-background">
         <ExecutionGraph
           aslJson={aslVersion?.aslJson}
           stepManifest={stepManifest}
@@ -198,27 +224,33 @@ function ExecutionDetailPage() {
           executionOutput={executionOutput}
           selectedNodeId={selectedNodeId}
           onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-          className="h-full min-h-0"
+          className="h-full min-h-0 rounded-none border-0"
         />
-
-        <div className="min-h-0 overflow-hidden">
-          {selectedNodeId ? (
-            <StepDetailPanel
-              nodeId={selectedNodeId}
-              step={selectedStep}
-              events={eventsForSelected}
-              executionOutput={executionOutput}
-              className="h-full"
-            />
-          ) : (
-            <Card className="h-full">
-              <CardContent className="py-6 text-sm text-muted-foreground">
-                Select a step to see its result.
-              </CardContent>
-            </Card>
-          )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="absolute right-3 top-3 z-20 xl:hidden"
+          onClick={() => setDetailsOpen(true)}
+        >
+          <PanelRight className="h-3.5 w-3.5" />
+          Details
+        </Button>
+        <div className="absolute inset-y-0 right-0 z-20 hidden w-[440px] min-h-0 overflow-y-auto border-l border-border/70 bg-card/95 shadow-2xl backdrop-blur xl:block">
+          {renderStepDetails()}
         </div>
       </div>
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(460px,calc(100vw-2rem))]">
+          <SheetHeader className="border-b border-border/70 pr-12">
+            <SheetTitle>Step result</SheetTitle>
+            <SheetDescription>
+              Inspect the selected execution step.
+            </SheetDescription>
+          </SheetHeader>
+          {renderStepDetails()}
+        </SheetContent>
+      </Sheet>
     </PageLayout>
   );
 }

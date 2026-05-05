@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { ArrowRight, RefreshCw, Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
@@ -9,7 +9,6 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  RebuildRoutineVersionMutation,
   RoutineDetailQuery,
   TriggerRoutineRunMutation,
 } from "@/lib/graphql-queries";
@@ -59,17 +58,12 @@ function RoutineDetailPage() {
     variables: { id: routineId },
   });
   const [triggerState, executeTrigger] = useMutation(TriggerRoutineRunMutation);
-  const [rebuildState, executeRebuild] = useMutation(
-    RebuildRoutineVersionMutation,
-  );
   const [triggerError, setTriggerError] = useState<string | null>(null);
   const [lastTestRun, setLastTestRun] = useState<{
     id: string;
     status: string;
   } | null>(null);
   const [executionRefreshKey, setExecutionRefreshKey] = useState(0);
-  const [rebuildError, setRebuildError] = useState<string | null>(null);
-  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
   const [definitionState, setDefinitionState] =
     useState<RoutineDefinitionEditorState>({
       ready: false,
@@ -110,21 +104,6 @@ function RoutineDetailPage() {
     }
   };
 
-  const handleRebuild = async () => {
-    setRebuildError(null);
-    setRebuildMessage(null);
-    const res = await executeRebuild({ input: { routineId } });
-    if (res.error) {
-      setRebuildError(res.error.message.replace(/^\[GraphQL\]\s*/, ""));
-      return;
-    }
-    const version = res.data?.rebuildRoutineVersion.versionNumber;
-    setRebuildMessage(
-      version ? `Rebuilt version ${version}.` : "Routine rebuilt.",
-    );
-    reexecuteRoutine({ requestPolicy: "network-only" });
-  };
-
   const routine = result.data?.routine;
   useBreadcrumbs([
     { label: "Routines", href: "/automations/routines" },
@@ -133,56 +112,28 @@ function RoutineDetailPage() {
 
   if (result.fetching || !routine) return <PageSkeleton />;
 
-  const testDisabled =
-    triggerState.fetching ||
-    rebuildState.fetching ||
-    testDisabledReason != null;
+  const testDisabled = triggerState.fetching || testDisabledReason != null;
 
   const actions = (
-    <>
-      {routine.engine === "step_functions" && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleRebuild}
-          disabled={rebuildState.fetching || triggerState.fetching}
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          {rebuildState.fetching ? "Rebuilding..." : "Rebuild"}
-        </Button>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleRunNow}
-        disabled={testDisabled}
-        title={testDisabledReason ?? undefined}
-      >
-        <Zap className="h-3.5 w-3.5" />
-        {triggerState.fetching ? "Starting..." : "Test Routine"}
-      </Button>
-    </>
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleRunNow}
+      disabled={testDisabled}
+      title={testDisabledReason ?? undefined}
+    >
+      <Zap className="h-3.5 w-3.5" />
+      {triggerState.fetching ? "Starting..." : "Test Routine"}
+    </Button>
   );
 
   return (
     <PageLayout
       contentClassName="overflow-hidden pb-4"
       header={
-        <PageHeader
-          title={routine.name}
-          description={routine.description ?? undefined}
-          actions={actions}
-        />
+        <PageHeader title={routine.name} actions={actions} />
       }
     >
-      {rebuildMessage && (
-        <p className="mb-3 text-sm text-muted-foreground">{rebuildMessage}</p>
-      )}
-      {rebuildError && (
-        <p className="mb-3 text-sm text-red-600 dark:text-red-400">
-          {rebuildError}
-        </p>
-      )}
       {triggerError && (
         <p className="mb-3 text-sm text-red-600 dark:text-red-400">
           {triggerError}
@@ -220,11 +171,14 @@ function RoutineDetailPage() {
             Activity
           </TabsTrigger>
           <TabsTrigger value="config" className="flex-none px-3">
-            Config
+            Details
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
+        <TabsContent
+          value="workflow"
+          className="h-full min-h-0 overflow-hidden"
+        >
           <RoutineDefinitionPanel
             routineId={routineId}
             onPublished={() =>
@@ -265,6 +219,13 @@ function RoutineDetailPage() {
         </TabsContent>
 
         <TabsContent value="config" className="space-y-4 overflow-y-auto">
+          <section className="space-y-2 rounded-md border border-border/70 p-4">
+            <h2 className="text-sm font-semibold">Description</h2>
+            <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+              {routine.description ?? "No description provided."}
+            </p>
+          </section>
+
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="space-y-3 rounded-md border p-4">
               <h2 className="text-sm font-semibold">Definition</h2>

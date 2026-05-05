@@ -14,7 +14,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "urql";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { type ColumnDef } from "@tanstack/react-table";
 import {
   ArrowRight,
   Play,
@@ -27,12 +28,12 @@ import {
 import { RoutineExecutionsListQuery } from "@/lib/graphql-queries";
 import { RoutineExecutionStatus } from "@/gql/graphql";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
 const TERMINAL_STATUSES = new Set<string>([
   "succeeded",
@@ -153,7 +154,9 @@ export function ExecutionList({
   emptyCta,
   refreshKey,
 }: ExecutionListProps) {
+  const navigate = useNavigate();
   const enumStatus = statusFilterToEnum(statusFilter);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Cursor stack keeps prior page boundaries so the operator can step
   // back. Index 0 is the first-page cursor (always undefined). Pushing
@@ -173,7 +176,7 @@ export function ExecutionList({
     variables: {
       routineId,
       status: enumStatus,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       cursor: currentCursor,
     },
     requestPolicy: "cache-and-network",
@@ -232,6 +235,123 @@ export function ExecutionList({
   const goPrevPage = () => {
     setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
   };
+  const goFirstPage = () => {
+    setCursorStack([undefined]);
+  };
+  const pageIndex = cursorStack.length - 1;
+  const hasPossibleNextPage = rows.length === pageSize;
+  const loadedRowCount = pageIndex * pageSize + rows.length;
+  const syntheticTotalCount =
+    rows.length === 0 && pageIndex > 0
+      ? (pageIndex + 1) * pageSize
+      : loadedRowCount + (hasPossibleNextPage ? pageSize : 0);
+  const handlePageChange = (nextPageIndex: number) => {
+    if (nextPageIndex <= 0) {
+      goFirstPage();
+      return;
+    }
+    if (nextPageIndex < pageIndex) {
+      goPrevPage();
+      return;
+    }
+    if (nextPageIndex > pageIndex) {
+      goNextPage();
+    }
+  };
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setCursorStack([undefined]);
+  };
+  const columns = useMemo<ColumnDef<ExecutionRow>[]>(
+    () => [
+      {
+        accessorKey: "id",
+        header: "Run",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3 px-3 py-3">
+            <span className="text-muted-foreground">
+              {triggerIcon(row.original.triggerSource)}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {row.original.id.slice(0, 8)}
+            </span>
+          </div>
+        ),
+        size: 160,
+      },
+      {
+        accessorKey: "triggerSource",
+        header: "Trigger",
+        cell: ({ row }) => (
+          <div className="px-3 py-3 text-sm capitalize text-muted-foreground">
+            {row.original.triggerSource.replace(/_/g, " ")}
+          </div>
+        ),
+        size: 150,
+      },
+      {
+        accessorKey: "startedAt",
+        header: "Started",
+        cell: ({ row }) => (
+          <div className="px-3 py-3 text-sm text-muted-foreground">
+            {row.original.startedAt
+              ? relativeTime(row.original.startedAt)
+              : "Pending"}
+            {row.original.errorCode ? (
+              <span className="ml-2 text-red-500">
+                ({row.original.errorCode})
+              </span>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "duration",
+        header: "Duration",
+        cell: ({ row }) => (
+          <div className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
+            {formatDurationMs(row.original.startedAt, row.original.finishedAt)}
+          </div>
+        ),
+        size: 110,
+      },
+      {
+        accessorKey: "totalLlmCostUsdCents",
+        header: "Cost",
+        cell: ({ row }) => (
+          <div className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
+            {formatLlmCost(row.original.totalLlmCostUsdCents)}
+          </div>
+        ),
+        size: 90,
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => (
+          <div className="flex justify-end px-3 py-3">
+            <StatusBadge
+              status={row.original.status.toLowerCase()}
+              size="sm"
+            />
+          </div>
+        ),
+        size: 130,
+      },
+      {
+        id: "action",
+        header: "",
+        cell: () => (
+          <div className="flex items-center justify-end gap-1 px-3 py-3 text-sm text-muted-foreground">
+            View output
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
+        ),
+        size: 130,
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-3">
@@ -271,87 +391,32 @@ export function ExecutionList({
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="py-3">
-          {rows.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                {statusFilter === "all"
-                  ? "No executions yet."
-                  : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
-              </p>
-              {emptyCta ? <div className="mt-3">{emptyCta}</div> : null}
-            </div>
-          ) : (
-            <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {rows.map((row) => (
-                <li key={row.id}>
-                  <Link
-                    to="/automations/routines/$routineId/executions/$executionId"
-                    params={{ routineId, executionId: row.id }}
-                    className="flex items-center gap-3 px-1 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-md"
-                  >
-                    <span className="text-zinc-400">
-                      {triggerIcon(row.triggerSource)}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">
-                      {row.id.slice(0, 8)}
-                    </span>
-                    <span className="text-xs text-muted-foreground w-32 shrink-0 capitalize">
-                      {row.triggerSource.replace(/_/g, " ")}
-                    </span>
-                    <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">
-                      {row.startedAt ? relativeTime(row.startedAt) : "Pending"}
-                      {row.errorCode ? (
-                        <span className="ml-2 text-red-500">
-                          ({row.errorCode})
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="text-xs text-muted-foreground w-20 shrink-0 text-right tabular-nums">
-                      {formatDurationMs(row.startedAt, row.finishedAt)}
-                    </span>
-                    <span className="text-xs text-muted-foreground w-16 shrink-0 text-right tabular-nums">
-                      {formatLlmCost(row.totalLlmCostUsdCents)}
-                    </span>
-                    <StatusBadge status={row.status.toLowerCase()} size="sm" />
-                    <span className="hidden items-center gap-1 text-xs text-muted-foreground md:inline-flex">
-                      View output
-                      <ArrowRight className="h-3 w-3" />
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        columns={columns}
+        data={rows}
+        compact
+        tableClassName="table-fixed"
+        pageSize={pageSize}
+        totalCount={Math.max(syntheticTotalCount, 1)}
+        pageIndex={pageIndex}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        onRowClick={(row) =>
+          navigate({
+            to: "/automations/routines/$routineId/executions/$executionId",
+            params: { routineId, executionId: row.id },
+          })
+        }
+      />
 
-      {(rows.length > 0 || cursorStack.length > 1) && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            {cursorStack.length > 1
-              ? `Page ${cursorStack.length}`
-              : "First page"}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goPrevPage}
-              disabled={cursorStack.length === 1}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goNextPage}
-              disabled={rows.length < PAGE_SIZE}
-            >
-              Next
-            </Button>
-          </div>
+      {rows.length === 0 && (
+        <div className="rounded-md border border-dashed border-border/70 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {statusFilter === "all"
+              ? "No executions yet."
+              : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
+          </p>
+          {emptyCta ? <div className="mt-3">{emptyCta}</div> : null}
         </div>
       )}
     </div>
