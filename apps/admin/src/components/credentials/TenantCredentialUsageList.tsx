@@ -41,7 +41,9 @@ export function TenantCredentialUsageList({
   );
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Checking routines...</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Checking routines...</p>
+    );
   }
 
   if (usages.length === 0) {
@@ -68,7 +70,7 @@ export function TenantCredentialUsageList({
               </Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Matched credential handle in routine configuration.
+              Matched this credential in routine configuration.
             </p>
           </div>
           <Button asChild variant="outline" size="sm">

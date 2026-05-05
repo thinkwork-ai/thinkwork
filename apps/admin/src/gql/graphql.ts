@@ -1300,6 +1300,15 @@ export type HeartbeatActivityEvent = {
   tenantId: Scalars['ID']['output'];
 };
 
+export type ImportN8nRoutineInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  n8nCredentialSlug?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  pdiCredentialSlug?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  workflowUrl: Scalars['String']['input'];
+};
+
 export type InboxItem = {
   __typename?: 'InboxItem';
   comments: Array<InboxItemComment>;
@@ -1736,6 +1745,7 @@ export type Mutation = {
   editTenantEntityFact: TenantEntitySection;
   escalateThread: Thread;
   generateActivationAutomationCandidates: Array<ActivationAutomationCandidate>;
+  importN8nRoutine: Routine;
   inviteMember: TenantMember;
   notifyActivationSessionUpdate?: Maybe<ActivationSessionEvent>;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
@@ -2217,6 +2227,11 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationGenerateActivationAutomationCandidatesArgs = {
   sessionId: Scalars['ID']['input'];
+};
+
+
+export type MutationImportN8nRoutineArgs = {
+  input: ImportN8nRoutineInput;
 };
 
 

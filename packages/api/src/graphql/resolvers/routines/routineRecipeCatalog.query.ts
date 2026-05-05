@@ -15,6 +15,7 @@ export async function routineRecipeCatalog(
   await requireAdminOrApiKeyCaller(ctx, args.tenantId, "create_routine");
   const credentials = await db
     .select({
+      id: tenantCredentials.id,
       slug: tenantCredentials.slug,
       display_name: tenantCredentials.display_name,
       kind: tenantCredentials.kind,
@@ -27,14 +28,14 @@ export async function routineRecipeCatalog(
         eq(tenantCredentials.status, "active"),
       ),
     );
-  const allCredentialOptions = credentials.map((credential) => credential.slug);
+  const allCredentialOptions = credentials.map((credential) => credential.id);
   const httpCredentialOptions = credentials
     .filter(
       (credential) =>
         credential.eventbridge_connection_arn &&
         ["api_key", "bearer_token", "basic_auth"].includes(credential.kind),
     )
-    .map((credential) => credential.slug);
+    .map((credential) => credential.id);
 
   return listRecipes().map((recipe) => {
     const defaultArgs = getRecipeDefaultArgs(recipe.id);

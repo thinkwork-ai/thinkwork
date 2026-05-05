@@ -145,7 +145,7 @@ function TenantCredentialDetailPage() {
           </Button>
           <PageHeader
             title={credential.displayName}
-            description={credential.slug}
+            description={credentialKindLabel(credential.kind)}
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">

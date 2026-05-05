@@ -15,7 +15,6 @@ import { Textarea } from "@/components/ui/textarea";
 
 export type TenantCredentialSubmitValues = {
   displayName?: string;
-  slug?: string;
   kind: TenantCredentialKind;
   metadataJson?: Record<string, unknown>;
   secretJson: Record<string, unknown>;
@@ -32,7 +31,6 @@ type TenantCredentialFormProps = {
   mode: "create" | "rotate";
   initialKind?: TenantCredentialKind;
   initialDisplayName?: string;
-  initialSlug?: string;
   initialMetadataJson?: unknown;
   submitLabel?: string;
   apiError?: string | null;
@@ -83,7 +81,9 @@ export function emptySecretFields(
   kind: TenantCredentialKind,
 ): Record<string, string> {
   if (kind === TenantCredentialKind.Json) return { json: "{}" };
-  return Object.fromEntries(SECRET_FIELDS[kind].map((field) => [field.key, ""]));
+  return Object.fromEntries(
+    SECRET_FIELDS[kind].map((field) => [field.key, ""]),
+  );
 }
 
 export function parseOptionalJsonObject(
@@ -107,7 +107,10 @@ export function secretPayloadForKind(
   }
 
   const payload = Object.fromEntries(
-    SECRET_FIELDS[kind].map((field) => [field.key, values[field.key]?.trim() ?? ""]),
+    SECRET_FIELDS[kind].map((field) => [
+      field.key,
+      values[field.key]?.trim() ?? "",
+    ]),
   );
   const missing = SECRET_FIELDS[kind]
     .filter((field) => !String(payload[field.key] ?? "").trim())
@@ -134,7 +137,6 @@ export function TenantCredentialForm({
   mode,
   initialKind = TenantCredentialKind.ApiKey,
   initialDisplayName = "",
-  initialSlug = "",
   initialMetadataJson,
   submitLabel,
   apiError,
@@ -143,7 +145,6 @@ export function TenantCredentialForm({
 }: TenantCredentialFormProps) {
   const [kind, setKind] = useState(initialKind);
   const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [slug, setSlug] = useState(initialSlug);
   const [metadataJson, setMetadataJson] = useState(() =>
     safeInitialMetadata(initialMetadataJson),
   );
@@ -168,7 +169,6 @@ export function TenantCredentialForm({
       const secretJson = secretPayloadForKind(kind, secretFields);
       await onSubmit({
         displayName: displayName.trim(),
-        slug: slug.trim() || undefined,
         kind,
         metadataJson: metadata,
         secretJson,
@@ -182,27 +182,15 @@ export function TenantCredentialForm({
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       {isCreate && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="credential-display-name">Display name</Label>
-            <Input
-              id="credential-display-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="PDI SOAP"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="credential-slug">Slug</Label>
-            <Input
-              id="credential-slug"
-              value={slug}
-              onChange={(event) => setSlug(event.target.value)}
-              placeholder="pdi-soap"
-              autoComplete="off"
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="credential-display-name">Display name</Label>
+          <Input
+            id="credential-display-name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="PDI SOAP"
+            autoComplete="off"
+          />
         </div>
       )}
 
@@ -257,9 +245,7 @@ export function TenantCredentialForm({
           <Textarea
             id="credential-secret-json"
             value={secretFields.json ?? "{}"}
-            onChange={(event) =>
-              setSecretFields({ json: event.target.value })
-            }
+            onChange={(event) => setSecretFields({ json: event.target.value })}
             rows={8}
             className="font-mono text-xs"
             placeholder='{"apiKey":"..."}'
