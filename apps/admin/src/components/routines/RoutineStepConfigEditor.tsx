@@ -50,7 +50,7 @@ export type RoutineConfigStep = {
 
 export type RoutineCredentialOption = {
   id: string;
-  slug: string;
+  slug?: string;
   displayName: string;
   kind: string;
   status?: string | null;
@@ -352,34 +352,45 @@ function ConfigFieldInput({
           </SelectContent>
         </Select>
       ) : control === "credential_select" ? (
-        <Select
-          value={value || "__none__"}
-          onValueChange={(next) => onChange(next === "__none__" ? "" : next)}
-          disabled={readOnly || !field.options?.length}
-        >
-          <SelectTrigger
-            id={id}
-            className="w-full"
-            aria-invalid={Boolean(error)}
-            aria-labelledby={labelId}
-          >
-            <SelectValue
-              placeholder={
-                field.options?.length
-                  ? "Select credential"
-                  : "No active credentials"
+        (() => {
+          const options = credentialOptionsForField(
+            field,
+            credentialOptions ?? [],
+          );
+          return (
+            <Select
+              value={selectedCredentialValue(value, options)}
+              onValueChange={(next) =>
+                onChange(next === "__none__" ? "" : next)
               }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">No credential</SelectItem>
-            {(field.options ?? []).map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              disabled={readOnly || options.length === 0}
+            >
+              <SelectTrigger
+                id={id}
+                className="w-full"
+                aria-invalid={Boolean(error)}
+                aria-labelledby={labelId}
+              >
+                <SelectValue
+                  placeholder={
+                    options.length
+                      ? "Select credential"
+                      : "No active credentials"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No credential</SelectItem>
+                {optionForMissingCredentialHandle(value, options)}
+                {options.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {credentialOptionLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        })()
       ) : control === "code" ? (
         <RoutineCodeEditor
           id={id}
@@ -602,7 +613,7 @@ function validateField(
         }
         aliases.add(alias);
         if (!credentialId.trim()) {
-          return "Each credential binding needs a credentialId.";
+          return "Each credential binding needs a credential.";
         }
         const invalidRequiredField = (binding.requiredFields ?? []).find(
           (fieldName) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(fieldName),
@@ -773,8 +784,8 @@ function CredentialBindingsEditor({
   const addBinding = () => {
     const credential = credentialOptions[0];
     const alias = uniqueCredentialAlias(
-      credential?.slug
-        ? aliasFromCredentialSlug(credential.slug)
+      credential?.displayName
+        ? aliasFromCredentialName(credential.displayName)
         : "credential",
       bindings,
     );
@@ -783,7 +794,7 @@ function CredentialBindingsEditor({
         ...bindings,
         normalizeBinding({
           alias,
-          credentialId: credential?.slug ?? "",
+          credentialId: credential?.id ?? "",
           requiredFields: [],
         }),
       ]),
@@ -820,7 +831,10 @@ function CredentialBindingsEditor({
               }
             />
             <Select
-              value={binding.credentialId || "__none__"}
+              value={selectedCredentialValue(
+                binding.credentialId,
+                credentialOptions,
+              )}
               disabled={readOnly || credentialOptions.length === 0}
               onValueChange={(next) =>
                 updateBinding(index, {
@@ -838,8 +852,8 @@ function CredentialBindingsEditor({
                 <SelectItem value="__none__">No credential</SelectItem>
                 {optionForMissingHandle(binding, credentialOptions)}
                 {credentialOptions.map((option) => (
-                  <SelectItem key={option.slug} value={option.slug}>
-                    {option.displayName} ({option.slug})
+                  <SelectItem key={option.id} value={option.id}>
+                    {credentialOptionLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -887,13 +901,50 @@ function credentialOptionsForField(
   field: RoutineConfigField,
   credentialOptions: RoutineCredentialOption[],
 ): RoutineCredentialOption[] {
-  if (credentialOptions.length > 0) return credentialOptions;
+  if (credentialOptions.length > 0) {
+    if (!field.options?.length) return credentialOptions;
+    const handles = new Set(field.options);
+    return credentialOptions.filter(
+      (option) =>
+        handles.has(option.id) ||
+        Boolean(option.slug && handles.has(option.slug)),
+    );
+  }
   return (field.options ?? []).map((option) => ({
     id: option,
-    slug: option,
     displayName: option,
     kind: "credential",
   }));
+}
+
+function selectedCredentialValue(
+  handle: string,
+  options: RoutineCredentialOption[],
+): string {
+  if (!handle) return "__none__";
+  const match = options.find(
+    (option) => option.id === handle || option.slug === handle,
+  );
+  return match?.id ?? handle;
+}
+
+function credentialOptionLabel(option: RoutineCredentialOption): string {
+  return option.kind
+    ? `${option.displayName} (${option.kind})`
+    : option.displayName;
+}
+
+function optionForMissingCredentialHandle(
+  handle: string,
+  options: RoutineCredentialOption[],
+) {
+  if (
+    !handle ||
+    options.some((option) => option.id === handle || option.slug === handle)
+  ) {
+    return null;
+  }
+  return <SelectItem value={handle}>{handle} (unavailable)</SelectItem>;
 }
 
 function optionForMissingHandle(
@@ -902,7 +953,11 @@ function optionForMissingHandle(
 ) {
   if (
     !binding.credentialId ||
-    options.some((option) => option.slug === binding.credentialId)
+    options.some(
+      (option) =>
+        option.id === binding.credentialId ||
+        option.slug === binding.credentialId,
+    )
   ) {
     return null;
   }
@@ -926,8 +981,8 @@ function normalizeBinding(
   };
 }
 
-function aliasFromCredentialSlug(slug: string): string {
-  const alias = slug.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
+function aliasFromCredentialName(name: string): string {
+  const alias = name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
   return alias.replace(/^_+$/, "") || "credential";
 }
 

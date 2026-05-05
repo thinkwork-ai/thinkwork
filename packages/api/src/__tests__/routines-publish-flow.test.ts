@@ -117,6 +117,7 @@ vi.mock("../graphql/utils.js", () => {
     and: (...a: unknown[]) => ({ _and: a }),
     routines: { id: "id", tenant_id: "tenant_id" },
     tenantCredentials: {
+      id: "tenant_credentials.id",
       tenant_id: "tenant_credentials.tenant_id",
       slug: "tenant_credentials.slug",
       display_name: "tenant_credentials.display_name",

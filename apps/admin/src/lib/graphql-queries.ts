@@ -783,16 +783,6 @@ export const PlanRoutineDraftMutation = graphql(`
   }
 `);
 
-export const ImportN8nRoutineMutation = gql`
-  mutation ImportN8nRoutine($input: ImportN8nRoutineInput!) {
-    importN8nRoutine(input: $input) {
-      id
-      name
-      currentVersion
-    }
-  }
-`;
-
 export const RoutineRecipeCatalogQuery = graphql(`
   query RoutineRecipeCatalog($tenantId: ID!) {
     routineRecipeCatalog(tenantId: $tenantId) {

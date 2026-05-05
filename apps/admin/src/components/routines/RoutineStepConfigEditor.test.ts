@@ -23,6 +23,8 @@ const credentialField = {
   max: null,
   pattern: null,
 };
+const pdiCredentialId = "11111111-1111-4111-8111-111111111111";
+const backupCredentialId = "22222222-2222-4222-8222-222222222222";
 
 describe("RoutineStepConfigEditor helpers", () => {
   it("selects TypeScript CodeMirror language from the recipe id", () => {
@@ -34,7 +36,7 @@ describe("RoutineStepConfigEditor helpers", () => {
     const value = stringifyCredentialBindings([
       {
         alias: "pdi",
-        credentialId: "pdi-soap",
+        credentialId: pdiCredentialId,
         requiredFields: ["apiUrl", "password"],
       },
     ]);
@@ -42,7 +44,7 @@ describe("RoutineStepConfigEditor helpers", () => {
     expect(parseCredentialBindings(value)).toEqual([
       {
         alias: "pdi",
-        credentialId: "pdi-soap",
+        credentialId: pdiCredentialId,
         requiredFields: ["apiUrl", "password"],
       },
     ]);
@@ -53,12 +55,12 @@ describe("RoutineStepConfigEditor helpers", () => {
     const step = stepWithCredentialField();
     const values = {
       "RunPdi.credentialBindings": stringifyCredentialBindings([
-        { alias: "pdi", credentialId: "pdi-soap" },
+        { alias: "pdi", credentialId: pdiCredentialId },
       ]),
     };
 
     expect(argsFromStepFields(step, values)).toEqual({
-      credentialBindings: [{ alias: "pdi", credentialId: "pdi-soap" }],
+      credentialBindings: [{ alias: "pdi", credentialId: pdiCredentialId }],
     });
   });
 
@@ -66,10 +68,10 @@ describe("RoutineStepConfigEditor helpers", () => {
     const step = stepWithCredentialField();
     const values = {
       "RunPdi.credentialBindings": stringifyCredentialBindings([
-        { alias: "pdi", credentialId: "pdi-soap", requiredFields: ["ok"] },
+        { alias: "pdi", credentialId: pdiCredentialId, requiredFields: ["ok"] },
         {
           alias: "pdi",
-          credentialId: "pdi-backup",
+          credentialId: backupCredentialId,
           requiredFields: ["not-safe-field"],
         },
       ]),
@@ -88,7 +90,7 @@ describe("RoutineStepConfigEditor helpers", () => {
       "RunPdi.credentialBindings": stringifyCredentialBindings([
         {
           alias: "pdi",
-          credentialId: "pdi-soap",
+          credentialId: pdiCredentialId,
           requiredFields: ["not-safe-field"],
         },
       ]),
