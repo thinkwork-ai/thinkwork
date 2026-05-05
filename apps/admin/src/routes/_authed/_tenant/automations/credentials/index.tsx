@@ -35,7 +35,6 @@ export const Route = createFileRoute(
 type CredentialRow = {
   id: string;
   displayName: string;
-  slug: string;
   kind: TenantCredentialKind;
   status: TenantCredentialStatus;
   lastUsedAt: string | null;
@@ -58,9 +57,6 @@ const columns: ColumnDef<CredentialRow>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="truncate font-medium">{row.original.displayName}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {row.original.slug}
-        </div>
       </div>
     ),
     size: 260,
@@ -92,7 +88,9 @@ const columns: ColumnDef<CredentialRow>[] = [
     header: "Last Used",
     cell: ({ row }) => (
       <span className="text-xs text-muted-foreground">
-        {row.original.lastUsedAt ? relativeTime(row.original.lastUsedAt) : "Never"}
+        {row.original.lastUsedAt
+          ? relativeTime(row.original.lastUsedAt)
+          : "Never"}
       </span>
     ),
     size: 120,
@@ -129,11 +127,12 @@ function TenantCredentialsPage() {
   const rows: CredentialRow[] = useMemo(
     () =>
       (result.data?.tenantCredentials ?? [])
-        .filter((credential) => credential.status !== TenantCredentialStatus.Deleted)
+        .filter(
+          (credential) => credential.status !== TenantCredentialStatus.Deleted,
+        )
         .map((credential) => ({
           id: credential.id,
           displayName: credential.displayName,
-          slug: credential.slug,
           kind: credential.kind,
           status: credential.status,
           lastUsedAt: credential.lastUsedAt ?? null,
@@ -194,7 +193,9 @@ function TenantCredentialsPage() {
       {showCreate && (
         <Card className="mb-4">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Create tenant credential</CardTitle>
+            <CardTitle className="text-base">
+              Create tenant credential
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <TenantCredentialForm
@@ -205,7 +206,6 @@ function TenantCredentialsPage() {
                   input: {
                     tenantId,
                     displayName: values.displayName ?? "",
-                    slug: values.slug,
                     kind: values.kind,
                     metadataJson: values.metadataJson,
                     secretJson: values.secretJson,
