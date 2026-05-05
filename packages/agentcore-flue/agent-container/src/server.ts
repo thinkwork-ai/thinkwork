@@ -166,7 +166,7 @@ function resolveModel(modelId: unknown) {
   const id =
     typeof modelId === "string" && modelId.trim()
       ? modelId.trim()
-      : "anthropic.claude-sonnet-4-5-20250929-v1:0";
+      : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
   return getModel("amazon-bedrock", id as never);
 }
 
