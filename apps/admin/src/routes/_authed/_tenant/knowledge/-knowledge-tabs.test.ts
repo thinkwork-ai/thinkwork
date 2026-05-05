@@ -17,9 +17,9 @@ describe("currentKnowledgeTab", () => {
     );
   });
 
-  it("uses Brain product labels for visible tabs", () => {
+  it("uses Memory product labels for visible tabs", () => {
     expect(KNOWLEDGE_TABS.map((tab) => tab.label)).toEqual([
-      "Memory",
+      "Brain",
       "Pages",
       "KBs",
       "Search",

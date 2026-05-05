@@ -26,7 +26,7 @@ export const KNOWLEDGE_TABS: {
     | "/knowledge/context-engine";
   label: string;
 }[] = [
-  { value: "memory", to: "/knowledge/memory", label: "Memory" },
+  { value: "memory", to: "/knowledge/memory", label: "Brain" },
   { value: "wiki", to: "/knowledge/wiki", label: "Pages" },
   {
     value: "knowledge-bases",
@@ -57,7 +57,7 @@ function KnowledgeLayout() {
         <div className="grid grid-cols-3 items-center gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-foreground">
-              Brain
+              Memory
             </h1>
           </div>
           <div className="flex justify-center">
