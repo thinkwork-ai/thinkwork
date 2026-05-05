@@ -272,13 +272,15 @@ const UUID = {
   pattern:
     "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
 } as const;
+const SAFE_CREDENTIAL_ALIAS_PATTERN =
+  "^(?!(?:__proto__|prototype|constructor)$)[A-Za-z_][A-Za-z0-9_]*$";
 const CREDENTIAL_BINDING_SCHEMA: JsonSchema7Type = {
   type: "object",
   additionalProperties: false,
   properties: {
     alias: {
       type: "string",
-      pattern: "^[A-Za-z_][A-Za-z0-9_]*$",
+      pattern: SAFE_CREDENTIAL_ALIAS_PATTERN,
       minLength: 1,
     },
     credentialId: STR_NONEMPTY,
@@ -325,7 +327,7 @@ const CODE_STEP_CONFIG_FIELDS: readonly RecipeConfigFieldDefinition[] = [
     control: "credential_bindings",
     editable: true,
     helpText:
-      "Bind tenant credentials by alias. Code receives only declared aliases at runtime.",
+      "Bind tenant credentials as variables on the runtime credentials object.",
   },
 ];
 
@@ -606,11 +608,9 @@ const _CATALOG: RecipeDefinition[] = [
         headers: { type: "object" },
         queryParameters: { type: "object" },
         requestBody: {},
-        connectionArn: STR_NONEMPTY,
         credentialId: STR_NONEMPTY,
       },
-      required: ["method", "apiEndpoint"],
-      anyOf: [{ required: ["connectionArn"] }, { required: ["credentialId"] }],
+      required: ["method", "apiEndpoint", "credentialId"],
     },
     configFields: [
       {
@@ -632,32 +632,22 @@ const _CATALOG: RecipeDefinition[] = [
         placeholder: "https://api.example.com/path",
       },
       {
-        key: "connectionArn",
-        label: "Connection ARN",
-        inputType: "text",
-        control: "text",
-        required: false,
-        editable: true,
-      },
-      {
         key: "credentialId",
         label: "ThinkWork credential",
         inputType: "text",
         control: "credential_select",
-        required: false,
+        required: true,
         editable: true,
         helpText:
-          "Select an active tenant credential. Publish resolves it to an EventBridge connection ARN.",
+          "Select an active tenant credential for EventBridge-backed HTTP authentication.",
       },
     ],
     resourceArnPattern: RESOURCE_ARN_PATTERNS.httpRequest,
     aslEmitter: (args, ctx) => {
       const connectionArn =
-        typeof args.connectionArn === "string" && args.connectionArn.trim()
-          ? args.connectionArn
-          : typeof args.credentialId === "string" && args.credentialId.trim()
-            ? `${HTTP_CREDENTIAL_CONNECTION_PREFIX}${args.credentialId.trim()}`
-            : "";
+        typeof args.credentialId === "string" && args.credentialId.trim()
+          ? `${HTTP_CREDENTIAL_CONNECTION_PREFIX}${args.credentialId.trim()}`
+          : "";
       return markRecipe(
         applySequencing(
           {
@@ -1145,7 +1135,6 @@ export function getRecipeDefaultArgs(
       return {
         method: "GET",
         apiEndpoint: "https://",
-        connectionArn: "",
         credentialId: "",
       };
     case "aurora_query":

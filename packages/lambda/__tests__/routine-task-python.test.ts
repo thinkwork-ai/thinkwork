@@ -385,6 +385,11 @@ describe("invokePythonTask — edge cases", () => {
             credentialId: "pdi-soap",
             requiredFields: ["partnerId"],
           },
+          {
+            alias: "lastmile",
+            credentialId: "lastmile-api",
+            requiredFields: ["apiKey"],
+          },
         ],
       },
       {
@@ -393,9 +398,14 @@ describe("invokePythonTask — edge cases", () => {
         credentialResolver: async () => ({
           credentials: {
             pdi: { partnerId: "123", password: "super-secret-password" },
+            lastmile: { apiKey: "lm-secret-api-key" },
           },
-          redactionValues: ["123", "super-secret-password"],
-          credentialIds: ["credential-1"],
+          redactionValues: [
+            "123",
+            "super-secret-password",
+            "lm-secret-api-key",
+          ],
+          credentialIds: ["credential-1", "credential-2"],
         }),
       },
     );
@@ -408,10 +418,65 @@ describe("invokePythonTask — edge cases", () => {
     expect(invokeCallArg.arguments.language).toBe("typescript");
     expect(invokeCallArg.arguments.code).toContain("const credentials");
     expect(invokeCallArg.arguments.code).toContain("partnerId");
+    expect(invokeCallArg.arguments.code).toContain("lastmile");
     expect(invokeCallArg.arguments.code).toContain("super-secret-password");
   });
 
-  it("redacts credential values before S3 offload and stdout preview", async () => {
+  it("injects resolved credential bindings into Python code as credentials", async () => {
+    mockAgentCoreSend
+      .mockResolvedValueOnce(defaultStartResponse())
+      .mockResolvedValueOnce({
+        stream: streamFrom([
+          structuredContentEvent({ stdout: "ok", exitCode: 0 }),
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    await invokePythonTask(
+      {
+        ...baseInput,
+        code: "print(credentials['pdi']['partnerId'])",
+        credentialBindings: [
+          {
+            alias: "pdi",
+            credentialId: "pdi-soap",
+            requiredFields: ["partnerId"],
+          },
+          {
+            alias: "lastmile",
+            credentialId: "lastmile-api",
+            requiredFields: ["apiKey"],
+          },
+        ],
+      },
+      {
+        interpreterId: "ipi-shared",
+        bucket: "thinkwork-dev-routine-output",
+        credentialResolver: async () => ({
+          credentials: {
+            pdi: { partnerId: "123" },
+            lastmile: { apiKey: "lm-secret-api-key" },
+          },
+          redactionValues: ["123", "lm-secret-api-key"],
+          credentialIds: ["credential-1", "credential-2"],
+        }),
+      },
+    );
+
+    const invokeCallArg = (
+      mockAgentCoreSend.mock.calls[1][0] as {
+        input: { arguments: { code: string; language: string } };
+      }
+    ).input;
+    expect(invokeCallArg.arguments.language).toBe("python");
+    expect(invokeCallArg.arguments.code).toContain("credentials = json.loads");
+    expect(invokeCallArg.arguments.code).toContain("lastmile");
+    expect(invokeCallArg.arguments.code).toContain("lm-secret-api-key");
+  });
+
+  it("redacts credential values before S3 offload, stdout preview, and callbacks", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
     mockAgentCoreSend
       .mockResolvedValueOnce(defaultStartResponse())
       .mockResolvedValueOnce({
@@ -440,6 +505,10 @@ describe("invokePythonTask — edge cases", () => {
           redactionValues: ["super-secret-password"],
           credentialIds: ["credential-1"],
         }),
+        stepCallback: {
+          apiUrl: "https://api.example.test",
+          authSecret: "callback-secret",
+        },
       },
     );
 
@@ -456,6 +525,15 @@ describe("invokePythonTask — edge cases", () => {
     expect((stderrPut![0] as { input: { Body: string } }).input.Body).toBe(
       "token=<redacted>\n",
     );
+    const terminalBody = JSON.parse(
+      (fetchMock.mock.calls[1][1] as { body: string }).body,
+    );
+    expect(terminalBody.stdoutPreview).toBe("password=<redacted>\n");
+    expect(JSON.stringify(terminalBody)).not.toContain("super-secret-password");
+    expect(JSON.stringify(terminalBody)).not.toContain(
+      "ghp_123456789012345678901234",
+    );
+    vi.unstubAllGlobals();
   });
 });
 

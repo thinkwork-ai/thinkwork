@@ -38,6 +38,7 @@ interface TenantCredentialRuntimeRow {
 const { tenantCredentials } = schema;
 
 const ALIAS_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_ALIASES = new Set(["__proto__", "prototype", "constructor"]);
 const UUID_HANDLE_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -114,13 +115,15 @@ function normalizeBindings(
   const seenAliases = new Set<string>();
   return bindings.map((binding) => {
     const alias = String(binding.alias ?? "").trim();
-    if (!ALIAS_RE.test(alias)) {
+    if (!isSafeCredentialAlias(alias)) {
       throw new Error(
-        `Credential alias '${alias}' must be a safe code identifier`,
+        `Credential variable '${alias}' must be a safe code identifier`,
       );
     }
     if (seenAliases.has(alias)) {
-      throw new Error(`Credential alias '${alias}' is declared more than once`);
+      throw new Error(
+        `Credential variable '${alias}' is declared more than once`,
+      );
     }
     seenAliases.add(alias);
     const credentialId = String(binding.credentialId ?? "").trim();
@@ -137,6 +140,10 @@ function normalizeBindings(
         : [],
     };
   });
+}
+
+function isSafeCredentialAlias(alias: string): boolean {
+  return ALIAS_RE.test(alias) && !RESERVED_ALIASES.has(alias);
 }
 
 async function loadCredentialRows(

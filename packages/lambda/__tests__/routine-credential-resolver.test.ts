@@ -76,6 +76,65 @@ describe("resolveRoutineCredentialBindings", () => {
     expect(updates).toHaveLength(1);
   });
 
+  it("resolves multiple credential variables by id and slug", async () => {
+    const { db, updates } = fakeDb([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        tenant_id: TENANT,
+        slug: "pdi-soap",
+        display_name: "PDI SOAP",
+        status: "active",
+        secret_ref: "pdi-secret-ref",
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        tenant_id: TENANT,
+        slug: "lastmile-api",
+        display_name: "LastMile API",
+        status: "active",
+        secret_ref: "lastmile-secret-ref",
+      },
+    ]);
+    secretsManager.send
+      .mockResolvedValueOnce({
+        SecretString: JSON.stringify({ partnerId: "partner-123" }),
+      })
+      .mockResolvedValueOnce({
+        SecretString: JSON.stringify({ apiKey: "lastmile-secret" }),
+      });
+
+    const resolved = await resolveRoutineCredentialBindings({
+      tenantId: TENANT,
+      bindings: [
+        {
+          alias: "pdi",
+          credentialId: "11111111-1111-4111-8111-111111111111",
+          requiredFields: ["partnerId"],
+        },
+        {
+          alias: "lastmile",
+          credentialId: "lastmile-api",
+          requiredFields: ["apiKey"],
+        },
+      ],
+      secretsManager: secretsManager as never,
+      database: db as never,
+    });
+
+    expect(resolved.credentials).toEqual({
+      pdi: { partnerId: "partner-123" },
+      lastmile: { apiKey: "lastmile-secret" },
+    });
+    expect(resolved.credentialIds).toEqual([
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ]);
+    expect(resolved.redactionValues).toEqual(
+      expect.arrayContaining(["partner-123", "lastmile-secret"]),
+    );
+    expect(updates).toHaveLength(1);
+  });
+
   it("rejects disabled credentials without reading Secrets Manager", async () => {
     const { db } = fakeDb([
       {
@@ -96,6 +155,20 @@ describe("resolveRoutineCredentialBindings", () => {
         database: db as never,
       }),
     ).rejects.toThrow(/not active/);
+    expect(secretsManager.send).not.toHaveBeenCalled();
+  });
+
+  it("rejects prototype-special credential variables without reading Secrets Manager", async () => {
+    const { db } = fakeDb([]);
+
+    await expect(
+      resolveRoutineCredentialBindings({
+        tenantId: TENANT,
+        bindings: [{ alias: "__proto__", credentialId: "pdi-soap" }],
+        secretsManager: secretsManager as never,
+        database: db as never,
+      }),
+    ).rejects.toThrow("safe code identifier");
     expect(secretsManager.send).not.toHaveBeenCalled();
   });
 
