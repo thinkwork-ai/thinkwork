@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/src/assets/logo.png" alt="Thinkwork" width="240" />
+  <img src="./apps/admin/public/logo.png" alt="Thinkwork" width="240" />
 </p>
 
 <h1 align="center">ThinkWork</h1>
