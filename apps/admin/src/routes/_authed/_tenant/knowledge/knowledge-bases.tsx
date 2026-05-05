@@ -13,7 +13,7 @@ function KnowledgeKnowledgeBasesPage() {
       embedded
       detailBase="/knowledge/knowledge-bases/$kbId"
       breadcrumbs={[
-        { label: "Brain", href: "/knowledge/memory" },
+        { label: "Memory", href: "/knowledge/memory" },
         { label: "KBs" },
       ]}
     />

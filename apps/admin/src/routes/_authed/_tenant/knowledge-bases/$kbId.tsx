@@ -84,7 +84,7 @@ export function KnowledgeBaseDetailPage({
   const kb = (result.data as any)?.knowledgeBase;
 
   useBreadcrumbs([
-    { label: "Brain", href: "/knowledge/memory" },
+    { label: "Memory", href: "/knowledge/memory" },
     { label: "KBs", href: listHref },
     { label: kb?.name ?? "Loading..." },
   ]);
