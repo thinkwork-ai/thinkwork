@@ -44,6 +44,10 @@ import {
   systemWorkflowMutations,
   systemWorkflowQueries,
 } from "./system-workflows/index.js";
+import {
+  quickActionQueries,
+  quickActionMutations,
+} from "./quick-actions/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -72,6 +76,7 @@ export const queryResolvers: Record<string, any> = {
   ...routineQueries,
   ...tenantCredentialQueries,
   ...systemWorkflowQueries,
+  ...quickActionQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -100,6 +105,7 @@ export const mutationResolvers: Record<string, any> = {
   ...routineMutations,
   ...tenantCredentialMutations,
   ...systemWorkflowMutations,
+  ...quickActionMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
