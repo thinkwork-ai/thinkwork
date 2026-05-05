@@ -31,9 +31,9 @@ export const KNOWLEDGE_TABS: {
   {
     value: "knowledge-bases",
     to: "/knowledge/knowledge-bases",
-    label: "Knowledge Bases",
+    label: "KBs",
   },
-  { value: "context-engine", to: "/knowledge/context-engine", label: "Sources" },
+  { value: "context-engine", to: "/knowledge/context-engine", label: "Search" },
 ];
 
 export function currentKnowledgeTab(pathname: string): KnowledgeTab {
@@ -57,7 +57,7 @@ function KnowledgeLayout() {
         <div className="grid grid-cols-3 items-center gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-foreground">
-              Company Brain
+              Brain
             </h1>
           </div>
           <div className="flex justify-center">
