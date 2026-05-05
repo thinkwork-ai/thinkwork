@@ -406,6 +406,7 @@ function ConfigFieldInput({
         <CredentialBindingsEditor
           value={value}
           readOnly={readOnly}
+          language={codeLanguageForStep(step)}
           credentialOptions={credentialOptionsForField(
             field,
             credentialOptions ?? [],
@@ -605,11 +606,11 @@ function validateField(
       for (const binding of bindings) {
         const alias = binding.alias;
         const credentialId = binding.credentialId;
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
-          return "Credential aliases must be safe code identifiers.";
+        if (!isSafeCredentialAlias(alias)) {
+          return "Credential variables must be safe code identifiers.";
         }
         if (aliases.has(alias)) {
-          return `Credential alias ${alias} is duplicated.`;
+          return `Credential variable ${alias} is duplicated.`;
         }
         aliases.add(alias);
         if (!credentialId.trim()) {
@@ -735,12 +736,14 @@ export function stringifyCredentialBindings(
 function CredentialBindingsEditor({
   value,
   readOnly,
+  language,
   credentialOptions,
   error,
   onChange,
 }: {
   value: string;
   readOnly: boolean;
+  language: RoutineCodeLanguage;
   credentialOptions: RoutineCredentialOption[];
   error: boolean;
   onChange: (value: string) => void;
@@ -767,7 +770,7 @@ function CredentialBindingsEditor({
   ) => {
     const next = bindings.map((binding, candidateIndex) =>
       candidateIndex === index
-        ? normalizeBinding({ ...binding, ...patch })
+        ? normalizeBinding({ ...binding, ...patch }, credentialOptions)
         : binding,
     );
     onChange(stringifyCredentialBindings(next));
@@ -792,11 +795,14 @@ function CredentialBindingsEditor({
     onChange(
       stringifyCredentialBindings([
         ...bindings,
-        normalizeBinding({
-          alias,
-          credentialId: credential?.id ?? "",
-          requiredFields: [],
-        }),
+        normalizeBinding(
+          {
+            alias,
+            credentialId: credential?.id ?? "",
+            requiredFields: [],
+          },
+          credentialOptions,
+        ),
       ]),
     );
   };
@@ -812,70 +818,91 @@ function CredentialBindingsEditor({
     >
       {bindings.length === 0 ? (
         <div className="rounded border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
-          No credential bindings.
+          {credentialOptions.length === 0
+            ? "No active tenant credentials."
+            : "No credential variables."}
         </div>
       ) : (
         bindings.map((binding, index) => (
           <div
             key={index}
-            className="grid gap-2 rounded-md border border-border/70 bg-background/60 p-2 sm:grid-cols-[minmax(92px,0.8fr)_minmax(160px,1.2fr)_minmax(140px,1fr)_auto]"
+            className="grid gap-2 rounded-md border border-border/70 bg-background/60 p-2 sm:grid-cols-[minmax(120px,0.8fr)_minmax(180px,1.1fr)_minmax(150px,1fr)_auto]"
           >
-            <Input
-              value={binding.alias}
-              readOnly={readOnly}
-              aria-label={`Credential binding ${index + 1} alias`}
-              placeholder="alias"
-              className="h-8 font-mono text-xs"
-              onChange={(event) =>
-                updateBinding(index, { alias: event.target.value })
-              }
-            />
-            <Select
-              value={selectedCredentialValue(
-                binding.credentialId,
-                credentialOptions,
-              )}
-              disabled={readOnly || credentialOptions.length === 0}
-              onValueChange={(next) =>
-                updateBinding(index, {
-                  credentialId: next === "__none__" ? "" : next,
-                })
-              }
-            >
-              <SelectTrigger
-                className="h-8 w-full"
-                aria-label={`Credential binding ${index + 1} credential`}
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] font-medium text-muted-foreground">
+                Variable
+              </div>
+              <Input
+                value={binding.alias}
+                readOnly={readOnly}
+                aria-label={`Credential binding ${index + 1} variable`}
+                placeholder="credential"
+                className="h-8 font-mono text-xs"
+                onChange={(event) =>
+                  updateBinding(index, { alias: event.target.value })
+                }
+              />
+              <div className="truncate font-mono text-[11px] text-muted-foreground">
+                {credentialAccessExpression(binding.alias, language)}
+              </div>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] font-medium text-muted-foreground">
+                Credential
+              </div>
+              <Select
+                value={selectedCredentialValue(
+                  binding.credentialId,
+                  credentialOptions,
+                )}
+                disabled={readOnly || credentialOptions.length === 0}
+                onValueChange={(next) =>
+                  updateBinding(index, {
+                    credentialId: next === "__none__" ? "" : next,
+                  })
+                }
               >
-                <SelectValue placeholder="Select credential" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">No credential</SelectItem>
-                {optionForMissingHandle(binding, credentialOptions)}
-                {credentialOptions.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {credentialOptionLabel(option)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              value={(binding.requiredFields ?? []).join(", ")}
-              readOnly={readOnly}
-              aria-label={`Credential binding ${index + 1} required fields`}
-              placeholder="required fields"
-              className="h-8 font-mono text-xs"
-              onChange={(event) =>
-                updateBinding(index, {
-                  requiredFields: listValues(event.target.value),
-                })
-              }
-            />
+                <SelectTrigger
+                  className="h-8 w-full"
+                  aria-label={`Credential binding ${index + 1} credential`}
+                >
+                  <SelectValue placeholder="Select credential" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No credential</SelectItem>
+                  {optionForMissingHandle(binding, credentialOptions)}
+                  {credentialOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {credentialOptionLabel(option)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] font-medium text-muted-foreground">
+                Required fields
+              </div>
+              <Input
+                value={(binding.requiredFields ?? []).join(", ")}
+                readOnly={readOnly}
+                aria-label={`Credential binding ${index + 1} required fields`}
+                placeholder="apiUrl, password"
+                className="h-8 font-mono text-xs"
+                onChange={(event) =>
+                  updateBinding(index, {
+                    requiredFields: listValues(event.target.value),
+                  })
+                }
+              />
+            </div>
             <Button
               type="button"
               size="icon-sm"
               variant="outline"
               disabled={readOnly}
               aria-label={`Remove credential binding ${index + 1}`}
+              className="self-end"
               onClick={() => removeBinding(index)}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -887,11 +914,11 @@ function CredentialBindingsEditor({
         type="button"
         size="sm"
         variant="outline"
-        disabled={readOnly}
+        disabled={readOnly || credentialOptions.length === 0}
         onClick={addBinding}
       >
         <Plus className="h-3.5 w-3.5" />
-        Add binding
+        Add credential
       </Button>
     </div>
   );
@@ -934,6 +961,18 @@ function credentialOptionLabel(option: RoutineCredentialOption): string {
     : option.displayName;
 }
 
+export function credentialAccessExpression(
+  alias: string,
+  language: RoutineCodeLanguage,
+): string {
+  const normalized = alias.trim();
+  if (!normalized) return "credentials";
+  if (language === "typescript" && isSafeCredentialAlias(normalized)) {
+    return `credentials.${normalized}`;
+  }
+  return `credentials[${JSON.stringify(normalized)}]`;
+}
+
 function optionForMissingCredentialHandle(
   handle: string,
   options: RoutineCredentialOption[],
@@ -970,15 +1009,37 @@ function optionForMissingHandle(
 
 function normalizeBinding(
   binding: CredentialBindingValue,
+  credentialOptions: RoutineCredentialOption[] = [],
 ): CredentialBindingValue {
   const requiredFields = (binding.requiredFields ?? [])
     .map((field) => field.trim())
     .filter(Boolean);
   return {
     alias: binding.alias.trim(),
-    credentialId: binding.credentialId.trim(),
+    credentialId: canonicalCredentialId(
+      binding.credentialId,
+      credentialOptions,
+    ),
     ...(requiredFields.length > 0 ? { requiredFields } : {}),
   };
+}
+
+function canonicalCredentialId(
+  credentialId: string,
+  credentialOptions: RoutineCredentialOption[],
+): string {
+  const handle = credentialId.trim();
+  const match = credentialOptions.find(
+    (option) => option.id === handle || option.slug === handle,
+  );
+  return match?.id ?? handle;
+}
+
+function isSafeCredentialAlias(alias: string): boolean {
+  return (
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(alias) &&
+    !["__proto__", "prototype", "constructor"].includes(alias)
+  );
 }
 
 function aliasFromCredentialName(name: string): string {

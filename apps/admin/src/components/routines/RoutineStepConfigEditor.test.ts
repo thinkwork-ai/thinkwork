@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   argsFromStepFields,
   codeLanguageForStep,
+  credentialAccessExpression,
   parseCredentialBindings,
   stringifyCredentialBindings,
   validationErrorsFromSteps,
@@ -51,6 +52,21 @@ describe("RoutineStepConfigEditor helpers", () => {
     expect(value).not.toContain("super-secret-password");
   });
 
+  it("renders credential access expressions for code-step languages", () => {
+    expect(credentialAccessExpression("pdi", "typescript")).toBe(
+      "credentials.pdi",
+    );
+    expect(credentialAccessExpression("pdi", "python")).toBe(
+      'credentials["pdi"]',
+    );
+    expect(credentialAccessExpression("pdi partner", "typescript")).toBe(
+      'credentials["pdi partner"]',
+    );
+    expect(credentialAccessExpression("__proto__", "typescript")).toBe(
+      'credentials["__proto__"]',
+    );
+  });
+
   it("builds mutation args from credential binding JSON", () => {
     const step = stepWithCredentialField();
     const values = {
@@ -80,7 +96,7 @@ describe("RoutineStepConfigEditor helpers", () => {
     const errors = validationErrorsFromSteps([step], values);
 
     expect(errors["RunPdi.credentialBindings"]).toBe(
-      "Credential alias pdi is duplicated.",
+      "Credential variable pdi is duplicated.",
     );
   });
 
@@ -100,6 +116,21 @@ describe("RoutineStepConfigEditor helpers", () => {
 
     expect(errors["RunPdi.credentialBindings"]).toBe(
       "Required fields must be safe code identifiers.",
+    );
+  });
+
+  it("rejects prototype-special credential variables", () => {
+    const step = stepWithCredentialField();
+    const values = {
+      "RunPdi.credentialBindings": stringifyCredentialBindings([
+        { alias: "__proto__", credentialId: pdiCredentialId },
+      ]),
+    };
+
+    const errors = validationErrorsFromSteps([step], values);
+
+    expect(errors["RunPdi.credentialBindings"]).toBe(
+      "Credential variables must be safe code identifiers.",
     );
   });
 });

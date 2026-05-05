@@ -200,11 +200,25 @@ describe("recipe-catalog", () => {
         credentialBindings: [{ alias: "not-safe-alias", credentialId: "pdi" }],
       }),
     ).toBe(false);
+    expect(
+      validate({
+        code: "print('nope')",
+        credentialBindings: [{ alias: "__proto__", credentialId: "pdi" }],
+      }),
+    ).toBe(false);
   });
 
   it("argSchema for typescript supports credential bindings", () => {
     const recipe = getRecipe("typescript")!;
     const validate = ajv.compile(recipe.argSchema);
+    expect(
+      (recipe.configFields ?? []).find(
+        (field) => field.key === "credentialBindings",
+      ),
+    ).toMatchObject({
+      control: "credential_bindings",
+      editable: true,
+    });
     expect(validate({ code: "" })).toBe(false);
     expect(
       validate({
@@ -223,6 +237,12 @@ describe("recipe-catalog", () => {
   it("http_request can reference a ThinkWork credential without emitting raw auth", () => {
     const recipe = getRecipe("http_request")!;
     const validate = ajv.compile(recipe.argSchema);
+    expect(
+      (recipe.configFields ?? []).find((field) => field.key === "credentialId"),
+    ).toMatchObject({
+      control: "credential_select",
+      editable: true,
+    });
     const args = {
       method: "POST",
       apiEndpoint: "https://api.example.test/orders",
@@ -230,6 +250,13 @@ describe("recipe-catalog", () => {
       requestBody: { ok: true },
     };
     expect(validate(args)).toBe(true);
+    expect(
+      validate({
+        method: "POST",
+        apiEndpoint: "https://api.example.test/orders",
+        connectionArn: "arn:aws:events:us-east-1:1:connection/other/abc",
+      }),
+    ).toBe(false);
     const state = recipe.aslEmitter(args, {
       stateName: "CallApi",
       next: null,
