@@ -860,10 +860,11 @@ export async function handleInvocation(
   }
 
   const workspaceSkills = await discoverSkills(env.workspaceDir);
-  const systemPrompt = composeSystemPrompt(
-    args.payload,
-    formatWorkspaceSkills(workspaceSkills),
-  );
+  const systemPrompt = await composeSystemPrompt({
+    payload: args.payload,
+    workspaceDir: env.workspaceDir,
+    workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
+  });
 
   const agentCoreClient = deps.agentCoreClientFactory();
 
