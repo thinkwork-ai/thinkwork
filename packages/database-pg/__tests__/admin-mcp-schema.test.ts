@@ -23,11 +23,16 @@ const rollbackSql = readFileSync(
 );
 
 describe("admin MCP separation — schema shape (U1)", () => {
-  it("adds is_admin to agent_templates with notNull + default", () => {
+  it("adds is_admin to agent_templates with notNull + default false (boolean)", () => {
     const columns = getTableColumns(agentTemplates);
     expect(columns.is_admin).toBeDefined();
     expect(columns.is_admin.notNull).toBe(true);
     expect(columns.is_admin.hasDefault).toBe(true);
+    // The one-way-door semantics depend on default=false: new templates
+    // start non-admin and can only be promoted via an explicit write.
+    expect(columns.is_admin.default).toBe(false);
+    // Pin the column type so a future refactor can't silently change it.
+    expect(columns.is_admin.dataType).toBe("boolean");
   });
 
   it("admin_mcp_servers mirrors tenant_mcp_servers columns", () => {
@@ -84,16 +89,25 @@ describe("admin MCP separation — schema shape (U1)", () => {
 });
 
 describe("admin MCP separation — migration 0065 (U1)", () => {
-  it("declares every drift-detected object", () => {
+  it("declares every drift-detected object with the correct marker type", () => {
+    // Marker types must match scripts/db-migrate-manual.sh probe dispatchers:
+    //   creates:          tables / views / sequences / indexes (to_regclass)
+    //   creates-column:   public.<table>.<column>
+    //   creates-constraint: public.<table>.<constraint>
+    //   creates-function: public.<function>
+    //   creates-trigger:  public.<table>.<trigger>
     expect(migrationSql).toMatch(
       /--\s*creates-column:\s*public\.agent_templates\.is_admin\b/,
     );
     expect(migrationSql).toMatch(
-      /--\s*creates:\s*public\.agent_templates_is_admin_one_way\b/,
+      /--\s*creates-function:\s*public\.enforce_agent_templates_is_admin_one_way\b/,
+    );
+    expect(migrationSql).toMatch(
+      /--\s*creates-trigger:\s*public\.agent_templates\.agent_templates_is_admin_one_way\b/,
     );
     expect(migrationSql).toMatch(/--\s*creates:\s*public\.admin_mcp_servers\b/);
     expect(migrationSql).toMatch(
-      /--\s*creates:\s*public\.admin_mcp_servers_status_enum\b/,
+      /--\s*creates-constraint:\s*public\.admin_mcp_servers\.admin_mcp_servers_status_enum\b/,
     );
     expect(migrationSql).toMatch(
       /--\s*creates:\s*public\.uq_admin_mcp_servers_slug\b/,
@@ -118,6 +132,18 @@ describe("admin MCP separation — migration 0065 (U1)", () => {
     );
     expect(migrationSql).toMatch(
       /--\s*creates:\s*public\.idx_agent_template_admin_mcp_servers_template\b/,
+    );
+  });
+
+  it("does not mis-classify trigger/constraint/function as plain `creates:` markers", () => {
+    // Regression guard for the deploy-gate failure surfaced in review:
+    // `creates:` is probed via to_regclass which only resolves relations;
+    // triggers/constraints/functions need their dedicated marker types.
+    expect(migrationSql).not.toMatch(
+      /--\s*creates:\s*public\.agent_templates_is_admin_one_way\b/,
+    );
+    expect(migrationSql).not.toMatch(
+      /--\s*creates:\s*public\.admin_mcp_servers_status_enum\b/,
     );
   });
 

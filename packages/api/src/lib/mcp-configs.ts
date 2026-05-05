@@ -160,6 +160,15 @@ async function resolveMcpAuth(
 		console.log(
 			`${logPrefix} MCP token expired for ${mcp.slug}, refreshing...`,
 		);
+		// Equivalence with the original (origin/main) buildMcpConfigs:
+		// every failure path inside the refresh attempt left `token`
+		// undefined so the caller's `if (!token) continue` SKIPPED the
+		// server. Returning the stale `parsed.access_token` instead would
+		// hand the runtime an already-expired credential (worse: when
+		// refreshRes is 4xx we have just marked the row status='expired',
+		// so the access_token is provably dead). Preserve the original
+		// skip-the-server behavior by returning undefined on every
+		// refresh-step failure.
 		try {
 			const mcpBaseUrl = mcp.url.replace(/\/+$/, "");
 			const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
@@ -167,13 +176,13 @@ async function resolveMcpAuth(
 			const resMeta = await fetch(wellKnownUrl, {
 				signal: AbortSignal.timeout(5000),
 			});
-			if (!resMeta.ok) return parsed.access_token;
+			if (!resMeta.ok) return undefined;
 
 			const meta = (await resMeta.json()) as {
 				authorization_servers?: string[];
 			};
 			const authServer = meta.authorization_servers?.[0];
-			if (!authServer) return parsed.access_token;
+			if (!authServer) return undefined;
 
 			const authMetaRes = await fetch(
 				`${authServer}/.well-known/oauth-authorization-server`,
@@ -184,7 +193,7 @@ async function resolveMcpAuth(
 				: await fetch(`${authServer}/.well-known/openid-configuration`, {
 						signal: AbortSignal.timeout(5000),
 					});
-			if (!oidcRes.ok) return parsed.access_token;
+			if (!oidcRes.ok) return undefined;
 
 			const authMeta = (await oidcRes.json()) as { token_endpoint: string };
 			const refreshRes = await fetch(authMeta.token_endpoint, {
@@ -207,7 +216,7 @@ async function resolveMcpAuth(
 					.update(userMcpTokens)
 					.set({ status: "expired", updated_at: new Date() })
 					.where(eq(userMcpTokens.id, userToken.id));
-				return parsed.access_token;
+				return undefined;
 			}
 
 			const refreshData = (await refreshRes.json()) as {
@@ -241,7 +250,9 @@ async function resolveMcpAuth(
 				`${logPrefix} MCP token refresh error for ${mcp.slug}:`,
 				refreshErr,
 			);
-			return parsed.access_token;
+			// Equivalence: original code's catch left token undefined so
+			// the caller skipped the server. Same here.
+			return undefined;
 		}
 	} catch (err) {
 		console.warn(`${logPrefix} MCP token lookup failed for ${mcp.slug}:`, err);
@@ -316,7 +327,7 @@ async function processRows(
 			tools: Array.isArray(assignCfg.toolAllowlist)
 				? (assignCfg.toolAllowlist as string[])
 				: undefined,
-			...(isAdmin ? { is_admin: true as const } : {}),
+			...(isAdmin ? { is_admin: true } : {}),
 		});
 	}
 	return out;
@@ -409,27 +420,64 @@ export async function buildMcpConfigs(
 
 	// Migration-window dedup: during U2..U9 the legacy `admin-ops` row in
 	// `tenant_mcp_servers` may still resolve for an agent alongside the
-	// new admin row. The admin row wins; warn so operators see the
-	// resurrected legacy row and chase its source down.
-	const adminSlugs = new Set(adminConfigs.map((c) => c.name));
+	// new admin row. The admin row wins; warn (with the legacy row's
+	// mcp_server_id so operators have a directly-actionable id) so the
+	// resurrected legacy row gets chased down.
+	//
+	// IMPORTANT: dedup is scoped to slug='admin-ops' only. The admin
+	// registry should only ever carry admin-class slugs (admin-ops today).
+	// A collision on any OTHER slug between the two registries is a
+	// configuration corruption — treat as an unexpected error rather
+	// than letting admin silently shadow user-facing connectors.
+	// Build the slug set from RAW admin rows (not adminConfigs) so that
+	// an admin row dropped by hash-pin / auth-skip still shadows its
+	// colliding tenant row — the dedup is about the structural intent,
+	// not the per-turn resolution outcome.
+	const ADMIN_OPS_SLUG = "admin-ops";
+	const adminRowsBySlug = new Map(adminRows.map((r) => [r.slug, r]));
+	const tenantRowsBySlug = new Map(tenantRows.map((r) => [r.slug, r]));
 	const merged: McpServerConfig[] = [...adminConfigs];
 	for (const tenantCfg of tenantConfigs) {
-		if (adminSlugs.has(tenantCfg.name)) {
+		if (!adminRowsBySlug.has(tenantCfg.name)) {
+			merged.push(tenantCfg);
+			continue;
+		}
+		if (tenantCfg.name === ADMIN_OPS_SLUG) {
+			const tenantRow = tenantRowsBySlug.get(tenantCfg.name);
 			console.warn(
-				`${logPrefix} legacy tenant_mcp_servers row for slug=${tenantCfg.name} shadowed by admin_mcp_servers; admin entry wins (deprecation: U9 will drop the tenant row)`,
+				`${logPrefix} legacy tenant_mcp_servers row for slug=admin-ops (mcp_server_id=${tenantRow?.mcp_server_id ?? "unknown"}) shadowed by admin_mcp_servers; admin entry wins (deprecation: U9 will drop the tenant row)`,
 			);
 			continue;
 		}
+		// Non-admin-ops collision: cross-registry slug clash that should
+		// not happen post-U6. Log as error so it surfaces in CloudWatch
+		// alarms; keep the tenant entry (the user-facing connector) and
+		// drop the admin one to avoid a silent name-takeover.
+		const adminRow = adminRowsBySlug.get(tenantCfg.name);
+		console.error(
+			`${logPrefix} unexpected cross-registry slug collision: slug=${tenantCfg.name} appears in tenant_mcp_servers (mcp_server_id=${tenantRowsBySlug.get(tenantCfg.name)?.mcp_server_id}) AND admin_mcp_servers (mcp_server_id=${adminRow?.mcp_server_id}). Keeping the tenant entry; dropping the admin one.`,
+		);
+		const adminIdx = merged.findIndex(
+			(c) => c.name === tenantCfg.name && c.is_admin,
+		);
+		if (adminIdx >= 0) merged.splice(adminIdx, 1);
 		merged.push(tenantCfg);
 	}
 
-	if (merged.length > 0) {
-		console.log(
-			`${logPrefix} MCP configs built: ${merged.length} servers (${merged
-				.map((c) => `${c.name}${c.is_admin ? " [admin]" : ""}`)
-				.join(", ")})`,
-		);
-	}
+	// Always log resolved counts — even when zero. A wakeup turn that
+	// resolved zero MCPs (e.g., admin query failed AND agent only had
+	// admin-MCP attached) used to leave no breadcrumb at all; operators
+	// could not distinguish "agent designed this way" from "config
+	// silently broke."
+	console.log(
+		`${logPrefix} MCP configs built: agent=${agentId} tenant=${tenantConfigs.length} admin=${adminConfigs.length} merged=${merged.length}${
+			merged.length > 0
+				? ` (${merged
+						.map((c) => `${c.name}${c.is_admin ? " [admin]" : ""}`)
+						.join(", ")})`
+				: ""
+		}`,
+	);
 
 	return merged;
 }

@@ -17,9 +17,10 @@
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0065_admin_mcp_separation.sql
 --
 -- creates-column: public.agent_templates.is_admin
--- creates: public.agent_templates_is_admin_one_way
+-- creates-function: public.enforce_agent_templates_is_admin_one_way
+-- creates-trigger: public.agent_templates.agent_templates_is_admin_one_way
 -- creates: public.admin_mcp_servers
--- creates: public.admin_mcp_servers_status_enum
+-- creates-constraint: public.admin_mcp_servers.admin_mcp_servers_status_enum
 -- creates: public.uq_admin_mcp_servers_slug
 -- creates: public.idx_admin_mcp_servers_tenant
 -- creates: public.agent_admin_mcp_servers

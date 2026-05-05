@@ -204,13 +204,15 @@ describe("buildMcpConfigs — admin registry merge", () => {
 		expect(configs[0]!.is_admin).toBeUndefined();
 	});
 
-	it("dedups admin-ops slug collision: admin wins, deprecation warning fires", async () => {
+	it("dedups admin-ops slug collision: admin wins, deprecation warning fires with legacy row mcp_server_id", async () => {
 		// Migration window: legacy tenant row + new admin row for same slug.
 		mockTenantRowsForJoin.mockReturnValue([
 			tenantRow({
 				mcp_server_id: "legacy-tenant-admin-ops",
 				slug: "admin-ops",
 				url: "https://mcp.example/admin-legacy",
+				// Distinct fields so we can prove admin's payload is used.
+				assignment_config: { toolAllowlist: ["legacy-tenant-tool"] },
 			}),
 		]);
 		mockAdminRowsForJoin.mockReturnValue([
@@ -218,6 +220,7 @@ describe("buildMcpConfigs — admin registry merge", () => {
 				mcp_server_id: "admin-srv-new",
 				slug: "admin-ops",
 				url: "https://mcp.example/admin-new",
+				assignment_config: { toolAllowlist: ["admin-tool"] },
 			}),
 		]);
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -226,15 +229,56 @@ describe("buildMcpConfigs — admin registry merge", () => {
 
 		expect(configs).toHaveLength(1);
 		expect(configs[0]!.is_admin).toBe(true);
-		// Admin entry's url wins, not the legacy one.
+		// Admin entry's url AND tools win — none of the tenant row's fields
+		// leak through into the surviving entry.
 		expect(configs[0]!.url).toBe("https://mcp.example/admin-new");
+		expect(configs[0]!.tools).toEqual(["admin-tool"]);
 
 		const warnings = warn.mock.calls.map((c) => String(c[0]));
 		const dedupWarn = warnings.find((m) => m.includes("legacy tenant_mcp_servers"));
 		expect(dedupWarn).toBeDefined();
-		expect(dedupWarn).toContain("admin-ops");
+		// Pin the slug so a regression that named the wrong slug would fail.
+		expect(dedupWarn).toMatch(/slug=admin-ops/);
+		// Pin the legacy mcp_server_id so operators see a directly-actionable id.
+		expect(dedupWarn).toContain("legacy-tenant-admin-ops");
 
 		warn.mockRestore();
+	});
+
+	it("logs an error and keeps the tenant entry when a non-admin-ops slug collides between registries", async () => {
+		// Defensive: should never happen post-U6, but a corrupt admin row
+		// with a tenant slug should not silently take over.
+		mockTenantRowsForJoin.mockReturnValue([
+			tenantRow({
+				mcp_server_id: "tenant-srv-tasks",
+				slug: "lastmile-tasks",
+				url: "https://mcp.example/legitimate-tasks",
+			}),
+		]);
+		mockAdminRowsForJoin.mockReturnValue([
+			adminRow({
+				mcp_server_id: "admin-srv-impostor",
+				slug: "lastmile-tasks",
+				url: "https://attacker.example/spoof",
+			}),
+		]);
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const configs = await buildMcpConfigs("agent-1", null);
+
+		// Tenant entry survives; admin entry is dropped.
+		expect(configs).toHaveLength(1);
+		expect(configs[0]!.is_admin).toBeUndefined();
+		expect(configs[0]!.url).toBe("https://mcp.example/legitimate-tasks");
+
+		const errors = error.mock.calls.map((c) => String(c[0]));
+		const collisionError = errors.find((m) =>
+			m.includes("unexpected cross-registry slug collision"),
+		);
+		expect(collisionError).toBeDefined();
+		expect(collisionError).toContain("lastmile-tasks");
+
+		error.mockRestore();
 	});
 
 	it("surfaces tenant configs even when the admin query throws", async () => {
