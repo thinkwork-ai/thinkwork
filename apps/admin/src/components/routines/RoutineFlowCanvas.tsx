@@ -54,7 +54,7 @@ export function RoutineFlowCanvas({
     return (
       <div
         className={cn(
-          "flex min-h-[360px] flex-col items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center",
+          "flex min-h-[360px] w-full flex-col items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center",
           className,
         )}
       >
@@ -88,7 +88,7 @@ export function RoutineFlowCanvas({
   return (
     <div
       className={cn(
-        "routine-flow-canvas relative h-[min(70vh,680px)] min-h-[420px] overflow-hidden rounded-md border border-border/80 bg-background",
+        "routine-flow-canvas relative h-[min(70vh,680px)] min-h-[420px] w-full overflow-hidden rounded-md border border-border/80 bg-background",
         className,
       )}
     >

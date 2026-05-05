@@ -239,7 +239,7 @@ export function RoutineDefinitionPanel({
           topologyDirty={topologyDirty}
           layout="workspace"
           sidebarHeader={
-            <div className="rounded-md border border-border/70 bg-card/50 p-3">
+            <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">

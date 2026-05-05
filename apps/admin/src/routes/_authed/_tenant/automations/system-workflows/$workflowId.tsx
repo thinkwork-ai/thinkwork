@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
+import { PanelRight } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,7 +11,15 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { RoutineFlowCanvas } from "@/components/routines/RoutineFlowCanvas";
 import { RoutineFlowInspector } from "@/components/routines/RoutineFlowInspector";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SystemWorkflowDetailQuery } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
@@ -174,6 +183,7 @@ function SystemWorkflowDetailPage() {
   const [selectedWorkflowNodeId, setSelectedWorkflowNodeId] = useState<
     string | null
   >(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [result] = useQuery({
     query: SystemWorkflowDetailQuery,
@@ -261,7 +271,6 @@ function SystemWorkflowDetailPage() {
       header={
         <PageHeader
           title={workflow.name}
-          description={workflow.description ?? undefined}
           actions={<StatusBadge status={workflow.status.toLowerCase()} />}
         />
       }
@@ -278,28 +287,59 @@ function SystemWorkflowDetailPage() {
             Activity
           </TabsTrigger>
           <TabsTrigger value="config" className="flex-none px-3">
-            Config
+            Details
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
-          <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <TabsContent
+          value="workflow"
+          className="h-full min-h-0 overflow-hidden"
+        >
+          <div className="relative h-full min-h-0 overflow-hidden rounded-md border border-border/80 bg-background">
             <RoutineFlowCanvas
               mode="execution"
               aslJson={workflowAsl}
               stepManifestJson={workflow.stepManifestJson}
               selectedNodeId={selectedWorkflowNodeId}
               onSelectNode={setSelectedWorkflowNodeId}
-              className="h-full min-h-0"
+              className="h-full min-h-0 rounded-none border-0"
               emptyLabel="No system workflow manifest available."
             />
-            <RoutineFlowInspector
-              mode="execution"
-              selectedNodeId={selectedWorkflowNodeId}
-              steps={workflowSteps}
-              className="h-full overflow-y-auto"
-            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="absolute right-3 top-3 z-20 xl:hidden"
+              onClick={() => setDetailsOpen(true)}
+            >
+              <PanelRight className="h-3.5 w-3.5" />
+              Details
+            </Button>
+            <div className="absolute inset-y-0 right-0 z-20 hidden w-[380px] min-h-0 overflow-y-auto border-l border-border/70 bg-card/95 shadow-2xl backdrop-blur xl:block">
+              <RoutineFlowInspector
+                mode="execution"
+                selectedNodeId={selectedWorkflowNodeId}
+                steps={workflowSteps}
+                className="h-full rounded-none border-0 bg-transparent"
+              />
+            </div>
           </div>
+          <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+            <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(420px,calc(100vw-2rem))]">
+              <SheetHeader className="border-b border-border/70 pr-12">
+                <SheetTitle>Node details</SheetTitle>
+                <SheetDescription>
+                  Inspect the selected system workflow step.
+                </SheetDescription>
+              </SheetHeader>
+              <RoutineFlowInspector
+                mode="execution"
+                selectedNodeId={selectedWorkflowNodeId}
+                steps={workflowSteps}
+                className="rounded-none border-0 bg-transparent"
+              />
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         <TabsContent value="activity" className="overflow-y-auto">
@@ -323,6 +363,13 @@ function SystemWorkflowDetailPage() {
         </TabsContent>
 
         <TabsContent value="config" className="space-y-4 overflow-y-auto">
+          <section className="space-y-2 rounded-md border border-border/70 p-4">
+            <h2 className="text-sm font-semibold">Description</h2>
+            <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+              {workflow.description ?? "No description provided."}
+            </p>
+          </section>
+
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="space-y-3 rounded-md border p-4">
               <h2 className="text-sm font-semibold">Definition</h2>

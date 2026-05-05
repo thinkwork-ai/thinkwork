@@ -1,6 +1,19 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Workflow } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  PanelRight,
+  Workflow,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { RoutineFlowCanvas } from "./RoutineFlowCanvas";
 import { RoutineFlowInspector } from "./RoutineFlowInspector";
 import { RoutineAddStepCommand } from "./RoutineAddStepCommand";
@@ -67,6 +80,7 @@ export function RoutineWorkflowEditor({
   );
   const [addOpen, setAddOpen] = useState(false);
   const [addAfterNodeId, setAddAfterNodeId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const issueCount = Object.keys(fieldErrors).length;
   const configurableFieldCount = steps.reduce(
     (count, step) => count + step.configFields.length,
@@ -104,6 +118,48 @@ export function RoutineWorkflowEditor({
     setAddOpen(true);
   };
   const workspace = layout === "workspace";
+  const flowCanvas = (
+    <RoutineFlowCanvas
+      mode="authoring"
+      aslJson={graphAsl}
+      stepManifestJson={graphManifest}
+      selectedNodeId={selectedNodeId}
+      onSelectNode={setSelectedNodeId}
+      onAddStepAfter={openAddStep}
+      className={
+        workspace ? "h-full min-h-0 rounded-none border-0" : undefined
+      }
+      emptyLabel={
+        catalogLoading
+          ? "Loading routine recipes..."
+          : "No workflow steps yet"
+      }
+    />
+  );
+  const inspector = (
+    <RoutineFlowInspector
+      mode="authoring"
+      selectedNodeId={selectedNodeId}
+      steps={steps}
+      fieldValues={fieldValues}
+      fieldErrors={fieldErrors}
+      credentialOptions={credentialOptions}
+      onFieldChange={onFieldChange}
+      onLabelChange={onLabelChange}
+      onRemoveStep={onRemoveStep}
+      className={workspace ? "rounded-none border-0 bg-transparent" : ""}
+    />
+  );
+  const renderSidebar = () => (
+    <>
+      {sidebarHeader && (
+        <div className="shrink-0 border-b border-border/70">
+          {sidebarHeader}
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto">{inspector}</div>
+    </>
+  );
 
   return (
     <div
@@ -131,46 +187,42 @@ export function RoutineWorkflowEditor({
         </div>
       )}
 
-      <div
-        className={cn(
-          "grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]",
-          workspace ? "min-h-0 flex-1" : "",
-        )}
-      >
-        <RoutineFlowCanvas
-          mode="authoring"
-          aslJson={graphAsl}
-          stepManifestJson={graphManifest}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={setSelectedNodeId}
-          onAddStepAfter={openAddStep}
-          className={workspace ? "h-full min-h-0" : undefined}
-          emptyLabel={
-            catalogLoading
-              ? "Loading routine recipes..."
-              : "No workflow steps yet"
-          }
-        />
-        <div
-          className={cn(
-            "min-h-0",
-            workspace ? "space-y-3 overflow-y-auto pr-1" : "",
-          )}
-        >
-          {sidebarHeader}
-          <RoutineFlowInspector
-            mode="authoring"
-            selectedNodeId={selectedNodeId}
-            steps={steps}
-            fieldValues={fieldValues}
-            fieldErrors={fieldErrors}
-            credentialOptions={credentialOptions}
-            onFieldChange={onFieldChange}
-            onLabelChange={onLabelChange}
-            onRemoveStep={onRemoveStep}
-          />
+      {workspace ? (
+        <>
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-background">
+            {flowCanvas}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="absolute right-28 top-3 z-20 xl:hidden"
+              onClick={() => setDetailsOpen(true)}
+            >
+              <PanelRight className="h-3.5 w-3.5" />
+              Details
+            </Button>
+            <div className="absolute inset-y-0 right-0 z-20 hidden w-[380px] min-h-0 flex-col border-l border-border/70 bg-card/95 shadow-2xl backdrop-blur xl:flex">
+              {renderSidebar()}
+            </div>
+          </div>
+          <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+            <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-[min(420px,calc(100vw-2rem))]">
+              <SheetHeader className="border-b border-border/70 pr-12">
+                <SheetTitle>Node details</SheetTitle>
+                <SheetDescription>
+                  Inspect and edit the selected workflow step.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex min-h-0 flex-col">{renderSidebar()}</div>
+            </SheetContent>
+          </Sheet>
+        </>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {flowCanvas}
+          <div className="min-h-0">{inspector}</div>
         </div>
-      </div>
+      )}
 
       <RoutineAddStepCommand
         open={addOpen}
