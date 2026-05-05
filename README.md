@@ -30,7 +30,7 @@ ThinkWork is a three-tier deployment ladder. The runtime is identical across tie
 | **ThinkWork for Business** | Same harness, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
 | **ThinkWork Enterprise** | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path. | Us, with you |
 
-The harness stays yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
+The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
 
 ## Status
 
