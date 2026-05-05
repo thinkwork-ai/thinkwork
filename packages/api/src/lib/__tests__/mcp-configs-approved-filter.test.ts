@@ -14,16 +14,9 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockWhereSelector,
-  mockTenantRowsForJoin,
-  mockAdminRowsForJoin,
-  mockRowsForUserToken,
-  mockSecretString,
-} = vi.hoisted(() => ({
+const { mockWhereSelector, mockRowsForJoin, mockRowsForUserToken, mockSecretString } = vi.hoisted(() => ({
   mockWhereSelector: vi.fn(),
-  mockTenantRowsForJoin: vi.fn(),
-  mockAdminRowsForJoin: vi.fn(),
+  mockRowsForJoin: vi.fn(),
   mockRowsForUserToken: vi.fn(),
   mockSecretString: vi.fn(),
 }));
@@ -31,18 +24,11 @@ const {
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
     select: () => ({
-      from: (table: { __source?: string }) => ({
+      from: () => ({
         innerJoin: () => ({
           where: (pred: unknown) => {
             mockWhereSelector(pred);
-            // U2: route by which join-side we entered. The tenant query
-            // starts at agentMcpServers; the admin query starts at
-            // agentAdminMcpServers. The mock schema below tags both with
-            // a `__source` identifier so the mock can differentiate.
-            if (table?.__source === "agentAdminMcpServers") {
-              return Promise.resolve(mockAdminRowsForJoin());
-            }
-            return Promise.resolve(mockTenantRowsForJoin());
+            return Promise.resolve(mockRowsForJoin());
           },
         }),
         where: (pred: unknown) => {
@@ -59,7 +45,6 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   tenantMcpServers: {
-    __source: "tenantMcpServers",
     id: "tenantMcpServers.id",
     name: "tenantMcpServers.name",
     slug: "tenantMcpServers.slug",
@@ -72,34 +57,12 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     url_hash: "tenantMcpServers.url_hash",
   },
   agentMcpServers: {
-    __source: "agentMcpServers",
     mcp_server_id: "agentMcpServers.mcp_server_id",
     agent_id: "agentMcpServers.agent_id",
     enabled: "agentMcpServers.enabled",
     config: "agentMcpServers.config",
   },
-  adminMcpServers: {
-    __source: "adminMcpServers",
-    id: "adminMcpServers.id",
-    name: "adminMcpServers.name",
-    slug: "adminMcpServers.slug",
-    url: "adminMcpServers.url",
-    transport: "adminMcpServers.transport",
-    auth_type: "adminMcpServers.auth_type",
-    auth_config: "adminMcpServers.auth_config",
-    enabled: "adminMcpServers.enabled",
-    status: "adminMcpServers.status",
-    url_hash: "adminMcpServers.url_hash",
-  },
-  agentAdminMcpServers: {
-    __source: "agentAdminMcpServers",
-    mcp_server_id: "agentAdminMcpServers.mcp_server_id",
-    agent_id: "agentAdminMcpServers.agent_id",
-    enabled: "agentAdminMcpServers.enabled",
-    config: "agentAdminMcpServers.config",
-  },
   userMcpTokens: {
-    __source: "userMcpTokens",
     user_id: "userMcpTokens.user_id",
     mcp_server_id: "userMcpTokens.mcp_server_id",
     status: "userMcpTokens.status",
@@ -152,15 +115,13 @@ function baseRow(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockTenantRowsForJoin.mockReturnValue([]);
-  mockAdminRowsForJoin.mockReturnValue([]);
   mockRowsForUserToken.mockReturnValue([]);
   mockSecretString.mockReturnValue("");
 });
 
 describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   it("SQL predicate requires status='approved' AND enabled=true", async () => {
-    mockTenantRowsForJoin.mockReturnValue([]);
+    mockRowsForJoin.mockReturnValue([]);
     await buildMcpConfigs("agent-1", null);
     const pred = mockWhereSelector.mock.calls[0]?.[0] as { _and: unknown[] };
     // Flatten the predicate terms to check the literal values included.
@@ -169,7 +130,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("grandfathered approved rows (url_hash=null) are returned", async () => {
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({ server_url_hash: null, auth_type: "none" }),
     ]);
     const configs = await buildMcpConfigs("agent-1", null);
@@ -181,7 +142,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     const url = "https://mcp.example/a";
     const authConfig = { secretRef: "arn:xyz", token: "tkn" };
     const hash = computeMcpUrlHash(url, authConfig);
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({
         url,
         auth_config: authConfig,
@@ -194,7 +155,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("approved rows with mismatched url_hash are SKIPPED (SI-5 defensive)", async () => {
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({
         auth_type: "none",
         url: "https://mcp.example/a",
@@ -215,7 +176,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("server_enabled=false rows are skipped even if status=approved", async () => {
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({ server_enabled: false, auth_type: "none" }),
     ]);
     const configs = await buildMcpConfigs("agent-1", null);
@@ -223,7 +184,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("tenant_api_key without a token is skipped", async () => {
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({
         auth_type: "tenant_api_key",
         auth_config: {},
@@ -238,7 +199,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   it("per-user OAuth looks up the active token by user_id and returns bearer auth", async () => {
     const userId = "user-current-1";
     const agentId = "agent-assigned-1";
-    mockTenantRowsForJoin.mockReturnValue([
+    mockRowsForJoin.mockReturnValue([
       baseRow({
         mcp_server_id: "srv-user-memory",
         slug: "user-memory",
@@ -265,13 +226,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
         auth: { type: "bearer", token: "user-scoped-token" },
       },
     ]);
-    // U2 split queries: find the userToken predicate by content (its
-    // position shifted from index 1 to index 2 once the admin query
-    // landed; locate it semantically instead of by index).
-    const userTokenCall = mockWhereSelector.mock.calls.find((call) =>
-      JSON.stringify(call).includes("userMcpTokens.user_id"),
-    );
-    const tokenLookupPredicate = userTokenCall?.[0] as { _and: unknown[] };
+    const tokenLookupPredicate = mockWhereSelector.mock.calls[1]?.[0] as { _and: unknown[] };
     expect(JSON.stringify(tokenLookupPredicate)).toContain(`"userMcpTokens.user_id","${userId}"`);
     expect(JSON.stringify(tokenLookupPredicate)).not.toContain(`"userMcpTokens.user_id","${agentId}"`);
     expect(JSON.stringify(tokenLookupPredicate)).toContain('"userMcpTokens.status","active"');
