@@ -1201,7 +1201,18 @@ export function createServer() {
       });
       return;
     }
-    if (req.method === "POST" && req.url === "/invocations") {
+    // Two transport paths route here:
+    //   1. AgentCore runtime direct-invoke (`InvokeAgentRuntime`) → POST
+    //      /invocations
+    //   2. Lambda invoke (`lambda.Invoke` from chat-agent-invoke) bridged
+    //      through AWS Lambda Web Adapter → POST /  (the LWA default
+    //      when there's no API Gateway path on the event)
+    // Accept POST regardless of path so chat-agent-invoke's existing
+    // dispatcher (which goes via Lambda) hits the same handler as direct
+    // runtime invokes. Without this, every Lambda-mediated invocation
+    // returns `{"error":"not found","runtime":"flue"}` even though the
+    // payload was correct.
+    if (req.method === "POST") {
       void handleHttpInvocation(req, res);
       return;
     }
