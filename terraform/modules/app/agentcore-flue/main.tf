@@ -72,10 +72,24 @@ resource "aws_iam_role_policy" "agentcore_flue" {
         ]
       },
       {
+        # Bedrock invoke spans foundation models, inference profiles, and
+        # cross-region routing. The original
+        # `arn:aws:bedrock:${region}::foundation-model/*` only covered
+        # foundation models in the primary region — but a
+        # `us.anthropic.claude-sonnet-...` inference profile (the default
+        # routing path used by chat-agent-invoke) lives at
+        # `arn:aws:bedrock:${region}:${account}:inference-profile/*` AND
+        # dispatches the actual InvokeModel call to the foundation model
+        # in whatever region the profile resolves to (us-east-1,
+        # us-east-2, us-west-2). The narrow ARN caused every agent turn
+        # to fail with AccessDenied silently inside pi-ai's Bedrock
+        # provider, surfacing as an empty assistant message with zero
+        # token usage. Strands uses `Resource = "*"` for the same actions;
+        # we match that posture.
         Sid      = "BedrockInvoke"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:InvokeAgent"]
-        Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
+        Resource = "*"
       },
       {
         # Automatic memory retention — every agent turn calls CreateEvent
