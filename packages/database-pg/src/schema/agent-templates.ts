@@ -107,6 +107,16 @@ export const agentTemplates = pgTable(
       sql`'{"enabled": true}'::jsonb`,
     ),
     is_published: boolean("is_published").notNull().default(true),
+    /**
+     * Admin-class flag (plan 2026-05-05-001). When true, the template is
+     * eligible to receive admin-MCP attachments via the admin-MCP join
+     * table. Once set to true the value is locked at the DB layer (CHECK
+     * constraint blocks `true → false`) — admin class is a one-way door.
+     * Tenant admins cannot set this flag from the regular admin UI; the
+     * template-create handler requires a system admin key when the
+     * payload sets is_admin = true.
+     */
+    is_admin: boolean("is_admin").notNull().default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
