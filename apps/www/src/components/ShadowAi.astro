@@ -1,0 +1,29 @@
+---
+import SectionShell from "./SectionShell.astro";
+import SectionHeader from "./SectionHeader.astro";
+import { shadowAi } from "../lib/copy";
+---
+
+<SectionShell id="shadow-ai" tone="raised">
+  <SectionHeader
+    eyebrow={shadowAi.eyebrow}
+    headline={shadowAi.headline}
+    lede={shadowAi.lede}
+    align="left"
+    width="wide"
+  />
+
+  <div class="mt-10 grid gap-4 sm:grid-cols-3">
+    {shadowAi.cards.map((card) => (
+      <div class="group flex flex-col gap-4 rounded-2xl border border-white/5 bg-white/[0.025] p-6 transition hover:border-red-500/20 hover:bg-white/[0.04]">
+        <span class="font-mono text-[11px] font-semibold tracking-[0.18em] text-red-500/60">
+          {card.n}
+        </span>
+        <h3 class="text-[15px] font-semibold leading-snug text-slate-100">
+          {card.title}
+        </h3>
+        <p class="text-sm leading-6 text-slate-400">{card.body}</p>
+      </div>
+    ))}
+  </div>
+</SectionShell>

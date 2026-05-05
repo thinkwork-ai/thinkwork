@@ -23,42 +23,54 @@ export const external = {
 // Docs + GitHub icon + Login are hardcoded in Header.astro after this list.
 export const nav = [
   { label: "Platform", href: "/" },
+  { label: "CompanyBrain", href: "/#memory" },
   { label: "Services", href: "/services" },
   { label: "Cloud", href: "/cloud" },
 ];
 
 export const meta = {
-  title: "ThinkWork — Agent Harness for Business",
+  title: "ThinkWork — AI Agents, Under Control",
   description:
-    "Infrastructure to run AI agents in production: threads, memory, tools, sandboxes, cost controls, and audit trails. Use the open-source platform yourself or run on ThinkWork Cloud.",
+    "ThinkWork gives IT leaders visibility and control over every AI agent in their organization — governance, cost optimization, automatic compliance, and compounding institutional knowledge.",
 };
 
 export const hero = {
-  eyebrow: "Agent Harness for Business",
-  headlinePart1: "The platform",
-  headlinePart2: "for",
-  headlineAccentPart1: "AI agents",
-  headlineAccentPart2: "at work.",
-  // Per the 2026-04-25 messaging-feedback memo: when "Agent Harness" is
-  // introduced early, follow it with a teaching line so readers do not have
-  // to know the category coming in. The lede names the runtime pieces first,
-  // then explains the operating model.
-  lede: "ThinkWork gives teams the infrastructure to run AI agents in production: threads, memory, tools, sandboxes, cost controls, and audit trails. Use the open-source platform yourself or run on ThinkWork Cloud.",
-  primaryCta: { label: "Read the docs", href: external.docs },
-  secondaryCta: { label: "View on GitHub", href: external.github },
-  headlineCandidates: [
-    // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "Production AI work, under your control.",
-    "The open Agent Harness, for Business.",
-    "Agent Harness for Business — open or operated.",
-    "Production agents, on the AWS account you own.",
+  eyebrow: "Shadow AI is already in your building",
+  headlinePart1: "Your employees are running AI.",
+  headlinePart2: "",
+  headlineAccentPart1: "Nobody's running",
+  headlineAccentPart2: "the AI.",
+  lede: "Every day, your team is building and deploying AI agents — on your network, with your data, on your budget. Without oversight. Without governance. Without you. ThinkWork puts your organization back in control.",
+  primaryCta: { label: "See how it works", href: "#controls" },
+  secondaryCta: { label: "Talk to our team", href: "mailto:hello@thinkwork.ai" },
+  trust: [
+    "Built for IT leaders",
+    "SOC 2 evidence — automatic",
+    "Crawl, walk, run — on your timeline",
+    "Trusted by industrial leaders",
   ],
-  ledeCandidates: [
-    // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "Models need more than prompts. ThinkWork adds the runtime: threads, memory, sandboxing, tools, controls, cost, and audit. Self-host it, run it with us, or add services.",
-    "ThinkWork is the open Agent Harness — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap it with services.",
-    "An Agent Harness for Business: threads, memory, agents, connectors, automations, and control wired into one production-grade system, deployable into the AWS account your team already runs.",
-    "The open Agent Harness for Business — production AI work that stays inside your AWS boundary, with the option to have us operate it or wrap it with services.",
+};
+
+export const shadowAi = {
+  eyebrow: "The Shadow AI problem",
+  headline: "The Wild West of AI is already inside your organization.",
+  lede: "The same tools that make AI powerful make it dangerous when nobody's watching. Your people aren't waiting for permission — and the risks compound every day they don't need to ask.",
+  cards: [
+    {
+      n: "01",
+      title: "Unauthorized agents on your network",
+      body: "Employees and departments are building AI tools with company data — outside IT's visibility, outside legal's review, outside anyone's control.",
+    },
+    {
+      n: "02",
+      title: "Costs nobody budgeted for",
+      body: "One company blew their entire annual AI budget in two months. Token costs compound silently until the invoice arrives. By then, the damage is done.",
+    },
+    {
+      n: "03",
+      title: "Zero audit trail",
+      body: "When an AI agent makes a bad decision — or a compliance auditor asks what your systems did last quarter — can you answer? Right now, probably not.",
+    },
   ],
 };
 
@@ -91,34 +103,31 @@ export const proofStrip = [
   },
 ];
 
-// The four-step rollout-path component (rendered by AdoptionJourney.astro
-// pending a future RolloutPath.astro rename — internal-only naming, no
-// product impact). Replaces the prior "AI adoption journey" framing per
-// docs/STYLE.md (banned: "journey").
+// The four-step rollout-path component (rendered by AdoptionJourney.astro).
 export const journey = {
   eyebrow: "The rollout path",
-  headline: "Deploy. Prove. Expand. Operate.",
-  lede: "ThinkWork ships the production controls first. Start with one workflow, prove the agent's work in threads and evaluations, then expand without changing the runtime underneath.",
+  headline: "Crawl. Walk. Run. On your timeline.",
+  lede: "Start with one workflow and one team. Prove governance works. Expand as confidence grows — without changing the runtime underneath.",
   steps: [
     {
       n: "01",
       title: "Deploy",
-      lede: "Self-host the open platform or start in ThinkWork Cloud.",
+      lede: "Get ThinkWork running in your AWS in under a day. First agents live within a week.",
     },
     {
       n: "02",
-      title: "Prove",
-      lede: "Every turn carries its thread, cost, tools, outputs, and evaluations.",
+      title: "Govern",
+      lede: "Every agent approved, every action logged, every cost attributed. Shadow AI eliminated from day one.",
     },
     {
       n: "03",
-      title: "Expand",
-      lede: "Add agents, workflows, connectors, and memory as confidence grows.",
+      title: "Optimize",
+      lede: "ThinkWork scores workflows and converts expensive agentic steps to reliable automation.",
     },
     {
       n: "04",
-      title: "Operate",
-      lede: "Keep running on the same platform: open source, Cloud, or Enterprise.",
+      title: "Compound",
+      lede: "CompanyBrain captures institutional knowledge through every run. Gets smarter every day.",
     },
   ],
 };
@@ -166,46 +175,35 @@ export const howItWorks = {
   ],
 };
 
-// The five governance controls below map 1:N to the four operating
-// guarantees (Reliability · Efficiency · Security · Traceability). The
-// chip-label on each card carries the guarantee(s) the control implements;
-// FiveControls.astro renders these as small uppercase tags. Mapping is
-// locked in plan U1 pre-flight and consumed verbatim by
-// docs/concepts/control.mdx (U8).
+// Four pillars of the ThinkWork platform — what changes when you deploy.
 export const controls = {
-  eyebrow: "Four operating guarantees",
-  headline: "Reliability, efficiency, security, and traceability — built into every agent run.",
-  lede: "These guarantees are not aspirations. ThinkWork implements them as concrete controls across the runtime: deployment boundary, approved capabilities, management surface, cost controls, and evaluations.",
+  eyebrow: "The ThinkWork platform",
+  headline: "Four things that change when you deploy ThinkWork.",
+  lede: "ThinkWork gives IT leaders the visibility, controls, and institutional infrastructure to run AI safely at scale — without slowing down the teams who use it.",
   items: [
     {
-      title: "Open or hosted",
-      desc: "Self-host the open-source platform in your AWS or run on ThinkWork Cloud. The operating model changes; the controls stay recognizable.",
-      icon: "aws",
-      guarantee: "Security · Traceability",
-    },
-    {
-      title: "Approved agent capabilities",
-      desc: "Each agent inherits an approved set of tools, models, and knowledge from its template — policy becomes code, not paperwork.",
-      icon: "templates",
-      guarantee: "Security · Reliability",
-    },
-    {
-      title: "Centralized management",
-      desc: "One admin console for agents, templates, budgets, evaluations, memory, and audit — no fragmented toolchain.",
-      icon: "admin",
-      guarantee: "Traceability",
-    },
-    {
-      title: "Cost control and analysis",
-      desc: "Real-time cost events per agent and model. Budgets cap spend before a runaway loop becomes an invoice.",
-      icon: "cost",
-      guarantee: "Efficiency",
-    },
-    {
-      title: "Security + accuracy evaluations",
-      desc: "Evaluation suite for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
+      title: "Shadow AI governance",
+      desc: "Every agent built on ThinkWork goes through an approval workflow before it touches your systems. Permissions documented. Policies enforced. IT finally has visibility over everything running on the network.",
       icon: "evals",
-      guarantee: "Reliability · Security",
+      guarantee: "Eliminates Shadow AI",
+    },
+    {
+      title: "Cost & performance optimization",
+      desc: "ThinkWork scores every workflow and automatically converts expensive agentic processes to reliable, near-zero-cost automation wherever possible. Typical result: ~80% reduction in token spend for optimized workflows.",
+      icon: "cost",
+      guarantee: "~80% cost reduction",
+    },
+    {
+      title: "Compliance — automatic",
+      desc: "SOC 2 Type 1 and Type 2 evidence collected without lifting a finger. Every agent action logged, every configuration documented, every permission recorded. When the auditor calls, hand them the package.",
+      icon: "templates",
+      guarantee: "SOC 2 ready",
+    },
+    {
+      title: "CompanyBrain",
+      desc: "Every workflow run, every agent decision, every operational outcome — captured, structured, and compounding. ThinkWork builds your organization's institutional knowledge into a living intelligence layer that gets smarter every day.",
+      icon: "admin",
+      guarantee: "Your long-term moat",
     },
   ],
 };
@@ -263,25 +261,25 @@ export const audit = {
 };
 
 export const costControl = {
-  eyebrow: "Cost",
-  headline: "Cost attributed where it happens.",
-  lede: "Every model call emits a cost event tagged by tenant, agent, and model. Per-agent budgets pause execution before overruns compound.",
+  eyebrow: "Cost optimization",
+  headline: "Stop taking a dump truck to the grocery store.",
+  lede: "Most companies run frontier models on every task — expensive and unnecessary. ThinkWork scores every workflow and finds the efficient path, cutting token costs without touching the results.",
   features: [
     {
-      title: "Owned cost ledger",
-      desc: "Every invocation emits a cost event tagged by tenant, agent, and model, written to the Postgres you deployed.",
+      title: "Workflow scoring",
+      desc: "ThinkWork evaluates every workflow and identifies where agentic reasoning is actually required — and where deterministic automation is cheaper and more reliable.",
     },
     {
-      title: "Enforced budgets",
-      desc: "Per-agent hard caps pause execution before a runaway loop compounds into a bill.",
+      title: "Automatic optimization",
+      desc: "Expensive agentic processes convert automatically to reliable, near-zero-cost automation wherever the workflow allows. Agentic where judgment is required. Automated where it isn't.",
     },
     {
-      title: "Evaluated in context",
-      desc: "Cost shows up next to the turn that produced it, so spend and quality travel together.",
+      title: "Real-time cost visibility",
+      desc: "Token budgets, per-agent spend caps, and cost attached to the turn that produced it. No monthly invoice surprises.",
     },
     {
-      title: "Per-model breakdown",
-      desc: "Tokens in, tokens out, and cost broken out per model, so high-spend calls surface next to the choice that drove them.",
+      title: "~80% cost reduction",
+      desc: "Typical result for optimized workflows. One company blew their entire annual AI budget in two months — ThinkWork would have stopped it on day one.",
     },
   ],
   caption: "Admin web · analytics · cost view",
@@ -334,20 +332,20 @@ export const systemModel = {
 };
 
 export const memory = {
-  eyebrow: "The durable asset",
-  headline: "A memory layer you own, not a vendor's API.",
-  lede: "The harness's context layer is the asset that compounds. Every artifact your agents produce is inspectable, exportable, and portable — under your IAM, in your account, on a contract you can swap engines under.",
+  eyebrow: "CompanyBrain",
+  headline: "Your organization's knowledge — finally in a system.",
+  lede: "Right now, your most critical knowledge lives in your best employees' heads. ThinkWork captures it through every agent interaction — and compounds it into an organizational intelligence layer your business owns permanently.",
   memoryPoints: [
-    "A harness-owned context layer, not a backend vendor's API.",
-    "Portable and inspectable — read it, export it, move it between deployment models.",
-    "A stable memory contract above pluggable engines. Hindsight and AgentCore are adapters, not the product.",
+    "Private and portable. Your CompanyBrain lives in your infrastructure. Export it, integrate it, or keep it contained — you decide.",
+    "Feeds agent improvement automatically. Every workflow run teaches your agents more about how your specific business operates.",
+    "Survives turnover. When your 20-year dispatcher retires, their knowledge stays. CompanyBrain doesn't give notice.",
   ],
   wikiPoints: [
-    "Compounding Memory pages distill conversations into durable, browsable Entity / Topic / Decision pages.",
-    "Inspect the graph that links entities, pages, and source threads.",
-    "Ship the same view to mobile so end users see what the org has learned.",
+    "Compounds over time. Month 1 you deploy ThinkWork for governance. Year 2 you can't imagine operating without it.",
+    "Compounding Memory pages distill agent interactions into durable Entity, Topic, and Decision pages your whole org can browse.",
+    "Inspect the knowledge graph that links entities, pages, and source threads — on web and mobile.",
   ],
-  caption: "Admin web · browse, search, and inspect every memory",
+  caption: "Admin web · CompanyBrain knowledge graph",
 };
 
 export const mobile = {
@@ -389,22 +387,18 @@ export const quickStart = {
   ],
 };
 
-// North-star copy block per the 2026-04-25 messaging-feedback memo. The
-// closing section earns the page's whole argument in three lines: what
-// ThinkWork is, what the harness gives you, and the three doors. Every
-// other section is in service of this block.
 export const finalCta = {
-  eyebrow: "Open · Operated · Enterprise",
-  headlinePart1: "Run it yourself,",
-  headlineAccent: "or run it with us.",
-  lede: "Start with the open harness, use hosted ThinkWork, or add services when a workflow needs launch help.",
+  eyebrow: "Get started",
+  headlinePart1: "Control your AI",
+  headlineAccent: "before it controls your budget.",
+  lede: "Start with one workflow. One department. One policy. ThinkWork's expert team guides you through every step — crawl, walk, run — on your timeline.",
   points: [
-    { title: "Open", desc: "Self-host in your AWS." },
-    { title: "Cloud", desc: "Hosted and operated by us." },
-    { title: "Enterprise", desc: "Strategy, launch, and ongoing operations." },
+    { title: "No engineers required", desc: "Expert-guided setup from day one." },
+    { title: "SOC 2 in progress", desc: "Compliance evidence collecting automatically." },
+    { title: "~80% cost reduction", desc: "On optimized workflows." },
   ],
-  primaryCta: { label: "Read the docs", href: external.docs },
-  secondaryCta: { label: "View on GitHub", href: external.github },
+  primaryCta: { label: "Request a demo", href: "mailto:hello@thinkwork.ai?subject=ThinkWork demo request" },
+  secondaryCta: { label: "Talk to our team", href: "mailto:hello@thinkwork.ai" },
 };
 
 // Cloud-variant FinalCTA. Same shape as `finalCta` so the component can swap

@@ -43,6 +43,20 @@ import { hero } from "../lib/copy";
           {hero.secondaryCta.label}
         </a>
       </div>
+      {hero.trust && (
+        <div class="animate-fade-in-up mt-10 flex flex-wrap justify-center gap-x-6 gap-y-2">
+          {hero.trust.map((item) => (
+            <div class="flex items-center gap-2 text-xs text-slate-500">
+              <span class="flex h-4 w-4 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                  <path d="M1.5 4l2 2 3-3" stroke="#10B981" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </span>
+              {item}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   </div>
 </section>
