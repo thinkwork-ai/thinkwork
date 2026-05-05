@@ -15,7 +15,7 @@ function KnowledgeWikiPage() {
       routeBase="/knowledge/wiki"
       embedded
       breadcrumbs={[
-        { label: "Company Brain", href: "/knowledge/memory" },
+        { label: "Brain", href: "/knowledge/memory" },
         { label: "Pages" },
       ]}
     />

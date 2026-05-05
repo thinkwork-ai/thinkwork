@@ -445,8 +445,8 @@ function ContextEnginePage() {
   const tenantId = tenant?.id;
   const tenantSlug = tenant?.slug;
   useBreadcrumbs([
-    { label: "Company Brain", href: "/knowledge/memory" },
-    { label: "Sources" },
+    { label: "Brain", href: "/knowledge/memory" },
+    { label: "Search" },
   ]);
   const [providers, setProviders] = useState<ContextProviderSummary[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);

@@ -192,7 +192,7 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/knowledge", icon: Brain, label: "Company Brain" },
+    { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     {
       to: "/threads",

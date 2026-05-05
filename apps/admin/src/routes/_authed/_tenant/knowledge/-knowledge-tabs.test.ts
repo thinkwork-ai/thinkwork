@@ -17,12 +17,12 @@ describe("currentKnowledgeTab", () => {
     );
   });
 
-  it("uses Company Brain product labels for visible tabs", () => {
+  it("uses Brain product labels for visible tabs", () => {
     expect(KNOWLEDGE_TABS.map((tab) => tab.label)).toEqual([
       "Memory",
       "Pages",
-      "Knowledge Bases",
-      "Sources",
+      "KBs",
+      "Search",
     ]);
   });
 });
