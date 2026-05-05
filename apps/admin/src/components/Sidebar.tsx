@@ -192,6 +192,7 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/knowledge", icon: Brain, label: "Company Brain" },
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     {
       to: "/threads",
@@ -230,7 +231,6 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
-    { to: "/knowledge", icon: Brain, label: "Company Brain" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
