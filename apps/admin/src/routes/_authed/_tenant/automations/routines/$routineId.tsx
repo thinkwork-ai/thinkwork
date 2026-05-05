@@ -208,21 +208,32 @@ function RoutineDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="activity" className="h-full min-h-0 gap-4">
+      <Tabs defaultValue="workflow" className="h-full min-h-0 gap-4">
         <TabsList
           variant="line"
           className="w-full shrink-0 justify-start border-b"
         >
-          <TabsTrigger value="activity" className="flex-none px-3">
-            Activity
-          </TabsTrigger>
           <TabsTrigger value="workflow" className="flex-none px-3">
             Workflow
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex-none px-3">
+            Activity
           </TabsTrigger>
           <TabsTrigger value="config" className="flex-none px-3">
             Config
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
+          <RoutineDefinitionPanel
+            routineId={routineId}
+            onPublished={() =>
+              reexecuteRoutine({ requestPolicy: "network-only" })
+            }
+            onStateChange={handleDefinitionStateChange}
+            layout="workspace"
+          />
+        </TabsContent>
 
         <TabsContent value="activity" className="overflow-y-auto">
           <ExecutionList
@@ -250,17 +261,6 @@ function RoutineDetailPage() {
               ) : null
             }
             refreshKey={executionRefreshKey}
-          />
-        </TabsContent>
-
-        <TabsContent value="workflow" className="min-h-0 overflow-hidden">
-          <RoutineDefinitionPanel
-            routineId={routineId}
-            onPublished={() =>
-              reexecuteRoutine({ requestPolicy: "network-only" })
-            }
-            onStateChange={handleDefinitionStateChange}
-            layout="workspace"
           />
         </TabsContent>
 

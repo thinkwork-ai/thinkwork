@@ -266,41 +266,21 @@ function SystemWorkflowDetailPage() {
         />
       }
     >
-      <Tabs defaultValue="activity" className="h-full min-h-0 gap-4">
+      <Tabs defaultValue="workflow" className="h-full min-h-0 gap-4">
         <TabsList
           variant="line"
           className="w-full shrink-0 justify-start border-b"
         >
-          <TabsTrigger value="activity" className="flex-none px-3">
-            Activity
-          </TabsTrigger>
           <TabsTrigger value="workflow" className="flex-none px-3">
             Workflow
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex-none px-3">
+            Activity
           </TabsTrigger>
           <TabsTrigger value="config" className="flex-none px-3">
             Config
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="activity" className="overflow-y-auto">
-          <DataTable
-            columns={runColumns}
-            data={runRows}
-            tableClassName="table-fixed"
-            pageSize={10}
-            onRowClick={(row) =>
-              navigate({
-                to: "/automations/system-workflows/$workflowId/runs/$runId",
-                params: { workflowId, runId: row.id },
-              })
-            }
-          />
-          {runRows.length === 0 && (
-            <div className="rounded-md border px-3 py-6 text-sm text-muted-foreground">
-              No runs recorded yet.
-            </div>
-          )}
-        </TabsContent>
 
         <TabsContent value="workflow" className="min-h-0 overflow-hidden">
           <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -320,6 +300,26 @@ function SystemWorkflowDetailPage() {
               className="h-full overflow-y-auto"
             />
           </div>
+        </TabsContent>
+
+        <TabsContent value="activity" className="overflow-y-auto">
+          <DataTable
+            columns={runColumns}
+            data={runRows}
+            tableClassName="table-fixed"
+            pageSize={10}
+            onRowClick={(row) =>
+              navigate({
+                to: "/automations/system-workflows/$workflowId/runs/$runId",
+                params: { workflowId, runId: row.id },
+              })
+            }
+          />
+          {runRows.length === 0 && (
+            <div className="rounded-md border px-3 py-6 text-sm text-muted-foreground">
+              No runs recorded yet.
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="config" className="space-y-4 overflow-y-auto">
