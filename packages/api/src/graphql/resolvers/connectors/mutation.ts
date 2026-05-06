@@ -9,6 +9,10 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import {
+  runConnectorDispatchTick,
+  type ConnectorDispatchResult,
+} from "../../../lib/connectors/runtime.js";
 
 type DispatchTargetType = "agent" | "routine" | "hybrid_routine";
 
@@ -181,6 +185,28 @@ export async function archiveConnector(
   });
 }
 
+export async function runConnectorNow(
+  _parent: unknown,
+  args: { id: string },
+  ctx: GraphQLContext,
+): Promise<unknown> {
+  const current = await loadConnectorForMutation(args.id);
+  await requireTenantAdmin(ctx, current.tenant_id);
+
+  const results = await runConnectorDispatchTick({
+    connectorId: current.id,
+    tenantId: current.tenant_id,
+    limit: 1,
+    force: true,
+  });
+
+  auditConnectorMutation("runConnectorNow", current, "success", ctx);
+  return {
+    connectorId: current.id,
+    results: results.map(connectorDispatchResultToGraphql),
+  };
+}
+
 async function updateConnectorLifecycle(
   id: string,
   mutationName: string,
@@ -265,7 +291,10 @@ async function validateConnection(
     .select({ id: connections.id })
     .from(connections)
     .where(
-      and(eq(connections.id, connectionId), eq(connections.tenant_id, tenantId)),
+      and(
+        eq(connections.id, connectionId),
+        eq(connections.tenant_id, tenantId),
+      ),
     )
     .limit(1);
 
@@ -320,4 +349,20 @@ function auditConnectorMutation(
       actorEmail: ctx.auth?.email ?? null,
     }),
   );
+}
+
+function connectorDispatchResultToGraphql(
+  result: ConnectorDispatchResult,
+): Record<string, unknown> {
+  return {
+    status: result.status,
+    connectorId: result.connectorId,
+    executionId: "executionId" in result ? (result.executionId ?? null) : null,
+    externalRef: "externalRef" in result ? (result.externalRef ?? null) : null,
+    threadId: "threadId" in result ? (result.threadId ?? null) : null,
+    messageId: "messageId" in result ? (result.messageId ?? null) : null,
+    targetType: "targetType" in result ? result.targetType : null,
+    reason: "reason" in result ? result.reason : null,
+    error: "error" in result ? result.error : null,
+  };
 }
