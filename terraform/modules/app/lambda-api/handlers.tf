@@ -61,24 +61,13 @@ locals {
     # permission has been a recurring source of silent failures where
     # getChatAgentInvokeFnArn falls back to null and sendMessage loses
     # message_history on the wakeup-processor fallback path.
-    CHAT_AGENT_INVOKE_FN_ARN            = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
-    ADMIN_URL                           = var.admin_url
-    DOCS_URL                            = var.docs_url
-    APPSYNC_REALTIME_URL                = var.appsync_realtime_url
-    ECR_REPOSITORY_URL                  = var.ecr_repository_url
-    AWS_ACCOUNT_ID                      = var.account_id
-    COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
-    COMPUTER_RUNTIME_CLUSTER_ARN        = var.computer_runtime_cluster_arn
-    COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
-    COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
-    COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
-    COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
-    COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
-    COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
-    COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
-    COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
-    COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
-    NODE_OPTIONS                        = "--enable-source-maps"
+    CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
+    ADMIN_URL                = var.admin_url
+    DOCS_URL                 = var.docs_url
+    APPSYNC_REALTIME_URL     = var.appsync_realtime_url
+    ECR_REPOSITORY_URL       = var.ecr_repository_url
+    AWS_ACCOUNT_ID           = var.account_id
+    NODE_OPTIONS             = "--enable-source-maps"
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by
@@ -132,6 +121,25 @@ locals {
     }
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
+    }
+    # computer-manager is the only handler that consumes ECS/EFS task
+    # config from packages/api/src/lib/computers/runtime-control.ts.
+    # Scoping the COMPUTER_RUNTIME_* variables here (instead of in
+    # local.common_env_vars) keeps the per-Lambda env-var payload under
+    # the AWS 4KB hard limit — they were previously dumped into every
+    # handler and pushed ~70 Lambdas over quota.
+    "computer-manager" = {
+      COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
+      COMPUTER_RUNTIME_CLUSTER_ARN        = var.computer_runtime_cluster_arn
+      COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
+      COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
+      COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
+      COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
+      COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
+      COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
+      COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
+      COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
+      COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
     }
     "mcp-context-engine" = {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
