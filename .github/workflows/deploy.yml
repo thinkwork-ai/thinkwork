@@ -613,10 +613,16 @@ jobs:
   flue-smoke-test:
     name: Flue Smoke Test
     needs: [update-agentcore-runtimes]
-    if: >-
-      always()
-      && needs.update-agentcore-runtimes.result == 'success'
-      && env.STAGE == 'dev'
+    # IMPORTANT: do NOT add `&& env.STAGE == 'dev'` here. The `env`
+    # context is unavailable at job-level `if:` evaluation time on
+    # GitHub-hosted runners — adding it silently fails the ENTIRE
+    # workflow at startup with `jobs: []` and a 0s duration. Caught
+    # the hard way 2026-05-05 when two deploys (after PR #827 and
+    # PR #830 merged) blew up before any job ran. The wrapper script
+    # `scripts/post-deploy-smoke-flue.sh` is the stage gate: it
+    # refuses to run when STAGE != dev unless SMOKE_AGENT_ID + the
+    # other SMOKE_* env vars are explicitly set.
+    if: always() && needs.update-agentcore-runtimes.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
