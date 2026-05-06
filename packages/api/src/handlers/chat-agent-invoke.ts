@@ -13,6 +13,7 @@
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  agents,
   messages,
   threads,
   users,
@@ -107,6 +108,132 @@ interface InvokeEvent {
   messageId?: string;
 }
 
+type ChatInvokeIdentitySource =
+  | "message_sender"
+  | "thread_creator"
+  | "connector_agent_human_pair"
+  | "none";
+
+export interface ChatInvokeIdentity {
+  currentUserId: string;
+  currentUserEmail: string;
+  source: ChatInvokeIdentitySource;
+}
+
+interface MessageSenderRow {
+  sender_id: string | null;
+  sender_type: string | null;
+}
+
+interface ThreadCreatorRow {
+  created_by_id: string | null;
+  created_by_type: string | null;
+}
+
+export interface ChatInvokeIdentityDeps {
+  loadMessageSender(messageId: string): Promise<MessageSenderRow | null>;
+  loadThreadCreator(threadId: string): Promise<ThreadCreatorRow | null>;
+  loadAgentHumanPair(args: {
+    agentId: string;
+    tenantId: string;
+  }): Promise<string | null>;
+  loadUserEmail(userId: string): Promise<string>;
+}
+
+export function createDrizzleChatInvokeIdentityDeps(
+  dbClient = db,
+): ChatInvokeIdentityDeps {
+  return {
+    async loadMessageSender(messageId) {
+      const [msg] = await dbClient
+        .select({
+          sender_id: messages.sender_id,
+          sender_type: messages.sender_type,
+        })
+        .from(messages)
+        .where(eq(messages.id, messageId));
+      return msg ?? null;
+    },
+    async loadThreadCreator(threadId) {
+      const [thread] = await dbClient
+        .select({
+          created_by_id: threads.created_by_id,
+          created_by_type: threads.created_by_type,
+        })
+        .from(threads)
+        .where(eq(threads.id, threadId));
+      return thread ?? null;
+    },
+    async loadAgentHumanPair({ agentId, tenantId }) {
+      const [agent] = await dbClient
+        .select({ human_pair_id: agents.human_pair_id })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
+      return agent?.human_pair_id ?? null;
+    },
+    async loadUserEmail(userId) {
+      const [u] = await dbClient
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, userId));
+      return u?.email || "";
+    },
+  };
+}
+
+export async function resolveChatInvokeIdentity(
+  args: {
+    threadId: string;
+    tenantId: string;
+    agentId: string;
+    messageId?: string;
+  },
+  deps: ChatInvokeIdentityDeps = createDrizzleChatInvokeIdentityDeps(),
+): Promise<ChatInvokeIdentity> {
+  if (args.messageId) {
+    const msg = await deps.loadMessageSender(args.messageId);
+    if (
+      (msg?.sender_type === "human" || msg?.sender_type === "user") &&
+      msg.sender_id
+    ) {
+      return {
+        currentUserId: msg.sender_id,
+        currentUserEmail: await deps.loadUserEmail(msg.sender_id),
+        source: "message_sender",
+      };
+    }
+  }
+
+  const thread = await deps.loadThreadCreator(args.threadId);
+  if (thread?.created_by_type === "user" && thread.created_by_id) {
+    return {
+      currentUserId: thread.created_by_id,
+      currentUserEmail: await deps.loadUserEmail(thread.created_by_id),
+      source: "thread_creator",
+    };
+  }
+
+  if (thread?.created_by_type === "connector") {
+    const humanPairId = await deps.loadAgentHumanPair({
+      agentId: args.agentId,
+      tenantId: args.tenantId,
+    });
+    if (humanPairId) {
+      return {
+        currentUserId: humanPairId,
+        currentUserEmail: await deps.loadUserEmail(humanPairId),
+        source: "connector_agent_human_pair",
+      };
+    }
+  }
+
+  return {
+    currentUserId: "",
+    currentUserEmail: "",
+    source: "none",
+  };
+}
+
 export async function handler(event: InvokeEvent): Promise<void> {
   const { threadId, tenantId, agentId, userMessage } = event;
   const traceId = getTraceId();
@@ -116,51 +243,24 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
   let turnId: string | undefined;
   try {
-    // 1. Resolve per-invoker identity (message sender → thread creator →
-    //    agent human pair for email only). This is the PER-TURN piece that
-    //    the shared `resolveAgentRuntimeConfig` helper does NOT own — it's
-    //    specific to the triggering chat event.
-    let currentUserEmail = "";
-    let currentUserId = "";
-    if (event.messageId) {
-      const [msg] = await db
-        .select({
-          sender_id: messages.sender_id,
-          sender_type: messages.sender_type,
-        })
-        .from(messages)
-        .where(eq(messages.id, event.messageId));
-      if (
-        (msg?.sender_type === "human" || msg?.sender_type === "user") &&
-        msg.sender_id
-      ) {
-        currentUserId = msg.sender_id;
-        const [u] = await db
-          .select({ email: users.email })
-          .from(users)
-          .where(eq(users.id, msg.sender_id));
-        currentUserEmail = u?.email || "";
-      }
-    }
-    if (!currentUserId) {
-      // Fallback: thread creator
-      const [thread] = await db
-        .select({
-          created_by_id: threads.created_by_id,
-          created_by_type: threads.created_by_type,
-        })
-        .from(threads)
-        .where(eq(threads.id, threadId));
-      if (thread?.created_by_type === "user" && thread.created_by_id) {
-        currentUserId = thread.created_by_id;
-        if (!currentUserEmail) {
-          const [u] = await db
-            .select({ email: users.email })
-            .from(users)
-            .where(eq(users.id, thread.created_by_id));
-          currentUserEmail = u?.email || "";
-        }
-      }
+    // 1. Resolve per-invoker identity. This is the PER-TURN piece that the
+    //    shared `resolveAgentRuntimeConfig` helper does NOT own — it's specific
+    //    to the triggering chat event. Human/user messages and user-created
+    //    threads keep their direct actor. Connector-created threads use the
+    //    target agent's paired human as the trusted user context so Flue receives
+    //    the required user_id without giving generic wakeups a fake invoker.
+    const identity = await resolveChatInvokeIdentity({
+      threadId,
+      tenantId,
+      agentId,
+      messageId: event.messageId,
+    });
+    const currentUserEmail = identity.currentUserEmail;
+    const currentUserId = identity.currentUserId;
+    if (identity.source !== "none") {
+      console.log(
+        `[chat-agent-invoke] resolved current user via ${identity.source}`,
+      );
     }
 
     // 2. Resolve agent runtime config (agent + template + tenant + skills +
@@ -362,9 +462,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
       workspace_tenant_id: tenantId,
       assistant_id: agentId,
       thread_id: threadId,
-      // R15: only the actual human invoker (message sender / thread
-      // creator). Falling back to agent.human_pair_id would hand every
-      // wakeup a fake invoker and bypass the admin-skill refusal.
+      // R15: only the actual human invoker (message sender / thread creator).
+      // Connector-created threads are the narrow exception: they run as the
+      // target agent's paired human so Flue receives a user_id for memory/tools.
+      // Generic wakeup-style runs still do not fall back to human_pair_id.
       user_id: currentUserId || undefined,
       trace_id: traceId,
       message: userMessage,
