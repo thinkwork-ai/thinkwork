@@ -136,6 +136,9 @@ build_handler "job-schedule-manager" \
 build_handler "scheduled-jobs" \
   "$REPO_ROOT/packages/api/src/handlers/scheduled-jobs.ts"
 
+build_handler "connector-poller" \
+  "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------
