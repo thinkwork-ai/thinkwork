@@ -72,22 +72,17 @@ const MESSAGE = process.env.SMOKE_MESSAGE || "What is my name?";
 // any way ("Eric", "Your name is Eric", "you're Eric Odom").
 const EXPECTED_FINGERPRINT = process.env.SMOKE_FINGERPRINT || "Eric";
 
-const threadId = `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const traceId = `smoke-trace-${threadId}`;
+function freshThreadId(): string {
+	return `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
-const payload: Record<string, unknown> = {
-	message: MESSAGE,
-	messages_history: [],
-	assistant_id: AGENT_ID,
-	thread_id: threadId,
-	tenant_id: TENANT_ID,
-	user_id: USER_ID,
-	trace_id: traceId,
-	tenant_slug: TENANT_SLUG,
-	instance_id: INSTANCE_ID,
-	sandbox_interpreter_id: SANDBOX_INTERPRETER_ID,
-	workspace_tenant_id: TENANT_ID,
-};
+interface ScenarioResult {
+	scenario: string;
+	tokens: number;
+	model: string | undefined;
+	contentPreview: string;
+	durationMs: number;
+}
 
 function fail(reason: string, context?: Record<string, unknown>): never {
 	console.error(`[flue-smoke] FAIL: ${reason}`);
@@ -95,12 +90,12 @@ function fail(reason: string, context?: Record<string, unknown>): never {
 	process.exit(1);
 }
 
-async function main(): Promise<void> {
-	console.log(
-		`[flue-smoke] stage=${STAGE} function=${FUNCTION_NAME} agent=${AGENT_ID} thread=${threadId}`,
-	);
-
-	const client = new LambdaClient({ region: REGION });
+async function invokeFlue(
+	client: LambdaClient,
+	scenario: string,
+	payload: Record<string, unknown>,
+	expectedFingerprint: RegExp,
+): Promise<ScenarioResult> {
 	const cmd = new InvokeCommand({
 		FunctionName: FUNCTION_NAME,
 		InvocationType: "RequestResponse",
@@ -115,14 +110,14 @@ async function main(): Promise<void> {
 		const errorPayload = result.Payload
 			? new TextDecoder().decode(result.Payload)
 			: "<no payload>";
-		fail(`Lambda returned FunctionError=${result.FunctionError}`, {
+		fail(`[${scenario}] Lambda returned FunctionError=${result.FunctionError}`, {
 			payload: errorPayload,
 			duration_ms: durationMs,
 		});
 	}
 
 	if (!result.Payload) {
-		fail("Lambda returned no payload (LWA routing or Lambda crash)", {
+		fail(`[${scenario}] Lambda returned no payload (LWA routing or Lambda crash)`, {
 			status_code: result.StatusCode,
 			duration_ms: durationMs,
 		});
@@ -133,7 +128,7 @@ async function main(): Promise<void> {
 	try {
 		response = JSON.parse(responseStr);
 	} catch (err) {
-		fail("Lambda response is not JSON (LWA routing break?)", {
+		fail(`[${scenario}] Lambda response is not JSON (LWA routing break?)`, {
 			raw_response: responseStr.slice(0, 500),
 			parse_error: err instanceof Error ? err.message : String(err),
 			duration_ms: durationMs,
@@ -141,14 +136,14 @@ async function main(): Promise<void> {
 	}
 
 	if (response.error) {
-		fail(`Lambda returned error="${response.error}"`, {
+		fail(`[${scenario}] Lambda returned error="${response.error}"`, {
 			full_response: response,
 			duration_ms: durationMs,
 		});
 	}
 
 	if (response.runtime !== "flue") {
-		fail(`response.runtime is "${response.runtime}", expected "flue"`, {
+		fail(`[${scenario}] response.runtime is "${response.runtime}", expected "flue"`, {
 			full_response: response,
 		});
 	}
@@ -156,34 +151,109 @@ async function main(): Promise<void> {
 	const totalTokens = response.response?.usage?.totalTokens ?? 0;
 	if (totalTokens === 0) {
 		fail(
-			"response.usage.totalTokens is 0 — Bedrock not invoked (silent ValidationException? IAM AccessDenied? pi-agent-core swallow?)",
+			`[${scenario}] response.usage.totalTokens is 0 — Bedrock not invoked (silent ValidationException? IAM AccessDenied? pi-agent-core swallow on malformed history?)`,
 			{ full_response: response, duration_ms: durationMs },
 		);
 	}
 
 	const content = String(response.response?.content ?? "").trim();
 	if (!content) {
-		fail("response.content is empty even though tokens were consumed", {
-			full_response: response,
-			duration_ms: durationMs,
-		});
-	}
-
-	const fingerprintRegex = new RegExp(EXPECTED_FINGERPRINT, "i");
-	if (!fingerprintRegex.test(content)) {
 		fail(
-			`response.content does not contain fingerprint "${EXPECTED_FINGERPRINT}" — workspace prompt loader not pulling USER.md?`,
-			{ content, duration_ms: durationMs },
+			`[${scenario}] response.content is empty even though tokens were consumed`,
+			{ full_response: response, duration_ms: durationMs },
 		);
 	}
 
-	const cost = response.response?.usage?.cost?.total;
+	if (!expectedFingerprint.test(content)) {
+		fail(
+			`[${scenario}] response.content does not match expected fingerprint`,
+			{ content, expected: expectedFingerprint.source, duration_ms: durationMs },
+		);
+	}
+
+	return {
+		scenario,
+		tokens: totalTokens,
+		model: response.response?.model,
+		contentPreview: `${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
+		durationMs,
+	};
+}
+
+async function main(): Promise<void> {
 	console.log(
-		`[flue-smoke] PASS: model=${response.response?.model} tokens=${totalTokens} cost=$${cost ?? "?"} duration_ms=${durationMs}`,
+		`[flue-smoke] stage=${STAGE} function=${FUNCTION_NAME} agent=${AGENT_ID}`,
 	);
-	console.log(
-		`[flue-smoke] content (first 200 chars): ${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
+
+	const client = new LambdaClient({ region: REGION });
+
+	// Scenario 1: fresh thread (zero history) — exercises the workspace
+	// prompt loader, model resolver, IAM, LWA routing.
+	const fresh = await invokeFlue(
+		client,
+		"fresh-thread",
+		{
+			message: MESSAGE,
+			messages_history: [],
+			assistant_id: AGENT_ID,
+			thread_id: freshThreadId(),
+			tenant_id: TENANT_ID,
+			user_id: USER_ID,
+			trace_id: `smoke-trace-${Date.now()}`,
+			tenant_slug: TENANT_SLUG,
+			instance_id: INSTANCE_ID,
+			sandbox_interpreter_id: SANDBOX_INTERPRETER_ID,
+			workspace_tenant_id: TENANT_ID,
+		},
+		new RegExp(EXPECTED_FINGERPRINT, "i"),
 	);
+
+	// Scenario 2: multi-turn (non-empty history) — exercises
+	// `normalizeHistory`'s assistant-message conversion. Pre-fix the
+	// AssistantMessage entry was structurally invalid (string content
+	// vs the required TextContent[] + missing api/provider/model/usage/
+	// stopReason fields), pi-ai's Agent silently swallowed it, and the
+	// turn returned content="" with totalTokens=0. The follow-up
+	// question pins recall: the agent must reference the prior turn's
+	// content. Fingerprint is intentionally generic ("CRM" or
+	// "opportunities") since the model phrases recall variably.
+	const multiTurn = await invokeFlue(
+		client,
+		"multi-turn-history",
+		{
+			message: "What did I just ask you?",
+			messages_history: [
+				{
+					role: "user",
+					content: "What are the last 5 opportunities in the CRM?",
+				},
+				{
+					role: "assistant",
+					content: "Here are the 5 most recent opportunities in the CRM.",
+				},
+			],
+			assistant_id: AGENT_ID,
+			thread_id: freshThreadId(),
+			tenant_id: TENANT_ID,
+			user_id: USER_ID,
+			trace_id: `smoke-trace-${Date.now()}`,
+			tenant_slug: TENANT_SLUG,
+			instance_id: INSTANCE_ID,
+			sandbox_interpreter_id: SANDBOX_INTERPRETER_ID,
+			workspace_tenant_id: TENANT_ID,
+		},
+		// Recall test: any reasonable phrasing of the prior question
+		// will mention CRM or opportunities. If the agent returns
+		// "I don't have prior context" or similar, the regex will fail.
+		/\b(CRM|opportunit(?:y|ies))\b/i,
+	);
+
+	for (const r of [fresh, multiTurn]) {
+		console.log(
+			`[flue-smoke] PASS [${r.scenario}]: model=${r.model} tokens=${r.tokens} duration_ms=${r.durationMs}`,
+		);
+		console.log(`[flue-smoke]   content: ${r.contentPreview}`);
+	}
 }
 
 main().catch((err) => {
