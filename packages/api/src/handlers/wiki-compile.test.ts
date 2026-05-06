@@ -9,9 +9,6 @@ const mocks = vi.hoisted(() => ({
   getCompileJob: vi.fn(),
   writeUserKnowledgePack: vi.fn(),
   loadGooglePlacesClientFromSsm: vi.fn(),
-  recordStep: vi.fn(),
-  recordEvidence: vi.fn(),
-  updateSummary: vi.fn(),
 }));
 
 vi.mock("../lib/wiki/compiler.js", () => ({
@@ -37,12 +34,6 @@ vi.mock("../lib/wiki/google-places-client.js", () => ({
   loadGooglePlacesClientFromSsm: mocks.loadGooglePlacesClientFromSsm,
 }));
 
-vi.mock("../lib/system-workflows/wiki-build.js", () => ({
-  recordWikiBuildWorkflowStep: mocks.recordStep,
-  recordWikiBuildWorkflowEvidence: mocks.recordEvidence,
-  updateWikiBuildWorkflowRunSummary: mocks.updateSummary,
-}));
-
 import { handler } from "./wiki-compile.js";
 
 const job = {
@@ -61,7 +52,7 @@ const job = {
   created_at: new Date("2026-05-02T12:00:00Z"),
 };
 
-describe("wiki-compile handler system workflow adapter", () => {
+describe("wiki-compile handler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadGooglePlacesClientFromSsm.mockResolvedValue(null);
@@ -74,7 +65,7 @@ describe("wiki-compile handler system workflow adapter", () => {
     });
   });
 
-  it("preserves legacy direct invocation without workflow records", async () => {
+  it("runs the compile job by id and returns succeeded", async () => {
     const result = await handler({ jobId: "job-1" });
 
     expect(result).toMatchObject({
@@ -85,75 +76,9 @@ describe("wiki-compile handler system workflow adapter", () => {
     expect(mocks.runJobById).toHaveBeenCalledWith("job-1", {
       googlePlacesClient: null,
     });
-    expect(mocks.recordStep).not.toHaveBeenCalled();
-    expect(mocks.recordEvidence).not.toHaveBeenCalled();
-    expect(mocks.updateSummary).not.toHaveBeenCalled();
   });
 
-  it("records workflow steps and evidence when context is present", async () => {
-    const result = await handler({
-      jobId: "job-1",
-      tenantId: "tenant-1",
-      ownerId: "owner-1",
-      systemWorkflowRunId: "sw-run-1",
-      systemWorkflowExecutionArn: "arn:execution",
-      trigger: "admin",
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      jobId: "job-1",
-      status: "succeeded",
-    });
-    expect(mocks.recordStep).toHaveBeenCalledWith(
-      {
-        tenantId: "tenant-1",
-        runId: "sw-run-1",
-        executionArn: "arn:execution",
-      },
-      expect.objectContaining({
-        nodeId: "ClaimCompileJob",
-        idempotencyKey: "wiki-build:job-1:claim",
-      }),
-    );
-    expect(mocks.recordStep).toHaveBeenCalledWith(
-      {
-        tenantId: "tenant-1",
-        runId: "sw-run-1",
-        executionArn: "arn:execution",
-      },
-      expect.objectContaining({
-        nodeId: "CompilePages",
-        status: "succeeded",
-        idempotencyKey: "wiki-build:job-1:compile",
-      }),
-    );
-    expect(mocks.recordEvidence).toHaveBeenCalledWith(
-      {
-        tenantId: "tenant-1",
-        runId: "sw-run-1",
-        executionArn: "arn:execution",
-      },
-      expect.objectContaining({
-        evidenceType: "compile-summary",
-        idempotencyKey: "wiki-build:job-1:compile-summary",
-      }),
-    );
-    expect(mocks.updateSummary).toHaveBeenCalledWith(
-      {
-        tenantId: "tenant-1",
-        runId: "sw-run-1",
-        executionArn: "arn:execution",
-      },
-      expect.objectContaining({
-        workflow: "wiki-build",
-        jobId: "job-1",
-        ok: true,
-      }),
-    );
-  });
-
-  it("returns a failed gate result and evidence for failed compile jobs", async () => {
+  it("returns failed result with error when compile fails", async () => {
     mocks.runJobById.mockResolvedValue({
       jobId: "job-1",
       status: "failed",
@@ -161,11 +86,7 @@ describe("wiki-compile handler system workflow adapter", () => {
       error: "model output invalid",
     });
 
-    const result = await handler({
-      jobId: "job-1",
-      tenantId: "tenant-1",
-      systemWorkflowRunId: "sw-run-1",
-    });
+    const result = await handler({ jobId: "job-1" });
 
     expect(result).toMatchObject({
       ok: false,
@@ -173,21 +94,6 @@ describe("wiki-compile handler system workflow adapter", () => {
       status: "failed",
       error: "model output invalid",
     });
-    expect(mocks.recordStep).toHaveBeenCalledWith(
-      { tenantId: "tenant-1", runId: "sw-run-1", executionArn: null },
-      expect.objectContaining({
-        nodeId: "ValidateGraph",
-        status: "failed",
-        idempotencyKey: "wiki-build:job-1:quality-gate",
-      }),
-    );
-    expect(mocks.recordEvidence).toHaveBeenCalledWith(
-      { tenantId: "tenant-1", runId: "sw-run-1", executionArn: null },
-      expect.objectContaining({
-        evidenceType: "quality-gates",
-        summary: "Wiki compile status gate failed.",
-      }),
-    );
   });
 
   it("treats already-terminal jobs as idempotent success", async () => {
@@ -196,11 +102,7 @@ describe("wiki-compile handler system workflow adapter", () => {
       status: "succeeded",
     });
 
-    const result = await handler({
-      jobId: "job-1",
-      tenantId: "tenant-1",
-      systemWorkflowRunId: "sw-run-1",
-    });
+    const result = await handler({ jobId: "job-1" });
 
     expect(result).toEqual({
       ok: true,
@@ -208,12 +110,5 @@ describe("wiki-compile handler system workflow adapter", () => {
       status: "already_done",
     });
     expect(mocks.runJobById).not.toHaveBeenCalled();
-    expect(mocks.recordEvidence).toHaveBeenCalledWith(
-      { tenantId: "tenant-1", runId: "sw-run-1", executionArn: null },
-      expect.objectContaining({
-        evidenceType: "compile-summary",
-        summary: "Wiki compile job job-1 already_done.",
-      }),
-    );
   });
 });

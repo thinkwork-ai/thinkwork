@@ -15,7 +15,6 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { enqueueCompileJob } from "../../../lib/wiki/repository.js";
-import { startSystemWorkflow } from "../../../lib/system-workflows/start.js";
 import { assertCanAdminWikiScope } from "./auth.js";
 
 interface CompileWikiNowArgs {
@@ -45,36 +44,14 @@ export const compileWikiNow = async (
       ? args.modelId
       : undefined;
 
-  try {
-    await startSystemWorkflow({
-      workflowId: "wiki-build",
-      tenantId,
-      triggerSource: "graphql",
-      actorId: ctx.auth.principalId ?? null,
-      actorType: ctx.auth.authType,
-      domainRef: { type: "wiki_compile_job", id: job.id },
-      input: {
-        wikiCompileJobId: job.id,
-        ownerId: userId,
-        modelId: modelId ?? null,
-        trigger: job.trigger,
-      },
-    });
-  } catch (err) {
-    if (!isUnconfiguredSystemWorkflow(err)) throw err;
-
+  // Best-effort invoke of the compile Lambda. We don't await because the
+  // dedupe job row gives us our idempotency guarantee; the Lambda handler
+  // can also pick it up via claimNextCompileJob if this invoke fails.
+  invokeWikiCompile(job.id, modelId).catch((invokeErr) => {
     console.warn(
-      `[compileWikiNow] system workflow unavailable, falling back to direct invoke: ${(err as Error)?.message}`,
+      `[compileWikiNow] invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
     );
-    // Best-effort invoke of the compile Lambda. We don't await because the
-    // dedupe job row gives us our idempotency guarantee; the Lambda handler
-    // can also pick it up via claimNextCompileJob if this invoke fails.
-    invokeWikiCompile(job.id, modelId).catch((invokeErr) => {
-      console.warn(
-        `[compileWikiNow] invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
-      );
-    });
-  }
+  });
 
   return {
     id: job.id,
@@ -93,13 +70,6 @@ export const compileWikiNow = async (
     createdAt: job.created_at.toISOString(),
   };
 };
-
-function isUnconfiguredSystemWorkflow(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    err.message.includes("has no configured state machine ARN")
-  );
-}
 
 async function invokeWikiCompile(
   jobId: string,

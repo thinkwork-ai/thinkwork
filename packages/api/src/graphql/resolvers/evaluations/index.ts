@@ -2,11 +2,9 @@
  * GraphQL resolvers for the Evaluations feature (port from maniflow).
  *
  * v1: queries + mutations + a fire-and-forget invocation of the eval-runner
- * Lambda from `startEvalRun`. The live System Workflow adapter now routes
- * new runs through a Standard Step Functions parent, which invokes
- * eval-runner while preserving the GraphQL contract. Subscription wiring
- * lives in subscriptions.graphql; the eval-runner Lambda calls
- * notifyEvalRunUpdate via AppSync after each state change.
+ * Lambda from `startEvalRun`. Subscription wiring lives in
+ * subscriptions.graphql; the eval-runner Lambda calls notifyEvalRunUpdate
+ * via AppSync after each state change.
  */
 
 import type { GraphQLContext } from "../../context.js";
@@ -18,7 +16,6 @@ import {
   agents,
   agentTemplates,
 } from "@thinkwork/database-pg/schema";
-import { startSystemWorkflow } from "../../../lib/system-workflows/start.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -392,23 +389,10 @@ const startEvalRun = async (
     })
     .returning();
 
+  const runId = (run as { id: string }).id;
+
   try {
-    await startSystemWorkflow({
-      workflowId: "evaluation-runs",
-      tenantId: args.tenantId,
-      triggerSource: "graphql",
-      actorId: _ctx.auth.principalId ?? null,
-      actorType: _ctx.auth.authType,
-      domainRef: { type: "eval_run", id: (run as { id: string }).id },
-      input: {
-        evalRunId: (run as { id: string }).id,
-        agentId: args.input.agentId ?? null,
-        agentTemplateId: args.input.agentTemplateId ?? null,
-        model: args.input.model ?? null,
-        categories: args.input.categories ?? [],
-        testCaseIds: args.input.testCaseIds ?? [],
-      },
-    });
+    await invokeEvalRunner(runId, args.input.testCaseIds ?? null);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -418,12 +402,45 @@ const startEvalRun = async (
         completed_at: new Date(),
         error_message: message,
       })
-      .where(eq(evalRuns.id, (run as { id: string }).id));
+      .where(eq(evalRuns.id, runId));
     throw err;
   }
 
   return runToGraphql(run as unknown as Record<string, unknown>, null);
 };
+
+async function invokeEvalRunner(
+  runId: string,
+  testCaseIds: string[] | null,
+): Promise<void> {
+  const fnName =
+    process.env.EVAL_RUNNER_FN ??
+    (process.env.STAGE
+      ? `thinkwork-${process.env.STAGE}-api-eval-runner`
+      : null);
+  if (!fnName) {
+    throw new Error(
+      "EVAL_RUNNER_FN is not configured (set EVAL_RUNNER_FN or STAGE).",
+    );
+  }
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const lambda = new LambdaClient({});
+  const payload: { runId: string; input?: { testCaseIds: string[] } } = {
+    runId,
+  };
+  if (testCaseIds && testCaseIds.length > 0) {
+    payload.input = { testCaseIds };
+  }
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "Event",
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }),
+  );
+}
 
 const cancelEvalRun = async (
   _p: any,
