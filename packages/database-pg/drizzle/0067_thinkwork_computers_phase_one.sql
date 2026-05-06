@@ -7,7 +7,7 @@
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0067_thinkwork_computers_phase_one.sql
 --
 -- creates-column: public.agent_templates.template_kind
--- creates: public.agent_templates_kind_allowed
+-- creates-constraint: public.agent_templates.agent_templates_kind_allowed
 -- creates: public.idx_agent_templates_kind
 -- creates: public.computers
 -- creates: public.computer_tasks
