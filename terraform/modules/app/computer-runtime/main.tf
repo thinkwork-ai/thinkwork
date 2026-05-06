@@ -142,6 +142,7 @@ resource "aws_iam_policy" "manager" {
           "elasticfilesystem:CreateAccessPoint",
           "elasticfilesystem:DescribeAccessPoints",
           "elasticfilesystem:DeleteAccessPoint",
+          "elasticfilesystem:TagResource",
         ]
         Resource = [
           aws_efs_file_system.workspace.arn,
