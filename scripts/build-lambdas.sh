@@ -391,6 +391,9 @@ build_handler "code-factory" \
 build_handler "bootstrap-workspaces" \
   "$REPO_ROOT/packages/api/src/handlers/bootstrap-workspaces.ts"
 
+build_handler "migrate-agents-to-computers" \
+  "$REPO_ROOT/packages/api/src/handlers/migrate-agents-to-computers.ts"
+
 build_handler "agentcore-admin" \
   "$REPO_ROOT/packages/lambda/agentcore-admin.ts"
 

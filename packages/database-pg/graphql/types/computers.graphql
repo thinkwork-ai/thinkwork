@@ -1,0 +1,92 @@
+# ThinkWork Computer domain contracts.
+
+enum ComputerStatus {
+  ACTIVE
+  PROVISIONING
+  FAILED
+  ARCHIVED
+}
+
+enum ComputerDesiredRuntimeStatus {
+  RUNNING
+  STOPPED
+}
+
+enum ComputerRuntimeStatus {
+  PENDING
+  STARTING
+  RUNNING
+  STOPPED
+  FAILED
+  UNKNOWN
+}
+
+type Computer {
+  id: ID!
+  tenantId: ID!
+  ownerUserId: ID!
+  owner: User
+  templateId: ID!
+  template: AgentTemplate
+  name: String!
+  slug: String!
+  status: ComputerStatus!
+  desiredRuntimeStatus: ComputerDesiredRuntimeStatus!
+  runtimeStatus: ComputerRuntimeStatus!
+  runtimeConfig: AWSJSON
+  liveWorkspaceRoot: String
+  efsAccessPointId: String
+  ecsServiceName: String
+  lastHeartbeatAt: AWSDateTime
+  lastActiveAt: AWSDateTime
+  budgetMonthlyCents: Int
+  spentMonthlyCents: Int
+  budgetPausedAt: AWSDateTime
+  budgetPausedReason: String
+  migratedFromAgentId: ID
+  migrationMetadata: AWSJSON
+  createdBy: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateComputerInput {
+  tenantId: ID!
+  ownerUserId: ID!
+  templateId: ID!
+  name: String!
+  slug: String
+  runtimeConfig: AWSJSON
+  budgetMonthlyCents: Int
+  migratedFromAgentId: ID
+  migrationMetadata: AWSJSON
+}
+
+input UpdateComputerInput {
+  name: String
+  slug: String
+  templateId: ID
+  status: ComputerStatus
+  desiredRuntimeStatus: ComputerDesiredRuntimeStatus
+  runtimeStatus: ComputerRuntimeStatus
+  runtimeConfig: AWSJSON
+  liveWorkspaceRoot: String
+  efsAccessPointId: String
+  ecsServiceName: String
+  lastHeartbeatAt: AWSDateTime
+  lastActiveAt: AWSDateTime
+  budgetMonthlyCents: Int
+  spentMonthlyCents: Int
+  budgetPausedReason: String
+}
+
+extend type Query {
+  myComputer: Computer
+  computers(tenantId: ID!, status: ComputerStatus): [Computer!]!
+  computer(id: ID!): Computer
+}
+
+extend type Mutation {
+  createComputer(input: CreateComputerInput!): Computer!
+  updateComputer(id: ID!, input: UpdateComputerInput!): Computer!
+}

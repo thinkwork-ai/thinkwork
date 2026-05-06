@@ -17,6 +17,7 @@ import {
   boolean,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core.js";
@@ -43,6 +44,8 @@ export const agentTemplates = pgTable(
     source: text("source").notNull().default("user"),
     /** Default runtime substrate for agents created from this template. */
     runtime: text("runtime").notNull().default("strands"),
+    /** Template category in the ThinkWork Computer product model. */
+    template_kind: text("template_kind").notNull().default("agent"),
     /** The Bedrock model agents in this template use */
     model: text("model"),
     /** Guardrail assigned to this template (null = inherit tenant default) */
@@ -122,6 +125,11 @@ export const agentTemplates = pgTable(
     index("idx_agent_templates_tenant").on(table.tenant_id),
     index("idx_agent_templates_category").on(table.category),
     index("idx_agent_templates_source").on(table.source),
+    index("idx_agent_templates_kind").on(table.template_kind),
+    check(
+      "agent_templates_kind_allowed",
+      sql`${table.template_kind} IN ('agent','computer')`,
+    ),
   ],
 );
 

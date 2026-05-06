@@ -236,6 +236,7 @@ resource "aws_lambda_function" "handler" {
     "recipe-refresh",
     "agent-skills-list",
     "bootstrap-workspaces",
+    "migrate-agents-to-computers",
     "code-factory",
     "eval-runner",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
@@ -587,6 +588,11 @@ locals {
 
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
+
+    # Phase-one Computer migration. Service-auth only; operator tooling calls
+    # dry-run first and apply only after conflict review.
+    "POST /api/migrations/agents-to-computers"    = "migrate-agents-to-computers"
+    "OPTIONS /api/migrations/agents-to-computers" = "migrate-agents-to-computers"
 
     # Knowledge bases
     "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"

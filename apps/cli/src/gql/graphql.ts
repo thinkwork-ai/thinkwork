@@ -418,6 +418,7 @@ export type AgentTemplate = {
   skills?: Maybe<Scalars['AWSJSON']['output']>;
   slug: Scalars['String']['output'];
   source: Scalars['String']['output'];
+  templateKind: TemplateKind;
   tenantId?: Maybe<Scalars['ID']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
   /**
@@ -813,6 +814,57 @@ export type CompositionFeedbackSummary = {
   total: Scalars['Int']['output'];
 };
 
+export type Computer = {
+  __typename?: 'Computer';
+  budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
+  budgetPausedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  budgetPausedReason?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdBy?: Maybe<Scalars['ID']['output']>;
+  desiredRuntimeStatus: ComputerDesiredRuntimeStatus;
+  ecsServiceName?: Maybe<Scalars['String']['output']>;
+  efsAccessPointId?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  lastActiveAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  liveWorkspaceRoot?: Maybe<Scalars['String']['output']>;
+  migratedFromAgentId?: Maybe<Scalars['ID']['output']>;
+  migrationMetadata?: Maybe<Scalars['AWSJSON']['output']>;
+  name: Scalars['String']['output'];
+  owner?: Maybe<User>;
+  ownerUserId: Scalars['ID']['output'];
+  runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
+  runtimeStatus: ComputerRuntimeStatus;
+  slug: Scalars['String']['output'];
+  spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
+  status: ComputerStatus;
+  template?: Maybe<AgentTemplate>;
+  templateId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum ComputerDesiredRuntimeStatus {
+  Running = 'RUNNING',
+  Stopped = 'STOPPED'
+}
+
+export enum ComputerRuntimeStatus {
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Starting = 'STARTING',
+  Stopped = 'STOPPED',
+  Unknown = 'UNKNOWN'
+}
+
+export enum ComputerStatus {
+  Active = 'ACTIVE',
+  Archived = 'ARCHIVED',
+  Failed = 'FAILED',
+  Provisioning = 'PROVISIONING'
+}
+
 export type ConcurrencySnapshot = {
   __typename?: 'ConcurrencySnapshot';
   byAgent: Array<AgentCount>;
@@ -1013,6 +1065,7 @@ export type CreateAgentTemplateInput = {
   sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug: Scalars['String']['input'];
+  templateKind?: InputMaybe<TemplateKind>;
   tenantId: Scalars['ID']['input'];
   /**
    * Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
@@ -1033,6 +1086,18 @@ export type CreateArtifactInput = {
   threadId?: InputMaybe<Scalars['ID']['input']>;
   title: Scalars['String']['input'];
   type: ArtifactType;
+};
+
+export type CreateComputerInput = {
+  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
+  migratedFromAgentId?: InputMaybe<Scalars['ID']['input']>;
+  migrationMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  name: Scalars['String']['input'];
+  ownerUserId: Scalars['ID']['input'];
+  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  slug?: InputMaybe<Scalars['String']['input']>;
+  templateId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateConnectorInput = {
@@ -1791,6 +1856,7 @@ export type Mutation = {
   createAgentFromTemplate: Agent;
   createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
+  createComputer: Computer;
   createConnector: Connector;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
@@ -1908,6 +1974,7 @@ export type Mutation = {
   updateAgentStatus: Agent;
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
+  updateComputer: Computer;
   updateConnector: Connector;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
@@ -2105,6 +2172,11 @@ export type MutationCreateAgentTemplateArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateComputerArgs = {
+  input: CreateComputerInput;
 };
 
 
@@ -2736,6 +2808,12 @@ export type MutationUpdateArtifactArgs = {
 };
 
 
+export type MutationUpdateComputerArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateComputerInput;
+};
+
+
 export type MutationUpdateConnectorArgs = {
   id: Scalars['ID']['input'];
   input: UpdateConnectorInput;
@@ -2960,6 +3038,8 @@ export type Query = {
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
+  computer?: Maybe<Computer>;
+  computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   connector?: Maybe<Connector>;
   connectorExecution?: Maybe<ConnectorExecution>;
@@ -3014,6 +3094,7 @@ export type Query = {
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
+  myComputer?: Maybe<Computer>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
@@ -3278,6 +3359,17 @@ export type QueryBudgetStatusArgs = {
 export type QueryCompositionFeedbackSummaryArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryComputerArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryComputersArgs = {
+  status?: InputMaybe<ComputerStatus>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4562,6 +4654,11 @@ export type TeamUser = {
   userId: Scalars['ID']['output'];
 };
 
+export enum TemplateKind {
+  Agent = 'AGENT',
+  Computer = 'COMPUTER'
+}
+
 export type TemplateSyncDiff = {
   __typename?: 'TemplateSyncDiff';
   filesAdded: Array<Scalars['String']['output']>;
@@ -5030,6 +5127,7 @@ export type UpdateAgentTemplateInput = {
   sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
+  templateKind?: InputMaybe<TemplateKind>;
   /**
    * Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
    * null to clear; omit to leave unchanged.
@@ -5045,6 +5143,24 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateComputerInput = {
+  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
+  budgetPausedReason?: InputMaybe<Scalars['String']['input']>;
+  desiredRuntimeStatus?: InputMaybe<ComputerDesiredRuntimeStatus>;
+  ecsServiceName?: InputMaybe<Scalars['String']['input']>;
+  efsAccessPointId?: InputMaybe<Scalars['String']['input']>;
+  lastActiveAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  lastHeartbeatAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  liveWorkspaceRoot?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  runtimeStatus?: InputMaybe<ComputerRuntimeStatus>;
+  slug?: InputMaybe<Scalars['String']['input']>;
+  spentMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<ComputerStatus>;
+  templateId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export type UpdateConnectorInput = {

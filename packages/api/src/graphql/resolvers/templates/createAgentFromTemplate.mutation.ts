@@ -31,6 +31,9 @@ export async function createAgentFromTemplate(
     .from(agentTemplates)
     .where(eq(agentTemplates.id, i.templateId));
   if (!agentTemplate) throw new Error("Agent template not found");
+  if (agentTemplate.template_kind !== "agent") {
+    throw new Error("Agents must be created from an Agent Template");
+  }
 
   const config = (agentTemplate.config as any) || {};
   const templateSkills = (agentTemplate.skills as any[]) || [];
@@ -162,8 +165,9 @@ export async function createAgentFromTemplate(
 
   // 7. Regenerate workspace map
   try {
-    const { regenerateWorkspaceMap } =
-      await import("../../../lib/workspace-map-generator.js");
+    const { regenerateWorkspaceMap } = await import(
+      "../../../lib/workspace-map-generator.js"
+    );
     regenerateWorkspaceMap(agent.id).catch((err: unknown) => {
       console.error(
         "[createAgentFromTemplate] Failed to regenerate workspace map:",

@@ -2,6 +2,11 @@
 # A template defines the full capability and security posture for agents
 # it creates: model, guardrail, blocked tools, skills, knowledge bases.
 
+enum TemplateKind {
+  AGENT
+  COMPUTER
+}
+
 type AgentTemplate {
   id: ID!
   tenantId: ID
@@ -12,6 +17,7 @@ type AgentTemplate {
   icon: String
   source: String!
   runtime: AgentRuntime!
+  templateKind: TemplateKind!
   model: String
   guardrailId: ID
   blockedTools: AWSJSON
@@ -138,6 +144,7 @@ input CreateAgentTemplateInput {
   category: String
   icon: String
   runtime: AgentRuntime
+  templateKind: TemplateKind
   model: String
   guardrailId: ID
   blockedTools: AWSJSON
@@ -186,6 +193,7 @@ input UpdateAgentTemplateInput {
   category: String
   icon: String
   runtime: AgentRuntime
+  templateKind: TemplateKind
   model: String
   guardrailId: ID
   blockedTools: AWSJSON

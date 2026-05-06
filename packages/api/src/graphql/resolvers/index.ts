@@ -49,6 +49,11 @@ import {
   quickActionMutations,
 } from "./quick-actions/index.js";
 import { connectorQueries, connectorMutations } from "./connectors/index.js";
+import {
+  computerQueries,
+  computerMutations,
+  computerTypeResolvers,
+} from "./computers/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -79,6 +84,7 @@ export const queryResolvers: Record<string, any> = {
   ...systemWorkflowQueries,
   ...quickActionQueries,
   ...connectorQueries,
+  ...computerQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -109,6 +115,7 @@ export const mutationResolvers: Record<string, any> = {
   ...systemWorkflowMutations,
   ...quickActionMutations,
   ...connectorMutations,
+  ...computerMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
@@ -129,4 +136,5 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   RoutineExecution: routineExecutionTypeResolvers,
   SystemWorkflow: systemWorkflowTypeResolvers,
   SystemWorkflowRun: systemWorkflowRunTypeResolvers,
+  Computer: computerTypeResolvers,
 };
