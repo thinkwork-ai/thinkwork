@@ -54,11 +54,7 @@ export async function applyComputerMigration(
 ): Promise<ComputerMigrationApplyResult> {
   const report = await dryRunComputerMigration(options);
   const blockers = report.groups.filter((group) =>
-    [
-      "multiple_candidates",
-      "existing_computer_conflict",
-      "template_not_computer",
-    ].includes(group.status),
+    ["existing_computer_conflict"].includes(group.status),
   );
   if (blockers.length > 0) {
     throw new ComputerMigrationBlockedError(
@@ -94,10 +90,16 @@ export async function applyComputerMigration(
         runtime_config: agent.runtime_config,
         budget_monthly_cents: agent.budget_monthly_cents,
         spent_monthly_cents: agent.spent_monthly_cents,
+        last_active_at: agent.last_heartbeat_at ?? agent.updated_at,
         migrated_from_agent_id: agent.id,
         migration_metadata: {
           source: "agent_to_computer_phase_one",
           sourceAgentId: agent.id,
+          sourceAgentIds: group.agentIds,
+          delegatedAgentIds: group.agentIds.filter((id) => id !== agent.id),
+          sourceAgentTemplateId: agent.template_id,
+          sourceAgentTemplateKind: agent.template_kind,
+          sourceAgentTemplateName: agent.template_name ?? null,
         },
       })
       .returning({ id: computers.id });

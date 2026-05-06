@@ -146,40 +146,6 @@ export function buildComputerMigrationReport(input: {
       });
       continue;
     }
-    if (sorted.length > 1) {
-      groups.push({
-        tenantId: primary.tenant_id,
-        ownerUserId,
-        owner: ownerSummary(primary),
-        status: "multiple_candidates",
-        severity: "blocker",
-        recommendedAction: "resolve_blocker",
-        applyDisposition: "refuse",
-        primaryAgentId: primary.id,
-        primaryAgent: agentSummary(primary),
-        agentIds: sorted.map((agent) => agent.id),
-        reasons: [
-          "Multiple user-paired Agents exist for one user; resolve before apply",
-        ],
-      });
-      continue;
-    }
-    if (primary.template_kind !== "computer") {
-      groups.push({
-        tenantId: primary.tenant_id,
-        ownerUserId,
-        owner: ownerSummary(primary),
-        status: "template_not_computer",
-        severity: "blocker",
-        recommendedAction: "resolve_blocker",
-        applyDisposition: "refuse",
-        primaryAgentId: primary.id,
-        primaryAgent: agentSummary(primary),
-        agentIds: [primary.id],
-        reasons: ["Source Agent template is not typed as a Computer Template"],
-      });
-      continue;
-    }
     groups.push({
       tenantId: primary.tenant_id,
       ownerUserId,
@@ -190,8 +156,8 @@ export function buildComputerMigrationReport(input: {
       applyDisposition: "create",
       primaryAgentId: primary.id,
       primaryAgent: agentSummary(primary),
-      agentIds: [primary.id],
-      reasons: ["Ready to create one Computer for this user"],
+      agentIds: sorted.map((agent) => agent.id),
+      reasons: migrationReasons(sorted),
     });
   }
 
@@ -201,6 +167,22 @@ export function buildComputerMigrationReport(input: {
     summary: summarize(groups),
     groups,
   };
+}
+
+function migrationReasons(agents: ComputerMigrationAgentCandidate[]): string[] {
+  const [primary, ...delegated] = agents;
+  const reasons = ["Ready to create one Computer for this user"];
+  if (primary?.template_kind !== "computer") {
+    reasons.push(
+      "Source Agent uses a legacy Agent Template and will be cloned as a Computer",
+    );
+  }
+  if (delegated.length > 0) {
+    reasons.push(
+      `${delegated.length} additional user-paired Agent(s) remain as delegated Agents`,
+    );
+  }
+  return reasons;
 }
 
 function ownerSummary(agent: ComputerMigrationAgentCandidate) {
