@@ -24,6 +24,26 @@ export type ConnectorFormSource = Omit<
   config?: unknown;
 };
 
+export type ConnectorTargetOption = {
+  id: string;
+  label: string;
+  description?: string | null;
+};
+
+export type ConnectorAgentTarget = {
+  id: string;
+  name: string;
+  role?: string | null;
+  status?: string | null;
+};
+
+export type ConnectorRoutineTarget = {
+  id: string;
+  name: string;
+  description?: string | null;
+  engine?: string | null;
+};
+
 export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   name: "",
   type: "linear_tracker",
@@ -33,6 +53,21 @@ export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   dispatchTargetType: DispatchTargetType.Agent,
   dispatchTargetId: "",
   enabled: true,
+};
+
+export const LINEAR_TRACKER_STARTER_CONFIG = {
+  provider: "linear",
+  sourceKind: "tracker_issue",
+  issueQuery: {
+    teamKey: "",
+    labels: [],
+    states: ["Todo", "In Progress"],
+  },
+  payload: {
+    includeDescription: true,
+    includeComments: true,
+    includeAttachments: false,
+  },
 };
 
 export function formatConnectorConfig(config: unknown): string {
@@ -47,6 +82,10 @@ export function formatConnectorConfig(config: unknown): string {
   }
 
   return JSON.stringify(config, null, 2);
+}
+
+export function linearTrackerStarterConfigJson(): string {
+  return formatConnectorConfig(LINEAR_TRACKER_STARTER_CONFIG);
 }
 
 export function connectorFormValues(
@@ -66,6 +105,55 @@ export function connectorFormValues(
     dispatchTargetId: source.dispatchTargetId ?? "",
     enabled: source.enabled ?? true,
   };
+}
+
+export function connectorTargetOptions(
+  targetType: DispatchTargetType,
+  agents: ConnectorAgentTarget[],
+  routines: ConnectorRoutineTarget[],
+): ConnectorTargetOption[] {
+  if (targetType === DispatchTargetType.Agent) {
+    return agents.map((agent) => ({
+      id: agent.id,
+      label: agent.name,
+      description: [agent.role, agent.status].filter(Boolean).join(" · "),
+    }));
+  }
+
+  if (targetType === DispatchTargetType.Routine) {
+    return routines
+      .filter((routine) => routine.engine !== "legacy_python")
+      .map((routine) => ({
+        id: routine.id,
+        label: routine.name,
+        description: routine.description,
+      }));
+  }
+
+  return [];
+}
+
+export function shouldUseManualTargetInput({
+  targetType,
+  targetId,
+  targetOptions,
+  manualTargetId,
+}: {
+  targetType: DispatchTargetType;
+  targetId: string;
+  targetOptions: ConnectorTargetOption[];
+  manualTargetId: boolean;
+}): boolean {
+  if (manualTargetId || targetType === DispatchTargetType.HybridRoutine) {
+    return true;
+  }
+
+  if (targetOptions.length === 0) return true;
+
+  return (
+    targetId.trim().length > 0 &&
+    !targetOptions.some((option) => option.id === targetId)
+  );
 }
 
 export function parseConnectorConfig(configJson: string): unknown {
