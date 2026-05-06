@@ -578,6 +578,7 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
     });
 
     expect(result.statusCode).toBe(200);
+    expect(stubLambda.send).toHaveBeenCalledTimes(1);
     expect(sendCalls).toHaveLength(1);
     const call = sendCalls[0]!;
     expect(call.input.FunctionName).toBe("thinkwork-test-api-memory-retain");

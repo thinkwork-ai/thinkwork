@@ -84,7 +84,10 @@ import {
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import { composeSystemPrompt } from "./runtime/system-prompt.js";
-import { retainConversation } from "./runtime/tools/memory-retain-client.js";
+import {
+  retainConversation,
+  type RetainPayloadInput,
+} from "./runtime/tools/memory-retain-client.js";
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import {
   discoverWorkspaceSkills,
@@ -1161,11 +1164,7 @@ export async function handleInvocation(
   // institutional record, so we trade ~tens of ms for guaranteed delivery.
   // Failures are logged but never bubble to the user (retain is best-effort).
   const retainOutcome = await retainConversation({
-    payload: args.payload as {
-      use_memory?: unknown;
-      message?: unknown;
-      messages_history?: unknown;
-    },
+    payload: args.payload as RetainPayloadInput,
     identity,
     env,
     assistantContent: runResult.content,

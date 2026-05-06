@@ -41,11 +41,16 @@ export interface RetainTranscriptEntry {
 }
 
 /**
- * Loose payload shape covering the fields this client cares about. The
- * caller's full payload is passed in unchanged so adding a field here can
- * be flagged by the field-passthrough tests rather than silently dropped
- * by a hand-curated subset dict (see `apply-invocation-env-field-passthrough`
- * institutional learning).
+ * Structural type covering the fields this client reads off the caller's
+ * payload. Declared as `unknown`-typed optionals so handleInvocation can
+ * pass `args.payload` through with a single cast — the actual shape
+ * validation lives at the boundary checks below (use_memory opt-in,
+ * messages_history role/content filter, message string trim).
+ *
+ * Anti-subset-dict guard: callers thread their full payload through to
+ * `buildMemoryRetainRequest` so adding a future field surfaces in the
+ * field-passthrough test (see `apply-invocation-env-field-passthrough`
+ * institutional learning) rather than silently dropping.
  */
 export interface RetainPayloadInput {
   /** Honors `payload.use_memory === true` as opt-in. Anything else (false / missing) skips retain. */
