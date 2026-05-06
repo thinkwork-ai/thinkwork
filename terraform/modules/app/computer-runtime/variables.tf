@@ -19,8 +19,20 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Private subnet IDs for Computer runtime tasks and EFS mount targets"
+  description = "Private subnet IDs for Computer runtime EFS mount targets and VPC endpoints"
   type        = list(string)
+}
+
+variable "task_subnet_ids" {
+  description = "Subnet IDs for Computer runtime ECS tasks. Defaults to subnet_ids."
+  type        = list(string)
+  default     = []
+}
+
+variable "assign_public_ip" {
+  description = "Whether Computer runtime ECS tasks receive a public IP for direct outbound internet access."
+  type        = bool
+  default     = false
 }
 
 variable "api_auth_secret_arn" {

@@ -6,6 +6,11 @@
 # the Computer manager Lambda from database rows.
 ################################################################################
 
+locals {
+  task_subnet_ids  = length(var.task_subnet_ids) > 0 ? var.task_subnet_ids : var.subnet_ids
+  assign_public_ip = var.assign_public_ip ? "ENABLED" : "DISABLED"
+}
+
 resource "aws_ecr_repository" "runtime" {
   name                 = "thinkwork-${var.stage}-computer-runtime"
   image_tag_mutability = "MUTABLE"

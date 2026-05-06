@@ -211,9 +211,19 @@ variable "computer_runtime_efs_file_system_id" {
 }
 
 variable "computer_runtime_subnet_ids" {
-  description = "Private subnets for Computer runtime ECS services"
+  description = "Subnets for Computer runtime ECS services"
   type        = list(string)
   default     = []
+}
+
+variable "computer_runtime_assign_public_ip" {
+  description = "ENABLED or DISABLED for Computer runtime ECS task public IP assignment"
+  type        = string
+  default     = "DISABLED"
+  validation {
+    condition     = contains(["ENABLED", "DISABLED"], var.computer_runtime_assign_public_ip)
+    error_message = "computer_runtime_assign_public_ip must be ENABLED or DISABLED."
+  }
 }
 
 variable "computer_runtime_task_sg_id" {
