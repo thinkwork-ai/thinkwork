@@ -224,6 +224,12 @@ build_handler "brain-agent-write" \
 build_handler "agents-runtime-config" \
   "$REPO_ROOT/packages/api/src/handlers/agents-runtime-config.ts"
 
+build_handler "computer-runtime" \
+  "$REPO_ROOT/packages/api/src/handlers/computer-runtime.ts"
+
+build_handler "computer-manager" \
+  "$REPO_ROOT/packages/api/src/handlers/computer-manager.ts"
+
 # Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
 #   POST /api/plugins/presign    → presigned PUT URL for the zip
 #   POST /api/plugins/upload     → validator + three-phase install saga

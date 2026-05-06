@@ -1,39 +1,45 @@
 ---
 title: Admin — Agent Templates
-description: Reusable agent configuration bundles - runtime, model, built-in tool opt-ins, workspace files, MCP servers, guardrails - plus the explicit sync flow that propagates changes out to linked agents.
+description: Reusable Computer Template and Agent Template bundles - runtime, model, built-in tool opt-ins, workspace files, MCP servers, guardrails - plus the explicit sync flow that propagates changes.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Agent templates are reusable configuration bundles that multiple agents can share. A template defines the default runtime, model, built-in tool opt-ins, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+Templates are reusable configuration bundles for either Computers or delegated Agents. A template defines the default runtime, model, built-in tool opt-ins, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+
+Template kind matters:
+
+- **Computer Templates** create or migrate user-owned [Computers](/concepts/computers/). They describe the durable workspace/orchestrator.
+- **Agent Templates** create delegated managed Agents. They describe reusable workers that Computers, threads, and automations can invoke.
 
 Templates propagate to linked agents via two distinct mechanisms depending on what changed:
 
 - **Configuration fields** (built-in tool opt-ins, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
 - **Workspace files** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, etc.) — propagated via the [workspace overlay](/concepts/agents/workspace-overlay/). Live-class files update on next invocation with no sync step; guardrail-class files require a per-agent **Accept update** review; `USER.md` is rewritten server-side on human reassignment.
 
-This is how fleet-wide configuration gets managed in ThinkWork without having to touch every agent individually.
+This is how fleet-wide configuration gets managed in ThinkWork without having to touch every Computer or delegated Agent individually.
 
 ## The template list
 
 **Route:** `/agent-templates`  
 **File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/index.tsx`
 
-The list is a searchable table showing every template in the tenant:
+The list is a searchable table showing every template in the tenant. The tabs filter by **All**, **Computer Templates**, and **Agent Templates**.
 
 | Column | Notes |
 |---|---|
 | Name | Display name |
 | Description | Short summary |
 | Category | Author-chosen category tag |
+| Kind | Computer Template or Agent Template |
 | Runtime | Default managed runtime for agents created from the template (`Strands` or `Pi`) |
 | Model | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.) |
 | Source | Where the template came from (built-in, tenant-created, imported) |
 | Skill count | How many skills are attached |
 | Published | Badge showing whether the template is publishable to child agents |
-| Action | "Use this template" button that opens a dialog to create an agent |
+| Action | Computer Templates link to Computers; Agent Templates open the create-agent dialog |
 
-The backing query is `AgentTemplatesListQuery`. The create-agent-from-template flow fires `CreateAgentFromTemplateMutation` with the new agent's name, slug, and any optional config overrides.
+The backing query is `AgentTemplatesListQuery`. The create-agent-from-template flow fires `CreateAgentFromTemplateMutation` only for Agent Templates. Computer creation and migration are handled from the Computers surface and migration CLI.
 
 ## The template detail
 
@@ -49,6 +55,7 @@ The detail page has three tabs:
 ### Configuration tab
 
 - **Identity** — name, slug, description, category, publish toggle
+- **Kind** — Computer Template or Agent Template
 - **Runtime selector** — default managed runtime for new agents created from this template: Strands or Pi
 - **Model select** — dropdown backed by the tenant's configured model catalog
 - **System prompt editor** — the prompt inherited by agents created from the template

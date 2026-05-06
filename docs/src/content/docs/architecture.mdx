@@ -74,6 +74,8 @@ External systems and users
     ↓
 Threads
     ↓
+Computers
+    ↓
 Company Brain
     ↓
 Agents
@@ -102,9 +104,17 @@ The default long-term memory setup includes semantic, summarization, user-prefer
 
 See [Company Brain](/concepts/knowledge/).
 
+### Computers
+
+Computers are durable per-user workspaces and orchestration runtimes. A Computer owns the user's live filesystem, runtime status, task queue, and local tool environment. It can answer directly, call local CLIs, or delegate focused work to managed Agents.
+
+In infrastructure terms, Computers add a shared ECS Fargate cluster and encrypted EFS filesystem to the app tier. Each provisioned Computer gets an EFS access point and ECS service reconciled by the internal Computer manager endpoint.
+
+See [Computers](/concepts/computers/).
+
 ### Agents
 
-Agents are the execution layer. They receive a thread plus assembled context, decide what to do, call tools, and produce a response.
+Agents are the delegated execution layer. They receive a thread or Computer-delegated task plus assembled context, decide what to do, call tools, and produce a response.
 
 In managed mode, this execution happens in AgentCore. Strands is the default runtime; Pi is a parallel runtime substrate that individual agents or templates can opt into. The surrounding harness remains ThinkWork's either way. That distinction is important: managed does not mean vendor-hosted.
 
@@ -176,6 +186,7 @@ The app tier is where computation happens. It depends on both lower tiers.
 | AppSync GraphQL API | Real-time subscriptions (WebSocket), used for streaming responses |
 | API Gateway v2 | HTTP queries and mutations, connector webhook ingress |
 | AgentCore runtimes | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore |
+| ECS Fargate + EFS | ThinkWork Computer runtime substrate: lightweight per-user orchestration tasks with persistent workspaces |
 | Connector Lambdas | One per connector (Slack, GitHub, Google) — handles inbound events |
 | Step Functions | Automation runner, routine executor |
 | EventBridge | Triggers for scheduled automations |

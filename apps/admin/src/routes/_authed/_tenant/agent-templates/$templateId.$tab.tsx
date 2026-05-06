@@ -72,7 +72,7 @@ import {
 import { ApiKeyDialog } from "@/components/mcp/ApiKeyDialog";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
-import { AgentRuntime } from "@/gql/graphql";
+import { AgentRuntime, TemplateKind } from "@/gql/graphql";
 
 const VALID_TABS = ["configuration", "workspace", "mcp-servers"] as const;
 type TabSlug = (typeof VALID_TABS)[number];
@@ -165,7 +165,7 @@ function TemplateEditorPage() {
     : "configuration";
 
   useBreadcrumbs([
-    { label: "Agent Templates", href: "/agent-templates" },
+    { label: "Templates", href: "/agent-templates" },
     { label: isNew ? "New Template" : "Edit Template" },
   ]);
 
@@ -177,6 +177,9 @@ function TemplateEditorPage() {
   const [icon, setIcon] = useState("");
   const [model, setModel] = useState("");
   const [runtime, setRuntime] = useState<AgentRuntime>(AgentRuntime.Strands);
+  const [templateKind, setTemplateKind] = useState<TemplateKind>(
+    TemplateKind.Agent,
+  );
   const [templateConfig, setTemplateConfig] = useState<JsonRecord>({});
   const [blockedTools, setBlockedTools] = useState<string[]>([]);
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
@@ -293,6 +296,7 @@ function TemplateEditorPage() {
         icon,
         model,
         runtime,
+        templateKind,
         blockedTools: [...blockedTools].sort(),
         guardrailId,
         sandboxEnabled,
@@ -312,6 +316,7 @@ function TemplateEditorPage() {
       icon,
       model,
       runtime,
+      templateKind,
       blockedTools,
       guardrailId,
       sandboxEnabled,
@@ -339,6 +344,7 @@ function TemplateEditorPage() {
       setIcon(t.icon || "");
       setModel(t.model || "");
       setRuntime(t.runtime ?? AgentRuntime.Strands);
+      setTemplateKind(t.templateKind ?? TemplateKind.Agent);
       setTemplateConfig(parsedConfig);
 
       // blocked tools
@@ -424,6 +430,7 @@ function TemplateEditorPage() {
           icon: t.icon || "",
           model: t.model || "",
           runtime: t.runtime ?? AgentRuntime.Strands,
+          templateKind: t.templateKind ?? TemplateKind.Agent,
           blockedTools: [...parsedBlockedTools].sort(),
           guardrailId: t.guardrailId || null,
           sandboxEnabled: nextSandboxEnabled,
@@ -607,6 +614,7 @@ function TemplateEditorPage() {
             category: category || undefined,
             icon: icon || undefined,
             config,
+            templateKind,
             sandbox: sandboxJson,
             browser: browserJson,
             webSearch: webSearchJson,
@@ -641,6 +649,7 @@ function TemplateEditorPage() {
             category: category || undefined,
             icon: icon || undefined,
             config,
+            templateKind,
             sandbox: sandboxJson,
             browser: browserJson,
             webSearch: webSearchJson,
@@ -777,7 +786,28 @@ function TemplateEditorPage() {
                       placeholder="Customer Support Agent"
                     />
                   </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Kind</Label>
+                      <Select
+                        value={templateKind}
+                        onValueChange={(value) =>
+                          setTemplateKind(value as TemplateKind)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={TemplateKind.Computer}>
+                            Computer
+                          </SelectItem>
+                          <SelectItem value={TemplateKind.Agent}>
+                            Agent
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="space-y-2">
                       <Label>Model</Label>
                       <ModelSelect value={model} onValueChange={setModel} />
@@ -797,7 +827,9 @@ function TemplateEditorPage() {
                           <SelectItem value={AgentRuntime.Strands}>
                             Strands
                           </SelectItem>
-                          <SelectItem value={AgentRuntime.Flue}>Flue</SelectItem>
+                          <SelectItem value={AgentRuntime.Flue}>
+                            Flue
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

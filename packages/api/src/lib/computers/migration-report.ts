@@ -4,8 +4,12 @@ export interface ComputerMigrationAgentCandidate {
   name: string;
   slug: string | null;
   human_pair_id: string | null;
+  human_name?: string | null;
+  human_email?: string | null;
   template_id: string;
   template_kind: string | null;
+  template_name?: string | null;
+  template_slug?: string | null;
   runtime_config: unknown;
   budget_monthly_cents: number | null;
   spent_monthly_cents: number | null;
@@ -33,8 +37,29 @@ export type ComputerMigrationGroupStatus =
 export interface ComputerMigrationGroup {
   tenantId: string;
   ownerUserId: string | null;
+  owner?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
   status: ComputerMigrationGroupStatus;
+  severity: "ready" | "info" | "warning" | "blocker";
+  recommendedAction:
+    | "create_computer"
+    | "skip_existing"
+    | "resolve_blocker"
+    | "leave_as_agent";
+  applyDisposition: "create" | "skip" | "refuse";
   primaryAgentId: string | null;
+  primaryAgent?: {
+    id: string;
+    name: string;
+    slug: string | null;
+    templateId: string;
+    templateName: string | null;
+    templateKind: string | null;
+    lastHeartbeatAt: Date | string | null;
+  } | null;
   agentIds: string[];
   existingComputerId?: string;
   reasons: string[];
@@ -66,8 +91,13 @@ export function buildComputerMigrationReport(input: {
       groups.push({
         tenantId: agent.tenant_id,
         ownerUserId: null,
+        owner: null,
         status: "missing_human_pair",
+        severity: "info",
+        recommendedAction: "leave_as_agent",
+        applyDisposition: "skip",
         primaryAgentId: null,
+        primaryAgent: agentSummary(agent),
         agentIds: [agent.id],
         reasons: ["Agent has no human_pair_id and remains a delegated worker"],
       });
@@ -86,8 +116,13 @@ export function buildComputerMigrationReport(input: {
       groups.push({
         tenantId: primary.tenant_id,
         ownerUserId,
+        owner: ownerSummary(primary),
         status: "already_migrated",
+        severity: "info",
+        recommendedAction: "skip_existing",
+        applyDisposition: "skip",
         primaryAgentId: primary.id,
+        primaryAgent: agentSummary(primary),
         agentIds: sorted.map((agent) => agent.id),
         existingComputerId: existing.id,
         reasons: ["Computer already exists for the selected source Agent"],
@@ -98,8 +133,13 @@ export function buildComputerMigrationReport(input: {
       groups.push({
         tenantId: primary.tenant_id,
         ownerUserId,
+        owner: ownerSummary(primary),
         status: "existing_computer_conflict",
+        severity: "blocker",
+        recommendedAction: "resolve_blocker",
+        applyDisposition: "refuse",
         primaryAgentId: primary.id,
+        primaryAgent: agentSummary(primary),
         agentIds: sorted.map((agent) => agent.id),
         existingComputerId: existing.id,
         reasons: ["User already has an active Computer from another source"],
@@ -110,8 +150,13 @@ export function buildComputerMigrationReport(input: {
       groups.push({
         tenantId: primary.tenant_id,
         ownerUserId,
+        owner: ownerSummary(primary),
         status: "multiple_candidates",
+        severity: "blocker",
+        recommendedAction: "resolve_blocker",
+        applyDisposition: "refuse",
         primaryAgentId: primary.id,
+        primaryAgent: agentSummary(primary),
         agentIds: sorted.map((agent) => agent.id),
         reasons: [
           "Multiple user-paired Agents exist for one user; resolve before apply",
@@ -123,8 +168,13 @@ export function buildComputerMigrationReport(input: {
       groups.push({
         tenantId: primary.tenant_id,
         ownerUserId,
+        owner: ownerSummary(primary),
         status: "template_not_computer",
+        severity: "blocker",
+        recommendedAction: "resolve_blocker",
+        applyDisposition: "refuse",
         primaryAgentId: primary.id,
+        primaryAgent: agentSummary(primary),
         agentIds: [primary.id],
         reasons: ["Source Agent template is not typed as a Computer Template"],
       });
@@ -133,8 +183,13 @@ export function buildComputerMigrationReport(input: {
     groups.push({
       tenantId: primary.tenant_id,
       ownerUserId,
+      owner: ownerSummary(primary),
       status: "ready",
+      severity: "ready",
+      recommendedAction: "create_computer",
+      applyDisposition: "create",
       primaryAgentId: primary.id,
+      primaryAgent: agentSummary(primary),
       agentIds: [primary.id],
       reasons: ["Ready to create one Computer for this user"],
     });
@@ -145,6 +200,27 @@ export function buildComputerMigrationReport(input: {
     dryRun: input.dryRun ?? true,
     summary: summarize(groups),
     groups,
+  };
+}
+
+function ownerSummary(agent: ComputerMigrationAgentCandidate) {
+  if (!agent.human_pair_id) return null;
+  return {
+    id: agent.human_pair_id,
+    name: agent.human_name ?? null,
+    email: agent.human_email ?? null,
+  };
+}
+
+function agentSummary(agent: ComputerMigrationAgentCandidate) {
+  return {
+    id: agent.id,
+    name: agent.name,
+    slug: agent.slug,
+    templateId: agent.template_id,
+    templateName: agent.template_name ?? null,
+    templateKind: agent.template_kind,
+    lastHeartbeatAt: agent.last_heartbeat_at,
   };
 }
 

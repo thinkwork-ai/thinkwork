@@ -144,6 +144,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "computer_runtime_manager" {
+  count      = var.computer_runtime_manager_policy_arn != "" ? 1 : 0
+  role       = aws_iam_role.lambda.name
+  policy_arn = var.computer_runtime_manager_policy_arn
+}
+
 resource "aws_iam_role_policy" "lambda_rds" {
   name = "rds-data-api"
   role = aws_iam_role.lambda.id

@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { registerMcpCommand } from "../src/commands/mcp.js";
 import { registerToolsCommand } from "../src/commands/tools.js";
 import { registerUserCommand } from "../src/commands/user.js";
+import { registerComputerCommand } from "../src/commands/computer.js";
 import { registerPlanCommand } from "../src/commands/plan.js";
 import { registerDeployCommand } from "../src/commands/deploy.js";
 import { registerDestroyCommand } from "../src/commands/destroy.js";
@@ -37,8 +38,17 @@ const ALLOWED_REQUIRED_FLAGS: Array<[string, string]> = [
   // (cli-path-prefix, flag) — see `isAllowed()`.
 ];
 
-function walkAll(program: Command, path: string[] = []): Array<{ path: string; options: Array<{ flags: string; required: boolean; long?: string }> }> {
-  const out: Array<{ path: string; options: Array<{ flags: string; required: boolean; long?: string }> }> = [];
+function walkAll(
+  program: Command,
+  path: string[] = [],
+): Array<{
+  path: string;
+  options: Array<{ flags: string; required: boolean; long?: string }>;
+}> {
+  const out: Array<{
+    path: string;
+    options: Array<{ flags: string; required: boolean; long?: string }>;
+  }> = [];
   const name = program.name();
   const fullPath = name ? [...path, name] : path;
   if (fullPath.length > 0) {
@@ -63,6 +73,7 @@ function registerEverything(): Command {
   registerMcpCommand(program);
   registerToolsCommand(program);
   registerUserCommand(program);
+  registerComputerCommand(program);
   registerPlanCommand(program);
   registerDeployCommand(program);
   registerDestroyCommand(program);
@@ -105,16 +116,17 @@ describe("interactive fallback contract", () => {
           !isAllowed(cmd.path, o.long),
       ),
     );
-    expect(violations, violationMessage(violations, "--tenant")).toHaveLength(0);
+    expect(violations, violationMessage(violations, "--tenant")).toHaveLength(
+      0,
+    );
   });
 
   it("no command has ANY required option without an ALLOWED_REQUIRED_FLAGS entry", () => {
-    const violations = tree
-      .flatMap((cmd) =>
-        cmd.options
-          .filter((o) => o.required && !isAllowed(cmd.path, o.long))
-          .map((o) => ({ path: cmd.path, flag: o.long ?? o.flags })),
-      );
+    const violations = tree.flatMap((cmd) =>
+      cmd.options
+        .filter((o) => o.required && !isAllowed(cmd.path, o.long))
+        .map((o) => ({ path: cmd.path, flag: o.long ?? o.flags })),
+    );
     expect(
       violations,
       `Found required options without an allowlist entry. Either make them .option (with a resolver/prompt fallback) or add to ALLOWED_REQUIRED_FLAGS:\n${JSON.stringify(violations, null, 2)}`,
@@ -123,7 +135,10 @@ describe("interactive fallback contract", () => {
 });
 
 function violationMessage(
-  violations: Array<{ path: string; options: Array<{ flags: string; required: boolean }> }>,
+  violations: Array<{
+    path: string;
+    options: Array<{ flags: string; required: boolean }>;
+  }>,
   flag: string,
 ): string {
   if (violations.length === 0) return "";

@@ -1,18 +1,20 @@
 ---
 title: Admin — Agents
-description: The agent roster plus workspace, runtime, template, Company Brain, and automation configuration. How to create, configure, and iterate on agents in the admin web app.
+description: The delegated-agent roster plus runtime, template, Company Brain, and automation configuration. Computers own user workspaces; Agents provide reusable managed-worker capabilities.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Agents surface is where operators and authors build, configure, and iterate on the agents running in a ThinkWork tenant. It covers the full agent lifecycle: listing the roster, creating new agents from templates, and opening each agent workspace/configuration view.
+The Agents surface is where operators and authors build, configure, and iterate on delegated workers in a ThinkWork tenant. Computers are the primary per-user workspace/orchestrator surface; Agents are reusable managed workers that Computers, threads, automations, or operators can invoke for focused work.
+
+For user-owned runtime state, persistent workspace files, and migration from old user-paired Agents, use [Admin — Computers](/applications/admin/computers/).
 
 ## The agent list
 
 **Route:** `/agents`  
 **File:** `apps/admin/src/routes/_authed/_tenant/agents/index.tsx`
 
-The list is a `DataTable` with search, sort, and a pair of top-right buttons: **New Agent** (opens a dialog) and **Invite BYOB** (creates an invite token for a bring-your-own-runtime agent; see [Agent Invites](/applications/admin/agent-invites/)).
+The list is a `DataTable` with search, sort, and a pair of top-right buttons: **New Managed Agent** (opens a dialog) and **Invite BYOB** (creates an invite token for a bring-your-own-runtime agent; see [Agent Invites](/applications/admin/agent-invites/)).
 
 Each row carries:
 
@@ -40,7 +42,7 @@ The runtime selector controls which managed AgentCore runtime executes the agent
 
 When the operator chooses a template, the dialog uses that template's default runtime as the starting value. Operators can still override it per agent. See [Runtime Selection](/concepts/agents/runtime-selection/) for the model.
 
-Most operators create agents from templates rather than from scratch — see [Agent Templates](/applications/admin/agent-templates/).
+Most operators create agents from Agent Templates rather than from scratch. Computer Templates create or migrate Computers instead — see [Agent Templates](/applications/admin/agent-templates/).
 
 ## The agent detail page
 
@@ -164,13 +166,14 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 
 ## Workflows
 
-### Create a new agent from a template
+### Create a new delegated agent from a template
 
 1. Open [Agent Templates](/applications/admin/agent-templates/)
-2. Click "Use this template" on the template row
-3. Fill the name, slug, and any config overrides
-4. Submit — the new agent is created with the template's skills, KB assignments, MCP servers, and guardrails
-5. Land on the new agent's detail page
+2. Filter to Agent Templates
+3. Click "Use this template" on the template row
+4. Fill the name, slug, and any config overrides
+5. Submit — the new agent is created with the template's skills, KB assignments, MCP servers, and guardrails
+6. Land on the new agent's detail page
 
 ### Iterate on an existing agent
 
@@ -197,6 +200,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ## Related pages
 
 - [Agent Templates](/applications/admin/agent-templates/) — reusable bundles + explicit sync flow
+- [Computers](/applications/admin/computers/) — durable per-user workspace and runtime surface
 - [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi managed-runtime routing
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from

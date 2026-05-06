@@ -7,8 +7,12 @@ const BASE_AGENT = {
   name: "Eric's Agent",
   slug: "eric-agent",
   human_pair_id: "user-1",
+  human_name: "Eric Odom",
+  human_email: "eric@example.com",
   template_id: "template-1",
   template_kind: "computer",
+  template_name: "Founder Computer",
+  template_slug: "founder-computer",
   runtime_config: null,
   budget_monthly_cents: null,
   spent_monthly_cents: 0,
@@ -28,8 +32,21 @@ describe("buildComputerMigrationReport", () => {
     expect(report.summary.ready).toBe(1);
     expect(report.groups[0]).toMatchObject({
       ownerUserId: "user-1",
+      owner: {
+        id: "user-1",
+        name: "Eric Odom",
+        email: "eric@example.com",
+      },
       status: "ready",
+      severity: "ready",
+      recommendedAction: "create_computer",
+      applyDisposition: "create",
       primaryAgentId: "agent-1",
+      primaryAgent: {
+        id: "agent-1",
+        name: "Eric's Agent",
+        templateName: "Founder Computer",
+      },
     });
   });
 
@@ -50,6 +67,9 @@ describe("buildComputerMigrationReport", () => {
     expect(report.summary.multiple_candidates).toBe(1);
     expect(report.groups[0]).toMatchObject({
       status: "multiple_candidates",
+      severity: "blocker",
+      recommendedAction: "resolve_blocker",
+      applyDisposition: "refuse",
       primaryAgentId: "agent-2",
       agentIds: ["agent-2", "agent-1"],
     });
@@ -73,6 +93,9 @@ describe("buildComputerMigrationReport", () => {
     expect(report.summary.already_migrated).toBe(1);
     expect(report.groups[0]).toMatchObject({
       status: "already_migrated",
+      severity: "info",
+      recommendedAction: "skip_existing",
+      applyDisposition: "skip",
       existingComputerId: "computer-1",
     });
   });
@@ -86,5 +109,10 @@ describe("buildComputerMigrationReport", () => {
 
     expect(report.summary.template_not_computer).toBe(1);
     expect(report.groups[0]?.reasons[0]).toMatch(/not typed/);
+    expect(report.groups[0]).toMatchObject({
+      severity: "blocker",
+      recommendedAction: "resolve_blocker",
+      applyDisposition: "refuse",
+    });
   });
 });

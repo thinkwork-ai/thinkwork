@@ -61,13 +61,24 @@ locals {
     # permission has been a recurring source of silent failures where
     # getChatAgentInvokeFnArn falls back to null and sendMessage loses
     # message_history on the wakeup-processor fallback path.
-    CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
-    ADMIN_URL                = var.admin_url
-    DOCS_URL                 = var.docs_url
-    APPSYNC_REALTIME_URL     = var.appsync_realtime_url
-    ECR_REPOSITORY_URL       = var.ecr_repository_url
-    AWS_ACCOUNT_ID           = var.account_id
-    NODE_OPTIONS             = "--enable-source-maps"
+    CHAT_AGENT_INVOKE_FN_ARN            = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
+    ADMIN_URL                           = var.admin_url
+    DOCS_URL                            = var.docs_url
+    APPSYNC_REALTIME_URL                = var.appsync_realtime_url
+    ECR_REPOSITORY_URL                  = var.ecr_repository_url
+    AWS_ACCOUNT_ID                      = var.account_id
+    COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
+    COMPUTER_RUNTIME_CLUSTER_ARN        = var.computer_runtime_cluster_arn
+    COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
+    COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
+    COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
+    COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
+    COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
+    COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
+    COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
+    COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
+    COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
+    NODE_OPTIONS                        = "--enable-source-maps"
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by
@@ -237,6 +248,8 @@ resource "aws_lambda_function" "handler" {
     "agent-skills-list",
     "bootstrap-workspaces",
     "migrate-agents-to-computers",
+    "computer-runtime",
+    "computer-manager",
     "code-factory",
     "eval-runner",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
@@ -643,6 +656,16 @@ locals {
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
+
+    # ThinkWork Computer runtime callback API. ECS tasks call outbound with
+    # Bearer API_AUTH_SECRET to fetch config, heartbeat, claim one task, append
+    # product/audit events, and complete/fail tasks.
+    "ANY /api/computers/runtime/{proxy+}" = "computer-runtime"
+
+    # ThinkWork Computer manager API. Internal service-auth endpoint used by
+    # admin operations to reconcile per-Computer ECS service desired state.
+    "POST /api/computers/manager"    = "computer-manager"
+    "OPTIONS /api/computers/manager" = "computer-manager"
 
     # Admin-Ops MCP server — single JSON-RPC endpoint. Strands agents
     # (and anyone else) POST with Bearer <tenant-scoped token> issued by
