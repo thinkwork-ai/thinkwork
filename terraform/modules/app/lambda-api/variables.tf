@@ -192,6 +192,78 @@ variable "agentcore_flue_function_arn" {
   default     = ""
 }
 
+variable "computer_runtime_cluster_name" {
+  description = "ECS cluster name for ThinkWork Computer runtime services"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_cluster_arn" {
+  description = "ECS cluster ARN for ThinkWork Computer runtime services"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_efs_file_system_id" {
+  description = "Shared EFS file system ID for Computer live workspaces"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_subnet_ids" {
+  description = "Private subnets for Computer runtime ECS services"
+  type        = list(string)
+  default     = []
+}
+
+variable "computer_runtime_task_sg_id" {
+  description = "Security group for Computer runtime ECS tasks"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_execution_role_arn" {
+  description = "ECS execution role ARN for Computer runtime tasks"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_task_role_arn" {
+  description = "ECS task role ARN for Computer runtime tasks"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_log_group_name" {
+  description = "CloudWatch log group for Computer runtime tasks"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_repository_url" {
+  description = "ECR repository URL for the Computer runtime image"
+  type        = string
+  default     = ""
+}
+
+variable "computer_runtime_default_cpu" {
+  description = "Default Fargate CPU units for Computer runtime tasks"
+  type        = number
+  default     = 256
+}
+
+variable "computer_runtime_default_memory" {
+  description = "Default Fargate memory MB for Computer runtime tasks"
+  type        = number
+  default     = 512
+}
+
+variable "computer_runtime_manager_policy_arn" {
+  description = "IAM policy ARN granting Computer manager access to ECS/EFS runtime resources"
+  type        = string
+  default     = ""
+}
+
 variable "admin_url" {
   description = "Admin app URL (e.g. https://d3li9vbqnhv7w.cloudfront.net)"
   type        = string

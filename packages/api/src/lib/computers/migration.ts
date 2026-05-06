@@ -4,6 +4,8 @@ import {
   agents,
   agentTemplates,
   computers,
+  computerEvents,
+  users,
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import {
@@ -99,6 +101,18 @@ export async function applyComputerMigration(
         },
       })
       .returning({ id: computers.id });
+    await db.insert(computerEvents).values({
+      tenant_id: agent.tenant_id,
+      computer_id: row.id,
+      event_type: "agent_to_computer_migration_applied",
+      level: "info",
+      payload: {
+        sourceAgentId: agent.id,
+        sourceAgentName: agent.name,
+        templateId: agent.template_id,
+        templateName: agent.template_name ?? null,
+      },
+    });
     created.push(row.id);
   }
 
@@ -120,8 +134,12 @@ async function loadUserPairedAgents(tenantId: string) {
       name: agents.name,
       slug: agents.slug,
       human_pair_id: agents.human_pair_id,
+      human_name: users.name,
+      human_email: users.email,
       template_id: agents.template_id,
       template_kind: agentTemplates.template_kind,
+      template_name: agentTemplates.name,
+      template_slug: agentTemplates.slug,
       runtime_config: agents.runtime_config,
       budget_monthly_cents: agents.budget_monthly_cents,
       spent_monthly_cents: agents.spent_monthly_cents,
@@ -131,6 +149,7 @@ async function loadUserPairedAgents(tenantId: string) {
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
+    .leftJoin(users, eq(agents.human_pair_id, users.id))
     .where(
       and(
         eq(agents.tenant_id, tenantId),

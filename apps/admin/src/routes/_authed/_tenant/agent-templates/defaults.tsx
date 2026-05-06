@@ -42,7 +42,7 @@ const DEFAULT_FILES: Record<string, string> = {
 
 function DefaultWorkspacePage() {
   useBreadcrumbs([
-    { label: "Agent Templates", href: "/agent-templates" },
+    { label: "Templates", href: "/agent-templates" },
     { label: "Default Workspace" },
   ]);
 
@@ -52,7 +52,7 @@ function DefaultWorkspacePage() {
         <div>
           <h1 className="text-lg font-semibold">Default Workspace</h1>
           <p className="text-xs text-muted-foreground">
-            Default files for new templates
+            Default workspace files for new Computer and Agent templates
           </p>
         </div>
       }

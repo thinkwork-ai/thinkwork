@@ -224,6 +224,131 @@ export const DeleteAgentBudgetPolicyMutation = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
+// Computers
+// ---------------------------------------------------------------------------
+
+export const ComputersListQuery = graphql(`
+  query ComputersList($tenantId: ID!) {
+    computers(tenantId: $tenantId) {
+      id
+      tenantId
+      ownerUserId
+      owner {
+        id
+        name
+        email
+      }
+      templateId
+      template {
+        id
+        name
+        slug
+        templateKind
+        model
+      }
+      name
+      slug
+      status
+      desiredRuntimeStatus
+      runtimeStatus
+      liveWorkspaceRoot
+      efsAccessPointId
+      ecsServiceName
+      lastHeartbeatAt
+      lastActiveAt
+      budgetMonthlyCents
+      spentMonthlyCents
+      budgetPausedAt
+      budgetPausedReason
+      migratedFromAgentId
+      migrationMetadata
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ComputerDetailQuery = graphql(`
+  query ComputerDetail($id: ID!) {
+    computer(id: $id) {
+      id
+      tenantId
+      ownerUserId
+      owner {
+        id
+        name
+        email
+      }
+      templateId
+      template {
+        id
+        name
+        slug
+        templateKind
+        model
+      }
+      name
+      slug
+      status
+      desiredRuntimeStatus
+      runtimeStatus
+      runtimeConfig
+      liveWorkspaceRoot
+      efsAccessPointId
+      ecsServiceName
+      lastHeartbeatAt
+      lastActiveAt
+      budgetMonthlyCents
+      spentMonthlyCents
+      budgetPausedAt
+      budgetPausedReason
+      migratedFromAgentId
+      migrationMetadata
+      createdBy
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const MyComputerQuery = graphql(`
+  query MyComputer {
+    myComputer {
+      id
+      name
+      slug
+      status
+      desiredRuntimeStatus
+      runtimeStatus
+      liveWorkspaceRoot
+      lastHeartbeatAt
+      lastActiveAt
+    }
+  }
+`);
+
+export const UpdateComputerMutation = graphql(`
+  mutation UpdateComputer($id: ID!, $input: UpdateComputerInput!) {
+    updateComputer(id: $id, input: $input) {
+      id
+      name
+      status
+      desiredRuntimeStatus
+      runtimeStatus
+      liveWorkspaceRoot
+      efsAccessPointId
+      ecsServiceName
+      lastHeartbeatAt
+      lastActiveAt
+      budgetMonthlyCents
+      spentMonthlyCents
+      budgetPausedReason
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
 // Workspace orchestration reviews — admin GraphQL bindings retired in U5
 // of the workspace-reviews routing refactor. System-agent reviews now
 // surface in Inbox; paired-human reviews live on mobile. Mobile retains
@@ -1980,6 +2105,7 @@ export const AgentTemplatesListQuery = graphql(`
       description
       category
       icon
+      templateKind
       source
       runtime
       model
@@ -2005,6 +2131,7 @@ export const AgentTemplateDetailQuery = graphql(`
       description
       category
       icon
+      templateKind
       source
       runtime
       model
@@ -2031,6 +2158,7 @@ export const CreateAgentTemplateMutation = graphql(`
       id
       name
       slug
+      templateKind
       runtime
     }
   }
@@ -2042,6 +2170,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       id
       name
       slug
+      templateKind
       runtime
       model
       guardrailId

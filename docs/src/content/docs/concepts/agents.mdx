@@ -1,11 +1,17 @@
 ---
 title: Agents
-description: Managed agents run by ThinkWork inside your AWS account, connected agents that bring their own runtime, and the model for how both plug into threads, memory, and connectors.
+description: Delegated managed workers run by ThinkWork inside your AWS account, connected agents that bring their own runtime, and how agents plug into Computers, threads, memory, and connectors.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent in ThinkWork is the harness's decision-making layer — a named entity that receives messages in a thread and produces responses. Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security operating guarantees land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
+An agent in ThinkWork is now best understood as a **delegated worker**: a named runtime with a defined model, tools, guardrails, and knowledge scope. Agents can still receive messages in threads, but the primary user-owned surface is the [Computer](/concepts/computers/) — a durable per-user workspace and orchestrator that can call tools directly or delegate specialized jobs to agents.
+
+Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security operating guarantees land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
+
+<Aside type="note">
+The product model is shifting from "one user-specific Agent" to "one user-specific Computer plus delegated Agents." Existing user-paired Agents can be migrated into Computers when they are backed by Computer Templates and have an unambiguous human owner.
+</Aside>
 
 ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about *who owns the inference runtime*, not about what capabilities the agent has.
 
@@ -46,7 +52,7 @@ Every managed agent is a record that references:
 - Optional **knowledge bases** — documents the agent retrieves from at turn time.
 - Optional **connectors + MCP servers** — external tool surfaces the agent is allowed to use.
 
-The agent itself is thin. Most of what determines how it behaves lives on the **template** it references.
+The agent itself is thin. Most of what determines how it behaves lives on the **template** it references. Computers use the same template system, but Computer Templates describe the owner-facing workspace/orchestrator while Agent Templates describe delegated workers.
 
 ## Templates: where the real configuration lives
 
@@ -54,7 +60,7 @@ Templates are the reuse layer for agent configuration. Rather than setting model
 
 When you update the template, every agent on it picks up the change on the next invocation. That's how ThinkWork handles fleet-wide model rotations, guardrail policy tightening, or budget cap changes: one write, many agents.
 
-See [Templates](/concepts/agents/templates/) for the live-configuration layer and [Skills](/concepts/agents/skills/) for the reusable-capability layer.
+See [Templates](/concepts/agents/templates/) for the live-configuration layer, [Computers](/concepts/computers/) for the durable workspace model, and [Skills](/concepts/agents/skills/) for the reusable-capability layer.
 
 ## How a turn runs (managed path)
 
@@ -121,12 +127,14 @@ Agents don't own threads, memory, or connectors — they *use* them. Every conce
 ## Related pages
 
 - [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore managed-runtime model in detail
+- [Computers](/concepts/computers/) — durable per-user workspace and orchestration model
 - [Runtime Selection](/concepts/agents/runtime-selection/) — choosing Strands or Pi per agent/template
 - [Templates](/concepts/agents/templates/) — fleet-wide configuration (model, guardrail, budget, tool surface)
 - [Workspace Overlay](/concepts/agents/workspace-overlay/) — how agent, template, and tenant workspace files compose
 - [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — async folder-native work through S3 workspace events
 - [Skills](/concepts/agents/skills/) — reusable capability packs the Agent Skills spec portably describes
 - [Admin: Agents](/applications/admin/agents/) — the operator surface for managing agents
+- [Admin: Computers](/applications/admin/computers/) — the operator surface for Computers
 - [Admin: Agent Templates](/applications/admin/agent-templates/) — templates live here
 - [Admin: Agent Invites](/applications/admin/agent-invites/) — how to connect a BYOB runtime to ThinkWork
 

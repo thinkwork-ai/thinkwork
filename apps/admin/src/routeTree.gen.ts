@@ -38,6 +38,7 @@ import { Route as AuthedTenantKnowledgeIndexRouteImport } from "./routes/_authed
 import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from "./routes/_authed/_tenant/knowledge-bases/index";
 import { Route as AuthedTenantInboxIndexRouteImport } from "./routes/_authed/_tenant/inbox/index";
 import { Route as AuthedTenantEvaluationsIndexRouteImport } from "./routes/_authed/_tenant/evaluations/index";
+import { Route as AuthedTenantComputersIndexRouteImport } from "./routes/_authed/_tenant/computers/index";
 import { Route as AuthedTenantCapabilitiesIndexRouteImport } from "./routes/_authed/_tenant/capabilities/index";
 import { Route as AuthedTenantAutomationsIndexRouteImport } from "./routes/_authed/_tenant/automations/index";
 import { Route as AuthedTenantArtifactsIndexRouteImport } from "./routes/_authed/_tenant/artifacts/index";
@@ -56,6 +57,7 @@ import { Route as AuthedTenantKnowledgeContextEngineRouteImport } from "./routes
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from "./routes/_authed/_tenant/knowledge-bases/$kbId";
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from "./routes/_authed/_tenant/inbox/$inboxItemId";
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from "./routes/_authed/_tenant/evaluations/$runId";
+import { Route as AuthedTenantComputersComputerIdRouteImport } from "./routes/_authed/_tenant/computers/$computerId";
 import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from "./routes/_authed/_tenant/capabilities/mcp-servers";
 import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from "./routes/_authed/_tenant/capabilities/builtin-tools";
 import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from "./routes/_authed/_tenant/analytics/performance";
@@ -251,6 +253,12 @@ const AuthedTenantEvaluationsIndexRoute =
     path: "/evaluations/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
+const AuthedTenantComputersIndexRoute =
+  AuthedTenantComputersIndexRouteImport.update({
+    id: "/computers/",
+    path: "/computers/",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
 const AuthedTenantCapabilitiesIndexRoute =
   AuthedTenantCapabilitiesIndexRouteImport.update({
     id: "/",
@@ -356,6 +364,12 @@ const AuthedTenantEvaluationsRunIdRoute =
   AuthedTenantEvaluationsRunIdRouteImport.update({
     id: "/evaluations/$runId",
     path: "/evaluations/$runId",
+    getParentRoute: () => AuthedTenantRoute,
+  } as any);
+const AuthedTenantComputersComputerIdRoute =
+  AuthedTenantComputersComputerIdRouteImport.update({
+    id: "/computers/$computerId",
+    path: "/computers/$computerId",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
 const AuthedTenantCapabilitiesMcpServersRoute =
@@ -630,6 +644,7 @@ export interface FileRoutesByFullPath {
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
   "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
   "/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
@@ -648,6 +663,7 @@ export interface FileRoutesByFullPath {
   "/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/automations/": typeof AuthedTenantAutomationsIndexRoute;
   "/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/computers/": typeof AuthedTenantComputersIndexRoute;
   "/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
   "/inbox/": typeof AuthedTenantInboxIndexRoute;
   "/knowledge-bases/": typeof AuthedTenantKnowledgeBasesIndexRoute;
@@ -715,6 +731,7 @@ export interface FileRoutesByTo {
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
   "/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
   "/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
@@ -733,6 +750,7 @@ export interface FileRoutesByTo {
   "/artifacts": typeof AuthedTenantArtifactsIndexRoute;
   "/automations": typeof AuthedTenantAutomationsIndexRoute;
   "/capabilities": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/computers": typeof AuthedTenantComputersIndexRoute;
   "/evaluations": typeof AuthedTenantEvaluationsIndexRoute;
   "/inbox": typeof AuthedTenantInboxIndexRoute;
   "/knowledge-bases": typeof AuthedTenantKnowledgeBasesIndexRoute;
@@ -806,6 +824,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
   "/_authed/_tenant/capabilities/builtin-tools": typeof AuthedTenantCapabilitiesBuiltinToolsRoute;
   "/_authed/_tenant/capabilities/mcp-servers": typeof AuthedTenantCapabilitiesMcpServersRoute;
+  "/_authed/_tenant/computers/$computerId": typeof AuthedTenantComputersComputerIdRoute;
   "/_authed/_tenant/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/_authed/_tenant/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
   "/_authed/_tenant/knowledge-bases/$kbId": typeof AuthedTenantKnowledgeBasesKbIdRoute;
@@ -824,6 +843,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/_authed/_tenant/automations/": typeof AuthedTenantAutomationsIndexRoute;
   "/_authed/_tenant/capabilities/": typeof AuthedTenantCapabilitiesIndexRoute;
+  "/_authed/_tenant/computers/": typeof AuthedTenantComputersIndexRoute;
   "/_authed/_tenant/evaluations/": typeof AuthedTenantEvaluationsIndexRoute;
   "/_authed/_tenant/inbox/": typeof AuthedTenantInboxIndexRoute;
   "/_authed/_tenant/knowledge-bases/": typeof AuthedTenantKnowledgeBasesIndexRoute;
@@ -896,6 +916,7 @@ export interface FileRouteTypes {
     | "/analytics/performance"
     | "/capabilities/builtin-tools"
     | "/capabilities/mcp-servers"
+    | "/computers/$computerId"
     | "/evaluations/$runId"
     | "/inbox/$inboxItemId"
     | "/knowledge-bases/$kbId"
@@ -914,6 +935,7 @@ export interface FileRouteTypes {
     | "/artifacts/"
     | "/automations/"
     | "/capabilities/"
+    | "/computers/"
     | "/evaluations/"
     | "/inbox/"
     | "/knowledge-bases/"
@@ -981,6 +1003,7 @@ export interface FileRouteTypes {
     | "/analytics/performance"
     | "/capabilities/builtin-tools"
     | "/capabilities/mcp-servers"
+    | "/computers/$computerId"
     | "/evaluations/$runId"
     | "/inbox/$inboxItemId"
     | "/knowledge-bases/$kbId"
@@ -999,6 +1022,7 @@ export interface FileRouteTypes {
     | "/artifacts"
     | "/automations"
     | "/capabilities"
+    | "/computers"
     | "/evaluations"
     | "/inbox"
     | "/knowledge-bases"
@@ -1071,6 +1095,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/analytics/performance"
     | "/_authed/_tenant/capabilities/builtin-tools"
     | "/_authed/_tenant/capabilities/mcp-servers"
+    | "/_authed/_tenant/computers/$computerId"
     | "/_authed/_tenant/evaluations/$runId"
     | "/_authed/_tenant/inbox/$inboxItemId"
     | "/_authed/_tenant/knowledge-bases/$kbId"
@@ -1089,6 +1114,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/artifacts/"
     | "/_authed/_tenant/automations/"
     | "/_authed/_tenant/capabilities/"
+    | "/_authed/_tenant/computers/"
     | "/_authed/_tenant/evaluations/"
     | "/_authed/_tenant/inbox/"
     | "/_authed/_tenant/knowledge-bases/"
@@ -1351,6 +1377,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantEvaluationsIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
+    "/_authed/_tenant/computers/": {
+      id: "/_authed/_tenant/computers/";
+      path: "/computers";
+      fullPath: "/computers/";
+      preLoaderRoute: typeof AuthedTenantComputersIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
     "/_authed/_tenant/capabilities/": {
       id: "/_authed/_tenant/capabilities/";
       path: "/";
@@ -1475,6 +1508,13 @@ declare module "@tanstack/react-router" {
       path: "/evaluations/$runId";
       fullPath: "/evaluations/$runId";
       preLoaderRoute: typeof AuthedTenantEvaluationsRunIdRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/computers/$computerId": {
+      id: "/_authed/_tenant/computers/$computerId";
+      path: "/computers/$computerId";
+      fullPath: "/computers/$computerId";
+      preLoaderRoute: typeof AuthedTenantComputersComputerIdRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/capabilities/mcp-servers": {
@@ -1872,6 +1912,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute;
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute;
   AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute;
+  AuthedTenantComputersComputerIdRoute: typeof AuthedTenantComputersComputerIdRoute;
   AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute;
   AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute;
   AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute;
@@ -1884,6 +1925,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute;
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute;
   AuthedTenantAutomationsIndexRoute: typeof AuthedTenantAutomationsIndexRoute;
+  AuthedTenantComputersIndexRoute: typeof AuthedTenantComputersIndexRoute;
   AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute;
   AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute;
   AuthedTenantKnowledgeBasesIndexRoute: typeof AuthedTenantKnowledgeBasesIndexRoute;
@@ -1938,6 +1980,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,
   AuthedTenantAgentsInvitesRoute: AuthedTenantAgentsInvitesRoute,
   AuthedTenantAgentsNewRoute: AuthedTenantAgentsNewRoute,
+  AuthedTenantComputersComputerIdRoute: AuthedTenantComputersComputerIdRoute,
   AuthedTenantEvaluationsRunIdRoute: AuthedTenantEvaluationsRunIdRoute,
   AuthedTenantInboxInboxItemIdRoute: AuthedTenantInboxInboxItemIdRoute,
   AuthedTenantKnowledgeBasesKbIdRoute: AuthedTenantKnowledgeBasesKbIdRoute,
@@ -1951,6 +1994,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsIndexRoute: AuthedTenantAgentsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
   AuthedTenantAutomationsIndexRoute: AuthedTenantAutomationsIndexRoute,
+  AuthedTenantComputersIndexRoute: AuthedTenantComputersIndexRoute,
   AuthedTenantEvaluationsIndexRoute: AuthedTenantEvaluationsIndexRoute,
   AuthedTenantInboxIndexRoute: AuthedTenantInboxIndexRoute,
   AuthedTenantKnowledgeBasesIndexRoute: AuthedTenantKnowledgeBasesIndexRoute,

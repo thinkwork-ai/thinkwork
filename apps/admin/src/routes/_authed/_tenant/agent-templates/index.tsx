@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Plus, FileText } from "lucide-react";
+import { Search, Plus, FileText, Bot, Monitor } from "lucide-react";
 import { useQuery, useMutation } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -20,11 +20,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AgentTemplatesListQuery,
   CreateAgentFromTemplateMutation,
 } from "@/lib/graphql-queries";
-import { AgentRuntime } from "@/gql/graphql";
+import { AgentRuntime, TemplateKind } from "@/gql/graphql";
 
 export const Route = createFileRoute("/_authed/_tenant/agent-templates/")({
   component: AgentTemplatesPage,
@@ -37,6 +38,7 @@ interface TemplateRow {
   description?: string | null;
   category?: string | null;
   icon?: string | null;
+  templateKind: TemplateKind;
   source: string;
   runtime?: AgentRuntime | null;
   model?: string | null;
@@ -52,9 +54,10 @@ function AgentTemplatesPage() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const navigate = useNavigate();
-  useBreadcrumbs([{ label: "Agent Templates" }]);
+  useBreadcrumbs([{ label: "Templates" }]);
 
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | TemplateKind>("all");
   const [useDialogOpen, setUseDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(
     null,
@@ -78,14 +81,22 @@ function AgentTemplatesPage() {
   const templates: TemplateRow[] = (result.data?.agentTemplates ??
     []) as TemplateRow[];
 
-  // Filter by search
-  const rows = search
-    ? templates.filter(
-        (t) =>
-          t.name.toLowerCase().includes(search.toLowerCase()) ||
-          t.description?.toLowerCase().includes(search.toLowerCase()),
-      )
-    : templates;
+  const agentTemplateCount = templates.filter(
+    (t) => t.templateKind === TemplateKind.Agent,
+  ).length;
+  const computerTemplateCount = templates.filter(
+    (t) => t.templateKind === TemplateKind.Computer,
+  ).length;
+
+  const rows = templates.filter((template) => {
+    const matchesKind =
+      kindFilter === "all" || template.templateKind === kindFilter;
+    const matchesSearch =
+      !search ||
+      template.name.toLowerCase().includes(search.toLowerCase()) ||
+      template.description?.toLowerCase().includes(search.toLowerCase());
+    return matchesKind && matchesSearch;
+  });
 
   const getSkillCount = (skills: any): number => {
     if (!skills) return 0;
@@ -142,6 +153,23 @@ function AgentTemplatesPage() {
           {row.original.icon ? `${row.original.icon} ` : ""}
           {row.original.name}
         </span>
+      ),
+    },
+    {
+      id: "kind",
+      header: "Kind",
+      size: 135,
+      cell: ({ row }) => (
+        <Badge variant="outline" className="gap-1 text-[10px]">
+          {row.original.templateKind === TemplateKind.Computer ? (
+            <Monitor className="h-3 w-3" />
+          ) : (
+            <Bot className="h-3 w-3" />
+          )}
+          {row.original.templateKind === TemplateKind.Computer
+            ? "Computer"
+            : "Agent"}
+        </Badge>
       ),
     },
     {
@@ -218,13 +246,19 @@ function AgentTemplatesPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
+              if (row.original.templateKind === TemplateKind.Computer) {
+                navigate({ to: "/computers" });
+                return;
+              }
               setSelectedTemplate(row.original);
               setNewAgentName("");
               setNewAgentSlug("");
               setUseDialogOpen(true);
             }}
           >
-            Use
+            {row.original.templateKind === TemplateKind.Computer
+              ? "Computers"
+              : "Use"}
           </Button>
         </div>
       ),
@@ -236,8 +270,8 @@ function AgentTemplatesPage() {
       header={
         <>
           <PageHeader
-            title="Agent Templates"
-            description="Define capability and security boundaries for agents"
+            title="Templates"
+            description="Define Computer workplaces and delegated Agent capabilities from typed templates."
             actions={
               <>
                 <Button
@@ -257,6 +291,32 @@ function AgentTemplatesPage() {
             }
           />
           <div className="flex items-center gap-4 mt-4">
+            <Tabs
+              value={kindFilter}
+              onValueChange={(value) =>
+                setKindFilter(value as "all" | TemplateKind)
+              }
+            >
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value={TemplateKind.Computer}>
+                  Computer Templates
+                  {computerTemplateCount ? (
+                    <Badge variant="outline" className="ml-2 text-[10px]">
+                      {computerTemplateCount}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+                <TabsTrigger value={TemplateKind.Agent}>
+                  Agent Templates
+                  {agentTemplateCount ? (
+                    <Badge variant="outline" className="ml-2 text-[10px]">
+                      {agentTemplateCount}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -284,7 +344,6 @@ function AgentTemplatesPage() {
         }
       />
 
-      {/* Create Agent from Template Dialog */}
       <Dialog open={useDialogOpen} onOpenChange={setUseDialogOpen}>
         <DialogContent>
           <DialogHeader>

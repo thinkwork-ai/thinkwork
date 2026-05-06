@@ -1,13 +1,20 @@
 ---
 title: Templates
-description: Agent templates are the configuration reuse layer — one named template holds the model, guardrail, inference params, tool surface, memory behavior, and budget caps that a fleet of agents share. Edit the template; every agent picks up the change on the next invocation.
+description: Templates are the configuration reuse layer for Computers and Agents — one named template holds the model, guardrail, inference params, tool surface, memory behavior, workspace files, and budget caps that a fleet shares.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent template is a named bundle of configuration that multiple agents share — and the harness's mechanism for **fleet coherence**. Model selection, guardrail assignment, inference parameters, tool surface, memory behavior, budget caps — everything that shapes *how* an agent behaves — lives on the template. Agents *reference* templates; they don't copy values. The whole layer exists to implement the **Reliability** operating guarantee at fleet scale (two agents on the same template behave identically because they read identical config) and the **Security** operating guarantee (capability grants and guardrail attachments are template-pinned, so a malicious skill-pack upload can't widen what an agent reaches).
+Templates are named bundles of configuration that Computers and Agents share — and the harness's mechanism for **fleet coherence**. Model selection, guardrail assignment, inference parameters, tool surface, memory behavior, workspace files, budget caps — everything that shapes *how* a Computer or delegated Agent behaves — lives on the template.
 
-That reference is the single most important property of the model: **edit the template once, and every agent using it picks up the change on the next invocation.** Rotating Claude versions across 100 agents is one write. Tightening guardrails across a tenant is one write. Cutting a budget cap in half is one write.
+Templates carry a kind:
+
+- **Computer Template** — starting point for a durable user-owned [Computer](/concepts/computers/).
+- **Agent Template** — starting point for a delegated managed Agent.
+
+Computers and Agents *reference* templates; they don't copy every live value. The whole layer exists to implement the **Reliability** operating guarantee at fleet scale (two runtime entities on the same template behave identically because they read identical config) and the **Security** operating guarantee (capability grants and guardrail attachments are template-pinned, so a malicious skill-pack upload can't widen what the runtime reaches).
+
+That reference is the single most important property of the model: **edit the template once, and every runtime entity using it picks up the live change on the next invocation.** Rotating Claude versions across 100 delegated Agents is one write. Tightening guardrails across a tenant is one write. Cutting a budget cap in half is one write.
 
 This page is the conceptual deep dive: why templates exist in this shape, what a template carries, how inheritance and overrides work, and the fleet-rotation playbook that motivates the whole design. For the admin UI that surfaces templates to operators (the template editor, the sync flow, the linked-agents view), see [Admin: Agent Templates](/applications/admin/agent-templates/).
 

@@ -5,6 +5,7 @@ import {
   MessagesSquare,
   Inbox,
   Bot,
+  Monitor,
   Repeat,
   BarChart3,
   Network,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
+  { label: "Computers", to: "/computers", icon: Monitor },
   { label: "Agents", to: "/agents", icon: Bot },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
   { label: "Credentials", to: "/automations/credentials", icon: KeyRound },
@@ -46,15 +48,12 @@ export function CommandPalette() {
   const { openNewThread, openNewAgent } = useDialog();
 
   // Listen for Cmd+K / Ctrl+K
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    },
-    [],
-  );
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    }
+  }, []);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
@@ -95,7 +94,7 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => runAction(() => openNewAgent())}>
             <Plus className="mr-2 h-4 w-4" />
-            New Agent
+            New Managed Agent
           </CommandItem>
         </CommandGroup>
 

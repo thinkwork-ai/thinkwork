@@ -14,9 +14,10 @@ These features are complete and supported in v1:
 | Feature | Status |
 |---------|--------|
 | Managed agents (AgentCore + Bedrock) | Stable |
+| ThinkWork Computers (product surface + migration foundation) | Beta |
 | Pi managed runtime substrate (parallel AgentCore runtime) | Beta |
 | Connected agents (BYO runtime webhook) | Stable |
-| Agent Templates (fleet model/guardrail config) | Stable |
+| Templates (Computer Templates + Agent Templates) | Stable |
 | Skill packs (SKILL.md → S3 → invoke-time loading) | Stable |
 | Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB) | Stable |
 | AgentCore managed memory with automatic per-turn retention (always on) | Stable |
@@ -82,16 +83,23 @@ An evaluation agent that can perform end-to-end tests using a browser (Nova Act 
 
 **Not in v1 because:** Requires browser automation infrastructure (headless Chrome on ECS) and a more sophisticated eval harness. Post-v1 priority.
 
+### Full Computer-use runtime
+
+The ThinkWork Computer foundation ships the product model, ECS/EFS substrate, runtime callback API, manager skeleton, and migration tooling. Full browser/computer-use automation inside the Computer runtime is still future work.
+
+**Not in v1 because:** It requires hardened browser isolation, profile/credential handling, per-tenant runtime policy, and production evaluation against real web workflows.
+
 ## What's next (active development)
 
 These are the highest-priority items being actively worked on:
 
-1. **Admin runtime selector** — Operator-facing Strands/Pi selection on agents and templates
-2. **Cost tracking** — Aggregated cost reports by tenant, agent, and time period
-3. **Places module** — Location intelligence as an optional Terraform module
-4. **AutoResearch** — Step Functions-based iterative research loop
-5. **End-user web client** — White-label React app for end users
-6. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
+1. **ThinkWork Computers** — Product surface, migration operationalization, ECS/EFS runtime skeleton
+2. **Computer runtime hardening** — CLI/tool install, stronger isolation, runtime reconciliation, browser/computer-use path
+3. **Cost tracking** — Aggregated cost reports by tenant, Computer, Agent, and time period
+4. **Places module** — Location intelligence as an optional Terraform module
+5. **AutoResearch** — Step Functions-based iterative research loop
+6. **End-user web client** — White-label React app for end users
+7. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
 
 ## Contributing
 

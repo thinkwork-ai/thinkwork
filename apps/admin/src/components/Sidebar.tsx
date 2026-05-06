@@ -5,6 +5,7 @@ import {
   MessagesSquare,
   Inbox,
   Bot,
+  Monitor,
   Users,
   Repeat,
   BarChart3,
@@ -25,6 +26,7 @@ import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import {
   InboxItemsListQuery,
   AgentsListQuery,
+  ComputersListQuery,
   ThreadsPagedQuery,
   RoutinesListQuery,
 } from "@/lib/graphql-queries";
@@ -112,6 +114,13 @@ export function AppSidebar() {
   });
   const agentCount = agentsResult.data?.agents?.length ?? 0;
 
+  const [computersResult] = useQuery({
+    query: ComputersListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+  });
+  const computerCount = computersResult.data?.computers?.length ?? 0;
+
   const [threadsResult] = useQuery({
     query: ThreadsPagedQuery,
     variables: {
@@ -194,7 +203,12 @@ export function AppSidebar() {
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/symphony", icon: Network, label: "Symphony" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
-    { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
+    {
+      to: "/computers",
+      icon: Monitor,
+      label: "Computers",
+      badge: computerCount,
+    },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -225,7 +239,8 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
+    { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
+    { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
