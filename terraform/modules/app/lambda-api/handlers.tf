@@ -12,28 +12,26 @@ locals {
 
   # Common environment variables shared by all API handlers
   common_env = {
-    STAGE                       = var.stage
-    DATABASE_URL                = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    DATABASE_SECRET_ARN         = var.graphql_db_secret_arn
-    DATABASE_HOST               = var.db_cluster_endpoint
-    DATABASE_NAME               = var.database_name
-    BUCKET_NAME                 = var.bucket_name
-    USER_POOL_ID                = var.user_pool_id
-    COGNITO_USER_POOL_ID        = var.user_pool_id
-    ADMIN_CLIENT_ID             = var.admin_client_id
-    MOBILE_CLIENT_ID            = var.mobile_client_id
-    COGNITO_MCP_CLIENT_ID       = aws_cognito_user_pool_client.mcp_oauth.id
-    COGNITO_AUTH_BASE_URL       = local.mcp_oauth_cognito_base_url
-    MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
-    MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
-    COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
-    APPSYNC_ENDPOINT            = var.appsync_api_url
-    APPSYNC_API_KEY             = var.appsync_api_key
-    GRAPHQL_API_KEY             = var.appsync_api_key
-    API_AUTH_SECRET             = var.api_auth_secret
-    THINKWORK_API_SECRET        = var.api_auth_secret
-    EMAIL_HMAC_SECRET           = var.api_auth_secret
-    THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    STAGE                  = var.stage
+    DATABASE_URL           = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
+    DATABASE_HOST          = var.db_cluster_endpoint
+    DATABASE_NAME          = var.database_name
+    BUCKET_NAME            = var.bucket_name
+    USER_POOL_ID           = var.user_pool_id
+    COGNITO_USER_POOL_ID   = var.user_pool_id
+    ADMIN_CLIENT_ID        = var.admin_client_id
+    MOBILE_CLIENT_ID       = var.mobile_client_id
+    COGNITO_MCP_CLIENT_ID  = aws_cognito_user_pool_client.mcp_oauth.id
+    COGNITO_AUTH_BASE_URL  = local.mcp_oauth_cognito_base_url
+    COGNITO_APP_CLIENT_IDS = "${var.admin_client_id},${var.mobile_client_id}"
+    APPSYNC_ENDPOINT       = var.appsync_api_url
+    APPSYNC_API_KEY        = var.appsync_api_key
+    GRAPHQL_API_KEY        = var.appsync_api_key
+    API_AUTH_SECRET        = var.api_auth_secret
+    THINKWORK_API_SECRET   = var.api_auth_secret
+    EMAIL_HMAC_SECRET      = var.api_auth_secret
+    THINKWORK_API_URL      = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
@@ -79,26 +77,40 @@ locals {
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
     COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID  = var.company_brain_source_agent_model_id
-    # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
-    # the actual keys live in Secrets Manager and are fetched by
-    # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
-    # are non-secret per-stage config carried as a plain JSON env var so
-    # staging/prod can use different products without a secret rotation.
+  }
+
+  # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
+  # the actual keys live in Secrets Manager and are fetched by
+  # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
+  # are non-secret per-stage config carried as a plain JSON env var so
+  # staging/prod can use different products without a secret rotation.
+  # WWW_URL is only used by stripe-checkout's CANCEL_URL; STRIPE_WELCOME_FROM_EMAIL
+  # is used by the post-checkout email send. Scoped here so the 4KB Lambda
+  # env-var ceiling stays under quota for non-billing handlers.
+  stripe_env = {
     STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials.arn
     STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
     STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
     STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
     WWW_URL                       = var.www_url
-    # Override the welcome email's From: address. Defaults to
-    # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
-    # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
-    STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
+    STRIPE_WELCOME_FROM_EMAIL     = var.stripe_welcome_from_email
+  }
+
+  # MCP OAuth runtime config — only mcp-oauth handler exercises these.
+  mcp_oauth_env = {
+    MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
+    MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
   }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
   handler_extra_env = {
+    "stripe-checkout"     = local.stripe_env
+    "stripe-portal"       = local.stripe_env
+    "stripe-webhook"      = local.stripe_env
+    "stripe-subscription" = local.stripe_env
+    "mcp-oauth"           = local.mcp_oauth_env
     "job-schedule-manager" = {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
