@@ -85,6 +85,7 @@ vi.mock("../graphql/utils.js", () => ({
   agentKnowledgeBases: { agent_id: "agentKnowledgeBases.agent_id" },
   snakeToCamel: (obj: Record<string, unknown>) => obj,
   agentToCamel: (obj: Record<string, unknown>) => obj,
+  templateToCamel: (obj: Record<string, unknown>) => obj,
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
