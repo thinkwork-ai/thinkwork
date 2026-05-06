@@ -276,6 +276,12 @@ variable "docs_url" {
   default     = ""
 }
 
+variable "www_url" {
+  description = "Marketing site URL (e.g. https://thinkwork.ai). Used for Stripe Checkout cancel_url and CORS origin."
+  type        = string
+  default     = ""
+}
+
 variable "stripe_price_ids_json" {
   description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Default is an empty object so Lambdas boot even before pricing is configured."
   type        = string

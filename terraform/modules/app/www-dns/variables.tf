@@ -4,12 +4,17 @@ variable "stage" {
 }
 
 variable "domain" {
-  description = "Apex domain (e.g. thinkwork.ai). The shared ACM cert covers apex + www; docs/admin/api subdomains are gated on the include_* flags below."
+  description = "Apex domain served by the public website (e.g. thinkwork.ai)"
   type        = string
 }
 
 variable "cloudflare_zone_id" {
   description = "Cloudflare zone ID for the apex domain. Non-secret; lives in tfvars."
+  type        = string
+}
+
+variable "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name for the primary www site (e.g. d123.cloudfront.net). Passed in from the static-site module output."
   type        = string
 }
 

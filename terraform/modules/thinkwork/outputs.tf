@@ -148,6 +148,22 @@ output "docs_bucket_name" {
   value       = module.docs_site.bucket_name
 }
 
+# Public website (www)
+output "www_distribution_id" {
+  description = "CloudFront distribution ID for the public website"
+  value       = module.www_site.distribution_id
+}
+
+output "www_distribution_domain" {
+  description = "CloudFront domain for the public website"
+  value       = module.www_site.distribution_domain
+}
+
+output "www_bucket_name" {
+  description = "S3 bucket for the public website assets"
+  value       = module.www_site.bucket_name
+}
+
 # SES inbound email
 output "ses_inbound_zone_id" {
   description = "Route53 hosted zone ID for the email subdomain (null when ses_inbound_domain is not set)"
