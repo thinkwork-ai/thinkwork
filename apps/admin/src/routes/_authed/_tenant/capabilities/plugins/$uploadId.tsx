@@ -22,7 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
 function PluginUploadDetailPage() {
   const { uploadId } = Route.useParams();
   useBreadcrumbs([
-    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills and Tools", href: "/capabilities" },
     { label: "Plugins", href: "/capabilities/plugins" },
     { label: uploadId.slice(0, 8) },
   ]);

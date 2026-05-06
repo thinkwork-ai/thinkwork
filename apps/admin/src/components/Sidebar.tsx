@@ -230,7 +230,7 @@ export function AppSidebar() {
 
   const agentsItems: NavItem[] = [
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
-    { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
+    { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
