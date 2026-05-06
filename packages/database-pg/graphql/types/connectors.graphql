@@ -32,6 +32,31 @@ input ConnectorFilter {
   includeArchived: Boolean
 }
 
+input CreateConnectorInput {
+  tenantId: ID!
+  type: String!
+  name: String!
+  description: String
+  connectionId: ID
+  config: AWSJSON
+  dispatchTargetType: DispatchTargetType!
+  dispatchTargetId: ID!
+  enabled: Boolean
+  createdByType: String
+  createdById: String
+}
+
+input UpdateConnectorInput {
+  type: String
+  name: String
+  description: String
+  connectionId: ID
+  config: AWSJSON
+  dispatchTargetType: DispatchTargetType
+  dispatchTargetId: ID
+  enabled: Boolean
+}
+
 type Connector {
   id: ID!
   tenantId: ID!
@@ -88,4 +113,12 @@ extend type Query {
     cursor: String
   ): [ConnectorExecution!]!
   connectorExecution(id: ID!): ConnectorExecution
+}
+
+extend type Mutation {
+  createConnector(input: CreateConnectorInput!): Connector!
+  updateConnector(id: ID!, input: UpdateConnectorInput!): Connector!
+  pauseConnector(id: ID!): Connector!
+  resumeConnector(id: ID!): Connector!
+  archiveConnector(id: ID!): Connector!
 }
