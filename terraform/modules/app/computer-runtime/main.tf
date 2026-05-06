@@ -75,6 +75,54 @@ resource "aws_security_group" "efs" {
   lifecycle { create_before_destroy = true }
 }
 
+resource "aws_security_group" "vpc_endpoints" {
+  name_prefix = "thinkwork-${var.stage}-computer-vpce-"
+  description = "PrivateLink endpoints for Computer runtime image pulls and logs"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description     = "HTTPS from Computer runtime tasks"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.task.id]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-computer-vpce-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+data "aws_route_table" "computer_subnet" {
+  for_each  = toset(var.subnet_ids)
+  subnet_id = each.value
+}
+
+resource "aws_vpc_endpoint" "interface" {
+  for_each = toset([
+    "ecr.api",
+    "ecr.dkr",
+    "logs",
+  ])
+
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = var.subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "thinkwork-${var.stage}-computer-${replace(each.value, ".", "-")}-vpce" }
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = distinct([for rt in data.aws_route_table.computer_subnet : rt.id])
+
+  tags = { Name = "thinkwork-${var.stage}-computer-s3-vpce" }
+}
+
 resource "aws_efs_mount_target" "workspace" {
   for_each = toset(var.subnet_ids)
 
