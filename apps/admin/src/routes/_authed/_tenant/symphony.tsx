@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
@@ -55,19 +56,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  AgentsListQuery,
   ArchiveConnectorMutation,
   ConnectorsListQuery,
   CreateConnectorMutation,
   PauseConnectorMutation,
   ResumeConnectorMutation,
+  RoutinesListQuery,
   UpdateConnectorMutation,
 } from "@/lib/graphql-queries";
 import {
   connectorFormValues,
   connectorStatusTone,
   connectorTargetLabel,
+  connectorTargetOptions,
   createConnectorInput,
+  linearTrackerStarterConfigJson,
   parseConnectorConfig,
+  shouldUseManualTargetInput,
   updateConnectorInput,
   type ConnectorFormValues,
 } from "@/lib/connector-admin";
@@ -100,6 +106,8 @@ type ConnectorRow = {
 };
 
 type ConnectorAction = (connector: ConnectorRow) => void | Promise<void>;
+
+const MANUAL_TARGET_ID = "__manual_target_id__";
 
 function SymphonyPage() {
   const { tenantId } = useTenant();
@@ -462,18 +470,63 @@ function ConnectorFormDialog({
   connector?: ConnectorRow | null;
   onSubmit: (values: ConnectorFormValues) => Promise<void>;
 }) {
+  const { tenantId } = useTenant();
   const [values, setValues] = useState<ConnectorFormValues>(
     connectorFormValues(connector),
   );
+  const [manualTargetId, setManualTargetId] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [agentsResult] = useQuery({
+    query: AgentsListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId || !open,
+  });
+  const [routinesResult] = useQuery({
+    query: RoutinesListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId || !open,
+  });
 
   useEffect(() => {
     if (open) {
-      setValues(connectorFormValues(connector));
+      const nextValues = connectorFormValues(connector);
+      setValues(nextValues);
+      setManualTargetId(
+        nextValues.dispatchTargetType === DispatchTargetType.HybridRoutine,
+      );
       setError(null);
     }
   }, [connector, open]);
+
+  const targetOptions = useMemo(
+    () =>
+      connectorTargetOptions(
+        values.dispatchTargetType,
+        agentsResult.data?.agents ?? [],
+        routinesResult.data?.routines ?? [],
+      ),
+    [
+      agentsResult.data?.agents,
+      routinesResult.data?.routines,
+      values.dispatchTargetType,
+    ],
+  );
+  const selectedTarget = targetOptions.find(
+    (option) => option.id === values.dispatchTargetId,
+  );
+  const canUseTargetPicker =
+    values.dispatchTargetType !== DispatchTargetType.HybridRoutine &&
+    targetOptions.length > 0;
+  const showManualTargetId = shouldUseManualTargetInput({
+    targetType: values.dispatchTargetType,
+    targetId: values.dispatchTargetId,
+    targetOptions,
+    manualTargetId,
+  });
+  const targetSelectValue = showManualTargetId
+    ? MANUAL_TARGET_ID
+    : selectedTarget?.id;
 
   const patch = <K extends keyof ConnectorFormValues>(
     key: K,
@@ -555,9 +608,14 @@ function ConnectorFormDialog({
               <Field label="Target Type">
                 <Select
                   value={values.dispatchTargetType}
-                  onValueChange={(value) =>
-                    patch("dispatchTargetType", value as DispatchTargetType)
-                  }
+                  onValueChange={(value) => {
+                    const nextType = value as DispatchTargetType;
+                    patch("dispatchTargetType", nextType);
+                    patch("dispatchTargetId", "");
+                    setManualTargetId(
+                      nextType === DispatchTargetType.HybridRoutine,
+                    );
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -575,14 +633,72 @@ function ConnectorFormDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Target ID">
-                <Input
-                  value={values.dispatchTargetId}
-                  onChange={(event) =>
-                    patch("dispatchTargetId", event.target.value)
-                  }
-                  placeholder="Agent or routine id"
-                />
+              <Field
+                label={
+                  manualTargetId || !canUseTargetPicker
+                    ? "Target ID"
+                    : "Target"
+                }
+              >
+                {canUseTargetPicker ? (
+                  <Select
+                    value={targetSelectValue}
+                    onValueChange={(value) => {
+                      if (value === MANUAL_TARGET_ID) {
+                        setManualTargetId(true);
+                        return;
+                      }
+                      setManualTargetId(false);
+                      patch("dispatchTargetId", value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select target..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {targetOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          <span className="flex min-w-0 flex-col items-start gap-0">
+                            <span className="truncate">{option.label}</span>
+                            {option.description && (
+                              <span className="truncate text-xs text-muted-foreground">
+                                {option.description}
+                              </span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={MANUAL_TARGET_ID}>
+                        Manual target ID...
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {showManualTargetId && (
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      value={values.dispatchTargetId}
+                      onChange={(event) =>
+                        patch("dispatchTargetId", event.target.value)
+                      }
+                      placeholder="Agent or routine id"
+                    />
+                    {manualTargetId && canUseTargetPicker && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setManualTargetId(false)}
+                      >
+                        Use picker
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {selectedTarget && !showManualTargetId && (
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                    {selectedTarget.id}
+                  </p>
+                )}
               </Field>
             </div>
 
@@ -594,7 +710,24 @@ function ConnectorFormDialog({
               />
             </Field>
 
-            <Field label="Config JSON">
+            <Field
+              label="Config JSON"
+              action={
+                values.type.trim() === "linear_tracker" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() =>
+                      patch("configJson", linearTrackerStarterConfigJson())
+                    }
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Linear starter
+                  </Button>
+                ) : null
+              }
+            >
               <Textarea
                 value={values.configJson}
                 onChange={(event) => patch("configJson", event.target.value)}
@@ -643,14 +776,19 @@ function ConnectorFormDialog({
 
 function Field({
   label,
+  action,
   children,
 }: {
   label: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        {action}
+      </div>
       {children}
     </div>
   );
