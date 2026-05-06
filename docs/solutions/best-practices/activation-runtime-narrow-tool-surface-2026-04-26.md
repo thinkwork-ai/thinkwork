@@ -6,11 +6,20 @@ module: agentcore-activation
 problem_type: best_practice
 component: agent_runtime
 severity: medium
+status: superseded
+superseded_date: 2026-05-06
+superseded_reason: |
+  The Activation feature and its dedicated AgentCore runtime were decommissioned 2026-05-06
+  via the System Workflows revert arc: PR #845 (Phase 1 wiki+evals), #848 (Phase 2 U2 GraphQL+UI),
+  #851 (Phase 2 U3 lib+lambdas), #855 (Phase 2 U4 Python source). The runtime no longer exists
+  in any stage. Doc retained for historical context — the narrow-tool-surface + privacy-invariant
+  pattern still generalizes to other focused runtimes; just don't treat the agentcore-activation
+  references as live infrastructure.
 applies_when:
   - Building a focused agent runtime whose job is narrower than the full Strands harness
   - Tool output can route user-private material to multiple storage targets
   - A privacy invariant must hold even if the model asks for the wrong target
-tags: [activation, agent-runtime, privacy, narrow-tools, expected-tools]
+tags: [activation, agent-runtime, privacy, narrow-tools, expected-tools, superseded]
 ---
 
 # Activation runtime narrow tool surface and privacy invariant
