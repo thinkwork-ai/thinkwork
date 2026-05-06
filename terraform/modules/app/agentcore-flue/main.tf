@@ -277,6 +277,7 @@ resource "aws_lambda_function" "agentcore_flue" {
       AGENTCORE_FILES_BUCKET = var.bucket_name
       MEMORY_ENGINE          = var.memory_engine
       MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
+      HINDSIGHT_ENDPOINT     = var.hindsight_endpoint
       THINKWORK_API_URL      = var.api_endpoint
       API_AUTH_SECRET        = var.api_auth_secret
       # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist
