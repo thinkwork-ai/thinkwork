@@ -1,8 +1,9 @@
 ---
 title: "feat: Flue runtime production wiring — replaces oh-my-pi vendoring track"
 type: feat
-status: active
+status: completed
 date: 2026-05-03
+completed: 2026-05-05
 origin: docs/brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md
 supersedes:
   - docs/plans/2026-04-26-009-feat-pi-agent-runtime-parallel-substrate-plan.md
@@ -794,40 +795,43 @@ Phases group units by dependency boundaries. A phase boundary is a natural commi
 
 ### Phase 4: First agent + plan completion
 
-- U14. **Deploy first agent (deep researcher) on Flue runtime; capture cold-start latency**
+- U14. **Flue runtime serves a real chat turn end-to-end; smoke gate at deploy time**
 
-**Goal:** Create the deep researcher agent on Flue, exercise every Phase 2 unit (MCP, sub-agent fan-out, Python skill, AgentCore Memory). Capture concrete cold-start latency for `session.task()` sub-agent fan-out (replaces the fabricated "~hundreds of ms" claim from earlier drafts).
+**Goal:** Validate the Flue runtime end-to-end against a real deployed agent. The original framing ("deploy the deep researcher") was never load-bearing — the deep researcher was the example agent the 2026-04-26 brainstorm used to motivate validation, not an actual product priority. This unit closes when Flue runs a real chat turn against any agent in dev AND a deploy-time smoke gate prevents silent regressions.
 
-**Requirements:** R14. (Origin: 2026-04-26 first-agent commitment + Success Criteria.)
+**Requirements:** R14. (Origin: 2026-04-26 first-agent commitment, re-scoped 2026-05-05 — see Re-scope note below.)
 
-**Dependencies:** U2, U3, U6, U7, U8, U9, U16 (the deep agent exercises every Phase 2 unit + worker integration).
+**Dependencies:** U2, U3, U6, U7, U8, U9, U16 (the chat turn exercises every Phase 2 unit + worker integration).
 
 **Files:**
-- Create: agent record / template definition (paths depend on existing seed/config pattern; likely `packages/system-workspace/templates/deep-researcher/AGENTS.md` + a seed script)
-- Modify: `packages/system-workspace/` skill catalog or workspace defaults to include the search MCP and the formatting Python skill
-- Create: `docs/solutions/architecture-patterns/flue-deep-researcher-launch-2026-MM-DD.md` (operator runbook + cold-start measurement log)
+- `packages/api/src/__smoke__/flue-marco-smoke.ts` (NEW; PR #827) — invokes the deployed Flue Lambda with a populated payload mirroring chat-agent-invoke's shape; asserts USER.md fingerprint in `response.content`.
+- `scripts/post-deploy-smoke-flue.sh` (NEW; PR #827) — wrapper following `scripts/post-deploy-smoke-fat-folder.sh` pattern.
+- `.github/workflows/deploy.yml` (modified; PR #827) — `flue-smoke-test` job, `needs: [update-agentcore-runtimes]`, gated `STAGE == 'dev'`.
+- `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` (renamed from `flue-deep-researcher-launch-...`, body rewritten 2026-05-05).
 
 **Approach:**
-- Compose AGENTS.md routing for the deep researcher with sub-agent paths.
-- Pick a deterministic Python skill (result formatting) for safe exercise.
-- Configure MCP search server: pick an existing one wired for some other agent (avoid new connector work).
-- Validate via admin and mobile chat.
-- **Cold-start measurement:** instrument `session.task()` invocations to log `Date.now()` deltas around `StartCodeInterpreterSession` calls; sample N=20+ and report p50/p95/p99 in the launch doc. This is the data the plan needs to make the per-task vs shared-session decision (currently in Open Questions, now answerable).
+- Deploy via the standard merge → `Deploy` workflow path. AgentCore runtime image build + image push handled by `update-agentcore-runtimes` job.
+- A real chat turn against the dev tenant validates: LWA routing, Bedrock IAM, Sonnet 4.5 inference-profile prefix, workspace prompt loader, `pi-agent-core` Agent loop, runtime payload contract.
+- The smoke gate makes silent regressions in any of those layers a deploy-blocker rather than an operator-noticed wrong answer.
+
+**Re-scope note (2026-05-05):**
+
+The original U14 wording bundled "validate Flue works" with "ship the deep researcher agent." On 2026-05-05 the validation half landed via Marco (a Default-template agent) + the shipped smoke gate — Marco answered through Flue with real tokens, the smoke now blocks any deploy where Flue can't answer with USER.md context.
+
+The "deep researcher" half — seeding a specific agent template, instrumenting `session.task()` cold-start, capturing p50/p95/p99, comparing eval scores against Strands — was unwound: the deep researcher was never a real product priority (the project owner did not recognize the name when asked), the cold-start instrumentation requires code that was never written, and the eval comparison requires running AgentCore Evaluations on an agent that does not exist. The 2-week DX comparison + production observation deliverable continues as a separate operational artifact (per the existing Phase 4 follow-up below) and stays out of plan completion.
 
 **Patterns to follow:**
-- Existing agent template seeding patterns in `packages/system-workspace/`.
-- 2026-04-26 brainstorm's first-agent specification.
+- Existing post-deploy smoke at `scripts/post-deploy-smoke-fat-folder.sh` + `packages/api/src/__smoke__/fat-folder-smoke.ts`.
 
 **Test scenarios:**
-- Happy path: end-user chat to deep researcher returns a research summary with sub-agent traces visible. *Covers FR-F2.*
-- Happy path: agent calls search MCP, gets results, calls `session.task()`, returns to top-level loop, calls Python format skill, returns.
-- Edge case: invocation without an MCP token → tool returns auth error gracefully.
-- Integration: token usage, completion success, latency, AgentCore Eval scores captured for this agent.
+- Happy path: deployed Flue Lambda returns non-empty `response.content` containing USER.md fingerprint for Marco (default agent in dev).
+- Edge case: smoke detects empty `response.content` even when token count is non-zero (catches silent ValidationException / AccessDenied that pi-agent-core swallows).
+- Edge case: smoke detects `totalTokens === 0` (catches Bedrock not invoked at all).
+- Edge case: smoke detects fingerprint mismatch (catches workspace prompt loader regressing to the pre-PR-#820 state).
 
 **Verification:**
-- A test conversation with the deep researcher returns useful output through admin and mobile.
-- Cold-start latency p50/p95/p99 captured in the launch doc.
-- Eval scores comparable to an equivalent Strands-routed reference (or divergence noted).
+- Marco answers through Flue with USER.md context (validated 2026-05-05; smoke run captured `Your name is Eric Odom.` 4230 tokens model=us.anthropic.claude-sonnet-4-5-20250929-v1:0).
+- The `flue-smoke-test` GitHub Actions job runs after every deploy and exits 0; failure makes the deploy workflow red.
 
 ---
 
