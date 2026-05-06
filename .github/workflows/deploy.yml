@@ -34,7 +34,6 @@ jobs:
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
       docs: ${{ steps.filter.outputs.docs }}
-      www: ${{ steps.filter.outputs.www }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,8 +62,6 @@ jobs:
               - 'apps/admin/**'
             docs:
               - 'docs/**'
-            www:
-              - 'apps/www/**'
 
       - name: Latest AgentCore container source commit
         id: container-source
@@ -524,7 +521,10 @@ jobs:
           # Cloudflare provider init requires a non-empty token even when
           # the www_dns module has count=0. Fall back to a placeholder when
           # the real secret isn't set — the provider only hits the API if
-          # WWW_DOMAIN is also configured, which enables the module.
+          # WWW_DOMAIN is also configured, which enables the module. NB:
+          # despite the name, www_dns no longer manages the marketing-site
+          # apex/www DNS (extracted to thinkwork-ai/thinkworkwebsite); it
+          # still owns the shared ACM cert + docs/admin/api CNAMEs.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
         run: |
           LAMBDA_DIR=""
@@ -799,41 +799,6 @@ jobs:
       - name: Build & deploy
         run: bash scripts/build-docs.sh ${{ env.STAGE }}
 
-  # ── Build & deploy public website (apps/www) ───────────────────
-  build-www:
-    name: Build & Deploy Www
-    needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform init
-        working-directory: terraform/examples/greenfield
-        run: |
-          terraform init
-          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-
-      - name: Build & deploy
-        run: bash scripts/build-www.sh ${{ env.STAGE }}
-
   # ── Bootstrap workspace + skills ─────────────────────────────────
   # Depends on migration-drift-check so skill-catalog seeding never runs
   # against an unmigrated schema — if a hand-rolled migration is
@@ -915,7 +880,6 @@ jobs:
         migration-drift-check,
         build-admin,
         build-docs,
-        build-www,
         bootstrap,
       ]
     if: always() && !cancelled()
@@ -990,7 +954,6 @@ jobs:
           echo "║"
           echo "║ Admin App:  $(tf_output_raw admin_url || echo 'N/A')"
           echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
-          echo "║ Www Site:   $(tf_output_raw www_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
           echo "║ Hindsight:  $(tf_output_raw hindsight_endpoint || echo 'N/A')"
@@ -1006,6 +969,5 @@ jobs:
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
-          echo "║   Build Www:              ${{ needs.build-www.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"

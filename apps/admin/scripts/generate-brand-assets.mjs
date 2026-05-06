@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Regenerate the admin app brand assets from the shared brain path
-// in apps/www/src/lib/brain-path.mjs so the favicon + sidebar/sign-in
-// logo match the mobile icon and the www/docs favicons.
+// in scripts/lib/brain-path.mjs so the favicon + sidebar/sign-in
+// logo match the mobile icon and the docs favicon (and the
+// extracted marketing site, which keeps its own copy of the same
+// path data).
 //
 // Outputs:
 //   apps/admin/public/favicon.png  — 256x256, width-fill, browser-downscaled
@@ -23,7 +25,7 @@ import {
   BRAIN_PATH_D,
   BRAIN_VIEWBOX,
   BRAIN_GROUP_TRANSFORM,
-} from "../../www/src/lib/brain-path.mjs";
+} from "../../../scripts/lib/brain-path.mjs";
 
 const require = createRequire(import.meta.url);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
