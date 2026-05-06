@@ -33,17 +33,12 @@ import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
-import { activationQueries, activationMutations } from "./activation/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
   tenantCredentialMutations,
   tenantCredentialQueries,
 } from "./tenant-credentials/index.js";
-import {
-  systemWorkflowMutations,
-  systemWorkflowQueries,
-} from "./system-workflows/index.js";
 import {
   quickActionQueries,
   quickActionMutations,
@@ -77,11 +72,9 @@ export const queryResolvers: Record<string, any> = {
   ...skillRunsQueries,
   ...runtimeQueries,
   ...workspaceQueries,
-  ...activationQueries,
   ...brainQueries,
   ...routineQueries,
   ...tenantCredentialQueries,
-  ...systemWorkflowQueries,
   ...quickActionQueries,
   ...connectorQueries,
   ...computerQueries,
@@ -108,11 +101,9 @@ export const mutationResolvers: Record<string, any> = {
   ...wikiMutations,
   ...skillRunsMutations,
   ...workspaceMutations,
-  ...activationMutations,
   ...brainMutations,
   ...routineMutations,
   ...tenantCredentialMutations,
-  ...systemWorkflowMutations,
   ...quickActionMutations,
   ...connectorMutations,
   ...computerMutations,
@@ -123,10 +114,6 @@ import { threadTypeResolvers } from "./threads/types.js";
 import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
-import {
-  systemWorkflowRunTypeResolvers,
-  systemWorkflowTypeResolvers,
-} from "./system-workflows/queries.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
   Agent: agentTypeResolvers,
@@ -134,7 +121,5 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MemoryRecord: memoryRecordTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
-  SystemWorkflow: systemWorkflowTypeResolvers,
-  SystemWorkflowRun: systemWorkflowRunTypeResolvers,
   Computer: computerTypeResolvers,
 };

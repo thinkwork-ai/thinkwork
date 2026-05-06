@@ -17,7 +17,6 @@ import {
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
-  Workflow,
   Network,
 } from "lucide-react";
 import { useQuery } from "urql";
@@ -222,11 +221,6 @@ export function AppSidebar() {
       to: "/automations/webhooks",
       icon: Webhook,
       label: "Webhooks",
-    },
-    {
-      to: "/automations/system-workflows",
-      icon: Workflow,
-      label: "System Workflows",
     },
   ];
 

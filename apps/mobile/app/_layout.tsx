@@ -347,10 +347,6 @@ function RootLayoutNav() {
                 name="chat/index"
                 options={{ headerShown: false }}
               />
-              <Stack.Screen
-                name="activation/index"
-                options={{ headerShown: false }}
-              />
               <Stack.Screen name="threads" />
               <Stack.Screen name="routines/[id]/index" />
               <Stack.Screen name="routines/[id]/runs" />

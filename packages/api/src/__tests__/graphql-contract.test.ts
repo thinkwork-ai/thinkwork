@@ -89,9 +89,6 @@ describe("GraphQL Schema Contract", () => {
 			"webhooks", "webhook",
 			// Artifacts
 			"artifacts", "artifact",
-			// Activation
-			"activationSession", "activationSessionTurns",
-			"activationAutomationCandidates",
 		];
 
 		for (const q of expectedQueries) {
@@ -123,10 +120,6 @@ describe("GraphQL Schema Contract", () => {
 			"deleteMemoryRecord", "updateMemoryRecord",
 			// Inbox
 			"createInboxItem", "approveInboxItem", "rejectInboxItem",
-			// Activation
-			"startActivation", "submitActivationTurn", "checkpointActivationLayer",
-			"applyActivationBundle", "dismissActivationRecommendation",
-			"generateActivationAutomationCandidates",
 		];
 
 		for (const m of expectedMutations) {
