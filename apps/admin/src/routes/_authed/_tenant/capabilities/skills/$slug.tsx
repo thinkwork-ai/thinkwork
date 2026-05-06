@@ -234,7 +234,7 @@ function SkillDetailPage() {
   const [dependencies, setDependencies] = useState<{ slug: string; name: string; installed: boolean }[]>([]);
 
   useBreadcrumbs([
-    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills and Tools", href: "/capabilities" },
     { label: "Skills", href: "/capabilities/skills" },
     { label: skill?.name || slug },
   ]);

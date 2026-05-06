@@ -160,7 +160,7 @@ function McpServersPage() {
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
   useBreadcrumbs([
-    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills and Tools", href: "/capabilities" },
     { label: "MCP Servers" },
   ]);
 
