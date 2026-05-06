@@ -87,8 +87,10 @@ locals {
     STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials.arn
     STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
     STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
-    STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
-    WWW_URL                       = var.www_url
+    # cancel_url is supplied by the client (mobile + marketing site). The
+    # marketing site lives in its own repo since 2026-05-06; the env-var
+    # fallback that pointed at the in-monorepo www_site CloudFront output
+    # was retired with the apps/www extraction.
     # Override the welcome email's From: address. Defaults to
     # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
     # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.

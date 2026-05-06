@@ -289,22 +289,6 @@ variable "docs_certificate_arn" {
 }
 
 # ---------------------------------------------------------------------------
-# Public website (custom domain — optional)
-# ---------------------------------------------------------------------------
-
-variable "www_domain" {
-  description = "Custom domain for the public website (e.g. thinkwork.ai). Leave empty for CloudFront default."
-  type        = string
-  default     = ""
-}
-
-variable "www_certificate_arn" {
-  description = "ACM certificate ARN for the www domain (us-east-1, required for CloudFront custom domains). Covers both the apex and www subdomain."
-  type        = string
-  default     = ""
-}
-
-# ---------------------------------------------------------------------------
 # Admin site (custom domain — optional)
 # ---------------------------------------------------------------------------
 

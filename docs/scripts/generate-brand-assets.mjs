@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Regenerate the docs site brand assets (public/favicon.png + the
 // Starlight site logo at src/assets/logo.png) from the shared brain
-// path in apps/www/src/lib/brain-path.mjs so every surface — docs,
-// www, and mobile — renders from the same source of truth.
+// path in scripts/lib/brain-path.mjs so every surface — docs,
+// admin, mobile, and the (now-extracted) marketing site — renders
+// from the same source of truth.
 //
 // Uses the sharp already installed in docs/node_modules.
 // Run from the repo root:
@@ -19,7 +20,7 @@ import {
   BRAIN_PATH_D,
   BRAIN_VIEWBOX,
   BRAIN_GROUP_TRANSFORM,
-} from "../../apps/www/src/lib/brain-path.mjs";
+} from "../../scripts/lib/brain-path.mjs";
 
 const require = createRequire(import.meta.url);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));

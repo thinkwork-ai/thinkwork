@@ -53,7 +53,7 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 ## Admin web
 
 <p align="center">
-  <img src="./apps/www/public/images/admin/dashboard.png" alt="ThinkWork admin dashboard — agents online, open threads, recent activity, recent threads" width="860" />
+  <img src="./assets/screenshots/admin/dashboard.png" alt="ThinkWork admin dashboard — agents online, open threads, recent activity, recent threads" width="860" />
 </p>
 
 The operator surface. A React SPA at `apps/admin`, authenticated through Cognito and tenant-scoped on every request. Platform operators configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect per-agent memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the [admin docs](https://docs.thinkwork.ai/applications/admin/) for the per-route breakdown.
@@ -61,8 +61,8 @@ The operator surface. A React SPA at `apps/admin`, authenticated through Cognito
 ## Mobile app
 
 <p align="center">
-  <img src="./apps/www/public/images/mobile/threads-list.png" alt="Threads tab in the ThinkWork mobile app" width="280" />
-  <img src="./apps/www/public/images/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a knowledge graph in the ThinkWork mobile app" width="280" />
+  <img src="./assets/screenshots/mobile/threads-list.png" alt="Threads tab in the ThinkWork mobile app" width="280" />
+  <img src="./assets/screenshots/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a knowledge graph in the ThinkWork mobile app" width="280" />
 </p>
 
 The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.

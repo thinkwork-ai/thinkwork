@@ -9,7 +9,6 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python ag
 - `apps/admin` — React 19 + Vite + TanStack Router operator SPA (dev port **5174**)
 - `apps/mobile` — Expo + React Native + NativeWind (iOS via TestFlight)
 - `apps/cli` — `thinkwork-cli` (commander.js), published to npm, bundles Terraform modules
-- `apps/www` — Astro marketing site
 - `packages/database-pg` — Drizzle schema + migrations + canonical GraphQL source (`graphql/types/*.graphql`)
 - `packages/api` — GraphQL (Yoga) resolvers, Lambda handlers, AppSync subscription bridge
 - `packages/lambda` — additional Lambda handlers (job-schedule-manager, job-trigger, agentcore-admin, github-workspace)
