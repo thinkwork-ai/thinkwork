@@ -128,6 +128,12 @@ export interface RuntimeEnvSnapshot {
   agentCoreMemoryId: string;
   hindsightEndpoint: string;
   memoryEngine: "managed" | "hindsight";
+  /**
+   * Name of the API's `memory-retain` Lambda
+   * (`thinkwork-${stage}-api-memory-retain`). Empty string disables
+   * end-of-turn auto-retain — the runtime logs and continues.
+   */
+  memoryRetainFnName: string;
   dbClusterArn: string;
   dbSecretArn: string;
   dbName: string;
@@ -156,6 +162,7 @@ export function snapshotRuntimeEnv(
     agentCoreMemoryId: env.AGENTCORE_MEMORY_ID || "",
     hindsightEndpoint: env.HINDSIGHT_ENDPOINT || "",
     memoryEngine,
+    memoryRetainFnName: env.MEMORY_RETAIN_FN_NAME || "",
     dbClusterArn: env.DB_CLUSTER_ARN || "",
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",

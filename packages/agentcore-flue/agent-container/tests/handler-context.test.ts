@@ -146,6 +146,20 @@ describe("snapshotRuntimeEnv", () => {
     expect(a.awsRegion).toBe("us-west-2");
     expect(b.awsRegion).toBe("eu-west-1");
   });
+
+  it("populates memoryRetainFnName from MEMORY_RETAIN_FN_NAME", () => {
+    expect(
+      snapshotRuntimeEnv({
+        MEMORY_RETAIN_FN_NAME: "thinkwork-dev-api-memory-retain",
+      } as NodeJS.ProcessEnv).memoryRetainFnName,
+    ).toBe("thinkwork-dev-api-memory-retain");
+  });
+
+  it("defaults memoryRetainFnName to empty string when MEMORY_RETAIN_FN_NAME is unset", () => {
+    expect(
+      snapshotRuntimeEnv({} as NodeJS.ProcessEnv).memoryRetainFnName,
+    ).toBe("");
+  });
 });
 
 describe("validateMcpUrl", () => {

@@ -434,6 +434,22 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
   maximum_event_age_in_seconds = 3600
 }
 
+# Per-turn auto-retain: the runtime (Strands + Flue) Event-invokes
+# memory-retain after every chat turn. AWS Lambda's default async-retry
+# policy is 2 attempts; without overriding it, a transient failure on the
+# canonical-transcript fetch or adapter write retries the entire writeback
+# and can multi-write the same per-turn document into Hindsight. The
+# longest-suffix-prefix merge in memory-retain.ts dedupes content but the
+# retain-cost path (Bedrock tokens charged in adapter.retainConversation)
+# is NOT idempotent — retries multiply LLM cost. Per
+# project_async_retry_idempotency_lessons.
+resource "aws_lambda_function_event_invoke_config" "memory_retain" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["memory-retain"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
 # ---------------------------------------------------------------------------
 # API Gateway routes → Lambda integrations
 # ---------------------------------------------------------------------------
