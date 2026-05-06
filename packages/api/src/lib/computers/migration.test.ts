@@ -50,7 +50,7 @@ describe("buildComputerMigrationReport", () => {
     });
   });
 
-  it("reports multiple user-paired Agents before apply", () => {
+  it("selects the most recently active Agent when a user has multiple legacy Agents", () => {
     const report = buildComputerMigrationReport({
       tenantId: "tenant-1",
       agents: [
@@ -64,15 +64,18 @@ describe("buildComputerMigrationReport", () => {
       existingComputers: [],
     });
 
-    expect(report.summary.multiple_candidates).toBe(1);
+    expect(report.summary.ready).toBe(1);
     expect(report.groups[0]).toMatchObject({
-      status: "multiple_candidates",
-      severity: "blocker",
-      recommendedAction: "resolve_blocker",
-      applyDisposition: "refuse",
+      status: "ready",
+      severity: "ready",
+      recommendedAction: "create_computer",
+      applyDisposition: "create",
       primaryAgentId: "agent-2",
       agentIds: ["agent-2", "agent-1"],
     });
+    expect(report.groups[0]?.reasons).toContain(
+      "1 additional user-paired Agent(s) remain as delegated Agents",
+    );
   });
 
   it("treats already migrated Computers as idempotent skips", () => {
@@ -100,19 +103,23 @@ describe("buildComputerMigrationReport", () => {
     });
   });
 
-  it("blocks Agents that are still backed by Agent Templates", () => {
+  it("clones Agents that are still backed by legacy Agent Templates", () => {
     const report = buildComputerMigrationReport({
       tenantId: "tenant-1",
       agents: [{ ...BASE_AGENT, template_kind: "agent" }],
       existingComputers: [],
     });
 
-    expect(report.summary.template_not_computer).toBe(1);
-    expect(report.groups[0]?.reasons[0]).toMatch(/not typed/);
+    expect(report.summary.ready).toBe(1);
+    expect(report.summary.template_not_computer).toBe(0);
+    expect(report.groups[0]?.reasons).toContain(
+      "Source Agent uses a legacy Agent Template and will be cloned as a Computer",
+    );
     expect(report.groups[0]).toMatchObject({
-      severity: "blocker",
-      recommendedAction: "resolve_blocker",
-      applyDisposition: "refuse",
+      status: "ready",
+      severity: "ready",
+      recommendedAction: "create_computer",
+      applyDisposition: "create",
     });
   });
 });
