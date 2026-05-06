@@ -95,6 +95,30 @@ locals {
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
   }
 
+  # Computer runtime control handlers only need database access, service-auth,
+  # the API callback URL, and ECS/EFS runtime wiring. Using the full common_env
+  # pushes computer-manager over Lambda's 4KB environment-variable limit in dev.
+  computer_runtime_control_base_env = {
+    STAGE             = var.stage
+    DATABASE_URL      = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    API_AUTH_SECRET   = var.api_auth_secret
+    THINKWORK_API_URL = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    NODE_OPTIONS      = "--enable-source-maps"
+  }
+
+  computer_runtime_control_env = {
+    COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
+    COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
+    COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
+    COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
+    COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
+    COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
+    COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
+    COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
+    COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
+    COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
+  }
+
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
@@ -122,25 +146,14 @@ locals {
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
     }
-    # computer-manager is the only handler that consumes ECS/EFS task
+    # computer-manager and computer-runtime-reconciler consume ECS/EFS task
     # config from packages/api/src/lib/computers/runtime-control.ts.
     # Scoping the COMPUTER_RUNTIME_* variables here (instead of in
     # local.common_env_vars) keeps the per-Lambda env-var payload under
     # the AWS 4KB hard limit — they were previously dumped into every
     # handler and pushed ~70 Lambdas over quota.
-    "computer-manager" = {
-      COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
-      COMPUTER_RUNTIME_CLUSTER_ARN        = var.computer_runtime_cluster_arn
-      COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
-      COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
-      COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
-      COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
-      COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn
-      COMPUTER_RUNTIME_LOG_GROUP_NAME     = var.computer_runtime_log_group_name
-      COMPUTER_RUNTIME_REPOSITORY_URL     = var.computer_runtime_repository_url
-      COMPUTER_RUNTIME_DEFAULT_CPU        = tostring(var.computer_runtime_default_cpu)
-      COMPUTER_RUNTIME_DEFAULT_MEMORY     = tostring(var.computer_runtime_default_memory)
-    }
+    "computer-manager"            = local.computer_runtime_control_env
+    "computer-runtime-reconciler" = local.computer_runtime_control_env
     "mcp-context-engine" = {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
@@ -372,7 +385,7 @@ resource "aws_lambda_function" "handler" {
 
   environment {
     variables = merge(
-      local.common_env,
+      contains(["computer-manager", "computer-runtime-reconciler"], each.key) ? local.computer_runtime_control_base_env : local.common_env,
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
