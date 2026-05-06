@@ -1,6 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
+import { db, eq, agentTemplates, templateToCamel, sql } from "../../utils.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateContextEngine } from "../../../lib/templates/context-engine-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
@@ -41,6 +41,9 @@ export async function updateAgentTemplate(
   if (i.category !== undefined) set.category = i.category;
   if (i.icon !== undefined) set.icon = i.icon;
   if (i.runtime !== undefined) set.runtime = parseAgentRuntimeInput(i.runtime);
+  if (i.templateKind !== undefined) {
+    set.template_kind = parseTemplateKindInput(i.templateKind);
+  }
   if (i.model !== undefined) set.model = i.model;
   if (i.guardrailId !== undefined) set.guardrail_id = i.guardrailId;
   if (i.isPublished !== undefined) set.is_published = i.isPublished;
@@ -100,5 +103,13 @@ export async function updateAgentTemplate(
     .returning();
 
   if (!row) throw new Error("Agent template not found");
-  return withGraphqlAgentRuntime(snakeToCamel(row));
+  return withGraphqlAgentRuntime(templateToCamel(row));
+}
+
+function parseTemplateKindInput(kind: unknown): "agent" | "computer" {
+  const normalized = String(kind).toLowerCase();
+  if (normalized === "agent" || normalized === "computer") return normalized;
+  throw new GraphQLError(`Invalid template kind: ${String(kind)}`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
 }

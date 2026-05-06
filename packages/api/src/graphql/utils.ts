@@ -18,6 +18,7 @@ import {
   gt,
   gte,
   lte,
+  isNotNull,
   sql,
   inArray,
 } from "drizzle-orm";
@@ -86,6 +87,11 @@ import {
   // Agent Templates
   agentTemplates,
   agentVersions,
+  computers,
+  computerTasks,
+  computerEvents,
+  computerSnapshots,
+  computerDelegations,
   // Skill Runs (composable-skills Unit 4)
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
@@ -122,6 +128,7 @@ export {
   gt,
   gte,
   lte,
+  isNotNull,
   sql,
   inArray,
   randomUUID,
@@ -169,6 +176,11 @@ export {
   recipes,
   agentTemplates,
   agentVersions,
+  computers,
+  computerTasks,
+  computerEvents,
+  computerSnapshots,
+  computerDelegations,
   skillRuns,
   mutationIdempotency,
   tenantPolicyEvents,
@@ -725,6 +737,31 @@ export function agentToCamel(
 ): Record<string, unknown> {
   const result = snakeToCamel(obj);
   for (const field of ["status", "type", "runtime"]) {
+    if (typeof result[field] === "string") {
+      result[field] = (result[field] as string).toUpperCase();
+    }
+  }
+  return result;
+}
+
+export function templateToCamel(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = snakeToCamel(obj);
+  if (typeof result.templateKind === "string") {
+    result.templateKind = (result.templateKind as string).toUpperCase();
+  }
+  if (typeof result.runtime === "string") {
+    result.runtime = (result.runtime as string).toUpperCase();
+  }
+  return result;
+}
+
+export function computerToCamel(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = snakeToCamel(obj);
+  for (const field of ["status", "desiredRuntimeStatus", "runtimeStatus"]) {
     if (typeof result[field] === "string") {
       result[field] = (result[field] as string).toUpperCase();
     }

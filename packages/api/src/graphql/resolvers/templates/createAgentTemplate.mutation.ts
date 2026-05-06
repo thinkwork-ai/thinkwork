@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { db, agentTemplates, snakeToCamel } from "../../utils.js";
+import { db, agentTemplates, templateToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
@@ -85,6 +85,7 @@ async function createAgentTemplateCore(i: any) {
       category: i.category,
       icon: i.icon,
       runtime: parseAgentRuntimeInput(i.runtime),
+      template_kind: parseTemplateKindInput(i.templateKind),
       model: i.model,
       guardrail_id: i.guardrailId,
       blocked_tools: blockedTools,
@@ -113,5 +114,12 @@ async function createAgentTemplateCore(i: any) {
     );
   }
 
-  return withGraphqlAgentRuntime(snakeToCamel(row));
+  return withGraphqlAgentRuntime(templateToCamel(row));
+}
+
+function parseTemplateKindInput(kind: unknown): "agent" | "computer" {
+  if (kind === undefined || kind === null) return "agent";
+  const normalized = String(kind).toLowerCase();
+  if (normalized === "agent" || normalized === "computer") return normalized;
+  throw new Error(`Invalid template kind: ${String(kind)}`);
 }
