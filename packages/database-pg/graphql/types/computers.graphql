@@ -21,6 +21,20 @@ enum ComputerRuntimeStatus {
   UNKNOWN
 }
 
+enum ComputerTaskStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ComputerTaskType {
+  HEALTH_CHECK
+  WORKSPACE_FILE_WRITE
+  GOOGLE_CLI_SMOKE
+}
+
 type Computer {
   id: ID!
   tenantId: ID!
@@ -46,6 +60,23 @@ type Computer {
   migratedFromAgentId: ID
   migrationMetadata: AWSJSON
   createdBy: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ComputerTask {
+  id: ID!
+  tenantId: ID!
+  computerId: ID!
+  taskType: ComputerTaskType!
+  status: ComputerTaskStatus!
+  input: AWSJSON
+  output: AWSJSON
+  error: AWSJSON
+  idempotencyKey: String
+  claimedAt: AWSDateTime
+  completedAt: AWSDateTime
+  createdByUserId: ID
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -80,13 +111,22 @@ input UpdateComputerInput {
   budgetPausedReason: String
 }
 
+input EnqueueComputerTaskInput {
+  computerId: ID!
+  taskType: ComputerTaskType!
+  input: AWSJSON
+  idempotencyKey: String
+}
+
 extend type Query {
   myComputer: Computer
   computers(tenantId: ID!, status: ComputerStatus): [Computer!]!
   computer(id: ID!): Computer
+  computerTasks(computerId: ID!, status: ComputerTaskStatus, limit: Int): [ComputerTask!]!
 }
 
 extend type Mutation {
   createComputer(input: CreateComputerInput!): Computer!
   updateComputer(id: ID!, input: UpdateComputerInput!): Computer!
+  enqueueComputerTask(input: EnqueueComputerTaskInput!): ComputerTask!
 }

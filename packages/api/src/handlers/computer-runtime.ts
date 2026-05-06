@@ -20,6 +20,12 @@ import {
   recordComputerHeartbeat,
   resolveComputerRuntimeConfig,
 } from "../lib/computers/runtime-api.js";
+import {
+  COMPUTER_TASK_TYPES,
+  ComputerTaskInputError,
+  enqueueComputerTask,
+  type ComputerTaskType,
+} from "../lib/computers/tasks.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +43,7 @@ export async function handler(
     return await route(event);
   } catch (err) {
     if (err instanceof BadRequestError) return error(err.message, 400);
+    if (err instanceof ComputerTaskInputError) return error(err.message, 400);
     if (err instanceof ComputerNotFoundError) return notFound(err.message);
     if (err instanceof ComputerTaskNotFoundError) return notFound(err.message);
     console.error("[computer-runtime] request failed", err);
@@ -83,6 +90,19 @@ async function route(
     const computerId = validUuid(body.computerId, "computerId");
     const task = await claimNextComputerTask({ tenantId, computerId });
     return json({ task });
+  }
+
+  if (method === "POST" && path === "/api/computers/runtime/tasks") {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    const task = await enqueueComputerTask({
+      tenantId,
+      computerId,
+      taskType: validTaskType(body.taskType),
+      taskInput: body.input,
+      idempotencyKey: optionalString(body.idempotencyKey),
+    });
+    return json({ task }, 201);
   }
 
   const taskEventMatch = path.match(
@@ -165,6 +185,14 @@ function requiredString(value: unknown, name: string): string {
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function validTaskType(value: unknown): ComputerTaskType {
+  const normalized = String(value ?? "").toLowerCase();
+  if (COMPUTER_TASK_TYPES.includes(normalized as ComputerTaskType)) {
+    return normalized as ComputerTaskType;
+  }
+  throw new BadRequestError("taskType: unsupported Computer task type");
 }
 
 class BadRequestError extends Error {}

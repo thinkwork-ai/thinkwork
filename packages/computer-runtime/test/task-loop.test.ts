@@ -52,6 +52,59 @@ describe("Computer runtime task loop", () => {
     await expect(readFile(markerPath, "utf8")).resolves.toContain("task-2");
   });
 
+  it("writes workspace files under the workspace root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const output = await handleTask(
+      {
+        id: "task-4",
+        taskType: "workspace_file_write",
+        input: { path: "notes/phase3.txt", content: "hello computer\n" },
+      },
+      root,
+    );
+
+    expect(output).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_write",
+      relativePath: "notes/phase3.txt",
+      bytes: 15,
+    });
+    await expect(readFile(join(root, "notes/phase3.txt"), "utf8")).resolves.toBe(
+      "hello computer\n",
+    );
+  });
+
+  it("fails unsafe workspace file paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+
+    await expect(
+      handleTask(
+        {
+          id: "task-5",
+          taskType: "workspace_file_write",
+          input: { path: "../escape.txt", content: "nope" },
+        },
+        root,
+      ),
+    ).rejects.toThrow("Workspace path cannot contain");
+  });
+
+  it("returns a structured Google CLI smoke result", async () => {
+    const output = await handleTask(
+      { id: "task-6", taskType: "google_cli_smoke" },
+      "/tmp",
+    );
+
+    expect(output).toMatchObject({
+      ok: true,
+      taskType: "google_cli_smoke",
+      smoke: expect.objectContaining({
+        available: expect.any(Boolean),
+        binary: expect.any(String),
+      }),
+    });
+  });
+
   it("fails unsupported task types without leaking input bodies", async () => {
     const api = {
       claimTask: vi.fn().mockResolvedValue({

@@ -16,7 +16,7 @@ This reframes the product model:
 The Computer is what makes the product feel less like "another agent list" and more like an AWS-native cloud computer for AI work. It can keep a live filesystem, hold installed CLIs, maintain local caches, run a real browser later, and route expensive or specialized reasoning to AgentCore workers when that is the better substrate.
 
 <Aside type="note">
-Phase 2 introduces the product surface, migration tooling, shared ECS/EFS substrate, runtime callback API, and ECS manager skeleton. It does not yet promise full unattended browser automation or production-grade per-tenant hard isolation beyond the shared Fargate/EFS foundation.
+Phase 3 activates the runtime skeleton with image rollout tooling, CLI lifecycle controls, task enqueueing, EFS workspace file writes, Google CLI smoke checks, and a scheduled runtime reconciler. It does not yet promise full unattended browser automation, OAuth-backed Google Workspace actions, or production-grade per-tenant hard isolation beyond the shared Fargate/EFS foundation.
 </Aside>
 
 ## Runtime model
@@ -34,6 +34,14 @@ Each Computer is backed by:
 
 The default runtime image is intentionally small. It boots, verifies the workspace, heartbeats to the API, checks available CLIs, and polls for tasks. The platform can evolve the image with Google Workspace CLI tooling, browser-use tools, repo CLIs, and other local capabilities without changing the core product model.
 
+Phase 3 task types are deliberately bounded:
+
+| Task | What it proves |
+|---|---|
+| `health_check` | the runtime can claim work and write a health marker into EFS |
+| `workspace_file_write` | the Computer owns a real live filesystem workspace |
+| `google_cli_smoke` | the runtime image can carry Google Workspace CLI tooling without exposing user OAuth tokens |
+
 ## Desired state
 
 Computers separate operator intent from observed runtime state:
@@ -47,6 +55,8 @@ Computers separate operator intent from observed runtime state:
 | `efs_access_point_id` | Workspace mount boundary |
 
 Admin mutations can update metadata and desired state. Runtime provisioning and ECS desired-count changes flow through the service-auth Computer manager endpoint so GraphQL stays a product API rather than a direct AWS control plane.
+
+A scheduled reconciler watches active Computers and moves ECS services toward the desired state in bounded batches. Operator CLI actions are still useful for immediate smoke tests and break-glass control, but the always-on product posture comes from the database intent plus reconciliation loop.
 
 ## Why not just AgentCore?
 

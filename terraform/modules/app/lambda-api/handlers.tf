@@ -249,6 +249,7 @@ resource "aws_lambda_function" "handler" {
     "migrate-agents-to-computers",
     "computer-runtime",
     "computer-manager",
+    "computer-runtime-reconciler",
     "code-factory",
     "eval-runner",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
@@ -877,6 +878,31 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
 
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# ThinkWork Computer runtime reconciler — keeps active Computers aligned with
+# desired_runtime_status by provisioning/starting/stopping ECS services in
+# bounded batches. The handler is conservative and records per-Computer events
+# for every attempted action.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "computer_runtime_reconciler" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-computer-runtime-reconciler"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["computer-runtime-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

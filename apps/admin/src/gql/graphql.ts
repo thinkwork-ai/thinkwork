@@ -745,6 +745,38 @@ export enum ComputerStatus {
   Provisioning = 'PROVISIONING'
 }
 
+export type ComputerTask = {
+  __typename?: 'ComputerTask';
+  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  computerId: Scalars['ID']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByUserId?: Maybe<Scalars['ID']['output']>;
+  error?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  input?: Maybe<Scalars['AWSJSON']['output']>;
+  output?: Maybe<Scalars['AWSJSON']['output']>;
+  status: ComputerTaskStatus;
+  taskType: ComputerTaskType;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum ComputerTaskStatus {
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING'
+}
+
+export enum ComputerTaskType {
+  GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
+  HealthCheck = 'HEALTH_CHECK',
+  WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
+}
+
 export type ConcurrencySnapshot = {
   __typename?: 'ConcurrencySnapshot';
   byAgent: Array<AgentCount>;
@@ -1225,6 +1257,13 @@ export enum DispatchTargetType {
   HybridRoutine = 'hybrid_routine',
   Routine = 'routine'
 }
+
+export type EnqueueComputerTaskInput = {
+  computerId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  input?: InputMaybe<Scalars['AWSJSON']['input']>;
+  taskType: ComputerTaskType;
+};
 
 export type EscalateThreadInput = {
   agentId: Scalars['ID']['input'];
@@ -1789,6 +1828,7 @@ export type Mutation = {
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
   editTenantEntityFact: TenantEntitySection;
+  enqueueComputerTask: ComputerTask;
   escalateThread: Thread;
   importN8nRoutine: Routine;
   inviteMember: TenantMember;
@@ -2264,6 +2304,11 @@ export type MutationDeleteWebhookArgs = {
 export type MutationEditTenantEntityFactArgs = {
   content: Scalars['String']['input'];
   factId: Scalars['ID']['input'];
+};
+
+
+export type MutationEnqueueComputerTaskArgs = {
+  input: EnqueueComputerTaskInput;
 };
 
 
@@ -2887,6 +2932,7 @@ export type Query = {
   budgetStatus: Array<BudgetStatus>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   computer?: Maybe<Computer>;
+  computerTasks: Array<ComputerTask>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   connector?: Maybe<Connector>;
@@ -3191,6 +3237,13 @@ export type QueryCompositionFeedbackSummaryArgs = {
 
 export type QueryComputerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryComputerTasksArgs = {
+  computerId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<ComputerTaskStatus>;
 };
 
 

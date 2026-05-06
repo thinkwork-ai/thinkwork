@@ -38,7 +38,7 @@ The detail page shows three operational panels:
 - **Runtime** — ECS service name, EFS access point, live workspace root, and runtime config JSON.
 - **Migration** — source Agent, migration metadata, and creation provenance.
 
-The status panel can update `desired_runtime_status`. Phase 2 treats that as intent; the service-auth Computer manager endpoint is the path that reconciles ECS desired count and provisioning.
+The status panel can update `desired_runtime_status`. The scheduled Computer runtime reconciler treats that as intent and uses the service-auth manager path to reconcile ECS desired count and provisioning.
 
 <Aside type="note">
   GraphQL remains the user/operator product API. Provisioning ECS services, EFS
@@ -59,7 +59,26 @@ Dry-run is the default operating mode. Apply refuses blocker groups such as mult
 
 ## Runtime operations
 
-The Computer manager API is internal service-auth:
+The CLI is the first supported operator surface:
+
+```bash
+thinkwork computer runtime provision --tenant-id <tenant-id> --computer-id <computer-id>
+thinkwork computer runtime status --tenant-id <tenant-id> --computer-id <computer-id>
+thinkwork computer runtime restart --tenant-id <tenant-id> --computer-id <computer-id>
+```
+
+Operators can also enqueue Phase 3 smoke tasks:
+
+```bash
+thinkwork computer task enqueue \
+  --tenant-id <tenant-id> \
+  --computer-id <computer-id> \
+  --type workspace_file_write \
+  --path smoke/admin.txt \
+  --content "admin smoke"
+```
+
+The Computer manager API remains internal service-auth:
 
 ```http
 POST /api/computers/manager
@@ -73,6 +92,8 @@ Authorization: Bearer <API_AUTH_SECRET>
 ```
 
 Supported actions are `provision`, `start`, `stop`, `restart`, and `status`.
+
+The task surface currently supports `health_check`, `workspace_file_write`, and `google_cli_smoke`. Google Workspace OAuth-backed actions are intentionally deferred; the smoke only verifies image tooling.
 
 ## Related pages
 

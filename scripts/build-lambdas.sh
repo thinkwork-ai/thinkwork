@@ -224,6 +224,9 @@ build_handler "computer-runtime" \
 build_handler "computer-manager" \
   "$REPO_ROOT/packages/api/src/handlers/computer-manager.ts"
 
+build_handler "computer-runtime-reconciler" \
+  "$REPO_ROOT/packages/api/src/handlers/computer-runtime-reconciler.ts"
+
 # Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
 #   POST /api/plugins/presign    → presigned PUT URL for the zip
 #   POST /api/plugins/upload     → validator + three-phase install saga

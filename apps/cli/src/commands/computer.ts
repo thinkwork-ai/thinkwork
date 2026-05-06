@@ -29,6 +29,26 @@ type MigrationResponse = {
   blockers?: unknown[];
 };
 
+type RuntimeAction = "provision" | "start" | "stop" | "restart" | "status";
+type RuntimeResponse = {
+  ok: boolean;
+  action?: RuntimeAction;
+  result?: Record<string, unknown>;
+  error?: string;
+};
+
+type TaskResponse = {
+  task?: {
+    id: string;
+    taskType: string;
+    status: string;
+    input?: unknown;
+    output?: unknown;
+    error?: unknown;
+  };
+  error?: string;
+};
+
 async function resolveComputerContext(opts: { stage?: string }) {
   const stage = await resolveStage({ flag: opts.stage });
   const api = resolveApiConfig(stage);
@@ -45,6 +65,25 @@ function resolveTenantId(opts: { tenant?: string; tenantId?: string }): string {
     process.exit(1);
   }
   return tenantId;
+}
+
+function resolveComputerId(opts: { computer?: string; computerId?: string }) {
+  const computerId = opts.computer ?? opts.computerId;
+  if (!computerId) {
+    printError(
+      "Computer ID is required. Pass --computer <uuid> or --computer-id <uuid>.",
+    );
+    process.exit(1);
+  }
+  return computerId;
+}
+
+function resolveTaskType(opts: { type?: string }) {
+  if (!opts.type?.trim()) {
+    printError("Task type is required. Pass --type <task-type>.");
+    process.exit(1);
+  }
+  return opts.type.trim().toLowerCase();
 }
 
 function printMigrationReport(response: MigrationResponse): void {
@@ -186,6 +225,129 @@ export function registerComputerCommand(program: Command): void {
         if (!isJsonMode()) {
           printSuccess(
             `Computer migration applied: ${response.body.created?.length ?? 0} created, ${response.body.skipped?.length ?? 0} skipped`,
+          );
+        }
+      },
+    );
+
+  const runtime = computer
+    .command("runtime")
+    .description("Provision and control ECS-backed Computer runtimes");
+
+  for (const action of [
+    "provision",
+    "start",
+    "stop",
+    "restart",
+    "status",
+  ] as const) {
+    runtime
+      .command(action)
+      .description(`${action} a Computer runtime`)
+      .option("-s, --stage <name>", "Deployment stage")
+      .option("-t, --tenant <uuid>", "Tenant ID")
+      .option("--tenant-id <uuid>", "Tenant ID")
+      .option("-c, --computer <uuid>", "Computer ID")
+      .option("--computer-id <uuid>", "Computer ID")
+      .action(
+        async (opts: {
+          stage?: string;
+          tenant?: string;
+          tenantId?: string;
+          computer?: string;
+          computerId?: string;
+        }) => {
+          const { stage, api } = await resolveComputerContext(opts);
+          const tenantId = resolveTenantId(opts);
+          const computerId = resolveComputerId(opts);
+          if (!isJsonMode()) {
+            printHeader(`computer runtime ${action}`, stage);
+          }
+
+          const response = await apiFetchRaw<RuntimeResponse>(
+            api.apiUrl,
+            api.authSecret,
+            "/api/computers/manager",
+            {
+              method: "POST",
+              body: JSON.stringify({ action, tenantId, computerId }),
+            },
+          );
+
+          printJson(response.body);
+          if (!response.ok) {
+            printError(response.body.error ?? `HTTP ${response.status}`);
+            process.exit(1);
+          }
+          if (!isJsonMode()) {
+            printSuccess(`Computer runtime ${action} complete`);
+          }
+        },
+      );
+  }
+
+  const task = computer
+    .command("task")
+    .description("Enqueue work for a ThinkWork Computer runtime");
+
+  task
+    .command("enqueue")
+    .description("Enqueue a Computer runtime task")
+    .option("--type <type>", "Task type")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <uuid>", "Tenant ID")
+    .option("--tenant-id <uuid>", "Tenant ID")
+    .option("-c, --computer <uuid>", "Computer ID")
+    .option("--computer-id <uuid>", "Computer ID")
+    .option("--path <path>", "Workspace-relative path for file-write tasks")
+    .option("--content <content>", "UTF-8 content for file-write tasks")
+    .option("--idempotency-key <key>", "Operator-supplied idempotency key")
+    .action(
+      async (opts: {
+        stage?: string;
+        tenant?: string;
+        tenantId?: string;
+        computer?: string;
+        computerId?: string;
+        type?: string;
+        path?: string;
+        content?: string;
+        idempotencyKey?: string;
+      }) => {
+        const { stage, api } = await resolveComputerContext(opts);
+        const tenantId = resolveTenantId(opts);
+        const computerId = resolveComputerId(opts);
+        const taskType = resolveTaskType(opts);
+        const input =
+          taskType === "workspace_file_write"
+            ? { path: opts.path, content: opts.content }
+            : undefined;
+        if (!isJsonMode()) printHeader("computer task enqueue", stage);
+
+        const response = await apiFetchRaw<TaskResponse>(
+          api.apiUrl,
+          api.authSecret,
+          "/api/computers/runtime/tasks",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              tenantId,
+              computerId,
+              taskType,
+              input,
+              idempotencyKey: opts.idempotencyKey,
+            }),
+          },
+        );
+
+        printJson(response.body);
+        if (!response.ok) {
+          printError(response.body.error ?? `HTTP ${response.status}`);
+          process.exit(1);
+        }
+        if (!isJsonMode()) {
+          printSuccess(
+            `Queued Computer task ${response.body.task?.id ?? taskType}`,
           );
         }
       },

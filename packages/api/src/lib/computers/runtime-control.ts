@@ -54,8 +54,7 @@ export async function controlComputerRuntime(input: {
     case "stop":
       return updateDesiredCount(input, 0, "stopped");
     case "restart":
-      await updateDesiredCount(input, 0, "stopped");
-      return updateDesiredCount(input, 1, "running");
+      return provisionComputerRuntime(input);
     case "status":
       return describeComputerRuntime(input);
   }
