@@ -120,6 +120,13 @@ export interface ToolInvocationRecord {
   runtime: "flue";
 }
 
+export interface FlueRetainStatus {
+  /** True when the per-turn auto-retain Lambda invoke was dispatched. */
+  retained: boolean;
+  /** Present when the invoke was attempted but failed; absent otherwise. */
+  error?: string;
+}
+
 export interface InvocationResponse {
   response: {
     role: "assistant";
@@ -133,6 +140,14 @@ export interface InvocationResponse {
   };
   runtime: "flue";
   flue_usage?: Usage;
+  /**
+   * End-of-turn auto-retain dispatch status. Surfaces whether the
+   * runtime invoked the `memory-retain` Lambda for this turn. Used by
+   * the post-deploy smoke to pin the auto-retain wiring against
+   * regressions where the response is otherwise healthy but retain
+   * silently no-ops.
+   */
+  flue_retain?: FlueRetainStatus;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
   hindsight_usage?: unknown[];
@@ -1204,6 +1219,9 @@ export async function handleInvocation(
   const responseBody: InvocationResponse = {
     runtime: "flue",
     flue_usage: runResult.usage,
+    flue_retain: retainOutcome.error
+      ? { retained: retainOutcome.retained, error: retainOutcome.error }
+      : { retained: retainOutcome.retained },
     tools_called: runResult.toolsCalled,
     tool_invocations: runResult.toolInvocations,
     hindsight_usage: hindsightUsage,
