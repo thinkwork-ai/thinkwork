@@ -1,4 +1,5 @@
-import { writeHealthCheck } from "./workspace.js";
+import { smokeGoogleWorkspaceCli } from "./google-cli-smoke.js";
+import { writeHealthCheck, writeWorkspaceFile } from "./workspace.js";
 import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
 
 export type TaskLoopOptions = {
@@ -42,6 +43,14 @@ export async function handleTask(task: RuntimeTask, workspaceRoot: string) {
   if (task.taskType === "health_check") {
     const markerPath = await writeHealthCheck(workspaceRoot, task.id);
     return { ok: true, taskType: "health_check", markerPath };
+  }
+  if (task.taskType === "workspace_file_write") {
+    const written = await writeWorkspaceFile(workspaceRoot, task.input);
+    return { ok: true, taskType: "workspace_file_write", ...written };
+  }
+  if (task.taskType === "google_cli_smoke") {
+    const smoke = await smokeGoogleWorkspaceCli();
+    return { ok: true, taskType: "google_cli_smoke", smoke };
   }
   throw new Error(`Unsupported Computer task type: ${task.taskType}`);
 }
