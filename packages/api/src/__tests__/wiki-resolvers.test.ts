@@ -20,7 +20,6 @@ const {
   mockAdminRows,
   mockResolveCaller,
   mockEnqueue,
-  mockStartSystemWorkflow,
   mockLambdaSend,
   mockListCompileJobs,
   InvokeCommandMock,
@@ -29,7 +28,6 @@ const {
   const mockAdminRows = vi.fn();
   const mockResolveCaller = vi.fn();
   const mockEnqueue = vi.fn();
-  const mockStartSystemWorkflow = vi.fn();
   const mockListCompileJobs = vi.fn();
   const mockLambdaSend = vi.fn().mockResolvedValue({});
   class InvokeCommandMock {
@@ -57,7 +55,6 @@ const {
     mockAdminRows,
     mockResolveCaller,
     mockEnqueue,
-    mockStartSystemWorkflow,
     mockLambdaSend,
     mockListCompileJobs,
     InvokeCommandMock,
@@ -90,10 +87,6 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
     listCompileJobsForScope: mockListCompileJobs,
   };
 });
-
-vi.mock("../lib/system-workflows/start.js", () => ({
-  startSystemWorkflow: mockStartSystemWorkflow,
-}));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
@@ -130,8 +123,6 @@ beforeEach(() => {
   mockAdminRows.mockReset();
   mockAdminRows.mockReturnValue([]);
   mockLambdaSend.mockResolvedValue({});
-  mockStartSystemWorkflow.mockReset();
-  mockStartSystemWorkflow.mockResolvedValue({ started: true, deduped: false });
   delete process.env.WIKI_COMPILE_FN;
   delete process.env.STAGE;
 });
@@ -259,25 +250,30 @@ describe("assertCanAdminWikiScope", () => {
 // ─── compileWikiNow ──────────────────────────────────────────────────────────
 
 describe("compileWikiNow", () => {
-  it("returns job row and starts the wiki-build system workflow when admin", async () => {
+  function makeJobRow(id: string) {
+    return {
+      id,
+      tenant_id: "t1",
+      owner_id: "a1",
+      dedupe_key: "t1:a1:1",
+      status: "pending",
+      trigger: "admin",
+      attempt: 0,
+      claimed_at: null,
+      started_at: null,
+      finished_at: null,
+      error: null,
+      metrics: null,
+      created_at: new Date("2026-04-18T00:00:00Z"),
+    };
+  }
+
+  it("enqueues the compile job and fire-and-forget invokes wiki-compile when admin", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
     mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
     mockEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: {
-        id: "job-1",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
+      job: makeJobRow("job-1"),
     });
     const out = await compileWikiNow(
       {},
@@ -292,21 +288,9 @@ describe("compileWikiNow", () => {
       ownerId: "a1",
       trigger: "admin",
     });
-    expect(mockStartSystemWorkflow).toHaveBeenCalledWith({
-      workflowId: "wiki-build",
-      tenantId: "t1",
-      triggerSource: "graphql",
-      actorId: "user-1",
-      actorType: "apikey",
-      domainRef: { type: "wiki_compile_job", id: "job-1" },
-      input: {
-        wikiCompileJobId: "job-1",
-        ownerId: "a1",
-        modelId: null,
-        trigger: "admin",
-      },
-    });
-    expect(mockLambdaSend).not.toHaveBeenCalled();
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-1" });
   });
 
   it("refuses a cognito (end-user) caller with admin-only error", async () => {
@@ -319,145 +303,15 @@ describe("compileWikiNow", () => {
       ),
     ).rejects.toThrow(/Admin-only/);
     expect(mockEnqueue).not.toHaveBeenCalled();
-  });
-
-  it("forwards modelId in the system workflow input when supplied", async () => {
-    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
-    mockEnqueue.mockResolvedValueOnce({
-      inserted: true,
-      job: {
-        id: "job-2",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
-    });
-    await compileWikiNow(
-      {},
-      {
-        tenantId: "t1",
-        userId: "a1",
-        modelId: "anthropic.claude-sonnet-4-6-v1:0",
-      },
-      makeCtx({ authType: "apikey" }),
-    );
-    expect(mockStartSystemWorkflow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          wikiCompileJobId: "job-2",
-          modelId: "anthropic.claude-sonnet-4-6-v1:0",
-        }),
-      }),
-    );
     expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 
-  it("uses null modelId in the system workflow input when not supplied", async () => {
-    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
-    mockEnqueue.mockResolvedValueOnce({
-      inserted: true,
-      job: {
-        id: "job-3",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
-    });
-    await compileWikiNow(
-      {},
-      { tenantId: "t1", userId: "a1" },
-      makeCtx({ authType: "apikey" }),
-    );
-    expect(mockStartSystemWorkflow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          wikiCompileJobId: "job-3",
-          modelId: null,
-        }),
-      }),
-    );
-    expect(mockLambdaSend).not.toHaveBeenCalled();
-  });
-
-  it("treats empty-string modelId as not provided", async () => {
-    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
-    mockEnqueue.mockResolvedValueOnce({
-      inserted: true,
-      job: {
-        id: "job-4",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
-    });
-    await compileWikiNow(
-      {},
-      { tenantId: "t1", userId: "a1", modelId: "" },
-      makeCtx({ authType: "apikey" }),
-    );
-    expect(mockStartSystemWorkflow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          wikiCompileJobId: "job-4",
-          modelId: null,
-        }),
-      }),
-    );
-    expect(mockLambdaSend).not.toHaveBeenCalled();
-  });
-
-  it("falls back to direct Lambda invoke when the system workflow is unconfigured", async () => {
+  it("forwards modelId in the Lambda payload when supplied", async () => {
     process.env.WIKI_COMPILE_FN = "wiki-compile-test";
-    mockStartSystemWorkflow.mockRejectedValueOnce(
-      new Error(
-        "System Workflow wiki-build has no configured state machine ARN",
-      ),
-    );
     mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
     mockEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: {
-        id: "job-5",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
+      job: makeJobRow("job-2"),
     });
     await compileWikiNow(
       {},
@@ -469,45 +323,79 @@ describe("compileWikiNow", () => {
       makeCtx({ authType: "apikey" }),
     );
     await waitForLambdaSend();
-    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
     const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
     expect(payload).toEqual({
-      jobId: "job-5",
+      jobId: "job-2",
       modelId: "anthropic.claude-sonnet-4-6-v1:0",
     });
   });
 
-  it("surfaces configured system workflow launch failures", async () => {
-    mockStartSystemWorkflow.mockRejectedValueOnce(
-      new Error("Failed to start System Workflow wiki-build: boom"),
-    );
+  it("omits modelId from the Lambda payload when not supplied", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
     mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
     mockEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: {
-        id: "job-6",
-        tenant_id: "t1",
-        owner_id: "a1",
-        dedupe_key: "t1:a1:1",
-        status: "pending",
-        trigger: "admin",
-        attempt: 0,
-        claimed_at: null,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        metrics: null,
-        created_at: new Date("2026-04-18T00:00:00Z"),
-      },
+      job: makeJobRow("job-3"),
     });
+    await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-3" });
+  });
 
-    await expect(
-      compileWikiNow(
-        {},
-        { tenantId: "t1", userId: "a1" },
-        makeCtx({ authType: "apikey" }),
-      ),
-    ).rejects.toThrow("Failed to start System Workflow wiki-build");
+  it("treats empty-string modelId as not provided", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-4"),
+    });
+    await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1", modelId: "" },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-4" });
+  });
+
+  it("returns the job row even when the Lambda invoke fails (fire-and-forget)", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockLambdaSend.mockRejectedValueOnce(new Error("Lambda throttled"));
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-5"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-5");
+    // The dedupe job row is the idempotency guarantee — the worker can pick
+    // it up via claimNextCompileJob if the Event-invoke fails.
+    await waitForLambdaSend();
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the Lambda invoke when WIKI_COMPILE_FN and STAGE are both unset", async () => {
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-6"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-6");
     expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 });

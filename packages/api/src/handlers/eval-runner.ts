@@ -48,12 +48,6 @@ import {
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
-import {
-  recordEvaluationWorkflowEvidence,
-  recordEvaluationWorkflowStep,
-  updateEvaluationWorkflowRunSummary,
-  type EvalSystemWorkflowContext,
-} from "../lib/system-workflows/evaluation-runs.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -129,9 +123,6 @@ async function resolveEvalRuntimeType(
 
 interface EvalRunnerEvent {
   runId: string;
-  systemWorkflowRunId?: string;
-  systemWorkflowExecutionArn?: string;
-  tenantId?: string;
   input?: {
     testCaseIds?: unknown;
   } | null;
@@ -565,15 +556,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
     `[eval-runner] starting runId=${runId} tenant=${run.tenant_id} agent=${run.agent_id}`,
   );
 
-  const workflowContext: EvalSystemWorkflowContext | null =
-    event.systemWorkflowRunId
-      ? {
-          tenantId: event.tenantId ?? run.tenant_id,
-          runId: event.systemWorkflowRunId,
-          executionArn: event.systemWorkflowExecutionArn ?? null,
-        }
-      : null;
-
   try {
     // Load test cases for this tenant. Specific test-case picks win over
     // category filters so CLI/API smoke runs can target a single case.
@@ -592,20 +574,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       .select()
       .from(evalTestCases)
       .where(and(...caseConditions));
-
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "SnapshotTestPack",
-      stepType: "checkpoint",
-      status: "succeeded",
-      finishedAt: new Date(),
-      outputJson: {
-        evalRunId: runId,
-        totalTests: cases.length,
-        categories: run.categories,
-        testCaseIds: selectedTestCaseIds,
-      },
-      idempotencyKey: `eval:${runId}:snapshot`,
-    });
 
     const runtimeType = await resolveEvalRuntimeType(run);
     const runtimeId = await loadRuntimeId(runtimeType);
@@ -628,15 +596,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       agentId: run.agent_id,
       status: "running",
       totalTests: cases.length,
-    });
-
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "RunEvaluation",
-      stepType: "worker",
-      status: "running",
-      startedAt,
-      outputJson: { totalTests: cases.length },
-      idempotencyKey: `eval:${runId}:runner-started`,
     });
 
     // Run tests with bounded concurrency so the Lambda doesn't hit its 900s
@@ -788,15 +747,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       }
     }
 
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "RunEvaluation",
-      stepType: "worker",
-      status: "succeeded",
-      finishedAt: new Date(),
-      outputJson: { passed, failed, totalTests: cases.length },
-      idempotencyKey: `eval:${runId}:runner-finished`,
-    });
-
     // Aggregate.
     const completedAt = new Date();
     const passRate = cases.length > 0 ? passed / cases.length : 0;
@@ -830,44 +780,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         .onConflictDoNothing();
     }
 
-    const totalCostUsdCents = Math.round(totalCostUsd * 100);
-    const evidenceSummary = {
-      evalRunId: runId,
-      totalTests: cases.length,
-      passed,
-      failed,
-      passRate,
-      totalCostUsdCents,
-    };
     const passedThreshold = passRate >= PASS_THRESHOLD;
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "AggregateScores",
-      stepType: "aggregation",
-      status: "succeeded",
-      finishedAt: completedAt,
-      outputJson: evidenceSummary,
-      idempotencyKey: `eval:${runId}:aggregate`,
-    });
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "ApplyPassFailGate",
-      stepType: "gate",
-      status: passedThreshold ? "succeeded" : "failed",
-      finishedAt: completedAt,
-      outputJson: {
-        passRate,
-        threshold: PASS_THRESHOLD,
-      },
-      idempotencyKey: `eval:${runId}:pass-fail-gate`,
-    });
-    await recordEvaluationWorkflowEvidence(workflowContext, {
-      evidenceType: "score-summary",
-      title: "Evaluation score summary",
-      summary: `${passed}/${cases.length} tests passed (${(passRate * 100).toFixed(1)}%).`,
-      artifactJson: evidenceSummary,
-      complianceTags: ["evaluation", "quality"],
-      idempotencyKey: `eval:${runId}:score-summary`,
-    });
-    await updateEvaluationWorkflowRunSummary(workflowContext, evidenceSummary);
 
     await notifyEvalRunUpdate({
       runId,
@@ -895,26 +808,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         error_message: message,
       })
       .where(eq(evalRuns.id, runId));
-    await recordEvaluationWorkflowStep(workflowContext, {
-      nodeId: "RunEvaluation",
-      stepType: "worker",
-      status: "failed",
-      finishedAt: completedAt,
-      errorJson: { message },
-      idempotencyKey: `eval:${runId}:runner-failed`,
-    });
-    await recordEvaluationWorkflowEvidence(workflowContext, {
-      evidenceType: "score-summary",
-      title: "Evaluation failed",
-      summary: message,
-      artifactJson: { evalRunId: runId, error: message },
-      complianceTags: ["evaluation", "quality"],
-      idempotencyKey: `eval:${runId}:score-summary`,
-    });
-    await updateEvaluationWorkflowRunSummary(workflowContext, {
-      evalRunId: runId,
-      error: message,
-    });
     await notifyEvalRunUpdate({
       runId,
       tenantId: run.tenant_id,
