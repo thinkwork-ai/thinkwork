@@ -48,6 +48,7 @@ import {
   quickActionQueries,
   quickActionMutations,
 } from "./quick-actions/index.js";
+import { connectorQueries } from "./connectors/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -77,6 +78,7 @@ export const queryResolvers: Record<string, any> = {
   ...tenantCredentialQueries,
   ...systemWorkflowQueries,
   ...quickActionQueries,
+  ...connectorQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
