@@ -245,6 +245,88 @@ export const ModelCatalogQuery = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
+// Connectors
+// ---------------------------------------------------------------------------
+
+export const ConnectorsListQuery = graphql(`
+  query ConnectorsList(
+    $filter: ConnectorFilter
+    $limit: Int
+    $cursor: String
+  ) {
+    connectors(filter: $filter, limit: $limit, cursor: $cursor) {
+      id
+      tenantId
+      type
+      name
+      description
+      status
+      connectionId
+      config
+      dispatchTargetType
+      dispatchTargetId
+      lastPollAt
+      nextPollAt
+      enabled
+      createdByType
+      createdById
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const CreateConnectorMutation = graphql(`
+  mutation CreateConnector($input: CreateConnectorInput!) {
+    createConnector(input: $input) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateConnectorMutation = graphql(`
+  mutation UpdateConnector($id: ID!, $input: UpdateConnectorInput!) {
+    updateConnector(id: $id, input: $input) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const PauseConnectorMutation = graphql(`
+  mutation PauseConnector($id: ID!) {
+    pauseConnector(id: $id) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const ResumeConnectorMutation = graphql(`
+  mutation ResumeConnector($id: ID!) {
+    resumeConnector(id: $id) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const ArchiveConnectorMutation = graphql(`
+  mutation ArchiveConnector($id: ID!) {
+    archiveConnector(id: $id) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
 // Email Channel (PRD-14)
 // ---------------------------------------------------------------------------
 
