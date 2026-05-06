@@ -142,22 +142,82 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeHistory(history: unknown): Message[] {
+/**
+ * Build a zero-valued Usage stub for synthesized history messages.
+ * The history rows came from chat-agent-invoke's DB load; the original
+ * per-turn token usage was not preserved across the wire. pi-ai requires
+ * `usage` on every AssistantMessage but doesn't read these fields when
+ * serializing history back to Bedrock — they're TypeScript metadata.
+ */
+function emptyUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
+/**
+ * Convert chat-agent-invoke's wire-format history into the shape pi-ai's
+ * `Agent.initialState.messages` requires.
+ *
+ * Wire format (from `packages/api/src/handlers/chat-agent-invoke.ts:300`):
+ *   `[{ role: "user" | "assistant", content: string }, ...]`
+ *
+ * pi-ai's `UserMessage` accepts `content: string`. pi-ai's
+ * `AssistantMessage` does NOT — it requires
+ * `content: (TextContent | ThinkingContent | ToolCall)[]` plus required
+ * metadata fields (`api`, `provider`, `model`, `usage`, `stopReason`,
+ * `timestamp`). The original implementation passed `content` as a
+ * string for both roles, which produced a structurally-invalid
+ * `AssistantMessage`. pi-ai's Agent silently swallowed the malformed
+ * input and returned an empty assistant turn — every multi-turn chat
+ * with non-empty `messages_history` produced `content === ""` until
+ * this fix.
+ *
+ * For the assistant fields that aren't carried over the wire (api,
+ * provider, model, usage, stopReason), use the current invocation's
+ * model and zero-valued metadata. These fields are not load-bearing
+ * during pi-ai's history → Bedrock serialization; the Bedrock Messages
+ * API only reads `role` and `content`.
+ */
+export function normalizeHistory(
+  history: unknown,
+  currentModelId: string,
+): Message[] {
   if (!Array.isArray(history)) return [];
   return history.flatMap((entry: HistoryMessage) => {
-    if (
-      (entry.role === "user" || entry.role === "assistant") &&
-      typeof entry.content === "string" &&
-      entry.content.trim()
-    ) {
+    if (typeof entry.content !== "string" || !entry.content.trim()) return [];
+
+    if (entry.role === "user") {
       return [
         {
-          role: entry.role,
+          role: "user",
           content: entry.content,
           timestamp: Date.now(),
         } as Message,
       ];
     }
+
+    if (entry.role === "assistant") {
+      const textPart: TextContent = { type: "text", text: entry.content };
+      return [
+        {
+          role: "assistant",
+          content: [textPart],
+          api: "bedrock-converse-stream",
+          provider: "amazon-bedrock",
+          model: currentModelId,
+          usage: emptyUsage(),
+          stopReason: "stop",
+          timestamp: Date.now(),
+        } as Message,
+      ];
+    }
+
     return [];
   });
 }
@@ -1010,9 +1070,18 @@ export async function handleInvocation(
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
   try {
+    // The current invocation's model id is what pi-ai's Agent will use
+    // to serialize history → Bedrock for THIS turn. We use the same id on
+    // synthesized AssistantMessage history entries so the metadata is
+    // self-consistent even though pi-ai doesn't actually read those
+    // fields during serialization.
+    const currentModelId =
+      typeof args.payload.model === "string" && args.payload.model.trim()
+        ? args.payload.model.trim()
+        : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
     runResult = await runLoop({
       message: userMessage,
-      history: normalizeHistory(args.payload.messages_history),
+      history: normalizeHistory(args.payload.messages_history, currentModelId),
       systemPrompt,
       tools: bundle.tools,
       modelId: args.payload.model,
