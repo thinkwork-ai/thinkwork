@@ -28,7 +28,7 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
-# graphql-http, memory-retain, mcp-user-memory, mcp-context-engine, activation-apply-worker,
+# graphql-http, memory-retain, mcp-user-memory, mcp-context-engine,
 # eval-runner, and wiki-compile use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
@@ -70,7 +70,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "activation-apply-worker" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -135,15 +135,6 @@ build_handler "job-schedule-manager" \
 
 build_handler "scheduled-jobs" \
   "$REPO_ROOT/packages/api/src/handlers/scheduled-jobs.ts"
-
-build_handler "activation" \
-  "$REPO_ROOT/packages/api/src/handlers/activation.ts"
-
-build_handler "activation-workflow-adapter" \
-  "$REPO_ROOT/packages/api/src/handlers/activation-workflow-adapter.ts"
-
-build_handler "activation-apply-worker" \
-  "$REPO_ROOT/packages/api/src/handlers/activation-apply-worker.ts"
 
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
@@ -294,10 +285,6 @@ build_handler "routine-step-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-step-callback.ts"
 build_handler "routine-execution-callback" \
   "$REPO_ROOT/packages/api/src/handlers/routine-execution-callback.ts"
-build_handler "system-workflow-step-callback" \
-  "$REPO_ROOT/packages/api/src/handlers/system-workflow-step-callback.ts"
-build_handler "system-workflow-execution-callback" \
-  "$REPO_ROOT/packages/api/src/handlers/system-workflow-execution-callback.ts"
 build_handler "routine-task-weather-email" \
   "$REPO_ROOT/packages/api/src/handlers/routine-task-weather-email.ts"
 

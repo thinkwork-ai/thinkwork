@@ -208,8 +208,6 @@ resource "aws_lambda_function" "handler" {
     "budgets",
     "guardrails",
     "scheduled-jobs",
-    "activation",
-    "activation-apply-worker",
     "job-schedule-manager",
     "job-trigger",
     "routine-task-weather-email",
@@ -278,9 +276,6 @@ resource "aws_lambda_function" "handler" {
     # for steps + on the conditional UPDATE for executions.
     "routine-step-callback",
     "routine-execution-callback",
-    "system-workflow-step-callback",
-    "system-workflow-execution-callback",
-    "activation-workflow-adapter",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # Strands container's `kind=run_skill` handler calls this with Bearer
@@ -558,15 +553,6 @@ locals {
     "ANY /api/thread-turns/{proxy+}"   = "scheduled-jobs"
     "ANY /api/thread-turns"            = "scheduled-jobs"
 
-    # Activation Agent runtime writeback. Shared API_AUTH_SECRET; OPTIONS
-    # short-circuits in the handler before auth.
-    "POST /api/activation/notify"        = "activation"
-    "OPTIONS /api/activation/notify"     = "activation"
-    "POST /api/activation/checkpoint"    = "activation"
-    "OPTIONS /api/activation/checkpoint" = "activation"
-    "POST /api/activation/complete"      = "activation"
-    "OPTIONS /api/activation/complete"   = "activation"
-
     # Job Schedule Manager (EventBridge CRUD)
     "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
     "ANY /api/job-schedules"          = "job-schedule-manager"
@@ -636,10 +622,6 @@ locals {
     "OPTIONS /api/routines/step"              = "routine-step-callback"
     "POST /api/routines/execution"            = "routine-execution-callback"
     "OPTIONS /api/routines/execution"         = "routine-execution-callback"
-    "POST /api/system-workflows/steps"        = "system-workflow-step-callback"
-    "OPTIONS /api/system-workflows/steps"     = "system-workflow-step-callback"
-    "POST /api/system-workflows/execution"    = "system-workflow-execution-callback"
-    "OPTIONS /api/system-workflows/execution" = "system-workflow-execution-callback"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"

@@ -404,7 +404,15 @@ module "system_workflows_stepfunctions" {
   # avoid a module cycle: lambda-api needs the System Workflow state
   # machine ARNs for launcher env, while this module needs callback/task
   # Lambda ARNs for Step Functions wiring.
-  execution_callback_lambda_arn          = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-system-workflow-execution-callback"
+  #
+  # Phase 2 U3 (System Workflows revert): execution_callback_lambda_arn is
+  # deliberately set to "" so the EventBridge sfn_state_change rule +
+  # target + permission (count-gated on this variable in the SW
+  # stepfunctions module) destroy alongside the deleted
+  # system-workflow-execution-callback Lambda. The other ARNs template
+  # into ASL strings only and remain until U5 destroys the entire SW
+  # stepfunctions module.
+  execution_callback_lambda_arn          = ""
   eval_runner_lambda_arn                 = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner"
   wiki_compile_lambda_arn                = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile"
   activation_workflow_adapter_lambda_arn = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-activation-workflow-adapter"
