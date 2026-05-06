@@ -1,0 +1,91 @@
+# Connector framework data foundation.
+#
+# U3 exposes read-only connector data. Lifecycle mutations land in U4, and
+# live dispatch behavior lands in the master plan's connector chassis work.
+
+enum ConnectorStatus {
+  active
+  paused
+  unhealthy
+  archived
+}
+
+enum DispatchTargetType {
+  agent
+  routine
+  hybrid_routine
+}
+
+enum ConnectorExecutionState {
+  pending
+  dispatching
+  invoking
+  recording_result
+  terminal
+  failed
+  cancelled
+}
+
+input ConnectorFilter {
+  status: ConnectorStatus
+  type: String
+  includeArchived: Boolean
+}
+
+type Connector {
+  id: ID!
+  tenantId: ID!
+  type: String!
+  name: String!
+  description: String
+  status: ConnectorStatus!
+  connectionId: ID
+  config: AWSJSON
+  dispatchTargetType: DispatchTargetType!
+  dispatchTargetId: ID!
+  lastPollAt: AWSDateTime
+  lastPollCursor: String
+  nextPollAt: AWSDateTime
+  ebScheduleName: String
+  enabled: Boolean!
+  createdByType: String
+  createdById: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ConnectorExecution {
+  id: ID!
+  tenantId: ID!
+  connectorId: ID!
+  externalRef: String!
+  currentState: ConnectorExecutionState!
+  spendEnvelopeUsdCents: Int
+  stateMachineArn: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  errorClass: String
+  outcomePayload: AWSJSON
+  costFinalizedAt: AWSDateTime
+  lastUsageEventAt: AWSDateTime
+  killTarget: String
+  killTargetAt: AWSDateTime
+  retryAttempt: Int!
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  connectors(
+    filter: ConnectorFilter
+    limit: Int
+    cursor: String
+  ): [Connector!]!
+  connector(id: ID!): Connector
+  connectorExecutions(
+    connectorId: ID!
+    status: ConnectorExecutionState
+    limit: Int
+    cursor: String
+  ): [ConnectorExecution!]!
+  connectorExecution(id: ID!): ConnectorExecution
+}

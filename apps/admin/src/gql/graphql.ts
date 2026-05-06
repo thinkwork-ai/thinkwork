@@ -820,6 +820,73 @@ export type ConcurrencySnapshot = {
   totalActive: Scalars['Int']['output'];
 };
 
+export type Connector = {
+  __typename?: 'Connector';
+  config?: Maybe<Scalars['AWSJSON']['output']>;
+  connectionId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdById?: Maybe<Scalars['String']['output']>;
+  createdByType?: Maybe<Scalars['String']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  dispatchTargetId: Scalars['ID']['output'];
+  dispatchTargetType: DispatchTargetType;
+  ebScheduleName?: Maybe<Scalars['String']['output']>;
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  lastPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastPollCursor?: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  nextPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: ConnectorStatus;
+  tenantId: Scalars['ID']['output'];
+  type: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type ConnectorExecution = {
+  __typename?: 'ConnectorExecution';
+  connectorId: Scalars['ID']['output'];
+  costFinalizedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentState: ConnectorExecutionState;
+  errorClass?: Maybe<Scalars['String']['output']>;
+  externalRef: Scalars['String']['output'];
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  killTarget?: Maybe<Scalars['String']['output']>;
+  killTargetAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastUsageEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  outcomePayload?: Maybe<Scalars['AWSJSON']['output']>;
+  retryAttempt: Scalars['Int']['output'];
+  spendEnvelopeUsdCents?: Maybe<Scalars['Int']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export enum ConnectorExecutionState {
+  Cancelled = 'cancelled',
+  Dispatching = 'dispatching',
+  Failed = 'failed',
+  Invoking = 'invoking',
+  Pending = 'pending',
+  RecordingResult = 'recording_result',
+  Terminal = 'terminal'
+}
+
+export type ConnectorFilter = {
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  status?: InputMaybe<ConnectorStatus>;
+  type?: InputMaybe<Scalars['String']['input']>;
+};
+
+export enum ConnectorStatus {
+  Active = 'active',
+  Archived = 'archived',
+  Paused = 'paused',
+  Unhealthy = 'unhealthy'
+}
+
 export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1179,6 +1246,12 @@ export type DismissActivationRecommendationInput = {
   itemId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
 };
+
+export enum DispatchTargetType {
+  Agent = 'agent',
+  HybridRoutine = 'hybrid_routine',
+  Routine = 'routine'
+}
 
 export type EscalateThreadInput = {
   agentId: Scalars['ID']['input'];
@@ -2843,6 +2916,10 @@ export type Query = {
   budgetStatus: Array<BudgetStatus>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   concurrencySnapshot: ConcurrencySnapshot;
+  connector?: Maybe<Connector>;
+  connectorExecution?: Maybe<ConnectorExecution>;
+  connectorExecutions: Array<ConnectorExecution>;
+  connectors: Array<Connector>;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
@@ -3161,6 +3238,31 @@ export type QueryCompositionFeedbackSummaryArgs = {
 
 export type QueryConcurrencySnapshotArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryConnectorArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryConnectorExecutionArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryConnectorExecutionsArgs = {
+  connectorId: Scalars['ID']['input'];
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<ConnectorExecutionState>;
+};
+
+
+export type QueryConnectorsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ConnectorFilter>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
