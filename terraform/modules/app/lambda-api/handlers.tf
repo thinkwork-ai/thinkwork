@@ -110,6 +110,7 @@ locals {
     COMPUTER_RUNTIME_CLUSTER_NAME       = var.computer_runtime_cluster_name
     COMPUTER_RUNTIME_EFS_FILE_SYSTEM_ID = var.computer_runtime_efs_file_system_id
     COMPUTER_RUNTIME_SUBNET_IDS         = join(",", var.computer_runtime_subnet_ids)
+    COMPUTER_RUNTIME_ASSIGN_PUBLIC_IP   = var.computer_runtime_assign_public_ip
     COMPUTER_RUNTIME_TASK_SG_ID         = var.computer_runtime_task_sg_id
     COMPUTER_RUNTIME_EXECUTION_ROLE_ARN = var.computer_runtime_execution_role_arn
     COMPUTER_RUNTIME_TASK_ROLE_ARN      = var.computer_runtime_task_role_arn

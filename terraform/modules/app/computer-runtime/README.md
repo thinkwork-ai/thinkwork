@@ -8,6 +8,7 @@ This module creates shared infrastructure only:
 - ECS/Fargate cluster.
 - Encrypted EFS filesystem and mount targets.
 - Task and EFS security groups, with NFS scoped to runtime tasks.
+- Optional public-IP task networking for low-cost outbound API/CLI access without a NAT gateway.
 - Execution/task roles and CloudWatch log group.
 - Manager IAM policy for per-Computer access points, task definitions, and services.
 

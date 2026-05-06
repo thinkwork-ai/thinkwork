@@ -97,6 +97,7 @@ export async function provisionComputerRuntime(input: {
     taskDefinitionArn,
     subnetIds: config.subnetIds,
     taskSecurityGroupId: config.taskSecurityGroupId,
+    assignPublicIp: config.assignPublicIp,
   });
   const serviceExists = await hasService(config.clusterName, serviceName);
   if (serviceExists) {
@@ -374,6 +375,7 @@ export function buildCreateServiceInput(input: {
   taskDefinitionArn: string;
   subnetIds: string[];
   taskSecurityGroupId: string;
+  assignPublicIp: "ENABLED" | "DISABLED";
 }): CreateServiceCommandInput {
   return {
     cluster: input.clusterName,
@@ -385,7 +387,7 @@ export function buildCreateServiceInput(input: {
       awsvpcConfiguration: {
         subnets: input.subnetIds,
         securityGroups: [input.taskSecurityGroupId],
-        assignPublicIp: "DISABLED",
+        assignPublicIp: input.assignPublicIp,
       },
     },
   };
@@ -452,6 +454,7 @@ type RuntimeConfig = {
   efsFileSystemId: string;
   subnetIds: string[];
   taskSecurityGroupId: string;
+  assignPublicIp: "ENABLED" | "DISABLED";
   executionRoleArn: string;
   taskRoleArn: string;
   logGroupName: string;
@@ -488,6 +491,9 @@ function runtimeConfig(): RuntimeConfig {
     taskSecurityGroupId: requiredConfig(
       "taskSecurityGroupId",
       process.env.COMPUTER_RUNTIME_TASK_SG_ID,
+    ),
+    assignPublicIp: parseAssignPublicIp(
+      process.env.COMPUTER_RUNTIME_ASSIGN_PUBLIC_IP,
     ),
     executionRoleArn: requiredConfig(
       "executionRoleArn",
@@ -531,4 +537,13 @@ function requiredConfig(name: string, value: string | undefined): string {
     );
   }
   return value;
+}
+
+function parseAssignPublicIp(value: string | undefined): "ENABLED" | "DISABLED" {
+  if (!value) return "DISABLED";
+  if (value === "ENABLED" || value === "DISABLED") return value;
+  throw new ComputerRuntimeControlError(
+    "Invalid Computer runtime config: assignPublicIp",
+    500,
+  );
 }

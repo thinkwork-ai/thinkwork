@@ -12,6 +12,11 @@
 locals {
   bucket_name         = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
   backups_bucket_name = "thinkwork-${var.stage}-backups"
+  computer_task_subnet_ids = (
+    length(module.vpc.public_subnet_ids) > 0
+    ? module.vpc.public_subnet_ids
+    : module.vpc.private_subnet_ids
+  )
 
   # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
   # For one release we also honor the legacy var.memory_engine == "hindsight"
@@ -173,11 +178,13 @@ module "appsync" {
 module "computer_runtime" {
   source = "../app/computer-runtime"
 
-  stage      = var.stage
-  account_id = var.account_id
-  region     = var.region
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnet_ids
+  stage            = var.stage
+  account_id       = var.account_id
+  region           = var.region
+  vpc_id           = module.vpc.vpc_id
+  subnet_ids       = module.vpc.private_subnet_ids
+  task_subnet_ids  = local.computer_task_subnet_ids
+  assign_public_ip = length(module.vpc.public_subnet_ids) > 0
 }
 
 module "api" {
@@ -238,7 +245,8 @@ module "api" {
   computer_runtime_cluster_name       = module.computer_runtime.cluster_name
   computer_runtime_cluster_arn        = module.computer_runtime.cluster_arn
   computer_runtime_efs_file_system_id = module.computer_runtime.efs_file_system_id
-  computer_runtime_subnet_ids         = module.computer_runtime.subnet_ids
+  computer_runtime_subnet_ids         = module.computer_runtime.task_subnet_ids
+  computer_runtime_assign_public_ip   = module.computer_runtime.assign_public_ip
   computer_runtime_task_sg_id         = module.computer_runtime.task_security_group_id
   computer_runtime_execution_role_arn = module.computer_runtime.execution_role_arn
   computer_runtime_task_role_arn      = module.computer_runtime.task_role_arn

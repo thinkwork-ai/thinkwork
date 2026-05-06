@@ -13,6 +13,7 @@ const CONFIG = {
   efsFileSystemId: "fs-123",
   subnetIds: ["subnet-a", "subnet-b"],
   taskSecurityGroupId: "sg-task",
+  assignPublicIp: "ENABLED" as const,
   executionRoleArn: "arn:aws:iam::123:role/execution",
   taskRoleArn: "arn:aws:iam::123:role/task",
   logGroupName: "/thinkwork/prod/computer-runtime",
@@ -88,7 +89,7 @@ describe("computer runtime control builders", () => {
     });
   });
 
-  it("builds a private ECS service using the Computer runtime task security group", () => {
+  it("builds an ECS service using the configured task network", () => {
     expect(
       buildCreateServiceInput({
         clusterName: "thinkwork-prod-computer",
@@ -96,6 +97,7 @@ describe("computer runtime control builders", () => {
         taskDefinitionArn: "arn:aws:ecs:task-definition/computer:1",
         subnetIds: ["subnet-a", "subnet-b"],
         taskSecurityGroupId: "sg-task",
+        assignPublicIp: "ENABLED",
       }),
     ).toMatchObject({
       cluster: "thinkwork-prod-computer",
@@ -106,7 +108,7 @@ describe("computer runtime control builders", () => {
         awsvpcConfiguration: {
           subnets: ["subnet-a", "subnet-b"],
           securityGroups: ["sg-task"],
-          assignPublicIp: "DISABLED",
+          assignPublicIp: "ENABLED",
         },
       },
     });

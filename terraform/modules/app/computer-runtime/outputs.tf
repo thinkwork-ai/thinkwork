@@ -26,6 +26,14 @@ output "subnet_ids" {
   value = var.subnet_ids
 }
 
+output "task_subnet_ids" {
+  value = local.task_subnet_ids
+}
+
+output "assign_public_ip" {
+  value = local.assign_public_ip
+}
+
 output "execution_role_arn" {
   value = aws_iam_role.execution.arn
 }
