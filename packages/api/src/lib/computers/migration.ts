@@ -22,6 +22,18 @@ export interface ComputerMigrationApplyResult {
   skipped: string[];
 }
 
+export class ComputerMigrationBlockedError extends Error {
+  readonly statusCode = 409;
+
+  constructor(
+    message: string,
+    readonly blockers: ComputerMigrationReport["groups"],
+  ) {
+    super(message);
+    this.name = "ComputerMigrationBlockedError";
+  }
+}
+
 const db = getDb();
 
 export async function dryRunComputerMigration(
@@ -47,8 +59,9 @@ export async function applyComputerMigration(
     ].includes(group.status),
   );
   if (blockers.length > 0) {
-    throw new Error(
+    throw new ComputerMigrationBlockedError(
       `Computer migration has ${blockers.length} unresolved blocker group(s)`,
+      blockers,
     );
   }
 

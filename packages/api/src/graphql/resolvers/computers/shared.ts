@@ -4,7 +4,9 @@ import {
   db,
   and,
   eq,
+  isNull,
   ne,
+  or,
   computers,
   agents,
   agentTemplates,
@@ -41,7 +43,13 @@ export function parseJsonInput(value: unknown): unknown {
 export function parseOptionalDate(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
-  return new Date(String(value));
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new GraphQLError(`Invalid date value: ${String(value)}`, {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return parsed;
 }
 
 export async function requireComputerTemplate(
@@ -57,7 +65,10 @@ export async function requireComputerTemplate(
     .where(
       and(
         eq(agentTemplates.id, templateId),
-        eq(agentTemplates.tenant_id, tenantId),
+        or(
+          eq(agentTemplates.tenant_id, tenantId),
+          isNull(agentTemplates.tenant_id),
+        ),
       ),
     );
   if (!template) {

@@ -1,5 +1,6 @@
 import {
   applyComputerMigration,
+  ComputerMigrationBlockedError,
   dryRunComputerMigration,
 } from "../lib/computers/migration.js";
 
@@ -40,6 +41,13 @@ export async function handler(
     return json(200, { ok: true, mode: "dry-run", report });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof ComputerMigrationBlockedError) {
+      return json(err.statusCode, {
+        ok: false,
+        error: message,
+        blockers: err.blockers,
+      });
+    }
     return json(500, { ok: false, error: message });
   }
 }

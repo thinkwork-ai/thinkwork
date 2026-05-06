@@ -36,15 +36,21 @@ export async function updateComputer(
     await requireComputerTemplate(existing.tenant_id, input.templateId);
     set.template_id = input.templateId;
   }
-  if (input.status !== undefined)
-    set.status = parseComputerStatus(input.status);
+  if (input.status !== undefined) {
+    const status = parseComputerStatus(input.status);
+    if (status !== undefined) set.status = status;
+  }
   if (input.desiredRuntimeStatus !== undefined) {
-    set.desired_runtime_status = parseDesiredRuntimeStatus(
+    const desiredRuntimeStatus = parseDesiredRuntimeStatus(
       input.desiredRuntimeStatus,
     );
+    if (desiredRuntimeStatus !== undefined) {
+      set.desired_runtime_status = desiredRuntimeStatus;
+    }
   }
   if (input.runtimeStatus !== undefined) {
-    set.runtime_status = parseRuntimeStatus(input.runtimeStatus);
+    const runtimeStatus = parseRuntimeStatus(input.runtimeStatus);
+    if (runtimeStatus !== undefined) set.runtime_status = runtimeStatus;
   }
   if (input.runtimeConfig !== undefined) {
     set.runtime_config = parseJsonInput(input.runtimeConfig);

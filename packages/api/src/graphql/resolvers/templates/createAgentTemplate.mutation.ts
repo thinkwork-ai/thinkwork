@@ -1,3 +1,4 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, agentTemplates, templateToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -121,5 +122,7 @@ function parseTemplateKindInput(kind: unknown): "agent" | "computer" {
   if (kind === undefined || kind === null) return "agent";
   const normalized = String(kind).toLowerCase();
   if (normalized === "agent" || normalized === "computer") return normalized;
-  throw new Error(`Invalid template kind: ${String(kind)}`);
+  throw new GraphQLError(`Invalid template kind: ${String(kind)}`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
 }
