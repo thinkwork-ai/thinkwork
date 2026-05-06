@@ -1035,6 +1035,20 @@ export type CreateArtifactInput = {
   type: ArtifactType;
 };
 
+export type CreateConnectorInput = {
+  config?: InputMaybe<Scalars['AWSJSON']['input']>;
+  connectionId?: InputMaybe<Scalars['ID']['input']>;
+  createdById?: InputMaybe<Scalars['String']['input']>;
+  createdByType?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  dispatchTargetId: Scalars['ID']['input'];
+  dispatchTargetType: DispatchTargetType;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  name: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  type: Scalars['String']['input'];
+};
+
 export type CreateEvalTestCaseInput = {
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -1741,6 +1755,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   applyActivationBundle: ActivationSession;
   approveInboxItem: InboxItem;
+  archiveConnector: Connector;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -1776,6 +1791,7 @@ export type Mutation = {
   createAgentFromTemplate: Agent;
   createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
+  createConnector: Connector;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -1830,6 +1846,7 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  pauseConnector: Connector;
   planRoutineDraft: RoutineDraft;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
@@ -1857,6 +1874,7 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  resumeConnector: Connector;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
   rotateTenantCredential: TenantCredential;
@@ -1890,6 +1908,7 @@ export type Mutation = {
   updateAgentStatus: Agent;
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
+  updateConnector: Connector;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
@@ -1979,6 +1998,11 @@ export type MutationApplyActivationBundleArgs = {
 export type MutationApproveInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ApproveInboxItemInput>;
+};
+
+
+export type MutationArchiveConnectorArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -2081,6 +2105,11 @@ export type MutationCreateAgentTemplateArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateConnectorArgs = {
+  input: CreateConnectorInput;
 };
 
 
@@ -2411,6 +2440,11 @@ export type MutationNotifyThreadUpdateArgs = {
 };
 
 
+export type MutationPauseConnectorArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationPlanRoutineDraftArgs = {
   input: PlanRoutineDraftInput;
 };
@@ -2528,6 +2562,11 @@ export type MutationResubmitInboxItemArgs = {
 export type MutationResumeAgentWorkspaceRunArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
+};
+
+
+export type MutationResumeConnectorArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -2694,6 +2733,12 @@ export type MutationUpdateAgentTemplateArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
+};
+
+
+export type MutationUpdateConnectorArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateConnectorInput;
 };
 
 
@@ -5000,6 +5045,17 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateConnectorInput = {
+  config?: InputMaybe<Scalars['AWSJSON']['input']>;
+  connectionId?: InputMaybe<Scalars['ID']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  dispatchTargetId?: InputMaybe<Scalars['ID']['input']>;
+  dispatchTargetType?: InputMaybe<DispatchTargetType>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateEvalTestCaseInput = {
