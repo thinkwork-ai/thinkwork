@@ -53,6 +53,7 @@ import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import {
   BedrockAgentCoreClient,
 } from "@aws-sdk/client-bedrock-agentcore";
+import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 
 import {
@@ -83,6 +84,7 @@ import {
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import { composeSystemPrompt } from "./runtime/system-prompt.js";
+import { retainConversation } from "./runtime/tools/memory-retain-client.js";
 import { buildRunSkillTool } from "./runtime/tools/run-skill.js";
 import {
   discoverWorkspaceSkills,
@@ -276,6 +278,11 @@ export interface HandlerDependencies {
   agentCoreClientFactory: () => BedrockAgentCoreClient;
   /** S3 client factory — overridden in tests. */
   s3ClientFactory: (region: string) => S3Client;
+  /**
+   * Lambda client factory — used by end-of-turn auto-retain to invoke the
+   * `memory-retain` Lambda. Overridden in tests with a stubbed client.
+   */
+  lambdaClientFactory: (region: string) => LambdaClient;
   /** Optional override for the MCP connect factory (tests inject fakes). */
   connectMcpServerFactory?: ConnectMcpServerFn;
   /**
@@ -312,6 +319,7 @@ export interface HandlerDependencies {
 const defaultDependencies: HandlerDependencies = {
   agentCoreClientFactory: () => new BedrockAgentCoreClient({}),
   s3ClientFactory: (region: string) => new S3Client({ region }),
+  lambdaClientFactory: (region: string) => new LambdaClient({ region }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1143,6 +1151,41 @@ export async function handleInvocation(
         runtime: "flue",
       },
     };
+  }
+
+  // End-of-turn auto-retain — fire-and-forget invoke of the memory-retain
+  // Lambda with the per-turn transcript. The receiving Lambda routes through
+  // the API's normalized memory layer (Hindsight or AgentCore depending on
+  // engine). Awaited so the Event invoke is queued before HTTP response —
+  // Lambda Web Adapter's in-flight Promise lifecycle is undocumented in our
+  // institutional record, so we trade ~tens of ms for guaranteed delivery.
+  // Failures are logged but never bubble to the user (retain is best-effort).
+  const retainOutcome = await retainConversation({
+    payload: args.payload as {
+      use_memory?: unknown;
+      message?: unknown;
+      messages_history?: unknown;
+    },
+    identity,
+    env,
+    assistantContent: runResult.content,
+    lambdaClient: deps.lambdaClientFactory(env.awsRegion),
+  });
+  if (retainOutcome.retained) {
+    logStructured({
+      level: "info",
+      event: "memory_retain_dispatched",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+  } else if (retainOutcome.error) {
+    logStructured({
+      level: "warn",
+      event: "memory_retain_failed",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+      error: retainOutcome.error,
+    });
   }
 
   await postCompletion({

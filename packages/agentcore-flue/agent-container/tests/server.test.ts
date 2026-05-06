@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  InvokeCommand,
+  type InvokeCommandInput,
+  type LambdaClient,
+} from "@aws-sdk/client-lambda";
 
 import {
   CompletionCallbackAuthError,
@@ -42,6 +47,7 @@ beforeEach(() => {
   delete process.env.MEMORY_ENGINE;
   delete process.env.AGENTCORE_MEMORY_ID;
   delete process.env.HINDSIGHT_ENDPOINT;
+  delete process.env.MEMORY_RETAIN_FN_NAME;
   delete process.env.WORKSPACE_BUCKET;
   delete process.env.AGENTCORE_FILES_BUCKET;
   delete process.env.DB_CLUSTER_ARN;
@@ -512,6 +518,7 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
         agentCoreMemoryId: "",
         hindsightEndpoint: "",
         memoryEngine: "managed",
+        memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
         dbName: "thinkwork",
@@ -538,6 +545,125 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
 });
 
 // ---------------------------------------------------------------------------
+// handleInvocation — end-of-turn auto-retain.
+// ---------------------------------------------------------------------------
+
+describe("handleInvocation — end-of-turn auto-retain", () => {
+  it("body-swap safety: invokes memory-retain Lambda with InvocationType=Event and the canonical envelope", async () => {
+    process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
+
+    const sendCalls: { input: InvokeCommandInput; payload: unknown }[] = [];
+    const stubLambda: LambdaClient = {
+      send: vi.fn(async (command: InvokeCommand) => {
+        const input = command.input as InvokeCommandInput;
+        const payloadBytes = input.Payload;
+        let decoded: unknown = null;
+        if (payloadBytes instanceof Uint8Array) {
+          decoded = JSON.parse(new TextDecoder().decode(payloadBytes));
+        }
+        sendCalls.push({ input, payload: decoded });
+        return {} as never;
+      }),
+    } as unknown as LambdaClient;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        use_memory: true,
+        messages_history: [
+          { role: "user", content: "my favorite color is teal" },
+          { role: "assistant", content: "Noted!" },
+        ],
+      }),
+      deps: makeDeps({ lambdaClientFactory: () => stubLambda }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(sendCalls).toHaveLength(1);
+    const call = sendCalls[0]!;
+    expect(call.input.FunctionName).toBe("thinkwork-test-api-memory-retain");
+    expect(call.input.InvocationType).toBe("Event");
+    expect(call.payload).toEqual({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      threadId: "thread-1",
+      transcript: [
+        { role: "user", content: "my favorite color is teal" },
+        { role: "assistant", content: "Noted!" },
+        { role: "user", content: "Hello flue" },
+        { role: "assistant", content: "stub response" },
+      ],
+    });
+  });
+
+  it("skips retain when use_memory is missing on the payload", async () => {
+    process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
+    const sendSpy = vi.fn();
+    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD(),
+      deps: makeDeps({ lambdaClientFactory: () => stubLambda }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it("skips retain when MEMORY_RETAIN_FN_NAME env is unset", async () => {
+    // env var deliberately not set — beforeEach already cleared it.
+    const sendSpy = vi.fn();
+    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ use_memory: true }),
+      deps: makeDeps({ lambdaClientFactory: () => stubLambda }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it("retain Lambda invoke failure does NOT affect the user-facing 200 response", async () => {
+    process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
+    const stubLambda: LambdaClient = {
+      send: vi.fn(async () => {
+        throw new Error("simulated retain timeout");
+      }),
+    } as unknown as LambdaClient;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ use_memory: true }),
+      deps: makeDeps({ lambdaClientFactory: () => stubLambda }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    expect((body.response as Record<string, unknown>).content).toBe(
+      "stub response",
+    );
+  });
+
+  it("does NOT fire retain when the agent loop itself fails (no partial transcripts)", async () => {
+    process.env.MEMORY_RETAIN_FN_NAME = "thinkwork-test-api-memory-retain";
+    const sendSpy = vi.fn();
+    const stubLambda: LambdaClient = { send: sendSpy } as unknown as LambdaClient;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ use_memory: true }),
+      deps: makeDeps({
+        lambdaClientFactory: () => stubLambda,
+        runAgentLoop: (async () => {
+          throw new Error("agent boom");
+        }) as unknown as typeof import("../src/server.js").runAgentLoop,
+      }),
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Test helpers.
 // ---------------------------------------------------------------------------
 
@@ -549,6 +675,12 @@ interface MakeDepsOptions {
   onHandlerComplete?: (
     bundle: import("../src/server.js").AssembledToolBundle,
   ) => void;
+  /** Lambda client factory — overridden by retain integration tests. */
+  lambdaClientFactory?: (region: string) => LambdaClient;
+}
+
+function fakeLambdaClient(): LambdaClient {
+  return { send: vi.fn(async () => ({})) } as unknown as LambdaClient;
 }
 
 function makeDeps(opts: MakeDepsOptions = {}) {
@@ -564,6 +696,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
   return {
     agentCoreClientFactory: () => fakeAgentCoreClient() as never,
     s3ClientFactory: () => fakeS3Client() as never,
+    lambdaClientFactory: opts.lambdaClientFactory ?? (() => fakeLambdaClient()),
     connectMcpServerFactory:
       opts.connectMcpServerFactory ?? noopConnect,
     sessionStoreFactory: () => ({}) as never,
