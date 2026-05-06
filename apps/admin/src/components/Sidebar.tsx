@@ -18,6 +18,7 @@ import {
   LayoutTemplate,
   ShieldCheck,
   Workflow,
+  Network,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -192,6 +193,7 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/symphony", icon: Network, label: "Symphony" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     {

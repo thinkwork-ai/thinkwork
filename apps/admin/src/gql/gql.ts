@@ -36,6 +36,12 @@ type Documents = {
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n": typeof types.SetAgentBudgetPolicyDocument,
     "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": typeof types.DeleteAgentBudgetPolicyDocument,
     "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": typeof types.ModelCatalogDocument,
+    "\n  query ConnectorsList(\n    $filter: ConnectorFilter\n    $limit: Int\n    $cursor: String\n  ) {\n    connectors(filter: $filter, limit: $limit, cursor: $cursor) {\n      id\n      tenantId\n      type\n      name\n      description\n      status\n      connectionId\n      config\n      dispatchTargetType\n      dispatchTargetId\n      lastPollAt\n      nextPollAt\n      enabled\n      createdByType\n      createdById\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.ConnectorsListDocument,
+    "\n  mutation CreateConnector($input: CreateConnectorInput!) {\n    createConnector(input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.CreateConnectorDocument,
+    "\n  mutation UpdateConnector($id: ID!, $input: UpdateConnectorInput!) {\n    updateConnector(id: $id, input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.UpdateConnectorDocument,
+    "\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.PauseConnectorDocument,
+    "\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.ResumeConnectorDocument,
+    "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.ArchiveConnectorDocument,
     "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n": typeof types.AgentEmailCapabilityDocument,
     "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n": typeof types.UpdateAgentEmailAllowlistDocument,
     "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n": typeof types.ToggleAgentEmailChannelDocument,
@@ -183,6 +189,12 @@ const documents: Documents = {
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n": types.SetAgentBudgetPolicyDocument,
     "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": types.DeleteAgentBudgetPolicyDocument,
     "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": types.ModelCatalogDocument,
+    "\n  query ConnectorsList(\n    $filter: ConnectorFilter\n    $limit: Int\n    $cursor: String\n  ) {\n    connectors(filter: $filter, limit: $limit, cursor: $cursor) {\n      id\n      tenantId\n      type\n      name\n      description\n      status\n      connectionId\n      config\n      dispatchTargetType\n      dispatchTargetId\n      lastPollAt\n      nextPollAt\n      enabled\n      createdByType\n      createdById\n      createdAt\n      updatedAt\n    }\n  }\n": types.ConnectorsListDocument,
+    "\n  mutation CreateConnector($input: CreateConnectorInput!) {\n    createConnector(input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.CreateConnectorDocument,
+    "\n  mutation UpdateConnector($id: ID!, $input: UpdateConnectorInput!) {\n    updateConnector(id: $id, input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.UpdateConnectorDocument,
+    "\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.PauseConnectorDocument,
+    "\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.ResumeConnectorDocument,
+    "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.ArchiveConnectorDocument,
     "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n": types.AgentEmailCapabilityDocument,
     "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n": types.UpdateAgentEmailAllowlistDocument,
     "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n": types.ToggleAgentEmailChannelDocument,
@@ -410,6 +422,30 @@ export function graphql(source: "\n  mutation DeleteAgentBudgetPolicy($agentId: 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n"): (typeof documents)["\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ConnectorsList(\n    $filter: ConnectorFilter\n    $limit: Int\n    $cursor: String\n  ) {\n    connectors(filter: $filter, limit: $limit, cursor: $cursor) {\n      id\n      tenantId\n      type\n      name\n      description\n      status\n      connectionId\n      config\n      dispatchTargetType\n      dispatchTargetId\n      lastPollAt\n      nextPollAt\n      enabled\n      createdByType\n      createdById\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query ConnectorsList(\n    $filter: ConnectorFilter\n    $limit: Int\n    $cursor: String\n  ) {\n    connectors(filter: $filter, limit: $limit, cursor: $cursor) {\n      id\n      tenantId\n      type\n      name\n      description\n      status\n      connectionId\n      config\n      dispatchTargetType\n      dispatchTargetId\n      lastPollAt\n      nextPollAt\n      enabled\n      createdByType\n      createdById\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateConnector($input: CreateConnectorInput!) {\n    createConnector(input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CreateConnector($input: CreateConnectorInput!) {\n    createConnector(input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateConnector($id: ID!, $input: UpdateConnectorInput!) {\n    updateConnector(id: $id, input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateConnector($id: ID!, $input: UpdateConnectorInput!) {\n    updateConnector(id: $id, input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
