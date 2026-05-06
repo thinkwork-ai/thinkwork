@@ -42,8 +42,8 @@ export const tenantEntityExternalRefs = pgTable(
 			table.source_kind,
 		),
 		check(
-			"tenant_entity_external_refs_kind_allowed",
-			sql`${table.source_kind} IN ('erp_customer','crm_opportunity','erp_order','crm_person','support_case','bedrock_kb')`,
+			"tenant_entity_external_refs_kind_allowed_v2",
+			sql`${table.source_kind} IN ('erp_customer','crm_opportunity','erp_order','crm_person','support_case','bedrock_kb','tracker_issue','tracker_ticket')`,
 		),
 		check(
 			"tenant_entity_external_refs_ttl_positive",
