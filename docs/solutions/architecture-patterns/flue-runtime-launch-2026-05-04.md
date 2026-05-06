@@ -36,17 +36,35 @@ This document is the durable record of what U14 *actually* validated.
 
 **Flue runtime is in production on dev.** The dispatcher Lambda `thinkwork-dev-agentcore-flue` accepts a populated invocation payload, bootstraps the workspace from S3, composes the system prompt from local files (USER.md included), invokes Bedrock through the inference-profile-prefixed model ID, and returns a real assistant message via `pi-agent-core`'s Agent loop.
 
-**A deploy-time smoke gate prevents silent regressions.** The `flue-smoke-test` job in `.github/workflows/deploy.yml` runs after `update-agentcore-runtimes` on every dev deploy. It invokes the deployed Flue Lambda with Marco's known IDs, asserts the response contains the USER.md fingerprint `"Eric"`, and fails the deploy workflow on any of these regressions:
+**A deploy-time smoke gate prevents silent regressions.** The `flue-smoke-test` job in `.github/workflows/deploy.yml` runs after `update-agentcore-runtimes` on every dev deploy. It invokes the deployed Flue Lambda with Marco's known IDs across three scenarios — `fresh-thread`, `multi-turn-history`, and `memory-bearing` — and fails the deploy workflow on any of these regressions:
 
-| Regression | Smoke detector |
-|---|---|
-| LWA routing breaks (POST `/` not handled) | response is not JSON |
-| Bedrock IAM missing inference-profile coverage | `totalTokens === 0` (silent ValidationException) |
-| Sonnet 4.5 model ID missing the `us.` inference-profile prefix | `totalTokens === 0` |
-| `pi-agent-core` Agent loop swallowing an exception silently | `content` is empty even when tokens are non-zero |
-| Workspace prompt loader regressing (USER.md not inlined) | `content` does not contain `"Eric"` |
+| Regression | Smoke detector | Scenario |
+|---|---|---|
+| LWA routing breaks (POST `/` not handled) | response is not JSON | all |
+| Bedrock IAM missing inference-profile coverage | `totalTokens === 0` (silent ValidationException) | all |
+| Sonnet 4.5 model ID missing the `us.` inference-profile prefix | `totalTokens === 0` | all |
+| `pi-agent-core` Agent loop swallowing an exception silently | `content` is empty even when tokens are non-zero | all |
+| Workspace prompt loader regressing (USER.md not inlined) | `content` does not contain `"Eric"` | `fresh-thread` |
+| `normalizeHistory` produces structurally invalid `AssistantMessage` | follow-up turn returns 0 tokens / empty content | `multi-turn-history` |
+| Auto-retain dispatch broken (missing `MEMORY_RETAIN_FN_NAME`, IAM revocation, LambdaClient throw, await semantics regressed) | `flue_retain.retained === false` despite `use_memory: true` | `memory-bearing` |
 
-The smoke is the structural reason this class of bugs no longer ships silently. Each of the five regressions above shipped to dev on 2026-05-05 and was caught only when an operator manually clicked through admin and saw a wrong answer; each cost roughly an hour of diagnostic. The smoke turns each into a deploy-blocker.
+The smoke is the structural reason this class of bugs no longer ships silently. Each of the regressions above shipped to dev on 2026-05-05 / 2026-05-06 and was caught only when an operator manually clicked through admin and saw a wrong answer; each cost roughly an hour of diagnostic. The smoke turns each into a deploy-blocker.
+
+**Operator memory-loop verification (post-deploy, manual):** the smoke pins dispatch but does NOT verify Hindsight reflection actually ingested the transcript and that recall surfaces the fact (Hindsight reflection is asynchronous, would balloon smoke runtime, and would introduce flakiness on reflection latency). The full memory loop is operator-driven:
+
+1. In admin chat, tell Marco a memorable fact: *"remember that I prefer rooibos tea"*
+2. Confirm a `memory_retain_dispatched` log line appears in CloudWatch within 30s of the chat turn:
+   ```
+   aws logs filter-log-events \
+     --region us-east-1 \
+     --log-group-name "/thinkwork/dev/agentcore-flue" \
+     --filter-pattern '"memory_retain_dispatched"' \
+     --start-time $(($(date +%s)*1000 - 60000))
+   ```
+3. Open a fresh thread with Marco, ask: *"what kind of tea do I like?"*
+4. Marco's `hindsight_recall` should surface "rooibos" within a turn or two — Hindsight's reflection layer is asynchronous, allow up to a minute for fact extraction on the first call.
+
+If step 2 fires but step 4 returns "I don't have that information": the dispatch path is healthy but Hindsight ingestion or recall is broken — escalate to the Hindsight side, not the Flue side.
 
 **Real production-style data captured during validation:**
 
