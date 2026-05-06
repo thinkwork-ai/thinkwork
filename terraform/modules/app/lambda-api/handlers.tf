@@ -95,6 +95,23 @@ locals {
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
   }
 
+  # Some handlers have their own large configuration surface and do not need
+  # the whole shared GraphQL/OAuth/billing env bundle. Keep those functions
+  # on a narrow base env so Lambda's 4KB environment limit does not block
+  # deploys as the platform grows.
+  handler_base_env = {
+    "computer-manager" = {
+      STAGE               = var.stage
+      DATABASE_URL        = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+      API_AUTH_SECRET     = var.api_auth_secret
+      THINKWORK_API_URL   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+      DATABASE_SECRET_ARN = var.graphql_db_secret_arn
+      DATABASE_HOST       = var.db_cluster_endpoint
+      DATABASE_NAME       = var.database_name
+      NODE_OPTIONS        = "--enable-source-maps"
+    }
+  }
+
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
@@ -372,7 +389,7 @@ resource "aws_lambda_function" "handler" {
 
   environment {
     variables = merge(
-      local.common_env,
+      lookup(local.handler_base_env, each.key, local.common_env),
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
