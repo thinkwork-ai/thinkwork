@@ -221,6 +221,7 @@ module "api" {
   memory_engine                       = local.resolved_memory_engine
   admin_url                           = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
   docs_url                            = "https://${module.docs_site.distribution_domain}"
+  www_url                             = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
   stripe_price_ids_json               = var.stripe_price_ids_json
   appsync_realtime_url                = module.appsync.graphql_realtime_url
   ecr_repository_url                  = module.agentcore.ecr_repository_url
@@ -493,3 +494,16 @@ module "docs_site" {
   certificate_arn = var.docs_certificate_arn
 }
 
+################################################################################
+# Public Website (www)
+################################################################################
+
+module "www_site" {
+  source = "../app/static-site"
+
+  stage           = var.stage
+  site_name       = "www"
+  custom_domain   = var.www_domain
+  certificate_arn = var.www_certificate_arn
+  # is_spa defaults to false — SSG output, directory URIs get rewritten to index.html
+}

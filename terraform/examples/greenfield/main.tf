@@ -275,10 +275,13 @@ module "thinkwork" {
   enable_workspace_orchestration = var.enable_workspace_orchestration
   api_auth_secret                = var.api_auth_secret
 
+  # Public website custom domain (optional — wired only when www_domain is set)
+  www_domain          = var.www_domain
+  www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
   # Docs site custom domain (derived from www_domain — docs.<apex>). The
   # same ACM cert covers apex + www + docs + admin so every distribution
-  # shares it. (apex/www themselves are no longer served from this stack —
-  # the marketing site lives at thinkwork-ai/thinkworkwebsite.)
+  # shares it.
   docs_domain          = local.www_dns_enabled ? local.docs_domain : ""
   docs_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
@@ -321,9 +324,10 @@ module "www_dns" {
   count  = local.www_dns_enabled ? 1 : 0
   source = "../../modules/app/www-dns"
 
-  stage              = var.stage
-  domain             = var.www_domain
-  cloudflare_zone_id = var.cloudflare_zone_id
+  stage                  = var.stage
+  domain                 = var.www_domain
+  cloudflare_zone_id     = var.cloudflare_zone_id
+  cloudfront_domain_name = module.thinkwork.www_distribution_domain
 
   # Docs: include_docs is a plain bool (no output reference) so the
   # ACM cert SAN list doesn't depend on the docs distribution output,
@@ -379,7 +383,7 @@ output "api_endpoint" {
 }
 
 output "api_domain" {
-  description = "Custom domain for the HTTP API (e.g. api.thinkwork.ai). Empty string when www_domain/cloudflare_zone_id aren't configured. Consumed by the marketing site's deploy pipeline (thinkwork-ai/thinkworkwebsite) to set PUBLIC_API_URL at build time."
+  description = "Custom domain for the HTTP API (e.g. api.thinkwork.ai). Empty string when www_domain/cloudflare_zone_id aren't configured. Read by scripts/build-www.sh to set PUBLIC_API_URL at build time."
   value       = local.www_dns_enabled ? local.api_domain : ""
 }
 
@@ -487,6 +491,26 @@ output "docs_distribution_id" {
 output "docs_bucket_name" {
   description = "S3 bucket for docs site assets"
   value       = module.thinkwork.docs_bucket_name
+}
+
+output "www_url" {
+  description = "Public website URL"
+  value       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.thinkwork.www_distribution_domain}"
+}
+
+output "www_distribution_id" {
+  description = "CloudFront distribution ID for the public website (for cache invalidation)"
+  value       = module.thinkwork.www_distribution_id
+}
+
+output "www_distribution_domain" {
+  description = "CloudFront distribution domain for the public website"
+  value       = module.thinkwork.www_distribution_domain
+}
+
+output "www_bucket_name" {
+  description = "S3 bucket for public website assets"
+  value       = module.thinkwork.www_bucket_name
 }
 
 output "ses_inbound_zone_id" {
