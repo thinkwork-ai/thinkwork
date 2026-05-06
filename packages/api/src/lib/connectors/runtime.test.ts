@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildLinearTrackerCandidates,
   isRuntimeEligibleConnector,
   runConnectorDispatchTick,
   type ConnectorExecutionRow,
+  type ConnectorRuntimeCredential,
   type ConnectorRuntimeRow,
   type ConnectorRuntimeStore,
 } from "./runtime.js";
@@ -255,6 +256,112 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
   });
+
+  it("fetches real Linear issues through the tenant credential vault", async () => {
+    store.connectors = [
+      connector({
+        config: {
+          provider: "linear",
+          sourceKind: "tracker_issue",
+          credentialSlug: "linear",
+          issueQuery: {
+            labels: ["symphony"],
+            limit: 1,
+          },
+        },
+      }),
+    ];
+    store.credential = {
+      id: "credential-1",
+      tenant_id: "tenant-a",
+      slug: "linear",
+      kind: "api_key",
+      status: "active",
+      secret_ref: "secret-ref",
+    };
+    store.claimResult = {
+      status: "created",
+      execution: execution({ id: "execution-1" }),
+    };
+    const readTenantCredentialSecret = vi.fn().mockResolvedValue({
+      apiKey: "lin_api_key",
+    });
+    const fetchLinearIssues = vi.fn().mockResolvedValue([
+      {
+        id: "linear-issue-1",
+        identifier: "SYM-101",
+        title: "Handle real Linear issue",
+        description: "From Linear API",
+        url: "https://linear.app/thinkwork/issue/SYM-101",
+        labels: ["symphony"],
+        state: "Todo",
+        priority: 2,
+      },
+    ]);
+
+    const result = await runConnectorDispatchTick(
+      { now: NOW },
+      { store, readTenantCredentialSecret, fetchLinearIssues },
+    );
+
+    expect(store.credentialLookups).toEqual([
+      {
+        tenantId: "tenant-a",
+        credentialId: undefined,
+        credentialSlug: "linear",
+      },
+    ]);
+    expect(readTenantCredentialSecret).toHaveBeenCalledWith("secret-ref");
+    expect(fetchLinearIssues).toHaveBeenCalledWith({
+      apiKey: "lin_api_key",
+      query: expect.objectContaining({
+        credentialSlug: "linear",
+        labels: ["symphony"],
+        limit: 1,
+      }),
+    });
+    expect(result).toEqual([
+      {
+        status: "dispatched",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "linear-issue-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+      },
+    ]);
+  });
+
+  it("reports a failed connector when Linear credential lookup fails", async () => {
+    store.connectors = [
+      connector({
+        config: {
+          provider: "linear",
+          sourceKind: "tracker_issue",
+          credentialSlug: "missing",
+          issueQuery: { labels: ["symphony"] },
+        },
+      }),
+    ];
+
+    const result = await runConnectorDispatchTick(
+      { now: NOW },
+      {
+        store,
+        readTenantCredentialSecret: vi.fn(),
+        fetchLinearIssues: vi.fn(),
+      },
+    );
+
+    expect(result).toEqual([
+      {
+        status: "failed",
+        connectorId: "connector-1",
+        error: "Linear credential not found",
+      },
+    ]);
+    expect(store.claims).toEqual([]);
+  });
 });
 
 class FakeStore implements ConnectorRuntimeStore {
@@ -266,7 +373,13 @@ class FakeStore implements ConnectorRuntimeStore {
     execution: execution(),
   };
   createAgentThreadError: Error | null = null;
+  credential: ConnectorRuntimeCredential | null = null;
   claims: Array<{ connectorId: string; externalRef: string }> = [];
+  credentialLookups: Array<{
+    tenantId: string;
+    credentialId?: string;
+    credentialSlug?: string;
+  }> = [];
   createdThreads: Array<{
     connectorId: string;
     executionId: string;
@@ -321,6 +434,13 @@ class FakeStore implements ConnectorRuntimeStore {
     args: Parameters<ConnectorRuntimeStore["markExecutionFailed"]>[0],
   ) {
     this.failedUpdates.push(args);
+  }
+
+  async loadTenantCredential(
+    args: Parameters<ConnectorRuntimeStore["loadTenantCredential"]>[0],
+  ) {
+    this.credentialLookups.push(args);
+    return this.credential;
   }
 }
 

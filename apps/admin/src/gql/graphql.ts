@@ -775,6 +775,19 @@ export type Connector = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type ConnectorDispatchResult = {
+  __typename?: 'ConnectorDispatchResult';
+  connectorId: Scalars['ID']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  executionId?: Maybe<Scalars['ID']['output']>;
+  externalRef?: Maybe<Scalars['String']['output']>;
+  messageId?: Maybe<Scalars['ID']['output']>;
+  reason?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  targetType?: Maybe<DispatchTargetType>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type ConnectorExecution = {
   __typename?: 'ConnectorExecution';
   connectorId: Scalars['ID']['output'];
@@ -810,6 +823,12 @@ export type ConnectorFilter = {
   includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<ConnectorStatus>;
   type?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type ConnectorRunNowResult = {
+  __typename?: 'ConnectorRunNowResult';
+  connectorId: Scalars['ID']['output'];
+  results: Array<ConnectorDispatchResult>;
 };
 
 export enum ConnectorStatus {
@@ -1815,6 +1834,7 @@ export type Mutation = {
   rollbackAgentVersion: Agent;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
+  runConnectorNow: ConnectorRunNowResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
@@ -2496,6 +2516,11 @@ export type MutationRotateTenantCredentialArgs = {
 
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
+};
+
+
+export type MutationRunConnectorNowArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -5429,6 +5454,13 @@ export type ArchiveConnectorMutationVariables = Exact<{
 
 export type ArchiveConnectorMutation = { __typename?: 'Mutation', archiveConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
 
+export type RunConnectorNowMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RunConnectorNowMutation = { __typename?: 'Mutation', runConnectorNow: { __typename?: 'ConnectorRunNowResult', connectorId: string, results: Array<{ __typename?: 'ConnectorDispatchResult', status: string, connectorId: string, executionId?: string | null, externalRef?: string | null, threadId?: string | null, messageId?: string | null, targetType?: DispatchTargetType | null, reason?: string | null, error?: string | null }> } };
+
 export type AgentEmailCapabilityQueryVariables = Exact<{
   agentId: Scalars['ID']['input'];
 }>;
@@ -6380,6 +6412,7 @@ export const UpdateConnectorDocument = {"kind":"Document","definitions":[{"kind"
 export const PauseConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PauseConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pauseConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PauseConnectorMutation, PauseConnectorMutationVariables>;
 export const ResumeConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResumeConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resumeConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ResumeConnectorMutation, ResumeConnectorMutationVariables>;
 export const ArchiveConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ArchiveConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"archiveConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ArchiveConnectorMutation, ArchiveConnectorMutationVariables>;
+export const RunConnectorNowDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RunConnectorNow"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runConnectorNow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"results"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"executionId"}},{"kind":"Field","name":{"kind":"Name","value":"externalRef"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"error"}}]}}]}}]}}]} as unknown as DocumentNode<RunConnectorNowMutation, RunConnectorNowMutationVariables>;
 export const AgentEmailCapabilityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AgentEmailCapability"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentEmailCapability"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"emailAddress"}},{"kind":"Field","name":{"kind":"Name","value":"vanityAddress"}},{"kind":"Field","name":{"kind":"Name","value":"allowedSenders"}}]}}]}}]} as unknown as DocumentNode<AgentEmailCapabilityQuery, AgentEmailCapabilityQueryVariables>;
 export const UpdateAgentEmailAllowlistDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgentEmailAllowlist"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentEmailAllowlist"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"allowedSenders"},"value":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<UpdateAgentEmailAllowlistMutation, UpdateAgentEmailAllowlistMutationVariables>;
 export const ToggleAgentEmailChannelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ToggleAgentEmailChannel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"toggleAgentEmailChannel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<ToggleAgentEmailChannelMutation, ToggleAgentEmailChannelMutationVariables>;

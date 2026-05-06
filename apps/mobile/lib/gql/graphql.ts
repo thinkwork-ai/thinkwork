@@ -775,6 +775,19 @@ export type Connector = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type ConnectorDispatchResult = {
+  __typename?: 'ConnectorDispatchResult';
+  connectorId: Scalars['ID']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  executionId?: Maybe<Scalars['ID']['output']>;
+  externalRef?: Maybe<Scalars['String']['output']>;
+  messageId?: Maybe<Scalars['ID']['output']>;
+  reason?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  targetType?: Maybe<DispatchTargetType>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type ConnectorExecution = {
   __typename?: 'ConnectorExecution';
   connectorId: Scalars['ID']['output'];
@@ -810,6 +823,12 @@ export type ConnectorFilter = {
   includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<ConnectorStatus>;
   type?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type ConnectorRunNowResult = {
+  __typename?: 'ConnectorRunNowResult';
+  connectorId: Scalars['ID']['output'];
+  results: Array<ConnectorDispatchResult>;
 };
 
 export enum ConnectorStatus {
@@ -1815,6 +1834,7 @@ export type Mutation = {
   rollbackAgentVersion: Agent;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
+  runConnectorNow: ConnectorRunNowResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
@@ -2496,6 +2516,11 @@ export type MutationRotateTenantCredentialArgs = {
 
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
+};
+
+
+export type MutationRunConnectorNowArgs = {
+  id: Scalars['ID']['input'];
 };
 
 

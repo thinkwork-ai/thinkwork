@@ -249,11 +249,7 @@ export const ModelCatalogQuery = graphql(`
 // ---------------------------------------------------------------------------
 
 export const ConnectorsListQuery = graphql(`
-  query ConnectorsList(
-    $filter: ConnectorFilter
-    $limit: Int
-    $cursor: String
-  ) {
+  query ConnectorsList($filter: ConnectorFilter, $limit: Int, $cursor: String) {
     connectors(filter: $filter, limit: $limit, cursor: $cursor) {
       id
       tenantId
@@ -322,6 +318,25 @@ export const ArchiveConnectorMutation = graphql(`
       id
       status
       updatedAt
+    }
+  }
+`);
+
+export const RunConnectorNowMutation = graphql(`
+  mutation RunConnectorNow($id: ID!) {
+    runConnectorNow(id: $id) {
+      connectorId
+      results {
+        status
+        connectorId
+        executionId
+        externalRef
+        threadId
+        messageId
+        targetType
+        reason
+        error
+      }
     }
   }
 `);

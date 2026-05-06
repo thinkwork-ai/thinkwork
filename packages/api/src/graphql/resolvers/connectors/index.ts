@@ -9,6 +9,7 @@ import {
   createConnector,
   pauseConnector,
   resumeConnector,
+  runConnectorNow,
   updateConnector,
 } from "./mutation.js";
 
@@ -24,5 +25,6 @@ export const connectorMutations = {
   createConnector,
   pauseConnector,
   resumeConnector,
+  runConnectorNow,
   updateConnector,
 };

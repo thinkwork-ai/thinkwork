@@ -99,12 +99,25 @@ type ConnectorExecution {
   createdAt: AWSDateTime!
 }
 
+type ConnectorDispatchResult {
+  status: String!
+  connectorId: ID!
+  executionId: ID
+  externalRef: String
+  threadId: ID
+  messageId: ID
+  targetType: DispatchTargetType
+  reason: String
+  error: String
+}
+
+type ConnectorRunNowResult {
+  connectorId: ID!
+  results: [ConnectorDispatchResult!]!
+}
+
 extend type Query {
-  connectors(
-    filter: ConnectorFilter
-    limit: Int
-    cursor: String
-  ): [Connector!]!
+  connectors(filter: ConnectorFilter, limit: Int, cursor: String): [Connector!]!
   connector(id: ID!): Connector
   connectorExecutions(
     connectorId: ID!
@@ -121,4 +134,5 @@ extend type Mutation {
   pauseConnector(id: ID!): Connector!
   resumeConnector(id: ID!): Connector!
   archiveConnector(id: ID!): Connector!
+  runConnectorNow(id: ID!): ConnectorRunNowResult!
 }

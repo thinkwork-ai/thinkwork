@@ -3,10 +3,18 @@ import {
   connectorExecutions,
   connectors,
   messages,
+  tenantCredentials,
   tenants,
   threads,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb, type Database } from "../db.js";
+import {
+  fetchLinearIssues as defaultFetchLinearIssues,
+  parseLinearIssueQueryConfig,
+  type LinearApiIssue,
+  type LinearFetchOptions,
+} from "./linear.js";
+import { readTenantCredentialSecret as defaultReadTenantCredentialSecret } from "../tenant-credentials/secret-store.js";
 
 export type ConnectorDispatchTargetType =
   | "agent"
@@ -34,6 +42,15 @@ export interface ConnectorDispatchCandidate {
   title: string;
   body: string;
   metadata: Record<string, unknown>;
+}
+
+export interface ConnectorRuntimeCredential {
+  id: string;
+  tenant_id: string;
+  slug: string;
+  kind: string;
+  status: string;
+  secret_ref: string;
 }
 
 export type ConnectorDispatchResult =
@@ -77,6 +94,7 @@ export interface ConnectorRuntimeTickOptions {
   connectorId?: string;
   now?: Date;
   limit?: number;
+  force?: boolean;
 }
 
 export interface AgentInvokePayload {
@@ -95,6 +113,7 @@ export interface ConnectorRuntimeStore {
     connectorId?: string;
     now: Date;
     limit: number;
+    force?: boolean;
   }): Promise<ConnectorRuntimeRow[]>;
   claimExecution(args: {
     connector: ConnectorRuntimeRow;
@@ -120,11 +139,26 @@ export interface ConnectorRuntimeStore {
     now: Date;
     error: string;
   }): Promise<void>;
+  loadTenantCredential(args: {
+    tenantId: string;
+    credentialId?: string;
+    credentialSlug?: string;
+  }): Promise<ConnectorRuntimeCredential | null>;
 }
+
+export type LinearIssueFetcher = (
+  options: LinearFetchOptions,
+) => Promise<LinearApiIssue[]>;
+
+export type TenantCredentialSecretReader = (
+  secretRef: string,
+) => Promise<Record<string, unknown>>;
 
 export interface ConnectorRuntimeDeps {
   store?: ConnectorRuntimeStore;
   invokeAgent?: AgentInvoker;
+  fetchLinearIssues?: LinearIssueFetcher;
+  readTenantCredentialSecret?: TenantCredentialSecretReader;
 }
 
 const ACTIVE_EXECUTION_STATES = [
@@ -147,6 +181,7 @@ export async function runConnectorDispatchTick(
     connectorId: options.connectorId,
     now,
     limit: options.limit ?? 50,
+    force: options.force,
   });
 
   const results: ConnectorDispatchResult[] = [];
@@ -160,7 +195,21 @@ export async function runConnectorDispatchTick(
       continue;
     }
 
-    const candidates = buildLinearTrackerCandidates(connector);
+    let candidates: ConnectorDispatchCandidate[];
+    try {
+      candidates = await loadConnectorDispatchCandidates(connector, store, {
+        fetchLinearIssues: deps.fetchLinearIssues ?? defaultFetchLinearIssues,
+        readTenantCredentialSecret:
+          deps.readTenantCredentialSecret ?? defaultReadTenantCredentialSecret,
+      });
+    } catch (error) {
+      results.push({
+        status: "failed",
+        connectorId: connector.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
     if (candidates.length === 0) {
       results.push({
         status: "skipped",
@@ -183,15 +232,62 @@ export async function runConnectorDispatchTick(
 export function isRuntimeEligibleConnector(
   connector: ConnectorRuntimeRow,
   now: Date,
-  filters: Pick<ConnectorRuntimeTickOptions, "tenantId" | "connectorId"> = {},
+  filters: Pick<
+    ConnectorRuntimeTickOptions,
+    "tenantId" | "connectorId" | "force"
+  > = {},
 ): boolean {
   if (filters.tenantId && connector.tenant_id !== filters.tenantId)
     return false;
   if (filters.connectorId && connector.id !== filters.connectorId) return false;
   if (connector.status !== "active") return false;
   if (connector.enabled !== true) return false;
-  if (connector.next_poll_at && connector.next_poll_at > now) return false;
+  if (!filters.force && connector.next_poll_at && connector.next_poll_at > now)
+    return false;
   return true;
+}
+
+export async function loadConnectorDispatchCandidates(
+  connector: ConnectorRuntimeRow,
+  store: Pick<ConnectorRuntimeStore, "loadTenantCredential">,
+  deps: {
+    fetchLinearIssues: LinearIssueFetcher;
+    readTenantCredentialSecret: TenantCredentialSecretReader;
+  },
+): Promise<ConnectorDispatchCandidate[]> {
+  const seedCandidates = buildLinearTrackerCandidates(connector);
+  if (seedCandidates.length > 0) return seedCandidates;
+  if (connector.type !== "linear_tracker") return [];
+
+  const config = asRecord(connector.config);
+  if (!isLinearTrackerConfig(config)) return [];
+
+  const query = parseLinearIssueQueryConfig(config);
+  if (!query) return [];
+
+  const credential = await store.loadTenantCredential({
+    tenantId: connector.tenant_id,
+    credentialId: query.credentialId,
+    credentialSlug: query.credentialSlug,
+  });
+  if (!credential) {
+    throw new Error("Linear credential not found");
+  }
+  if (credential.kind !== "api_key") {
+    throw new Error("Linear connector credential must be an api_key");
+  }
+
+  const secret = await deps.readTenantCredentialSecret(credential.secret_ref);
+  const apiKey = cleanString(secret.apiKey);
+  if (!apiKey) {
+    throw new Error("Linear credential secret is missing apiKey");
+  }
+
+  const issues = await deps.fetchLinearIssues({ apiKey, query });
+  return issues.flatMap((issue) => {
+    const candidate = linearIssueToCandidate(connector, issue);
+    return candidate ? [candidate] : [];
+  });
 }
 
 export function buildLinearTrackerCandidates(
@@ -200,12 +296,7 @@ export function buildLinearTrackerCandidates(
   if (connector.type !== "linear_tracker") return [];
 
   const config = asRecord(connector.config);
-  if (!config) return [];
-  const provider = typeof config.provider === "string" ? config.provider : null;
-  const sourceKind =
-    typeof config.sourceKind === "string" ? config.sourceKind : null;
-  if (provider && provider !== "linear") return [];
-  if (sourceKind && sourceKind !== "tracker_issue") return [];
+  if (!isLinearTrackerConfig(config)) return [];
 
   const seedIssues = readSeedIssues(config);
   return seedIssues.flatMap((issue) => {
@@ -270,12 +361,18 @@ export function createDrizzleConnectorRuntimeStore(
   invokeAgent: AgentInvoker = invokeChatAgentByDefault,
 ): ConnectorRuntimeStore {
   return {
-    async listDueConnectors({ tenantId, connectorId, now, limit }) {
+    async listDueConnectors({ tenantId, connectorId, now, limit, force }) {
       const conditions = [
         eq(connectors.status, "active"),
         eq(connectors.enabled, true),
-        or(isNull(connectors.next_poll_at), lte(connectors.next_poll_at, now)),
       ];
+      if (!force) {
+        const dueCondition = or(
+          isNull(connectors.next_poll_at),
+          lte(connectors.next_poll_at, now),
+        );
+        if (dueCondition) conditions.push(dueCondition);
+      }
       if (tenantId) conditions.push(eq(connectors.tenant_id, tenantId));
       if (connectorId) conditions.push(eq(connectors.id, connectorId));
 
@@ -415,6 +512,31 @@ export function createDrizzleConnectorRuntimeStore(
         })
         .where(eq(connectorExecutions.id, executionId));
     },
+
+    async loadTenantCredential({ tenantId, credentialId, credentialSlug }) {
+      if (!credentialId && !credentialSlug) return null;
+      const conditions = [
+        eq(tenantCredentials.tenant_id, tenantId),
+        eq(tenantCredentials.status, "active"),
+      ];
+      if (credentialId) conditions.push(eq(tenantCredentials.id, credentialId));
+      if (credentialSlug)
+        conditions.push(eq(tenantCredentials.slug, credentialSlug));
+
+      const [credential] = await db
+        .select({
+          id: tenantCredentials.id,
+          tenant_id: tenantCredentials.tenant_id,
+          slug: tenantCredentials.slug,
+          kind: tenantCredentials.kind,
+          status: tenantCredentials.status,
+          secret_ref: tenantCredentials.secret_ref,
+        })
+        .from(tenantCredentials)
+        .where(and(...conditions))
+        .limit(1);
+      return credential ?? null;
+    },
   };
 }
 
@@ -514,6 +636,18 @@ function readSeedIssues(config: Record<string, unknown>): LinearSeedIssue[] {
   return raw.filter(
     (issue): issue is LinearSeedIssue => asRecord(issue) !== null,
   );
+}
+
+function isLinearTrackerConfig(
+  config: Record<string, unknown> | null,
+): config is Record<string, unknown> {
+  if (!config) return false;
+  const provider = typeof config.provider === "string" ? config.provider : null;
+  const sourceKind =
+    typeof config.sourceKind === "string" ? config.sourceKind : null;
+  if (provider && provider !== "linear") return false;
+  if (sourceKind && sourceKind !== "tracker_issue") return false;
+  return true;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

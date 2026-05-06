@@ -11,6 +11,7 @@ const mockLimit = vi.fn();
 const mockValues = vi.fn();
 const mockSet = vi.fn();
 const mockReturning = vi.fn();
+const mockRunConnectorDispatchTick = vi.fn();
 
 vi.mock("../../utils.js", () => ({
   db: {
@@ -52,6 +53,10 @@ vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
+vi.mock("../../../lib/connectors/runtime.js", () => ({
+  runConnectorDispatchTick: mockRunConnectorDispatchTick,
+}));
+
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ and: args }),
   eq: (col: unknown, val: unknown) => ({ eq: [col, val] }),
@@ -71,9 +76,11 @@ beforeEach(async () => {
   mockValues.mockReset();
   mockSet.mockReset();
   mockReturning.mockReset();
+  mockRunConnectorDispatchTick.mockReset();
   vi.resetModules();
 
   mockRequireTenantAdmin.mockResolvedValue(undefined);
+  mockRunConnectorDispatchTick.mockResolvedValue([]);
   mockLimit.mockImplementation(() => Promise.resolve(mockRows()));
   mockWhere.mockReturnValue({ limit: mockLimit, returning: mockReturning });
   mockFrom.mockReturnValue({ where: mockWhere });
@@ -89,21 +96,19 @@ beforeEach(async () => {
 
 describe("connector mutations", () => {
   it("creates a connector after tenant-admin gate and same-tenant target validation", async () => {
-    mockRows
-      .mockReturnValueOnce([{ id: "agent-1" }])
-      .mockReturnValueOnce([
-        {
-          id: "connector-1",
-          tenant_id: "tenant-a",
-          type: "linear_tracker",
-          name: "Linear",
-          status: "active",
-          enabled: true,
-          config: { projectId: "ENG" },
-          dispatch_target_type: "agent",
-          dispatch_target_id: "agent-1",
-        },
-      ]);
+    mockRows.mockReturnValueOnce([{ id: "agent-1" }]).mockReturnValueOnce([
+      {
+        id: "connector-1",
+        tenant_id: "tenant-a",
+        type: "linear_tracker",
+        name: "Linear",
+        status: "active",
+        enabled: true,
+        config: { projectId: "ENG" },
+        dispatch_target_type: "agent",
+        dispatch_target_id: "agent-1",
+      },
+    ]);
 
     const result = await resolvers.createConnector(
       null,
@@ -242,6 +247,60 @@ describe("connector mutations", () => {
     expect(result).toMatchObject({ status: "archived", enabled: false });
   });
 
+  it("runs a connector now after row-derived tenant authorization", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "connector-1",
+        tenant_id: "tenant-a",
+        dispatch_target_type: "agent",
+        dispatch_target_id: "agent-1",
+      },
+    ]);
+    mockRunConnectorDispatchTick.mockResolvedValueOnce([
+      {
+        status: "dispatched",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "linear-issue-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+      },
+    ]);
+
+    const result = await resolvers.runConnectorNow(
+      null,
+      { id: "connector-1" },
+      { auth: { principalId: "user-1" } } as any,
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-a",
+    );
+    expect(mockRunConnectorDispatchTick).toHaveBeenCalledWith({
+      connectorId: "connector-1",
+      tenantId: "tenant-a",
+      limit: 1,
+      force: true,
+    });
+    expect(result).toEqual({
+      connectorId: "connector-1",
+      results: [
+        {
+          status: "dispatched",
+          connectorId: "connector-1",
+          executionId: "execution-1",
+          externalRef: "linear-issue-1",
+          threadId: "thread-1",
+          messageId: "message-1",
+          targetType: null,
+          reason: null,
+          error: null,
+        },
+      ],
+    });
+  });
+
   it("rejects cross-tenant dispatch targets before inserting", async () => {
     mockRows.mockReturnValueOnce([]);
 
@@ -266,9 +325,7 @@ describe("connector mutations", () => {
   });
 
   it("rejects cross-tenant connections before inserting", async () => {
-    mockRows
-      .mockReturnValueOnce([{ id: "agent-1" }])
-      .mockReturnValueOnce([]);
+    mockRows.mockReturnValueOnce([{ id: "agent-1" }]).mockReturnValueOnce([]);
 
     await expect(
       resolvers.createConnector(

@@ -58,10 +58,12 @@ export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
 export const LINEAR_TRACKER_STARTER_CONFIG = {
   provider: "linear",
   sourceKind: "tracker_issue",
+  credentialSlug: "linear",
   issueQuery: {
     teamKey: "",
-    labels: [],
-    states: ["Todo", "In Progress"],
+    labels: ["symphony"],
+    states: [],
+    limit: 10,
   },
   payload: {
     includeDescription: true,
@@ -100,8 +102,7 @@ export function connectorFormValues(
     connectionId: source.connectionId ?? "",
     configJson:
       source.configJson ?? formatConnectorConfig(source.config ?? null),
-    dispatchTargetType:
-      source.dispatchTargetType ?? DispatchTargetType.Agent,
+    dispatchTargetType: source.dispatchTargetType ?? DispatchTargetType.Agent,
     dispatchTargetId: source.dispatchTargetId ?? "",
     enabled: source.enabled ?? true,
   };

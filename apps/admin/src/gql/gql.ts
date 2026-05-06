@@ -42,6 +42,7 @@ type Documents = {
     "\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.PauseConnectorDocument,
     "\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.ResumeConnectorDocument,
     "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.ArchiveConnectorDocument,
+    "\n  mutation RunConnectorNow($id: ID!) {\n    runConnectorNow(id: $id) {\n      connectorId\n      results {\n        status\n        connectorId\n        executionId\n        externalRef\n        threadId\n        messageId\n        targetType\n        reason\n        error\n      }\n    }\n  }\n": typeof types.RunConnectorNowDocument,
     "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n": typeof types.AgentEmailCapabilityDocument,
     "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n": typeof types.UpdateAgentEmailAllowlistDocument,
     "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n": typeof types.ToggleAgentEmailChannelDocument,
@@ -192,6 +193,7 @@ const documents: Documents = {
     "\n  mutation PauseConnector($id: ID!) {\n    pauseConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.PauseConnectorDocument,
     "\n  mutation ResumeConnector($id: ID!) {\n    resumeConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.ResumeConnectorDocument,
     "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.ArchiveConnectorDocument,
+    "\n  mutation RunConnectorNow($id: ID!) {\n    runConnectorNow(id: $id) {\n      connectorId\n      results {\n        status\n        connectorId\n        executionId\n        externalRef\n        threadId\n        messageId\n        targetType\n        reason\n        error\n      }\n    }\n  }\n": types.RunConnectorNowDocument,
     "\n  query AgentEmailCapability($agentId: ID!) {\n    agentEmailCapability(agentId: $agentId) {\n      id\n      agentId\n      enabled\n      emailAddress\n      vanityAddress\n      allowedSenders\n    }\n  }\n": types.AgentEmailCapabilityDocument,
     "\n  mutation UpdateAgentEmailAllowlist(\n    $agentId: ID!\n    $allowedSenders: [String!]!\n  ) {\n    updateAgentEmailAllowlist(\n      agentId: $agentId\n      allowedSenders: $allowedSenders\n    ) {\n      id\n      config\n      enabled\n    }\n  }\n": types.UpdateAgentEmailAllowlistDocument,
     "\n  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {\n    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {\n      id\n      enabled\n    }\n  }\n": types.ToggleAgentEmailChannelDocument,
@@ -440,6 +442,10 @@ export function graphql(source: "\n  mutation ResumeConnector($id: ID!) {\n    r
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation ArchiveConnector($id: ID!) {\n    archiveConnector(id: $id) {\n      id\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RunConnectorNow($id: ID!) {\n    runConnectorNow(id: $id) {\n      connectorId\n      results {\n        status\n        connectorId\n        executionId\n        externalRef\n        threadId\n        messageId\n        targetType\n        reason\n        error\n      }\n    }\n  }\n"): (typeof documents)["\n  mutation RunConnectorNow($id: ID!) {\n    runConnectorNow(id: $id) {\n      connectorId\n      results {\n        status\n        connectorId\n        executionId\n        externalRef\n        threadId\n        messageId\n        targetType\n        reason\n        error\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -63,6 +63,7 @@ import {
   PauseConnectorMutation,
   ResumeConnectorMutation,
   RoutinesListQuery,
+  RunConnectorNowMutation,
   UpdateConnectorMutation,
 } from "@/lib/graphql-queries";
 import {
@@ -114,6 +115,9 @@ function SymphonyPage() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<ConnectorRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const [runningConnectorId, setRunningConnectorId] = useState<string | null>(
+    null,
+  );
   useBreadcrumbs([{ label: "Symphony" }]);
 
   const filter: ConnectorFilter = { includeArchived: true };
@@ -128,6 +132,7 @@ function SymphonyPage() {
   const [, pauseConnector] = useMutation(PauseConnectorMutation);
   const [, resumeConnector] = useMutation(ResumeConnectorMutation);
   const [, archiveConnector] = useMutation(ArchiveConnectorMutation);
+  const [, runConnectorNow] = useMutation(RunConnectorNowMutation);
 
   const connectors = (result.data?.connectors ?? []) as ConnectorRow[];
   const rows = useMemo(() => {
@@ -213,6 +218,42 @@ function SymphonyPage() {
     toast.success("Connector archived");
   };
 
+  const handleRunNow: ConnectorAction = async (connector) => {
+    setRunningConnectorId(connector.id);
+    try {
+      const response = await runConnectorNow({ id: connector.id });
+      if (response.error) {
+        toast.error(response.error.message);
+        return;
+      }
+
+      const results = response.data?.runConnectorNow.results ?? [];
+      const dispatched = results.filter(
+        (item) => item.status === "dispatched",
+      ).length;
+      const duplicates = results.filter(
+        (item) => item.status === "duplicate",
+      ).length;
+      const failed = results.find((item) => item.status === "failed");
+      refresh();
+      if (failed) {
+        toast.error(failed.error ?? "Connector run failed");
+      } else if (dispatched > 0) {
+        toast.success(`Dispatched ${dispatched} Linear issue`);
+      } else if (duplicates > 0) {
+        toast.info("Linear issue is already in flight");
+      } else {
+        toast.info(
+          results[0]?.reason
+            ? statusLabel(results[0].reason)
+            : "No Linear issues matched",
+        );
+      }
+    } finally {
+      setRunningConnectorId(null);
+    }
+  };
+
   return (
     <PageLayout
       header={
@@ -275,6 +316,8 @@ function SymphonyPage() {
             onPause: handlePause,
             onResume: handleResume,
             onArchive: handleArchive,
+            onRunNow: handleRunNow,
+            runningConnectorId,
           })}
           data={rows}
           pageSize={20}
@@ -304,6 +347,8 @@ function connectorColumns(actions: {
   onPause: ConnectorAction;
   onResume: ConnectorAction;
   onArchive: ConnectorAction;
+  onRunNow: ConnectorAction;
+  runningConnectorId: string | null;
 }): ColumnDef<ConnectorRow>[] {
   return [
     {
@@ -390,8 +435,23 @@ function connectorColumns(actions: {
         const connector = row.original;
         const archived = connector.status === ConnectorStatus.Archived;
         const paused = connector.status === ConnectorStatus.Paused;
+        const running = actions.runningConnectorId === connector.id;
         return (
           <div className="flex justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => actions.onRunNow(connector)}
+              disabled={archived || paused || running}
+              title="Run connector now"
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -407,7 +467,9 @@ function connectorColumns(actions: {
               variant="ghost"
               size="icon-sm"
               onClick={() =>
-                paused ? actions.onResume(connector) : actions.onPause(connector)
+                paused
+                  ? actions.onResume(connector)
+                  : actions.onPause(connector)
               }
               disabled={archived}
               title={paused ? "Resume connector" : "Pause connector"}
@@ -635,9 +697,7 @@ function ConnectorFormDialog({
               </Field>
               <Field
                 label={
-                  manualTargetId || !canUseTargetPicker
-                    ? "Target ID"
-                    : "Target"
+                  manualTargetId || !canUseTargetPicker ? "Target ID" : "Target"
                 }
               >
                 {canUseTargetPicker ? (
