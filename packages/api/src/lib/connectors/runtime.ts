@@ -1,0 +1,533 @@
+import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  connectorExecutions,
+  connectors,
+  messages,
+  tenants,
+  threads,
+} from "@thinkwork/database-pg/schema";
+import { db as defaultDb, type Database } from "../db.js";
+
+export type ConnectorDispatchTargetType =
+  | "agent"
+  | "routine"
+  | "hybrid_routine";
+
+export type ConnectorRuntimeRow = typeof connectors.$inferSelect;
+export type ConnectorExecutionRow = typeof connectorExecutions.$inferSelect;
+
+export interface LinearSeedIssue {
+  id?: string | null;
+  identifier?: string | null;
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
+  state?: string | null;
+  labels?: string[] | null;
+  priority?: string | number | null;
+}
+
+export interface ConnectorDispatchCandidate {
+  connectorId: string;
+  tenantId: string;
+  externalRef: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+}
+
+export type ConnectorDispatchResult =
+  | {
+      status: "dispatched";
+      connectorId: string;
+      executionId: string;
+      externalRef: string;
+      threadId: string;
+      messageId: string;
+    }
+  | {
+      status: "duplicate";
+      connectorId: string;
+      executionId?: string;
+      externalRef: string;
+    }
+  | {
+      status: "unsupported_target";
+      connectorId: string;
+      executionId: string;
+      externalRef: string;
+      targetType: ConnectorDispatchTargetType;
+    }
+  | {
+      status: "skipped";
+      connectorId: string;
+      reason: string;
+      externalRef?: string;
+    }
+  | {
+      status: "failed";
+      connectorId: string;
+      externalRef?: string;
+      executionId?: string;
+      error: string;
+    };
+
+export interface ConnectorRuntimeTickOptions {
+  tenantId?: string;
+  connectorId?: string;
+  now?: Date;
+  limit?: number;
+}
+
+export interface AgentInvokePayload {
+  threadId: string;
+  tenantId: string;
+  agentId: string;
+  userMessage: string;
+  messageId: string;
+}
+
+export type AgentInvoker = (payload: AgentInvokePayload) => Promise<boolean>;
+
+export interface ConnectorRuntimeStore {
+  listDueConnectors(args: {
+    tenantId?: string;
+    connectorId?: string;
+    now: Date;
+    limit: number;
+  }): Promise<ConnectorRuntimeRow[]>;
+  claimExecution(args: {
+    connector: ConnectorRuntimeRow;
+    candidate: ConnectorDispatchCandidate;
+    now: Date;
+  }): Promise<
+    | { status: "created"; execution: ConnectorExecutionRow }
+    | { status: "duplicate"; execution?: ConnectorExecutionRow }
+  >;
+  createAgentThread(args: {
+    connector: ConnectorRuntimeRow;
+    candidate: ConnectorDispatchCandidate;
+    execution: ConnectorExecutionRow;
+    now: Date;
+  }): Promise<{ threadId: string; messageId: string }>;
+  markExecutionDispatching(args: {
+    executionId: string;
+    now: Date;
+    outcomePayload: Record<string, unknown>;
+  }): Promise<void>;
+  markExecutionFailed(args: {
+    executionId: string;
+    now: Date;
+    error: string;
+  }): Promise<void>;
+}
+
+export interface ConnectorRuntimeDeps {
+  store?: ConnectorRuntimeStore;
+  invokeAgent?: AgentInvoker;
+}
+
+const ACTIVE_EXECUTION_STATES = [
+  "pending",
+  "dispatching",
+  "invoking",
+  "recording_result",
+];
+
+export async function runConnectorDispatchTick(
+  options: ConnectorRuntimeTickOptions = {},
+  deps: ConnectorRuntimeDeps = {},
+): Promise<ConnectorDispatchResult[]> {
+  const now = options.now ?? new Date();
+  const store =
+    deps.store ??
+    createDrizzleConnectorRuntimeStore(defaultDb, deps.invokeAgent);
+  const connectorsToRun = await store.listDueConnectors({
+    tenantId: options.tenantId,
+    connectorId: options.connectorId,
+    now,
+    limit: options.limit ?? 50,
+  });
+
+  const results: ConnectorDispatchResult[] = [];
+  for (const connector of connectorsToRun) {
+    if (!isRuntimeEligibleConnector(connector, now, options)) {
+      results.push({
+        status: "skipped",
+        connectorId: connector.id,
+        reason: "connector_not_active_enabled_due",
+      });
+      continue;
+    }
+
+    const candidates = buildLinearTrackerCandidates(connector);
+    if (candidates.length === 0) {
+      results.push({
+        status: "skipped",
+        connectorId: connector.id,
+        reason: "no_dispatch_candidates",
+      });
+      continue;
+    }
+
+    for (const candidate of candidates) {
+      results.push(
+        await dispatchCandidate({ store, connector, candidate, now }),
+      );
+    }
+  }
+
+  return results;
+}
+
+export function isRuntimeEligibleConnector(
+  connector: ConnectorRuntimeRow,
+  now: Date,
+  filters: Pick<ConnectorRuntimeTickOptions, "tenantId" | "connectorId"> = {},
+): boolean {
+  if (filters.tenantId && connector.tenant_id !== filters.tenantId)
+    return false;
+  if (filters.connectorId && connector.id !== filters.connectorId) return false;
+  if (connector.status !== "active") return false;
+  if (connector.enabled !== true) return false;
+  if (connector.next_poll_at && connector.next_poll_at > now) return false;
+  return true;
+}
+
+export function buildLinearTrackerCandidates(
+  connector: ConnectorRuntimeRow,
+): ConnectorDispatchCandidate[] {
+  if (connector.type !== "linear_tracker") return [];
+
+  const config = asRecord(connector.config);
+  if (!config) return [];
+  const provider = typeof config.provider === "string" ? config.provider : null;
+  const sourceKind =
+    typeof config.sourceKind === "string" ? config.sourceKind : null;
+  if (provider && provider !== "linear") return [];
+  if (sourceKind && sourceKind !== "tracker_issue") return [];
+
+  const seedIssues = readSeedIssues(config);
+  return seedIssues.flatMap((issue) => {
+    const candidate = linearIssueToCandidate(connector, issue);
+    return candidate ? [candidate] : [];
+  });
+}
+
+export function linearIssueToCandidate(
+  connector: ConnectorRuntimeRow,
+  issue: LinearSeedIssue,
+): ConnectorDispatchCandidate | null {
+  const externalRef = cleanString(issue.id) ?? cleanString(issue.identifier);
+  if (!externalRef) return null;
+
+  const title =
+    cleanString(issue.title) ?? cleanString(issue.identifier) ?? externalRef;
+  const description = cleanString(issue.description);
+  const url = cleanString(issue.url);
+  const labels = Array.isArray(issue.labels)
+    ? issue.labels.filter((label): label is string => typeof label === "string")
+    : [];
+
+  const lines = [
+    `Linear issue ${cleanString(issue.identifier) ?? externalRef}: ${title}`,
+    "",
+    description ?? "No issue description was provided.",
+  ];
+  if (url) lines.push("", `Issue URL: ${url}`);
+  if (issue.state) lines.push(`State: ${issue.state}`);
+  if (labels.length > 0) lines.push(`Labels: ${labels.join(", ")}`);
+  if (issue.priority !== undefined && issue.priority !== null) {
+    lines.push(`Priority: ${String(issue.priority)}`);
+  }
+
+  return {
+    connectorId: connector.id,
+    tenantId: connector.tenant_id,
+    externalRef,
+    title,
+    body: lines.join("\n"),
+    metadata: {
+      sourceKind: "tracker_issue",
+      connectorId: connector.id,
+      connectorType: connector.type,
+      externalRef,
+      linear: {
+        id: issue.id ?? null,
+        identifier: issue.identifier ?? null,
+        title,
+        url: url ?? null,
+        state: issue.state ?? null,
+        labels,
+        priority: issue.priority ?? null,
+      },
+    },
+  };
+}
+
+export function createDrizzleConnectorRuntimeStore(
+  db: Database,
+  invokeAgent: AgentInvoker = invokeChatAgentByDefault,
+): ConnectorRuntimeStore {
+  return {
+    async listDueConnectors({ tenantId, connectorId, now, limit }) {
+      const conditions = [
+        eq(connectors.status, "active"),
+        eq(connectors.enabled, true),
+        or(isNull(connectors.next_poll_at), lte(connectors.next_poll_at, now)),
+      ];
+      if (tenantId) conditions.push(eq(connectors.tenant_id, tenantId));
+      if (connectorId) conditions.push(eq(connectors.id, connectorId));
+
+      return db
+        .select()
+        .from(connectors)
+        .where(and(...conditions))
+        .orderBy(asc(connectors.next_poll_at), asc(connectors.created_at))
+        .limit(limit);
+    },
+
+    async claimExecution({ connector, candidate }) {
+      try {
+        const [execution] = await db
+          .insert(connectorExecutions)
+          .values({
+            tenant_id: connector.tenant_id,
+            connector_id: connector.id,
+            external_ref: candidate.externalRef,
+            current_state: "pending",
+            outcome_payload: {
+              candidate: candidate.metadata,
+              dispatchTitle: candidate.title,
+            },
+          })
+          .returning();
+        if (!execution) return { status: "duplicate" };
+        return { status: "created", execution };
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          const [existing] = await db
+            .select()
+            .from(connectorExecutions)
+            .where(
+              and(
+                eq(connectorExecutions.connector_id, connector.id),
+                eq(connectorExecutions.external_ref, candidate.externalRef),
+                inArray(
+                  connectorExecutions.current_state,
+                  ACTIVE_EXECUTION_STATES,
+                ),
+              ),
+            )
+            .limit(1);
+          return existing
+            ? { status: "duplicate", execution: existing }
+            : { status: "duplicate" };
+        }
+        throw error;
+      }
+    },
+
+    async createAgentThread({ connector, candidate, execution }) {
+      const created = await db.transaction(async (tx) => {
+        const [tenant] = await tx
+          .update(tenants)
+          .set({ issue_counter: sql`${tenants.issue_counter} + 1` })
+          .where(eq(tenants.id, connector.tenant_id))
+          .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
+        if (!tenant) throw new Error("Tenant not found");
+
+        const identifier = `CONN-${tenant.nextNumber}`;
+        const metadata = {
+          kind: "connector_dispatch",
+          connectorId: connector.id,
+          connectorType: connector.type,
+          connectorExecutionId: execution.id,
+          externalRef: candidate.externalRef,
+          sourceKind: "tracker_issue",
+          candidate: candidate.metadata,
+        };
+
+        const [thread] = await tx
+          .insert(threads)
+          .values({
+            tenant_id: connector.tenant_id,
+            agent_id: connector.dispatch_target_id,
+            number: tenant.nextNumber,
+            identifier,
+            title: candidate.title,
+            status: "in_progress",
+            channel: "connector",
+            created_by_type: "connector",
+            created_by_id: connector.id,
+            metadata,
+          })
+          .returning({ id: threads.id });
+        if (!thread) throw new Error("Failed to create connector thread");
+
+        const [message] = await tx
+          .insert(messages)
+          .values({
+            thread_id: thread.id,
+            tenant_id: connector.tenant_id,
+            role: "user",
+            content: candidate.body,
+            sender_type: "connector",
+            sender_id: connector.id,
+            metadata,
+          })
+          .returning({ id: messages.id });
+        if (!message) throw new Error("Failed to create connector message");
+
+        return { threadId: thread.id, messageId: message.id };
+      });
+      const dispatched = await invokeAgent({
+        threadId: created.threadId,
+        tenantId: connector.tenant_id,
+        agentId: connector.dispatch_target_id,
+        userMessage: candidate.body,
+        messageId: created.messageId,
+      });
+      if (!dispatched) {
+        throw new Error("chat-agent-invoke dispatch failed");
+      }
+      return created;
+    },
+
+    async markExecutionDispatching({ executionId, now, outcomePayload }) {
+      await db
+        .update(connectorExecutions)
+        .set({
+          current_state: "dispatching",
+          started_at: now,
+          outcome_payload: outcomePayload,
+        })
+        .where(eq(connectorExecutions.id, executionId));
+    },
+
+    async markExecutionFailed({ executionId, now, error }) {
+      await db
+        .update(connectorExecutions)
+        .set({
+          current_state: "failed",
+          finished_at: now,
+          error_class: error,
+        })
+        .where(eq(connectorExecutions.id, executionId));
+    },
+  };
+}
+
+async function invokeChatAgentByDefault(
+  payload: AgentInvokePayload,
+): Promise<boolean> {
+  const { invokeChatAgent } = await import("../../graphql/utils.js");
+  return invokeChatAgent(payload);
+}
+
+async function dispatchCandidate(args: {
+  store: ConnectorRuntimeStore;
+  connector: ConnectorRuntimeRow;
+  candidate: ConnectorDispatchCandidate;
+  now: Date;
+}): Promise<ConnectorDispatchResult> {
+  const { store, connector, candidate, now } = args;
+  let execution: ConnectorExecutionRow | undefined;
+
+  try {
+    const claim = await store.claimExecution({ connector, candidate, now });
+    if (claim.status === "duplicate") {
+      return {
+        status: "duplicate",
+        connectorId: connector.id,
+        executionId: claim.execution?.id,
+        externalRef: candidate.externalRef,
+      };
+    }
+    execution = claim.execution;
+
+    const targetType =
+      connector.dispatch_target_type as ConnectorDispatchTargetType;
+    if (targetType !== "agent") {
+      return {
+        status: "unsupported_target",
+        connectorId: connector.id,
+        executionId: execution.id,
+        externalRef: candidate.externalRef,
+        targetType,
+      };
+    }
+
+    const { threadId, messageId } = await store.createAgentThread({
+      connector,
+      candidate,
+      execution,
+      now,
+    });
+    await store.markExecutionDispatching({
+      executionId: execution.id,
+      now,
+      outcomePayload: {
+        ...candidate.metadata,
+        threadId,
+        messageId,
+        dispatchTargetType: targetType,
+        dispatchTargetId: connector.dispatch_target_id,
+      },
+    });
+
+    return {
+      status: "dispatched",
+      connectorId: connector.id,
+      executionId: execution.id,
+      externalRef: candidate.externalRef,
+      threadId,
+      messageId,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (execution) {
+      await store.markExecutionFailed({
+        executionId: execution.id,
+        now,
+        error: message,
+      });
+    }
+    return {
+      status: "failed",
+      connectorId: connector.id,
+      externalRef: candidate.externalRef,
+      executionId: execution?.id,
+      error: message,
+    };
+  }
+}
+
+function readSeedIssues(config: Record<string, unknown>): LinearSeedIssue[] {
+  const raw =
+    config.seedIssues ??
+    config.seed_issues ??
+    config.issues ??
+    asRecord(config.payload)?.seedIssues ??
+    asRecord(config.payload)?.issues;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (issue): issue is LinearSeedIssue => asRecord(issue) !== null,
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const maybe = error as { code?: unknown; cause?: { code?: unknown } };
+  return maybe.code === "23505" || maybe.cause?.code === "23505";
+}
