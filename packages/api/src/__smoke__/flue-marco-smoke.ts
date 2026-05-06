@@ -44,6 +44,10 @@ interface FlueResponseShape {
 		tool_invocations?: unknown[];
 	};
 	flue_usage?: unknown;
+	flue_retain?: {
+		retained?: boolean;
+		error?: string;
+	};
 	error?: string;
 }
 
@@ -82,6 +86,16 @@ interface ScenarioResult {
 	model: string | undefined;
 	contentPreview: string;
 	durationMs: number;
+	retain?: { retained: boolean; error?: string };
+}
+
+interface ScenarioOptions {
+	/**
+	 * When true, assert `flue_retain.retained === true` in the response.
+	 * Pins that the runtime dispatched the per-turn auto-retain Lambda
+	 * invoke. Used by the memory-bearing scenario.
+	 */
+	expectRetain?: boolean;
 }
 
 function fail(reason: string, context?: Record<string, unknown>): never {
@@ -95,6 +109,7 @@ async function invokeFlue(
 	scenario: string,
 	payload: Record<string, unknown>,
 	expectedFingerprint: RegExp,
+	options: ScenarioOptions = {},
 ): Promise<ScenarioResult> {
 	const cmd = new InvokeCommand({
 		FunctionName: FUNCTION_NAME,
@@ -171,12 +186,38 @@ async function invokeFlue(
 		);
 	}
 
+	const retain = response.flue_retain;
+	if (options.expectRetain) {
+		if (!retain) {
+			fail(
+				`[${scenario}] response.flue_retain is missing — the runtime did not surface retain status (older container? response shape regression?)`,
+				{ full_response: response, duration_ms: durationMs },
+			);
+		}
+		if (retain.retained !== true) {
+			fail(
+				`[${scenario}] response.flue_retain.retained=${retain.retained} despite use_memory=true — auto-retain dispatch did not fire`,
+				{
+					retain,
+					duration_ms: durationMs,
+					hint: "Check MEMORY_RETAIN_FN_NAME env var, IAM MemoryRetainInvoke policy, and Flue Lambda CloudWatch logs for memory_retain_failed events.",
+				},
+			);
+		}
+	}
+
 	return {
 		scenario,
 		tokens: totalTokens,
 		model: response.response?.model,
 		contentPreview: `${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
 		durationMs,
+		retain: retain
+			? {
+					retained: Boolean(retain.retained),
+					...(retain.error ? { error: retain.error } : {}),
+				}
+			: undefined,
 	};
 }
 
@@ -248,11 +289,62 @@ async function main(): Promise<void> {
 		/\b(CRM|opportunit(?:y|ies))\b/i,
 	);
 
-	for (const r of [fresh, multiTurn]) {
+	// Scenario 3: memory-bearing — pins the end-of-turn auto-retain
+	// dispatch path. Sends `use_memory: true` and asserts the response
+	// surfaces `flue_retain.retained === true`. The retain Lambda invoke
+	// itself is fire-and-forget (Event invocation type), so this scenario
+	// catches Flue-side regressions: missing MEMORY_RETAIN_FN_NAME env,
+	// IAM revocation on MemoryRetainInvoke, LambdaClient construction
+	// throwing, server.ts hook removed, await semantics broken. Does NOT
+	// verify Hindsight reflection latency or recall correctness — those
+	// are operator-driven full-loop checks (admin chat: "remember X" then
+	// fresh thread "what's X?"), not deploy gates.
+	const memoryBearing = await invokeFlue(
+		client,
+		"memory-bearing",
+		{
+			message: "Please confirm you got my last message.",
+			messages_history: [
+				{
+					role: "user",
+					content:
+						"This is a smoke-test fact: my favorite hot beverage is lapsang souchong tea. Please confirm.",
+				},
+				{
+					role: "assistant",
+					content:
+						"Got it — your favorite hot beverage is lapsang souchong tea.",
+				},
+			],
+			assistant_id: AGENT_ID,
+			thread_id: freshThreadId(),
+			tenant_id: TENANT_ID,
+			user_id: USER_ID,
+			trace_id: `smoke-trace-${Date.now()}`,
+			tenant_slug: TENANT_SLUG,
+			instance_id: INSTANCE_ID,
+			sandbox_interpreter_id: SANDBOX_INTERPRETER_ID,
+			workspace_tenant_id: TENANT_ID,
+			use_memory: true,
+		},
+		// The agent's confirmation phrasing varies; any acknowledgement
+		// signal is sufficient for the content check. The load-bearing
+		// assertion is `flue_retain.retained === true` (handled by
+		// `expectRetain` below).
+		/\b(confirm|got|noted|yes|received|hear)\b/i,
+		{ expectRetain: true },
+	);
+
+	for (const r of [fresh, multiTurn, memoryBearing]) {
 		console.log(
 			`[flue-smoke] PASS [${r.scenario}]: model=${r.model} tokens=${r.tokens} duration_ms=${r.durationMs}`,
 		);
 		console.log(`[flue-smoke]   content: ${r.contentPreview}`);
+		if (r.retain) {
+			console.log(
+				`[flue-smoke]   flue_retain: retained=${r.retain.retained}${r.retain.error ? ` error=${r.retain.error}` : ""}`,
+			);
+		}
 	}
 }
 

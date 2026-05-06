@@ -594,6 +594,9 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
         { role: "assistant", content: "stub response" },
       ],
     });
+    // Surfaces retain status to callers (smoke gate, chat-agent-invoke).
+    const body = result.body as Record<string, unknown>;
+    expect(body.flue_retain).toEqual({ retained: true });
   });
 
   it("skips retain when use_memory is missing on the payload", async () => {
@@ -608,6 +611,8 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
 
     expect(result.statusCode).toBe(200);
     expect(sendSpy).not.toHaveBeenCalled();
+    const body = result.body as Record<string, unknown>;
+    expect(body.flue_retain).toEqual({ retained: false });
   });
 
   it("skips retain when MEMORY_RETAIN_FN_NAME env is unset", async () => {
@@ -642,6 +647,12 @@ describe("handleInvocation — end-of-turn auto-retain", () => {
     expect((body.response as Record<string, unknown>).content).toBe(
       "stub response",
     );
+    // Retain failure surfaces in the response so operators (and the smoke
+    // gate) can distinguish "did not attempt" from "attempted but failed".
+    expect(body.flue_retain).toEqual({
+      retained: false,
+      error: expect.stringContaining("simulated retain timeout"),
+    });
   });
 
   it("does NOT fire retain when the agent loop itself fails (no partial transcripts)", async () => {
