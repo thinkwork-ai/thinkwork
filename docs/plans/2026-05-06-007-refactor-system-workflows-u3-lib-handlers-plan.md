@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 U3: Delete System Workflows library + Lambda handlers"
 type: refactor
-status: active
+status: completed
 date: 2026-05-06
 origin: docs/plans/2026-05-06-001-refactor-system-workflows-activation-removal-plan.md
 ---
