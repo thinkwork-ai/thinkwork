@@ -107,6 +107,7 @@ export async function provisionComputerRuntime(input: {
         service: serviceName,
         taskDefinition: taskDefinitionArn,
         desiredCount: 1,
+        networkConfiguration: createServiceInput.networkConfiguration,
       }),
     );
   } else {
