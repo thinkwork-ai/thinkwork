@@ -21,33 +21,46 @@ const MAX_STRING_BYTES = 4096;
 const REDACTED_SECRET = "<REDACTED:secret>";
 
 // ---------------------------------------------------------------------------
-// Secret-pattern set (mirror of packages/lambda/sandbox-log-scrubber.ts:43-56)
+// Secret-pattern set (extends packages/lambda/sandbox-log-scrubber.ts)
 //
 // Copied rather than imported because the scrubber is in `packages/lambda`
-// and a cross-package dep for three regexes would be brittle. If the
-// scrubber's pattern set evolves, update both places — flagged in
-// `docs/solutions/` for future consolidation.
+// and a cross-package dep for these regexes would be brittle. The
+// compliance helper is the higher-stakes target (durable audit table vs
+// transient CloudWatch logs), so this set is wider:
+//   - GitHub (gh[oprsu]_), Slack (xox[abep]-), Google OAuth (ya29.)
+//   - Anthropic (sk-ant-*), OpenAI (sk-proj-*)
+//   - AWS access keys (AKIA / ASIA)
+//   - JWT — anchored to `eyJ` Base64url-encoded JSON header prefix to
+//     eliminate false positives on dotted identifiers / prose with 16+
+//     char segments
+//
+// Update both files in lockstep; consider a shared module if patterns
+// evolve further.
 // ---------------------------------------------------------------------------
 
 const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
-const JWT = /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
+// Anchor JWT to the standard header prefix: every real JWT base64url-
+// encodes a header that begins with `{"alg":...}` -> `eyJ...`. This
+// eliminates the false positive on three-segment dotted identifiers.
+const JWT = /\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
 const PREFIXED_TOKEN =
-	/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,})/g;
+	/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
 
+/**
+ * Self-contained secret detection: resets every regex's `lastIndex`
+ * before calling `.test()` so callers don't need to coordinate. The
+ * `g` flag retains state between calls, which would otherwise produce
+ * false negatives across consecutive scrub calls.
+ */
 function looksLikeSecret(value: string): boolean {
+	AUTH_BEARER.lastIndex = 0;
+	JWT.lastIndex = 0;
+	PREFIXED_TOKEN.lastIndex = 0;
 	return (
 		AUTH_BEARER.test(value) ||
 		JWT.test(value) ||
 		PREFIXED_TOKEN.test(value)
 	);
-}
-
-// `RegExp.prototype.test` advances `lastIndex` on `g`-flagged regexes;
-// reset before each independent call.
-function resetRegexes(): void {
-	AUTH_BEARER.lastIndex = 0;
-	JWT.lastIndex = 0;
-	PREFIXED_TOKEN.lastIndex = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +138,11 @@ export interface RedactResult {
  * Redact a raw payload against the per-event-type allow-list and the
  * secret-pattern scrub. Throws when the event type has no registered
  * schema — protects against unknown event types reaching the outbox.
+ *
+ * Phase 6 reserved event types (R14) have empty allow-lists by design.
+ * Calling `redactPayload` with one of these throws so an emitter
+ * accidentally shipped before the registry update fails loudly rather
+ * than silently writing `{}` payloads with no audit evidence.
  */
 export function redactPayload(
 	eventType: ComplianceEventType,
@@ -135,6 +153,12 @@ export function redactPayload(
 		throw new Error(
 			`compliance.redactPayload: no redaction schema for event type "${eventType}". ` +
 				`Add an entry to EVENT_PAYLOAD_SHAPES in packages/api/src/lib/compliance/event-schemas.ts.`,
+		);
+	}
+	if (schema.allowedFields.size === 0) {
+		throw new Error(
+			`compliance.redactPayload: event type "${eventType}" is a Phase 6 reservation ` +
+				`with no allowed fields. Define its allow-list in EVENT_PAYLOAD_SHAPES before emitting.`,
 		);
 	}
 
@@ -163,7 +187,6 @@ export function redactPayload(
 			redactedFields.push(`${key}:truncated`);
 		}
 
-		resetRegexes();
 		if (looksLikeSecret(cleanedValue)) {
 			redacted[key] = REDACTED_SECRET;
 			redactedFields.push(`${key}:scrubbed`);

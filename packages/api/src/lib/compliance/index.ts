@@ -17,6 +17,7 @@
 export {
 	emitAuditEvent,
 	COMPLIANCE_SOURCES,
+	type AuditTx,
 	type ComplianceSource,
 	type EmitAuditEventInput,
 	type EmitAuditEventResult,

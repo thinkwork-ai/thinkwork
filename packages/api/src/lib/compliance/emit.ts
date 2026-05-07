@@ -41,8 +41,11 @@ import { redactPayload } from "./redaction";
  * `tx` from inside `db.transaction(async (tx) => ...)`. Indexing off the
  * Database type extracts whatever PgTransaction shape Drizzle uses,
  * future-proof against drizzle-orm version bumps.
+ *
+ * Exported so callers + tests can name the parameter type directly
+ * instead of reaching through `Parameters<typeof emitAuditEvent>[0]`.
  */
-type AuditOutboxInsertable =
+export type AuditTx =
 	| Database
 	| Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -102,6 +105,16 @@ export interface EmitAuditEventResult {
  * for control-evidence semantics; passing `db` directly bypasses
  * transactional atomicity with the primary write.
  *
+ * **Tenant-boundary contract:** `tenantId` and `actorId` are caller-
+ * supplied. The helper does NOT validate that the caller is authorized
+ * to write for that tenant — that is the caller's responsibility,
+ * resolved via `resolveCallerFromAuth(ctx.auth)` /
+ * `resolveCallerTenantId(ctx)` in resolvers, or via the authenticated
+ * session context in Lambda handlers. A resolver passing a user-
+ * supplied `tenantId` would corrupt that tenant's hash chain (U4); all
+ * call sites must derive tenant ID from the authenticated session, not
+ * from request arguments.
+ *
  * Throws on:
  *   - Unknown eventType / source / actorType
  *   - Missing required fields (tenantId, actorId)
@@ -111,7 +124,7 @@ export interface EmitAuditEventResult {
  * Returns identifiers + redaction provenance for caller smoke pinning.
  */
 export async function emitAuditEvent(
-	tx: AuditOutboxInsertable,
+	tx: AuditTx,
 	input: EmitAuditEventInput,
 ): Promise<EmitAuditEventResult> {
 	// ── Validation ───────────────────────────────────────────────

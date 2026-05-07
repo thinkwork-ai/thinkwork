@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { auditOutbox } from "@thinkwork/database-pg/schema";
-import { emitAuditEvent } from "../emit";
+import { emitAuditEvent, type AuditTx } from "../emit";
 
 /**
  * Mock Drizzle insert chain. Returns the row passed to `.values()` so
@@ -15,9 +15,7 @@ function makeMockTx() {
 	const valuesSpy = vi.fn().mockResolvedValue(undefined);
 	const insertSpy = vi.fn().mockReturnValue({ values: valuesSpy });
 	return {
-		tx: { insert: insertSpy } as unknown as Parameters<
-			typeof emitAuditEvent
-		>[0],
+		tx: { insert: insertSpy } as unknown as AuditTx,
 		insertSpy,
 		valuesSpy,
 	};
@@ -197,30 +195,42 @@ describe("emitAuditEvent", () => {
 	});
 
 	describe("propagation of insert failure", () => {
-		it("re-throws the underlying error from tx.insert", async () => {
+		it("re-throws the underlying error from tx.insert.values()", async () => {
 			const insertError = new Error("simulated DB failure");
 			const tx = {
 				insert: vi.fn().mockReturnValue({
 					values: vi.fn().mockRejectedValue(insertError),
 				}),
-			} as unknown as Parameters<typeof emitAuditEvent>[0];
+			} as unknown as AuditTx;
 
 			await expect(emitAuditEvent(tx, validInput)).rejects.toBe(insertError);
 		});
+
+		it("re-throws a synchronous throw from tx.insert() itself", async () => {
+			const syncErr = new Error("schema mismatch");
+			const tx = {
+				insert: vi.fn().mockImplementation(() => {
+					throw syncErr;
+				}),
+			} as unknown as AuditTx;
+
+			await expect(emitAuditEvent(tx, validInput)).rejects.toBe(syncErr);
+		});
 	});
 
-	describe("Phase 6 reserved event types (R14)", () => {
-		it("policy.evaluated is accepted; payload fields all dropped (empty allow-list)", async () => {
-			const { tx, valuesSpy } = makeMockTx();
+	describe("Phase 6 reserved event types (R14) — emit attempt throws", () => {
+		it("policy.evaluated throws — reserved type with no allow-list defined", async () => {
+			const { tx, insertSpy } = makeMockTx();
 
-			const result = await emitAuditEvent(tx, {
-				...validInput,
-				eventType: "policy.evaluated",
-				payload: { policyId: "p1", outcome: "allow" },
-			});
-
-			expect(result.redactedFields.sort()).toEqual(["outcome", "policyId"]);
-			expect(valuesSpy.mock.calls[0][0].payload).toEqual({});
+			await expect(
+				emitAuditEvent(tx, {
+					...validInput,
+					eventType: "policy.evaluated",
+					payload: { policyId: "p1" },
+				}),
+			).rejects.toThrow(/Phase 6 reservation/);
+			// No insert attempted — reservation throws before envelope build.
+			expect(insertSpy).not.toHaveBeenCalled();
 		});
 	});
 });

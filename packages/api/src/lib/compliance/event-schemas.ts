@@ -14,10 +14,7 @@
  * redaction policy (master plan Decision #6).
  */
 
-import {
-	COMPLIANCE_EVENT_TYPES,
-	type ComplianceEventType,
-} from "@thinkwork/database-pg/schema";
+import { type ComplianceEventType } from "@thinkwork/database-pg/schema";
 import { createHash } from "node:crypto";
 
 export interface RedactionSchema {
@@ -34,21 +31,103 @@ export interface RedactionSchema {
 const GOVERNANCE_PREVIEW_BYTES = 2048;
 
 /**
- * Replace raw `content` with `content_sha256` + 2 KB `preview` so the
- * audit log records the file diff without storing the full content.
- * Used by `workspace.governance_file_edited` events for AGENTS.md /
- * GUARDRAILS.md / CAPABILITIES.md edits.
+ * Truncate a string to the largest UTF-8-byte-length-bounded prefix.
+ * Bisects on character index so the cut never lands mid-codepoint —
+ * `String.slice(0, N)` cuts on JS char count (UTF-16 code units), which
+ * for multi-byte content (emoji, CJK) blows past the byte budget. The
+ * preview budget (2 KB) is a storage limit, not a character limit, so
+ * byte-aware truncation is required.
+ */
+function sliceByBytes(text: string, maxBytes: number): string {
+	if (Buffer.byteLength(text, "utf-8") <= maxBytes) return text;
+	let lo = 0;
+	let hi = text.length;
+	while (lo < hi) {
+		const mid = (lo + hi + 1) >>> 1;
+		const candidate = text.slice(0, mid);
+		if (Buffer.byteLength(candidate, "utf-8") <= maxBytes) {
+			lo = mid;
+		} else {
+			hi = mid - 1;
+		}
+	}
+	return text.slice(0, lo);
+}
+
+/**
+ * Replace raw `content` with `content_sha256` + 2 KB byte-bounded
+ * `preview` so the audit log records the file diff without storing the
+ * full content. Used by `workspace.governance_file_edited` events for
+ * AGENTS.md / GUARDRAILS.md / CAPABILITIES.md edits.
+ *
+ * Order matters: the secret-pattern scrub runs against the FULL content
+ * before truncation so a token spanning the 2 KB boundary cannot leak
+ * partial key material into the preview. (Avoids the
+ * truncate-then-partially-leak bug where 16-char minimum patterns miss
+ * 12-char prefix tails.)
  */
 function governanceFileDiffTransform(
 	raw: Record<string, unknown>,
 ): Record<string, unknown> {
 	const content = typeof raw.content === "string" ? raw.content : "";
+	// Hash the original (pre-scrub) content so the audit anchor commits
+	// to what was actually edited, not the redacted preview.
 	const hash = createHash("sha256").update(content, "utf-8").digest("hex");
+	// Scrub before truncating so partial tokens can't survive at the boundary.
+	const scrubbed = scrubKnownSecretPatterns(content);
 	return {
 		file: raw.file,
+		workspaceId: raw.workspaceId,
 		content_sha256: hash,
-		preview: content.slice(0, GOVERNANCE_PREVIEW_BYTES),
+		preview: sliceByBytes(scrubbed, GOVERNANCE_PREVIEW_BYTES),
 	};
+}
+
+/**
+ * Mirror of the scrub step in `redaction.ts` — kept here in tandem so
+ * the `governanceFileDiffTransform` preview is sanitized before
+ * truncation. The two pattern sets MUST stay in sync; consider a shared
+ * module if the patterns evolve.
+ */
+function scrubKnownSecretPatterns(text: string): string {
+	const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
+	const JWT = /\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
+	const PREFIXED_TOKEN =
+		/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
+	const REDACTED = "<REDACTED:scrubbed>";
+	return text
+		.replace(AUTH_BEARER, `Authorization: Bearer ${REDACTED}`)
+		.replace(JWT, REDACTED)
+		.replace(PREFIXED_TOKEN, REDACTED);
+}
+
+/**
+ * Strip user/password components from URLs in MCP events. `new URL()`
+ * gracefully ignores malformed input; on parse failure the original is
+ * returned unchanged (and downstream sanitization still runs).
+ */
+function stripUrlUserinfo(value: string): string {
+	try {
+		const u = new URL(value);
+		if (u.username || u.password) {
+			u.username = "";
+			u.password = "";
+			return u.toString();
+		}
+	} catch {
+		// not a URL we can parse — leave untouched
+	}
+	return value;
+}
+
+function mcpUrlPreTransform(
+	raw: Record<string, unknown>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...raw };
+	if (typeof out.url === "string") {
+		out.url = stripUrlUserinfo(out.url);
+	}
+	return out;
 }
 
 /**
@@ -103,9 +182,11 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 
 		"mcp.added": {
 			allowedFields: new Set(["mcpId", "url", "scopes"]),
+			preTransform: mcpUrlPreTransform,
 		},
 		"mcp.removed": {
 			allowedFields: new Set(["mcpId", "url"]),
+			preTransform: mcpUrlPreTransform,
 		},
 
 		"workspace.governance_file_edited": {
@@ -139,11 +220,8 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 		"approval.recorded": { allowedFields: new Set() },
 	};
 
-/**
- * Build-time guarantee that every entry in `COMPLIANCE_EVENT_TYPES` has
- * a redaction schema. Because the Record type above is keyed by
- * `ComplianceEventType`, TypeScript fails the build if an event type is
- * missing — runtime exhaustiveness is implied.
- */
-const _exhaustive: readonly ComplianceEventType[] = COMPLIANCE_EVENT_TYPES;
-void _exhaustive;
+// Build-time exhaustiveness: the `Record<ComplianceEventType,
+// RedactionSchema>` annotation on `EVENT_PAYLOAD_SHAPES` above is the
+// single safety gate. Adding a new entry to `COMPLIANCE_EVENT_TYPES`
+// without a matching schema key is a TypeScript compile error at the
+// declaration site — no runtime check needed.

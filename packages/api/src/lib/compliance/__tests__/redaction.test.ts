@@ -89,7 +89,7 @@ describe("redactPayload", () => {
 	});
 
 	describe("governance file diff preTransform", () => {
-		it("replaces raw content with content_sha256 + 2 KB preview", () => {
+		it("replaces raw content with content_sha256 + 2 KB preview, preserves workspaceId", () => {
 			const fakeContent = "x".repeat(10_000);
 			const result = redactPayload("workspace.governance_file_edited", {
 				file: "AGENTS.md",
@@ -98,8 +98,48 @@ describe("redactPayload", () => {
 			});
 			expect(result.redacted).not.toHaveProperty("content");
 			expect(result.redacted.content_sha256).toMatch(/^[a-f0-9]{64}$/);
-			expect((result.redacted.preview as string).length).toBe(2048);
+			expect(result.redacted.preview).toBeDefined();
+			// Byte-bounded, not character-bounded.
+			expect(
+				Buffer.byteLength(result.redacted.preview as string, "utf-8"),
+			).toBeLessThanOrEqual(2048);
+			// Workspace context must round-trip — auditor needs it to tie
+			// the event to a workspace.
+			expect(result.redacted.workspaceId).toBe("w1");
+			expect(result.redacted.file).toBe("AGENTS.md");
 			expect(result.redactedFields).toEqual([]);
+		});
+
+		it("preview byte length stays under 2048 even for multi-byte content (emoji/CJK)", () => {
+			// 4-byte emoji × 1500 = 6000 bytes; preview must truncate by
+			// bytes not by char index, otherwise the limit is violated.
+			const longEmoji = "🎉".repeat(1500);
+			const result = redactPayload("workspace.governance_file_edited", {
+				file: "AGENTS.md",
+				content: longEmoji,
+				workspaceId: "w1",
+			});
+			const preview = result.redacted.preview as string;
+			expect(Buffer.byteLength(preview, "utf-8")).toBeLessThanOrEqual(2048);
+			// Truncation must not produce replacement chars from
+			// mid-codepoint cuts.
+			expect(preview).not.toContain("�");
+		});
+
+		it("scrubs secrets in preview before truncation (no partial-token leak at boundary)", () => {
+			// Place a GitHub token within the would-be preview region.
+			// If truncation happened first then scrub, a 12-char tail of
+			// the token could survive (PREFIXED_TOKEN minimum is 20).
+			const filler = "x".repeat(2000);
+			const token = "ghp_" + "A".repeat(36);
+			const result = redactPayload("workspace.governance_file_edited", {
+				file: "AGENTS.md",
+				content: filler + token + "trailing",
+				workspaceId: "w1",
+			});
+			const preview = result.redacted.preview as string;
+			expect(preview).not.toContain("ghp_");
+			expect(preview).toContain("<REDACTED:scrubbed>");
 		});
 
 		it("hashes empty content correctly", () => {
@@ -112,6 +152,42 @@ describe("redactPayload", () => {
 			expect(result.redacted.content_sha256).toBe(
 				"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			);
+			expect(result.redacted.workspaceId).toBe("w1");
+		});
+	});
+
+	describe("MCP URL userinfo stripping", () => {
+		it("strips username and password from mcp.added.url", () => {
+			const result = redactPayload("mcp.added", {
+				mcpId: "m1",
+				url: "https://user:p4ss@mcp.example.com/path",
+				scopes: ["read"],
+			});
+			expect(result.redacted.url).toBe("https://mcp.example.com/path");
+		});
+
+		it("leaves URLs without userinfo unchanged", () => {
+			const result = redactPayload("mcp.added", {
+				mcpId: "m1",
+				url: "https://mcp.example.com/path",
+			});
+			expect(result.redacted.url).toBe("https://mcp.example.com/path");
+		});
+
+		it("strips userinfo from mcp.removed.url too", () => {
+			const result = redactPayload("mcp.removed", {
+				mcpId: "m1",
+				url: "https://x:sk-anything@mcp.example.com",
+			});
+			expect(result.redacted.url).toBe("https://mcp.example.com/");
+		});
+
+		it("preserves malformed URLs (graceful pre-transform fallback)", () => {
+			const result = redactPayload("mcp.added", {
+				mcpId: "m1",
+				url: "not a url",
+			});
+			expect(result.redacted.url).toBe("not a url");
 		});
 	});
 
@@ -142,6 +218,25 @@ describe("redactPayload", () => {
 			expect(result.truncated).toBe(false);
 		});
 
+		it("returns empty string unchanged for empty input", () => {
+			const result = sanitizeStringField("");
+			expect(result.value).toBe("");
+			expect(result.truncated).toBe(false);
+		});
+
+		it("does not truncate at exactly the 4096-byte boundary (fence-post check)", () => {
+			const exact = "a".repeat(4096);
+			const result = sanitizeStringField(exact);
+			expect(result.value).toBe(exact);
+			expect(result.truncated).toBe(false);
+		});
+
+		it("returns empty string when all chars are stripped control chars", () => {
+			const result = sanitizeStringField("\x00\x01\x02\x7F\x1F");
+			expect(result.value).toBe("");
+			expect(result.truncated).toBe(false);
+		});
+
 		it("handles multi-byte UTF-8 correctly when truncating", () => {
 			// 4-byte emoji × 1500 = 6000 bytes; truncation should land on a
 			// codepoint boundary, not mid-byte.
@@ -157,6 +252,64 @@ describe("redactPayload", () => {
 		});
 	});
 
+	describe("expanded secret-pattern set", () => {
+		it("scrubs AWS access key IDs (AKIA prefix)", () => {
+			const result = redactPayload("auth.signin.success", {
+				userId: "u1",
+				method: "password",
+				ip: "10.0.0.1",
+				userAgent: "AKIAIOSFODNN7EXAMPLE config",
+			});
+			expect(result.redacted.userAgent).toBe("<REDACTED:secret>");
+			expect(result.redactedFields).toContain("userAgent:scrubbed");
+		});
+
+		it("scrubs Anthropic sk-ant- keys", () => {
+			const result = redactPayload("user.invited", {
+				email: "test@example.com",
+				role: "member",
+				invitedBy: "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			});
+			expect(result.redacted.invitedBy).toBe("<REDACTED:secret>");
+		});
+
+		it("scrubs OpenAI sk-proj- keys", () => {
+			const result = redactPayload("user.invited", {
+				email: "test@example.com",
+				role: "member",
+				invitedBy: "sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			});
+			expect(result.redacted.invitedBy).toBe("<REDACTED:secret>");
+		});
+
+		it("does NOT false-positive on dotted identifiers (16+ char segments)", () => {
+			// Pre-fix: this matched the old JWT regex and silently destroyed
+			// audit evidence. Post-fix: anchored to `eyJ` prefix, no match.
+			const dottedId =
+				"date_range_filter_longer.export_format_name_here.tenant_identifier_12";
+			const result = redactPayload("data.export_initiated", {
+				exportJobId: "j1",
+				format: "csv",
+				filterSummary: dottedId,
+				requestedBy: "u1",
+			});
+			expect(result.redacted.filterSummary).toBe(dottedId);
+			expect(result.redactedFields).not.toContain("filterSummary:scrubbed");
+		});
+
+		it("still catches real JWTs (eyJ header prefix)", () => {
+			const fakeJwt =
+				"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+			const result = redactPayload("auth.signin.success", {
+				userId: "u1",
+				method: "password",
+				ip: "10.0.0.1",
+				userAgent: `Bearer ${fakeJwt}`,
+			});
+			expect(result.redacted.userAgent).toBe("<REDACTED:secret>");
+		});
+	});
+
 	describe("error paths", () => {
 		it("throws on unknown event type", () => {
 			expect(() =>
@@ -165,7 +318,7 @@ describe("redactPayload", () => {
 		});
 	});
 
-	describe("Phase 6 reservations (R14)", () => {
+	describe("Phase 6 reservations (R14) — throw on emit attempt", () => {
 		const phase6Types = [
 			"policy.evaluated",
 			"policy.allowed",
@@ -175,16 +328,55 @@ describe("redactPayload", () => {
 		] as const;
 
 		it.each(phase6Types)(
-			"%s has empty allow-list — all payload fields dropped",
+			"%s throws — empty allow-list means no defined emit path",
 			(eventType) => {
-				const result = redactPayload(eventType, {
-					anything: "value",
-					more: 42,
-				});
-				expect(result.redacted).toEqual({});
-				expect(result.redactedFields.sort()).toEqual(["anything", "more"]);
+				// Reserved types are declared in COMPLIANCE_EVENT_TYPES so
+				// the prefix CHECK constraint accepts them, but emitting
+				// before the registry update is a loud failure (better than
+				// silently writing {} payloads with no audit evidence).
+				expect(() =>
+					redactPayload(eventType, { anything: "value" }),
+				).toThrow(/Phase 6 reservation/);
 			},
 		);
+	});
+
+	describe("behavioral coverage of remaining Phase 3 starter slate", () => {
+		it("auth.signout retains userId + sessionId", () => {
+			const result = redactPayload("auth.signout", {
+				userId: "u1",
+				sessionId: "s1",
+				token: "leaked",
+			});
+			expect(result.redacted).toMatchObject({ userId: "u1", sessionId: "s1" });
+			expect(result.redactedFields).toContain("token");
+		});
+
+		it("mcp.removed retains mcpId + url", () => {
+			const result = redactPayload("mcp.removed", {
+				mcpId: "m1",
+				url: "https://mcp.example.com",
+				token: "leak",
+			});
+			expect(result.redacted.mcpId).toBe("m1");
+			expect(result.redactedFields).toContain("token");
+		});
+
+		it("data.export_initiated retains the four allow-list fields", () => {
+			const result = redactPayload("data.export_initiated", {
+				exportJobId: "j1",
+				format: "csv",
+				filterSummary: "agent.skills_changed events last 7 days",
+				requestedBy: "u-admin",
+				password: "leak",
+			});
+			expect(result.redacted).toMatchObject({
+				exportJobId: "j1",
+				format: "csv",
+				requestedBy: "u-admin",
+			});
+			expect(result.redactedFields).toContain("password");
+		});
 	});
 
 	describe("non-string fields pass through unchanged", () => {
