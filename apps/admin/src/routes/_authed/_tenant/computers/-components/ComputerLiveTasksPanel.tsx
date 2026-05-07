@@ -63,6 +63,16 @@ function taskTone(status: ComputerTaskStatus): string {
   return "text-muted-foreground";
 }
 
+function taskTimestamp(task: {
+  completedAt?: string | null;
+  claimedAt?: string | null;
+  createdAt: string;
+}): string {
+  if (task.completedAt) return `Completed ${relativeTime(task.completedAt)}`;
+  if (task.claimedAt) return `Claimed ${relativeTime(task.claimedAt)}`;
+  return `Queued ${relativeTime(task.createdAt)}`;
+}
+
 function outputSummary(output: unknown, error: unknown): string {
   const payload =
     error && typeof error === "object"
@@ -187,6 +197,55 @@ function taskPayload(task: {
       : null;
 }
 
+function TaskResultRow({
+  task,
+  highlighted = false,
+}: {
+  task: {
+    id: string;
+    taskType: ComputerTaskType;
+    status: ComputerTaskStatus;
+    output?: unknown;
+    error?: unknown;
+    completedAt?: string | null;
+    claimedAt?: string | null;
+    createdAt: string;
+  };
+  highlighted?: boolean;
+}) {
+  const Icon = taskIcon(task.status);
+
+  return (
+    <div
+      className={`grid gap-3 text-sm lg:grid-cols-[minmax(0,1fr)_120px_180px] ${
+        highlighted ? "rounded-md border bg-muted/20 p-3" : "p-3"
+      }`}
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <Icon
+          className={`mt-0.5 h-4 w-4 shrink-0 ${taskTone(task.status)} ${
+            task.status === ComputerTaskStatus.Running ? "animate-spin" : ""
+          }`}
+        />
+        <div className="min-w-0">
+          <div className="break-words font-medium">{label(task.taskType)}</div>
+          <div className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
+            {outputSummary(task.output, task.error)}
+          </div>
+        </div>
+      </div>
+      <div className="lg:text-center">
+        <Badge variant="outline" className="text-xs">
+          {label(task.status)}
+        </Badge>
+      </div>
+      <div className="text-xs text-muted-foreground lg:text-right">
+        {taskTimestamp(task)}
+      </div>
+    </div>
+  );
+}
+
 export function ComputerLiveTasksPanel({
   computer,
   onChanged,
@@ -203,6 +262,8 @@ export function ComputerLiveTasksPanel({
   );
 
   const tasks = tasksResult.data?.computerTasks ?? [];
+  const latestTask = tasks[0] ?? null;
+  const historicalTasks = tasks.slice(1);
   const needsGoogleReconnect = useMemo(() => {
     const latestGoogleTask = tasks.find(taskHasGoogleWorkspaceSignal);
     return latestGoogleTask
@@ -284,7 +345,7 @@ export function ComputerLiveTasksPanel({
 
   function enqueueCalendarUpcoming() {
     const now = new Date();
-    const timeMax = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     enqueueRuntimeTask(ComputerTaskType.GoogleCalendarUpcoming, {
       timeMin: now.toISOString(),
       timeMax: timeMax.toISOString(),
@@ -294,16 +355,29 @@ export function ComputerLiveTasksPanel({
 
   return (
     <Card>
-      <CardHeader className="gap-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 max-w-2xl">
-            <CardTitle>Live Runtime</CardTitle>
-            <CardDescription>
-              Browser-triggered actions and recent work claimed by the running
-              ECS worker.
-            </CardDescription>
+      <CardHeader>
+        <CardTitle>Live Runtime</CardTitle>
+        <CardDescription>
+          Queue checks against the running Computer and review the latest result.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <section className="space-y-2" aria-labelledby="runtime-actions-title">
+          <div className="flex items-center justify-between gap-3">
+            <h3
+              id="runtime-actions-title"
+              className="text-sm font-medium text-foreground"
+            >
+              Actions
+            </h3>
+            {enqueueing ? (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Queueing
+              </span>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2 xl:justify-end">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <Button
               size="sm"
               variant="outline"
@@ -363,9 +437,7 @@ export function ComputerLiveTasksPanel({
               Calendar
             </Button>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </section>
         {needsGoogleReconnect ? (
           <div className="flex flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-2">
@@ -400,47 +472,46 @@ export function ComputerLiveTasksPanel({
             No runtime tasks yet.
           </div>
         ) : (
-          <div className="divide-y rounded-md border">
-            {tasks.map((task) => {
-              const Icon = taskIcon(task.status);
-              return (
-                <div
-                  key={task.id}
-                  className="grid gap-3 p-3 text-sm lg:grid-cols-[minmax(0,1fr)_120px_180px]"
+          <>
+            {latestTask ? (
+              <section
+                className="space-y-2"
+                aria-labelledby="latest-runtime-result-title"
+              >
+                <h3
+                  id="latest-runtime-result-title"
+                  className="text-sm font-medium text-foreground"
                 >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <Icon
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${taskTone(task.status)} ${
-                        task.status === ComputerTaskStatus.Running
-                          ? "animate-spin"
-                          : ""
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <div className="break-words font-medium">
-                        {label(task.taskType)}
-                      </div>
-                      <div className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
-                        {outputSummary(task.output, task.error)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="lg:text-center">
-                    <Badge variant="outline" className="text-xs">
-                      {label(task.status)}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground lg:text-right">
-                    {task.completedAt
-                      ? `Completed ${relativeTime(task.completedAt)}`
-                      : task.claimedAt
-                        ? `Claimed ${relativeTime(task.claimedAt)}`
-                        : `Queued ${relativeTime(task.createdAt)}`}
-                  </div>
+                  Latest Result
+                </h3>
+                <TaskResultRow task={latestTask} highlighted />
+              </section>
+            ) : null}
+            <section className="space-y-2" aria-labelledby="task-history-title">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3
+                  id="task-history-title"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Task History
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {historicalTasks.length} previous
+                </span>
+              </div>
+              {historicalTasks.length === 0 ? (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  No previous runtime tasks.
                 </div>
-              );
-            })}
-          </div>
+              ) : (
+                <div className="divide-y rounded-md border">
+                  {historicalTasks.map((task) => (
+                    <TaskResultRow key={task.id} task={task} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
         )}
       </CardContent>
     </Card>

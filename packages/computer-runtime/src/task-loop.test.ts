@@ -209,20 +209,7 @@ describe("Computer task loop", () => {
 
     expect(execFileAsync).toHaveBeenCalledWith(
       "gws",
-      [
-        "calendar",
-        "events",
-        "list",
-        "--params",
-        JSON.stringify({
-          calendarId: "primary",
-          timeMin: "2026-05-07T10:00:00.000Z",
-          timeMax: "2026-05-08T10:00:00.000Z",
-          singleEvents: true,
-          orderBy: "startTime",
-          maxResults: 10,
-        }),
-      ],
+      ["calendar", "+agenda", "--days", "1", "--format", "json"],
       expect.objectContaining({
         env: expect.objectContaining({
           GOOGLE_WORKSPACE_CLI_TOKEN: "ya29.secret-token",
@@ -271,7 +258,7 @@ describe("Computer task loop", () => {
       .fn()
       .mockRejectedValue(
         new Error(
-          "Command failed: gws calendar events list\nerror[api]: Request had insufficient authentication scopes.\n",
+          "Command failed: gws calendar +agenda\nerror[api]: Request had insufficient authentication scopes.\n",
         ),
       );
 
@@ -299,7 +286,7 @@ describe("Computer task loop", () => {
     const execFileAsync = vi.fn().mockRejectedValue(
       new Error(
         [
-          "Command failed: gws calendar events list",
+          "Command failed: gws calendar +agenda",
           "error[api]: hint: API not enabled for your GCP project.",
           "      Enable it at: https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=430475771862",
         ].join("\n"),
