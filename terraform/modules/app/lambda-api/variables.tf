@@ -481,3 +481,31 @@ variable "compliance_anchor_object_lock_retention_days" {
   type        = number
   default     = 365
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 U8b — anchor Lambda live config
+# ---------------------------------------------------------------------------
+
+variable "compliance_anchor_kms_key_arn" {
+  description = "ARN of the customer-managed CMK used for SSE-KMS encryption of anchor objects. Forwarded to the anchor Lambda as COMPLIANCE_ANCHOR_KMS_KEY_ARN (required by `_anchor_fn_live` for the SSE-KMS PutObject)."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_anchor_object_lock_mode" {
+  description = "Object Lock retention mode applied per-object to anchor PutObjects. GOVERNANCE in dev/staging; COMPLIANCE in prod (irreversible). Forwarded to the anchor Lambda as COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE."
+  type        = string
+  default     = "GOVERNANCE"
+}
+
+variable "compliance_anchor_watchdog_role_arn" {
+  description = "ARN of the sibling IAM role the watchdog Lambda assumes (Phase 3 U8b). Decrypt-less: kms:DescribeKey only on the bucket CMK; s3:ListBucket prefix-scoped to anchors/."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_anchor_watchdog_role_name" {
+  description = "Name of the sibling watchdog IAM role. Used for any future inline-policy attachments (e.g., DLQ SendMessage) without re-deriving the name from the ARN."
+  type        = string
+  default     = ""
+}

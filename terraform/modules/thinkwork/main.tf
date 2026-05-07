@@ -239,12 +239,27 @@ module "api" {
   compliance_anchor_lambda_role_arn  = module.compliance_anchors.lambda_role_arn
   compliance_anchor_lambda_role_name = module.compliance_anchors.lambda_role_name
 
+  # Phase 3 U8b — sibling watchdog role (kms:DescribeKey only on the CMK,
+  # s3:ListBucket prefix-conditioned). The watchdog moves OFF the shared
+  # lambda role onto this dedicated role; the move is a `terraform state
+  # mv` operator step documented in the U8b plan.
+  compliance_anchor_watchdog_role_arn  = module.compliance_anchors.watchdog_role_arn
+  compliance_anchor_watchdog_role_name = module.compliance_anchors.watchdog_role_name
+
   # Phase 3 U8a — anchor Lambda runtime config. compliance_reader for
   # least-privilege SELECT on audit_events; retention_days forwarded as
   # the COMPLIANCE_ANCHOR_RETENTION_DAYS env var (consumed by U8b's
   # live function; pre-plumbed in U8a per Decision #11).
   compliance_reader_secret_arn                 = module.database.compliance_reader_secret_arn
   compliance_anchor_object_lock_retention_days = var.compliance_anchor_retention_days
+
+  # Phase 3 U8b — KMS key + Object Lock mode forwarded as
+  # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
+  # env vars on the anchor Lambda. The live `_anchor_fn_live` requires
+  # both: KMS for SSE-KMS PutObject, mode for the per-object retention
+  # override applied to anchors/.
+  compliance_anchor_kms_key_arn      = module.compliance_anchors.kms_key_arn
+  compliance_anchor_object_lock_mode = module.compliance_anchors.object_lock_mode
 
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn

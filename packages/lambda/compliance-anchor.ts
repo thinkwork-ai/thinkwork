@@ -37,17 +37,22 @@
  */
 
 import { createHash } from "node:crypto";
-import { uuidv7 } from "uuidv7";
 import { createDb, type Database } from "@thinkwork/database-pg";
 import {
 	auditEvents,
 	tenantAnchorState,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
+import pLimit from "p-limit";
+import {
+	S3Client,
+	PutObjectCommand,
+	type S3ClientConfig,
+} from "@aws-sdk/client-s3";
 // Note: @aws-sdk/client-cloudwatch is intentionally NOT imported here.
-// In U8a the anchor Lambda emits no metrics (only the watchdog does,
-// from its own dedicated client). U8b will re-import if/when the live
-// anchor emits its own metrics around the S3 PutObject path.
+// In U8b the anchor Lambda still emits no metrics directly (only the
+// watchdog does, from its own dedicated client). The S3 PutObject IS
+// the live signal; metrics are watchdog-side via `ComplianceAnchorGap`.
 
 // ---------------------------------------------------------------------------
 // Domain-separation prefix bytes — RFC 6962 §2.1.
@@ -94,7 +99,10 @@ export interface AnchorResult {
 export type AnchorFn = (
 	merkleRoot: string,
 	tenantSlices: TenantSlice[],
-) => Pick<AnchorResult, "anchored"> & Partial<Pick<AnchorResult, "s3_key" | "retain_until_date">>;
+	cadenceId: string,
+) => Promise<
+	Pick<AnchorResult, "anchored"> & Partial<Pick<AnchorResult, "s3_key" | "retain_until_date">>
+>;
 
 // ---------------------------------------------------------------------------
 // Merkle tree (RFC 6962-style domain separation)
@@ -203,16 +211,23 @@ interface AnchorEnv {
 	readonly readerSecretArn: string;
 	readonly drainerSecretArn: string;
 	readonly anchorBucketName: string;
+	readonly kmsKeyArn: string;
+	readonly mode: "GOVERNANCE" | "COMPLIANCE";
 	readonly retentionDays: number;
 	readonly stage: string;
 	readonly region: string;
 }
 
 function getAnchorEnv(): AnchorEnv {
+	const rawMode = process.env.COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE || "GOVERNANCE";
+	const mode: "GOVERNANCE" | "COMPLIANCE" =
+		rawMode === "COMPLIANCE" ? "COMPLIANCE" : "GOVERNANCE";
 	return Object.freeze({
 		readerSecretArn: process.env.COMPLIANCE_READER_SECRET_ARN || "",
 		drainerSecretArn: process.env.COMPLIANCE_DRAINER_SECRET_ARN || "",
 		anchorBucketName: process.env.COMPLIANCE_ANCHOR_BUCKET_NAME || "",
+		kmsKeyArn: process.env.COMPLIANCE_ANCHOR_KMS_KEY_ARN || "",
+		mode,
 		retentionDays: parseInt(
 			process.env.COMPLIANCE_ANCHOR_RETENTION_DAYS || "365",
 			10,
@@ -231,6 +246,20 @@ const ENV: AnchorEnv = getAnchorEnv();
 
 let _readerDb: Database | undefined;
 let _drainerDb: Database | undefined;
+let _s3: S3Client | undefined;
+
+function getS3Client(): S3Client {
+	if (_s3) return _s3;
+	const config: S3ClientConfig = {
+		region: ENV.region,
+		// Bound the SDK call so a regional S3 degradation doesn't consume
+		// the full Lambda timeout. Mirrors the SecretsManager + CloudWatch
+		// timeouts used elsewhere in this file + watchdog.
+		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
+	};
+	_s3 = new S3Client(config);
+	return _s3;
+}
 
 async function resolveDatabaseUrl(secretArn: string): Promise<string> {
 	if (!secretArn) {
@@ -291,24 +320,193 @@ async function getDrainerDb(): Promise<Database> {
 }
 
 // ---------------------------------------------------------------------------
-// Inert seam — U8a returns {anchored: false}; U8b will export
-// `_anchor_fn_live` that PutObject's to S3 with Object Lock retention.
+// Cadence ID — DETERMINISTIC fingerprint of chain heads (Decision #5a).
+//
+// Same chain heads → same cadence_id. This makes retries idempotent:
+// when a cadence's S3 writes fail and `tenant_anchor_state` rolls back,
+// the next cadence sees the same heads and computes the same cadence_id,
+// overwriting the prior partial-state slices in-place. Without
+// determinism, UUIDv7-per-cadence-run would orphan partial slices for
+// 365 days under WORM lock.
+//
+// Output is shaped like UUIDv7 (RFC 9562): 32 hex chars from sha256 of
+// canonical chain-head JSON, with version (7) and variant (10) nibbles
+// patched in. The `cadence_id` field's wire format is unchanged from
+// U8a — only the derivation function differs.
 // ---------------------------------------------------------------------------
 
-export const _anchor_fn_inert: AnchorFn = (_merkleRoot, _tenantSlices) => {
-	return { anchored: false };
+interface ChainHeadFingerprint {
+	tenant_id: string;
+	event_hash: string;
+}
+
+export function deriveCadenceId(
+	heads: Array<{ tenant_id: string; event_hash: string }>,
+): string {
+	const canonical: ChainHeadFingerprint[] = heads
+		.map((h) => ({ tenant_id: h.tenant_id, event_hash: h.event_hash }))
+		.sort((a, b) => (a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0));
+	const digest = createHash("sha256")
+		.update(JSON.stringify(canonical))
+		.digest("hex");
+	// Reshape sha256(32-byte hex) → UUIDv7 form (8-4-4-4-12).
+	// Patch version nibble (13th hex) to '7' and variant nibble (17th) to 8/9/a/b.
+	const a = digest.slice(0, 8);
+	const b = digest.slice(8, 12);
+	// version = 7
+	const c = "7" + digest.slice(13, 16);
+	// variant = 0b10xx → first hex of d ∈ {8,9,a,b}. Mask: (digest[16] & 0x3) | 0x8.
+	const variantNibble = (parseInt(digest[16], 16) & 0x3) | 0x8;
+	const d = variantNibble.toString(16) + digest.slice(17, 20);
+	const e = digest.slice(20, 32);
+	return `${a}-${b}-${c}-${d}-${e}`;
+}
+
+// ---------------------------------------------------------------------------
+// Live seam — U8b PutObject's to S3 with Object Lock retention.
+// ---------------------------------------------------------------------------
+
+export const _anchor_fn_live: AnchorFn = async (
+	merkleRoot,
+	tenantSlices,
+	cadenceId,
+) => {
+	if (!ENV.kmsKeyArn) {
+		throw new Error(
+			"compliance-anchor: COMPLIANCE_ANCHOR_KMS_KEY_ARN is required for SSE-KMS PutObject",
+		);
+	}
+	if (!ENV.anchorBucketName) {
+		throw new Error(
+			"compliance-anchor: COMPLIANCE_ANCHOR_BUCKET_NAME is required",
+		);
+	}
+
+	// 1. Merkle self-check (Decision #16) — recompute root from received
+	// leaves and assert equality before WORM-locking. Cheap insurance
+	// against a runAnchorPass arithmetic bug producing inconsistent
+	// (root, leaves) — which would otherwise become 365 days of poisoned
+	// audit evidence.
+	const expectedRoot = buildMerkleTree(
+		tenantSlices.map((s) => s.leaf_hash),
+	).root;
+	if (expectedRoot !== merkleRoot) {
+		throw new Error(
+			`compliance-anchor: leaf-set / merkleRoot mismatch — expected ${expectedRoot}, got ${merkleRoot}`,
+		);
+	}
+
+	const retainUntilDate = new Date(
+		Date.now() + ENV.retentionDays * 86400 * 1000,
+	);
+
+	// 2. Slice-key construction — single source of truth for both
+	// PutObject calls and the anchor's `proof_keys` array (Decision #5,
+	// closes referential-integrity gap).
+	const sliceKeyFor = (slice: TenantSlice): string =>
+		`proofs/tenant-${slice.tenant_id}/cadence-${cadenceId}.json`;
+	const proofKeys = tenantSlices.map(sliceKeyFor);
+
+	const s3 = getS3Client();
+
+	// 3. Slices first (Decision #3) — bounded concurrency via p-limit.
+	// Any rejection bubbles up to runAnchorPass, which rolls back the
+	// drainer transaction; the next cadence (with deterministic cadence_id)
+	// retries the same keys.
+	const limit = pLimit(8);
+	const slicePromises = tenantSlices.map((slice, idx) =>
+		limit(async () => {
+			const sliceBody = JSON.stringify({
+				schema_version: 1,
+				tenant_id: slice.tenant_id,
+				latest_event_hash: slice.latest_event_hash,
+				latest_recorded_at: slice.latest_recorded_at,
+				latest_event_id: slice.latest_event_id,
+				leaf_hash: slice.leaf_hash,
+				proof_path: slice.proof_path,
+				global_root: merkleRoot,
+				cadence_id: cadenceId,
+			});
+			await s3.send(
+				new PutObjectCommand({
+					Bucket: ENV.anchorBucketName,
+					Key: proofKeys[idx],
+					Body: sliceBody,
+					ContentType: "application/json",
+					ServerSideEncryption: "aws:kms",
+					SSEKMSKeyId: ENV.kmsKeyArn,
+					ChecksumAlgorithm: "SHA256",
+					// No per-object Object Lock override — bucket-default applies (R2).
+				}),
+			);
+		}),
+	);
+	await Promise.all(slicePromises);
+
+	// 4. Anchor LAST. The anchor object is the verifier-discoverable
+	// commit point; if any slice failed, we never reach this line.
+	const anchorKey = `anchors/cadence-${cadenceId}.json`;
+	const recordedAtRange = computeRecordedAtRange(tenantSlices);
+	const anchorBody = JSON.stringify({
+		schema_version: 1,
+		cadence_id: cadenceId,
+		recorded_at: new Date().toISOString(),
+		merkle_root: merkleRoot,
+		tenant_count: tenantSlices.length,
+		anchored_event_count: tenantSlices.length, // 1 chain-head event per tenant per cadence
+		recorded_at_range: recordedAtRange,
+		leaf_algorithm: "sha256_rfc6962",
+		proof_keys: proofKeys,
+	});
+	try {
+		await s3.send(
+			new PutObjectCommand({
+				Bucket: ENV.anchorBucketName,
+				Key: anchorKey,
+				Body: anchorBody,
+				ContentType: "application/json",
+				ServerSideEncryption: "aws:kms",
+				SSEKMSKeyId: ENV.kmsKeyArn,
+				ChecksumAlgorithm: "SHA256",
+				ObjectLockMode: ENV.mode,
+				ObjectLockRetainUntilDate: retainUntilDate,
+			}),
+		);
+	} catch (err) {
+		// On S3 failure, invalidate the cached client so the next
+		// invocation rebuilds. Mirrors the _readerDb / _drainerDb pattern.
+		_s3 = undefined;
+		throw err;
+	}
+
+	return {
+		anchored: true,
+		s3_key: anchorKey,
+		retain_until_date: retainUntilDate.toISOString(),
+	};
 };
 
+function computeRecordedAtRange(
+	tenantSlices: TenantSlice[],
+): { min: string; max: string } | null {
+	if (tenantSlices.length === 0) return null;
+	let minIso = tenantSlices[0].latest_recorded_at;
+	let maxIso = tenantSlices[0].latest_recorded_at;
+	for (const slice of tenantSlices) {
+		if (slice.latest_recorded_at < minIso) minIso = slice.latest_recorded_at;
+		if (slice.latest_recorded_at > maxIso) maxIso = slice.latest_recorded_at;
+	}
+	return { min: minIso, max: maxIso };
+}
+
 /**
- * Returns the production-wired anchor function. U6 test scenarios
- * assert this returns `_anchor_fn_inert` in U8a; when U8b lands and
- * replaces the wired fn with `_anchor_fn_live`, that test must be
- * replaced with a real body-swap safety test (asserting S3Client.send
- * was called with PutObjectCommand). Decision #17 — structural forcing
- * function for the U8b body-swap protection.
+ * Returns the production-wired anchor function. U6 integration test
+ * asserts this returns `_anchor_fn_live` (Layer 1 forcing function).
+ * The substantive body-swap safety (Layer 2) lives in U6's mock-based
+ * test that asserts `S3Client.send` is called with `PutObjectCommand`.
  */
 export function getWiredAnchorFn(): AnchorFn {
-	return _anchor_fn_inert;
+	return _anchor_fn_live;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +606,6 @@ export interface AnchorPassDeps {
 export async function runAnchorPass(
 	deps: AnchorPassDeps,
 ): Promise<AnchorResult> {
-	const cadenceId = deps.cadenceId ?? uuidv7();
 	const anchorFn = deps.anchorFn ?? getWiredAnchorFn();
 
 	// 1. Reader-side SELECT — runs to completion BEFORE drainer transaction
@@ -420,6 +617,10 @@ export async function runAnchorPass(
 	// Sort tenants deterministically — by tenant_id ascending — so the
 	// Merkle tree shape is deterministic given the same input set.
 	heads.sort((a, b) => (a.tenant_id < b.tenant_id ? -1 : a.tenant_id > b.tenant_id ? 1 : 0));
+
+	// Derive cadence_id deterministically from chain heads (Decision #5a).
+	// Same heads → same cadence_id → retries idempotent on slice keys.
+	const cadenceId = deps.cadenceId ?? deriveCadenceId(heads);
 
 	// 2. Compute Merkle leaves + tree.
 	const leaves = heads.map((h) => computeLeafHash(h.tenant_id, h.event_hash));
@@ -435,9 +636,10 @@ export async function runAnchorPass(
 		proof_path: deriveProofPath(levels, i),
 	}));
 
-	// 4. Call the seam function. In U8a returns {anchored: false}. U8b
-	// returns {anchored: true, s3_key, retain_until_date}.
-	const seamResult = anchorFn(merkleRoot, tenantSlices);
+	// 4. Call the seam function (now async — `_anchor_fn_live` does S3 PutObject).
+	// Throws on Merkle self-check failure or S3 error; the drainer transaction
+	// below is rolled back (the tenant_anchor_state UPDATE never starts).
+	const seamResult = await anchorFn(merkleRoot, tenantSlices, cadenceId);
 
 	// 5. Drainer-side UPDATE — single transaction over all tenants.
 	// Skipped for empty heads (nothing to advance).
