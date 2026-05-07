@@ -212,25 +212,21 @@ function ComputerDetailPage() {
       }
     >
       {tab === "dashboard" ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="space-y-4">
-            <ComputerStatusPanel
-              computer={computer}
-              onUpdated={() => reexecute({ requestPolicy: "network-only" })}
-            />
-            <ComputerLiveTasksPanel
-              computer={computer}
-              onChanged={refreshActivity}
-            />
-            <ComputerEventsPanel
-              computer={computer}
-              refreshKey={activityRefreshKey}
-            />
-          </div>
-          <div className="space-y-4">
-            <ComputerRuntimePanel computer={computer} />
-            <IdentityCard computer={computer} ownerLabel={ownerLabel} />
-          </div>
+        <div className="space-y-4">
+          <ComputerStatusPanel
+            computer={computer}
+            onUpdated={() => reexecute({ requestPolicy: "network-only" })}
+          />
+          <ComputerLiveTasksPanel
+            computer={computer}
+            onChanged={refreshActivity}
+          />
+          <ComputerEventsPanel
+            computer={computer}
+            refreshKey={activityRefreshKey}
+          />
+          <ComputerRuntimePanel computer={computer} />
+          <IdentityCard computer={computer} ownerLabel={ownerLabel} />
         </div>
       ) : null}
 
@@ -255,14 +251,10 @@ function ComputerDetailPage() {
       ) : null}
 
       {tab === "config" ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="space-y-4">
-            <ComputerRuntimePanel computer={computer} />
-            <ComputerMigrationPanel computer={computer} />
-          </div>
-          <div className="space-y-4">
-            <IdentityCard computer={computer} ownerLabel={ownerLabel} />
-          </div>
+        <div className="space-y-4">
+          <ComputerRuntimePanel computer={computer} />
+          <ComputerMigrationPanel computer={computer} />
+          <IdentityCard computer={computer} ownerLabel={ownerLabel} />
         </div>
       ) : null}
     </PageLayout>
@@ -273,30 +265,27 @@ function IdentityCard({
   computer,
   ownerLabel,
 }: {
-  computer: Pick<
-    Computer,
-    "slug" | "createdAt" | "updatedAt" | "template"
-  >;
+  computer: Pick<Computer, "slug" | "createdAt" | "updatedAt" | "template">;
   ownerLabel: string;
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Identity</CardTitle>
-        <CardDescription>Owner, template, and creation metadata.</CardDescription>
+        <CardDescription>
+          Owner, template, and creation metadata.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <dl className="space-y-4">
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">
-              Owner
-            </dt>
+        <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="min-w-0">
+            <dt className="text-xs font-medium text-muted-foreground">Owner</dt>
             <dd className="mt-1 flex min-w-0 items-center gap-2 text-sm">
               <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{ownerLabel}</span>
             </dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-xs font-medium text-muted-foreground">
               Template
             </dt>
@@ -315,21 +304,25 @@ function IdentityCard({
               )}
             </dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-xs font-medium text-muted-foreground">Slug</dt>
             <dd className="mt-1 break-all text-sm">{computer.slug}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-xs font-medium text-muted-foreground">
               Created
             </dt>
-            <dd className="mt-1 text-sm">{formatDateTime(computer.createdAt)}</dd>
+            <dd className="mt-1 text-sm">
+              {formatDateTime(computer.createdAt)}
+            </dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-xs font-medium text-muted-foreground">
               Updated
             </dt>
-            <dd className="mt-1 text-sm">{formatDateTime(computer.updatedAt)}</dd>
+            <dd className="mt-1 text-sm">
+              {formatDateTime(computer.updatedAt)}
+            </dd>
           </div>
         </dl>
       </CardContent>

@@ -42,7 +42,7 @@ function RuntimeRow({
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
         <div className="text-xs font-medium text-muted-foreground">{label}</div>
-        <div className="mt-0.5 truncate text-sm">{value || "—"}</div>
+        <div className="mt-0.5 break-all text-sm">{value || "—"}</div>
       </div>
     </div>
   );
@@ -69,7 +69,7 @@ export function ComputerRuntimePanel({ computer }: ComputerRuntimePanelProps) {
               : "not observed"}
           </span>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <RuntimeRow
             icon={HardDrive}
             label="Workspace Root"

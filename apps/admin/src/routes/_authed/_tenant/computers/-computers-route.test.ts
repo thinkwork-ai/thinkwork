@@ -47,6 +47,9 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain("ComputerRuntimePanel");
     expect(detailRouteSource).toContain("ComputerMigrationPanel");
     expect(detailRouteSource).toContain("Identity");
+    expect(detailRouteSource).not.toContain(
+      "xl:grid-cols-[minmax(0,1fr)_420px]",
+    );
   });
 
   it("offers browser-triggered runtime actions", () => {
@@ -63,6 +66,7 @@ describe("Computers admin routes", () => {
     );
     expect(liveTasksPanelSource).toContain("Google Calendar token unavailable");
     expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
+    expect(liveTasksPanelSource).not.toContain("CardAction");
     expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");
     expect(liveTasksPanelSource).not.toContain("accessToken");
   });
