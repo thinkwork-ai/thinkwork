@@ -1,7 +1,25 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 const MAX_WORKSPACE_FILE_BYTES = 256 * 1024;
+const MAX_PROMPT_FILE_CHARS = 24_000;
+
+const PROMPT_WORKSPACE_FILES = [
+  "PLATFORM.md",
+  "CAPABILITIES.md",
+  "GUARDRAILS.md",
+  "MEMORY_GUIDE.md",
+  "SOUL.md",
+  "IDENTITY.md",
+  "USER.md",
+  "AGENTS.md",
+  "CONTEXT.md",
+  "TOOLS.md",
+] as const;
+
+export type WorkspacePromptFileReader = (
+  filePath: string,
+) => Promise<string | null>;
 
 export async function ensureWorkspace(root: string): Promise<string> {
   await mkdir(root, { recursive: true });
@@ -41,6 +59,30 @@ export async function writeWorkspaceFile(
   return { path, relativePath, bytes };
 }
 
+export async function readWorkspaceSystemPrompt(
+  root: string,
+  fileReader: WorkspacePromptFileReader = readPromptFile,
+): Promise<string> {
+  const parts: string[] = [
+    "Workspace files loaded from the Computer's local workspace. Use them as durable identity, user context, operating instructions, and guardrails.",
+  ];
+  let filesLoaded = 0;
+
+  for (const filename of PROMPT_WORKSPACE_FILES) {
+    const content = await fileReader(join(root, filename));
+    if (!content) continue;
+
+    filesLoaded++;
+    const truncated =
+      content.length > MAX_PROMPT_FILE_CHARS
+        ? `${content.slice(0, MAX_PROMPT_FILE_CHARS)}\n\n[truncated]`
+        : content;
+    parts.push(`# ${filename}\n${truncated}`);
+  }
+
+  return filesLoaded > 0 ? parts.join("\n\n---\n\n") : "";
+}
+
 export function validateWorkspaceRelativePath(path: string): string {
   const trimmed = path.trim();
   if (!trimmed || trimmed.startsWith("/") || trimmed.startsWith("\\")) {
@@ -51,6 +93,16 @@ export function validateWorkspaceRelativePath(path: string): string {
     throw new Error("Workspace path cannot contain . or .. segments");
   }
   return parts.join("/");
+}
+
+async function readPromptFile(filePath: string): Promise<string | null> {
+  try {
+    const content = await readFile(filePath, "utf8");
+    const trimmed = content.trim();
+    return trimmed || null;
+  } catch {
+    return null;
+  }
 }
 
 function requireObject(input: unknown): Record<string, unknown> {
