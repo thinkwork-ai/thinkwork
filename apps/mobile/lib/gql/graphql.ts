@@ -792,6 +792,7 @@ export enum ComputerTaskStatus {
 }
 
 export enum ComputerTaskType {
+  ConnectorWork = 'CONNECTOR_WORK',
   GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
@@ -831,6 +832,8 @@ export type Connector = {
 
 export type ConnectorDispatchResult = {
   __typename?: 'ConnectorDispatchResult';
+  computerId?: Maybe<Scalars['ID']['output']>;
+  computerTaskId?: Maybe<Scalars['ID']['output']>;
   connectorId: Scalars['ID']['output'];
   error?: Maybe<Scalars['String']['output']>;
   executionId?: Maybe<Scalars['ID']['output']>;

@@ -371,6 +371,8 @@ describe("connector mutations", () => {
         externalRef: "linear-issue-1",
         threadId: "thread-1",
         messageId: "message-1",
+        computerId: "computer-1",
+        computerTaskId: "computer-task-1",
       },
     ]);
 
@@ -400,6 +402,8 @@ describe("connector mutations", () => {
           externalRef: "linear-issue-1",
           threadId: "thread-1",
           messageId: "message-1",
+          computerId: "computer-1",
+          computerTaskId: "computer-task-1",
           targetType: null,
           reason: null,
           error: null,

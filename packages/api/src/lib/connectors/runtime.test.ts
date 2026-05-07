@@ -157,9 +157,74 @@ describe("runConnectorDispatchTick", () => {
     ]);
   });
 
-  it("does not create a thread for duplicate active external refs", async () => {
+  it("claims, hands off, and finishes a new Computer-targeted Linear seed issue", async () => {
     store.connectors = [
       connector({
+        dispatch_target_type: "computer",
+        dispatch_target_id: "computer-1",
+        config: {
+          provider: "linear",
+          sourceKind: "tracker_issue",
+          seedIssues: [
+            {
+              id: "issue-1",
+              identifier: "TECH-101",
+              title: "Handle connector work",
+              description: "Prove Computer handoff.",
+            },
+          ],
+        },
+      }),
+    ];
+    store.claimResult = {
+      status: "created",
+      execution: execution({ id: "execution-1" }),
+    };
+
+    const result = await runConnectorDispatchTick({ now: NOW }, { store });
+
+    expect(result).toEqual([
+      {
+        status: "dispatched",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "issue-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        computerId: "computer-1",
+        computerTaskId: "computer-task-1",
+      },
+    ]);
+    expect(store.createdComputerHandoffs).toMatchObject([
+      {
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "issue-1",
+        computerId: "computer-1",
+      },
+    ]);
+    expect(store.createdThreads).toEqual([]);
+    expect(store.terminalUpdates).toMatchObject([
+      {
+        executionId: "execution-1",
+        now: NOW,
+        outcomePayload: {
+          threadId: "thread-1",
+          messageId: "message-1",
+          computerId: "computer-1",
+          computerTaskId: "computer-task-1",
+          dispatchTargetType: "computer",
+          dispatchTargetId: "computer-1",
+        },
+      },
+    ]);
+  });
+
+  it("does not create duplicate work for duplicate active external refs", async () => {
+    store.connectors = [
+      connector({
+        dispatch_target_type: "computer",
+        dispatch_target_id: "computer-1",
         config: {
           seedIssues: [{ id: "issue-1", title: "Already running" }],
         },
@@ -181,6 +246,7 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.createdThreads).toEqual([]);
+    expect(store.createdComputerHandoffs).toEqual([]);
     expect(store.terminalUpdates).toEqual([]);
   });
 
@@ -209,6 +275,41 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.createdThreads).toEqual([]);
+  });
+
+  it("marks a claimed execution failed when Computer handoff fails", async () => {
+    store.connectors = [
+      connector({
+        dispatch_target_type: "computer",
+        dispatch_target_id: "missing-computer",
+        config: { seedIssues: [{ id: "issue-1", title: "No Computer" }] },
+      }),
+    ];
+    store.claimResult = {
+      status: "created",
+      execution: execution({ id: "execution-1" }),
+    };
+    store.createComputerHandoffError = new Error("Computer not found");
+
+    const result = await runConnectorDispatchTick({ now: NOW }, { store });
+
+    expect(result).toEqual([
+      {
+        status: "failed",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "issue-1",
+        error: "Computer not found",
+      },
+    ]);
+    expect(store.failedUpdates).toEqual([
+      {
+        executionId: "execution-1",
+        now: NOW,
+        error: "Computer not found",
+      },
+    ]);
+    expect(store.terminalUpdates).toEqual([]);
   });
 
   it("marks a claimed execution failed when agent dispatch fails", async () => {
@@ -409,6 +510,7 @@ class FakeStore implements ConnectorRuntimeStore {
     execution: execution(),
   };
   createAgentThreadError: Error | null = null;
+  createComputerHandoffError: Error | null = null;
   credential: ConnectorRuntimeCredential | null = null;
   claims: Array<{ connectorId: string; externalRef: string }> = [];
   credentialLookups: Array<{
@@ -420,6 +522,12 @@ class FakeStore implements ConnectorRuntimeStore {
     connectorId: string;
     executionId: string;
     externalRef: string;
+  }> = [];
+  createdComputerHandoffs: Array<{
+    connectorId: string;
+    executionId: string;
+    externalRef: string;
+    computerId: string;
   }> = [];
   terminalUpdates: Array<{
     executionId: string;
@@ -456,6 +564,24 @@ class FakeStore implements ConnectorRuntimeStore {
       externalRef: args.candidate.externalRef,
     });
     return { threadId: "thread-1", messageId: "message-1" };
+  }
+
+  async createComputerHandoff(
+    args: Parameters<ConnectorRuntimeStore["createComputerHandoff"]>[0],
+  ) {
+    if (this.createComputerHandoffError) throw this.createComputerHandoffError;
+    this.createdComputerHandoffs.push({
+      connectorId: args.connector.id,
+      executionId: args.execution.id,
+      externalRef: args.candidate.externalRef,
+      computerId: args.connector.dispatch_target_id,
+    });
+    return {
+      computerId: args.connector.dispatch_target_id,
+      computerTaskId: "computer-task-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+    };
   }
 
   async markExecutionTerminal(

@@ -12,6 +12,7 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("workspace_file_write")).toBe(
       "workspace_file_write",
     );
+    expect(parseComputerTaskType("CONNECTOR_WORK")).toBe("connector_work");
     expect(parseComputerTaskType("GOOGLE_CLI_SMOKE")).toBe("google_cli_smoke");
     expect(parseComputerTaskType("GOOGLE_WORKSPACE_AUTH_CHECK")).toBe(
       "google_workspace_auth_check",
@@ -39,6 +40,37 @@ describe("Computer task helpers", () => {
         content: "hello",
       }),
     ).toEqual({ path: "notes/today.md", content: "hello" });
+  });
+
+  it("normalizes connector work input", () => {
+    expect(
+      normalizeTaskInput("connector_work", {
+        connectorId: "connector-1",
+        connectorExecutionId: "execution-1",
+        externalRef: "TECH-101",
+        title: "Handle task",
+        body: "Linear issue body",
+        metadata: { sourceKind: "tracker_issue" },
+      }),
+    ).toEqual({
+      connectorId: "connector-1",
+      connectorExecutionId: "execution-1",
+      externalRef: "TECH-101",
+      title: "Handle task",
+      body: "Linear issue body",
+      metadata: { sourceKind: "tracker_issue" },
+    });
+  });
+
+  it("rejects malformed connector work input", () => {
+    expect(() =>
+      normalizeTaskInput("connector_work", {
+        connectorId: "connector-1",
+        externalRef: "TECH-101",
+        title: "Handle task",
+        body: "Linear issue body",
+      }),
+    ).toThrow("connectorExecutionId is required");
   });
 
   it("rejects unsafe workspace paths", () => {
