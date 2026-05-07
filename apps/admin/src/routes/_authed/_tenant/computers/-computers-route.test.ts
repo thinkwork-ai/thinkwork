@@ -34,6 +34,10 @@ describe("Computers admin routes", () => {
 
   it("renders detail panels for status, runtime, migration, and identity", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
+    expect(detailRouteSource).toContain('type ComputerDetailTab = "dashboard" | "workspace" | "config"');
+    expect(detailRouteSource).toContain('value="dashboard"');
+    expect(detailRouteSource).toContain('value="workspace"');
+    expect(detailRouteSource).toContain('value="config"');
     expect(detailRouteSource).toContain("ComputerStatusPanel");
     expect(detailRouteSource).toContain("ComputerLiveTasksPanel");
     expect(detailRouteSource).toContain("ComputerEventsPanel");
