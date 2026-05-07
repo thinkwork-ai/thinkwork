@@ -15,8 +15,7 @@ RUN apt-get update \
   && chown node:node /workspace
 
 COPY package.json ./package.json
-RUN corepack enable \
-  && pnpm install --prod --no-lockfile --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts
 
 COPY dist/src ./dist/src
 
