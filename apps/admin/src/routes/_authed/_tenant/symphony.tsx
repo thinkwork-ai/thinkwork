@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Filter,
   Loader2,
+  Monitor,
   Network,
   Pause,
   Pencil,
@@ -39,7 +40,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -62,6 +66,7 @@ import {
   ArchiveConnectorMutation,
   ConnectorExecutionsListQuery,
   ConnectorsListQuery,
+  ComputersListQuery,
   CreateConnectorMutation,
   PauseConnectorMutation,
   ResumeConnectorMutation,
@@ -83,6 +88,7 @@ import {
   parseConnectorConfig,
   shouldUseManualTargetInput,
   updateConnectorInput,
+  type ConnectorComputerTarget,
   type ConnectorFormValues,
 } from "@/lib/connector-admin";
 import {
@@ -814,15 +820,28 @@ function ConnectorFormDialog({
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
+  const [computersResult] = useQuery({
+    query: ComputersListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId || !open,
+  });
   const [routinesResult] = useQuery({
     query: RoutinesListQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
+  const computerTargets = useMemo(
+    () => (computersResult.data?.computers ?? []) as ConnectorComputerTarget[],
+    [computersResult.data?.computers],
+  );
+  const agentTargets = agentsResult.data?.agents ?? [];
+  const routineTargets = routinesResult.data?.routines ?? [];
 
   useEffect(() => {
     if (open) {
-      const nextValues = connectorFormValues(connector);
+      const nextValues = connectorFormValues(connector, {
+        computers: computerTargets,
+      });
       setValues(nextValues);
       setManualTargetId(
         nextValues.dispatchTargetType === DispatchTargetType.HybridRoutine,
@@ -831,18 +850,37 @@ function ConnectorFormDialog({
     }
   }, [connector, open]);
 
+  useEffect(() => {
+    if (
+      !open ||
+      mode !== "create" ||
+      connector ||
+      values.dispatchTargetType !== DispatchTargetType.Computer ||
+      values.dispatchTargetId ||
+      computerTargets.length === 0
+    ) {
+      return;
+    }
+
+    patch("dispatchTargetId", computerTargets[0]?.id ?? "");
+  }, [
+    computerTargets,
+    connector,
+    mode,
+    open,
+    values.dispatchTargetId,
+    values.dispatchTargetType,
+  ]);
+
   const targetOptions = useMemo(
     () =>
       connectorTargetOptions(
         values.dispatchTargetType,
-        agentsResult.data?.agents ?? [],
-        routinesResult.data?.routines ?? [],
+        computerTargets,
+        agentTargets,
+        routineTargets,
       ),
-    [
-      agentsResult.data?.agents,
-      routinesResult.data?.routines,
-      values.dispatchTargetType,
-    ],
+    [agentTargets, computerTargets, routineTargets, values.dispatchTargetType],
   );
   const selectedTarget = targetOptions.find(
     (option) => option.id === values.dispatchTargetId,
@@ -942,8 +980,14 @@ function ConnectorFormDialog({
                   value={values.dispatchTargetType}
                   onValueChange={(value) => {
                     const nextType = value as DispatchTargetType;
+                    const nextOptions = connectorTargetOptions(
+                      nextType,
+                      computerTargets,
+                      agentTargets,
+                      routineTargets,
+                    );
                     patch("dispatchTargetType", nextType);
-                    patch("dispatchTargetId", "");
+                    patch("dispatchTargetId", nextOptions[0]?.id ?? "");
                     setManualTargetId(
                       nextType === DispatchTargetType.HybridRoutine,
                     );
@@ -953,15 +997,26 @@ function ConnectorFormDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={DispatchTargetType.Agent}>
-                      Agent
-                    </SelectItem>
-                    <SelectItem value={DispatchTargetType.Routine}>
-                      Routine
-                    </SelectItem>
-                    <SelectItem value={DispatchTargetType.HybridRoutine}>
-                      Hybrid Routine
-                    </SelectItem>
+                    <SelectGroup>
+                      <SelectLabel>Default</SelectLabel>
+                      <SelectItem value={DispatchTargetType.Computer}>
+                        <Monitor className="h-3.5 w-3.5" />
+                        Computer
+                      </SelectItem>
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Advanced direct targets</SelectLabel>
+                      <SelectItem value={DispatchTargetType.Agent}>
+                        Agent
+                      </SelectItem>
+                      <SelectItem value={DispatchTargetType.Routine}>
+                        Routine
+                      </SelectItem>
+                      <SelectItem value={DispatchTargetType.HybridRoutine}>
+                        Hybrid Routine
+                      </SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -1011,7 +1066,7 @@ function ConnectorFormDialog({
                       onChange={(event) =>
                         patch("dispatchTargetId", event.target.value)
                       }
-                      placeholder="Agent or routine id"
+                      placeholder={`${connectorTargetLabel(values.dispatchTargetType)} id`}
                     />
                     {manualTargetId && canUseTargetPicker && (
                       <Button
