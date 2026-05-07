@@ -909,6 +909,13 @@ resource "aws_scheduler_schedule" "connector_poller" {
   target {
     arn      = aws_lambda_function.handler["connector-poller"].arn
     role_arn = aws_iam_role.scheduler.arn
+
+    # The next minute is the retry. Connector dispatch is idempotent, but
+    # Scheduler's default 185 retries can overlap with the regular cadence
+    # and turn transient failures into noisy duplicate scans.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildLinearTrackerCandidates,
   createDrizzleConnectorRuntimeStore,
+  defaultNextPollAt,
   isRuntimeEligibleConnector,
   runConnectorDispatchTick,
   type ConnectorExecutionRow,
@@ -155,6 +156,13 @@ describe("runConnectorDispatchTick", () => {
         },
       },
     ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("claims, hands off, and finishes a new Computer-targeted Linear seed issue", async () => {
@@ -218,6 +226,13 @@ describe("runConnectorDispatchTick", () => {
         },
       },
     ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("does not create duplicate work for duplicate active external refs", async () => {
@@ -248,6 +263,13 @@ describe("runConnectorDispatchTick", () => {
     expect(store.createdThreads).toEqual([]);
     expect(store.createdComputerHandoffs).toEqual([]);
     expect(store.terminalUpdates).toEqual([]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("claims but does not dispatch routine targets until the chassis exists", async () => {
@@ -275,6 +297,13 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.createdThreads).toEqual([]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("marks a claimed execution failed when Computer handoff fails", async () => {
@@ -310,6 +339,13 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.terminalUpdates).toEqual([]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("marks a claimed execution failed when agent dispatch fails", async () => {
@@ -344,6 +380,13 @@ describe("runConnectorDispatchTick", () => {
         error: "chat-agent-invoke dispatch failed",
       },
     ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("reports skipped connectors with no deterministic candidates", async () => {
@@ -356,6 +399,65 @@ describe("runConnectorDispatchTick", () => {
         status: "skipped",
         connectorId: "connector-1",
         reason: "no_dispatch_candidates",
+      },
+    ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
+  });
+
+  it("does not advance poll metadata for a future-due connector skipped by a scheduled tick", async () => {
+    store.connectors = [
+      connector({ next_poll_at: new Date("2026-05-06T17:00:00.000Z") }),
+    ];
+
+    const result = await runConnectorDispatchTick({ now: NOW }, { store });
+
+    expect(result).toEqual([
+      {
+        status: "skipped",
+        connectorId: "connector-1",
+        reason: "connector_not_active_enabled_due",
+      },
+    ]);
+    expect(store.claims).toEqual([]);
+    expect(store.polledConnectors).toEqual([]);
+  });
+
+  it("force-runs a future-due connector and advances poll metadata from the forced clock", async () => {
+    store.connectors = [
+      connector({
+        next_poll_at: new Date("2026-05-06T17:00:00.000Z"),
+        config: { seedIssues: [{ id: "issue-1", title: "Force me" }] },
+      }),
+    ];
+    store.claimResult = {
+      status: "created",
+      execution: execution({ id: "execution-1" }),
+    };
+
+    const result = await runConnectorDispatchTick(
+      { now: NOW, force: true },
+      { store },
+    );
+
+    expect(result).toMatchObject([
+      {
+        status: "dispatched",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "issue-1",
+      },
+    ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
       },
     ]);
   });
@@ -433,6 +535,13 @@ describe("runConnectorDispatchTick", () => {
         messageId: "message-1",
       },
     ]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 
   it("reports a failed connector when Linear credential lookup fails", async () => {
@@ -464,6 +573,13 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.claims).toEqual([]);
+    expect(store.polledConnectors).toEqual([
+      {
+        connectorId: "connector-1",
+        now: NOW,
+        nextPollAt: defaultNextPollAt(NOW),
+      },
+    ]);
   });
 });
 
@@ -539,6 +655,11 @@ class FakeStore implements ConnectorRuntimeStore {
     now: Date;
     error: string;
   }> = [];
+  polledConnectors: Array<{
+    connectorId: string;
+    now: Date;
+    nextPollAt: Date;
+  }> = [];
 
   async listDueConnectors() {
     return this.connectors;
@@ -598,6 +719,12 @@ class FakeStore implements ConnectorRuntimeStore {
     args: Parameters<ConnectorRuntimeStore["markExecutionFailed"]>[0],
   ) {
     this.failedUpdates.push(args);
+  }
+
+  async markConnectorPolled(
+    args: Parameters<ConnectorRuntimeStore["markConnectorPolled"]>[0],
+  ) {
+    this.polledConnectors.push(args);
   }
 
   async loadTenantCredential(
