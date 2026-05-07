@@ -7,7 +7,6 @@ import { COLORS } from "@/lib/theme";
 
 export interface ThreadFilters {
   channels: string[];
-  agentId: string;
   showArchived: boolean;
 }
 

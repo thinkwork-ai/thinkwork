@@ -15,6 +15,7 @@ import {
   Keyboard,
   Alert,
   AppState,
+  Modal,
 } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
@@ -39,6 +40,7 @@ import { useQuery } from "urql";
 import {
   ThreadsQuery,
   MyComputerQuery,
+  ComputersQuery,
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
 } from "@/lib/graphql-queries";
@@ -61,6 +63,8 @@ import {
   LogOut,
   RefreshCw,
   Filter,
+  ChevronDown,
+  Monitor,
   Zap,
   Lock,
   CreditCard,
@@ -125,6 +129,99 @@ function resolveApiUrl(): string {
   );
 }
 
+type HomeComputer = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+  ownerUserId?: string | null;
+  status?: string | null;
+  runtimeStatus?: string | null;
+};
+
+function ComputerPickerModal({
+  visible,
+  computers,
+  selectedComputerId,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  computers: HomeComputer[];
+  selectedComputerId?: string | null;
+  onSelect: (computer: HomeComputer) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        className="flex-1 justify-start bg-black/30"
+        style={{ paddingTop: 96, paddingHorizontal: 16 }}
+        onPress={onClose}
+      >
+        <View
+          className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
+          onStartShouldSetResponder={() => true}
+        >
+          <View className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+            <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              Computers
+            </Text>
+          </View>
+          {computers.length === 0 ? (
+            <View className="px-4 py-5">
+              <Muted className="text-sm">No Computers available</Muted>
+            </View>
+          ) : null}
+          {computers.map((computer, index) => {
+            const selected = computer.id === selectedComputerId;
+            return (
+              <Pressable
+                key={computer.id}
+                className="flex-row items-center gap-3 px-4 py-3 active:opacity-70"
+                style={
+                  index < computers.length - 1
+                    ? {
+                        borderBottomWidth: 1,
+                        borderBottomColor: "rgba(115,115,115,0.18)",
+                      }
+                    : undefined
+                }
+                onPress={() => {
+                  onSelect(computer);
+                  onClose();
+                }}
+              >
+                <Monitor size={18} color={selected ? "#0ea5e9" : "#737373"} />
+                <View className="min-w-0 flex-1">
+                  <Text
+                    className="text-base font-medium text-neutral-900 dark:text-neutral-100"
+                    numberOfLines={1}
+                  >
+                    {computer.name || "Computer"}
+                  </Text>
+                  <Muted className="text-xs" numberOfLines={1}>
+                    {computer.slug || computer.runtimeStatus || computer.status}
+                  </Muted>
+                </View>
+                {selected ? (
+                  <Text className="text-xs font-semibold text-sky-500">
+                    Selected
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function ThreadsScreen() {
   const router = useRouter();
   const { user, refreshCounter, signOut, getToken } = useAuth();
@@ -178,6 +275,43 @@ export default function ThreadsScreen() {
     pause: !tenantId,
   });
   const myComputer = myComputerData?.myComputer;
+  const [{ data: computersData, fetching: computersFetching }] = useQuery({
+    query: ComputersQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+  });
+  const computers = useMemo<HomeComputer[]>(() => {
+    const rows = ((computersData?.computers ?? []) as HomeComputer[]).filter((computer) => {
+      if (computer.status === "archived") return false;
+      if (!currentUser?.id) return false;
+      return computer.ownerUserId === currentUser.id;
+    });
+    if (rows.length > 0) return rows;
+    return myComputer ? [myComputer as HomeComputer] : [];
+  }, [computersData?.computers, currentUser?.id, myComputer]);
+  const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
+    null,
+  );
+  const [computerPickerOpen, setComputerPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedComputerId && computers.some((c) => c.id === selectedComputerId)) {
+      return;
+    }
+    const ownedComputer =
+      computers.find((computer) => computer.id === myComputer?.id) ??
+      computers[0] ??
+      null;
+    setSelectedComputerId(ownedComputer?.id ?? null);
+  }, [computers, myComputer?.id, selectedComputerId]);
+
+  const selectedComputer = useMemo(
+    () =>
+      computers.find((computer) => computer.id === selectedComputerId) ??
+      myComputer ??
+      null,
+    [computers, myComputer, selectedComputerId],
+  );
 
   // Server already scopes agents to the authed user. Just drop local scratch agents.
   const visibleAgents = useMemo(
@@ -215,7 +349,6 @@ export default function ThreadsScreen() {
   // ── Thread filters + query (scoped to the user's Computer) ─────────────
   const [filters, setFilters] = useState<ThreadFilters>({
     channels: [],
-    agentId: "",
     showArchived: false,
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -224,19 +357,22 @@ export default function ThreadsScreen() {
   // Only apply filters when the filter panel is open
   const appliedFilters = filtersOpen
     ? filters
-    : ({ channels: [], agentId: "", showArchived: false } as ThreadFilters);
+    : ({ channels: [], showArchived: false } as ThreadFilters);
 
   const queryVars = useMemo(() => {
     const vars: any = { tenantId: tenantId! };
-    if (myComputer?.id) vars.computerId = myComputer.id;
-    if (appliedFilters.agentId) vars.agentId = appliedFilters.agentId;
+    if (selectedComputer?.id) vars.computerId = selectedComputer.id;
     return vars;
-  }, [tenantId, myComputer?.id, appliedFilters.agentId]);
+  }, [tenantId, selectedComputer?.id]);
 
   const [{ data: threadsData }, reexecute] = useQuery({
     query: ThreadsQuery,
     variables: queryVars,
-    pause: !tenantId || myComputerFetching || !myComputer?.id,
+    pause:
+      !tenantId ||
+      myComputerFetching ||
+      computersFetching ||
+      !selectedComputer?.id,
   });
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
@@ -364,7 +500,6 @@ export default function ThreadsScreen() {
     threadsData?.threads,
     appliedFilters.channels,
     appliedFilters.showArchived,
-    myComputer?.id,
     archivedIds,
     pendingReviewsByThreadId,
   ]);
@@ -545,15 +680,15 @@ export default function ThreadsScreen() {
       const workspaces = overrideWorkspaces ?? selectedWorkspaces;
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
-        computerId: myComputer?.id,
+        computerId: selectedComputer?.id,
         tenantId,
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
       });
-      if (!text || !myComputer?.id || !tenantId) {
+      if (!text || !selectedComputer?.id || !tenantId) {
         console.warn("[handleCreateThread] Bailed — missing:", {
           text: !!text,
-          computerId: !!myComputer?.id,
+          computerId: !!selectedComputer?.id,
           tenantId: !!tenantId,
         });
         return;
@@ -580,7 +715,7 @@ export default function ThreadsScreen() {
         // Atomic create + first user message (SDK 0.2.0-beta.0+).
         const newThread = await createThread({
           tenantId,
-          computerId: myComputer.id,
+          computerId: selectedComputer.id,
           title: text.length > 60 ? text.slice(0, 60) + "..." : text,
           channel: "CHAT",
           createdByType: "user",
@@ -606,7 +741,7 @@ export default function ThreadsScreen() {
     [
       newThreadText,
       selectedWorkspaces,
-      myComputer?.id,
+      selectedComputer?.id,
       tenantId,
       currentUser?.id,
       createThread,
@@ -618,8 +753,10 @@ export default function ThreadsScreen() {
   );
 
   // ── Render ─────────────────────────────────────────────────────────────
-  const agentDisplayName =
-    myComputer?.name || activeAgent?.name || (agentsFetching ? "" : "Computer");
+  const computerDisplayName =
+    selectedComputer?.name ||
+    myComputer?.name ||
+    (computersFetching || myComputerFetching ? "" : "Computer");
   const brainProviderErrors = brainProviders.filter((provider) =>
     ["error", "timeout"].includes(provider.state),
   ).length;
@@ -633,7 +770,7 @@ export default function ThreadsScreen() {
     >
       {/* Header */}
       {isWide ? (
-        <TabHeader title={agentDisplayName} />
+        <TabHeader title={computerDisplayName} />
       ) : (
         <View
           style={{ paddingTop: insets.top }}
@@ -643,12 +780,18 @@ export default function ThreadsScreen() {
             className="flex-row items-center justify-between px-4"
             style={{ height: 48 }}
           >
-            {/* Left: Computer name */}
-            <View className="flex-row items-center gap-1.5">
+            {/* Left: Computer selector */}
+            <Pressable
+              className="min-w-0 flex-1 flex-row items-center gap-1.5 active:opacity-70"
+              onPress={() => setComputerPickerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select Computer"
+            >
               <Text size="xl" weight="bold">
-                {agentDisplayName}
+                {computerDisplayName}
               </Text>
-            </View>
+              <ChevronDown size={18} color={colors.mutedForeground} />
+            </Pressable>
 
             {/* Right: Brain graph labels + Filter + Menu */}
             <View className="flex-row items-center gap-3">
@@ -1118,6 +1261,14 @@ export default function ThreadsScreen() {
         providers={brainProviders}
         colors={colors}
         onClose={() => setBrainProvidersVisible(false)}
+      />
+
+      <ComputerPickerModal
+        visible={computerPickerOpen}
+        computers={computers}
+        selectedComputerId={selectedComputer?.id}
+        onSelect={(computer) => setSelectedComputerId(computer.id)}
+        onClose={() => setComputerPickerOpen(false)}
       />
 
       {activeTab === "brain" ? <ToastHost bottomOffset={96} /> : null}
