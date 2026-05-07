@@ -12,6 +12,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -35,6 +36,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -109,7 +111,22 @@ describe("Computer runtime task loop", () => {
     });
   });
 
-  it("accepts connector work as a handoff-only task", async () => {
+  it("delegates connector work through the Computer runtime API", async () => {
+    const api = {
+      appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn().mockResolvedValue({
+        delegated: true,
+        idempotent: false,
+        mode: "managed_agent",
+        delegationId: "delegation-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        status: "running",
+      }),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+    };
     const output = await handleTask(
       {
         id: "task-7",
@@ -123,17 +140,26 @@ describe("Computer runtime task loop", () => {
         },
       },
       "/tmp",
+      api,
     );
 
     expect(output).toEqual({
       ok: true,
       taskType: "connector_work",
       accepted: true,
-      mode: "handoff_only",
+      delegated: true,
+      idempotent: false,
+      mode: "managed_agent",
+      delegationId: "delegation-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      status: "running",
     });
+    expect(api.delegateConnectorWork).toHaveBeenCalledWith("task-7");
   });
 
-  it("completes connector work tasks without failing the runtime handoff", async () => {
+  it("completes connector work tasks after delegation is accepted", async () => {
     const api = {
       claimTask: vi.fn().mockResolvedValue({
         id: "task-8",
@@ -150,6 +176,16 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn().mockResolvedValue({
+        delegated: true,
+        idempotent: false,
+        mode: "managed_agent",
+        delegationId: "delegation-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        status: "running",
+      }),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -164,10 +200,62 @@ describe("Computer runtime task loop", () => {
       ok: true,
       taskType: "connector_work",
       accepted: true,
-      mode: "handoff_only",
+      delegated: true,
+      idempotent: false,
+      mode: "managed_agent",
+      delegationId: "delegation-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      status: "running",
     });
     expect(api.failTask).not.toHaveBeenCalled();
     expect(api.appendTaskEvent).not.toHaveBeenCalled();
+  });
+
+  it("fails connector work tasks when delegation fails", async () => {
+    const api = {
+      claimTask: vi.fn().mockResolvedValue({
+        id: "task-9",
+        taskType: "connector_work",
+        input: {
+          connectorId: "connector-1",
+          connectorExecutionId: "execution-1",
+          externalRef: "TECH-59",
+          title: "Handle Linear issue",
+          body: "Linear issue body should stay in the existing thread",
+        },
+      }),
+      completeTask: vi.fn(),
+      failTask: vi.fn(),
+      appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi
+        .fn()
+        .mockRejectedValue(new Error("delegation unavailable")),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+    };
+
+    const result = await runTaskLoopOnce({
+      api,
+      workspaceRoot: "/tmp",
+      idleDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      taskId: "task-9",
+      error: { message: "delegation unavailable" },
+    });
+    expect(api.completeTask).not.toHaveBeenCalled();
+    expect(api.appendTaskEvent).toHaveBeenCalledWith("task-9", {
+      eventType: "task_error",
+      level: "error",
+      payload: { message: "delegation unavailable" },
+    });
+    expect(api.failTask).toHaveBeenCalledWith("task-9", {
+      message: "delegation unavailable",
+    });
   });
 
   it("fails unsupported task types without leaking input bodies", async () => {
@@ -181,6 +269,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 

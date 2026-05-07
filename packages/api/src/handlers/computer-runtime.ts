@@ -15,8 +15,10 @@ import {
   checkGoogleWorkspaceConnection,
   claimNextComputerTask,
   completeComputerTask,
+  ComputerTaskDelegationError,
   ComputerNotFoundError,
   ComputerTaskNotFoundError,
+  delegateConnectorWorkTask,
   failComputerTask,
   recordComputerHeartbeat,
   resolveGoogleWorkspaceCliToken,
@@ -46,6 +48,9 @@ export async function handler(
   } catch (err) {
     if (err instanceof BadRequestError) return error(err.message, 400);
     if (err instanceof ComputerTaskInputError) return error(err.message, 400);
+    if (err instanceof ComputerTaskDelegationError) {
+      return error(err.message, err.statusCode);
+    }
     if (err instanceof ComputerNotFoundError) return notFound(err.message);
     if (err instanceof ComputerTaskNotFoundError) return notFound(err.message);
     console.error("[computer-runtime] request failed", err);
@@ -147,6 +152,21 @@ async function route(
         payload: body.payload,
       }),
       201,
+    );
+  }
+
+  const delegateConnectorWorkMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/delegate-connector-work$/,
+  );
+  if (method === "POST" && delegateConnectorWorkMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await delegateConnectorWorkTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(delegateConnectorWorkMatch[1], "taskId"),
+      }),
     );
   }
 

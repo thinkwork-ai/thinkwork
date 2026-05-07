@@ -94,6 +94,28 @@ describe("resolveChatInvokeIdentity", () => {
     });
   });
 
+  it("uses the delegated agent's paired human for Computer-owned connector threads", async () => {
+    const subject = deps({
+      loadThreadCreator: vi.fn(async () => ({
+        created_by_id: "computer-1",
+        created_by_type: "computer",
+      })),
+      loadAgentHumanPair: vi.fn(async () => "paired-human"),
+    });
+
+    const identity = await resolveChatInvokeIdentity(baseArgs, subject);
+
+    expect(identity).toEqual({
+      currentUserId: "paired-human",
+      currentUserEmail: "paired-human@example.com",
+      source: "computer_agent_human_pair",
+    });
+    expect(subject.loadAgentHumanPair).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      tenantId: "tenant-1",
+    });
+  });
+
   it("returns no identity when a connector-created thread has no paired human", async () => {
     const subject = deps({
       loadThreadCreator: vi.fn(async () => ({

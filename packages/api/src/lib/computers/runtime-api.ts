@@ -1,14 +1,19 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  agents,
+  computerDelegations,
   computers,
   computerEvents,
   computerTasks,
+  messages,
+  threads,
 } from "@thinkwork/database-pg/schema";
 import {
   resolveConnectionForUser,
   resolveOAuthTokenDetails,
 } from "../oauth-token.js";
+import { invokeChatAgent } from "../../graphql/utils.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -24,6 +29,16 @@ export class ComputerTaskNotFoundError extends Error {
   constructor(readonly taskId: string) {
     super(`Computer task not found: ${taskId}`);
     this.name = "ComputerTaskNotFoundError";
+  }
+}
+
+export class ComputerTaskDelegationError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode = 400,
+  ) {
+    super(message);
+    this.name = "ComputerTaskDelegationError";
   }
 }
 
@@ -280,6 +295,147 @@ export async function resolveGoogleWorkspaceCliToken(input: {
   };
 }
 
+export async function delegateConnectorWorkTask(input: {
+  tenantId: string;
+  computerId: string;
+  taskId: string;
+}) {
+  const task = await loadTask(input.tenantId, input.computerId, input.taskId);
+  if (task.task_type !== "connector_work") {
+    throw new ComputerTaskDelegationError(
+      "Only connector_work tasks can be delegated",
+    );
+  }
+
+  const computer = await loadComputer(input.tenantId, input.computerId);
+  if (!computer.migrated_from_agent_id) {
+    throw new ComputerTaskDelegationError(
+      "Computer has no delegated Managed Agent configured",
+      409,
+    );
+  }
+
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.id, computer.migrated_from_agent_id),
+        eq(agents.tenant_id, input.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!agent) {
+    throw new ComputerTaskDelegationError(
+      "Delegated Managed Agent not found",
+      404,
+    );
+  }
+
+  const payload = connectorWorkPayload(task.input);
+  const existing = await loadDelegation(input.tenantId, input.taskId);
+  if (existing && ["running", "completed"].includes(existing.status)) {
+    return {
+      delegated: false,
+      idempotent: true,
+      mode: "managed_agent",
+      delegationId: existing.id,
+      agentId: existing.agent_id,
+      threadId: String((existing.input_artifacts as any)?.threadId ?? ""),
+      status: existing.status,
+    };
+  }
+
+  const handoff = await resolveConnectorHandoffThread({
+    tenantId: input.tenantId,
+    taskId: input.taskId,
+  });
+
+  const delegation =
+    existing ??
+    (
+      await db
+        .insert(computerDelegations)
+        .values({
+          tenant_id: input.tenantId,
+          computer_id: input.computerId,
+          agent_id: agent.id,
+          task_id: input.taskId,
+          status: "pending",
+          input_artifacts: {
+            connectorId: payload.connectorId,
+            connectorExecutionId: payload.connectorExecutionId,
+            externalRef: payload.externalRef,
+            title: payload.title,
+            threadId: handoff.threadId,
+            messageId: handoff.messageId,
+            metadata: payload.metadata,
+          },
+        })
+        .returning({
+          id: computerDelegations.id,
+          agent_id: computerDelegations.agent_id,
+        })
+    )[0];
+  if (!delegation) {
+    throw new ComputerTaskDelegationError("Failed to create delegation", 500);
+  }
+
+  await appendComputerTaskEvent({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    taskId: input.taskId,
+    eventType: "connector_work_delegation_started",
+    level: "info",
+    payload: {
+      delegationId: delegation.id,
+      agentId: agent.id,
+      threadId: handoff.threadId,
+      connectorExecutionId: payload.connectorExecutionId,
+      externalRef: payload.externalRef,
+    },
+  });
+
+  const invoked = await invokeChatAgent({
+    tenantId: input.tenantId,
+    threadId: handoff.threadId,
+    agentId: agent.id,
+    userMessage: payload.body,
+    messageId: handoff.messageId,
+  });
+
+  if (!invoked) {
+    await db
+      .update(computerDelegations)
+      .set({
+        status: "failed",
+        error: { message: "Managed Agent delegation dispatch failed" },
+        completed_at: new Date(),
+      })
+      .where(eq(computerDelegations.id, delegation.id));
+    throw new ComputerTaskDelegationError(
+      "Managed Agent delegation dispatch failed",
+      502,
+    );
+  }
+
+  await db
+    .update(computerDelegations)
+    .set({ status: "running" })
+    .where(eq(computerDelegations.id, delegation.id));
+
+  return {
+    delegated: true,
+    idempotent: false,
+    mode: "managed_agent",
+    delegationId: delegation.id,
+    agentId: agent.id,
+    threadId: handoff.threadId,
+    messageId: handoff.messageId,
+    status: "running",
+  };
+}
+
 export async function completeComputerTask(input: {
   tenantId: string;
   computerId: string;
@@ -371,7 +527,11 @@ function missingGoogleCalendarScopes(grantedScopes: string[]) {
 
 async function loadTask(tenantId: string, computerId: string, taskId: string) {
   const [task] = await db
-    .select({ id: computerTasks.id })
+    .select({
+      id: computerTasks.id,
+      task_type: computerTasks.task_type,
+      input: computerTasks.input,
+    })
     .from(computerTasks)
     .where(
       and(
@@ -383,4 +543,97 @@ async function loadTask(tenantId: string, computerId: string, taskId: string) {
     .limit(1);
   if (!task) throw new ComputerTaskNotFoundError(taskId);
   return task;
+}
+
+async function loadDelegation(tenantId: string, taskId: string) {
+  const [delegation] = await db
+    .select({
+      id: computerDelegations.id,
+      agent_id: computerDelegations.agent_id,
+      status: computerDelegations.status,
+      input_artifacts: computerDelegations.input_artifacts,
+    })
+    .from(computerDelegations)
+    .where(
+      and(
+        eq(computerDelegations.tenant_id, tenantId),
+        eq(computerDelegations.task_id, taskId),
+      ),
+    )
+    .orderBy(asc(computerDelegations.created_at))
+    .limit(1);
+  return delegation ?? null;
+}
+
+async function resolveConnectorHandoffThread(input: {
+  tenantId: string;
+  taskId: string;
+}) {
+  const [thread] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.tenant_id, input.tenantId),
+        sql`${threads.metadata}->>'computerTaskId' = ${input.taskId}`,
+      ),
+    )
+    .limit(1);
+  if (!thread) {
+    throw new ComputerTaskDelegationError(
+      "Connector work thread not found for task",
+      409,
+    );
+  }
+
+  const [message] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, thread.id),
+        eq(messages.sender_type, "connector"),
+      ),
+    )
+    .orderBy(asc(messages.created_at))
+    .limit(1);
+  if (!message) {
+    throw new ComputerTaskDelegationError(
+      "Connector work message not found for task",
+      409,
+    );
+  }
+
+  return { threadId: thread.id, messageId: message.id };
+}
+
+function connectorWorkPayload(input: unknown) {
+  const payload =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  return {
+    connectorId: requiredPayloadString(payload.connectorId, "connectorId"),
+    connectorExecutionId: requiredPayloadString(
+      payload.connectorExecutionId,
+      "connectorExecutionId",
+    ),
+    externalRef: requiredPayloadString(payload.externalRef, "externalRef"),
+    title: requiredPayloadString(payload.title, "title"),
+    body: requiredPayloadString(payload.body, "body"),
+    metadata:
+      payload.metadata && typeof payload.metadata === "object"
+        ? payload.metadata
+        : null,
+  };
+}
+
+function requiredPayloadString(value: unknown, name: string) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new ComputerTaskDelegationError(
+      `connector_work input missing ${name}`,
+    );
+  }
+  return value.trim();
 }

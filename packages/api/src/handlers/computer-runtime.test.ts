@@ -11,8 +11,17 @@ const mocks = vi.hoisted(() => {
     appendComputerTaskEvent: vi.fn(),
     checkGoogleWorkspaceConnection: vi.fn(),
     resolveGoogleWorkspaceCliToken: vi.fn(),
+    delegateConnectorWorkTask: vi.fn(),
     completeComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
+    ComputerTaskDelegationError: class ComputerTaskDelegationError extends Error {
+      statusCode: number;
+
+      constructor(message: string, statusCode = 400) {
+        super(message);
+        this.statusCode = statusCode;
+      }
+    },
     ComputerNotFoundError,
     ComputerTaskNotFoundError,
   };
@@ -35,8 +44,10 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   appendComputerTaskEvent: mocks.appendComputerTaskEvent,
   checkGoogleWorkspaceConnection: mocks.checkGoogleWorkspaceConnection,
   resolveGoogleWorkspaceCliToken: mocks.resolveGoogleWorkspaceCliToken,
+  delegateConnectorWorkTask: mocks.delegateConnectorWorkTask,
   completeComputerTask: mocks.completeComputerTask,
   failComputerTask: mocks.failComputerTask,
+  ComputerTaskDelegationError: mocks.ComputerTaskDelegationError,
   ComputerNotFoundError: mocks.ComputerNotFoundError,
   ComputerTaskNotFoundError: mocks.ComputerTaskNotFoundError,
 }));
@@ -94,6 +105,14 @@ describe("computer-runtime handler", () => {
       connected: true,
       tokenResolved: true,
       accessToken: "ya29.secret-token",
+    });
+    mocks.delegateConnectorWorkTask.mockResolvedValue({
+      delegated: true,
+      mode: "managed_agent",
+      delegationId: "delegation-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      status: "running",
     });
     mocks.completeComputerTask.mockResolvedValue({
       id: TASK_ID,
@@ -198,6 +217,60 @@ describe("computer-runtime handler", () => {
       }),
     );
     expect(failResponse.statusCode).toBe(200);
+  });
+
+  it("delegates connector work through the service-auth task endpoint", async () => {
+    const response = await handler(
+      event(
+        "POST",
+        `/api/computers/runtime/tasks/${TASK_ID}/delegate-connector-work`,
+        {
+          body: {
+            tenantId: TENANT_ID,
+            computerId: COMPUTER_ID,
+          },
+        },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.delegateConnectorWorkTask).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+      taskId: TASK_ID,
+    });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      delegated: true,
+      mode: "managed_agent",
+      delegationId: "delegation-1",
+    });
+  });
+
+  it("surfaces connector work delegation errors with their status code", async () => {
+    mocks.delegateConnectorWorkTask.mockRejectedValueOnce(
+      new mocks.ComputerTaskDelegationError(
+        "Computer has no delegated Managed Agent configured",
+        409,
+      ),
+    );
+
+    const response = await handler(
+      event(
+        "POST",
+        `/api/computers/runtime/tasks/${TASK_ID}/delegate-connector-work`,
+        {
+          body: {
+            tenantId: TENANT_ID,
+            computerId: COMPUTER_ID,
+          },
+        },
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.body).toContain(
+      "Computer has no delegated Managed Agent configured",
+    );
   });
 
   it("checks Google Workspace connection status without exposing tokens", async () => {
