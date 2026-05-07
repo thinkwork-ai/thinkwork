@@ -40,6 +40,7 @@
 #   -- creates-constraint: public.<table_name>.<constraint_name>
 #   -- creates-function: public.<function_name>
 #   -- creates-trigger: public.<table_name>.<trigger_name>
+#   -- creates-role: <role_name>               # probes pg_catalog.pg_roles (global, unqualified)
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 # Multiple markers per file are fine. A file with zero markers is reported
@@ -252,6 +253,24 @@ probe_trigger() {
   fi
 }
 
+probe_role() {
+  # Accepts a bare role name (e.g. compliance_writer). Postgres roles are
+  # cluster-global, not schema-qualified — the marker form mirrors
+  # creates-extension rather than the schema-qualified relation probes.
+  local name="$1"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1 FROM pg_catalog.pg_roles
+     WHERE rolname = '$name'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "role:$name"
+  fi
+}
+
 any_missing=0
 any_unverified=0
 
@@ -297,6 +316,10 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     grep -oE "^--[[:space:]]+creates-trigger:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  role_markers=$(
+    grep -oE "^--[[:space:]]+creates-role:[[:space:]]+[A-Za-z0-9_]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_col_markers=$(
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
@@ -306,8 +329,8 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- drops:', or '-- drops-column:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- drops:', or '-- drops-column:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -330,6 +353,9 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     fi
     if [[ -n "$trigger_markers" ]]; then
       while IFS= read -r m; do echo "    creates-trigger: $m"; done <<< "$trigger_markers"
+    fi
+    if [[ -n "$role_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-role: $m"; done <<< "$role_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
@@ -387,6 +413,14 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       echo "    trigger $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$trigger_markers"
+  fi
+  if [[ -n "$role_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_role "$m")
+      echo "    role $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$role_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do
