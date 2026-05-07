@@ -52,9 +52,9 @@ export function ComputerRuntimePanel({ computer }: ComputerRuntimePanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Runtime Skeleton</CardTitle>
+        <CardTitle>Runtime</CardTitle>
         <CardDescription>
-          ECS/EFS identifiers and heartbeat data for the Computer runtime.
+          ECS/EFS identifiers and heartbeat data for the live Computer worker.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

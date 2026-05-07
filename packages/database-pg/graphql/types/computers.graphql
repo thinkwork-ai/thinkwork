@@ -35,6 +35,13 @@ enum ComputerTaskType {
   GOOGLE_CLI_SMOKE
 }
 
+enum ComputerEventLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
 type Computer {
   id: ID!
   tenantId: ID!
@@ -82,6 +89,17 @@ type ComputerTask {
   updatedAt: AWSDateTime!
 }
 
+type ComputerEvent {
+  id: ID!
+  tenantId: ID!
+  computerId: ID!
+  taskId: ID
+  eventType: String!
+  level: ComputerEventLevel!
+  payload: AWSJSON
+  createdAt: AWSDateTime!
+}
+
 input CreateComputerInput {
   tenantId: ID!
   ownerUserId: ID!
@@ -123,7 +141,12 @@ extend type Query {
   myComputer: Computer
   computers(tenantId: ID!, status: ComputerStatus): [Computer!]!
   computer(id: ID!): Computer
-  computerTasks(computerId: ID!, status: ComputerTaskStatus, limit: Int): [ComputerTask!]!
+  computerTasks(
+    computerId: ID!
+    status: ComputerTaskStatus
+    limit: Int
+  ): [ComputerTask!]!
+  computerEvents(computerId: ID!, limit: Int): [ComputerEvent!]!
 }
 
 extend type Mutation {

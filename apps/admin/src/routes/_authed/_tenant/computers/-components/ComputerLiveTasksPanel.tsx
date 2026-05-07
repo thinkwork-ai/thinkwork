@@ -1,6 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "urql";
-import { Activity, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Loader2,
+  Terminal,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -57,6 +65,17 @@ function outputSummary(output: unknown, error: unknown): string {
   if (!payload) return "—";
   const markerPath = payload.markerPath ?? payload.path;
   if (typeof markerPath === "string") return markerPath;
+  const smoke = payload.smoke;
+  if (smoke && typeof smoke === "object") {
+    const smokePayload = smoke as Record<string, unknown>;
+    if (smokePayload.available === true) {
+      const version = smokePayload.version;
+      return typeof version === "string"
+        ? `Google CLI available: ${version}`
+        : "Google CLI available";
+    }
+    if (smokePayload.available === false) return "Google CLI unavailable";
+  }
   const message = payload.message;
   if (typeof message === "string") return message;
   return "Output recorded";
@@ -95,35 +114,43 @@ export function ComputerLiveTasksPanel({
     return () => window.clearInterval(timer);
   }, [hasOpenTask, onChanged, reexecuteTasks]);
 
-  async function enqueueBrowserCheck() {
+  async function enqueueRuntimeTask(
+    taskType: ComputerTaskType,
+    taskInput?: Record<string, unknown>,
+  ) {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 60_000).toISOString();
     const stamp = now.toISOString().replace(/[:.]/g, "-");
-    const path = `.thinkwork/runtime-checks/${stamp}.md`;
     const result = await enqueueTask({
       input: {
         computerId: computer.id,
-        taskType: ComputerTaskType.WorkspaceFileWrite,
-        idempotencyKey: `browser-runtime-check-${computer.id}-${stamp}`,
-        input: {
-          path,
-          content: [
-            "# Browser Runtime Check",
-            "",
-            `computer: ${computer.slug}`,
-            `queuedAt: ${now.toISOString()}`,
-            `expiresAt: ${expiresAt}`,
-          ].join("\n"),
-        },
+        taskType,
+        idempotencyKey: `browser-${taskType.toLowerCase()}-${computer.id}-${stamp}`,
+        input: taskInput ?? null,
       },
     });
     if (result.error) {
       toast.error(result.error.message);
       return;
     }
-    toast.success("Runtime check queued");
+    toast.success(`${label(taskType)} queued`);
     reexecuteTasks({ requestPolicy: "network-only" });
     onChanged?.();
+  }
+
+  function enqueueWorkspaceMarker() {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 60_000).toISOString();
+    const stamp = now.toISOString().replace(/[:.]/g, "-");
+    enqueueRuntimeTask(ComputerTaskType.WorkspaceFileWrite, {
+      path: `.thinkwork/runtime-checks/${stamp}.md`,
+      content: [
+        "# Browser Runtime Check",
+        "",
+        `computer: ${computer.slug}`,
+        `queuedAt: ${now.toISOString()}`,
+        `expiresAt: ${expiresAt}`,
+      ].join("\n"),
+    });
   }
 
   return (
@@ -131,22 +158,43 @@ export function ComputerLiveTasksPanel({
       <CardHeader>
         <CardTitle>Live Runtime</CardTitle>
         <CardDescription>
-          Browser-triggered checks and recent work claimed by the running ECS
+          Browser-triggered actions and recent work claimed by the running ECS
           worker.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex flex-wrap gap-2">
           <Button
             size="sm"
             variant="outline"
-            onClick={enqueueBrowserCheck}
+            onClick={() => enqueueRuntimeTask(ComputerTaskType.HealthCheck)}
             disabled={enqueueing}
+            title="Queue a runtime health check"
           >
             {enqueueing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Activity className="h-4 w-4" />
             )}
-            Check Runtime
+            Health
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={enqueueWorkspaceMarker}
+            disabled={enqueueing}
+            title="Write a TTL-marked file into the Computer workspace"
+          >
+            <FileText className="h-4 w-4" />
+            Workspace
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => enqueueRuntimeTask(ComputerTaskType.GoogleCliSmoke)}
+            disabled={enqueueing}
+            title="Check whether the Google Workspace CLI is available in the runtime"
+          >
+            <Terminal className="h-4 w-4" />
+            Google CLI
           </Button>
         </CardAction>
       </CardHeader>

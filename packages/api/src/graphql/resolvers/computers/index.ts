@@ -1,5 +1,6 @@
 import { computers } from "./computers.query.js";
 import { computer } from "./computer.query.js";
+import { computerEvents } from "./computerEvents.query.js";
 import { computerTasks } from "./computerTasks.query.js";
 import { myComputer } from "./myComputer.query.js";
 import { createComputer } from "./createComputer.mutation.js";
@@ -9,6 +10,7 @@ import { updateComputer } from "./updateComputer.mutation.js";
 export const computerQueries = {
   computers,
   computer,
+  computerEvents,
   computerTasks,
   myComputer,
 };

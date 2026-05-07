@@ -292,6 +292,11 @@ export const ComputerDetailQuery = graphql(`
         templateKind
         model
       }
+      sourceAgent {
+        id
+        name
+        slug
+      }
       name
       slug
       status
@@ -367,6 +372,19 @@ export const ComputerTasksQuery = graphql(`
       completedAt
       createdAt
       updatedAt
+    }
+  }
+`);
+
+export const ComputerEventsQuery = graphql(`
+  query ComputerEvents($computerId: ID!, $limit: Int) {
+    computerEvents(computerId: $computerId, limit: $limit) {
+      id
+      taskId
+      eventType
+      level
+      payload
+      createdAt
     }
   }
 `);
