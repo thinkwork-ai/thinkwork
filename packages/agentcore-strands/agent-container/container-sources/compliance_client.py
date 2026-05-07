@@ -86,11 +86,12 @@ class ComplianceClient:
 	existing ``_log_invocation`` template's dev-stage fallback.
 	"""
 
-	# 3 attempts with exponential backoff (0.5s, 1.0s, 2.0s) — total
-	# worst-case wait ~3.5s on full transient failure. Per-request
-	# timeout is 3 seconds (matches the existing _log_invocation
-	# template at server.py:993).
-	RETRY_DELAYS_SEC = (0.5, 1.0, 2.0)
+	# 3 attempts with exponential backoff between retries (0.5s, 1.0s)
+	# — total worst-case wait ~1.5s of sleep + 3 × request timeout.
+	# Two delay entries because the third attempt is the final shot;
+	# we don't sleep after it. Per-request timeout is 3 seconds
+	# (matches the existing _log_invocation template at server.py:993).
+	RETRY_DELAYS_SEC = (0.5, 1.0)
 	REQUEST_TIMEOUT_SEC = 3.0
 
 	def __init__(self) -> None:
@@ -222,7 +223,12 @@ class ComplianceClient:
 		loop = asyncio.get_event_loop()
 		last_err: Optional[Exception] = None
 
-		for attempt, delay in enumerate(self.RETRY_DELAYS_SEC):
+		# Total attempts = len(RETRY_DELAYS_SEC) + 1; delays sit
+		# BETWEEN attempts (sleep AFTER attempt N, BEFORE attempt N+1).
+		# Two delays (0.5s, 1.0s) → three attempts → ~1.5s sleep budget
+		# plus per-attempt request timeouts.
+		total_attempts = len(self.RETRY_DELAYS_SEC) + 1
+		for attempt in range(total_attempts):
 			try:
 				retryable, result, err = await loop.run_in_executor(None, _do_post)
 			except Exception as exc:  # noqa: BLE001 — defensive
@@ -249,12 +255,11 @@ class ComplianceClient:
 				)
 				return None
 
-			# More attempts left — sleep before the next retry. The
-			# final iteration's delay is the wait BEFORE giving up,
-			# so we still sleep on attempt = len(RETRY_DELAYS_SEC) - 1
-			# to honor the documented backoff schedule.
-			if attempt < len(self.RETRY_DELAYS_SEC) - 1:
-				await asyncio.sleep(delay)
+			# Sleep before the next attempt; on the final attempt
+			# (attempt == total_attempts - 1) the loop exits without
+			# sleeping.
+			if attempt < total_attempts - 1:
+				await asyncio.sleep(self.RETRY_DELAYS_SEC[attempt])
 
 		logger.warning(
 			"compliance.emit retries exhausted event_id=%s last_err=%s",

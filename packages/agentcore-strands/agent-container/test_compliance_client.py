@@ -259,7 +259,7 @@ def test_retries_exhausted_returns_none(monkeypatch):
 	# Speed the test up — zero out retry delays.
 	monkeypatch.setattr(
 		"compliance_client.ComplianceClient.RETRY_DELAYS_SEC",
-		(0.0, 0.0, 0.0),
+		(0.0, 0.0),
 	)
 	client = ComplianceClient()
 
@@ -313,7 +313,7 @@ def test_retries_on_429(monkeypatch):
 	monkeypatch.setenv("API_AUTH_SECRET", "test-secret")
 	monkeypatch.setattr(
 		"compliance_client.ComplianceClient.RETRY_DELAYS_SEC",
-		(0.0, 0.0, 0.0),
+		(0.0, 0.0),
 	)
 	client = ComplianceClient()
 
@@ -381,7 +381,7 @@ def test_retries_on_network_timeout(monkeypatch):
 	monkeypatch.setenv("API_AUTH_SECRET", "test-secret")
 	monkeypatch.setattr(
 		"compliance_client.ComplianceClient.RETRY_DELAYS_SEC",
-		(0.0, 0.0, 0.0),
+		(0.0, 0.0),
 	)
 	client = ComplianceClient()
 

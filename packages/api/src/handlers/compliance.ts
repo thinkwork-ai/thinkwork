@@ -171,14 +171,24 @@ export async function handler(
 	// only trust it after confirming the supplied actorUserId actually
 	// belongs to that tenant. Don't reveal whether the user exists in
 	// another tenant — return 403 uniformly on mismatch or missing.
-	const [actorRow] = await db
-		.select({ tenant_id: users.tenant_id })
-		.from(users)
-		.where(eq(users.id, actorUserId))
-		.limit(1);
+	//
+	// The SELECT against the `users` table only applies for
+	// `actorType === "user"`. `system` and `agent` actorIds are not
+	// `users.id` PKs (system actors are platform constants like
+	// "platform-credential", agent actorIds are `agents.id` rows in
+	// a different table), so SELECTing `users` would always 403 them.
+	// For non-user actorTypes the API_AUTH_SECRET bearer is the trust
+	// boundary; the body's tenantId is accepted as authoritative.
+	if (actorType === "user") {
+		const [actorRow] = await db
+			.select({ tenant_id: users.tenant_id })
+			.from(users)
+			.where(eq(users.id, actorUserId))
+			.limit(1);
 
-	if (!actorRow || actorRow.tenant_id !== tenantId) {
-		return error("Forbidden", 403);
+		if (!actorRow || actorRow.tenant_id !== tenantId) {
+			return error("Forbidden", 403);
+		}
 	}
 
 	// ── Idempotency pre-check. Cheap SELECT before opening a tx. Replay
@@ -243,9 +253,13 @@ export async function handler(
 		// pg unique-violation race: a concurrent request with the same
 		// event_id landed between our SELECT and INSERT. Re-run the
 		// SELECT and surface the pre-existing row as an idempotent hit.
-		// `pg` exposes `.code` on the wrapped error even after drizzle
-		// re-throws it; pattern verified at packages/api/src/lib/computers/tasks.ts.
-		const pgCode = (err as { code?: string }).code;
+		// drizzle-orm wraps the underlying pg error, so check both the
+		// outer `.code` AND the wrapped `.cause.code` (this matches the
+		// existing 23505 patterns at
+		// `packages/api/src/lib/computers/tasks.ts:383` and
+		// `packages/api/src/lib/connectors/runtime.ts:862`).
+		const errAny = err as { code?: string; cause?: { code?: string } };
+		const pgCode = errAny?.code ?? errAny?.cause?.code;
 		if (pgCode === "23505") {
 			const [raced] = await db
 				.select({
@@ -266,12 +280,21 @@ export async function handler(
 			}
 		}
 		// Validation errors from the U3 helper (unknown eventType /
-		// actorType / source / malformed eventId) bubble up here.
-		// Mapping helper-validation errors to 400 keeps the contract
-		// honest — these are caller bugs, not server faults.
+		// actorType / source / malformed eventId) and the
+		// redaction registry (`redactPayload: ` prefix on unknown
+		// eventTypes) bubble up here. Mapping these to 400 keeps the
+		// contract honest — they're caller bugs, not server faults —
+		// and prevents the Python client from treating them as
+		// retryable 5xx and exhausting backoff on a permanent error.
 		const message = err instanceof Error ? err.message : String(err);
-		if (message.startsWith("emitAuditEvent: ")) {
-			return error(message.replace(/^emitAuditEvent: /, ""), 400);
+		if (
+			message.startsWith("emitAuditEvent: ") ||
+			message.startsWith("redactPayload: ")
+		) {
+			return error(
+				message.replace(/^(emitAuditEvent|redactPayload): /, ""),
+				400,
+			);
 		}
 		console.error(`[compliance.events] emit failed: ${message}`);
 		return error("Internal server error", 500);

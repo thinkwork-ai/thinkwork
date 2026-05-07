@@ -106,7 +106,7 @@ function buildEvent(
 			typeof overrides.body === "string"
 				? overrides.body
 				: overrides.body === null
-					? null
+					? undefined
 					: JSON.stringify(
 							overrides.body ?? {
 								event_id: VALID_EVENT_ID,
@@ -256,6 +256,29 @@ describe("compliance.events handler", () => {
 			});
 		});
 
+		it("recovers from 23505 race when pg code is on err.cause (drizzle-wrapped)", async () => {
+			// drizzle-orm wraps the underlying pg error so .code lives
+			// on err.cause, not err itself. The handler must check both.
+			mockOutboxSelect
+				.mockReturnValueOnce([])
+				.mockReturnValueOnce([
+					{ event_id: VALID_EVENT_ID, outbox_id: "raced-outbox-id" },
+				]);
+			const pgError = Object.assign(new Error("drizzle insert failed"), {
+				cause: { code: "23505" },
+			});
+			mockEmitAuditEvent.mockRejectedValueOnce(pgError);
+
+			const result = await handler(buildEvent());
+
+			expect(result.statusCode).toBe(200);
+			expect(bodyJson(result)).toMatchObject({
+				dispatched: true,
+				idempotent: true,
+				outboxId: "raced-outbox-id",
+			});
+		});
+
 		it("accepts Idempotency-Key header that mirrors body event_id", async () => {
 			const result = await handler(
 				buildEvent({ idempotencyKey: VALID_EVENT_ID }),
@@ -307,6 +330,50 @@ describe("compliance.events handler", () => {
 
 			expect(result.statusCode).toBe(403);
 			expect(mockEmitAuditEvent).not.toHaveBeenCalled();
+		});
+
+		it("skips users-table SELECT for actorType: 'system' (platform-credential actorIds)", async () => {
+			// system / agent actorTypes pass non-users.id values (e.g.
+			// "platform-credential"). The cross-tenant guard would
+			// always 403 them if it SELECTed users; the handler must
+			// only run the SELECT for actorType: "user".
+			mockUsersSelect.mockReturnValue([]);
+			const result = await handler(
+				buildEvent({
+					body: {
+						event_id: VALID_EVENT_ID,
+						tenantId: TENANT_A,
+						actorUserId: "platform-credential",
+						actorType: "system",
+						eventType: "agent.skills_changed",
+						source: "strands",
+						payload: { agentId: "a" },
+					},
+				}),
+			);
+
+			expect(result.statusCode).toBe(200);
+			expect(mockEmitAuditEvent).toHaveBeenCalledOnce();
+		});
+
+		it("skips users-table SELECT for actorType: 'agent'", async () => {
+			mockUsersSelect.mockReturnValue([]);
+			const result = await handler(
+				buildEvent({
+					body: {
+						event_id: VALID_EVENT_ID,
+						tenantId: TENANT_A,
+						actorUserId: "agent-id-uuid",
+						actorType: "agent",
+						eventType: "agent.skills_changed",
+						source: "strands",
+						payload: { agentId: "a" },
+					},
+				}),
+			);
+
+			expect(result.statusCode).toBe(200);
+			expect(mockEmitAuditEvent).toHaveBeenCalledOnce();
 		});
 	});
 
