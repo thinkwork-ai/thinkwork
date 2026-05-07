@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildLinearTrackerCandidates,
+  createDrizzleConnectorRuntimeStore,
   isRuntimeEligibleConnector,
   runConnectorDispatchTick,
   type ConnectorExecutionRow,
@@ -362,6 +363,40 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.claims).toEqual([]);
+  });
+});
+
+describe("createDrizzleConnectorRuntimeStore", () => {
+  it("treats any existing connector external ref as duplicate, including terminal executions", async () => {
+    const existing = execution({
+      id: "execution-terminal",
+      current_state: "terminal",
+    });
+    const limit = vi.fn().mockResolvedValue([existing]);
+    const where = vi.fn(() => ({ limit }));
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const insert = vi.fn();
+    const db = { select, insert } as unknown as Parameters<
+      typeof createDrizzleConnectorRuntimeStore
+    >[0];
+    const store = createDrizzleConnectorRuntimeStore(db, vi.fn());
+
+    const result = await store.claimExecution({
+      connector: connector(),
+      candidate: {
+        connectorId: "connector-1",
+        tenantId: "tenant-a",
+        externalRef: "issue-1",
+        title: "Already handled",
+        body: "Already handled",
+        metadata: {},
+      },
+      now: NOW,
+    });
+
+    expect(result).toEqual({ status: "duplicate", execution: existing });
+    expect(insert).not.toHaveBeenCalled();
   });
 });
 

@@ -385,6 +385,18 @@ export function createDrizzleConnectorRuntimeStore(
     },
 
     async claimExecution({ connector, candidate }) {
+      const [existing] = await db
+        .select()
+        .from(connectorExecutions)
+        .where(
+          and(
+            eq(connectorExecutions.connector_id, connector.id),
+            eq(connectorExecutions.external_ref, candidate.externalRef),
+          ),
+        )
+        .limit(1);
+      if (existing) return { status: "duplicate", execution: existing };
+
       try {
         const [execution] = await db
           .insert(connectorExecutions)
