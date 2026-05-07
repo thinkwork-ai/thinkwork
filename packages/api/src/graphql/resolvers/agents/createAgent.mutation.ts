@@ -14,6 +14,12 @@ import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
+import { emitAuditEvent } from "../../../lib/compliance/emit.js";
+
+interface CreateAgentActor {
+  actorId: string;
+  actorType: "user" | "system";
+}
 
 export async function createAgent(
   _parent: any,
@@ -32,6 +38,23 @@ export async function createAgent(
       ? ctx.auth.principalId
       : await resolveCallerUserId(ctx);
 
+  // Compliance audit actor: branch by auth path. Apikey callers
+  // identify as `system` (the x-principal-id header is unverified per
+  // packages/api/src/lib/tenant-membership.ts:112-114, so the audit row
+  // records a stable platform-credential constant rather than the
+  // attacker-controlled header value). Cognito callers identify as
+  // `user` with the resolved users.id; falls back to the cognito sub
+  // (which Cognito itself signs) when the users-lookup misses.
+  const auditActor: CreateAgentActor =
+    ctx.auth.authType === "apikey"
+      ? { actorId: "platform-credential", actorType: "system" }
+      : invokerUserId
+        ? { actorId: invokerUserId, actorType: "user" }
+        : {
+            actorId: ctx.auth.principalId ?? "unknown",
+            actorType: "user",
+          };
+
   return runWithIdempotency({
     tenantId: i.tenantId,
     invokerUserId,
@@ -39,12 +62,13 @@ export async function createAgent(
     inputs: i,
     clientKey: i.idempotencyKey ?? null,
     resultCoerce: (raw) => raw as ReturnType<typeof agentToCamel>,
-    fn: () => createAgentCore(i),
+    fn: () => createAgentCore(i, auditActor),
   });
 }
 
 async function createAgentCore(
   i: any,
+  auditActor: CreateAgentActor,
 ): Promise<ReturnType<typeof agentToCamel>> {
   let runtime = parseAgentRuntimeInput(i.runtime);
   if (i.runtime == null && i.templateId) {
@@ -75,27 +99,53 @@ async function createAgentCore(
     };
   }
 
-  const [row] = await db
-    .insert(agents)
-    .values({
-      tenant_id: i.tenantId,
-      name: i.name,
-      slug: generateSlug(),
-      role: i.role,
-      type: i.type?.toLowerCase() ?? "agent",
-      template_id: i.templateId,
-      runtime,
-      system_prompt: i.systemPrompt,
-      adapter_type: adapterType,
-      adapter_config: i.adapterConfig ? JSON.parse(i.adapterConfig) : undefined,
-      runtime_config: runtimeConfig,
-      budget_monthly_cents: i.budgetMonthlyCents,
-      avatar_url: i.avatarUrl,
-      reports_to: i.reportsTo,
-      human_pair_id: i.humanPairId,
-      parent_agent_id: i.parentAgentId || null,
-    })
-    .returning();
+  // Wrap the agent insert + audit emit in a single transaction so
+  // audit-write failure rolls back the originating mutation
+  // (control-evidence tier per master plan U5).
+  const [row] = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(agents)
+      .values({
+        tenant_id: i.tenantId,
+        name: i.name,
+        slug: generateSlug(),
+        role: i.role,
+        type: i.type?.toLowerCase() ?? "agent",
+        template_id: i.templateId,
+        runtime,
+        system_prompt: i.systemPrompt,
+        adapter_type: adapterType,
+        adapter_config: i.adapterConfig
+          ? JSON.parse(i.adapterConfig)
+          : undefined,
+        runtime_config: runtimeConfig,
+        budget_monthly_cents: i.budgetMonthlyCents,
+        avatar_url: i.avatarUrl,
+        reports_to: i.reportsTo,
+        human_pair_id: i.humanPairId,
+        parent_agent_id: i.parentAgentId || null,
+      })
+      .returning();
+
+    await emitAuditEvent(tx, {
+      tenantId: i.tenantId,
+      actorId: auditActor.actorId,
+      actorType: auditActor.actorType,
+      eventType: "agent.created",
+      source: "graphql",
+      payload: {
+        agentId: inserted.id,
+        name: inserted.name,
+        templateId: inserted.template_id ?? null,
+      },
+      resourceType: "agent",
+      resourceId: inserted.id,
+      action: "create",
+      outcome: "success",
+    });
+
+    return [inserted];
+  });
 
   // PRD-14: Auto-provision email channel capability
   try {

@@ -78,6 +78,35 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 		id: "users.id",
 		tenant_id: "users.tenant_id",
 	},
+	// U5: skills.ts now imports emitAuditEvent for the mcpRegisterServer
+	// / mcpDeleteServer call sites, which pulls these symbols from the
+	// schema module at module-load time. The handlers under test
+	// (skills-complete, skills-start) don't exercise the MCP CRUD
+	// paths, so the mock values just need to be present, not
+	// functional.
+	auditOutbox: {},
+	COMPLIANCE_EVENT_TYPES: [
+		"auth.signin.success",
+		"auth.signin.failure",
+		"auth.signout",
+		"user.invited",
+		"user.created",
+		"user.disabled",
+		"user.deleted",
+		"agent.created",
+		"agent.deleted",
+		"agent.skills_changed",
+		"mcp.added",
+		"mcp.removed",
+		"workspace.governance_file_edited",
+		"data.export_initiated",
+		"policy.evaluated",
+		"policy.allowed",
+		"policy.blocked",
+		"policy.bypassed",
+		"approval.recorded",
+	],
+	COMPLIANCE_ACTOR_TYPES: ["user", "system", "agent"],
 }));
 
 vi.mock("drizzle-orm", () => ({

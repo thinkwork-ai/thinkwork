@@ -36,8 +36,8 @@ const {
   deleteCallRef: { value: 0 },
 }));
 
-vi.mock("../graphql/utils.js", () => ({
-  db: {
+vi.mock("../graphql/utils.js", () => {
+  const dbMock: any = {
     select: vi.fn(() => ({
       from: () => ({
         where: () => Promise.resolve(mockAgentRows() as unknown[]),
@@ -62,7 +62,19 @@ vi.mock("../graphql/utils.js", () => ({
         }),
       }),
     })),
-  },
+  };
+  // U5: createAgent + deleteAgent now wrap their writes in
+  // db.transaction. The tx handle exposes the same insert/update
+  // surface as the top-level db so callbacks pass through to the
+  // existing mocks above, plus a no-op for emitAuditEvent's
+  // tx.insert(auditOutbox).values(...) call (auditOutbox isn't on
+  // any mock returning() so the resulting promise resolves to
+  // undefined, which the helper accepts).
+  dbMock.transaction = vi.fn(
+    async (fn: (tx: unknown) => Promise<unknown>) => fn(dbMock),
+  );
+  return {
+  db: dbMock,
   eq: (..._args: any[]) => ({ _eq: _args }),
   and: (..._args: any[]) => ({ _and: _args }),
   inArray: (..._args: any[]) => ({ _in: _args }),
@@ -84,6 +96,20 @@ vi.mock("../graphql/utils.js", () => ({
   agentToCamel: (obj: Record<string, unknown>) => obj,
   generateSlug: () => "test-slug",
   invokeJobScheduleManager: vi.fn(),
+};
+});
+
+// U5: emitAuditEvent is mocked at module scope so the in-tx audit
+// row insert is a no-op. The createAgent / deleteAgent paths still
+// exercise the wrapping db.transaction call against the dbMock
+// above; the audit row itself is exercised end-to-end in
+// test/integration/compliance-event-writers/.
+vi.mock("../lib/compliance/emit.js", () => ({
+  emitAuditEvent: vi.fn().mockResolvedValue({
+    eventId: "evt-mock",
+    outboxId: "outbox-mock",
+    redactedFields: [],
+  }),
 }));
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({

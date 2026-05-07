@@ -14,14 +14,16 @@ describe("redactPayload", () => {
 	});
 
 	describe("happy path — fields in allow-list pass through", () => {
-		it("agent.skills_changed retains agentId + skillIds", () => {
+		it("agent.skills_changed retains agentId + addedSkills + removedSkills", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1", "s2"],
+				addedSkills: ["s1", "s2"],
+				removedSkills: ["s3"],
 			});
 			expect(result.redacted).toEqual({
 				agentId: "a1",
-				skillIds: ["s1", "s2"],
+				addedSkills: ["s1", "s2"],
+				removedSkills: ["s3"],
 			});
 			expect(result.redactedFields).toEqual([]);
 		});
@@ -46,7 +48,7 @@ describe("redactPayload", () => {
 		it("drops apiKey from agent.skills_changed", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1"],
+				addedSkills: ["s1"],
 				apiKey: "sk-proj-deadbeef",
 			});
 			expect(result.redacted).not.toHaveProperty("apiKey");
@@ -188,6 +190,41 @@ describe("redactPayload", () => {
 				url: "not a url",
 			});
 			expect(result.redacted.url).toBe("not a url");
+		});
+
+		it("strips credential-shaped query params from mcp.added.url", () => {
+			const result = redactPayload("mcp.added", {
+				mcpId: "m1",
+				url: "https://mcp.example.com/path?api_key=sk-live-abc123&safe=1",
+				scopes: ["read"],
+			});
+			const stripped = result.redacted.url as string;
+			expect(stripped).not.toContain("sk-live-abc123");
+			expect(stripped).toContain("api_key=%3CREDACTED%3Ascrubbed%3E");
+			// Non-credential params survive.
+			expect(stripped).toContain("safe=1");
+		});
+
+		it("strips token / access_token / client_secret query params", () => {
+			const result = redactPayload("mcp.added", {
+				mcpId: "m1",
+				url: "https://mcp.example.com/?token=abc&access_token=def&client_secret=ghi",
+			});
+			const stripped = result.redacted.url as string;
+			expect(stripped).not.toContain("abc");
+			expect(stripped).not.toContain("def");
+			expect(stripped).not.toContain("ghi");
+		});
+
+		it("strips both userinfo and credential query params in one call", () => {
+			const result = redactPayload("mcp.removed", {
+				mcpId: "m1",
+				url: "https://user:pass@mcp.example.com/?api_key=secret",
+			});
+			const stripped = result.redacted.url as string;
+			expect(stripped).not.toContain("user");
+			expect(stripped).not.toContain("pass");
+			expect(stripped).not.toContain("secret");
 		});
 	});
 
@@ -383,9 +420,9 @@ describe("redactPayload", () => {
 		it("preserves array values without sanitization", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1", "s2", "s3"],
+				addedSkills: ["s1", "s2", "s3"],
 			});
-			expect(result.redacted.skillIds).toEqual(["s1", "s2", "s3"]);
+			expect(result.redacted.addedSkills).toEqual(["s1", "s2", "s3"]);
 		});
 	});
 });

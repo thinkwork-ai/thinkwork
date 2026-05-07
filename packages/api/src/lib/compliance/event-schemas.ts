@@ -89,12 +89,13 @@ function governanceFileDiffTransform(
  * truncation. The two pattern sets MUST stay in sync; consider a shared
  * module if the patterns evolve.
  */
+const REDACTED = "<REDACTED:scrubbed>";
+
 function scrubKnownSecretPatterns(text: string): string {
 	const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
 	const JWT = /\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
 	const PREFIXED_TOKEN =
 		/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
-	const REDACTED = "<REDACTED:scrubbed>";
 	return text
 		.replace(AUTH_BEARER, `Authorization: Bearer ${REDACTED}`)
 		.replace(JWT, REDACTED)
@@ -102,18 +103,65 @@ function scrubKnownSecretPatterns(text: string): string {
 }
 
 /**
- * Strip user/password components from URLs in MCP events. `new URL()`
- * gracefully ignores malformed input; on parse failure the original is
- * returned unchanged (and downstream sanitization still runs).
+ * Strip user/password components AND credential-shaped query params
+ * from URLs in MCP events. The audit row is durable evidence that
+ * outlives the underlying server, so any credential material that
+ * survives this transform persists in audit_events permanently.
+ *
+ * Cleared:
+ *   - userinfo (`https://user:pass@host` → `https://host`)
+ *   - query params whose name matches a credential heuristic
+ *     (case-insensitive substring match against
+ *     CREDENTIAL_QUERY_PARAM_NAMES below)
+ *
+ * `new URL()` gracefully ignores malformed input; on parse failure
+ * the original is returned unchanged and the downstream
+ * sanitization in `redactPayload` still runs against the string.
  */
+const CREDENTIAL_QUERY_PARAM_NAMES = [
+	"api_key",
+	"apikey",
+	"key",
+	"token",
+	"access_token",
+	"refresh_token",
+	"id_token",
+	"secret",
+	"client_secret",
+	"password",
+	"passwd",
+	"auth",
+	"signature",
+	"sig",
+];
+
 function stripUrlUserinfo(value: string): string {
 	try {
 		const u = new URL(value);
+		let mutated = false;
 		if (u.username || u.password) {
 			u.username = "";
 			u.password = "";
-			return u.toString();
+			mutated = true;
 		}
+		// Walk searchParams looking for credential-shaped names. Build
+		// the replacement set first to avoid mutating during iteration.
+		const toRedact: string[] = [];
+		for (const name of u.searchParams.keys()) {
+			const lower = name.toLowerCase();
+			if (
+				CREDENTIAL_QUERY_PARAM_NAMES.some((cred) => lower.includes(cred))
+			) {
+				toRedact.push(name);
+			}
+		}
+		if (toRedact.length > 0) {
+			for (const name of toRedact) {
+				u.searchParams.set(name, REDACTED);
+			}
+			mutated = true;
+		}
+		if (mutated) return u.toString();
 	} catch {
 		// not a URL we can parse — leave untouched
 	}
@@ -172,10 +220,15 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 		},
 		"agent.skills_changed": {
 			// Direct evidence of effective-capability change (CC8.1).
+			// Delta shape: addedSkills / removedSkills are the slugs that
+			// changed; the absolute current/previous skill set can be
+			// reconstructed from prior `agent.skills_changed` rows in the
+			// chain. This avoids a round-trip to read absolute state at
+			// emit time.
 			allowedFields: new Set([
 				"agentId",
-				"skillIds",
-				"previousSkillIds",
+				"addedSkills",
+				"removedSkills",
 				"reason",
 			]),
 		},

@@ -65,6 +65,7 @@ import {
   tenantMembers,
   tenants,
 } from "./src/graphql/utils.js";
+import { emitAuditEvent } from "./src/lib/compliance/emit.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -414,6 +415,38 @@ function isSkillMarkerPath(path: string): boolean {
   return /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(path);
 }
 
+/**
+ * Top-level governance / identity / capability files that, when
+ * edited, materially change agent behavior. Edits to these files emit
+ * `workspace.governance_file_edited` audit rows. SKILL.md is included
+ * because SKILL.md edits change effective agent capabilities (they
+ * trigger derive-agent-skills); auditing the underlying file write
+ * captures the action even if the post-derive `agent.skills_changed`
+ * emit drops (telemetry-tier).
+ *
+ * Implementer note: this list mirrors the top-level files shipped in
+ * `packages/system-workspace/`. Add new governance files here when
+ * they're added to the workspace defaults bundle.
+ */
+const GOVERNANCE_FILE_BASENAMES: ReadonlySet<string> = new Set([
+  "AGENTS.md",
+  "GUARDRAILS.md",
+  "CAPABILITIES.md",
+  "PLATFORM.md",
+  "MEMORY_GUIDE.md",
+  "USER.md",
+]);
+
+function isGovernanceFilePath(cleanPath: string): boolean {
+  // Top-level governance files: exact basename match (no nesting).
+  if (GOVERNANCE_FILE_BASENAMES.has(cleanPath)) return true;
+  // SKILL.md markers anywhere under skills/<slug>/ are also
+  // governance-tier — they change agent capability.
+  if (isSkillMarkerPath(cleanPath)) return true;
+  return false;
+}
+
+
 function isProtectedOrchestrationWritePath(path: string): boolean {
   return (
     path.startsWith("work/inbox/") ||
@@ -430,7 +463,7 @@ async function handlePut(
   content: string,
   acceptTemplateUpdate: boolean,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
+  const { target, tenantId, auth } = deps;
   let cleanPath: string;
   try {
     cleanPath = normalizeWorkspacePath(path);
@@ -456,6 +489,10 @@ async function handlePut(
     });
   }
 
+  // Resolve audit actor once per request. apikey path → system,
+  // cognito path → user with resolved users.id.
+  const auditActor = await resolveAuditActor(auth);
+
   if (target.kind === "agent") {
     // Guardrail-class files require accept-update flag. Unit 9 will wire
     // this up through a GraphQL mutation that bumps the pinned hash
@@ -469,14 +506,60 @@ async function handlePut(
       });
     }
 
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket(),
-        Key: target.key(cleanPath),
-        Body: content,
-        ContentType: "text/plain; charset=utf-8",
-      }),
-    );
+    if (isGovernanceFilePath(cleanPath)) {
+      // Governance file edit: emit audit row inside a tx, then run the
+      // S3 put inside the same tx callback so an S3 throw rolls back
+      // the audit row. Emit FIRST, S3 second — emit failure prevents
+      // the S3 write entirely. Cost: pool slot held across the S3
+      // round-trip (acknowledged tradeoff per master plan U5 risks).
+      try {
+        await db.transaction(async (tx) => {
+          await emitAuditEvent(tx, {
+            tenantId,
+            actorId: auditActor.actorId,
+            actorType: auditActor.actorType,
+            eventType: "workspace.governance_file_edited",
+            source: "lambda",
+            payload: {
+              file: cleanPath,
+              content,
+              workspaceId: target.tenantSlug,
+            },
+            resourceType: "workspace_file",
+            resourceId: `${target.tenantSlug}/${target.agentSlug}/${cleanPath}`,
+            action: "edit",
+            outcome: "success",
+          });
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket(),
+              Key: target.key(cleanPath),
+              Body: content,
+              ContentType: "text/plain; charset=utf-8",
+            }),
+          );
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[workspace-files] governance PUT failed: ${message}`);
+        return json(500, {
+          ok: false,
+          error: `Governance file edit could not be safely audited: ${message}`,
+        });
+      }
+    } else {
+      // Non-governance files (notes, free-form data): unaudited
+      // unwrapped S3 put, preserving today's hot-path behavior.
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: target.key(cleanPath),
+          Body: content,
+          ContentType: "text/plain; charset=utf-8",
+        }),
+      );
+    }
+
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
     // Skills are activated by first-class workspace folders. After a
@@ -492,6 +575,45 @@ async function handlePut(
           `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
           `removed=${result.removedSlugs.join(",") || "-"}`;
         console.log(`[derive-agent-skills] ${summary}`);
+
+        // Emit `agent.skills_changed` (telemetry tier) when the
+        // derived membership actually changed. The wrapping tx
+        // covers ONLY the audit row — derive's own writes already
+        // committed, so an emit failure does not roll back the
+        // skill-state mutation. The underlying SKILL.md edit is
+        // separately audited as `workspace.governance_file_edited`
+        // above, so an emit-miss here does not lose evidence of the
+        // capability change.
+        if (result.changed) {
+          try {
+            await db.transaction(async (tx) => {
+              await emitAuditEvent(tx, {
+                tenantId,
+                actorId: auditActor.actorId,
+                actorType: auditActor.actorType,
+                eventType: "agent.skills_changed",
+                source: "lambda",
+                payload: {
+                  agentId: target.agentId,
+                  addedSkills: result.addedSlugs,
+                  removedSkills: result.removedSlugs,
+                  reason: "workspace_skill_marker_change",
+                },
+                resourceType: "agent",
+                resourceId: target.agentId,
+                action: "update",
+                outcome: "success",
+              });
+            });
+          } catch (emitErr) {
+            console.error(
+              `[agent.skills_changed] audit emit failed (telemetry-tier; not blocking): ${
+                emitErr instanceof Error ? emitErr.message : String(emitErr)
+              }`,
+            );
+          }
+        }
+
         if (result.warnings.length > 0) {
           return json(200, {
             ok: true,
@@ -515,15 +637,76 @@ async function handlePut(
 
   // Template / defaults: tenant already validated at target resolution.
   // Invalidate every agent in the tenant — the base layer moved.
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: target.key(cleanPath),
-      Body: content,
-      ContentType: "text/plain; charset=utf-8",
-    }),
-  );
+  // Governance-file template edits (e.g., a tenant's default AGENTS.md)
+  // also emit; non-governance template files take the unwrapped path.
+  if (isGovernanceFilePath(cleanPath)) {
+    try {
+      await db.transaction(async (tx) => {
+        await emitAuditEvent(tx, {
+          tenantId,
+          actorId: auditActor.actorId,
+          actorType: auditActor.actorType,
+          eventType: "workspace.governance_file_edited",
+          source: "lambda",
+          payload: {
+            file: cleanPath,
+            content,
+            workspaceId: target.tenantSlug,
+          },
+          resourceType: "workspace_template",
+          resourceId: `${target.tenantSlug}/${cleanPath}`,
+          action: "edit",
+          outcome: "success",
+        });
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket(),
+            Key: target.key(cleanPath),
+            Body: content,
+            ContentType: "text/plain; charset=utf-8",
+          }),
+        );
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[workspace-files] governance template PUT failed: ${message}`);
+      return json(500, {
+        ok: false,
+        error: `Governance template edit could not be safely audited: ${message}`,
+      });
+    }
+  } else {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+        Body: content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+  }
   return json(200, { ok: true });
+}
+
+/**
+ * Resolve the audit actor for the request:
+ *   apikey path → actorType: "system", actorId: "platform-credential"
+ *     (do NOT trust event.headers["x-principal-id"] — it's an
+ *     unverified self-assertion per tenant-membership.ts:112-114)
+ *   cognito path → actorType: "user", actorId: resolved users.id
+ *     (or principalId fallback when the users-lookup misses)
+ */
+async function resolveAuditActor(
+  auth: AuthResult,
+): Promise<{ actorId: string; actorType: "user" | "system" }> {
+  if (auth.authType === "apikey") {
+    return { actorId: "platform-credential", actorType: "system" };
+  }
+  const { userId } = await resolveCallerFromAuth(auth);
+  return {
+    actorId: userId ?? auth.principalId ?? "unknown",
+    actorType: "user",
+  };
 }
 
 const SUB_AGENT_SLUG_RE = /^[a-z][a-z0-9-]{0,31}$/;

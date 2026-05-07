@@ -58,6 +58,7 @@ import {
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
+import { emitAuditEvent } from "../lib/compliance/emit.js";
 import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import {
@@ -380,6 +381,7 @@ export async function handler(
     // POST /api/skills/mcp-servers — register MCP server
     if (path === "/api/skills/mcp-servers" && method === "POST") {
       if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      let registerVerdictUserId: string | null = null;
       {
         const _v = await requireTenantMembership(event, tenantSlug, {
           requiredRoles:
@@ -388,8 +390,9 @@ export async function handler(
               : ["owner", "admin"],
         });
         if (!_v.ok) return error(_v.reason, _v.status);
+        registerVerdictUserId = _v.userId;
       }
-      return mcpRegisterServer(tenantSlug, event);
+      return mcpRegisterServer(tenantSlug, registerVerdictUserId, event);
     }
 
     // PUT /api/skills/mcp-servers/:id — update MCP server
@@ -411,6 +414,7 @@ export async function handler(
     // DELETE /api/skills/mcp-servers/:id — remove MCP server
     if (mcpUpdateMatch && method === "DELETE") {
       if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      let deleteVerdictUserId: string | null = null;
       {
         const _v = await requireTenantMembership(event, tenantSlug, {
           requiredRoles:
@@ -419,8 +423,9 @@ export async function handler(
               : ["owner", "admin"],
         });
         if (!_v.ok) return error(_v.reason, _v.status);
+        deleteVerdictUserId = _v.userId;
       }
-      return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1]);
+      return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1], deleteVerdictUserId);
     }
 
     // GET /api/skills/mcp-servers/:id/key-status — whether a tenant API key
@@ -1954,6 +1959,7 @@ async function mcpListTenantServers(
 
 async function mcpRegisterServer(
   tenantSlug: string,
+  verdictUserId: string | null,
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const tenantId = await resolveTenantId(tenantSlug);
@@ -2026,19 +2032,50 @@ async function mcpRegisterServer(
     return json({ id: existing.id, slug, updated: true, revertedToPending });
   }
 
-  const [inserted] = await db
-    .insert(tenantMcpServers)
-    .values({
-      tenant_id: tenantId,
-      name,
-      slug,
-      url,
-      transport: transport || "streamable-http",
-      auth_type: authType || "none",
-      auth_config: authConfig,
-      oauth_provider: oauthProvider || null,
-    })
-    .returning({ id: tenantMcpServers.id });
+  // Compliance audit actor branching:
+  //   apikey path → actorType: "system", actorId: "platform-credential"
+  //   cognito path → actorType: "user", actorId: verdictUserId
+  const auditActor: { actorId: string; actorType: "user" | "system" } =
+    verdictUserId
+      ? { actorId: verdictUserId, actorType: "user" }
+      : { actorId: "platform-credential", actorType: "system" };
+
+  // Wrap the insert + audit emit in a single transaction
+  // (control-evidence tier per master plan U5).
+  const [inserted] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(tenantMcpServers)
+      .values({
+        tenant_id: tenantId,
+        name,
+        slug,
+        url,
+        transport: transport || "streamable-http",
+        auth_type: authType || "none",
+        auth_config: authConfig,
+        oauth_provider: oauthProvider || null,
+      })
+      .returning({ id: tenantMcpServers.id, url: tenantMcpServers.url });
+
+    await emitAuditEvent(tx, {
+      tenantId,
+      actorId: auditActor.actorId,
+      actorType: auditActor.actorType,
+      eventType: "mcp.added",
+      source: "lambda",
+      payload: {
+        mcpId: row.id,
+        url: row.url,
+        scopes: [],
+      },
+      resourceType: "mcp_server",
+      resourceId: row.id,
+      action: "create",
+      outcome: "success",
+    });
+
+    return [row];
+  });
 
   return json({ id: inserted.id, slug, created: true });
 }
@@ -2101,28 +2138,87 @@ async function mcpUpdateServer(
 async function mcpDeleteServer(
   tenantSlug: string,
   serverId: string,
+  verdictUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const badUuid = requireUuid(serverId);
   if (badUuid) return badUuid;
   const tenantId = await resolveTenantId(tenantSlug);
   if (!tenantId) return error("Tenant not found", 404);
 
-  // Delete agent assignments first (cascade)
-  await db
-    .delete(agentMcpServers)
-    .where(eq(agentMcpServers.mcp_server_id, serverId));
+  // Compliance audit actor branching (same shape as mcpRegisterServer).
+  const auditActor: { actorId: string; actorType: "user" | "system" } =
+    verdictUserId
+      ? { actorId: verdictUserId, actorType: "user" }
+      : { actorId: "platform-credential", actorType: "system" };
 
-  const deleted = await db
-    .delete(tenantMcpServers)
-    .where(
-      and(
-        eq(tenantMcpServers.id, serverId),
-        eq(tenantMcpServers.tenant_id, tenantId),
-      ),
-    )
-    .returning({ id: tenantMcpServers.id });
+  // Wrap the cascade delete + audit emit in a single transaction
+  // (control-evidence tier). `.returning()` captures the deleted row's
+  // url in one round-trip — no SELECT-before-DELETE needed.
+  //
+  // Tenant ownership is verified BEFORE the cascade so a cross-tenant
+  // probe (correct serverId, wrong tenantSlug) cannot delete
+  // agentMcpServers rows for another tenant. The post-cascade
+  // tenantMcpServers delete still runs tenant-scoped — defense in
+  // depth — but the gate keeps the cascade from committing on a
+  // failed ownership check.
+  const result = await db.transaction(async (tx) => {
+    const [owned] = await tx
+      .select({ id: tenantMcpServers.id, url: tenantMcpServers.url })
+      .from(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.id, serverId),
+          eq(tenantMcpServers.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
 
-  if (deleted.length === 0) return notFound("MCP server not found");
+    if (!owned) {
+      // Throw to roll back the entire tx — important when the gate
+      // ever moves below side-effecting writes. Caught below; the
+      // handler returns 404.
+      throw new Error("MCP_SERVER_NOT_FOUND");
+    }
+
+    await tx
+      .delete(agentMcpServers)
+      .where(eq(agentMcpServers.mcp_server_id, serverId));
+
+    const [deleted] = await tx
+      .delete(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.id, serverId),
+          eq(tenantMcpServers.tenant_id, tenantId),
+        ),
+      )
+      .returning({ id: tenantMcpServers.id, url: tenantMcpServers.url });
+
+    await emitAuditEvent(tx, {
+      tenantId,
+      actorId: auditActor.actorId,
+      actorType: auditActor.actorType,
+      eventType: "mcp.removed",
+      source: "lambda",
+      payload: {
+        mcpId: deleted.id,
+        url: deleted.url,
+      },
+      resourceType: "mcp_server",
+      resourceId: deleted.id,
+      action: "delete",
+      outcome: "success",
+    });
+
+    return deleted;
+  }).catch((err) => {
+    if (err instanceof Error && err.message === "MCP_SERVER_NOT_FOUND") {
+      return null;
+    }
+    throw err;
+  });
+
+  if (!result) return notFound("MCP server not found");
   return json({ ok: true, deleted: serverId });
 }
 

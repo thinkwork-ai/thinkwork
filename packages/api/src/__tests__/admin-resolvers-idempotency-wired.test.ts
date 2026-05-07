@@ -42,56 +42,70 @@ const {
 
 vi.mock("../graphql/utils.js", async (importOriginal) => {
   const actual: any = await importOriginal();
+  const dbMock: any = {
+    insert: vi.fn((table: unknown) => ({
+      values: (values: unknown) => {
+        if (table === actual.mutationIdempotency) {
+          return {
+            onConflictDoNothing: () => ({
+              returning: () =>
+                Promise.resolve(
+                  insertMutationIdempotencyMock(values) as unknown[],
+                ),
+            }),
+          };
+        }
+        return {
+          returning: () =>
+            Promise.resolve(insertPrimaryMock(values, table) as unknown[]),
+        };
+      },
+    })),
+    update: vi.fn((table: unknown) => ({
+      set: (patch: unknown) => ({
+        where: () => {
+          if (table === actual.mutationIdempotency) {
+            updateMutationIdempotencyMock(patch);
+          }
+          return Promise.resolve();
+        },
+      }),
+    })),
+    select: vi.fn(() => ({
+      from: (table: unknown) => ({
+        where: () => {
+          if (table === actual.mutationIdempotency) {
+            return Promise.resolve(
+              selectMutationIdempotencyMock() as unknown[],
+            );
+          }
+          return Promise.resolve(selectOtherMock() as unknown[]);
+        },
+      }),
+    })),
+  };
+  // U5: createAgent now wraps its insert in db.transaction. Pass
+  // the same mock surface through so the tx-scoped insert /
+  // select calls match the existing assertions.
+  dbMock.transaction = vi.fn(
+    async (cb: (tx: unknown) => Promise<unknown>) => cb(dbMock),
+  );
   return {
     ...actual,
-    db: {
-      insert: vi.fn((table: unknown) => ({
-        values: (values: unknown) => {
-          if (table === actual.mutationIdempotency) {
-            return {
-              onConflictDoNothing: () => ({
-                returning: () =>
-                  Promise.resolve(
-                    insertMutationIdempotencyMock(values) as unknown[],
-                  ),
-              }),
-            };
-          }
-          return {
-            returning: () =>
-              Promise.resolve(insertPrimaryMock(values, table) as unknown[]),
-          };
-        },
-      })),
-      update: vi.fn((table: unknown) => ({
-        set: (patch: unknown) => ({
-          where: () => {
-            if (table === actual.mutationIdempotency) {
-              updateMutationIdempotencyMock(patch);
-            }
-            return Promise.resolve();
-          },
-        }),
-      })),
-      select: vi.fn(() => ({
-        from: (table: unknown) => ({
-          where: () => {
-            if (table === actual.mutationIdempotency) {
-              return Promise.resolve(
-                selectMutationIdempotencyMock() as unknown[],
-              );
-            }
-            return Promise.resolve(selectOtherMock() as unknown[]);
-          },
-        }),
-      })),
-      transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
-        cb({}),
-      ),
-    },
+    db: dbMock,
     invokeJobScheduleManager: vi.fn(),
   };
 });
+
+// U5: emitAuditEvent is mocked at module scope so the in-tx audit
+// row insert is a no-op for these admin-resolver tests.
+vi.mock("../lib/compliance/emit.js", () => ({
+  emitAuditEvent: vi.fn().mockResolvedValue({
+    eventId: "evt-mock",
+    outboxId: "outbox-mock",
+    redactedFields: [],
+  }),
+}));
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,

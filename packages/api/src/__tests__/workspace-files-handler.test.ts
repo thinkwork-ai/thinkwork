@@ -63,7 +63,19 @@ vi.mock("../graphql/utils.js", () => {
     })),
   });
   return {
-    db: { select: vi.fn().mockImplementation(() => chain()) },
+    db: {
+      select: vi.fn().mockImplementation(() => chain()),
+      // U5: handler now calls db.transaction(fn) for governance file
+      // edits + the post-derive `agent.skills_changed` emit. The
+      // emitAuditEvent helper is mocked at module scope so the tx
+      // callback only needs a permissive `tx` value — the S3 put
+      // inside the callback uses the s3 mock client, not tx.
+      transaction: vi
+        .fn()
+        .mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
+          fn({} as unknown),
+        ),
+    },
     eq: (a: unknown, b: unknown) => {
       eqCalls.push({ col: a, value: b });
       return { __eq: [a, b] };
@@ -136,6 +148,30 @@ const { deriveMockImpl } = vi.hoisted(() => ({
 
 vi.mock("../lib/derive-agent-skills.js", () => ({
   deriveAgentSkills: deriveMockImpl,
+}));
+
+// ─── Mock emitAuditEvent (U5) so the workspace-files-handler tests
+// don't need a working compliance.audit_outbox connection. The
+// in-tx audit emit is exercised end-to-end in
+// `test/integration/compliance-event-writers/cross-cutting.integration.test.ts`.
+// Targeted tx-rollback tests live there; this file only validates
+// handler return shapes.
+//
+// The mock is permissive: emitAuditEvent resolves successfully and
+// the tx callback returns whatever the body resolves to. The
+// `db.transaction(fn)` mock invokes the callback with a tx
+// "facade" that supports the methods the handler actually calls.
+
+const { emitMockImpl } = vi.hoisted(() => ({
+  emitMockImpl: vi.fn().mockResolvedValue({
+    eventId: "evt-mock",
+    outboxId: "outbox-mock",
+    redactedFields: [],
+  }),
+}));
+
+vi.mock("../lib/compliance/emit.js", () => ({
+  emitAuditEvent: emitMockImpl,
 }));
 
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
