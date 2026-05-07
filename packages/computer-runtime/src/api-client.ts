@@ -129,6 +129,28 @@ export class ComputerRuntimeApi {
     });
   }
 
+  async delegateConnectorWork(taskId: string): Promise<{
+    delegated: boolean;
+    idempotent: boolean;
+    mode: "managed_agent";
+    delegationId: string;
+    agentId: string;
+    threadId: string;
+    messageId?: string;
+    status: string;
+  }> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/delegate-connector-work`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
   async failTask(taskId: string, error: unknown) {
     return this.request(`/api/computers/runtime/tasks/${taskId}/fail`, {
       method: "POST",

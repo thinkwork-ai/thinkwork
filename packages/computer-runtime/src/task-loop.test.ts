@@ -13,6 +13,7 @@ describe("Computer task loop", () => {
         connectionId: "connection-1",
         checkedAt: "2026-05-07T00:00:00.000Z",
       }),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -52,6 +53,7 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-2" }),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
@@ -126,6 +128,7 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-3" }),
       checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
@@ -264,11 +267,13 @@ describe("Computer task loop", () => {
   });
 
   it("classifies Google insufficient-scope errors", async () => {
-    const execFileAsync = vi.fn().mockRejectedValue(
-      new Error(
-        "Command failed: gws calendar events list\nerror[api]: Request had insufficient authentication scopes.\n",
-      ),
-    );
+    const execFileAsync = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "Command failed: gws calendar events list\nerror[api]: Request had insufficient authentication scopes.\n",
+        ),
+      );
 
     const result = await listGoogleCalendarUpcomingWithGws(
       {

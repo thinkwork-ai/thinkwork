@@ -13,6 +13,7 @@ export type TaskLoopOptions = {
     | "failTask"
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
+    | "delegateConnectorWork"
     | "resolveGoogleWorkspaceCliToken"
   >;
   workspaceRoot: string;
@@ -51,6 +52,7 @@ export async function handleTask(
     ComputerRuntimeApi,
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
+    | "delegateConnectorWork"
     | "resolveGoogleWorkspaceCliToken"
   >,
   googleWorkspaceCli: GoogleWorkspaceCliRunner = listGoogleCalendarUpcomingWithGws,
@@ -71,11 +73,13 @@ export async function handleTask(
     return { ok: true, taskType: "google_cli_smoke", smoke };
   }
   if (task.taskType === "connector_work") {
+    if (!api) throw new Error("Computer runtime API is required");
+    const delegation = await api.delegateConnectorWork(task.id);
     return {
       ok: true,
       taskType: "connector_work",
       accepted: true,
-      mode: "handoff_only",
+      ...delegation,
     };
   }
   if (task.taskType === "google_workspace_auth_check") {

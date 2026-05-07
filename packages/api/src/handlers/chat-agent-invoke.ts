@@ -112,6 +112,7 @@ type ChatInvokeIdentitySource =
   | "message_sender"
   | "thread_creator"
   | "connector_agent_human_pair"
+  | "computer_agent_human_pair"
   | "none";
 
 export interface ChatInvokeIdentity {
@@ -213,7 +214,10 @@ export async function resolveChatInvokeIdentity(
     };
   }
 
-  if (thread?.created_by_type === "connector") {
+  if (
+    thread?.created_by_type === "connector" ||
+    thread?.created_by_type === "computer"
+  ) {
     const humanPairId = await deps.loadAgentHumanPair({
       agentId: args.agentId,
       tenantId: args.tenantId,
@@ -222,7 +226,10 @@ export async function resolveChatInvokeIdentity(
       return {
         currentUserId: humanPairId,
         currentUserEmail: await deps.loadUserEmail(humanPairId),
-        source: "connector_agent_human_pair",
+        source:
+          thread.created_by_type === "computer"
+            ? "computer_agent_human_pair"
+            : "connector_agent_human_pair",
       };
     }
   }
@@ -737,9 +744,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } = await import(
-          "../lib/hindsight-cost.js"
-        );
+        const { recordHindsightCost } =
+          await import("../lib/hindsight-cost.js");
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -946,9 +952,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     // 4c. Send push notification to user devices
     try {
-      const { sendTurnCompletedPush } = await import(
-        "../lib/push-notifications.js"
-      );
+      const { sendTurnCompletedPush } =
+        await import("../lib/push-notifications.js");
       await sendTurnCompletedPush({
         threadId,
         tenantId,
