@@ -2,6 +2,7 @@ import {
   connector,
   connectorExecution,
   connectorExecutions,
+  connectorRunLifecycles,
   connectors_,
 } from "./query.js";
 import {
@@ -17,6 +18,7 @@ export const connectorQueries = {
   connector,
   connectorExecution,
   connectorExecutions,
+  connectorRunLifecycles,
   connectors: connectors_,
 };
 

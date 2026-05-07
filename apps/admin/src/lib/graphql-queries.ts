@@ -555,6 +555,69 @@ export const ConnectorExecutionsListQuery = graphql(`
   }
 `);
 
+export const ConnectorRunLifecyclesQuery = gql`
+  query ConnectorRunLifecycles($connectorId: ID, $limit: Int, $cursor: String) {
+    connectorRunLifecycles(
+      connectorId: $connectorId
+      limit: $limit
+      cursor: $cursor
+    ) {
+      execution {
+        id
+        tenantId
+        connectorId
+        externalRef
+        currentState
+        startedAt
+        finishedAt
+        errorClass
+        outcomePayload
+        retryAttempt
+        createdAt
+      }
+      connector {
+        id
+        type
+        name
+        status
+      }
+      computerTask {
+        id
+        status
+        output
+        error
+        completedAt
+        createdAt
+      }
+      delegation {
+        id
+        status
+        agentId
+        outputArtifacts
+        result
+        error
+        completedAt
+        createdAt
+      }
+      threadTurn {
+        id
+        threadId
+        agentId
+        status
+        resultJson
+        error
+        errorCode
+        startedAt
+        finishedAt
+        createdAt
+      }
+      threadId
+      messageId
+      computerId
+    }
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Email Channel (PRD-14)
 // ---------------------------------------------------------------------------

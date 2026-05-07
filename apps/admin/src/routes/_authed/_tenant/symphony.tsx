@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import type { FormEvent, ReactNode } from "react";
 import {
@@ -64,7 +64,7 @@ import {
 import {
   AgentsListQuery,
   ArchiveConnectorMutation,
-  ConnectorExecutionsListQuery,
+  ConnectorRunLifecyclesQuery,
   ConnectorsListQuery,
   ComputersListQuery,
   CreateConnectorMutation,
@@ -76,7 +76,6 @@ import {
 } from "@/lib/graphql-queries";
 import {
   connectorFormValues,
-  connectorExecutionCleanupReason,
   connectorExecutionLinearIdentifier,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
@@ -95,13 +94,23 @@ import {
   ConnectorStatus,
   ConnectorExecutionState,
   DispatchTargetType,
+  type ConnectorRunLifecyclesQuery as ConnectorRunLifecyclesQueryResult,
   type ConnectorFilter,
 } from "@/gql/graphql";
 import { cn, relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/symphony")({
   component: SymphonyPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: parseSymphonyTab(search.tab),
+  }),
 });
+
+type SymphonyTab = "connectors" | "runs";
+
+function parseSymphonyTab(value: unknown): SymphonyTab {
+  return value === "runs" ? "runs" : "connectors";
+}
 
 type ConnectorRow = {
   id: string;
@@ -122,26 +131,15 @@ type ConnectorRow = {
 
 type ConnectorAction = (connector: ConnectorRow) => void | Promise<void>;
 
-type ConnectorExecutionRow = {
-  id: string;
-  tenantId: string;
-  connectorId: string;
-  externalRef: string;
-  currentState: ConnectorExecutionState;
-  startedAt: string | null;
-  finishedAt: string | null;
-  errorClass: string | null;
-  outcomePayload: unknown;
-  retryAttempt: number;
-  createdAt: string;
-};
+type ConnectorRunLifecycleRow =
+  ConnectorRunLifecyclesQueryResult["connectorRunLifecycles"][number];
 
 const MANUAL_TARGET_ID = "__manual_target_id__";
 
 function SymphonyPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
-  const [selectedTab, setSelectedTab] = useState("connectors");
+  const { tab } = Route.useSearch();
   const [search, setSearch] = useState("");
   const [executionConnectorId, setExecutionConnectorId] = useState("all");
   const [showCancelledRuns, setShowCancelledRuns] = useState(false);
@@ -161,11 +159,10 @@ function SymphonyPage() {
   });
   const selectedExecutionConnectorId =
     executionConnectorId === "all" ? null : executionConnectorId;
-  const [executionsResult, refetchExecutions] = useQuery({
-    query: ConnectorExecutionsListQuery,
+  const [runsResult, refetchRuns] = useQuery({
+    query: ConnectorRunLifecyclesQuery,
     variables: {
       connectorId: selectedExecutionConnectorId,
-      status: null,
       limit: 50,
       cursor: null,
     },
@@ -180,19 +177,14 @@ function SymphonyPage() {
   const [, runConnectorNow] = useMutation(RunConnectorNowMutation);
 
   const connectors = (result.data?.connectors ?? []) as ConnectorRow[];
-  const executions = (executionsResult.data?.connectorExecutions ??
-    []) as ConnectorExecutionRow[];
-  const connectorById = useMemo(
-    () => new Map(connectors.map((connector) => [connector.id, connector])),
-    [connectors],
-  );
-  const visibleExecutions = useMemo(() => {
-    if (showCancelledRuns) return executions;
-    return executions.filter(
-      (execution) =>
-        execution.currentState !== ConnectorExecutionState.Cancelled,
+  const runs = (runsResult.data?.connectorRunLifecycles ??
+    []) as ConnectorRunLifecycleRow[];
+  const visibleRuns = useMemo(() => {
+    if (showCancelledRuns) return runs;
+    return runs.filter(
+      (run) => run.execution.currentState !== ConnectorExecutionState.Cancelled,
     );
-  }, [executions, showCancelledRuns]);
+  }, [runs, showCancelledRuns]);
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return connectors;
@@ -225,7 +217,7 @@ function SymphonyPage() {
 
   const refresh = () => {
     refetch({ requestPolicy: "network-only" });
-    refetchExecutions({ requestPolicy: "network-only" });
+    refetchRuns({ requestPolicy: "network-only" });
   };
   const handleCreate = async (values: ConnectorFormValues) => {
     const response = await createConnector({
@@ -329,19 +321,23 @@ function SymphonyPage() {
             </p>
           </div>
           <div className="flex justify-start lg:justify-center">
-            <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+            <Tabs value={tab}>
               <TabsList>
-                <TabsTrigger value="connectors" className="px-4">
-                  Connectors
+                <TabsTrigger value="connectors" asChild className="px-4">
+                  <Link to="/symphony" search={{ tab: "connectors" }}>
+                    Connectors
+                  </Link>
                 </TabsTrigger>
-                <TabsTrigger value="runs" className="px-4">
-                  Runs
+                <TabsTrigger value="runs" asChild className="px-4">
+                  <Link to="/symphony" search={{ tab: "runs" }}>
+                    Runs
+                  </Link>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
           <div className="flex justify-start lg:justify-end">
-            {selectedTab === "connectors" ? (
+            {tab === "connectors" ? (
               <Button size="sm" onClick={() => setCreating(true)}>
                 <Plus className="h-4 w-4" />
                 New Connector
@@ -351,7 +347,7 @@ function SymphonyPage() {
                 variant="outline"
                 size="sm"
                 onClick={refresh}
-                disabled={result.fetching || executionsResult.fetching}
+                disabled={result.fetching || runsResult.fetching}
               >
                 <RefreshCw className="h-4 w-4" />
                 Refresh
@@ -365,7 +361,7 @@ function SymphonyPage() {
         <PageSkeleton />
       ) : result.error ? (
         <p className="text-sm text-destructive">{result.error.message}</p>
-      ) : selectedTab === "connectors" ? (
+      ) : tab === "connectors" ? (
         <div className="space-y-4">
           {connectors.length > 0 && (
             <div className="flex items-center gap-2">
@@ -417,7 +413,7 @@ function SymphonyPage() {
               data={rows}
               pageSize={20}
               allowHorizontalScroll={false}
-              tableClassName="table-fixed [&_tbody_tr]:h-11"
+              tableClassName="table-fixed [&_tbody_tr]:h-11 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap"
             />
           )}
         </div>
@@ -425,9 +421,9 @@ function SymphonyPage() {
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {executionsResult.fetching && !executionsResult.data
+              {runsResult.fetching && !runsResult.data
                 ? "Loading recent pickup history..."
-                : `${visibleExecutions.length} visible of ${executions.length} recent executions`}
+                : `${visibleRuns.length} visible of ${runs.length} recent executions`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Select
@@ -459,28 +455,27 @@ function SymphonyPage() {
             </div>
           </div>
 
-          {executionsResult.error ? (
+          {runsResult.error ? (
             <p className="text-sm text-destructive">
-              {executionsResult.error.message}
+              {runsResult.error.message}
             </p>
-          ) : visibleExecutions.length === 0 ? (
+          ) : visibleRuns.length === 0 ? (
             <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
               No connector runs match the current filters.
             </div>
           ) : (
             <DataTable
-              columns={connectorExecutionColumns({
-                connectorById,
+              columns={connectorRunLifecycleColumns({
                 onOpenThread: (threadId) =>
                   navigate({
                     to: "/threads/$threadId",
                     params: { threadId },
                   }),
               })}
-              data={visibleExecutions}
+              data={visibleRuns}
               pageSize={15}
               allowHorizontalScroll={false}
-              tableClassName="table-fixed [&_tbody_tr]:h-11"
+              tableClassName="table-fixed [&_tbody_tr]:h-11 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap"
             />
           )}
         </div>
@@ -503,122 +498,236 @@ function SymphonyPage() {
   );
 }
 
-function connectorExecutionColumns(args: {
-  connectorById: Map<string, ConnectorRow>;
+function connectorRunLifecycleColumns(args: {
   onOpenThread: (threadId: string) => void;
-}): ColumnDef<ConnectorExecutionRow>[] {
+}): ColumnDef<ConnectorRunLifecycleRow>[] {
   return [
     {
-      accessorKey: "currentState",
+      id: "executionState",
       header: "State",
       cell: ({ row }) => (
         <Badge
           variant="secondary"
           className={cn(
             "text-xs font-medium",
-            connectorExecutionStateTone(row.original.currentState),
+            connectorExecutionStateTone(row.original.execution.currentState),
           )}
         >
-          {statusLabel(row.original.currentState)}
+          {statusLabel(row.original.execution.currentState)}
         </Badge>
       ),
-      size: 105,
+      size: 78,
     },
     {
-      accessorKey: "connectorId",
-      header: "Connector",
-      cell: ({ row }) => {
-        const connector = args.connectorById.get(row.original.connectorId);
-        return (
-          <span className="block truncate font-medium">
-            {connector?.name ?? row.original.connectorId}
-          </span>
-        );
-      },
-      size: 210,
-    },
-    {
-      accessorKey: "externalRef",
       header: "External ref",
       cell: ({ row }) => (
-        <span className="block truncate font-mono text-xs">
+        <span
+          className="block truncate font-mono text-xs"
+          title={row.original.execution.externalRef}
+        >
           {connectorExecutionLinearIdentifier(
-            row.original.outcomePayload,
-            row.original.externalRef,
+            row.original.execution.outcomePayload,
+            row.original.execution.externalRef,
           )}
         </span>
       ),
-      size: 185,
+      size: 80,
+    },
+    {
+      id: "connector",
+      header: "Connector",
+      cell: ({ row }) => (
+        <span className="block truncate font-medium">
+          {row.original.connector.name}
+        </span>
+      ),
+      size: 120,
+    },
+    {
+      id: "lifecycle",
+      header: "Lifecycle",
+      cell: ({ row }) => (
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+          <LifecycleStage
+            label="Task"
+            status={row.original.computerTask?.status}
+            detail={row.original.computerTask?.id}
+          />
+          <LifecycleStage
+            label="Delegation"
+            status={row.original.delegation?.status}
+            detail={delegationDetail(row.original)}
+          />
+          <LifecycleStage
+            label="Turn"
+            status={row.original.threadTurn?.status}
+            detail={threadTurnDetail(row.original)}
+          />
+        </div>
+      ),
+      size: 190,
     },
     {
       id: "thread",
-      header: "Thread",
+      header: "Open",
       cell: ({ row }) => {
-        const threadId = connectorExecutionThreadId(
-          row.original.outcomePayload,
-        );
+        const threadId =
+          row.original.threadId ??
+          row.original.threadTurn?.threadId ??
+          connectorExecutionThreadId(row.original.execution.outcomePayload);
         return threadId ? (
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-full justify-start gap-1 px-2 font-mono text-xs"
+            className="h-7 w-7 justify-center px-0"
             onClick={() => args.onOpenThread(threadId)}
+            title={`Open thread ${threadId}`}
           >
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{threadId}</span>
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">No thread</span>
         );
       },
-      size: 175,
+      size: 42,
     },
     {
-      id: "details",
-      header: "Details",
-      cell: ({ row }) => {
-        const cleanupReason = connectorExecutionCleanupReason(
-          row.original.outcomePayload,
-        );
-        const detail = cleanupReason ?? row.original.errorClass;
-        return detail ? (
-          <span className="block truncate text-xs text-muted-foreground">
-            {statusLabel(detail)}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            Attempt {row.original.retryAttempt + 1}
-          </span>
-        );
-      },
-      size: 180,
-    },
-    {
-      accessorKey: "startedAt",
-      header: "Started",
+      id: "updated",
+      header: "Age",
       cell: ({ row }) => (
-        <div className="text-xs text-muted-foreground">
-          {row.original.startedAt
-            ? relativeTime(row.original.startedAt)
-            : relativeTime(row.original.createdAt)}
-        </div>
+        <span className="text-xs text-muted-foreground">
+          {relativeTime(latestRunTimestamp(row.original))}
+        </span>
       ),
-      size: 95,
-    },
-    {
-      accessorKey: "finishedAt",
-      header: "Finished",
-      cell: ({ row }) => (
-        <div className="text-xs text-muted-foreground">
-          {row.original.finishedAt
-            ? relativeTime(row.original.finishedAt)
-            : "—"}
-        </div>
-      ),
-      size: 95,
+      size: 62,
     },
   ];
+}
+
+function LifecycleStage({
+  label,
+  status,
+  detail,
+}: {
+  label: string;
+  status?: string | null;
+  detail?: string | null;
+}) {
+  if (!status) {
+    return (
+      <span
+        className="min-w-0 truncate rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+        title={`${label}: Pending`}
+      >
+        {label}: Pending
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "min-w-0 truncate rounded-full px-2 py-0.5 text-xs font-medium",
+        lifecycleStatusTone(status),
+      )}
+      title={`${label}: ${statusLabel(status)}${detail ? ` - ${detail}` : ""}`}
+    >
+      {label}: {statusLabel(status)}
+      {detail ? ` ${detail}` : ""}
+    </span>
+  );
+}
+
+function lifecycleStatusTone(status: string): string {
+  switch (status) {
+    case "completed":
+    case "succeeded":
+    case "terminal":
+      return "bg-green-500/15 text-green-700 dark:text-green-300";
+    case "failed":
+    case "timed_out":
+      return "bg-red-500/15 text-red-700 dark:text-red-300";
+    case "cancelled":
+    case "skipped":
+      return "bg-muted text-muted-foreground";
+    case "pending":
+    case "queued":
+      return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
+    case "running":
+    default:
+      return "bg-blue-500/15 text-blue-700 dark:text-blue-300";
+  }
+}
+
+function delegationDetail(run: ConnectorRunLifecycleRow): string | null {
+  if (!run.delegation) return null;
+
+  const error = lifecycleJsonSummary(run.delegation.error, [
+    "message",
+    "code",
+    "status",
+  ]);
+  if (error) return error;
+
+  const result = lifecycleJsonSummary(run.delegation.result, [
+    "status",
+    "responseLength",
+    "threadTurnId",
+  ]);
+  return result ?? run.delegation.id;
+}
+
+function threadTurnDetail(run: ConnectorRunLifecycleRow): string | null {
+  if (!run.threadTurn) return null;
+  if (run.threadTurn.errorCode) return run.threadTurn.errorCode;
+  if (run.threadTurn.error) return run.threadTurn.error;
+
+  const result = parsePayloadRecord(run.threadTurn.resultJson);
+  const response = result?.response;
+  if (typeof response === "string" && response.trim()) {
+    return `${response.length} chars`;
+  }
+
+  return run.threadTurn.id;
+}
+
+function latestRunTimestamp(run: ConnectorRunLifecycleRow): string {
+  return (
+    run.threadTurn?.finishedAt ??
+    run.delegation?.completedAt ??
+    run.computerTask?.completedAt ??
+    run.execution.finishedAt ??
+    run.threadTurn?.startedAt ??
+    run.execution.startedAt ??
+    run.execution.createdAt
+  );
+}
+
+function lifecycleJsonSummary(value: unknown, keys: string[]): string | null {
+  const record = parsePayloadRecord(value);
+  if (!record) return null;
+
+  for (const key of keys) {
+    const field = record[key];
+    if (typeof field === "string" && field.trim()) return field;
+    if (typeof field === "number") return String(field);
+  }
+
+  return null;
+}
+
+function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      return parsePayloadRecord(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
 function connectorColumns(actions: {
