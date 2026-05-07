@@ -64,6 +64,9 @@ Use the Symphony page first:
 1. On the **Connectors** tab, confirm the connector is active and targets a Computer.
 2. On the **Runs** tab, find the new execution for the Linear issue identifier.
 3. Confirm the execution is terminal and includes a thread link plus Computer handoff details.
+4. Confirm the lifecycle chips show a completed `connector_work` task, completed delegation, and succeeded thread turn.
+5. Confirm the Writeback column says `Linear: In Progress`.
+6. Confirm the row stays single-line with no horizontal scroll in the table.
 
 Then verify the Computer-owned side:
 
@@ -167,6 +170,33 @@ For the checkpoint, pass means:
 - one Computer-owned connector thread exists for that external reference
 - the Linear issue has moved to `In Progress` without duplicate pickup comments
 
+## Stale Historical Rows
+
+Older Symphony proof attempts from before the Computer delegation and Linear writeback fixes may show as stale `dispatching`, pending, or running lifecycle rows. Treat fresh rows as the source of truth; do not manually repair fresh successful checkpoints.
+
+If historical rows make the Runs tab noisy, use the cleanup script. It is dry-run by default and only applies when you pass `--apply`.
+
+Prefer scoping to the tenant or connector:
+
+```bash
+pnpm -C packages/api exec tsx scripts/cleanup-stale-connector-runs.ts \
+  --tenant '<tenant uuid>' \
+  --older-than-hours 4
+```
+
+Review the candidate list. If it only contains stale historical proof rows, apply it:
+
+```bash
+pnpm -C packages/api exec tsx scripts/cleanup-stale-connector-runs.ts \
+  --tenant '<tenant uuid>' \
+  --older-than-hours 4 \
+  --apply
+```
+
+The script only targets Computer-bound connector rows. It marks matching stale connector executions as `cancelled`, adds cleanup metadata to `outcome_payload`, and cancels linked non-terminal Computer tasks, delegations, or thread turns when those ids are present. Symphony Runs hides cancelled connector executions by default; toggle **Show cancelled** to inspect them. Cleaned rows should show a compact cleanup reason instead of looking like active work.
+
+`--external-ref-prefix` is available when the raw connector `external_ref` values share a known prefix. Linear issue keys such as `TECH-66` are usually stored inside the execution payload and displayed by the UI, while the raw `external_ref` may be the provider UUID, so tenant or connector scope is usually the better filter.
+
 ## Failure Signals
 
 | Symptom                                           | Likely check                                                                                                                                                      |
@@ -178,6 +208,7 @@ For the checkpoint, pass means:
 | Repeated Linear pickup notifications              | Duplicate/idempotency behavior regressed, or another Symphony process is watching the same issue                                                                  |
 | Linear card stays in Todo                         | Linear writeback failed, the target workflow lacks an `In Progress` state, or the connector credential lacks issue update permission                              |
 | UI still shows old issue label                    | The connector config still filters on `symphony-eligible`; update it to `symphony`                                                                                |
+| Old rows look like live work                      | Run the stale historical cleanup dry-run, then apply only if the candidate list is limited to old proof rows                                                       |
 
 ## Exit Criteria
 

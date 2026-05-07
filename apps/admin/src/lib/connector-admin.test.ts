@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DispatchTargetType } from "@/gql/graphql";
 import {
   LINEAR_TRACKER_STARTER_CONFIG,
+  connectorExecutionCleanupDisplay,
   connectorExecutionCleanupReason,
   connectorExecutionLinearIdentifier,
   connectorExecutionStateTone,
@@ -264,6 +265,25 @@ describe("connector admin helpers", () => {
     expect(connectorExecutionLinearIdentifier({}, "external_1")).toBe(
       "external_1",
     );
+  });
+
+  it("formats stale cleanup metadata for compact run rows", () => {
+    expect(
+      connectorExecutionCleanupDisplay({
+        cleanup: {
+          reason: "incomplete_delegation",
+          source: "cleanup-stale-connector-runs",
+          appliedAt: "2026-05-07T22:30:00Z",
+        },
+      }),
+    ).toEqual({
+      label: "Cleaned: Incomplete Delegation",
+      title:
+        "Cleanup reason: incomplete_delegation - cleanup-stale-connector-runs - 2026-05-07T22:30:00Z",
+    });
+
+    expect(connectorExecutionCleanupDisplay({})).toBeNull();
+    expect(connectorExecutionCleanupDisplay("{not-json")).toBeNull();
   });
 
   it("formats successful Linear writeback payloads for compact run rows", () => {
