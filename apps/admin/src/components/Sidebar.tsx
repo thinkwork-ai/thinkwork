@@ -201,13 +201,13 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/symphony", icon: Network, label: "Symphony" },
     {
       to: "/computers",
       icon: Monitor,
       label: "Computers",
       badge: computerCount,
     },
-    { to: "/symphony", icon: Network, label: "Symphony" },
     {
       to: "/threads",
       icon: MessagesSquare,
