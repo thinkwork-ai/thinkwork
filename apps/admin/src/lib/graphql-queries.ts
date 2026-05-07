@@ -353,6 +353,42 @@ export const UpdateComputerMutation = graphql(`
   }
 `);
 
+export const ComputerTasksQuery = graphql(`
+  query ComputerTasks($computerId: ID!, $limit: Int) {
+    computerTasks(computerId: $computerId, limit: $limit) {
+      id
+      taskType
+      status
+      input
+      output
+      error
+      idempotencyKey
+      claimedAt
+      completedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const EnqueueComputerTaskMutation = graphql(`
+  mutation EnqueueComputerTask($input: EnqueueComputerTaskInput!) {
+    enqueueComputerTask(input: $input) {
+      id
+      taskType
+      status
+      input
+      output
+      error
+      idempotencyKey
+      claimedAt
+      completedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Workspace orchestration reviews — admin GraphQL bindings retired in U5
 // of the workspace-reviews routing refactor. System-agent reviews now
