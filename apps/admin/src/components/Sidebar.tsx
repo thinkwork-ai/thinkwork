@@ -201,14 +201,13 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/symphony", icon: Network, label: "Symphony" },
-    { to: "/knowledge", icon: Brain, label: "Memory" },
     {
       to: "/computers",
       icon: Monitor,
       label: "Computers",
       badge: computerCount,
     },
+    { to: "/symphony", icon: Network, label: "Symphony" },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -241,6 +240,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
+    { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
@@ -285,16 +285,16 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Automations</SidebarGroupLabel>
+          <SidebarGroupLabel>Agents</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={automationsItems} />
+            <NavItems items={agentsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupLabel>Automations</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={agentsItems} />
+            <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
