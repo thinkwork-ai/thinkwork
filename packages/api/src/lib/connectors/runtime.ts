@@ -157,6 +157,11 @@ export interface ConnectorRuntimeStore {
     now: Date;
     error: string;
   }): Promise<void>;
+  markConnectorPolled(args: {
+    connectorId: string;
+    now: Date;
+    nextPollAt: Date;
+  }): Promise<void>;
   loadTenantCredential(args: {
     tenantId: string;
     credentialId?: string;
@@ -185,6 +190,8 @@ const ACTIVE_EXECUTION_STATES = [
   "invoking",
   "recording_result",
 ];
+
+const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
 export async function runConnectorDispatchTick(
   options: ConnectorRuntimeTickOptions = {},
@@ -226,6 +233,7 @@ export async function runConnectorDispatchTick(
         connectorId: connector.id,
         error: error instanceof Error ? error.message : String(error),
       });
+      await markConnectorPolled(store, connector.id, now);
       continue;
     }
     if (candidates.length === 0) {
@@ -234,6 +242,7 @@ export async function runConnectorDispatchTick(
         connectorId: connector.id,
         reason: "no_dispatch_candidates",
       });
+      await markConnectorPolled(store, connector.id, now);
       continue;
     }
 
@@ -242,6 +251,7 @@ export async function runConnectorDispatchTick(
         await dispatchCandidate({ store, connector, candidate, now }),
       );
     }
+    await markConnectorPolled(store, connector.id, now);
   }
 
   return results;
@@ -675,6 +685,17 @@ export function createDrizzleConnectorRuntimeStore(
         .where(eq(connectorExecutions.id, executionId));
     },
 
+    async markConnectorPolled({ connectorId, now, nextPollAt }) {
+      await db
+        .update(connectors)
+        .set({
+          last_poll_at: now,
+          next_poll_at: nextPollAt,
+          updated_at: now,
+        })
+        .where(eq(connectors.id, connectorId));
+    },
+
     async loadTenantCredential({ tenantId, credentialId, credentialSlug }) {
       if (!credentialId && !credentialSlug) return null;
       const conditions = [
@@ -707,6 +728,22 @@ async function invokeChatAgentByDefault(
 ): Promise<boolean> {
   const { invokeChatAgent } = await import("../../graphql/utils.js");
   return invokeChatAgent(payload);
+}
+
+async function markConnectorPolled(
+  store: ConnectorRuntimeStore,
+  connectorId: string,
+  now: Date,
+): Promise<void> {
+  await store.markConnectorPolled({
+    connectorId,
+    now,
+    nextPollAt: defaultNextPollAt(now),
+  });
+}
+
+export function defaultNextPollAt(now: Date): Date {
+  return new Date(now.getTime() + DEFAULT_POLL_INTERVAL_MS);
 }
 
 async function dispatchCandidate(args: {
