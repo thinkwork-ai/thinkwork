@@ -87,17 +87,23 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 			},
 		);
 
-		it.each(roles)("%s creation uses psql variable substitution", (role) => {
-			const passVar = role.replace("compliance_", "") + "_pass";
-			// Passwords are passed via -v writer_pass=... at psql invocation
-			// time; format(%L) does the SQL-quoting so passwords with single
-			// quotes or backslashes round-trip correctly.
-			expect(migration0070).toMatch(
-				new RegExp(
-					`format\\('(?:CREATE|ALTER) ROLE ${role}[^']*PASSWORD %L'\\s*,\\s*:'${passVar}'\\)`,
-				),
-			);
-		});
+		it.each(roles)(
+			"loads %s password through a transaction-local setting",
+			(role) => {
+				const passVar = role.replace("compliance_", "") + "_pass";
+				// psql does not substitute variables inside DO $$ bodies, so the
+				// migration copies each secret into a transaction-local setting
+				// before the role-creation blocks read it with current_setting().
+				expect(migration0070).toMatch(
+					new RegExp(`SET LOCAL "thinkwork\\.${passVar}" = :'${passVar}'`),
+				);
+				expect(migration0070).toMatch(
+					new RegExp(
+						`format\\('(?:CREATE|ALTER) ROLE ${role}[^']*PASSWORD %L'\\s*,\\s*current_setting\\('thinkwork\\.${passVar}'\\)\\)`,
+					),
+				);
+			},
+		);
 	});
 
 	describe("GRANT matrix matches Decision #4", () => {
@@ -193,15 +199,13 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 	});
 
 	describe("SQL injection safety in password substitution", () => {
-		it("uses format(%L) for password interpolation, not plain :'pass' in CREATE ROLE", () => {
+		it("uses format(%L) for password interpolation, not plain current_setting concatenation", () => {
 			// format(%L) emits a properly-escaped SQL literal even when the
-			// password contains single quotes, backslashes, or null bytes. A
-			// raw `CREATE ROLE foo WITH LOGIN PASSWORD :'pass'` would also
-			// quote correctly under psql's default settings, but format(%L)
-			// is defensive and matches the EXECUTE pattern that lets us put
-			// the create/alter inside DO blocks.
+			// password contains single quotes, backslashes, or null bytes.
+			// Passwords enter the DO blocks via current_setting() because
+			// psql variables are not expanded inside dollar-quoted bodies.
 			const formatMatches = migration0070.match(
-				/format\('[A-Z][^']+%L'\s*,\s*:'(?:writer|drainer|reader)_pass'\)/g,
+				/format\('[A-Z][^']+%L'\s*,\s*current_setting\('thinkwork\.(?:writer|drainer|reader)_pass'\)\)/g,
 			);
 			expect(formatMatches?.length ?? 0).toBeGreaterThanOrEqual(6);
 			// 6 = 3 roles × 2 branches (CREATE + ALTER)
@@ -218,10 +222,10 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 				// >=6-count assertion above would silently pass — e.g. if a
 				// future edit drops the ALTER branch on one role.
 				const createPattern = new RegExp(
-					`format\\('CREATE ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
+					`format\\('CREATE ROLE ${role}[^']+%L'\\s*,\\s*current_setting\\('thinkwork\\.${passVar}'\\)\\)`,
 				);
 				const alterPattern = new RegExp(
-					`format\\('ALTER ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
+					`format\\('ALTER ROLE ${role}[^']+%L'\\s*,\\s*current_setting\\('thinkwork\\.${passVar}'\\)\\)`,
 				);
 				expect(migration0070).toMatch(createPattern);
 				expect(migration0070).toMatch(alterPattern);
