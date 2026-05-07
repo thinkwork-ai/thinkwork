@@ -67,37 +67,33 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 		});
 	});
 
-	describe("idempotent role creation", () => {
+	describe("role existence guard (role create/alter is in bootstrap script, not this file)", () => {
 		const roles = [
 			"compliance_writer",
 			"compliance_drainer",
 			"compliance_reader",
 		] as const;
 
+		it("does NOT contain role create/alter SQL", () => {
+			// Role create/alter moved to scripts/bootstrap-compliance-roles.sh
+			// because psql `:'var'` substitution does not work inside
+			// `DO $$ ... $$` blocks. Caught on first deploy.yml
+			// compliance-bootstrap run on 2026-05-07.
+			expect(migration0070).not.toMatch(/CREATE ROLE compliance_/);
+			expect(migration0070).not.toMatch(/ALTER ROLE compliance_/);
+			expect(migration0070).not.toMatch(/format\(.*PASSWORD %L/);
+			expect(migration0070).not.toMatch(/:'(?:writer|drainer|reader)_pass'/);
+		});
+
 		it.each(roles)(
-			"%s creation block checks pg_roles existence before CREATE ROLE",
+			"raises hard exception when %s role is missing (must be created by bootstrap first)",
 			(role) => {
-				// DO $$ block must check pg_roles before CREATE ROLE so re-runs
-				// don't error on duplicate-role. Without this guard the bootstrap
-				// script's idempotency story breaks the moment passwords rotate.
-				const blockPattern = new RegExp(
-					`IF NOT EXISTS \\(SELECT FROM pg_roles WHERE rolname = '${role}'\\)[\\s\\S]*?CREATE ROLE ${role}[\\s\\S]*?ELSE[\\s\\S]*?ALTER ROLE ${role}`,
+				const guardPattern = new RegExp(
+					`IF NOT EXISTS \\(SELECT FROM pg_roles WHERE rolname = '${role}'\\)[\\s\\S]*?RAISE EXCEPTION '${role} role missing`,
 				);
-				expect(migration0070).toMatch(blockPattern);
+				expect(migration0070).toMatch(guardPattern);
 			},
 		);
-
-		it.each(roles)("%s creation uses psql variable substitution", (role) => {
-			const passVar = role.replace("compliance_", "") + "_pass";
-			// Passwords are passed via -v writer_pass=... at psql invocation
-			// time; format(%L) does the SQL-quoting so passwords with single
-			// quotes or backslashes round-trip correctly.
-			expect(migration0070).toMatch(
-				new RegExp(
-					`format\\('(?:CREATE|ALTER) ROLE ${role}[^']*PASSWORD %L'\\s*,\\s*:'${passVar}'\\)`,
-				),
-			);
-		});
 	});
 
 	describe("GRANT matrix matches Decision #4", () => {
@@ -192,40 +188,16 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 		});
 	});
 
-	describe("SQL injection safety in password substitution", () => {
-		it("uses format(%L) for password interpolation, not plain :'pass' in CREATE ROLE", () => {
-			// format(%L) emits a properly-escaped SQL literal even when the
-			// password contains single quotes, backslashes, or null bytes. A
-			// raw `CREATE ROLE foo WITH LOGIN PASSWORD :'pass'` would also
-			// quote correctly under psql's default settings, but format(%L)
-			// is defensive and matches the EXECUTE pattern that lets us put
-			// the create/alter inside DO blocks.
-			const formatMatches = migration0070.match(
-				/format\('[A-Z][^']+%L'\s*,\s*:'(?:writer|drainer|reader)_pass'\)/g,
-			);
-			expect(formatMatches?.length ?? 0).toBeGreaterThanOrEqual(6);
-			// 6 = 3 roles × 2 branches (CREATE + ALTER)
+	describe("file structure post-bootstrap-fix", () => {
+		it("contains no psql variable references (vars don't expand inside DO blocks)", () => {
+			// Role create/alter (which needs password interpolation) moved
+			// to bash; this file is now GRANT-only and contains no psql
+			// `:'foo'` references.
+			expect(migration0070).not.toMatch(/:'(?:writer|drainer|reader)_pass'/);
 		});
 
-		it.each([
-			["compliance_writer", "writer_pass"],
-			["compliance_drainer", "drainer_pass"],
-			["compliance_reader", "reader_pass"],
-		])(
-			"%s has both CREATE and ALTER format(%%L) branches with the matching variable",
-			(role, passVar) => {
-				// Per-role assertion catches a missing branch that the
-				// >=6-count assertion above would silently pass — e.g. if a
-				// future edit drops the ALTER branch on one role.
-				const createPattern = new RegExp(
-					`format\\('CREATE ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
-				);
-				const alterPattern = new RegExp(
-					`format\\('ALTER ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
-				);
-				expect(migration0070).toMatch(createPattern);
-				expect(migration0070).toMatch(alterPattern);
-			},
-		);
+		it("ends with COMMIT", () => {
+			expect(migration0070.trim().endsWith("COMMIT;")).toBe(true);
+		});
 	});
 });

@@ -229,35 +229,59 @@ put_secret_value "reader" "$COMPLIANCE_READER_PASS"
 # characters preemptively, but defense-in-depth at both layers is cheap).
 # ---------------------------------------------------------------------------
 
-echo "==> Applying migration $MIGRATION_FILE" >&2
+echo "==> Creating / rotating compliance roles" >&2
 
-# Write the password \set directives to a mode-0600 preamble file rather
-# than passing them via `psql -v writer_pass=...`. The -v form puts each
-# password literal in argv where it's readable via `ps aux` for the full
-# psql session (including the lock_timeout wait window). The preamble
-# file is consumed before the migration so :'writer_pass' substitutes
-# correctly inside the migration's DO blocks.
-PSQL_PREAMBLE="$(mktemp)"
-chmod 600 "$PSQL_PREAMBLE"
-trap "rm -f '$PSQL_PREAMBLE'" EXIT
+# Role create/alter happens HERE in bash, NOT in the SQL migration
+# file. Reason: psql `:'writer_pass'` variable substitution does NOT
+# work inside `DO $$ ... $$` plpgsql blocks — psql's variable expander
+# operates at the client text-substitution layer before SQL is sent
+# to the server, and dollar-quoted block bodies are opaque to that
+# layer. The migration file's earlier shape (`format(%L, :'writer_pass')`
+# inside DO $$ ... $$) was always going to fail with "syntax error
+# at or near \":\"" — caught when the deploy.yml compliance-bootstrap
+# step ran for the first time on 2026-05-07 (run 25492522430). Fix:
+# build the SQL string in bash with single-quote escaping, run via
+# heredoc so each password is interpolated as a literal SQL string
+# the server can parse directly.
+#
+# Single-quote escaping uses the SQL standard `''` doubling pattern.
+# generate_pass() strips `=+/` from base64 output, so the typical
+# password contains only `[A-Za-z0-9]` and the escape is a no-op.
+# Operator-supplied passwords with embedded quotes round-trip safely
+# via the `''` doubling.
 
-# Quote each password for psql variable assignment. Single-quoted form
-# requires escaping any embedded single quotes; generate_pass() and
-# operator-supplied values from the COMPLIANCE_*_PASS env vars are both
-# pre-stripped of `=+/` and shell-metas, so the simple `'...'` form is
-# safe — but the gsub handles any operator who deliberately supplies a
-# password with quotes.
-escape_psql() {
+escape_psql_literal() {
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
-cat > "$PSQL_PREAMBLE" <<EOF
-\set writer_pass '$(escape_psql "$COMPLIANCE_WRITER_PASS")'
-\set drainer_pass '$(escape_psql "$COMPLIANCE_DRAINER_PASS")'
-\set reader_pass '$(escape_psql "$COMPLIANCE_READER_PASS")'
-EOF
+create_or_alter_role() {
+  local role="$1"
+  local password="$2"
+  local escaped
+  escaped="$(escape_psql_literal "$password")"
 
-psql "$DATABASE_URL" -f "$PSQL_PREAMBLE" -f "$MIGRATION_FILE"
+  psql "$DATABASE_URL" --set ON_ERROR_STOP=on <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN
+    CREATE ROLE ${role} WITH LOGIN PASSWORD '${escaped}';
+  ELSE
+    ALTER ROLE ${role} WITH LOGIN PASSWORD '${escaped}';
+  END IF;
+END\$\$;
+SQL
+}
+
+create_or_alter_role compliance_writer "$COMPLIANCE_WRITER_PASS"
+create_or_alter_role compliance_drainer "$COMPLIANCE_DRAINER_PASS"
+create_or_alter_role compliance_reader "$COMPLIANCE_READER_PASS"
+
+echo "==> Applying migration $MIGRATION_FILE (GRANTs only)" >&2
+
+# Migration file no longer carries role create/alter (moved to bash
+# above). It contains GRANT statements + the schema-existence guard.
+# No psql -v variables needed.
+psql "$DATABASE_URL" -f "$MIGRATION_FILE"
 
 # ---------------------------------------------------------------------------
 # 5. Verify roles exist + drift gate exits 0.

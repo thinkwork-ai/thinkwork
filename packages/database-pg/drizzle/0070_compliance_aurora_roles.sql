@@ -23,19 +23,28 @@
 --   docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md
 --
 -- Apply manually:
---   The bootstrap helper script wraps this file with psql variable
---   substitution + Secrets Manager population:
---     STAGE=dev bash scripts/bootstrap-compliance-roles.sh
---   Direct apply (advanced — must supply all three passwords):
---     psql "$DATABASE_URL" \
---       -v writer_pass="$COMPLIANCE_WRITER_PASS" \
---       -v drainer_pass="$COMPLIANCE_DRAINER_PASS" \
---       -v reader_pass="$COMPLIANCE_READER_PASS" \
---       -f packages/database-pg/drizzle/0070_compliance_aurora_roles.sql
+--   STAGE=dev bash scripts/bootstrap-compliance-roles.sh
 --
--- The DO $$ ... $$ blocks make role creation idempotent (re-running with
--- new passwords runs ALTER ROLE; re-running with same passwords is a
--- no-op). GRANT statements are inherently idempotent in PostgreSQL.
+-- The bootstrap helper script:
+--   1. Resolves master DB credentials from Secrets Manager.
+--   2. Resolves / generates the three role passwords.
+--   3. Populates the three compliance secret containers via
+--      `aws secretsmanager put-secret-value`.
+--   4. Creates/alters the three Aurora roles inline via psql heredoc
+--      (NOT in this file — see WHY below).
+--   5. Applies this file (GRANTs only).
+--
+-- WHY role create/alter is in the bootstrap script, not this file:
+-- psql client-side variable substitution does NOT expand inside
+-- dollar-quoted plpgsql blocks. The previous shape (CREATE/ALTER ROLE
+-- inside DO blocks with caller-supplied passwords) failed with a
+-- syntax error on the first deploy.yml compliance-bootstrap run on
+-- 2026-05-07. The bootstrap script now interpolates passwords in bash
+-- with single-quote doubling and runs per-role psql heredocs. GRANTs
+-- stay in this file because they need no variables.
+--
+-- GRANT statements are inherently idempotent in PostgreSQL — re-running
+-- this file is safe.
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh as the post-deploy drift gate):
 --
@@ -75,39 +84,24 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- Role creation (idempotent)
+-- Role existence guard
 --
--- Each block creates the role if missing, otherwise rotates the password
--- via ALTER ROLE. CREATE ROLE has no IF NOT EXISTS form prior to PG 16,
--- so the DO $$ ... pg_roles existence check is the portable idempotent
--- pattern. ALTER ROLE on the same role with the same password is a
--- no-op, so re-running with stable passwords is safe.
+-- The bootstrap script creates / alters the three roles via inline psql
+-- BEFORE this file runs. Refuse to apply if any role is missing — a
+-- direct `psql -f` invocation that bypasses the bootstrap would
+-- otherwise leave the schema partially granted.
 -- ---------------------------------------------------------------------------
 
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_writer') THEN
-    EXECUTE format('CREATE ROLE compliance_writer WITH LOGIN PASSWORD %L', :'writer_pass');
-  ELSE
-    EXECUTE format('ALTER ROLE compliance_writer WITH LOGIN PASSWORD %L', :'writer_pass');
+    RAISE EXCEPTION 'compliance_writer role missing: run scripts/bootstrap-compliance-roles.sh first';
   END IF;
-END $$;
-
-DO $$
-BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_drainer') THEN
-    EXECUTE format('CREATE ROLE compliance_drainer WITH LOGIN PASSWORD %L', :'drainer_pass');
-  ELSE
-    EXECUTE format('ALTER ROLE compliance_drainer WITH LOGIN PASSWORD %L', :'drainer_pass');
+    RAISE EXCEPTION 'compliance_drainer role missing: run scripts/bootstrap-compliance-roles.sh first';
   END IF;
-END $$;
-
-DO $$
-BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_reader') THEN
-    EXECUTE format('CREATE ROLE compliance_reader WITH LOGIN PASSWORD %L', :'reader_pass');
-  ELSE
-    EXECUTE format('ALTER ROLE compliance_reader WITH LOGIN PASSWORD %L', :'reader_pass');
+    RAISE EXCEPTION 'compliance_reader role missing: run scripts/bootstrap-compliance-roles.sh first';
   END IF;
 END $$;
 
