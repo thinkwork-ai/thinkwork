@@ -203,6 +203,14 @@ locals {
       ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
       SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
     }
+    # Phase 3 U4 Compliance outbox drainer.
+    # Connects to Aurora as the compliance_drainer role (provisioned in
+    # U2). The DATABASE_SECRET_ARN-style indirection is via
+    # COMPLIANCE_DRAINER_SECRET_ARN so the drainer's connection cache is
+    # isolated from the master `getDb()` cache used by other handlers.
+    "compliance-outbox-drainer" = {
+      COMPLIANCE_DRAINER_SECRET_ARN = var.compliance_drainer_secret_arn
+    }
   }
 }
 
@@ -363,6 +371,14 @@ resource "aws_lambda_function" "handler" {
     # Brain v0 narrow write endpoint. Strands calls this with
     # Bearer API_AUTH_SECRET; GraphQL remains user/admin-facing only.
     "brain-agent-write",
+    # Phase 3 U4 of the Compliance audit-event log
+    # (docs/plans/2026-05-07-004-feat-compliance-u4-outbox-drainer-plan.md).
+    # Single-writer drainer with reserved_concurrent_executions=1 (set
+    # below). Connects to Aurora as `compliance_drainer` role via the
+    # COMPLIANCE_DRAINER_SECRET_ARN env var (compliance secret created in
+    # U2). EventBridge rate(1 minute) schedule + DLQ + MaxRetryAttempts=0
+    # (defined in dedicated resources below).
+    "compliance-outbox-drainer",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -383,6 +399,13 @@ resource "aws_lambda_function" "handler" {
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
+
+  # Per-handler reserved concurrency. compliance-outbox-drainer is a
+  # single-writer (per-tenant hash chain integrity depends on it — two
+  # concurrent drainers would race the chain head SELECT and produce
+  # orphan prev_hash links). All other handlers run with the default
+  # account-level concurrency pool.
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : -1
 
   environment {
     variables = merge(
@@ -481,6 +504,76 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   function_name                = aws_lambda_function.handler["memory-retain"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
+}
+
+# ---------------------------------------------------------------------------
+# Phase 3 U4: compliance-outbox-drainer DLQ + async retry config
+#
+# AWS Lambda's default async-retry policy is 2 attempts. The drainer's
+# INSERT ... ON CONFLICT (outbox_id) DO NOTHING makes per-row replay
+# safe, but reserved-concurrency=1 + retry-0 is the architectural
+# guarantee that we never have two drainers racing the chain head.
+# Per project_async_retry_idempotency_lessons.
+# ---------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "compliance_drainer_dlq" {
+  count                     = local.use_local_zips ? 1 : 0
+  name                      = "thinkwork-${var.stage}-compliance-drainer-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-drainer-dlq"
+  }
+}
+
+resource "aws_iam_role_policy" "compliance_drainer_dlq_send" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "compliance-drainer-dlq-send"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "compliance_outbox_drainer" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["compliance-outbox-drainer"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.compliance_drainer_dlq[0].arn
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Phase 3 U4: compliance-outbox-drainer EventBridge schedule (every 1 min)
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "compliance_outbox_drainer" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-compliance-outbox-drainer"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["compliance-outbox-drainer"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
 }
 
 # ---------------------------------------------------------------------------

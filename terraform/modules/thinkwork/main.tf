@@ -202,6 +202,11 @@ module "api" {
   graphql_db_secret_arn = module.database.graphql_db_secret_arn
   database_name         = var.database_name
 
+  # Phase 3 U4 — compliance-outbox-drainer connects as `compliance_drainer`
+  # via this dedicated secret (provisioned in U2 / PR #887, populated by
+  # the compliance-bootstrap CI step in deploy.yml).
+  compliance_drainer_secret_arn = module.database.compliance_drainer_secret_arn
+
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
 

@@ -26,6 +26,9 @@ export {
 export { redactPayload, sanitizeStringField } from "./redaction";
 export type { RedactResult } from "./redaction";
 
+export { canonicalizeEvent, computeEventHash } from "./hash-chain";
+export type { HashableEnvelope } from "./hash-chain";
+
 export { EVENT_PAYLOAD_SHAPES } from "./event-schemas";
 export type { RedactionSchema } from "./event-schemas";
 
