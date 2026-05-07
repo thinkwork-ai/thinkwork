@@ -9,6 +9,10 @@ export type ConnectorFormValues = {
   type: string;
   description: string;
   connectionId: string;
+  linearTeamKey: string;
+  linearLabel: string;
+  linearCredentialSlug: string;
+  linearWritebackState: string;
   configJson: string;
   dispatchTargetType: DispatchTargetType;
   dispatchTargetId: string;
@@ -63,11 +67,19 @@ export type ConnectorExecutionCleanupDisplay = {
   title: string;
 };
 
+export const LINEAR_CHECKPOINT_LABEL = "symphony";
+export const DEFAULT_LINEAR_CREDENTIAL_SLUG = "linear";
+export const DEFAULT_LINEAR_WRITEBACK_STATE = "In Progress";
+
 export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   name: "",
   type: "linear_tracker",
   description: "",
   connectionId: "",
+  linearTeamKey: "",
+  linearLabel: LINEAR_CHECKPOINT_LABEL,
+  linearCredentialSlug: DEFAULT_LINEAR_CREDENTIAL_SLUG,
+  linearWritebackState: DEFAULT_LINEAR_WRITEBACK_STATE,
   configJson: "{}",
   dispatchTargetType: DispatchTargetType.Computer,
   dispatchTargetId: "",
@@ -77,10 +89,10 @@ export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
 export const LINEAR_TRACKER_STARTER_CONFIG = {
   provider: "linear",
   sourceKind: "tracker_issue",
-  credentialSlug: "linear",
+  credentialSlug: DEFAULT_LINEAR_CREDENTIAL_SLUG,
   issueQuery: {
     teamKey: "",
-    labels: ["symphony"],
+    labels: [LINEAR_CHECKPOINT_LABEL],
     states: [],
     limit: 10,
   },
@@ -88,6 +100,12 @@ export const LINEAR_TRACKER_STARTER_CONFIG = {
     includeDescription: true,
     includeComments: true,
     includeAttachments: false,
+  },
+  writeback: {
+    moveOnDispatch: {
+      enabled: true,
+      stateName: DEFAULT_LINEAR_WRITEBACK_STATE,
+    },
   },
 };
 
@@ -117,17 +135,24 @@ export function connectorFormValues(
   if (!source) {
     return {
       ...DEFAULT_CONNECTOR_FORM_VALUES,
+      configJson: linearTrackerStarterConfigJson(),
       dispatchTargetId: defaultComputerId,
     };
   }
+  const configJson =
+    source.configJson ?? formatConnectorConfig(source.config ?? null);
+  const linearFields = linearConnectorFieldsFromConfig(configJson);
 
   return {
     name: source.name ?? "",
     type: source.type ?? "linear_tracker",
     description: source.description ?? "",
     connectionId: source.connectionId ?? "",
-    configJson:
-      source.configJson ?? formatConnectorConfig(source.config ?? null),
+    linearTeamKey: linearFields.teamKey,
+    linearLabel: linearFields.label,
+    linearCredentialSlug: linearFields.credentialSlug,
+    linearWritebackState: linearFields.writebackState,
+    configJson,
     dispatchTargetType:
       source.dispatchTargetType ??
       DEFAULT_CONNECTOR_FORM_VALUES.dispatchTargetType,
@@ -205,6 +230,73 @@ export function parseConnectorConfig(configJson: string): unknown {
   return JSON.parse(trimmed);
 }
 
+export function validateConnectorFormValues(
+  values: ConnectorFormValues,
+): string | null {
+  if (!values.name.trim()) return "Name is required.";
+  if (!values.type.trim()) return "Type is required.";
+  if (!values.dispatchTargetId.trim()) return "Dispatch target is required.";
+  if (values.type.trim() !== "linear_tracker") {
+    return "Symphony supports Linear tracker connectors here.";
+  }
+  if (!values.linearTeamKey.trim()) return "Linear team key is required.";
+  if (!values.linearCredentialSlug.trim()) {
+    return "Linear credential slug is required.";
+  }
+  if (values.linearLabel.trim() !== LINEAR_CHECKPOINT_LABEL) {
+    return "Checkpoint connector label must be symphony.";
+  }
+  if (!values.linearWritebackState.trim()) {
+    return "Linear writeback state is required.";
+  }
+
+  try {
+    parseConnectorConfig(values.configJson);
+  } catch {
+    return "Advanced JSON must be valid JSON.";
+  }
+
+  return null;
+}
+
+export function linearConnectorConfigFromValues(
+  values: ConnectorFormValues,
+): Record<string, unknown> {
+  const parsed = parseConnectorConfig(values.configJson);
+  const config = parsePayloadRecord(parsed) ?? {};
+  const issueQuery = parsePayloadRecord(config.issueQuery) ?? {};
+  const payload = parsePayloadRecord(config.payload) ?? {};
+  const writeback = parsePayloadRecord(config.writeback) ?? {};
+  const moveOnDispatch = parsePayloadRecord(writeback.moveOnDispatch) ?? {};
+
+  return {
+    ...config,
+    provider: "linear",
+    sourceKind: cleanString(config.sourceKind) ?? "tracker_issue",
+    credentialSlug: values.linearCredentialSlug.trim(),
+    issueQuery: {
+      ...issueQuery,
+      teamKey: values.linearTeamKey.trim(),
+      labels: [values.linearLabel.trim()],
+      limit: Number.isFinite(issueQuery.limit as number)
+        ? issueQuery.limit
+        : LINEAR_TRACKER_STARTER_CONFIG.issueQuery.limit,
+    },
+    payload: {
+      ...LINEAR_TRACKER_STARTER_CONFIG.payload,
+      ...payload,
+    },
+    writeback: {
+      ...writeback,
+      moveOnDispatch: {
+        ...moveOnDispatch,
+        enabled: moveOnDispatch.enabled ?? true,
+        stateName: values.linearWritebackState.trim(),
+      },
+    },
+  };
+}
+
 export function createConnectorInput(
   tenantId: string,
   values: ConnectorFormValues,
@@ -215,7 +307,7 @@ export function createConnectorInput(
     type: values.type.trim(),
     description: emptyToNull(values.description),
     connectionId: emptyToNull(values.connectionId),
-    config: parseConnectorConfig(values.configJson),
+    config: linearConnectorConfigFromValues(values),
     dispatchTargetType: values.dispatchTargetType,
     dispatchTargetId: values.dispatchTargetId.trim(),
     enabled: values.enabled,
@@ -231,7 +323,7 @@ export function updateConnectorInput(
     type: values.type.trim(),
     description: emptyToNull(values.description),
     connectionId: emptyToNull(values.connectionId),
-    config: parseConnectorConfig(values.configJson),
+    config: linearConnectorConfigFromValues(values),
     dispatchTargetType: values.dispatchTargetType,
     dispatchTargetId: values.dispatchTargetId.trim(),
     enabled: values.enabled,
@@ -388,6 +480,43 @@ function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function linearConnectorFieldsFromConfig(config: unknown): {
+  teamKey: string;
+  label: string;
+  credentialSlug: string;
+  writebackState: string;
+} {
+  const parsed = parsePayloadRecord(config);
+  const issueQuery = parsePayloadRecord(parsed?.issueQuery);
+  const labels = readStringArray(issueQuery?.labels ?? parsed?.labels);
+  const writeback = parsePayloadRecord(parsed?.writeback);
+  const moveOnDispatch = parsePayloadRecord(writeback?.moveOnDispatch);
+
+  return {
+    teamKey: cleanString(parsed?.teamKey ?? issueQuery?.teamKey) ?? "",
+    label:
+      cleanString(issueQuery?.label ?? parsed?.label) ??
+      labels[0] ??
+      LINEAR_CHECKPOINT_LABEL,
+    credentialSlug:
+      cleanString(parsed?.credentialSlug ?? issueQuery?.credentialSlug) ??
+      DEFAULT_LINEAR_CREDENTIAL_SLUG,
+    writebackState:
+      cleanString(
+        moveOnDispatch?.stateName ??
+          writeback?.onDispatchState ??
+          parsed?.onDispatchState,
+      ) ?? DEFAULT_LINEAR_WRITEBACK_STATE,
+  };
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanString(item))
+    .filter((item): item is string => Boolean(item));
 }
 
 function cleanString(value: unknown): string | null {
