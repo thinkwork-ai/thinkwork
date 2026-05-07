@@ -3,22 +3,26 @@ title: Admin Web App
 description: The ThinkWork admin web app — a Vite + React 19 dashboard for platform operators to manage agents, threads, Company Brain, controls, analytics, and tenant configuration.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-The admin web app is the operator-facing control plane for a ThinkWork deployment. Platform operators, agent authors, and audit owners live here — configuring agents, watching threads, wiring up connectors, managing tenant settings, and enforcing controls. End users live in the [Mobile App](/applications/mobile/).
+The admin web app is the operator-facing control plane for a ThinkWork deployment. Platform operators, agent authors, and audit owners live here — configuring Computers and managed Agents, watching threads, wiring up connectors, managing tenant settings, and enforcing controls. End users live in the [Mobile App](/applications/mobile/).
 
 The admin app is a Vite + React 19 single-page application with file-based routing through **TanStack Router**. It talks to the same GraphQL + REST endpoints the mobile app does, scoped with an `x-tenant-id` header on every request, and it authenticates through **AWS Cognito** with optional Google SSO.
 
 <Aside type="note">
-Tenant-level configuration (MCP servers, connector credentials, guardrails, budgets, webhooks) lives in the admin app. Per-user connections — where an end user grants their personal OAuth credentials — live in the [Mobile App](/applications/mobile/integrations-and-mcp-connect/). Admin owns infrastructure; users own their own credentials.
+  Tenant-level configuration (MCP servers, connector credentials, guardrails,
+  budgets, webhooks) lives in the admin app. Per-user connections — where an end
+  user grants their personal OAuth credentials — live in the [Mobile
+  App](/applications/mobile/integrations-and-mcp-connect/). Admin owns
+  infrastructure; users own their own credentials.
 </Aside>
 
 ## Who uses it
 
 Three rough personas:
 
-- **Platform operators** — the people who stood up ThinkWork in AWS and configure the tenant. They live under Threads, Connectors, Webhooks, Settings, and Observability.
-- **Agent authors** — the people building and iterating on agents, templates, skills, Company Brain sources, and guardrails. They live under Agents, Agent Templates, Skills, Company Brain, and Security Center.
+- **Platform operators** — the people who stood up ThinkWork in AWS and configure the tenant. They live under Dashboard, Symphony, Threads, Computers, Webhooks, Settings, and Observability.
+- **Agent authors** — the people building and iterating on Computers, managed Agents, templates, skills, Company Brain sources, and guardrails. They live under Computers, Agents, Agent Templates, Skills, Company Brain, and Security Center.
 - **Audit / observability owners** — the people watching usage, cost, and safety. They live under Analytics, Security Center, Inbox, and the thread audit view.
 
 All three are tenant-scoped. The admin app is multi-tenant at the routing level: the `_authed/_tenant` layout enforces a tenant selection before loading any tenant data.
@@ -34,6 +38,7 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 ### Work
 
 - [Dashboard](/applications/admin/dashboard/) — the landing page with metric cards, recent activity, and recent threads
+- **Symphony** (`/symphony`) — connector configuration and connector runs, including the Computer-first Linear checkpoint path
 - [Threads](/applications/admin/threads/) — the thread list and detail view with Kanban, grouped table, live subscriptions, inline edit, and thread audit
 - [Inbox](/applications/admin/inbox/) — the approval queue for agent-requested human-in-the-loop actions, including system-agent workspace reviews
 - [Automations](/applications/admin/automations/) — recurring agent work, scheduled jobs, and routine triggers (cron, rate, one-shot, multi-step workflows)
@@ -41,6 +46,7 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 ### Agents
 
 - [Company Brain](/applications/admin/knowledge/) — Memory, Pages, Knowledge Bases, and Sources verification/configuration in one tabbed surface
+- [Computers](/applications/admin/computers/) — durable per-user orchestration runtimes and valid connector-facing actors
 - [Agents](/applications/admin/agents/) — the agent roster plus agent workspace/configuration flows
 - [Agent Templates](/applications/admin/agent-templates/) — reusable template bundles and the explicit sync flow to linked agents
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB agent invitations and join-request approvals
@@ -61,17 +67,18 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 
 The rule of thumb: **the admin app configures the tenant; the mobile app is where end users do the work.**
 
-| Capability | Where |
-|---|---|
-| Register an agent or agent template | Admin |
-| Connect your personal Google account to an agent | Mobile |
-| Register a tenant-level MCP server (URL, transport, auth type) | Admin |
-| Grant your personal OAuth token to that MCP server | Mobile |
-| Configure guardrails, budgets, and audit retention | Admin |
-| Chat with an agent, review threads, act on external tasks | Mobile |
-| Upload knowledge-base documents or inspect Company Brain | Admin |
-| Register a webhook connector with a signing secret | Admin |
-| See a push notification when you're assigned a task | Mobile |
+| Capability                                                       | Where  |
+| ---------------------------------------------------------------- | ------ |
+| Register an agent or agent template                              | Admin  |
+| Connect your personal Google account to an agent                 | Mobile |
+| Register a tenant-level MCP server (URL, transport, auth type)   | Admin  |
+| Grant your personal OAuth token to that MCP server               | Mobile |
+| Configure guardrails, budgets, and audit retention               | Admin  |
+| Chat with an agent, review threads, act on external tasks        | Mobile |
+| Upload knowledge-base documents or inspect Company Brain         | Admin  |
+| Register a webhook connector with a signing secret               | Admin  |
+| Configure a Linear/Symphony connector to hand work to a Computer | Admin  |
+| See a push notification when you're assigned a task              | Mobile |
 
 When in doubt: tenant-level → admin, user-level → mobile.
 
