@@ -404,3 +404,29 @@ variable "mcp_custom_domain_ready" {
   type        = bool
   default     = false
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 U7 — Compliance audit-anchor bucket (S3 Object Lock)
+# ---------------------------------------------------------------------------
+
+variable "compliance_anchor_object_lock_mode" {
+  description = "S3 Object Lock retention mode for the compliance audit-anchor bucket. GOVERNANCE allows a privileged role with s3:BypassGovernanceRetention to delete or shorten retention; COMPLIANCE is irreversible (even AWS root cannot delete or shorten until retention expires). Default GOVERNANCE per master plan Decision #2; flip to COMPLIANCE in prod tfvars at audit-engagement time."
+  type        = string
+  default     = "GOVERNANCE"
+
+  validation {
+    condition     = contains(["GOVERNANCE", "COMPLIANCE"], var.compliance_anchor_object_lock_mode)
+    error_message = "compliance_anchor_object_lock_mode must be either GOVERNANCE or COMPLIANCE."
+  }
+}
+
+variable "compliance_anchor_retention_days" {
+  description = "Default Object Lock retention in days for the compliance audit-anchor bucket. SOC2 Type 1 baseline is 12 months (365)."
+  type        = number
+  default     = 365
+
+  validation {
+    condition     = var.compliance_anchor_retention_days > 0
+    error_message = "compliance_anchor_retention_days must be greater than 0."
+  }
+}
