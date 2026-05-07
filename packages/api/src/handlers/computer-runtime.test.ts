@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
     recordComputerHeartbeat: vi.fn(),
     claimNextComputerTask: vi.fn(),
     appendComputerTaskEvent: vi.fn(),
+    checkGoogleWorkspaceConnection: vi.fn(),
     completeComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
     ComputerNotFoundError,
@@ -31,6 +32,7 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   recordComputerHeartbeat: mocks.recordComputerHeartbeat,
   claimNextComputerTask: mocks.claimNextComputerTask,
   appendComputerTaskEvent: mocks.appendComputerTaskEvent,
+  checkGoogleWorkspaceConnection: mocks.checkGoogleWorkspaceConnection,
   completeComputerTask: mocks.completeComputerTask,
   failComputerTask: mocks.failComputerTask,
   ComputerNotFoundError: mocks.ComputerNotFoundError,
@@ -80,6 +82,11 @@ describe("computer-runtime handler", () => {
       taskType: "noop",
     });
     mocks.appendComputerTaskEvent.mockResolvedValue({ id: "event-1" });
+    mocks.checkGoogleWorkspaceConnection.mockResolvedValue({
+      providerName: "google_productivity",
+      connected: true,
+      tokenResolved: true,
+    });
     mocks.completeComputerTask.mockResolvedValue({
       id: TASK_ID,
       status: "completed",
@@ -183,6 +190,25 @@ describe("computer-runtime handler", () => {
       }),
     );
     expect(failResponse.statusCode).toBe(200);
+  });
+
+  it("checks Google Workspace connection status without exposing tokens", async () => {
+    const response = await handler(
+      event("POST", "/api/computers/runtime/google-workspace/check", {
+        body: { tenantId: TENANT_ID, computerId: COMPUTER_ID },
+      }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(mocks.checkGoogleWorkspaceConnection).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+    });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      providerName: "google_productivity",
+      connected: true,
+      tokenResolved: true,
+    });
+    expect(response.body).not.toContain("accessToken");
   });
 
   it("validates UUID inputs before calling runtime code", async () => {

@@ -793,6 +793,7 @@ export enum ComputerTaskStatus {
 
 export enum ComputerTaskType {
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
+  GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
   HealthCheck = 'HEALTH_CHECK',
   WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
 }

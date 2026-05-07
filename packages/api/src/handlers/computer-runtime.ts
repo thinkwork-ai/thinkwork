@@ -12,6 +12,7 @@ import {
 } from "../lib/response.js";
 import {
   appendComputerTaskEvent,
+  checkGoogleWorkspaceConnection,
   claimNextComputerTask,
   completeComputerTask,
   ComputerNotFoundError,
@@ -103,6 +104,15 @@ async function route(
       idempotencyKey: optionalString(body.idempotencyKey),
     });
     return json({ task }, 201);
+  }
+
+  if (
+    method === "POST" &&
+    path === "/api/computers/runtime/google-workspace/check"
+  ) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(await checkGoogleWorkspaceConnection({ tenantId, computerId }));
   }
 
   const taskEventMatch = path.match(

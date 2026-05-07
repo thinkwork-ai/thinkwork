@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   FileText,
+  KeyRound,
   Loader2,
   Terminal,
   XCircle,
@@ -75,6 +76,20 @@ function outputSummary(output: unknown, error: unknown): string {
         : "Google CLI available";
     }
     if (smokePayload.available === false) return "Google CLI unavailable";
+  }
+  const googleWorkspace = payload.googleWorkspace;
+  if (googleWorkspace && typeof googleWorkspace === "object") {
+    const googlePayload = googleWorkspace as Record<string, unknown>;
+    if (
+      googlePayload.connected === true &&
+      googlePayload.tokenResolved === true
+    ) {
+      return "Google Workspace connected";
+    }
+    if (googlePayload.connected === true) {
+      return "Google Workspace token unavailable";
+    }
+    return "Google Workspace not connected";
   }
   const message = payload.message;
   if (typeof message === "string") return message;
@@ -195,6 +210,18 @@ export function ComputerLiveTasksPanel({
           >
             <Terminal className="h-4 w-4" />
             Google CLI
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              enqueueRuntimeTask(ComputerTaskType.GoogleWorkspaceAuthCheck)
+            }
+            disabled={enqueueing}
+            title="Check the Computer owner's Google Workspace connection without exposing tokens"
+          >
+            <KeyRound className="h-4 w-4" />
+            Google Auth
           </Button>
         </CardAction>
       </CardHeader>

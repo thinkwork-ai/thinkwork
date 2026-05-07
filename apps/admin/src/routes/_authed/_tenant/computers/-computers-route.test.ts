@@ -49,8 +49,12 @@ describe("Computers admin routes", () => {
       "ComputerTaskType.WorkspaceFileWrite",
     );
     expect(liveTasksPanelSource).toContain("ComputerTaskType.GoogleCliSmoke");
+    expect(liveTasksPanelSource).toContain(
+      "ComputerTaskType.GoogleWorkspaceAuthCheck",
+    );
     expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
     expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");
+    expect(liveTasksPanelSource).not.toContain("accessToken");
   });
 
   it("defines typed GraphQL documents for Computer reads and updates", () => {

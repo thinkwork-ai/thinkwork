@@ -72,6 +72,23 @@ export class ComputerRuntimeApi {
     });
   }
 
+  async checkGoogleWorkspaceConnection(): Promise<{
+    providerName: string;
+    connected: boolean;
+    tokenResolved: boolean;
+    connectionId?: string;
+    reason?: string | null;
+    checkedAt?: string;
+  }> {
+    return this.request("/api/computers/runtime/google-workspace/check", {
+      method: "POST",
+      body: JSON.stringify({
+        tenantId: this.config.tenantId,
+        computerId: this.config.computerId,
+      }),
+    });
+  }
+
   async completeTask(taskId: string, output: unknown) {
     return this.request(`/api/computers/runtime/tasks/${taskId}/complete`, {
       method: "POST",

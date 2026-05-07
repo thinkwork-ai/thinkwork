@@ -33,6 +33,7 @@ enum ComputerTaskType {
   HEALTH_CHECK
   WORKSPACE_FILE_WRITE
   GOOGLE_CLI_SMOKE
+  GOOGLE_WORKSPACE_AUTH_CHECK
 }
 
 enum ComputerEventLevel {
