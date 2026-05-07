@@ -61,10 +61,17 @@ if [[ "$PUSH" == "true" ]]; then
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 fi
 
-docker buildx build \
-  --platform "$PLATFORM" \
-  --tag "$IMAGE" \
-  ${PUSH:+--push} \
-  "$REPO_ROOT/packages/computer-runtime"
+BUILD_ARGS=(
+  --platform "$PLATFORM"
+  --tag "$IMAGE"
+)
+
+if [[ "$PUSH" == "true" ]]; then
+  BUILD_ARGS+=(--push)
+else
+  BUILD_ARGS+=(--load)
+fi
+
+docker buildx build "${BUILD_ARGS[@]}" "$REPO_ROOT/packages/computer-runtime"
 
 echo "$IMAGE"
