@@ -162,9 +162,12 @@ vi.mock("../lib/derive-agent-skills.js", () => ({
 // `db.transaction(fn)` mock invokes the callback with a tx
 // "facade" that supports the methods the handler actually calls.
 
-const { emitMockImpl, transactionMockImpl } = vi.hoisted(() => ({
-  emitMockImpl: vi.fn(),
-  transactionMockImpl: vi.fn(),
+const { emitMockImpl } = vi.hoisted(() => ({
+  emitMockImpl: vi.fn().mockResolvedValue({
+    eventId: "evt-mock",
+    outboxId: "outbox-mock",
+    redactedFields: [],
+  }),
 }));
 
 vi.mock("../lib/compliance/emit.js", () => ({

@@ -2154,7 +2154,32 @@ async function mcpDeleteServer(
   // Wrap the cascade delete + audit emit in a single transaction
   // (control-evidence tier). `.returning()` captures the deleted row's
   // url in one round-trip — no SELECT-before-DELETE needed.
+  //
+  // Tenant ownership is verified BEFORE the cascade so a cross-tenant
+  // probe (correct serverId, wrong tenantSlug) cannot delete
+  // agentMcpServers rows for another tenant. The post-cascade
+  // tenantMcpServers delete still runs tenant-scoped — defense in
+  // depth — but the gate keeps the cascade from committing on a
+  // failed ownership check.
   const result = await db.transaction(async (tx) => {
+    const [owned] = await tx
+      .select({ id: tenantMcpServers.id, url: tenantMcpServers.url })
+      .from(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.id, serverId),
+          eq(tenantMcpServers.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
+
+    if (!owned) {
+      // Throw to roll back the entire tx — important when the gate
+      // ever moves below side-effecting writes. Caught below; the
+      // handler returns 404.
+      throw new Error("MCP_SERVER_NOT_FOUND");
+    }
+
     await tx
       .delete(agentMcpServers)
       .where(eq(agentMcpServers.mcp_server_id, serverId));
@@ -2168,8 +2193,6 @@ async function mcpDeleteServer(
         ),
       )
       .returning({ id: tenantMcpServers.id, url: tenantMcpServers.url });
-
-    if (!deleted) return null;
 
     await emitAuditEvent(tx, {
       tenantId,
@@ -2188,6 +2211,11 @@ async function mcpDeleteServer(
     });
 
     return deleted;
+  }).catch((err) => {
+    if (err instanceof Error && err.message === "MCP_SERVER_NOT_FOUND") {
+      return null;
+    }
+    throw err;
   });
 
   if (!result) return notFound("MCP server not found");
