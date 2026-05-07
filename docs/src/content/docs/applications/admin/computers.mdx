@@ -7,6 +7,8 @@ import { Aside } from "@astrojs/starlight/components";
 
 The Computers surface is where operators manage the durable per-user ThinkWork Computer. A Computer owns the user's live workspace and orchestration runtime; managed Agents remain available as delegated workers.
 
+Computers are also valid connector-facing actors. The current Linear/Symphony checkpoint routes a `symphony`-labeled Linear issue to a Computer as a `connector_work` task, records a `connector_work_received` event, and creates a Computer-owned connector thread before any deeper runtime delegation occurs.
+
 ## Computer list
 
 **Route:** `/computers`  
@@ -93,7 +95,19 @@ Authorization: Bearer <API_AUTH_SECRET>
 
 Supported actions are `provision`, `start`, `stop`, `restart`, and `status`.
 
-The task surface currently supports `health_check`, `workspace_file_write`, and `google_cli_smoke`. Google Workspace OAuth-backed actions are intentionally deferred; the smoke only verifies image tooling.
+The task surface currently supports `health_check`, `workspace_file_write`, `google_cli_smoke`, and `connector_work`. `connector_work` is the connector handoff/audit task used by the Linear checkpoint; full provider-specific runtime delegation is intentionally deferred. Google Workspace OAuth-backed actions are also deferred; the smoke only verifies image tooling.
+
+## Connector checkpoint
+
+The first Computer-facing connector proof is Linear-only:
+
+1. A Linear issue has the `symphony` label.
+2. The Symphony connector is enabled and targets a Computer.
+3. The connector runtime records a terminal connector execution.
+4. The target Computer receives a `connector_work` task and `connector_work_received` event.
+5. ThinkWork creates a connector thread assigned to that Computer.
+
+Use `docs/runbooks/computer-first-linear-connector-checkpoint.md` for deploy verification and duplicate-check expectations.
 
 ## Related pages
 
