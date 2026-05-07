@@ -107,7 +107,7 @@ describe("runConnectorDispatchTick", () => {
     store = new FakeStore();
   });
 
-  it("claims and dispatches a new agent-targeted Linear seed issue", async () => {
+  it("claims, dispatches, and finishes a new agent-targeted Linear seed issue", async () => {
     store.connectors = [
       connector({
         config: {
@@ -142,9 +142,10 @@ describe("runConnectorDispatchTick", () => {
         externalRef: "issue-1",
       },
     ]);
-    expect(store.dispatchingUpdates).toMatchObject([
+    expect(store.terminalUpdates).toMatchObject([
       {
         executionId: "execution-1",
+        now: NOW,
         outcomePayload: {
           threadId: "thread-1",
           messageId: "message-1",
@@ -179,7 +180,7 @@ describe("runConnectorDispatchTick", () => {
       },
     ]);
     expect(store.createdThreads).toEqual([]);
-    expect(store.dispatchingUpdates).toEqual([]);
+    expect(store.terminalUpdates).toEqual([]);
   });
 
   it("claims but does not dispatch routine targets until the chassis exists", async () => {
@@ -385,8 +386,9 @@ class FakeStore implements ConnectorRuntimeStore {
     executionId: string;
     externalRef: string;
   }> = [];
-  dispatchingUpdates: Array<{
+  terminalUpdates: Array<{
     executionId: string;
+    now: Date;
     outcomePayload: Record<string, unknown>;
   }> = [];
   failedUpdates: Array<{
@@ -421,11 +423,12 @@ class FakeStore implements ConnectorRuntimeStore {
     return { threadId: "thread-1", messageId: "message-1" };
   }
 
-  async markExecutionDispatching(
-    args: Parameters<ConnectorRuntimeStore["markExecutionDispatching"]>[0],
+  async markExecutionTerminal(
+    args: Parameters<ConnectorRuntimeStore["markExecutionTerminal"]>[0],
   ) {
-    this.dispatchingUpdates.push({
+    this.terminalUpdates.push({
       executionId: args.executionId,
+      now: args.now,
       outcomePayload: args.outcomePayload,
     });
   }

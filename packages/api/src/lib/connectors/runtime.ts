@@ -129,7 +129,7 @@ export interface ConnectorRuntimeStore {
     execution: ConnectorExecutionRow;
     now: Date;
   }): Promise<{ threadId: string; messageId: string }>;
-  markExecutionDispatching(args: {
+  markExecutionTerminal(args: {
     executionId: string;
     now: Date;
     outcomePayload: Record<string, unknown>;
@@ -491,12 +491,13 @@ export function createDrizzleConnectorRuntimeStore(
       return created;
     },
 
-    async markExecutionDispatching({ executionId, now, outcomePayload }) {
+    async markExecutionTerminal({ executionId, now, outcomePayload }) {
       await db
         .update(connectorExecutions)
         .set({
-          current_state: "dispatching",
+          current_state: "terminal",
           started_at: now,
+          finished_at: now,
           outcome_payload: outcomePayload,
         })
         .where(eq(connectorExecutions.id, executionId));
@@ -586,7 +587,7 @@ async function dispatchCandidate(args: {
       execution,
       now,
     });
-    await store.markExecutionDispatching({
+    await store.markExecutionTerminal({
       executionId: execution.id,
       now,
       outcomePayload: {
