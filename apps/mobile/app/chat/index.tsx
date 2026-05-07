@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
-  useAgents,
   useThreadUpdatedSubscription,
   useUpdateThread,
 } from "@thinkwork/react-native-sdk";
@@ -19,7 +18,7 @@ import { useQuery } from "urql";
 // ThreadsQuery stays local — the chat dashboard accesses richer Thread
 // fields (`description`, labels, metadata, assignee detail) than the
 // chat-oriented SDK Thread type exposes.
-import { ThreadsQuery } from "@/lib/graphql-queries";
+import { MyComputerQuery, ThreadsQuery } from "@/lib/graphql-queries";
 
 // ThreadLifecycleStatus → operator-facing label. Mirrors admin's
 // ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
@@ -45,7 +44,7 @@ function lifecycleColor(status: string | null | undefined, isDark: boolean): str
 }
 
 export default function ChatRoute() {
-  const { agentId: paramAgentId, threadId: paramThreadId, identifier: paramIdentifier } =
+  const { threadId: paramThreadId, identifier: paramIdentifier } =
     useLocalSearchParams<{
       agentId?: string;
       threadId?: string;
@@ -62,43 +61,27 @@ export default function ChatRoute() {
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
 
-  const { agents } = useAgents({ tenantId });
-
-  // Server already scopes agents to the authed user. Just drop local scratch agents.
-  const visibleAgents = useMemo(
-    () => (agents as any[]).filter((a: any) => a.type !== "local"),
-    [agents],
-  );
-
-  const [selectedId, setSelectedId] = useState<string | null>(paramAgentId ?? null);
-
-  const activeAgent = useMemo(() => {
-    if (!visibleAgents?.length) return null;
-    if (selectedId) {
-      const found = visibleAgents.find((a: any) => a.id === selectedId);
-      if (found) return found;
-    }
-    return visibleAgents.find((a: any) => a.role === "team") ?? visibleAgents[0];
-  }, [visibleAgents, selectedId]);
+  const [{ data: myComputerData, fetching: myComputerFetching }] = useQuery({
+    query: MyComputerQuery,
+    pause: !tenantId,
+  });
+  const myComputer = myComputerData?.myComputer;
 
   const caller = useMemo(() => {
     if (!currentUser) return undefined;
-    const isOwner = (activeAgent as any)?.humanPairId
-      ? currentUser.id === (activeAgent as any).humanPairId
-      : true;
     return {
       name: currentUser.name || undefined,
       email: currentUser.email || undefined,
       role: undefined as string | undefined,
-      isOwner,
+      isOwner: true,
     };
-  }, [currentUser, (activeAgent as any)?.humanPairId]);
+  }, [currentUser]);
 
   // Thread tracking
   const [{ data: threadsData }, reexecuteThreads] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
+    variables: { tenantId: tenantId!, computerId: myComputer?.id },
+    pause: !tenantId || myComputerFetching || !myComputer?.id,
   });
   const chatThreads = threadsData?.threads ?? [];
 
@@ -128,10 +111,10 @@ export default function ChatRoute() {
       // Thread not in query yet — use param directly
       return { id: paramThreadId, identifier: paramIdentifier };
     }
-    if (!(chatThreads as any[]).length || !activeAgent?.id) return null;
+    if (!(chatThreads as any[]).length || !myComputer?.id) return null;
     const active = (chatThreads as any[])
       .filter((t: any) =>
-        t.agentId === activeAgent.id
+        t.computerId === myComputer.id
         && t.channel === "CHAT"
         && !t.archivedAt
         && t.lifecycleStatus !== "COMPLETED"
@@ -139,7 +122,7 @@ export default function ChatRoute() {
       )
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return active[0] ?? null;
-  }, [chatThreads, activeAgent?.id, paramThreadId, paramIdentifier]);
+  }, [chatThreads, myComputer?.id, paramThreadId, paramIdentifier]);
 
   const threadIdentifier = activeThread?.identifier || paramIdentifier || "New Thread";
   const lifecycleStatus = activeThread?.lifecycleStatus;
@@ -147,7 +130,7 @@ export default function ChatRoute() {
   const lifecycleDotColor = lifecycleColor(lifecycleStatus, isDark);
 
   const handleNewChat = useCallback(() => {
-    if (!activeAgent?.id) return;
+    if (!myComputer?.id) return;
     if (activeThread?.id) {
       // Archive instead of the retired status=DONE transition (U9): lifecycle
       // is derived server-side; "done" as a user action maps to archiving.
@@ -155,9 +138,9 @@ export default function ChatRoute() {
         .catch((e: any) => console.error("[Chat] Failed to archive thread:", e));
     }
     setChatKey((k) => k + 1);
-  }, [activeAgent?.id, activeThread?.id, updateThread]);
+  }, [myComputer?.id, activeThread?.id, updateThread]);
 
-  if (!activeAgent) {
+  if (!myComputer) {
     return <View className="flex-1 bg-white dark:bg-neutral-950" />;
   }
 
@@ -198,15 +181,13 @@ export default function ChatRoute() {
 
       {/* Chat */}
       <ChatScreen
-        key={`chat-${chatKey}-${activeAgent.id}`}
+        key={`chat-${chatKey}-${myComputer.id}`}
         baseUrl=""
         token="graphql"
-        agentType={activeAgent.type}
-        agentName={activeAgent.name || "Agent"}
-        agents={visibleAgents.map((a: any) => ({ ...a, _id: a.id }))}
-        selectedAgentId={activeAgent.id}
-        onSelectAgent={(a: any) => setSelectedId(a._id ?? a.id)}
-        agentId={activeAgent.id}
+        agentType="computer"
+        agentName={myComputer.name || "Computer"}
+        agents={[]}
+        selectedAgentId=""
         threadId={activeThread?.id}
         tenantId={tenantId}
         caller={caller}

@@ -9,19 +9,20 @@ import { Text, Muted } from "@/components/ui/typography";
 import { MobileRow } from "@/components/ui/mobile-row";
 import { DataTable, Column } from "@/components/ui/data-table";
 import { useIsLargeScreen } from "@/lib/hooks/use-media-query";
-import { Plus, X, ChevronDown } from "lucide-react-native";
+import { Plus, X } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { useQuery } from "urql";
 // TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier`.
 //            Keep local ThreadsQuery until SDK widens.
-import { ThreadsQuery } from "@/lib/graphql-queries";
+import { MyComputerQuery, ThreadsQuery } from "@/lib/graphql-queries";
 
 interface Thread {
   id: string;
   tenantId: string;
   agentId?: string | null;
+  computerId?: string | null;
   number?: number | null;
   title: string;
   status: string;
@@ -65,11 +66,13 @@ function formatRelativeTime(timestamp: number | null | undefined): string {
 function ThreadRowItem({
   thread,
   agents,
+  computerName,
   onPress,
   isLast
 }: {
   thread: Thread;
   agents: { id: string; name: string; status?: string }[] | undefined;
+  computerName?: string | null;
   onPress: () => void;
   isLast?: boolean;
 }) {
@@ -80,7 +83,9 @@ function ThreadRowItem({
     return a.status === "revoked" ? `${a.name} (removed)` : a.name;
   };
 
-  const assignee = getAgentName(thread.agentId) || "Agent";
+  const assignee = thread.computerId
+    ? (computerName || "Computer")
+    : getAgentName(thread.agentId) || "Agent";
 
   return (
     <MobileRow
@@ -113,37 +118,25 @@ function ThreadRowItem({
 function CreateThreadModal({
   visible,
   onClose,
-  agents
+  computer,
 }: {
   visible: boolean;
   onClose: () => void;
-  agents: { id: string; name: string; status?: string }[] | undefined;
+  computer?: { id: string; name?: string | null } | null;
 }) {
   const { user } = useAuth();
   const tenantId = user?.tenantId;
   const createThread = useCreateThread();
   const [title, setTitle] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [creating, setCreating] = useState(false);
-
-  // Show all non-revoked agents
-  const availableAgents = agents?.filter(g =>
-    g.status !== "revoked"
-  ) ?? [];
-
-  // Default to first available agent
-  const defaultAgent = availableAgents[0];
-  const effectiveAgentId = selectedAgentId || defaultAgent?.id;
-  const selectedAgent = availableAgents.find(g => g.id === effectiveAgentId);
 
   const handleCreate = async () => {
     if (!title.trim()) {
       Alert.alert("Error", "Please enter a thread title");
       return;
     }
-    if (!effectiveAgentId) {
-      Alert.alert("Error", "No agent available to assign the thread");
+    if (!computer?.id) {
+      Alert.alert("Error", "No Computer available to handle the thread");
       return;
     }
 
@@ -153,10 +146,9 @@ function CreateThreadModal({
       await createThread({
         tenantId,
         title: title.trim(),
-        agentId: effectiveAgentId,
-      });
+        computerId: computer.id,
+      } as any);
       setTitle("");
-      setSelectedAgentId(null);
       onClose();
     } catch (err) {
       Alert.alert("Error", "Failed to create thread");
@@ -167,8 +159,6 @@ function CreateThreadModal({
 
   const handleClose = () => {
     setTitle("");
-    setSelectedAgentId(null);
-    setShowAgentPicker(false);
     onClose();
   };
 
@@ -209,56 +199,22 @@ function CreateThreadModal({
             />
           </View>
 
-          {/* Agent Selector */}
+          {/* Computer target */}
           <View className="mb-6">
             <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-              Assign to Agent
+              Computer
             </Text>
-            <Pressable
-              onPress={() => setShowAgentPicker(!showAgentPicker)}
-              className="h-12 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 bg-white dark:bg-neutral-900 flex-row items-center justify-between"
-            >
+            <View className="h-12 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 bg-white dark:bg-neutral-900 flex-row items-center">
               <Text className="text-neutral-900 dark:text-neutral-100">
-                {selectedAgent?.name || "Select agent..."}
+                {computer?.name || "No Computer available"}
               </Text>
-              <ChevronDown size={20} color="#737373" />
-            </Pressable>
-
-            {showAgentPicker && (
-              <View className="mt-2 border border-neutral-300 dark:border-neutral-700 rounded-lg overflow-hidden">
-                {availableAgents.map((ag) => (
-                  <Pressable
-                    key={ag.id}
-                    onPress={() => {
-                      setSelectedAgentId(ag.id);
-                      setShowAgentPicker(false);
-                    }}
-                    className={`px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 ${
-                      effectiveAgentId === ag.id ? "bg-sky-50 dark:bg-sky-900/20" : "bg-white dark:bg-neutral-900"
-                    }`}
-                  >
-                    <Text className={`${
-                      effectiveAgentId === ag.id
-                        ? "text-sky-600 dark:text-sky-400 font-medium"
-                        : "text-neutral-900 dark:text-neutral-100"
-                    }`}>
-                      {ag.name}
-                    </Text>
-                  </Pressable>
-                ))}
-                {availableAgents.length === 0 && (
-                  <View className="px-4 py-3">
-                    <Muted>No agents available</Muted>
-                  </View>
-                )}
-              </View>
-            )}
+            </View>
           </View>
         </ScrollView>
 
         {/* Footer */}
         <View className="px-4 py-4 border-t border-neutral-200 dark:border-neutral-800">
-          <Button onPress={handleCreate} loading={creating} disabled={!title.trim()}>
+          <Button onPress={handleCreate} loading={creating} disabled={!title.trim() || !computer?.id}>
             Create Thread
           </Button>
         </View>
@@ -281,10 +237,16 @@ export default function ThreadsScreen() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  const [{ data: myComputerData, fetching: computerFetching }] = useQuery({
+    query: MyComputerQuery,
+    pause: !tenantId,
+  });
+  const myComputer = myComputerData?.myComputer;
+
   const [{ data: threadsData, fetching: threadsFetching }] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
+    variables: { tenantId: tenantId!, computerId: myComputer?.id },
+    pause: !tenantId || computerFetching || !myComputer?.id,
   });
   const { agents: sdkAgents, loading: agentsFetching } = useAgents({
     tenantId: mounted ? tenantId : undefined,
@@ -315,12 +277,14 @@ export default function ThreadsScreen() {
     router.push(`/threads/${thread.id}`);
   }, [router]);
 
-  const getAgentName = useCallback((agentId?: any) => {
+  const getAssigneeName = useCallback((thread: Thread) => {
+    if (thread.computerId) return myComputer?.name || "Computer";
+    const agentId = thread.agentId;
     if (!agentId) return "\u2014";
     const a = agents?.find((a: any) => a.id === agentId);
     if (!a) return "Unknown";
     return a.status === "revoked" ? `${a.name} (removed)` : a.name;
-  }, [agents]);
+  }, [agents, myComputer?.name]);
 
   // Table columns for wide screens
   const columns: Column<Thread>[] = useMemo(() => [
@@ -342,7 +306,7 @@ export default function ThreadsScreen() {
       minWidth: 120,
       render: (item) => (
         <Muted className="text-sm">
-          {getAgentName(item.agentId) || "Agent"}
+          {getAssigneeName(item)}
         </Muted>
       ),
     },
@@ -367,7 +331,7 @@ export default function ThreadsScreen() {
         <Muted className="text-sm">{formatRelativeTime(new Date(item.updatedAt).getTime())}</Muted>
       ),
     },
-  ], [getAgentName]);
+  ], [getAssigneeName]);
 
   // Sort logic (newest first)
   const filteredThreads = useMemo(() => {
@@ -376,12 +340,13 @@ export default function ThreadsScreen() {
     );
   }, [threads]);
 
-  const isLoading = threadsFetching || agentsFetching;
+  const isLoading = threadsFetching || agentsFetching || computerFetching;
 
   const renderMobileItem = ({ item, index }: { item: Thread; index: number }) => (
     <ThreadRowItem
       thread={item}
       agents={agents}
+      computerName={myComputer?.name}
       onPress={() => handleRowPress(item)}
       isLast={index === filteredThreads.length - 1}
     />
@@ -431,7 +396,7 @@ export default function ThreadsScreen() {
           <CreateThreadModal
             visible={showCreateModal}
             onClose={() => setShowCreateModal(false)}
-            agents={agents}
+            computer={myComputer}
           />
         </>
       )}
