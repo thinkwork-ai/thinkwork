@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { ArrowLeft, Monitor, User } from "lucide-react";
@@ -21,6 +22,7 @@ import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
 import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
+import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
 import {
   AGENT_WORKSPACE_DEFAULT_FILES,
   WorkspaceEditor,
@@ -33,6 +35,7 @@ export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
 function ComputerDetailPage() {
   const { computerId } = Route.useParams();
   const navigate = useNavigate();
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
   const [result, reexecute] = useQuery({
     query: ComputerDetailQuery,
     variables: { id: computerId },
@@ -104,6 +107,10 @@ function ComputerDetailPage() {
   }
 
   const ownerLabel = computer.owner?.name ?? computer.owner?.email ?? "—";
+  const refreshActivity = () => {
+    reexecute({ requestPolicy: "network-only" });
+    setActivityRefreshKey((key) => key + 1);
+  };
 
   return (
     <PageLayout
@@ -111,7 +118,7 @@ function ComputerDetailPage() {
       header={
         <PageHeader
           title={computer.name}
-          description="Durable workplace, runtime state, and migration provenance."
+          description="Live workspace, runtime actions, and operational history."
           actions={
             <Button
               variant="outline"
@@ -149,7 +156,11 @@ function ComputerDetailPage() {
           />
           <ComputerLiveTasksPanel
             computer={computer}
-            onChanged={() => reexecute({ requestPolicy: "network-only" })}
+            onChanged={refreshActivity}
+          />
+          <ComputerEventsPanel
+            computer={computer}
+            refreshKey={activityRefreshKey}
           />
           <ComputerRuntimePanel computer={computer} />
           <ComputerMigrationPanel computer={computer} />

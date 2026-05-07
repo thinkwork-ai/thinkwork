@@ -12,6 +12,9 @@ describe("Computers admin routes", () => {
   );
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$computerId.tsx");
+  const liveTasksPanelSource = readSource(
+    "./-components/ComputerLiveTasksPanel.tsx",
+  );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
   it("exposes Computers as a primary admin surface", () => {
@@ -33,15 +36,29 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
     expect(detailRouteSource).toContain("ComputerStatusPanel");
     expect(detailRouteSource).toContain("ComputerLiveTasksPanel");
+    expect(detailRouteSource).toContain("ComputerEventsPanel");
+    expect(detailRouteSource).toContain("activityRefreshKey");
     expect(detailRouteSource).toContain("ComputerRuntimePanel");
     expect(detailRouteSource).toContain("ComputerMigrationPanel");
     expect(detailRouteSource).toContain("Identity");
   });
 
+  it("offers browser-triggered runtime actions", () => {
+    expect(liveTasksPanelSource).toContain("ComputerTaskType.HealthCheck");
+    expect(liveTasksPanelSource).toContain(
+      "ComputerTaskType.WorkspaceFileWrite",
+    );
+    expect(liveTasksPanelSource).toContain("ComputerTaskType.GoogleCliSmoke");
+    expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
+    expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");
+  });
+
   it("defines typed GraphQL documents for Computer reads and updates", () => {
     expect(queriesSource).toContain("query ComputersList");
     expect(queriesSource).toContain("query ComputerDetail");
+    expect(queriesSource).toContain("sourceAgent");
     expect(queriesSource).toContain("query MyComputer");
+    expect(queriesSource).toContain("query ComputerEvents");
     expect(queriesSource).toContain("mutation UpdateComputer");
   });
 });

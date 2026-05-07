@@ -730,6 +730,25 @@ export enum ComputerDesiredRuntimeStatus {
   Stopped = 'STOPPED'
 }
 
+export type ComputerEvent = {
+  __typename?: 'ComputerEvent';
+  computerId: Scalars['ID']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  level: ComputerEventLevel;
+  payload?: Maybe<Scalars['AWSJSON']['output']>;
+  taskId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export enum ComputerEventLevel {
+  Debug = 'DEBUG',
+  Error = 'ERROR',
+  Info = 'INFO',
+  Warn = 'WARN'
+}
+
 export enum ComputerRuntimeStatus {
   Failed = 'FAILED',
   Pending = 'PENDING',
@@ -2933,6 +2952,7 @@ export type Query = {
   budgetStatus: Array<BudgetStatus>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   computer?: Maybe<Computer>;
+  computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
@@ -3238,6 +3258,12 @@ export type QueryCompositionFeedbackSummaryArgs = {
 
 export type QueryComputerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryComputerEventsArgs = {
+  computerId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
