@@ -37,6 +37,10 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "connections.id",
     tenant_id: "connections.tenant_id",
   },
+  computers: {
+    id: "computers.id",
+    tenant_id: "computers.tenant_id",
+  },
   connectors: {
     id: "connectors.id",
     tenant_id: "connectors.tenant_id",
@@ -154,6 +158,57 @@ describe("connector mutations", () => {
     });
   });
 
+  it("creates a connector with a same-tenant Computer dispatch target", async () => {
+    mockRows.mockReturnValueOnce([{ id: "computer-1" }]).mockReturnValueOnce([
+      {
+        id: "connector-1",
+        tenant_id: "tenant-a",
+        type: "linear_tracker",
+        name: "Linear",
+        status: "active",
+        enabled: true,
+        config: { label: "symphony" },
+        dispatch_target_type: "computer",
+        dispatch_target_id: "computer-1",
+      },
+    ]);
+
+    const result = await resolvers.createConnector(
+      null,
+      {
+        input: {
+          tenantId: "tenant-a",
+          type: "linear_tracker",
+          name: "Linear",
+          config: '{"label":"symphony"}',
+          dispatchTargetType: "computer",
+          dispatchTargetId: "computer-1",
+        },
+      },
+      { auth: { principalId: "user-1", email: "a@example.com" } } as any,
+    );
+
+    expect(mockWhere).toHaveBeenCalledWith({
+      and: [
+        { eq: ["computers.id", "computer-1"] },
+        { eq: ["computers.tenant_id", "tenant-a"] },
+      ],
+    });
+    expect(mockValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "tenant-a",
+        dispatch_target_type: "computer",
+        dispatch_target_id: "computer-1",
+      }),
+    );
+    expect(result).toMatchObject({
+      id: "connector-1",
+      tenantId: "tenant-a",
+      dispatchTargetType: "computer",
+      dispatchTargetId: "computer-1",
+    });
+  });
+
   it("updates a connector using row-derived tenant authorization", async () => {
     mockRows
       .mockReturnValueOnce([
@@ -203,6 +258,58 @@ describe("connector mutations", () => {
         name: "Linear updated",
         dispatch_target_type: "routine",
         dispatch_target_id: "routine-1",
+        updated_at: expect.any(Date),
+      }),
+    );
+  });
+
+  it("updates a connector from Agent to Computer after validating the same-tenant Computer", async () => {
+    mockRows
+      .mockReturnValueOnce([
+        {
+          id: "connector-1",
+          tenant_id: "tenant-a",
+          dispatch_target_type: "agent",
+          dispatch_target_id: "agent-1",
+        },
+      ])
+      .mockReturnValueOnce([{ id: "computer-1" }])
+      .mockReturnValueOnce([
+        {
+          id: "connector-1",
+          tenant_id: "tenant-a",
+          name: "Linear updated",
+          dispatch_target_type: "computer",
+          dispatch_target_id: "computer-1",
+        },
+      ]);
+
+    await resolvers.updateConnector(
+      null,
+      {
+        id: "connector-1",
+        input: {
+          dispatchTargetType: "computer",
+          dispatchTargetId: "computer-1",
+        },
+      },
+      { auth: { principalId: "user-1" } } as any,
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-a",
+    );
+    expect(mockWhere).toHaveBeenNthCalledWith(2, {
+      and: [
+        { eq: ["computers.id", "computer-1"] },
+        { eq: ["computers.tenant_id", "tenant-a"] },
+      ],
+    });
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatch_target_type: "computer",
+        dispatch_target_id: "computer-1",
         updated_at: expect.any(Date),
       }),
     );
@@ -320,6 +427,35 @@ describe("connector mutations", () => {
       ),
     ).rejects.toMatchObject({
       extensions: { code: "BAD_USER_INPUT" },
+    });
+    expect(mockValues).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-tenant Computer dispatch targets before inserting", async () => {
+    mockRows.mockReturnValueOnce([]);
+
+    await expect(
+      resolvers.createConnector(
+        null,
+        {
+          input: {
+            tenantId: "tenant-a",
+            type: "linear_tracker",
+            name: "Linear",
+            dispatchTargetType: "computer",
+            dispatchTargetId: "computer-b",
+          },
+        },
+        { auth: { principalId: "user-1" } } as any,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+    expect(mockWhere).toHaveBeenCalledWith({
+      and: [
+        { eq: ["computers.id", "computer-b"] },
+        { eq: ["computers.tenant_id", "tenant-a"] },
+      ],
     });
     expect(mockValues).not.toHaveBeenCalled();
   });
