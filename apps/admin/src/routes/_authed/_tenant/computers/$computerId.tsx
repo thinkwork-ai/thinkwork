@@ -20,6 +20,7 @@ import { formatDateTime } from "@/lib/utils";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
+import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
 import {
   AGENT_WORKSPACE_DEFAULT_FILES,
   WorkspaceEditor,
@@ -145,6 +146,10 @@ function ComputerDetailPage() {
           <ComputerStatusPanel
             computer={computer}
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}
+          />
+          <ComputerLiveTasksPanel
+            computer={computer}
+            onChanged={() => reexecute({ requestPolicy: "network-only" })}
           />
           <ComputerRuntimePanel computer={computer} />
           <ComputerMigrationPanel computer={computer} />
