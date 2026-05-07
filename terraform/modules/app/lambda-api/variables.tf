@@ -466,6 +466,12 @@ variable "compliance_anchor_lambda_role_arn" {
   default     = ""
 }
 
+variable "compliance_anchor_lambda_role_name" {
+  description = "Name of the IAM role the anchor Lambda assumes (extracted from the role resource for inline-policy attachments like the U8a DLQ SendMessage grant)."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Phase 3 U8a — compliance anchor Lambda runtime config
 # ---------------------------------------------------------------------------

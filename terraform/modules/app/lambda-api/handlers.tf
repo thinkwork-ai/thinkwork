@@ -411,7 +411,10 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "connector-poller" ? 120 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "compliance-anchor-watchdog" ? 30 : 30
+  # The trailing default (30s) covers compliance-anchor-watchdog without
+  # a redundant explicit branch; watchdog memory_size still gets a
+  # specific 512 MB override below.
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "connector-poller" ? 120 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "compliance-anchor-watchdog" ? 512 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
@@ -1184,9 +1187,11 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
       # Includes every for_each handler PLUS the standalone Phase 3 U8a
       # anchor Lambda (which is intentionally outside the for_each set
       # because it uses the U7 IAM role, not the shared aws_iam_role.lambda).
+      # Splat (`[*]`) expansion handles count=0 cleanly when local.use_local_zips
+      # is false; an indexed reference (`[0].arn`) would throw on graph eval.
       Resource = local.use_local_zips ? concat(
         [for k, v in aws_lambda_function.handler : v.arn],
-        [aws_lambda_function.compliance_anchor[0].arn],
+        aws_lambda_function.compliance_anchor[*].arn,
       ) : []
     }]
   })
@@ -1281,11 +1286,40 @@ resource "aws_lambda_function" "compliance_anchor" {
   }
 }
 
+resource "aws_sqs_queue" "compliance_anchor_dlq" {
+  count                     = local.use_local_zips ? 1 : 0
+  name                      = "thinkwork-${var.stage}-compliance-anchor-dlq"
+  message_retention_seconds = 1209600 # 14 days, matches the drainer DLQ
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_iam_role_policy" "compliance_anchor_dlq_send" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "compliance-anchor-dlq-send"
+  # Attached to the U7 anchor role (which the standalone anchor Lambda assumes).
+  role = var.compliance_anchor_lambda_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.compliance_anchor_dlq[0].arn
+    }]
+  })
+}
+
 resource "aws_lambda_function_event_invoke_config" "compliance_anchor" {
   count                        = local.use_local_zips ? 1 : 0
   function_name                = aws_lambda_function.compliance_anchor[0].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.compliance_anchor_dlq[0].arn
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------

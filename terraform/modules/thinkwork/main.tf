@@ -234,9 +234,10 @@ module "api" {
 
   # Phase 3 U7 — anchor bucket + IAM role wiring. U8a now uses these to
   # provision the standalone anchor Lambda function + watchdog + schedules.
-  compliance_anchor_bucket_arn      = module.compliance_anchors.bucket_arn
-  compliance_anchor_bucket_name     = module.compliance_anchors.bucket_name
-  compliance_anchor_lambda_role_arn = module.compliance_anchors.lambda_role_arn
+  compliance_anchor_bucket_arn       = module.compliance_anchors.bucket_arn
+  compliance_anchor_bucket_name      = module.compliance_anchors.bucket_name
+  compliance_anchor_lambda_role_arn  = module.compliance_anchors.lambda_role_arn
+  compliance_anchor_lambda_role_name = module.compliance_anchors.lambda_role_name
 
   # Phase 3 U8a — anchor Lambda runtime config. compliance_reader for
   # least-privilege SELECT on audit_events; retention_days forwarded as

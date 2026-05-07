@@ -279,7 +279,7 @@ export const exportJobs = compliance.table(
  * In U8a the anchor Lambda calls _anchor_fn_inert (no S3 writes) but
  * still advances last_anchored_seq so the inert path is observable.
  *
- * Role grants (drizzle/0071_compliance_tenant_anchor_state.sql):
+ * Role grants (drizzle/0073_compliance_tenant_anchor_state.sql):
  *   - compliance_drainer: SELECT, INSERT, UPDATE (no DELETE — append-or-update)
  *   - compliance_reader: SELECT (for U10 admin Compliance UI showing anchor lag)
  */

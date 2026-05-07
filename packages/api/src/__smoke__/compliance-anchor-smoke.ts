@@ -31,19 +31,32 @@ import {
 	type InvokeCommandOutput,
 } from "@aws-sdk/client-lambda";
 
+// Inline the response-shape types — packages/api's tsconfig rootDir is
+// scoped to packages/api/src, so importing TS types directly from
+// packages/lambda crosses rootDir and fails compile. The
+// `@thinkwork/lambda` package only exports ./github-workspace today.
+// **Source of truth:**
+//   - AnchorResult: packages/lambda/compliance-anchor.ts
+//   - WatchdogMode + WatchdogResult: packages/lambda/compliance-anchor-watchdog.ts
+// When U8b changes `mode: "inert"` → `mode: "live"`, update the
+// WatchdogMode union here and the runtime assertions below in lockstep.
+// Casing typos still get caught by the literal-type union (`"inert" | "live"`).
+
+type WatchdogMode = "inert" | "live";
+
 interface AnchorResponseShape {
-	dispatched: boolean;
-	anchored: boolean;
-	merkle_root: string;
-	tenant_count: number;
-	anchored_event_count: number;
-	cadence_id: string;
+	dispatched?: boolean;
+	anchored?: boolean;
+	merkle_root?: string;
+	tenant_count?: number;
+	anchored_event_count?: number;
+	cadence_id?: string;
 }
 
 interface WatchdogResponseShape {
-	mode: "inert" | "live";
-	checked_at: string;
-	oldest_unanchored_age_ms: number | null;
+	mode?: WatchdogMode;
+	checked_at?: string;
+	oldest_unanchored_age_ms?: number | null;
 }
 
 const STAGE = process.env.STAGE || "dev";

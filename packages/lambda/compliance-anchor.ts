@@ -44,10 +44,10 @@ import {
 	tenantAnchorState,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
-import {
-	CloudWatchClient,
-	type CloudWatchClientConfig,
-} from "@aws-sdk/client-cloudwatch";
+// Note: @aws-sdk/client-cloudwatch is intentionally NOT imported here.
+// In U8a the anchor Lambda emits no metrics (only the watchdog does,
+// from its own dedicated client). U8b will re-import if/when the live
+// anchor emits its own metrics around the S3 PutObject path.
 
 // ---------------------------------------------------------------------------
 // Domain-separation prefix bytes — RFC 6962 §2.1.
@@ -231,7 +231,6 @@ const ENV: AnchorEnv = getAnchorEnv();
 
 let _readerDb: Database | undefined;
 let _drainerDb: Database | undefined;
-let _cw: CloudWatchClient | undefined;
 
 async function resolveDatabaseUrl(secretArn: string): Promise<string> {
 	if (!secretArn) {
@@ -289,16 +288,6 @@ async function getDrainerDb(): Promise<Database> {
 		_drainerDb = undefined;
 	});
 	return _drainerDb;
-}
-
-function getCloudWatchClient(): CloudWatchClient {
-	if (_cw) return _cw;
-	const config: CloudWatchClientConfig = {
-		region: ENV.region,
-		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
-	};
-	_cw = new CloudWatchClient(config);
-	return _cw;
 }
 
 // ---------------------------------------------------------------------------
@@ -392,9 +381,12 @@ export async function countUnanchoredEvents(readerDb: Database): Promise<number>
 export interface AnchorPassDeps {
 	readerDb: Database;
 	drainerDb: Database;
-	cw?: CloudWatchClient;
 	anchorFn?: AnchorFn;
 	cadenceId?: string;
+	// `cw` was dropped in U8a — the inert anchor doesn't emit metrics
+	// (only the watchdog does, via its own client). U8b will re-thread a
+	// CloudWatchClient if/when the live anchor emits its own metrics; for
+	// now the unused parameter was dead code that confused reviewers.
 }
 
 export async function runAnchorPass(
@@ -483,11 +475,10 @@ export async function runAnchorPass(
 export async function handler(): Promise<AnchorResult> {
 	const readerDb = await getReaderDb();
 	const drainerDb = await getDrainerDb();
-	const cw = getCloudWatchClient();
 
 	let result: AnchorResult;
 	try {
-		result = await runAnchorPass({ readerDb, drainerDb, cw });
+		result = await runAnchorPass({ readerDb, drainerDb });
 	} catch (err) {
 		// On any error, log structured + rethrow. Scheduler retry-policy=0
 		// ensures no replay; the next 15-min cadence picks up the same

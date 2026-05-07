@@ -10,7 +10,7 @@ origin: docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md
 
 ## Summary
 
-Ship the inert phase of the compliance anchor pipeline. New TypeScript Lambda `compliance-anchor` runs every 15 minutes via AWS Scheduler, reads un-anchored events from `compliance.audit_events` (per-tenant chain heads), computes a global Merkle root, and calls `_anchor_fn_inert(merkleRoot, tenantSlices) → {dispatched: true, anchored: false, ...}` instead of writing to S3. New TypeScript Lambda `compliance-anchor-watchdog` runs every 5 minutes and short-circuits with `{mode: "inert"}` (U8b will switch it to S3 HeadObject). New CloudWatch alarm `ComplianceAnchorGap` is wired with `treat_missing_data = "notBreaching"` so it stays quiet during the inert soak window. New migration `0071_compliance_tenant_anchor_state.sql` adds the per-tenant high-water-mark table with INSERT/UPDATE granted to the existing `compliance_drainer` role. U7's anchor IAM role gets three additions: Secrets Manager read for the compliance_reader secret, CloudWatch PutMetricData scoped to the `Thinkwork/Compliance` namespace, and the deferred `aws:SourceArn` trust-policy pin. **No S3 PutObject in this PR** — that's U8b. The seam contract `_anchor_fn_inert/_live` is the body-swap point; U8b is the first PR allowed to call S3 from the anchor Lambda.
+Ship the inert phase of the compliance anchor pipeline. New TypeScript Lambda `compliance-anchor` runs every 15 minutes via AWS Scheduler, reads un-anchored events from `compliance.audit_events` (per-tenant chain heads), computes a global Merkle root, and calls `_anchor_fn_inert(merkleRoot, tenantSlices) → {dispatched: true, anchored: false, ...}` instead of writing to S3. New TypeScript Lambda `compliance-anchor-watchdog` runs every 5 minutes and short-circuits with `{mode: "inert"}` (U8b will switch it to S3 HeadObject). New CloudWatch alarm `ComplianceAnchorGap` is wired with `treat_missing_data = "notBreaching"` so it stays quiet during the inert soak window. New migration `0073_compliance_tenant_anchor_state.sql` adds the per-tenant high-water-mark table with INSERT/UPDATE granted to the existing `compliance_drainer` role. U7's anchor IAM role gets three additions: Secrets Manager read for the compliance_reader secret, CloudWatch PutMetricData scoped to the `Thinkwork/Compliance` namespace, and the deferred `aws:SourceArn` trust-policy pin. **No S3 PutObject in this PR** — that's U8b. The seam contract `_anchor_fn_inert/_live` is the body-swap point; U8b is the first PR allowed to call S3 from the anchor Lambda.
 
 ---
 
@@ -25,7 +25,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 - R1. New Lambda `compliance-anchor` (TypeScript, nodejs22.x) runs on AWS Scheduler `rate(15 minutes)` with `reserved_concurrent_executions = 1`, returns `{dispatched: true, anchored: false, merkle_root, tenant_count, anchored_event_count, cadence_id}` on every invocation. (Master plan U8a)
 - R2. New Lambda `compliance-anchor-watchdog` runs on AWS Scheduler `rate(5 minutes)`, returns `{mode: "inert", checked_at, oldest_unanchored_age_ms?}`. **No S3 HeadObject in U8a; no metric emit.** (Master plan U8a)
 - R3. CloudWatch alarm `thinkwork-${stage}-compliance-anchor-gap` on metric `ComplianceAnchorGap` (namespace `Thinkwork/Compliance`), `threshold = 1`, `period = 300`, `evaluation_periods = 2`, `treat_missing_data = "notBreaching"`, `alarm_actions = []`. **The alarm sits in INSUFFICIENT_DATA / OK during U8a — by design.** (Master plan Decision #9 + AWS-best-practice for inert metrics)
-- R4. Migration `packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql` (hand-rolled per the existing 0069/0070 pattern) creates `compliance.tenant_anchor_state(tenant_id uuid PK, last_anchored_seq bigint NOT NULL DEFAULT 0, last_anchored_at timestamptz, last_cadence_id uuid, updated_at timestamptz DEFAULT now())` with INSERT/UPDATE/SELECT granted to `compliance_drainer`. **Drizzle TS schema export added to `packages/database-pg/src/schema/compliance.ts`.**
+- R4. Migration `packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql` (hand-rolled per the existing 0069/0070 pattern) creates `compliance.tenant_anchor_state(tenant_id uuid PK, last_anchored_seq bigint NOT NULL DEFAULT 0, last_anchored_at timestamptz, last_cadence_id uuid, updated_at timestamptz DEFAULT now())` with INSERT/UPDATE/SELECT granted to `compliance_drainer`. **Drizzle TS schema export added to `packages/database-pg/src/schema/compliance.ts`.**
 - R5. Anchor Lambda reads from Aurora **directly** (not RDS Proxy — the repo has no Proxy today; master-plan reference was aspirational, see Decision #4 below) using the existing `compliance_reader` Aurora role + Secrets Manager secret (provisioned in master-plan-U2 / PR #887, exposed at `module.database.compliance_reader_secret_arn`). Connection follows the U4 drainer pattern: lazy-built `_db` cached at module scope, error-handler invalidates on connection drop, no `vpc_config`.
 - R6. Anchor Lambda **updates `compliance.tenant_anchor_state`** after each cadence using the `compliance_drainer` role (which is the writer for `compliance.audit_events` outbox-drain operations from U4 + which we're extending with INSERT/UPDATE on `tenant_anchor_state`). Two PG connections per Lambda invocation: one as `compliance_reader` for the SELECT, one as `compliance_drainer` for the UPDATE. Both via Secrets Manager.
 - R7. U7's existing IAM role `thinkwork-${stage}-compliance-anchor-lambda-role` (defined in `terraform/modules/data/compliance-audit-bucket/main.tf`) is extended with three new inline policies: `anchor_secrets` (GetSecretValue on the two compliance secrets), `anchor_cloudwatch_metrics` (PutMetricData scoped to namespace `Thinkwork/Compliance`), and the trust-policy `aws:SourceArn` condition pinned to `arn:aws:lambda:${region}:${account_id}:function:thinkwork-${stage}-api-compliance-anchor`. **The existing S3 + KMS allow + explicit-deny statements stay untouched** — U8b will exercise them.
@@ -147,7 +147,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 
 - Exact UUIDv7 helper location — reuse existing if `packages/lambda/uuid7.ts` exists, otherwise inline a 20-line implementation. Implementer chooses at coding time.
 - Whether the Merkle proof path uses `0`/`1` bits or `"left"`/`"right"` strings in the JSON — readability vs payload size. Implementer chooses at coding time; U9 verifier CLI must match.
-- Final SQL of the `0071_compliance_tenant_anchor_state.sql` migration (column types, default expressions, exact index names) — implementer iterates against `to_regclass` checks during dev apply.
+- Final SQL of the `0073_compliance_tenant_anchor_state.sql` migration (column types, default expressions, exact index names) — implementer iterates against `to_regclass` checks during dev apply.
 - Whether to ship a `pnpm db:migrate-manual` validation step in CI for U8a's migration — out of scope for U8a (drift gate is disabled at repo level per #905); operator-discipline is the v1 control.
 
 ---
@@ -213,7 +213,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 **Dependencies:** None
 
 **Files:**
-- Create: `packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql`
+- Create: `packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql`
 - Modify: `packages/database-pg/src/schema/compliance.ts` (add `tenantAnchorState` Drizzle export mirroring the `auditEvents` shape)
 
 **Approach:**
@@ -223,7 +223,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 - GRANTs: `USAGE` on schema (already granted to compliance_drainer in 0070, so this is a no-op restatement for clarity), `SELECT, INSERT, UPDATE` on `compliance.tenant_anchor_state` to `compliance_drainer`. **No DELETE grant** — this table is append-or-update-only.
 - Markers: `-- creates: compliance.tenant_anchor_state`, `-- creates: compliance.idx_tenant_anchor_state_updated_at`.
 - Drizzle TS export: `tenantAnchorState = pgTable("tenant_anchor_state", {...}, (t) => ({...}))` inside the existing `compliance` `pgSchema()` block.
-- **Operator step**: apply to dev with `psql -f packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql` before merging the PR. The drift gate is currently disabled (`#905`), so missing apply is silent.
+- **Operator step**: apply to dev with `psql -f packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql` before merging the PR. The drift gate is currently disabled (`#905`), so missing apply is silent.
 
 **Patterns to follow:**
 - `packages/database-pg/drizzle/0069_compliance_schema.sql` (prologue, marker grammar)
@@ -237,7 +237,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 - *Integration:* the Drizzle TS export compiles + a `db.select().from(tenantAnchorState).limit(1)` query parses and runs against dev.
 
 **Verification:**
-- `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql` succeeds in dev.
+- `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql` succeeds in dev.
 - `\d compliance.tenant_anchor_state` shows expected columns + PK + index.
 - `\dp compliance.tenant_anchor_state` shows correct GRANTs.
 - Drizzle TS export exposes `tenantAnchorState` symbol at `@thinkwork/database-pg`.
@@ -520,7 +520,7 @@ Master-plan-U2 ships per-tenant audit hash chains (`compliance.audit_events.even
 
 ## Documentation / Operational Notes
 
-- **Manual operator step**: apply `0071_compliance_tenant_anchor_state.sql` to dev with `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql` before merging the PR. Drift gate disabled per `#905` so missing apply is silent.
+- **Manual operator step**: apply `0073_compliance_tenant_anchor_state.sql` to dev with `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql` before merging the PR. Drift gate disabled per `#905` so missing apply is silent.
 - **PR description must include**: "U8a is the first true function-body seam-swap instance in compliance work. U7 used Terraform-variable-shape-reservation; U8a uses the inert-function-body pattern from `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`. Reviewers should check (a) does the seam contract payload shape match what U8b will swap into, (b) the body-swap safety test is correctly scoped to U8b, (c) the inert response is observably correct in dev via the smoke gate."
 - **PR description must call out**: "CloudWatch alarm `thinkwork-${stage}-compliance-anchor-gap` will sit in OK / INSUFFICIENT_DATA state during the U8a soak window. This is intentional. Don't page on the absence of data points."
 - **Soak window**: Per master plan U8 execution note, U8a soaks for at least one full deploy cycle (24h) before U8b ships. CloudWatch logs of the anchor Lambda should show ~96 invocations in the first 24h (4 per hour × 24); watchdog should show ~288 (12 per hour × 24). Operator-discovery of healthy operation is via CloudWatch console.

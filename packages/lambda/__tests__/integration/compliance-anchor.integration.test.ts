@@ -65,10 +65,13 @@ const ANCHOR_TEST_TENANT_B = "88888888-7888-7888-8888-bbbbbbbbbbbb";
 const UUIDV7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
+// Generates UUIDv7-shape strings unique across the test run. Must produce
+// distinct values for distinct `seq` inputs to satisfy the audit_events
+// PRIMARY KEY constraint when seedAuditEvents inserts multiple rows.
 function uuidLikeV7(seq: number): string {
 	const ts = Date.now().toString(16).padStart(12, "0");
-	const seqHex = seq.toString(16).padStart(4, "0");
-	return `${ts.slice(0, 8)}-${ts.slice(8, 12)}-7${seqHex.slice(0, 3)}-8${seqHex.slice(0, 3)}-${"0".repeat(12)}`;
+	const seqHex = seq.toString(16).padStart(8, "0");
+	return `${ts.slice(0, 8)}-${ts.slice(8, 12)}-7${seqHex.slice(0, 3)}-8${seqHex.slice(3, 6)}-${seqHex.slice(0, 8)}${"0".repeat(4)}`;
 }
 
 function fakeEventHash(seed: string): string {
@@ -175,20 +178,15 @@ describe("compliance-anchor: Merkle math (RFC 6962 domain separation)", () => {
 		// 64-char hex digest — exact value must be stable across all
 		// future runs and across cross-implementation verifiers.
 		expect(leaf).toMatch(SHA256_HEX_RE);
-		// Compute the same leaf via independent path to detect encoding
-		// drift. If a future refactor changes the byte order or prefix,
-		// this assertion fires.
-		const independent = createHash("sha256")
-			.update(Buffer.from([0x00]))
-			.update(
-				Buffer.from(
-					"11111111111171118111111111111111",
-					"hex",
-				),
-			)
-			.update(Buffer.from("aa".repeat(32), "hex"))
-			.digest("hex");
-		expect(leaf).toBe(independent);
+		// Hardcoded canonical leaf hex — the byte-encoding contract for
+		// U9's verifier CLI. Any third-party reimplementation (Java
+		// auditor tool, Python verifier, etc.) MUST produce this exact
+		// value when fed the same tenant_id + event_hash inputs. If this
+		// assertion drifts, U9's verifier CLI must be updated in lockstep
+		// — the spec is here, not in code generation.
+		expect(leaf).toBe(
+			"701e2479c1ad3506b53c1355562082b44dd68112b018e73e4c39a869e680bcb3",
+		);
 	});
 
 	it("empty tree returns sentinel root sha256(0x00)", () => {

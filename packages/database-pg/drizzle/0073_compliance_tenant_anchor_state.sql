@@ -1,6 +1,9 @@
--- 0071_compliance_tenant_anchor_state.sql
+-- 0073_compliance_tenant_anchor_state.sql
 --
 -- Phase 3 U8a of the System Workflows revert + Compliance reframe.
+-- (Originally drafted as 0071 but renumbered to 0073 to avoid collision
+-- with the unrelated 0071_connector_computer_dispatch_target.sql that
+-- shipped on origin/main concurrently with this work.)
 -- Adds the per-tenant high-water-mark table the anchor Lambda uses to
 -- track which audit_events have been included in a Merkle anchor.
 --
@@ -34,7 +37,7 @@
 --
 -- Apply manually (operator step before merging — drift gate currently
 -- disabled per #905):
---   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0071_compliance_tenant_anchor_state.sql
+--   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0073_compliance_tenant_anchor_state.sql
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh as the post-deploy drift gate):
 --
@@ -60,10 +63,13 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- compliance.tenant_anchor_state
 --
--- One row per tenant. The anchor Lambda updates last_anchored_seq with
--- the maximum seq it included in the latest Merkle cadence's tenant
--- slice. Seeded lazily on first anchor (0 default catches "never
--- anchored" tenants without an explicit INSERT step).
+-- One row per tenant. The anchor Lambda updates last_anchored_recorded_at
+-- with the maximum recorded_at across the events included in the latest
+-- Merkle cadence's tenant slice (tie-broken by event_id for equal
+-- timestamps). Seeded lazily on first anchor — never-anchored tenants
+-- have no row, and the chain-head SELECT uses
+-- COALESCE(last_anchored_recorded_at, '-infinity'::timestamptz) so they
+-- still surface every event.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS compliance.tenant_anchor_state (
