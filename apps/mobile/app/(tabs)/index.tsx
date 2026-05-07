@@ -38,12 +38,12 @@ import { useQuery } from "urql";
 // `dueAt`, etc.) than the chat-oriented SDK surface exposes on `Thread`.
 import {
   ThreadsQuery,
+  MyComputerQuery,
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
 } from "@/lib/graphql-queries";
 import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";
-import { AgentPicker } from "@/components/chat/AgentPicker";
 import {
   ThreadFilterBar,
   type ThreadFilters,
@@ -61,7 +61,6 @@ import {
   LogOut,
   RefreshCw,
   Filter,
-  ChevronDown,
   Zap,
   Lock,
   CreditCard,
@@ -174,6 +173,11 @@ export default function ThreadsScreen() {
 
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
+  const [{ data: myComputerData, fetching: myComputerFetching }] = useQuery({
+    query: MyComputerQuery,
+    pause: !tenantId,
+  });
+  const myComputer = myComputerData?.myComputer;
 
   // Server already scopes agents to the authed user. Just drop local scratch agents.
   const visibleAgents = useMemo(
@@ -181,18 +185,12 @@ export default function ThreadsScreen() {
     [agents],
   );
 
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-
   const activeAgent = useMemo(() => {
     if (!visibleAgents?.length) return null;
-    if (selectedAgentId) {
-      const found = visibleAgents.find((a: any) => a.id === selectedAgentId);
-      if (found) return found;
-    }
     return (
       visibleAgents.find((a: any) => a.role === "team") ?? visibleAgents[0]
     );
-  }, [visibleAgents, selectedAgentId]);
+  }, [visibleAgents]);
 
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -214,7 +212,7 @@ export default function ThreadsScreen() {
     return ids;
   }, [agents]);
 
-  // ── Thread filters + query (scoped to active agent) ────────────────────
+  // ── Thread filters + query (scoped to the user's Computer) ─────────────
   const [filters, setFilters] = useState<ThreadFilters>({
     channels: [],
     agentId: "",
@@ -228,19 +226,17 @@ export default function ThreadsScreen() {
     ? filters
     : ({ channels: [], agentId: "", showArchived: false } as ThreadFilters);
 
-  // Use agent from filter, or fall back to active agent from header picker
-  const effectiveAgentId = appliedFilters.agentId || activeAgent?.id;
-
   const queryVars = useMemo(() => {
     const vars: any = { tenantId: tenantId! };
-    if (effectiveAgentId) vars.agentId = effectiveAgentId;
+    if (myComputer?.id) vars.computerId = myComputer.id;
+    if (appliedFilters.agentId) vars.agentId = appliedFilters.agentId;
     return vars;
-  }, [tenantId, effectiveAgentId]);
+  }, [tenantId, myComputer?.id, appliedFilters.agentId]);
 
   const [{ data: threadsData }, reexecute] = useQuery({
     query: ThreadsQuery,
     variables: queryVars,
-    pause: !tenantId || !effectiveAgentId,
+    pause: !tenantId || myComputerFetching || !myComputer?.id,
   });
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
@@ -368,7 +364,7 @@ export default function ThreadsScreen() {
     threadsData?.threads,
     appliedFilters.channels,
     appliedFilters.showArchived,
-    activeAgent?.id,
+    myComputer?.id,
     archivedIds,
     pendingReviewsByThreadId,
   ]);
@@ -549,15 +545,15 @@ export default function ThreadsScreen() {
       const workspaces = overrideWorkspaces ?? selectedWorkspaces;
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
-        agentId: activeAgent?.id,
+        computerId: myComputer?.id,
         tenantId,
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
       });
-      if (!text || !activeAgent?.id || !tenantId) {
+      if (!text || !myComputer?.id || !tenantId) {
         console.warn("[handleCreateThread] Bailed — missing:", {
           text: !!text,
-          agentId: !!activeAgent?.id,
+          computerId: !!myComputer?.id,
           tenantId: !!tenantId,
         });
         return;
@@ -584,14 +580,14 @@ export default function ThreadsScreen() {
         // Atomic create + first user message (SDK 0.2.0-beta.0+).
         const newThread = await createThread({
           tenantId,
-          agentId: activeAgent.id,
+          computerId: myComputer.id,
           title: text.length > 60 ? text.slice(0, 60) + "..." : text,
           channel: "CHAT",
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
           firstMessage: messageContent,
           ...(metadata ? ({ metadata } as any) : {}),
-        });
+        } as any);
 
         console.log("[Threads] Thread created:", newThread.id);
         markRead(newThread.id);
@@ -610,7 +606,7 @@ export default function ThreadsScreen() {
     [
       newThreadText,
       selectedWorkspaces,
-      activeAgent?.id,
+      myComputer?.id,
       tenantId,
       currentUser?.id,
       createThread,
@@ -622,8 +618,8 @@ export default function ThreadsScreen() {
   );
 
   // ── Render ─────────────────────────────────────────────────────────────
-  const agentDisplayName = activeAgent?.name || (agentsFetching ? "" : "Agent");
-  const pickerAgents = visibleAgents.map((a: any) => ({ ...a, _id: a.id }));
+  const agentDisplayName =
+    myComputer?.name || activeAgent?.name || (agentsFetching ? "" : "Computer");
   const brainProviderErrors = brainProviders.filter((provider) =>
     ["error", "timeout"].includes(provider.state),
   ).length;
@@ -647,19 +643,12 @@ export default function ThreadsScreen() {
             className="flex-row items-center justify-between px-4"
             style={{ height: 48 }}
           >
-            {/* Left: Agent name + picker */}
-            <AgentPicker
-              agents={pickerAgents}
-              selectedId={activeAgent?.id ?? ""}
-              onSelect={(a: any) => setSelectedAgentId(a._id ?? a.id)}
-            >
-              <View className="flex-row items-center gap-1.5">
-                <Text size="xl" weight="bold">
-                  {agentDisplayName}
-                </Text>
-                <ChevronDown size={18} color={colors.foreground} />
-              </View>
-            </AgentPicker>
+            {/* Left: Computer name */}
+            <View className="flex-row items-center gap-1.5">
+              <Text size="xl" weight="bold">
+                {agentDisplayName}
+              </Text>
+            </View>
 
             {/* Right: Brain graph labels + Filter + Menu */}
             <View className="flex-row items-center gap-3">

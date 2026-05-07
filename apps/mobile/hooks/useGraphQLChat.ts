@@ -260,13 +260,15 @@ export function useGraphQLChat(
       if (!activeThreadId && tenantId && !creatingThread.current) {
         creatingThread.current = true;
         try {
-          const thread = await createThread({
+          const input: any = {
             tenantId,
-            agentId,
             title: "Chat",
             channel: "CHAT",
+            createdByType: "user",
             firstMessage: content,
-          });
+          };
+          if (agentId) input.agentId = agentId;
+          const thread = await createThread(input);
           setLocalThreadId(thread.id);
           console.log("[GraphQLChat] Auto-created thread with firstMessage:", thread.id);
         } catch (e) {

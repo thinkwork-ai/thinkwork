@@ -7,9 +7,7 @@ import { Text } from "@/components/ui/typography";
 import { ChatBubble } from "@/components/chat/ChatBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
-import { useAuth } from "@/lib/auth-context";
 import {
-  useAgents,
   useMessages,
   useNewMessageSubscription,
   useSendMessage,
@@ -42,11 +40,7 @@ export default function ThreadConversationScreen() {
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const flatListRef = useRef<FlatList>(null);
 
-  const { user } = useAuth();
-  const tenantId = user?.tenantId;
-
   const { thread: threadData } = useThread(id);
-  const { agents } = useAgents({ tenantId });
 
   const { messages, refetch: reexecuteMessages } = useMessages(id);
 
@@ -70,12 +64,6 @@ export default function ThreadConversationScreen() {
   const mentionCandidates: any[] = [];
   const [pendingMentions, setPendingMentions] = useState<SelectedMention[]>([]);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
-
-  // Find the agent for this thread
-  const agent = useMemo(() => {
-    const aid = threadData?.agentId;
-    return agents?.find((a: any) => a.id === aid);
-  }, [threadData, agents]);
 
   // Convert messages to ChatMessage type with timestamp. SDK returns role as
   // the uppercase enum literal ("USER" | "ASSISTANT" | ...) whereas the
@@ -120,7 +108,7 @@ export default function ThreadConversationScreen() {
   const isStreaming = lastMsg?.role === "user";
 
   const handleSend = async (content: string) => {
-    if (!agent?.id || !id) return;
+    if (!id) return;
     const mentionsToSend = pendingMentions.length > 0 ? pendingMentions : undefined;
     setPendingMentions([]);
     try {
