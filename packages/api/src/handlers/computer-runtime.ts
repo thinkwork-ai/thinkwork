@@ -19,6 +19,7 @@ import {
   ComputerNotFoundError,
   ComputerTaskNotFoundError,
   delegateConnectorWorkTask,
+  executeThreadTurnTask,
   failComputerTask,
   recordComputerHeartbeat,
   resolveGoogleWorkspaceCliToken,
@@ -166,6 +167,21 @@ async function route(
         tenantId,
         computerId,
         taskId: validUuid(delegateConnectorWorkMatch[1], "taskId"),
+      }),
+    );
+  }
+
+  const executeThreadTurnMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/execute-thread-turn$/,
+  );
+  if (method === "POST" && executeThreadTurnMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await executeThreadTurnTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(executeThreadTurnMatch[1], "taskId"),
       }),
     );
   }

@@ -71,6 +71,7 @@ vi.mock("../../graphql/utils.js", () => ({
 import {
   checkGoogleWorkspaceConnection,
   delegateConnectorWorkTask,
+  executeThreadTurnTask,
   resolveGoogleWorkspaceCliToken,
 } from "./runtime-api.js";
 
@@ -388,6 +389,110 @@ describe("Computer runtime API connector work delegation", () => {
 
     await expect(
       delegateConnectorWorkTask({
+        tenantId: "tenant-1",
+        computerId: "computer-1",
+        taskId: "task-1",
+      }),
+    ).rejects.toThrow("Computer has no delegated Managed Agent configured");
+    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("Computer runtime API thread turn execution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.selectQueue = [];
+    mocks.insertRows = [{ id: "event-1" }];
+    mocks.inserts = [];
+    mocks.updates = [];
+    mocks.invokeChatAgent.mockResolvedValue(true);
+  });
+
+  it("dispatches a Computer-owned Thread turn to the migrated managed agent", async () => {
+    mocks.selectQueue = [
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+            source: "chat_message",
+          },
+        },
+      ],
+      [
+        {
+          id: "computer-1",
+          tenant_id: "tenant-1",
+          owner_user_id: "user-1",
+          migrated_from_agent_id: "agent-1",
+        },
+      ],
+      [{ id: "agent-1" }],
+      [{ id: "thread-1" }],
+      [{ id: "message-1", role: "user", content: "hello computer" }],
+    ];
+
+    const result = await executeThreadTurnTask({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+    });
+
+    expect(result).toMatchObject({
+      dispatched: true,
+      mode: "managed_agent",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "chat_message",
+      status: "running",
+    });
+    expect(mocks.invokeChatAgent).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "hello computer",
+      messageId: "message-1",
+    });
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        event_type: "thread_turn_dispatch_started",
+        task_id: "task-1",
+        payload: expect.objectContaining({
+          agentId: "agent-1",
+          threadId: "thread-1",
+          messageId: "message-1",
+        }),
+      }),
+    );
+  });
+
+  it("rejects Thread turns when the Computer has no delegated managed agent", async () => {
+    mocks.selectQueue = [
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+          },
+        },
+      ],
+      [
+        {
+          id: "computer-1",
+          tenant_id: "tenant-1",
+          owner_user_id: "user-1",
+          migrated_from_agent_id: null,
+        },
+      ],
+    ];
+
+    await expect(
+      executeThreadTurnTask({
         tenantId: "tenant-1",
         computerId: "computer-1",
         taskId: "task-1",

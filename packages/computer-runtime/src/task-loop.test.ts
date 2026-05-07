@@ -8,6 +8,15 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-thread" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn().mockResolvedValue({
+        dispatched: true,
+        mode: "managed_agent",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "chat_message",
+        status: "running",
+      }),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -34,13 +43,18 @@ describe("Computer task loop", () => {
         source: "chat_message",
       },
     });
+    expect(api.executeThreadTurn).toHaveBeenCalledWith("task-thread");
     expect(output).toEqual({
       ok: true,
       taskType: "thread_turn",
+      accepted: true,
+      dispatched: true,
+      mode: "managed_agent",
+      agentId: "agent-1",
       threadId: "thread-1",
       messageId: "message-1",
       source: "chat_message",
-      claimed: true,
+      status: "running",
     });
   });
 
@@ -55,6 +69,7 @@ describe("Computer task loop", () => {
         checkedAt: "2026-05-07T00:00:00.000Z",
       }),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -95,6 +110,7 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-2" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
@@ -170,6 +186,7 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-3" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
