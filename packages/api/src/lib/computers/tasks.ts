@@ -14,6 +14,7 @@ export const COMPUTER_TASK_TYPES = [
   "health_check",
   "workspace_file_write",
   "google_cli_smoke",
+  "google_workspace_auth_check",
 ] as const;
 
 export type ComputerTaskType = (typeof COMPUTER_TASK_TYPES)[number];
@@ -158,7 +159,11 @@ export function normalizeTaskInput(
   taskType: ComputerTaskType,
   input: unknown,
 ): Record<string, unknown> | null {
-  if (taskType === "health_check" || taskType === "google_cli_smoke") {
+  if (
+    taskType === "health_check" ||
+    taskType === "google_cli_smoke" ||
+    taskType === "google_workspace_auth_check"
+  ) {
     return null;
   }
 

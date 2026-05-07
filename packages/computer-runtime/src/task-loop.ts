@@ -5,7 +5,11 @@ import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
 export type TaskLoopOptions = {
   api: Pick<
     ComputerRuntimeApi,
-    "claimTask" | "completeTask" | "failTask" | "appendTaskEvent"
+    | "claimTask"
+    | "completeTask"
+    | "failTask"
+    | "appendTaskEvent"
+    | "checkGoogleWorkspaceConnection"
   >;
   workspaceRoot: string;
   idleDelayMs: number;
@@ -19,7 +23,7 @@ export async function runTaskLoopOnce(options: TaskLoopOptions) {
   }
 
   try {
-    const output = await handleTask(task, options.workspaceRoot);
+    const output = await handleTask(task, options.workspaceRoot, options.api);
     await options.api.completeTask(task.id, output);
     return { handled: true as const, taskId: task.id, output };
   } catch (err) {
@@ -36,7 +40,14 @@ export async function runTaskLoopOnce(options: TaskLoopOptions) {
   }
 }
 
-export async function handleTask(task: RuntimeTask, workspaceRoot: string) {
+export async function handleTask(
+  task: RuntimeTask,
+  workspaceRoot: string,
+  api?: Pick<
+    ComputerRuntimeApi,
+    "appendTaskEvent" | "checkGoogleWorkspaceConnection"
+  >,
+) {
   if (task.taskType === "noop") {
     return { ok: true, taskType: "noop" };
   }
@@ -51,6 +62,29 @@ export async function handleTask(task: RuntimeTask, workspaceRoot: string) {
   if (task.taskType === "google_cli_smoke") {
     const smoke = await smokeGoogleWorkspaceCli();
     return { ok: true, taskType: "google_cli_smoke", smoke };
+  }
+  if (task.taskType === "google_workspace_auth_check") {
+    if (!api) throw new Error("Computer runtime API is required");
+    const googleWorkspace = await api.checkGoogleWorkspaceConnection();
+    await api.appendTaskEvent(task.id, {
+      eventType: "google_workspace_auth_checked",
+      level:
+        googleWorkspace.connected && googleWorkspace.tokenResolved
+          ? "info"
+          : "warn",
+      payload: {
+        providerName: googleWorkspace.providerName,
+        connected: googleWorkspace.connected,
+        tokenResolved: googleWorkspace.tokenResolved,
+        connectionId: googleWorkspace.connectionId ?? null,
+        reason: googleWorkspace.reason ?? null,
+      },
+    });
+    return {
+      ok: true,
+      taskType: "google_workspace_auth_check",
+      googleWorkspace,
+    };
   }
   throw new Error(`Unsupported Computer task type: ${task.taskType}`);
 }

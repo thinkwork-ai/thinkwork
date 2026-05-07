@@ -11,6 +11,7 @@ describe("Computer runtime task loop", () => {
       completeTask: vi.fn(),
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
     };
 
     const result = await runTaskLoopOnce({
@@ -32,6 +33,7 @@ describe("Computer runtime task loop", () => {
       completeTask: vi.fn(),
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
     };
 
     await expect(
@@ -115,6 +117,7 @@ describe("Computer runtime task loop", () => {
       completeTask: vi.fn(),
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
     };
 
     const result = await runTaskLoopOnce({

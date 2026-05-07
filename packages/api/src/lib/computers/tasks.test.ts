@@ -13,6 +13,9 @@ describe("Computer task helpers", () => {
       "workspace_file_write",
     );
     expect(parseComputerTaskType("GOOGLE_CLI_SMOKE")).toBe("google_cli_smoke");
+    expect(parseComputerTaskType("GOOGLE_WORKSPACE_AUTH_CHECK")).toBe(
+      "google_workspace_auth_check",
+    );
   });
 
   it("rejects unsupported task types", () => {
@@ -57,6 +60,11 @@ describe("Computer task helpers", () => {
     expect(normalizeTaskInput("health_check", { ignored: true })).toBeNull();
     expect(
       normalizeTaskInput("google_cli_smoke", { token: "do-not-use" }),
+    ).toBeNull();
+    expect(
+      normalizeTaskInput("google_workspace_auth_check", {
+        token: "do-not-use",
+      }),
     ).toBeNull();
   });
 });

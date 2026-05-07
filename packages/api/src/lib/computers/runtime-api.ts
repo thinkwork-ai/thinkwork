@@ -5,6 +5,10 @@ import {
   computerEvents,
   computerTasks,
 } from "@thinkwork/database-pg/schema";
+import {
+  resolveConnectionForUser,
+  resolveOAuthToken,
+} from "../oauth-token.js";
 
 const db = getDb();
 
@@ -175,6 +179,44 @@ export async function appendComputerTaskEvent(input: {
     eventType: event.event_type,
     level: event.level,
     createdAt: event.created_at,
+  };
+}
+
+export async function checkGoogleWorkspaceConnection(input: {
+  tenantId: string;
+  computerId: string;
+}) {
+  const computer = await loadComputer(input.tenantId, input.computerId);
+  const checkedAt = new Date().toISOString();
+  const connection = await resolveConnectionForUser(
+    computer.tenant_id,
+    computer.owner_user_id,
+    "google_productivity",
+  );
+
+  if (!connection) {
+    return {
+      providerName: "google_productivity",
+      connected: false,
+      tokenResolved: false,
+      reason: "no_active_connection",
+      checkedAt,
+    };
+  }
+
+  const accessToken = await resolveOAuthToken(
+    connection.connectionId,
+    computer.tenant_id,
+    connection.providerId,
+  );
+
+  return {
+    providerName: "google_productivity",
+    connected: true,
+    tokenResolved: Boolean(accessToken),
+    connectionId: connection.connectionId,
+    reason: accessToken ? null : "token_unavailable_or_expired",
+    checkedAt,
   };
 }
 
