@@ -5,7 +5,6 @@ import {
   Archive,
   ExternalLink,
   Filter,
-  History,
   Loader2,
   Network,
   Pause,
@@ -22,7 +21,6 @@ import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,6 +135,7 @@ const MANUAL_TARGET_ID = "__manual_target_id__";
 function SymphonyPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const [selectedTab, setSelectedTab] = useState("connectors");
   const [search, setSearch] = useState("");
   const [executionConnectorId, setExecutionConnectorId] = useState("all");
   const [showCancelledRuns, setShowCancelledRuns] = useState(false);
@@ -312,20 +312,57 @@ function SymphonyPage() {
   return (
     <PageLayout
       header={
-        <>
-          <PageHeader
-            title="Symphony"
-            description={`${activeCount} active, ${pausedCount} paused, ${archivedCount} archived`}
-            actions={
+        <div className="grid items-start gap-3 lg:grid-cols-[1fr_auto_1fr]">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-bold leading-tight tracking-tight text-foreground">
+              Symphony
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {activeCount} active, {pausedCount} paused, {archivedCount}{" "}
+              archived
+            </p>
+          </div>
+          <div className="flex justify-start lg:justify-center">
+            <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+              <TabsList>
+                <TabsTrigger value="connectors" className="px-4">
+                  Connectors
+                </TabsTrigger>
+                <TabsTrigger value="runs" className="px-4">
+                  Runs
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="flex justify-start lg:justify-end">
+            {selectedTab === "connectors" ? (
               <Button size="sm" onClick={() => setCreating(true)}>
                 <Plus className="h-4 w-4" />
                 New Connector
               </Button>
-            }
-          />
-
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refresh}
+                disabled={result.fetching || executionsResult.fetching}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      {isLoading ? (
+        <PageSkeleton />
+      ) : result.error ? (
+        <p className="text-sm text-destructive">{result.error.message}</p>
+      ) : selectedTab === "connectors" ? (
+        <div className="space-y-4">
           {connectors.length > 0 && (
-            <div className="mt-4 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <div className="relative max-w-sm flex-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -346,23 +383,18 @@ function SymphonyPage() {
               </Button>
             </div>
           )}
-        </>
-      }
-    >
-      {isLoading ? (
-        <PageSkeleton />
-      ) : result.error ? (
-        <p className="text-sm text-destructive">{result.error.message}</p>
-      ) : connectors.length === 0 ? (
-        <EmptyState
-          icon={Network}
-          title="No connectors"
-          description="Create a connector row for the upcoming Symphony dispatch runtime."
-          action={{ label: "New Connector", onClick: () => setCreating(true) }}
-        />
-      ) : (
-        <div className="space-y-8">
-          {rows.length === 0 ? (
+
+          {connectors.length === 0 ? (
+            <EmptyState
+              icon={Network}
+              title="No connectors"
+              description="Create a connector row for the upcoming Symphony dispatch runtime."
+              action={{
+                label: "New Connector",
+                onClick: () => setCreating(true),
+              }}
+            />
+          ) : rows.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
               No matching connectors.
             </p>
@@ -378,77 +410,73 @@ function SymphonyPage() {
               })}
               data={rows}
               pageSize={20}
-              tableClassName="table-fixed"
+              allowHorizontalScroll={false}
+              tableClassName="table-fixed [&_tbody_tr]:h-11"
             />
           )}
-
-          <section className="space-y-3">
-            <div className="flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-end sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="text-base font-semibold">Connector runs</h2>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {executionsResult.fetching && !executionsResult.data
-                    ? "Loading recent pickup history..."
-                    : `${visibleExecutions.length} visible of ${executions.length} recent executions`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={executionConnectorId}
-                  onValueChange={setExecutionConnectorId}
-                >
-                  <SelectTrigger className="h-8 w-[220px] text-xs">
-                    <Filter className="h-3.5 w-3.5" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All connectors</SelectItem>
-                    {connectors.map((connector) => (
-                      <SelectItem key={connector.id} value={connector.id}>
-                        {connector.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant={showCancelledRuns ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => setShowCancelledRuns((value) => !value)}
-                >
-                  <Archive className="h-4 w-4" />
-                  {showCancelledRuns ? "Hide cancelled" : "Show cancelled"}
-                </Button>
-              </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {executionsResult.fetching && !executionsResult.data
+                ? "Loading recent pickup history..."
+                : `${visibleExecutions.length} visible of ${executions.length} recent executions`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={executionConnectorId}
+                onValueChange={setExecutionConnectorId}
+              >
+                <SelectTrigger className="h-8 w-[220px] text-xs">
+                  <Filter className="h-3.5 w-3.5" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All connectors</SelectItem>
+                  {connectors.map((connector) => (
+                    <SelectItem key={connector.id} value={connector.id}>
+                      {connector.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant={showCancelledRuns ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowCancelledRuns((value) => !value)}
+              >
+                <Archive className="h-4 w-4" />
+                {showCancelledRuns ? "Hide cancelled" : "Show cancelled"}
+              </Button>
             </div>
+          </div>
 
-            {executionsResult.error ? (
-              <p className="text-sm text-destructive">
-                {executionsResult.error.message}
-              </p>
-            ) : visibleExecutions.length === 0 ? (
-              <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                No connector runs match the current filters.
-              </div>
-            ) : (
-              <DataTable
-                columns={connectorExecutionColumns({
-                  connectorById,
-                  onOpenThread: (threadId) =>
-                    navigate({
-                      to: "/threads/$threadId",
-                      params: { threadId },
-                    }),
-                })}
-                data={visibleExecutions}
-                pageSize={15}
-                tableClassName="table-fixed"
-              />
-            )}
-          </section>
+          {executionsResult.error ? (
+            <p className="text-sm text-destructive">
+              {executionsResult.error.message}
+            </p>
+          ) : visibleExecutions.length === 0 ? (
+            <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              No connector runs match the current filters.
+            </div>
+          ) : (
+            <DataTable
+              columns={connectorExecutionColumns({
+                connectorById,
+                onOpenThread: (threadId) =>
+                  navigate({
+                    to: "/threads/$threadId",
+                    params: { threadId },
+                  }),
+              })}
+              data={visibleExecutions}
+              pageSize={15}
+              allowHorizontalScroll={false}
+              tableClassName="table-fixed [&_tbody_tr]:h-11"
+            />
+          )}
         </div>
       )}
 
@@ -488,7 +516,7 @@ function connectorExecutionColumns(args: {
           {statusLabel(row.original.currentState)}
         </Badge>
       ),
-      size: 125,
+      size: 105,
     },
     {
       accessorKey: "connectorId",
@@ -496,35 +524,25 @@ function connectorExecutionColumns(args: {
       cell: ({ row }) => {
         const connector = args.connectorById.get(row.original.connectorId);
         return (
-          <div className="min-w-0">
-            <div className="truncate font-medium">
-              {connector?.name ?? row.original.connectorId}
-            </div>
-            <div className="truncate text-xs text-muted-foreground">
-              {connector?.type ?? row.original.connectorId}
-            </div>
-          </div>
+          <span className="block truncate font-medium">
+            {connector?.name ?? row.original.connectorId}
+          </span>
         );
       },
-      size: 240,
+      size: 210,
     },
     {
       accessorKey: "externalRef",
       header: "External ref",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-mono text-xs">
-            {connectorExecutionLinearIdentifier(
-              row.original.outcomePayload,
-              row.original.externalRef,
-            )}
-          </div>
-          <div className="truncate font-mono text-xs text-muted-foreground">
-            {row.original.externalRef}
-          </div>
-        </div>
+        <span className="block truncate font-mono text-xs">
+          {connectorExecutionLinearIdentifier(
+            row.original.outcomePayload,
+            row.original.externalRef,
+          )}
+        </span>
       ),
-      size: 230,
+      size: 185,
     },
     {
       id: "thread",
@@ -538,7 +556,7 @@ function connectorExecutionColumns(args: {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 max-w-full justify-start gap-1 px-2 font-mono text-xs"
+            className="h-7 w-full justify-start gap-1 px-2 font-mono text-xs"
             onClick={() => args.onOpenThread(threadId)}
           >
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
@@ -548,7 +566,7 @@ function connectorExecutionColumns(args: {
           <span className="text-xs text-muted-foreground">No thread</span>
         );
       },
-      size: 220,
+      size: 175,
     },
     {
       id: "details",
@@ -568,7 +586,7 @@ function connectorExecutionColumns(args: {
           </span>
         );
       },
-      size: 220,
+      size: 180,
     },
     {
       accessorKey: "startedAt",
@@ -580,7 +598,7 @@ function connectorExecutionColumns(args: {
             : relativeTime(row.original.createdAt)}
         </div>
       ),
-      size: 115,
+      size: 95,
     },
     {
       accessorKey: "finishedAt",
@@ -592,7 +610,7 @@ function connectorExecutionColumns(args: {
             : "—"}
         </div>
       ),
-      size: 115,
+      size: 95,
     },
   ];
 }
@@ -620,43 +638,40 @@ function connectorColumns(actions: {
           {statusLabel(row.original.status)}
         </Badge>
       ),
-      size: 105,
+      size: 95,
     },
     {
       accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">{row.original.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.description ?? row.original.id}
-          </div>
-        </div>
+        <span className="block truncate font-medium">{row.original.name}</span>
       ),
-      size: 260,
+      size: 280,
     },
     {
       accessorKey: "type",
       header: "Type",
       cell: ({ row }) => (
-        <span className="truncate font-mono text-xs">{row.original.type}</span>
+        <span className="block truncate font-mono text-xs">
+          {row.original.type}
+        </span>
       ),
-      size: 160,
+      size: 145,
     },
     {
       accessorKey: "dispatchTargetId",
       header: "Target",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="text-xs font-medium">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-xs font-medium">
             {connectorTargetLabel(row.original.dispatchTargetType)}
-          </div>
-          <div className="truncate font-mono text-xs text-muted-foreground">
+          </span>
+          <span className="block min-w-0 truncate font-mono text-xs text-muted-foreground">
             {row.original.dispatchTargetId}
-          </div>
+          </span>
         </div>
       ),
-      size: 260,
+      size: 220,
     },
     {
       accessorKey: "enabled",
@@ -671,7 +686,7 @@ function connectorColumns(actions: {
             Disabled
           </Badge>
         ),
-      size: 105,
+      size: 100,
     },
     {
       accessorKey: "updatedAt",
@@ -681,7 +696,7 @@ function connectorColumns(actions: {
           {relativeTime(row.original.updatedAt)}
         </span>
       ),
-      size: 120,
+      size: 90,
     },
     {
       id: "actions",
@@ -692,7 +707,7 @@ function connectorColumns(actions: {
         const paused = connector.status === ConnectorStatus.Paused;
         const running = actions.runningConnectorId === connector.id;
         return (
-          <div className="flex justify-end gap-1">
+          <div className="flex justify-end gap-0.5">
             <Button
               type="button"
               variant="ghost"
@@ -769,7 +784,7 @@ function connectorColumns(actions: {
           </div>
         );
       },
-      size: 130,
+      size: 118,
     },
   ];
 }
