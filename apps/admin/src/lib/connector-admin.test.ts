@@ -6,6 +6,7 @@ import {
   connectorExecutionLinearIdentifier,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
+  connectorExecutionWritebackDisplay,
   connectorFormValues,
   connectorTargetLabel,
   connectorTargetOptions,
@@ -263,6 +264,71 @@ describe("connector admin helpers", () => {
     expect(connectorExecutionLinearIdentifier({}, "external_1")).toBe(
       "external_1",
     );
+  });
+
+  it("formats successful Linear writeback payloads for compact run rows", () => {
+    expect(
+      connectorExecutionWritebackDisplay({
+        providerWriteback: {
+          provider: "linear",
+          action: "move_issue_state",
+          status: "updated",
+          stateName: "In Progress",
+          stateId: "state-started",
+        },
+      }),
+    ).toEqual({
+      label: "Linear: In Progress",
+      title: "Linear issue moved to In Progress",
+      tone: "success",
+    });
+
+    expect(
+      connectorExecutionWritebackDisplay(
+        JSON.stringify({
+          providerWriteback: {
+            provider: "linear",
+            action: "move_issue_state",
+            status: "skipped",
+            reason: "already_in_state",
+            stateName: "In Progress",
+          },
+        }),
+      ),
+    ).toEqual({
+      label: "Linear: In Progress",
+      title: "Linear issue already In Progress - already_in_state",
+      tone: "success",
+    });
+  });
+
+  it("formats failed Linear writeback payloads for compact run rows", () => {
+    expect(
+      connectorExecutionWritebackDisplay({
+        providerWriteback: {
+          provider: "linear",
+          action: "move_issue_state",
+          status: "failed",
+          stateName: "In Progress",
+          error: "Linear credential lacks issue update permission",
+        },
+      }),
+    ).toEqual({
+      label: "Linear writeback failed",
+      title:
+        "Linear writeback failed - Linear credential lacks issue update permission",
+      tone: "destructive",
+    });
+  });
+
+  it("omits writeback display for old, malformed, and non-Linear payloads", () => {
+    expect(connectorExecutionWritebackDisplay({})).toBeNull();
+    expect(connectorExecutionWritebackDisplay("{not-json")).toBeNull();
+    expect(
+      connectorExecutionWritebackDisplay({
+        providerWriteback: { provider: "slack", status: "updated" },
+      }),
+    ).toBeNull();
   });
 
   it("styles terminal, active, and noisy connector execution states", () => {

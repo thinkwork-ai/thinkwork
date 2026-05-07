@@ -52,6 +52,12 @@ export type ConnectorRoutineTarget = {
   engine?: string | null;
 };
 
+export type ConnectorExecutionWritebackDisplay = {
+  label: string;
+  title: string;
+  tone: "success" | "destructive" | "muted";
+};
+
 export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   name: "",
   type: "linear_tracker",
@@ -301,6 +307,51 @@ export function connectorExecutionCleanupReason(
   return typeof reason === "string" && reason.trim() ? reason : null;
 }
 
+export function connectorExecutionWritebackDisplay(
+  payload: unknown,
+): ConnectorExecutionWritebackDisplay | null {
+  const parsed = parsePayloadRecord(payload);
+  const writeback = parsePayloadRecord(parsed?.providerWriteback);
+  const provider = cleanString(writeback?.provider);
+  if (provider !== "linear") return null;
+
+  const status = cleanString(writeback?.status);
+  const stateName = cleanString(writeback?.stateName);
+  const reason = cleanString(writeback?.reason);
+  const error = cleanString(writeback?.error);
+
+  if (status === "failed") {
+    return {
+      label: "Linear writeback failed",
+      title: ["Linear writeback failed", error].filter(Boolean).join(" - "),
+      tone: "destructive",
+    };
+  }
+
+  if ((status === "updated" || status === "skipped") && stateName) {
+    return {
+      label: `Linear: ${stateName}`,
+      title: [
+        `Linear issue ${status === "updated" ? "moved to" : "already"} ${stateName}`,
+        reason,
+      ]
+        .filter(Boolean)
+        .join(" - "),
+      tone: "success",
+    };
+  }
+
+  if (status) {
+    return {
+      label: `Linear: ${statusLabel(status)}`,
+      title: `Linear writeback ${status}`,
+      tone: "muted",
+    };
+  }
+
+  return null;
+}
+
 function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value === "string") {
     try {
@@ -312,6 +363,20 @@ function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function statusLabel(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function emptyToNull(value: string): string | null {

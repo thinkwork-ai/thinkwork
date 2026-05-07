@@ -79,6 +79,7 @@ import {
   connectorExecutionLinearIdentifier,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
+  connectorExecutionWritebackDisplay,
   connectorStatusTone,
   connectorTargetLabel,
   connectorTargetOptions,
@@ -88,6 +89,7 @@ import {
   shouldUseManualTargetInput,
   updateConnectorInput,
   type ConnectorComputerTarget,
+  type ConnectorExecutionWritebackDisplay,
   type ConnectorFormValues,
 } from "@/lib/connector-admin";
 import {
@@ -565,7 +567,15 @@ function connectorRunLifecycleColumns(args: {
           />
         </div>
       ),
-      size: 190,
+      size: 205,
+    },
+    {
+      id: "writeback",
+      header: "Writeback",
+      cell: ({ row }) => (
+        <WritebackStage payload={row.original.execution.outcomePayload} />
+      ),
+      size: 110,
     },
     {
       id: "thread",
@@ -603,6 +613,37 @@ function connectorRunLifecycleColumns(args: {
       size: 62,
     },
   ];
+}
+
+function WritebackStage({ payload }: { payload: unknown }) {
+  const display = connectorExecutionWritebackDisplay(payload);
+  if (!display) return null;
+
+  return (
+    <span
+      className={cn(
+        "block min-w-0 truncate rounded-full px-2 py-0.5 text-xs font-medium",
+        writebackTone(display.tone),
+      )}
+      title={display.title}
+    >
+      {display.label}
+    </span>
+  );
+}
+
+function writebackTone(
+  tone: ConnectorExecutionWritebackDisplay["tone"],
+): string {
+  switch (tone) {
+    case "success":
+      return "bg-green-500/15 text-green-700 dark:text-green-300";
+    case "destructive":
+      return "bg-red-500/15 text-red-700 dark:text-red-300";
+    case "muted":
+    default:
+      return "bg-muted text-muted-foreground";
+  }
 }
 
 function LifecycleStage({
