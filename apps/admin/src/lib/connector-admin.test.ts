@@ -13,10 +13,12 @@ import {
   connectorTargetOptions,
   createConnectorInput,
   formatConnectorConfig,
+  linearConnectorConfigFromValues,
   linearTrackerStarterConfigJson,
   parseConnectorConfig,
   shouldUseManualTargetInput,
   updateConnectorInput,
+  validateConnectorFormValues,
 } from "@/lib/connector-admin";
 
 describe("connector admin helpers", () => {
@@ -37,7 +39,11 @@ describe("connector admin helpers", () => {
       type: " linear_tracker ",
       description: " ",
       connectionId: " conn_1 ",
-      configJson: '{"team":"ENG"}',
+      linearTeamKey: "TECH",
+      linearLabel: "symphony",
+      linearCredentialSlug: "linear-prod",
+      linearWritebackState: "In Progress",
+      configJson: '{"customFlag":true}',
       dispatchTargetType: DispatchTargetType.Agent,
       dispatchTargetId: " agent_1 ",
       enabled: false,
@@ -49,7 +55,28 @@ describe("connector admin helpers", () => {
       type: "linear_tracker",
       description: null,
       connectionId: "conn_1",
-      config: { team: "ENG" },
+      config: {
+        customFlag: true,
+        provider: "linear",
+        sourceKind: "tracker_issue",
+        credentialSlug: "linear-prod",
+        issueQuery: {
+          teamKey: "TECH",
+          labels: ["symphony"],
+          limit: 10,
+        },
+        payload: {
+          includeDescription: true,
+          includeComments: true,
+          includeAttachments: false,
+        },
+        writeback: {
+          moveOnDispatch: {
+            enabled: true,
+            stateName: "In Progress",
+          },
+        },
+      },
       dispatchTargetType: DispatchTargetType.Agent,
       dispatchTargetId: "agent_1",
       enabled: false,
@@ -63,6 +90,7 @@ describe("connector admin helpers", () => {
       name: "Tracker",
       type: "linear_tracker",
       configJson: "",
+      linearTeamKey: "TECH",
       dispatchTargetType: DispatchTargetType.Routine,
       dispatchTargetId: "routine_1",
     });
@@ -70,7 +98,20 @@ describe("connector admin helpers", () => {
     expect(input).toMatchObject({
       name: "Tracker",
       type: "linear_tracker",
-      config: {},
+      config: {
+        provider: "linear",
+        sourceKind: "tracker_issue",
+        credentialSlug: "linear",
+        issueQuery: { teamKey: "TECH", labels: ["symphony"], limit: 10 },
+        payload: {
+          includeDescription: true,
+          includeComments: true,
+          includeAttachments: false,
+        },
+        writeback: {
+          moveOnDispatch: { enabled: true, stateName: "In Progress" },
+        },
+      },
       dispatchTargetType: DispatchTargetType.Routine,
       dispatchTargetId: "routine_1",
     });
@@ -109,6 +150,37 @@ describe("connector admin helpers", () => {
     expect(connectorFormValues()).toMatchObject({
       dispatchTargetType: DispatchTargetType.Computer,
       dispatchTargetId: "",
+      type: "linear_tracker",
+      linearLabel: "symphony",
+      linearCredentialSlug: "linear",
+      linearWritebackState: "In Progress",
+    });
+  });
+
+  it("hydrates Linear setup fields from existing connector config", () => {
+    expect(
+      connectorFormValues({
+        config: {
+          provider: "linear",
+          credentialSlug: "linear-prod",
+          issueQuery: {
+            teamKey: "TECH",
+            labels: ["symphony"],
+            limit: 25,
+          },
+          writeback: {
+            moveOnDispatch: {
+              enabled: true,
+              stateName: "Started",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      linearTeamKey: "TECH",
+      linearLabel: "symphony",
+      linearCredentialSlug: "linear-prod",
+      linearWritebackState: "Started",
     });
   });
 
@@ -206,6 +278,64 @@ describe("connector admin helpers", () => {
   it("provides a parseable Linear starter config", () => {
     const json = linearTrackerStarterConfigJson();
     expect(JSON.parse(json)).toEqual(LINEAR_TRACKER_STARTER_CONFIG);
+  });
+
+  it("serializes first-class Linear setup fields over advanced JSON", () => {
+    const config = linearConnectorConfigFromValues({
+      ...connectorFormValues(),
+      linearTeamKey: "TECH",
+      linearLabel: "symphony",
+      linearCredentialSlug: "linear-prod",
+      linearWritebackState: "In Progress",
+      configJson: JSON.stringify({
+        provider: "linear",
+        issueQuery: { teamKey: "OLD", labels: ["old"], states: ["Todo"] },
+        payload: { includeAttachments: true },
+        writeback: { moveOnDispatch: { enabled: false } },
+      }),
+    });
+
+    expect(config).toMatchObject({
+      provider: "linear",
+      credentialSlug: "linear-prod",
+      issueQuery: {
+        teamKey: "TECH",
+        labels: ["symphony"],
+        states: ["Todo"],
+        limit: 10,
+      },
+      payload: {
+        includeDescription: true,
+        includeComments: true,
+        includeAttachments: true,
+      },
+      writeback: {
+        moveOnDispatch: {
+          enabled: false,
+          stateName: "In Progress",
+        },
+      },
+    });
+  });
+
+  it("validates required Linear setup fields before mutation", () => {
+    const valid = {
+      ...connectorFormValues(),
+      name: "Linear Symphony",
+      linearTeamKey: "TECH",
+      dispatchTargetId: "computer_1",
+    };
+
+    expect(validateConnectorFormValues(valid)).toBeNull();
+    expect(
+      validateConnectorFormValues({ ...valid, linearLabel: "wrong" }),
+    ).toBe("Checkpoint connector label must be symphony.");
+    expect(validateConnectorFormValues({ ...valid, linearTeamKey: "" })).toBe(
+      "Linear team key is required.",
+    );
+    expect(validateConnectorFormValues({ ...valid, configJson: "{nope" })).toBe(
+      "Advanced JSON must be valid JSON.",
+    );
   });
 
   it("uses manual target input for hybrid, empty, and missing targets", () => {

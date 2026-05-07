@@ -3,6 +3,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import type { FormEvent, ReactNode } from "react";
 import {
   Archive,
+  ChevronDown,
   ExternalLink,
   Filter,
   Loader2,
@@ -16,7 +17,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
@@ -35,6 +36,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -86,9 +92,9 @@ import {
   connectorTargetOptions,
   createConnectorInput,
   linearTrackerStarterConfigJson,
-  parseConnectorConfig,
   shouldUseManualTargetInput,
   updateConnectorInput,
+  validateConnectorFormValues,
   type ConnectorComputerTarget,
   type ConnectorExecutionWritebackDisplay,
   type ConnectorFormValues,
@@ -972,10 +978,12 @@ function ConnectorFormDialog({
   onSubmit: (values: ConnectorFormValues) => Promise<void>;
 }) {
   const { tenantId } = useTenant();
+  const formId = useId();
   const [values, setValues] = useState<ConnectorFormValues>(
     connectorFormValues(connector),
   );
   const [manualTargetId, setManualTargetId] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [agentsResult] = useQuery({
@@ -1008,6 +1016,9 @@ function ConnectorFormDialog({
       setValues(nextValues);
       setManualTargetId(
         nextValues.dispatchTargetType === DispatchTargetType.HybridRoutine,
+      );
+      setAdvancedOpen(
+        nextValues.dispatchTargetType !== DispatchTargetType.Computer,
       );
       setError(null);
     }
@@ -1060,6 +1071,10 @@ function ConnectorFormDialog({
   const targetSelectValue = showManualTargetId
     ? MANUAL_TARGET_ID
     : selectedTarget?.id;
+  const showComputerPicker =
+    values.dispatchTargetType === DispatchTargetType.Computer &&
+    canUseTargetPicker &&
+    !showManualTargetId;
 
   const patch = <K extends keyof ConnectorFormValues>(
     key: K,
@@ -1070,23 +1085,9 @@ function ConnectorFormDialog({
     event.preventDefault();
     setError(null);
 
-    if (!values.name.trim()) {
-      setError("Name is required.");
-      return;
-    }
-    if (!values.type.trim()) {
-      setError("Type is required.");
-      return;
-    }
-    if (!values.dispatchTargetId.trim()) {
-      setError("Dispatch target id is required.");
-      return;
-    }
-
-    try {
-      parseConnectorConfig(values.configJson);
-    } catch {
-      setError("Config must be valid JSON.");
+    const validationError = validateConnectorFormValues(values);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -1105,31 +1106,35 @@ function ConnectorFormDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? "New Connector" : "Edit Connector"}
+            {mode === "create"
+              ? "New Linear Connector"
+              : "Edit Linear Connector"}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <DialogBody className="max-h-[70vh] space-y-4 py-1 pr-1">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name">
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+              <Field id={`${formId}-name`} label="Name">
                 <Input
+                  id={`${formId}-name`}
                   value={values.name}
                   onChange={(event) => patch("name", event.target.value)}
-                  placeholder="Linear intake"
+                  placeholder="Linear Symphony pickup"
                 />
               </Field>
               <Field label="Type">
-                <Input
-                  value={values.type}
-                  onChange={(event) => patch("type", event.target.value)}
-                  placeholder="linear_tracker"
-                />
+                <div className="flex h-9 items-center">
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    linear_tracker
+                  </Badge>
+                </div>
               </Field>
             </div>
 
-            <Field label="Description">
+            <Field id={`${formId}-description`} label="Description">
               <Textarea
+                id={`${formId}-description`}
                 value={values.description}
                 onChange={(event) => patch("description", event.target.value)}
                 rows={2}
@@ -1137,153 +1142,283 @@ function ConnectorFormDialog({
               />
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
-              <Field label="Target Type">
-                <Select
-                  value={values.dispatchTargetType}
-                  onValueChange={(value) => {
-                    const nextType = value as DispatchTargetType;
-                    const nextOptions = connectorTargetOptions(
-                      nextType,
-                      computerTargets,
-                      agentTargets,
-                      routineTargets,
-                    );
-                    patch("dispatchTargetType", nextType);
-                    patch("dispatchTargetId", nextOptions[0]?.id ?? "");
-                    setManualTargetId(
-                      nextType === DispatchTargetType.HybridRoutine,
-                    );
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Default</SelectLabel>
-                      <SelectItem value={DispatchTargetType.Computer}>
-                        <Monitor className="h-3.5 w-3.5" />
-                        Computer
-                      </SelectItem>
-                    </SelectGroup>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel>Advanced direct targets</SelectLabel>
-                      <SelectItem value={DispatchTargetType.Agent}>
-                        Agent
-                      </SelectItem>
-                      <SelectItem value={DispatchTargetType.Routine}>
-                        Routine
-                      </SelectItem>
-                      <SelectItem value={DispatchTargetType.HybridRoutine}>
-                        Hybrid Routine
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id={`${formId}-linear-team-key`} label="Linear team key">
+                <Input
+                  id={`${formId}-linear-team-key`}
+                  value={values.linearTeamKey}
+                  onChange={(event) =>
+                    patch("linearTeamKey", event.target.value)
+                  }
+                  placeholder="TECH"
+                  autoCapitalize="characters"
+                />
+              </Field>
+              <Field id={`${formId}-linear-label`} label="Label">
+                <Input
+                  id={`${formId}-linear-label`}
+                  value={values.linearLabel}
+                  onChange={(event) => patch("linearLabel", event.target.value)}
+                  placeholder="symphony"
+                />
+              </Field>
+              <Field id={`${formId}-linear-credential`} label="Credential">
+                <Input
+                  id={`${formId}-linear-credential`}
+                  value={values.linearCredentialSlug}
+                  onChange={(event) =>
+                    patch("linearCredentialSlug", event.target.value)
+                  }
+                  placeholder="linear"
+                />
               </Field>
               <Field
-                label={
-                  manualTargetId || !canUseTargetPicker ? "Target ID" : "Target"
-                }
+                id={`${formId}-linear-writeback-state`}
+                label="Writeback state"
               >
-                {canUseTargetPicker ? (
-                  <Select
-                    value={targetSelectValue}
-                    onValueChange={(value) => {
-                      if (value === MANUAL_TARGET_ID) {
-                        setManualTargetId(true);
-                        return;
-                      }
-                      setManualTargetId(false);
-                      patch("dispatchTargetId", value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select target..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {targetOptions.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          <span className="flex min-w-0 flex-col items-start gap-0">
-                            <span className="truncate">{option.label}</span>
-                            {option.description && (
-                              <span className="truncate text-xs text-muted-foreground">
-                                {option.description}
-                              </span>
-                            )}
-                          </span>
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={MANUAL_TARGET_ID}>
-                        Manual target ID...
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                {showManualTargetId && (
-                  <div className="mt-2 flex gap-2">
-                    <Input
-                      value={values.dispatchTargetId}
-                      onChange={(event) =>
-                        patch("dispatchTargetId", event.target.value)
-                      }
-                      placeholder={`${connectorTargetLabel(values.dispatchTargetType)} id`}
-                    />
-                    {manualTargetId && canUseTargetPicker && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setManualTargetId(false)}
-                      >
-                        Use picker
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {selectedTarget && !showManualTargetId && (
-                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                    {selectedTarget.id}
-                  </p>
-                )}
+                <Input
+                  id={`${formId}-linear-writeback-state`}
+                  value={values.linearWritebackState}
+                  onChange={(event) =>
+                    patch("linearWritebackState", event.target.value)
+                  }
+                  placeholder="In Progress"
+                />
               </Field>
             </div>
 
-            <Field label="Connection ID">
-              <Input
-                value={values.connectionId}
-                onChange={(event) => patch("connectionId", event.target.value)}
-                placeholder="Optional EventBridge connection id"
-              />
-            </Field>
-
             <Field
-              label="Config JSON"
-              action={
-                values.type.trim() === "linear_tracker" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() =>
-                      patch("configJson", linearTrackerStarterConfigJson())
-                    }
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Linear starter
-                  </Button>
-                ) : null
+              id={`${formId}-target-computer`}
+              label={
+                values.dispatchTargetType === DispatchTargetType.Computer
+                  ? "Target Computer"
+                  : `${connectorTargetLabel(values.dispatchTargetType)} target`
               }
             >
-              <Textarea
-                value={values.configJson}
-                onChange={(event) => patch("configJson", event.target.value)}
-                rows={8}
-                className="font-mono text-xs"
-                spellCheck={false}
-              />
+              {showComputerPicker ? (
+                <Select
+                  value={selectedTarget?.id}
+                  onValueChange={(value) => patch("dispatchTargetId", value)}
+                >
+                  <SelectTrigger id={`${formId}-target-computer`}>
+                    <SelectValue placeholder="Select Computer..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {computerTargets.map((computer) => (
+                      <SelectItem key={computer.id} value={computer.id}>
+                        <span className="flex min-w-0 flex-col items-start gap-0">
+                          <span className="truncate">{computer.name}</span>
+                          {(computer.owner?.name ||
+                            computer.owner?.email ||
+                            computer.runtimeStatus ||
+                            computer.status) && (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {[
+                                computer.owner?.name ?? computer.owner?.email,
+                                computer.runtimeStatus ?? computer.status,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id={`${formId}-target-computer`}
+                  value={values.dispatchTargetId}
+                  onChange={(event) =>
+                    patch("dispatchTargetId", event.target.value)
+                  }
+                  placeholder={`${connectorTargetLabel(values.dispatchTargetType)} id`}
+                />
+              )}
+              {selectedTarget && showComputerPicker && (
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                  {selectedTarget.id}
+                </p>
+              )}
             </Field>
+
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between"
+                >
+                  Advanced connector settings
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      advancedOpen && "rotate-180",
+                    )}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-4">
+                <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+                  <Field id={`${formId}-target-type`} label="Target Type">
+                    <Select
+                      value={values.dispatchTargetType}
+                      onValueChange={(value) => {
+                        const nextType = value as DispatchTargetType;
+                        const nextOptions = connectorTargetOptions(
+                          nextType,
+                          computerTargets,
+                          agentTargets,
+                          routineTargets,
+                        );
+                        patch("dispatchTargetType", nextType);
+                        patch("dispatchTargetId", nextOptions[0]?.id ?? "");
+                        setManualTargetId(
+                          nextType === DispatchTargetType.HybridRoutine,
+                        );
+                      }}
+                    >
+                      <SelectTrigger id={`${formId}-target-type`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Default</SelectLabel>
+                          <SelectItem value={DispatchTargetType.Computer}>
+                            <Monitor className="h-3.5 w-3.5" />
+                            Computer
+                          </SelectItem>
+                        </SelectGroup>
+                        <SelectSeparator />
+                        <SelectGroup>
+                          <SelectLabel>Advanced direct targets</SelectLabel>
+                          <SelectItem value={DispatchTargetType.Agent}>
+                            Agent
+                          </SelectItem>
+                          <SelectItem value={DispatchTargetType.Routine}>
+                            Routine
+                          </SelectItem>
+                          <SelectItem value={DispatchTargetType.HybridRoutine}>
+                            Hybrid Routine
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field
+                    id={`${formId}-advanced-target`}
+                    label={
+                      manualTargetId || !canUseTargetPicker
+                        ? "Target ID"
+                        : "Target"
+                    }
+                  >
+                    {canUseTargetPicker ? (
+                      <Select
+                        value={targetSelectValue}
+                        onValueChange={(value) => {
+                          if (value === MANUAL_TARGET_ID) {
+                            setManualTargetId(true);
+                            return;
+                          }
+                          setManualTargetId(false);
+                          patch("dispatchTargetId", value);
+                        }}
+                      >
+                        <SelectTrigger id={`${formId}-advanced-target`}>
+                          <SelectValue placeholder="Select target..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {targetOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              <span className="flex min-w-0 flex-col items-start gap-0">
+                                <span className="truncate">{option.label}</span>
+                                {option.description && (
+                                  <span className="truncate text-xs text-muted-foreground">
+                                    {option.description}
+                                  </span>
+                                )}
+                              </span>
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={MANUAL_TARGET_ID}>
+                            Manual target ID...
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                    {showManualTargetId && (
+                      <div className="mt-2 flex gap-2">
+                        <Input
+                          id={`${formId}-advanced-target`}
+                          value={values.dispatchTargetId}
+                          onChange={(event) =>
+                            patch("dispatchTargetId", event.target.value)
+                          }
+                          placeholder={`${connectorTargetLabel(values.dispatchTargetType)} id`}
+                        />
+                        {manualTargetId && canUseTargetPicker && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setManualTargetId(false)}
+                          >
+                            Use picker
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {selectedTarget && !showManualTargetId && (
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        {selectedTarget.id}
+                      </p>
+                    )}
+                  </Field>
+                </div>
+
+                <Field id={`${formId}-connection-id`} label="Connection ID">
+                  <Input
+                    id={`${formId}-connection-id`}
+                    value={values.connectionId}
+                    onChange={(event) =>
+                      patch("connectionId", event.target.value)
+                    }
+                    placeholder="Optional EventBridge connection id"
+                  />
+                </Field>
+
+                <Field
+                  id={`${formId}-config-json`}
+                  label="Config JSON"
+                  action={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() =>
+                        patch("configJson", linearTrackerStarterConfigJson())
+                      }
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Linear starter
+                    </Button>
+                  }
+                >
+                  <Textarea
+                    id={`${formId}-config-json`}
+                    value={values.configJson}
+                    onChange={(event) =>
+                      patch("configJson", event.target.value)
+                    }
+                    rows={8}
+                    className="font-mono text-xs"
+                    spellCheck={false}
+                  />
+                </Field>
+              </CollapsibleContent>
+            </Collapsible>
 
             <label className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
               <span>
@@ -1323,10 +1458,12 @@ function ConnectorFormDialog({
 }
 
 function Field({
+  id,
   label,
   action,
   children,
 }: {
+  id?: string;
   label: string;
   action?: ReactNode;
   children: ReactNode;
@@ -1334,7 +1471,7 @@ function Field({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label>{label}</Label>
+        <Label htmlFor={id}>{label}</Label>
         {action}
       </div>
       {children}
