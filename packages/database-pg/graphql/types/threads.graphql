@@ -39,6 +39,7 @@ type Thread {
   id: ID!
   tenantId: ID!
   agentId: ID
+  computerId: ID
   agent: Agent
   messages(limit: Int, cursor: String): MessageConnection!
   number: Int!
@@ -117,6 +118,7 @@ type ThreadLabelAssignment {
 input CreateThreadInput {
   tenantId: ID!
   agentId: ID
+  computerId: ID
   title: String!
   channel: ThreadChannel
   assigneeType: String
@@ -177,6 +179,7 @@ extend type Query {
     status: ThreadStatus
     channel: ThreadChannel
     agentId: ID
+    computerId: ID
     assigneeId: ID
     search: String
     limit: Int

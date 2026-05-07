@@ -797,6 +797,7 @@ export enum ComputerTaskType {
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
   HealthCheck = 'HEALTH_CHECK',
+  ThreadTurn = 'THREAD_TURN',
   WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
 }
 
@@ -1194,6 +1195,7 @@ export type CreateThreadInput = {
   assigneeType?: InputMaybe<Scalars['String']['input']>;
   billingCode?: InputMaybe<Scalars['String']['input']>;
   channel?: InputMaybe<ThreadChannel>;
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
@@ -3715,6 +3717,7 @@ export type QueryThreadsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   assigneeId?: InputMaybe<Scalars['ID']['input']>;
   channel?: InputMaybe<ThreadChannel>;
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
@@ -4598,6 +4601,7 @@ export type Thread = {
   checkoutVersion: Scalars['Int']['output'];
   closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  computerId?: Maybe<Scalars['ID']['output']>;
   costSummary?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;

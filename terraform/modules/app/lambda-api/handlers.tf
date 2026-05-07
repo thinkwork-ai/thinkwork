@@ -50,12 +50,13 @@ locals {
     # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
     # invocation against the right runtime — pre-U3 the flue path was
     # dead because the env var was never wired here.
-    AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-    AGENTCORE_RUNTIME_SSM_FLUE    = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
-    WORKSPACE_BUCKET              = var.bucket_name
-    HINDSIGHT_ENDPOINT            = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID           = var.agentcore_memory_id
-    MEMORY_ENGINE                 = var.memory_engine
+    AGENTCORE_RUNTIME_SSM_STRANDS             = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+    AGENTCORE_RUNTIME_SSM_FLUE                = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
+    WORKSPACE_BUCKET                          = var.bucket_name
+    THINKWORK_COMPUTER_THREAD_CUTOVER_ENABLED = tostring(var.computer_thread_cutover_enabled)
+    HINDSIGHT_ENDPOINT                        = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID                       = var.agentcore_memory_id
+    MEMORY_ENGINE                             = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where

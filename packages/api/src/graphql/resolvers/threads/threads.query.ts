@@ -15,6 +15,7 @@ export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext
 		conditions.push(sql`${threads.channel} != 'task'`);
 	}
 	if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
+	if (args.computerId) conditions.push(eq(threads.computer_id, args.computerId));
 	if (args.assigneeId) {
 		// Mobile passes user.sub (Cognito) as assigneeId. For Google-OAuth
 		// users the DB users.id is a fresh UUID linked by email, so sub !=

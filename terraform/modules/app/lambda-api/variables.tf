@@ -66,6 +66,12 @@ variable "enable_workspace_orchestration" {
   default     = false
 }
 
+variable "computer_thread_cutover_enabled" {
+  description = "Route new user Thread turns to the owner's ThinkWork Computer instead of direct Agent pickup."
+  type        = bool
+  default     = false
+}
+
 variable "user_pool_id" {
   description = "Cognito user pool ID"
   type        = string
