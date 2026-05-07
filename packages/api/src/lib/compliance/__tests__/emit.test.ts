@@ -148,6 +148,59 @@ describe("emitAuditEvent", () => {
 		});
 	});
 
+	describe("caller-supplied eventId (U6 cross-runtime idempotency)", () => {
+		it("uses the caller's eventId when supplied", async () => {
+			const { tx, valuesSpy } = makeMockTx();
+			const callerEventId = "01900000-0000-7000-8000-000000000001";
+
+			const result = await emitAuditEvent(tx, {
+				...validInput,
+				eventId: callerEventId,
+			});
+
+			expect(result.eventId).toBe(callerEventId);
+			const row = valuesSpy.mock.calls[0][0];
+			expect(row.event_id).toBe(callerEventId);
+		});
+
+		it("generates a fresh UUIDv7 when eventId is omitted", async () => {
+			const { tx, valuesSpy } = makeMockTx();
+
+			const result = await emitAuditEvent(tx, validInput);
+
+			expect(result.eventId).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+			);
+			const row = valuesSpy.mock.calls[0][0];
+			expect(row.event_id).toBe(result.eventId);
+		});
+
+		it("rejects malformed caller-supplied eventId (uuid4 disallowed)", async () => {
+			const { tx, insertSpy } = makeMockTx();
+
+			await expect(
+				emitAuditEvent(tx, {
+					...validInput,
+					// uuid4 — version nibble is `4`, fails UUIDv7 regex
+					eventId: "01900000-0000-4000-8000-000000000001",
+				}),
+			).rejects.toThrow(/not a valid UUIDv7/);
+			expect(insertSpy).not.toHaveBeenCalled();
+		});
+
+		it("rejects non-UUID strings", async () => {
+			const { tx, insertSpy } = makeMockTx();
+
+			await expect(
+				emitAuditEvent(tx, {
+					...validInput,
+					eventId: "not-a-uuid",
+				}),
+			).rejects.toThrow(/not a valid UUIDv7/);
+			expect(insertSpy).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("validation errors (no insert)", () => {
 		it("throws on missing tenantId", async () => {
 			const { tx, insertSpy } = makeMockTx();

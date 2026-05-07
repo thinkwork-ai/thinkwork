@@ -379,6 +379,14 @@ resource "aws_lambda_function" "handler" {
     # U2). EventBridge rate(1 minute) schedule + DLQ + MaxRetryAttempts=0
     # (defined in dedicated resources below).
     "compliance-outbox-drainer",
+    # Phase 3 U6 of the Compliance audit-event log
+    # (docs/plans/2026-05-07-007-feat-compliance-u6-strands-emit-path-plan.md).
+    # Cross-runtime emit endpoint POST /api/compliance/events — Bearer
+    # API_AUTH_SECRET, Strands Python client posts here with a
+    # client-supplied UUIDv7 event_id for idempotency. Connects to
+    # Aurora via the master DATABASE_SECRET_ARN like every other narrow
+    # handler (compliance_writer role is reserved for future hardening).
+    "compliance-events",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -617,6 +625,10 @@ locals {
     # Invites
     "ANY /api/invites/{proxy+}" = "invites"
     "ANY /api/invites"          = "invites"
+
+    # Compliance audit-event emit (Phase 3 U6) — narrow Bearer
+    # API_AUTH_SECRET endpoint, Strands Python client posts here.
+    "POST /api/compliance/events" = "compliance-events"
 
     # Skills
     "ANY /api/skills/{proxy+}" = "skills"

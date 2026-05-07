@@ -142,6 +142,12 @@ build_handler "connector-poller" \
 build_handler "compliance-outbox-drainer" \
   "$REPO_ROOT/packages/lambda/compliance-outbox-drainer.ts"
 
+# Phase 3 U6: cross-runtime compliance emit endpoint (Strands Python
+# client posts here). Bearer API_AUTH_SECRET; idempotency on
+# client-supplied UUIDv7 event_id.
+build_handler "compliance-events" \
+  "$REPO_ROOT/packages/api/src/handlers/compliance.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------

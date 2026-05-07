@@ -68,6 +68,14 @@ _apply_workspace_bucket_env(os.environ.get("AGENTCORE_FILES_BUCKET", ""))
 _nova_act_api_key: str = ""
 _tool_costs: list[dict] = []  # Accumulated per-invocation tool costs
 
+# ── Compliance audit-event emit client (U6) ──────────────────────────────────
+# Constructed once at server boot in main(); Phase 4 callers reuse this
+# singleton via `from server import _compliance_client`. Module-level
+# typing without a forward reference would force an import at module
+# load time; lazy-import keeps the boot path clean if compliance_client
+# ever pulls in heavy deps.
+_compliance_client = None  # type: ignore[var-annotated]
+
 
 # ─── Composer-backed workspace fetch (Unit 7) ────────────────────────────────
 #
@@ -2360,6 +2368,29 @@ def main():
     # Download system workspace files (platform rules, guardrails) — once per container
     from install_skills import install_system_workspace
     install_system_workspace()
+
+    # Phase 3 U6 of the Compliance audit-event log
+    # (docs/plans/2026-05-07-007-feat-compliance-u6-strands-emit-path-plan.md).
+    # Construct the cross-runtime audit-emit client once at server boot so
+    # any future Strands tool that wants to emit an audit event picks up
+    # the same instance. The client snapshots THINKWORK_API_URL +
+    # API_AUTH_SECRET in __init__ to guard against env shadowing later in
+    # the agent turn (per
+    # docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md).
+    #
+    # NO live emit() call sites in U6 — the only natural candidate
+    # (Strands AGENTS.md edits) goes through /api/workspaces/files which
+    # already emits via U5's TypeScript path; emitting from Python on
+    # top would create duplicate audit rows and corrupt the per-tenant
+    # hash chain's evidence shape. Selection of the first non-duplicate
+    # caller is a Phase 4 brainstorm.
+    global _compliance_client
+    try:
+        from compliance_client import ComplianceClient
+        _compliance_client = ComplianceClient()
+    except Exception as e:
+        logger.warning("Failed to initialize ComplianceClient: %s", e)
+        _compliance_client = None
 
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), AgentCoreHandler)

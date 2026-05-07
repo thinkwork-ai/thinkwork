@@ -89,7 +89,31 @@ export interface EmitAuditEventInput {
 	payloadSchemaVersion?: number;
 	/** Pre-uploaded S3 key for oversize payloads (caller uploads; helper passes through). */
 	payloadOversizeS3Key?: string;
+
+	/**
+	 * Optional caller-supplied event_id (U6). When present, the helper
+	 * uses this value as-is instead of generating a fresh UUIDv7. The
+	 * caller is responsible for passing a UUIDv7-shaped value — the
+	 * helper validates the shape and throws on mismatch. This exists so
+	 * cross-runtime callers (Strands Python client) can supply the same
+	 * event_id across retries; the `audit_outbox.uq_audit_outbox_event_id`
+	 * unique constraint then makes replays idempotent at the DB layer.
+	 *
+	 * Existing in-process U5 callers (createAgent, createInvite, MCP
+	 * CRUD, workspace-files) should NOT pass this — generating
+	 * server-side keeps the chain ordering invariant simple.
+	 */
+	eventId?: string;
 }
+
+/**
+ * UUIDv7 regex from RFC 9562 — version nibble is `7`, variant nibble is
+ * `8`/`9`/`a`/`b`. The helper validates caller-supplied event_ids
+ * against this shape so a malformed ID never reaches the DB unique
+ * constraint where it would silently disable idempotent replay.
+ */
+const UUIDV7_RE =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface EmitAuditEventResult {
 	eventId: string;
@@ -152,9 +176,16 @@ export async function emitAuditEvent(
 				`Allowed: ${COMPLIANCE_SOURCES.join(", ")}`,
 		);
 	}
+	if (input.eventId !== undefined && !UUIDV7_RE.test(input.eventId)) {
+		throw new Error(
+			`emitAuditEvent: eventId "${input.eventId}" is not a valid UUIDv7. ` +
+				`Cross-runtime idempotency depends on UUIDv7 shape; pass undefined ` +
+				`to let the helper generate one server-side.`,
+		);
+	}
 
 	// ── ID + redaction ───────────────────────────────────────────
-	const eventId = uuidv7();
+	const eventId = input.eventId ?? uuidv7();
 	const outboxId = uuidv7();
 	const occurredAt = input.occurredAt ?? new Date();
 
