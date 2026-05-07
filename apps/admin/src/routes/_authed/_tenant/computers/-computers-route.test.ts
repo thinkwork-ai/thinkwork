@@ -34,7 +34,9 @@ describe("Computers admin routes", () => {
 
   it("renders detail panels for status, runtime, migration, and identity", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
-    expect(detailRouteSource).toContain('type ComputerDetailTab = "dashboard" | "workspace" | "config"');
+    expect(detailRouteSource).toContain(
+      'type ComputerDetailTab = "dashboard" | "workspace" | "config"',
+    );
     expect(detailRouteSource).toContain('value="dashboard"');
     expect(detailRouteSource).toContain('value="workspace"');
     expect(detailRouteSource).toContain('value="config"');
@@ -56,6 +58,10 @@ describe("Computers admin routes", () => {
     expect(liveTasksPanelSource).toContain(
       "ComputerTaskType.GoogleWorkspaceAuthCheck",
     );
+    expect(liveTasksPanelSource).toContain(
+      "ComputerTaskType.GoogleCalendarUpcoming",
+    );
+    expect(liveTasksPanelSource).toContain("Google Calendar token unavailable");
     expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
     expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");
     expect(liveTasksPanelSource).not.toContain("accessToken");

@@ -16,6 +16,9 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("GOOGLE_WORKSPACE_AUTH_CHECK")).toBe(
       "google_workspace_auth_check",
     );
+    expect(parseComputerTaskType("GOOGLE_CALENDAR_UPCOMING")).toBe(
+      "google_calendar_upcoming",
+    );
   });
 
   it("rejects unsupported task types", () => {
@@ -66,5 +69,44 @@ describe("Computer task helpers", () => {
         token: "do-not-use",
       }),
     ).toBeNull();
+  });
+
+  it("normalizes Google Calendar upcoming input with safe bounds", () => {
+    const normalized = normalizeTaskInput("google_calendar_upcoming", {
+      timeMin: "2026-05-07T10:00:00.000Z",
+      timeMax: "2026-05-20T10:00:00.000Z",
+      maxResults: 500,
+    });
+
+    expect(normalized).toEqual({
+      timeMin: "2026-05-07T10:00:00.000Z",
+      timeMax: "2026-05-14T10:00:00.000Z",
+      maxResults: 25,
+    });
+  });
+
+  it("defaults Google Calendar upcoming input to a future window", () => {
+    const normalized = normalizeTaskInput("google_calendar_upcoming", null);
+
+    expect(typeof normalized?.timeMin).toBe("string");
+    expect(typeof normalized?.timeMax).toBe("string");
+    expect(normalized?.maxResults).toBe(10);
+    expect(new Date(String(normalized?.timeMax)).getTime()).toBeGreaterThan(
+      new Date(String(normalized?.timeMin)).getTime(),
+    );
+  });
+
+  it("rejects invalid Google Calendar time ranges", () => {
+    expect(() =>
+      normalizeTaskInput("google_calendar_upcoming", {
+        timeMin: "not-a-date",
+      }),
+    ).toThrow("timeMin must be an ISO timestamp");
+    expect(() =>
+      normalizeTaskInput("google_calendar_upcoming", {
+        timeMin: "2026-05-07T10:00:00.000Z",
+        timeMax: "2026-05-07T09:59:59.000Z",
+      }),
+    ).toThrow("timeMax must be after timeMin");
   });
 });

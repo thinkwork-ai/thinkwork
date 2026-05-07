@@ -29,11 +29,15 @@ vi.mock("../oauth-token.js", () => ({
   resolveOAuthToken: mocks.resolveOAuthToken,
 }));
 
-import { checkGoogleWorkspaceConnection } from "./runtime-api.js";
+import {
+  checkGoogleWorkspaceConnection,
+  resolveGoogleWorkspaceCliToken,
+} from "./runtime-api.js";
 
 describe("Computer runtime API Google Workspace status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     mocks.computerRows = [
       {
         id: "computer-1",
@@ -89,5 +93,58 @@ describe("Computer runtime API Google Workspace status", () => {
       reason: null,
     });
     expect(JSON.stringify(result)).not.toContain("ya29");
+  });
+
+  it("resolves a Google Workspace CLI token for service-auth runtime use", async () => {
+    mocks.resolveConnectionForUser.mockResolvedValue({
+      connectionId: "connection-1",
+      providerId: "provider-1",
+    });
+    mocks.resolveOAuthToken.mockResolvedValue("ya29.secret-token");
+
+    const result = await resolveGoogleWorkspaceCliToken({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      tokenResolved: true,
+      accessToken: "ya29.secret-token",
+      connectionId: "connection-1",
+    });
+  });
+
+  it("returns safe CLI token status when no connection or token is available", async () => {
+    mocks.resolveConnectionForUser.mockResolvedValueOnce(null);
+
+    await expect(
+      resolveGoogleWorkspaceCliToken({
+        tenantId: "tenant-1",
+        computerId: "computer-1",
+      }),
+    ).resolves.toMatchObject({
+      connected: false,
+      tokenResolved: false,
+      reason: "no_active_connection",
+    });
+
+    mocks.resolveConnectionForUser.mockResolvedValueOnce({
+      connectionId: "connection-1",
+      providerId: "provider-1",
+    });
+    mocks.resolveOAuthToken.mockResolvedValueOnce(null);
+
+    const result = await resolveGoogleWorkspaceCliToken({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      tokenResolved: false,
+      reason: "token_unavailable_or_expired",
+    });
+    expect(JSON.stringify(result)).not.toContain("accessToken");
   });
 });

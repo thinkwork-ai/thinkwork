@@ -792,6 +792,7 @@ export enum ComputerTaskStatus {
 }
 
 export enum ComputerTaskType {
+  GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
   HealthCheck = 'HEALTH_CHECK',

@@ -5,10 +5,7 @@ import {
   computerEvents,
   computerTasks,
 } from "@thinkwork/database-pg/schema";
-import {
-  resolveConnectionForUser,
-  resolveOAuthToken,
-} from "../oauth-token.js";
+import { resolveConnectionForUser, resolveOAuthToken } from "../oauth-token.js";
 
 const db = getDb();
 
@@ -217,6 +214,58 @@ export async function checkGoogleWorkspaceConnection(input: {
     connectionId: connection.connectionId,
     reason: accessToken ? null : "token_unavailable_or_expired",
     checkedAt,
+  };
+}
+
+export async function resolveGoogleWorkspaceCliToken(input: {
+  tenantId: string;
+  computerId: string;
+}) {
+  const computer = await loadComputer(input.tenantId, input.computerId);
+  const checkedAt = new Date().toISOString();
+  const connection = await resolveConnectionForUser(
+    computer.tenant_id,
+    computer.owner_user_id,
+    "google_productivity",
+  );
+
+  const base = {
+    providerName: "google_productivity",
+    checkedAt,
+  };
+
+  if (!connection) {
+    return {
+      ...base,
+      connected: false,
+      tokenResolved: false,
+      reason: "no_active_connection",
+    };
+  }
+
+  const accessToken = await resolveOAuthToken(
+    connection.connectionId,
+    computer.tenant_id,
+    connection.providerId,
+  );
+
+  if (!accessToken) {
+    return {
+      ...base,
+      connected: true,
+      tokenResolved: false,
+      connectionId: connection.connectionId,
+      reason: "token_unavailable_or_expired",
+    };
+  }
+
+  return {
+    ...base,
+    connected: true,
+    tokenResolved: true,
+    connectionId: connection.connectionId,
+    reason: null,
+    accessToken,
   };
 }
 

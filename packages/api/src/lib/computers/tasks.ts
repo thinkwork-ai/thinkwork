@@ -9,12 +9,17 @@ import {
 
 const db = getDb();
 const MAX_WORKSPACE_FILE_BYTES = 256 * 1024;
+const DEFAULT_GOOGLE_CALENDAR_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_GOOGLE_CALENDAR_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_GOOGLE_CALENDAR_RESULTS = 10;
+const MAX_GOOGLE_CALENDAR_RESULTS = 25;
 
 export const COMPUTER_TASK_TYPES = [
   "health_check",
   "workspace_file_write",
   "google_cli_smoke",
   "google_workspace_auth_check",
+  "google_calendar_upcoming",
 ] as const;
 
 export type ComputerTaskType = (typeof COMPUTER_TASK_TYPES)[number];
@@ -167,6 +172,10 @@ export function normalizeTaskInput(
     return null;
   }
 
+  if (taskType === "google_calendar_upcoming") {
+    return normalizeGoogleCalendarUpcomingInput(input);
+  }
+
   if (taskType === "workspace_file_write") {
     const payload = coerceObject(input);
     const path = requiredString(payload.path, "path");
@@ -195,6 +204,39 @@ export function validateWorkspaceRelativePath(path: string): string {
     throw new ComputerTaskInputError("path cannot contain . or .. segments");
   }
   return parts.join("/");
+}
+
+function normalizeGoogleCalendarUpcomingInput(
+  input: unknown,
+): Record<string, unknown> {
+  const payload =
+    input === undefined || input === null ? {} : coerceObject(input);
+  const now = new Date();
+  const timeMin = optionalDate(payload.timeMin, "timeMin") ?? now;
+  const requestedTimeMax =
+    optionalDate(payload.timeMax, "timeMax") ??
+    new Date(timeMin.getTime() + DEFAULT_GOOGLE_CALENDAR_WINDOW_MS);
+  if (requestedTimeMax.getTime() <= timeMin.getTime()) {
+    throw new ComputerTaskInputError("timeMax must be after timeMin");
+  }
+  const maxTimeMax = new Date(
+    timeMin.getTime() + MAX_GOOGLE_CALENDAR_WINDOW_MS,
+  );
+  const timeMax =
+    requestedTimeMax.getTime() > maxTimeMax.getTime()
+      ? maxTimeMax
+      : requestedTimeMax;
+  const maxResults = clampInteger(
+    payload.maxResults,
+    DEFAULT_GOOGLE_CALENDAR_RESULTS,
+    1,
+    MAX_GOOGLE_CALENDAR_RESULTS,
+  );
+  return {
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
+    maxResults,
+  };
 }
 
 export function toGraphqlComputerTask(row: Record<string, any>) {
@@ -261,7 +303,9 @@ function coerceObject(value: unknown): Record<string, unknown> {
         return parsed as Record<string, unknown>;
       }
     } catch {
-      throw new ComputerTaskInputError("input must be an object or JSON object");
+      throw new ComputerTaskInputError(
+        "input must be an object or JSON object",
+      );
     }
   }
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -275,6 +319,38 @@ function requiredString(value: unknown, name: string): string {
     throw new ComputerTaskInputError(`${name} is required`);
   }
   return value;
+}
+
+function optionalDate(value: unknown, name: string): Date | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new ComputerTaskInputError(`${name} must be an ISO timestamp`);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new ComputerTaskInputError(`${name} must be an ISO timestamp`);
+  }
+  return date;
+}
+
+function clampInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+  if (!Number.isFinite(parsed)) {
+    throw new ComputerTaskInputError("maxResults must be a number");
+  }
+  const integer = Math.floor(parsed);
+  return Math.min(Math.max(integer, min), max);
 }
 
 function assertNever(value: never): never {

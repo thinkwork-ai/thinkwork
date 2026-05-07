@@ -5,8 +5,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV WORKSPACE_ROOT=/workspace
 ENV RUNTIME_VERSION=phase2-skeleton
+ENV GOOGLE_WORKSPACE_CLI_BIN=gws
 
-RUN mkdir -p /workspace && chown node:node /workspace
+RUN npm install -g @googleworkspace/cli@0.22.5 \
+  && mkdir -p /workspace \
+  && chown node:node /workspace
 
 COPY package.json ./package.json
 COPY dist/src ./dist/src

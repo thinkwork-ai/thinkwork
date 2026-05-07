@@ -1,6 +1,9 @@
 import { smokeGoogleWorkspaceCli } from "./google-cli-smoke.js";
+import { listGoogleCalendarUpcomingWithGws } from "./google-workspace-cli.js";
 import { writeHealthCheck, writeWorkspaceFile } from "./workspace.js";
 import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
+
+type GoogleWorkspaceCliRunner = typeof listGoogleCalendarUpcomingWithGws;
 
 export type TaskLoopOptions = {
   api: Pick<
@@ -10,6 +13,7 @@ export type TaskLoopOptions = {
     | "failTask"
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
+    | "resolveGoogleWorkspaceCliToken"
   >;
   workspaceRoot: string;
   idleDelayMs: number;
@@ -45,8 +49,11 @@ export async function handleTask(
   workspaceRoot: string,
   api?: Pick<
     ComputerRuntimeApi,
-    "appendTaskEvent" | "checkGoogleWorkspaceConnection"
+    | "appendTaskEvent"
+    | "checkGoogleWorkspaceConnection"
+    | "resolveGoogleWorkspaceCliToken"
   >,
+  googleWorkspaceCli: GoogleWorkspaceCliRunner = listGoogleCalendarUpcomingWithGws,
 ) {
   if (task.taskType === "noop") {
     return { ok: true, taskType: "noop" };
@@ -86,9 +93,76 @@ export async function handleTask(
       googleWorkspace,
     };
   }
+  if (task.taskType === "google_calendar_upcoming") {
+    if (!api) throw new Error("Computer runtime API is required");
+    const taskInput = parseCalendarUpcomingInput(task.input);
+    const cliToken = await api.resolveGoogleWorkspaceCliToken();
+    const googleCalendar =
+      cliToken.connected && cliToken.tokenResolved && cliToken.accessToken
+        ? await googleWorkspaceCli(taskInput, {
+            accessToken: cliToken.accessToken,
+          })
+        : {
+            providerName: cliToken.providerName,
+            connected: cliToken.connected,
+            tokenResolved: cliToken.tokenResolved,
+            calendarAvailable: false,
+            connectionId: cliToken.connectionId ?? null,
+            reason: cliToken.reason ?? null,
+            timeMin: taskInput.timeMin,
+            timeMax: taskInput.timeMax,
+            maxResults: taskInput.maxResults,
+            events: [],
+            eventCount: 0,
+          };
+    await api.appendTaskEvent(task.id, {
+      eventType: "google_calendar_upcoming_checked",
+      level:
+        googleCalendar.connected &&
+        googleCalendar.tokenResolved &&
+        googleCalendar.calendarAvailable
+          ? "info"
+          : "warn",
+      payload: {
+        providerName: googleCalendar.providerName,
+        connected: googleCalendar.connected,
+        tokenResolved: googleCalendar.tokenResolved,
+        calendarAvailable: googleCalendar.calendarAvailable,
+        eventCount: googleCalendar.eventCount,
+        reason: googleCalendar.reason ?? null,
+      },
+    });
+    return {
+      ok: true,
+      taskType: "google_calendar_upcoming",
+      googleCalendar,
+    };
+  }
   throw new Error(`Unsupported Computer task type: ${task.taskType}`);
 }
 
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseCalendarUpcomingInput(input: unknown) {
+  const payload =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  const timeMin = requiredString(payload.timeMin, "timeMin");
+  const timeMax = requiredString(payload.timeMax, "timeMax");
+  const maxResults =
+    typeof payload.maxResults === "number" &&
+    Number.isInteger(payload.maxResults)
+      ? payload.maxResults
+      : 10;
+  return { timeMin, timeMax, maxResults };
+}
+
+function requiredString(value: unknown, name: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
 }

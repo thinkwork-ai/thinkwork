@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export async function smokeGoogleWorkspaceCli(
-  binary = process.env.GOOGLE_WORKSPACE_CLI_BIN || "google-workspace",
+  binary = process.env.GOOGLE_WORKSPACE_CLI_BIN || "gws",
 ) {
   try {
     const result = await execFileAsync(binary, ["--version"], {
