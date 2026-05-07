@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => {
     resolveGoogleWorkspaceCliToken: vi.fn(),
     delegateConnectorWorkTask: vi.fn(),
     executeThreadTurnTask: vi.fn(),
+    loadThreadTurnContext: vi.fn(),
+    recordThreadTurnResponse: vi.fn(),
     completeComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
     ComputerTaskDelegationError: class ComputerTaskDelegationError extends Error {
@@ -47,6 +49,8 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   resolveGoogleWorkspaceCliToken: mocks.resolveGoogleWorkspaceCliToken,
   delegateConnectorWorkTask: mocks.delegateConnectorWorkTask,
   executeThreadTurnTask: mocks.executeThreadTurnTask,
+  loadThreadTurnContext: mocks.loadThreadTurnContext,
+  recordThreadTurnResponse: mocks.recordThreadTurnResponse,
   completeComputerTask: mocks.completeComputerTask,
   failComputerTask: mocks.failComputerTask,
   ComputerTaskDelegationError: mocks.ComputerTaskDelegationError,
@@ -117,12 +121,24 @@ describe("computer-runtime handler", () => {
       status: "running",
     });
     mocks.executeThreadTurnTask.mockResolvedValue({
-      dispatched: true,
-      mode: "managed_agent",
-      agentId: "agent-1",
+      error: "legacy-disabled",
+    });
+    mocks.loadThreadTurnContext.mockResolvedValue({
+      taskId: TASK_ID,
+      source: "chat_message",
+      computer: { id: COMPUTER_ID, name: "Marco", slug: "marco" },
+      thread: { id: "thread-1", title: "Hello" },
+      message: { id: "message-1", content: "Hi" },
+      messagesHistory: [{ id: "message-1", role: "user", content: "Hi" }],
+      model: "model-1",
+    });
+    mocks.recordThreadTurnResponse.mockResolvedValue({
+      responded: true,
+      mode: "computer_native",
+      responseMessageId: "message-2",
       threadId: "thread-1",
       messageId: "message-1",
-      status: "running",
+      status: "completed",
     });
     mocks.completeComputerTask.mockResolvedValue({
       id: TASK_ID,
@@ -256,11 +272,11 @@ describe("computer-runtime handler", () => {
     });
   });
 
-  it("executes Computer-owned thread turns through the service-auth task endpoint", async () => {
+  it("loads Computer-owned thread turn context through the service-auth task endpoint", async () => {
     const response = await handler(
       event(
         "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/execute-thread-turn`,
+        `/api/computers/runtime/tasks/${TASK_ID}/thread-turn-context`,
         {
           body: {
             tenantId: TENANT_ID,
@@ -271,15 +287,48 @@ describe("computer-runtime handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.executeThreadTurnTask).toHaveBeenCalledWith({
+    expect(mocks.loadThreadTurnContext).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       computerId: COMPUTER_ID,
       taskId: TASK_ID,
     });
     expect(JSON.parse(response.body ?? "{}")).toMatchObject({
-      dispatched: true,
-      mode: "managed_agent",
-      agentId: "agent-1",
+      taskId: TASK_ID,
+      thread: { id: "thread-1" },
+      message: { id: "message-1" },
+    });
+  });
+
+  it("records Computer-native thread responses through the service-auth task endpoint", async () => {
+    const response = await handler(
+      event(
+        "POST",
+        `/api/computers/runtime/tasks/${TASK_ID}/thread-turn-response`,
+        {
+          body: {
+            tenantId: TENANT_ID,
+            computerId: COMPUTER_ID,
+            content: "Assistant reply",
+            model: "model-1",
+            usage: { inputTokens: 3 },
+          },
+        },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.recordThreadTurnResponse).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+      taskId: TASK_ID,
+      content: "Assistant reply",
+      model: "model-1",
+      usage: { inputTokens: 3 },
+    });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      responded: true,
+      mode: "computer_native",
+      responseMessageId: "message-2",
     });
   });
 

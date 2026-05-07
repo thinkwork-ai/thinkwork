@@ -13,7 +13,8 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -38,7 +39,8 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -127,7 +129,8 @@ describe("Computer runtime task loop", () => {
         messageId: "message-1",
         status: "running",
       }),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
     const output = await handleTask(
@@ -189,7 +192,8 @@ describe("Computer runtime task loop", () => {
         messageId: "message-1",
         status: "running",
       }),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -233,22 +237,42 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn().mockResolvedValue({
-        dispatched: true,
-        mode: "managed_agent",
-        agentId: "agent-1",
+      loadThreadTurnContext: vi.fn().mockResolvedValue({
+        taskId: "task-10",
+        source: "chat_message",
+        computer: {
+          id: "computer-1",
+          name: "Marco",
+          slug: "marco",
+          workspaceRoot: "/workspace",
+        },
+        thread: { id: "thread-1", title: "Hello Marco" },
+        message: { id: "message-1", content: "Hello" },
+        messagesHistory: [{ id: "message-1", role: "user", content: "Hello" }],
+        model: "model-1",
+        systemPrompt: "You are Marco.",
+      }),
+      recordThreadTurnResponse: vi.fn().mockResolvedValue({
+        responded: true,
+        mode: "computer_native",
+        responseMessageId: "message-2",
         threadId: "thread-1",
         messageId: "message-1",
-        source: "chat_message",
-        status: "running",
+        status: "completed",
+        model: "model-1",
       }),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
+    const computerChat = vi.fn().mockResolvedValue({
+      content: "Hi from Marco",
+      model: "model-1",
+    });
 
     const result = await runTaskLoopOnce({
       api,
       workspaceRoot: "/tmp",
       idleDelayMs: 0,
+      computerChat,
     });
 
     expect(result).toMatchObject({ handled: true, taskId: "task-10" });
@@ -261,18 +285,25 @@ describe("Computer runtime task loop", () => {
         source: "chat_message",
       },
     });
-    expect(api.executeThreadTurn).toHaveBeenCalledWith("task-10");
+    expect(api.loadThreadTurnContext).toHaveBeenCalledWith("task-10");
+    expect(computerChat).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-10" }),
+      { workspaceRoot: "/tmp" },
+    );
+    expect(api.recordThreadTurnResponse).toHaveBeenCalledWith("task-10", {
+      content: "Hi from Marco",
+      model: "model-1",
+    });
     expect(api.completeTask).toHaveBeenCalledWith("task-10", {
       ok: true,
       taskType: "thread_turn",
-      accepted: true,
-      dispatched: true,
-      mode: "managed_agent",
-      agentId: "agent-1",
+      responded: true,
+      mode: "computer_native",
+      responseMessageId: "message-2",
       threadId: "thread-1",
       messageId: "message-1",
-      source: "chat_message",
-      status: "running",
+      status: "completed",
+      model: "model-1",
     });
     expect(api.failTask).not.toHaveBeenCalled();
   });
@@ -297,7 +328,8 @@ describe("Computer runtime task loop", () => {
       delegateConnectorWork: vi
         .fn()
         .mockRejectedValue(new Error("delegation unavailable")),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -335,7 +367,8 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
