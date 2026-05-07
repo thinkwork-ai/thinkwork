@@ -459,3 +459,25 @@ variable "compliance_anchor_lambda_role_arn" {
   type        = string
   default     = ""
 }
+
+variable "compliance_anchor_lambda_role_name" {
+  description = "Name of the IAM role the anchor Lambda assumes (extracted from the role resource for inline-policy attachments like the U8a DLQ SendMessage grant)."
+  type        = string
+  default     = ""
+}
+
+# ---------------------------------------------------------------------------
+# Phase 3 U8a — compliance anchor Lambda runtime config
+# ---------------------------------------------------------------------------
+
+variable "compliance_reader_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the `compliance_reader` Aurora role credentials. Wired from `module.database.compliance_reader_secret_arn`. The U8a anchor Lambda uses this for least-privilege SELECT on `compliance.audit_events`."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_anchor_object_lock_retention_days" {
+  description = "Default Object Lock retention for the compliance anchor bucket, in days. Forwarded to the anchor Lambda as COMPLIANCE_ANCHOR_RETENTION_DAYS (consumed by U8b's live function; pre-plumbed in U8a). Master plan baseline: 365."
+  type        = number
+  default     = 365
+}

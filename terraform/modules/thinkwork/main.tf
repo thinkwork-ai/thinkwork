@@ -132,10 +132,17 @@ module "compliance_anchors" {
 
   stage          = var.stage
   account_id     = var.account_id
+  region         = var.region
   bucket_name    = local.compliance_anchor_bucket_name
   kms_key_arn    = module.kms.key_arn
   mode           = var.compliance_anchor_object_lock_mode
   retention_days = var.compliance_anchor_retention_days
+
+  # Phase 3 U8a — anchor Lambda's IAM role gets `secretsmanager:GetSecretValue`
+  # on these two compliance secrets (anchor connects as compliance_reader for
+  # SELECT, compliance_drainer for tenant_anchor_state UPDATE).
+  compliance_reader_secret_arn  = module.database.compliance_reader_secret_arn
+  compliance_drainer_secret_arn = module.database.compliance_drainer_secret_arn
 }
 
 module "database" {
@@ -225,11 +232,19 @@ module "api" {
   # the compliance-bootstrap CI step in deploy.yml).
   compliance_drainer_secret_arn = module.database.compliance_drainer_secret_arn
 
-  # Phase 3 U7 — anchor bucket + IAM role wiring. Inert in this PR (no Lambda
-  # in lambda-api references these yet); U8a wires the anchor Lambda function.
-  compliance_anchor_bucket_arn      = module.compliance_anchors.bucket_arn
-  compliance_anchor_bucket_name     = module.compliance_anchors.bucket_name
-  compliance_anchor_lambda_role_arn = module.compliance_anchors.lambda_role_arn
+  # Phase 3 U7 — anchor bucket + IAM role wiring. U8a now uses these to
+  # provision the standalone anchor Lambda function + watchdog + schedules.
+  compliance_anchor_bucket_arn       = module.compliance_anchors.bucket_arn
+  compliance_anchor_bucket_name      = module.compliance_anchors.bucket_name
+  compliance_anchor_lambda_role_arn  = module.compliance_anchors.lambda_role_arn
+  compliance_anchor_lambda_role_name = module.compliance_anchors.lambda_role_name
+
+  # Phase 3 U8a — anchor Lambda runtime config. compliance_reader for
+  # least-privilege SELECT on audit_events; retention_days forwarded as
+  # the COMPLIANCE_ANCHOR_RETENTION_DAYS env var (consumed by U8b's
+  # live function; pre-plumbed in U8a per Decision #11).
+  compliance_reader_secret_arn                 = module.database.compliance_reader_secret_arn
+  compliance_anchor_object_lock_retention_days = var.compliance_anchor_retention_days
 
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
