@@ -109,6 +109,67 @@ describe("Computer runtime task loop", () => {
     });
   });
 
+  it("accepts connector work as a handoff-only task", async () => {
+    const output = await handleTask(
+      {
+        id: "task-7",
+        taskType: "connector_work",
+        input: {
+          connectorId: "connector-1",
+          connectorExecutionId: "execution-1",
+          externalRef: "TECH-59",
+          title: "Handle Linear issue",
+          body: "Linear issue body should stay in the existing thread",
+        },
+      },
+      "/tmp",
+    );
+
+    expect(output).toEqual({
+      ok: true,
+      taskType: "connector_work",
+      accepted: true,
+      mode: "handoff_only",
+    });
+  });
+
+  it("completes connector work tasks without failing the runtime handoff", async () => {
+    const api = {
+      claimTask: vi.fn().mockResolvedValue({
+        id: "task-8",
+        taskType: "connector_work",
+        input: {
+          connectorId: "connector-1",
+          connectorExecutionId: "execution-1",
+          externalRef: "TECH-59",
+          title: "Handle Linear issue",
+          body: "Linear issue body should stay in the existing thread",
+        },
+      }),
+      completeTask: vi.fn(),
+      failTask: vi.fn(),
+      appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+    };
+
+    const result = await runTaskLoopOnce({
+      api,
+      workspaceRoot: "/tmp",
+      idleDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({ handled: true, taskId: "task-8" });
+    expect(api.completeTask).toHaveBeenCalledWith("task-8", {
+      ok: true,
+      taskType: "connector_work",
+      accepted: true,
+      mode: "handoff_only",
+    });
+    expect(api.failTask).not.toHaveBeenCalled();
+    expect(api.appendTaskEvent).not.toHaveBeenCalled();
+  });
+
   it("fails unsupported task types without leaking input bodies", async () => {
     const api = {
       claimTask: vi.fn().mockResolvedValue({

@@ -70,6 +70,14 @@ export async function handleTask(
     const smoke = await smokeGoogleWorkspaceCli();
     return { ok: true, taskType: "google_cli_smoke", smoke };
   }
+  if (task.taskType === "connector_work") {
+    return {
+      ok: true,
+      taskType: "connector_work",
+      accepted: true,
+      mode: "handoff_only",
+    };
+  }
   if (task.taskType === "google_workspace_auth_check") {
     if (!api) throw new Error("Computer runtime API is required");
     const googleWorkspace = await api.checkGoogleWorkspaceConnection();
