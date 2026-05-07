@@ -32,6 +32,7 @@ enum ThreadChannel {
   WEBHOOK
   API
   TASK
+  CONNECTOR
 }
 
 type Thread {

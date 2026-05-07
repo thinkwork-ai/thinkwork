@@ -4640,6 +4640,7 @@ export type ThreadAttachment = {
 export enum ThreadChannel {
   Api = 'API',
   Chat = 'CHAT',
+  Connector = 'CONNECTOR',
   Email = 'EMAIL',
   Manual = 'MANUAL',
   Schedule = 'SCHEDULE',

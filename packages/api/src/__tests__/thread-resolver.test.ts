@@ -139,6 +139,13 @@ describe("threadToCamel", () => {
 		expect(result.channel).toBe("TASK");
 	});
 
+	it("uppercases every persisted channel enum field", () => {
+		for (const channel of ["chat", "email", "schedule", "manual", "webhook", "api", "task", "connector"]) {
+			const result = threadToCamel({ channel });
+			expect(result.channel).toBe(channel.toUpperCase());
+		}
+	});
+
 	it("handles all 7 statuses", () => {
 		for (const status of ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"]) {
 			const result = threadToCamel({ status });
