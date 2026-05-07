@@ -76,6 +76,7 @@ import {
 } from "@/lib/graphql-queries";
 import {
   connectorFormValues,
+  connectorExecutionCleanupDisplay,
   connectorExecutionLinearIdentifier,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
@@ -617,7 +618,19 @@ function connectorRunLifecycleColumns(args: {
 
 function WritebackStage({ payload }: { payload: unknown }) {
   const display = connectorExecutionWritebackDisplay(payload);
-  if (!display) return null;
+  if (!display) {
+    const cleanup = connectorExecutionCleanupDisplay(payload);
+    if (!cleanup) return null;
+
+    return (
+      <span
+        className="block min-w-0 truncate rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+        title={cleanup.title}
+      >
+        {cleanup.label}
+      </span>
+    );
+  }
 
   return (
     <span

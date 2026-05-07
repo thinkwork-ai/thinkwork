@@ -58,6 +58,11 @@ export type ConnectorExecutionWritebackDisplay = {
   tone: "success" | "destructive" | "muted";
 };
 
+export type ConnectorExecutionCleanupDisplay = {
+  label: string;
+  title: string;
+};
+
 export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   name: "",
   type: "linear_tracker",
@@ -305,6 +310,26 @@ export function connectorExecutionCleanupReason(
   const cleanup = parsePayloadRecord(parsed?.cleanup);
   const reason = cleanup?.reason;
   return typeof reason === "string" && reason.trim() ? reason : null;
+}
+
+export function connectorExecutionCleanupDisplay(
+  payload: unknown,
+): ConnectorExecutionCleanupDisplay | null {
+  const parsed = parsePayloadRecord(payload);
+  const cleanup = parsePayloadRecord(parsed?.cleanup);
+  const reason = cleanString(cleanup?.reason);
+  if (!reason) return null;
+
+  return {
+    label: `Cleaned: ${statusLabel(reason)}`,
+    title: [
+      `Cleanup reason: ${reason}`,
+      cleanString(cleanup?.source),
+      cleanString(cleanup?.appliedAt),
+    ]
+      .filter(Boolean)
+      .join(" - "),
+  };
 }
 
 export function connectorExecutionWritebackDisplay(
