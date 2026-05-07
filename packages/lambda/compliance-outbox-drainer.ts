@@ -78,12 +78,22 @@ function canonicalize(value: unknown, parentKey: string | null): string {
 	if (typeof value !== "object") return JSON.stringify(value);
 
 	if (Array.isArray(value)) {
-		const items =
-			parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)
-				? [...value]
-						.map((v) => (typeof v === "string" ? v : String(v)))
-						.sort()
-				: value;
+		let items: unknown[];
+		if (parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)) {
+			// Mirror of hash-chain.ts SEC-005 fix: throw on non-string
+			// elements rather than String(v) coercion (which silently
+			// produces "[object Object]").
+			for (const v of value) {
+				if (typeof v !== "string") {
+					throw new Error(
+						`canonicalize: non-string element in set-like array field "${parentKey}" (got ${typeof v})`,
+					);
+				}
+			}
+			items = [...(value as string[])].sort();
+		} else {
+			items = value;
+		}
 		return `[${items.map((v) => canonicalize(v, null)).join(",")}]`;
 	}
 
@@ -125,6 +135,17 @@ async function getDrainerDb(): Promise<Database> {
 	if (_db) return _db;
 	const url = await resolveDrainerDatabaseUrl();
 	_db = createDb(url);
+	// Wire pool error handler to invalidate the cached _db so the next
+	// invocation rebuilds. Without this, a 5-min Aurora idle TCP reap
+	// leaves the drainer's pool dead and every subsequent invocation
+	// fails with ECONNRESET → DLQ noise until Lambda container recycle
+	// (~15 min). Per ce-reliability-reviewer REL-001.
+	const dbAny = _db as unknown as {
+		$client?: { on?: (event: string, cb: () => void) => void };
+	};
+	dbAny.$client?.on?.("error", () => {
+		_db = undefined;
+	});
 	return _db;
 }
 
@@ -134,10 +155,20 @@ async function getDrainerDb(): Promise<Database> {
  * drainer connects as a different role (compliance_drainer, not
  * thinkwork_admin) and cross-contaminating module-scope state would
  * be a footgun.
+ *
+ * **No env-var URL override in production.** A `COMPLIANCE_DRAINER_DATABASE_URL`
+ * env var was previously honored as a "test override" but accidentally
+ * setting it in prod (botched terraform-apply, console edit, attacker
+ * with Lambda:UpdateFunctionConfiguration) would redirect the drainer
+ * to an arbitrary host, voiding the compliance_drainer role's
+ * least-privilege guarantee. Per ce-security-reviewer SEC-001, the
+ * override is now gated behind `NODE_ENV=test` only.
  */
 async function resolveDrainerDatabaseUrl(): Promise<string> {
-	if (process.env.COMPLIANCE_DRAINER_DATABASE_URL) {
-		// Test override.
+	if (
+		process.env.NODE_ENV === "test" &&
+		process.env.COMPLIANCE_DRAINER_DATABASE_URL
+	) {
 		return process.env.COMPLIANCE_DRAINER_DATABASE_URL;
 	}
 
@@ -151,7 +182,12 @@ async function resolveDrainerDatabaseUrl(): Promise<string> {
 	const { SecretsManagerClient, GetSecretValueCommand } = await import(
 		"@aws-sdk/client-secrets-manager"
 	);
-	const sm = new SecretsManagerClient({});
+	// Bound the Secrets Manager call so a regional degradation doesn't
+	// consume the full 30s Lambda timeout. Per ce-reliability-reviewer
+	// REL-002.
+	const sm = new SecretsManagerClient({
+		requestHandler: { requestTimeout: 5000, connectionTimeout: 3000 },
+	});
 	const result = await sm.send(
 		new GetSecretValueCommand({ SecretId: secretArn }),
 	);
@@ -212,6 +248,14 @@ type RowOutcome = "drained" | "errored" | "empty";
 
 async function processNextRow(db: Database): Promise<RowOutcome> {
 	let outcome: RowOutcome = "empty";
+	// Capture the failing row's outbox_id outside the transaction so the
+	// catch block can mark exactly that row as poison without re-polling.
+	// Re-polling (the previous findFailingRow approach) raced under
+	// concurrent inserts — a new outbox row with an earlier-or-equal
+	// enqueued_at would get poisoned instead of the actual failing row.
+	// Per ce-correctness-reviewer COR-002, ce-security-reviewer SEC-006,
+	// ce-reliability-reviewer REL-003.
+	let polledOutboxId: string | undefined;
 
 	try {
 		await db.transaction(async (tx) => {
@@ -238,15 +282,23 @@ async function processNextRow(db: Database): Promise<RowOutcome> {
 			}
 
 			const row = rows[0];
+			polledOutboxId = row.outbox_id;
 
-			// Look up the tenant's chain head (latest event_hash for this
-			// tenant_id by occurred_at). Genesis event has no predecessor;
-			// pass "" to computeEventHash.
+			// Look up the tenant's chain head. Order by `recorded_at` not
+			// `occurred_at` so the chain follows DRAIN order, not
+			// caller-controlled timestamps. A back-dated occurred_at would
+			// otherwise become the chain head until the back-date passes,
+			// breaking the cryptographic order. Tiebreaker on event_id so
+			// same-millisecond events have a deterministic predecessor
+			// (Aurora's recorded_at default of `now()` resolves to
+			// microsecond precision, but defense-in-depth never hurts).
+			// Per ce-correctness-reviewer COR-003, ce-security-reviewer
+			// SEC-002, ce-adversarial-reviewer ADV-U4-01/02.
 			const headRows = await tx
 				.select({ event_hash: auditEvents.event_hash })
 				.from(auditEvents)
 				.where(eq(auditEvents.tenant_id, row.tenant_id))
-				.orderBy(desc(auditEvents.occurred_at))
+				.orderBy(desc(auditEvents.recorded_at), desc(auditEvents.event_id))
 				.limit(1);
 
 			const prevHash =
@@ -281,7 +333,10 @@ async function processNextRow(db: Database): Promise<RowOutcome> {
 			// INSERT audit_events. ON CONFLICT (outbox_id) DO NOTHING is the
 			// drainer-replay idempotency guarantee: if a previous invocation
 			// crashed between this insert and the outbox UPDATE below, the
-			// re-attempt no-ops here and the UPDATE retries cleanly.
+			// re-attempt no-ops here and the UPDATE retries cleanly. Target
+			// is `auditEvents.outbox_id` (the destination unique constraint
+			// `uq_audit_events_outbox_id`), not `auditOutbox.outbox_id` —
+			// per ce-correctness-reviewer COR-001.
 			await tx
 				.insert(auditEvents)
 				.values({
@@ -308,7 +363,7 @@ async function processNextRow(db: Database): Promise<RowOutcome> {
 					prev_hash: prevHash === "" ? null : prevHash,
 					event_hash: eventHash,
 				})
-				.onConflictDoNothing({ target: auditOutbox.outbox_id });
+				.onConflictDoNothing({ target: auditEvents.outbox_id });
 
 			// Mark the outbox row drained.
 			await tx
@@ -322,27 +377,39 @@ async function processNextRow(db: Database): Promise<RowOutcome> {
 		// Per-row error: record the error message on the outbox row so the
 		// next invocation skips it. Use a fresh transaction so the original
 		// transaction's rollback doesn't take this UPDATE with it.
-		const errMessage = err instanceof Error ? err.message : String(err);
-		const failingRow = await findFailingRow(db);
-		if (failingRow) {
+		const rawMessage = err instanceof Error ? err.message : String(err);
+		// Scrub known secret patterns from the error string before
+		// persisting/logging. Postgres error messages can echo offending
+		// input values verbatim (e.g., 'invalid input syntax for type
+		// json: {"token":"sk-..."}'). compliance_reader has SELECT on
+		// audit_outbox; CloudWatch logs are visible to anyone with
+		// logs:FilterLogEvents. Per ce-security-reviewer SEC-003.
+		const scrubbedMessage = scrubKnownSecretPatterns(rawMessage).slice(
+			0,
+			4096,
+		);
+
+		if (polledOutboxId) {
+			// Direct UPDATE against the captured outbox_id — no re-poll, no
+			// race with concurrent emitters. Per COR-002 / SEC-006 /
+			// REL-003 fix.
 			await db
 				.update(auditOutbox)
-				.set({ drainer_error: errMessage.slice(0, 4096) })
-				.where(eq(auditOutbox.outbox_id, failingRow.outbox_id));
+				.set({ drainer_error: scrubbedMessage })
+				.where(eq(auditOutbox.outbox_id, polledOutboxId));
 			outcome = "errored";
 			console.error(
 				JSON.stringify({
 					level: "error",
 					msg: "compliance-drainer: poison row marked",
-					outbox_id: failingRow.outbox_id,
-					event_id: failingRow.event_id,
-					tenant_id: failingRow.tenant_id,
-					error: errMessage,
+					outbox_id: polledOutboxId,
+					error: scrubbedMessage,
 				}),
 			);
 		} else {
-			// Re-throw if we can't even identify the failing row — the
+			// Failure happened before we successfully polled a row — the
 			// failure is structural (DB unreachable, schema mismatch).
+			// Re-throw to the Lambda-level DLQ.
 			throw err;
 		}
 	}
@@ -351,29 +418,22 @@ async function processNextRow(db: Database): Promise<RowOutcome> {
 }
 
 /**
- * Look up the row that the failed transaction was attempting to drain.
- * Best-effort: returns the same row that processNextRow's poll would
- * have selected. Used only on the error path.
+ * Scrub the same secret patterns the U3 redaction helper catches —
+ * mirror of `redaction.ts`. Inlined per the same convention as the
+ * canonicalize helper above; keeps `packages/lambda` decoupled from
+ * `packages/api`. If either pattern set evolves, update both.
  */
-async function findFailingRow(
-	db: Database,
-): Promise<{ outbox_id: string; event_id: string; tenant_id: string } | null> {
-	const rows = await db
-		.select({
-			outbox_id: auditOutbox.outbox_id,
-			event_id: auditOutbox.event_id,
-			tenant_id: auditOutbox.tenant_id,
-		})
-		.from(auditOutbox)
-		.where(
-			and(
-				isNull(auditOutbox.drained_at),
-				isNull(auditOutbox.drainer_error),
-			),
-		)
-		.orderBy(auditOutbox.enqueued_at)
-		.limit(1);
-	return rows[0] ?? null;
+function scrubKnownSecretPatterns(text: string): string {
+	const AUTH_BEARER = /Authorization:\s*Bearer\s+([^\s"'<>]+)/gi;
+	const JWT =
+		/\beyJ[A-Za-z0-9_-]{13,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
+	const PREFIXED_TOKEN =
+		/(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{40,}|sk-proj-[A-Za-z0-9_-]{40,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})/g;
+	const REDACTED = "<REDACTED:scrubbed>";
+	return text
+		.replace(AUTH_BEARER, `Authorization: Bearer ${REDACTED}`)
+		.replace(JWT, REDACTED)
+		.replace(PREFIXED_TOKEN, REDACTED);
 }
 
 async function getOldestPendingAgeMs(db: Database): Promise<number | null> {

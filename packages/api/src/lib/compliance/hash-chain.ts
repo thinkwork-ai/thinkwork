@@ -85,12 +85,26 @@ function canonicalize(value: unknown, parentKey: string | null): string {
 	if (typeof value !== "object") return JSON.stringify(value);
 
 	if (Array.isArray(value)) {
-		const items =
-			parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)
-				? [...value]
-						.map((v) => (typeof v === "string" ? v : String(v)))
-						.sort()
-				: value;
+		let items: unknown[];
+		if (parentKey !== null && SET_LIKE_ARRAY_FIELDS.has(parentKey)) {
+			// Set-like fields (control_ids, payload_redacted_fields) are
+			// typed string[] in TS and text[] in Postgres. If a non-string
+			// somehow leaks in (a future schema change, a bypass), throw
+			// rather than coerce via String() — coercion silently produces
+			// "[object Object]" and the hash commits to the wrong string,
+			// which subsequent verification can't distinguish from a
+			// legitimate value. Per ce-security-reviewer SEC-005.
+			for (const v of value) {
+				if (typeof v !== "string") {
+					throw new Error(
+						`canonicalizeEvent: non-string element in set-like array field "${parentKey}" (got ${typeof v})`,
+					);
+				}
+			}
+			items = [...(value as string[])].sort();
+		} else {
+			items = value;
+		}
 		const serialized = items.map((v) => canonicalize(v, null));
 		return `[${serialized.join(",")}]`;
 	}
