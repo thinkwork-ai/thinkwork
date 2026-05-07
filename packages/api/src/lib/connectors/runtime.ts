@@ -1,5 +1,8 @@
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
+  computerEvents,
+  computers,
+  computerTasks,
   connectorExecutions,
   connectors,
   messages,
@@ -15,11 +18,13 @@ import {
   type LinearFetchOptions,
 } from "./linear.js";
 import { readTenantCredentialSecret as defaultReadTenantCredentialSecret } from "../tenant-credentials/secret-store.js";
+import { normalizeTaskInput } from "../computers/tasks.js";
 
 export type ConnectorDispatchTargetType =
   | "agent"
   | "routine"
-  | "hybrid_routine";
+  | "hybrid_routine"
+  | "computer";
 
 export type ConnectorRuntimeRow = typeof connectors.$inferSelect;
 export type ConnectorExecutionRow = typeof connectorExecutions.$inferSelect;
@@ -61,6 +66,8 @@ export type ConnectorDispatchResult =
       externalRef: string;
       threadId: string;
       messageId: string;
+      computerId?: string;
+      computerTaskId?: string;
     }
   | {
       status: "duplicate";
@@ -129,6 +136,17 @@ export interface ConnectorRuntimeStore {
     execution: ConnectorExecutionRow;
     now: Date;
   }): Promise<{ threadId: string; messageId: string }>;
+  createComputerHandoff(args: {
+    connector: ConnectorRuntimeRow;
+    candidate: ConnectorDispatchCandidate;
+    execution: ConnectorExecutionRow;
+    now: Date;
+  }): Promise<{
+    computerId: string;
+    computerTaskId: string;
+    threadId: string;
+    messageId: string;
+  }>;
   markExecutionTerminal(args: {
     executionId: string;
     now: Date;
@@ -503,6 +521,137 @@ export function createDrizzleConnectorRuntimeStore(
       return created;
     },
 
+    async createComputerHandoff({ connector, candidate, execution }) {
+      return db.transaction(async (tx) => {
+        const [computer] = await tx
+          .select({
+            id: computers.id,
+            owner_user_id: computers.owner_user_id,
+          })
+          .from(computers)
+          .where(
+            and(
+              eq(computers.id, connector.dispatch_target_id),
+              eq(computers.tenant_id, connector.tenant_id),
+            ),
+          )
+          .limit(1);
+        if (!computer) throw new Error("Computer not found");
+
+        const idempotencyKey = `connector:${connector.id}:external:${candidate.externalRef}`;
+        const normalizedInput = normalizeTaskInput("connector_work", {
+          connectorId: connector.id,
+          connectorExecutionId: execution.id,
+          externalRef: candidate.externalRef,
+          title: candidate.title,
+          body: candidate.body,
+          metadata: candidate.metadata,
+        });
+
+        let [task] = await tx
+          .insert(computerTasks)
+          .values({
+            tenant_id: connector.tenant_id,
+            computer_id: computer.id,
+            task_type: "connector_work",
+            input: normalizedInput,
+            idempotency_key: idempotencyKey,
+          })
+          .onConflictDoNothing()
+          .returning({ id: computerTasks.id });
+        if (!task) {
+          [task] = await tx
+            .select({ id: computerTasks.id })
+            .from(computerTasks)
+            .where(
+              and(
+                eq(computerTasks.tenant_id, connector.tenant_id),
+                eq(computerTasks.computer_id, computer.id),
+                eq(computerTasks.idempotency_key, idempotencyKey),
+              ),
+            )
+            .limit(1);
+        }
+        if (!task) throw new Error("Failed to create connector Computer task");
+
+        const [tenant] = await tx
+          .update(tenants)
+          .set({ issue_counter: sql`${tenants.issue_counter} + 1` })
+          .where(eq(tenants.id, connector.tenant_id))
+          .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
+        if (!tenant) throw new Error("Tenant not found");
+
+        const identifier = `CONN-${tenant.nextNumber}`;
+        const metadata = {
+          kind: "connector_dispatch",
+          connectorId: connector.id,
+          connectorType: connector.type,
+          connectorExecutionId: execution.id,
+          externalRef: candidate.externalRef,
+          sourceKind: "tracker_issue",
+          candidate: candidate.metadata,
+          dispatchTargetType: "computer",
+          computerId: computer.id,
+          computerTaskId: task.id,
+        };
+
+        await tx.insert(computerEvents).values({
+          tenant_id: connector.tenant_id,
+          computer_id: computer.id,
+          task_id: task.id,
+          event_type: "connector_work_received",
+          level: "info",
+          payload: {
+            connectorId: connector.id,
+            connectorExecutionId: execution.id,
+            externalRef: candidate.externalRef,
+            title: candidate.title,
+            idempotencyKey,
+          },
+        });
+
+        const [thread] = await tx
+          .insert(threads)
+          .values({
+            tenant_id: connector.tenant_id,
+            user_id: computer.owner_user_id,
+            number: tenant.nextNumber,
+            identifier,
+            title: candidate.title,
+            status: "in_progress",
+            channel: "connector",
+            assignee_type: "computer",
+            assignee_id: computer.id,
+            created_by_type: "computer",
+            created_by_id: computer.id,
+            metadata,
+          })
+          .returning({ id: threads.id });
+        if (!thread) throw new Error("Failed to create connector thread");
+
+        const [message] = await tx
+          .insert(messages)
+          .values({
+            thread_id: thread.id,
+            tenant_id: connector.tenant_id,
+            role: "user",
+            content: candidate.body,
+            sender_type: "connector",
+            sender_id: connector.id,
+            metadata,
+          })
+          .returning({ id: messages.id });
+        if (!message) throw new Error("Failed to create connector message");
+
+        return {
+          computerId: computer.id,
+          computerTaskId: task.id,
+          threadId: thread.id,
+          messageId: message.id,
+        };
+      });
+    },
+
     async markExecutionTerminal({ executionId, now, outcomePayload }) {
       await db
         .update(connectorExecutions)
@@ -583,6 +732,40 @@ async function dispatchCandidate(args: {
 
     const targetType =
       connector.dispatch_target_type as ConnectorDispatchTargetType;
+    if (targetType === "computer") {
+      const { computerId, computerTaskId, threadId, messageId } =
+        await store.createComputerHandoff({
+          connector,
+          candidate,
+          execution,
+          now,
+        });
+      await store.markExecutionTerminal({
+        executionId: execution.id,
+        now,
+        outcomePayload: {
+          ...candidate.metadata,
+          threadId,
+          messageId,
+          computerId,
+          computerTaskId,
+          dispatchTargetType: targetType,
+          dispatchTargetId: connector.dispatch_target_id,
+        },
+      });
+
+      return {
+        status: "dispatched",
+        connectorId: connector.id,
+        executionId: execution.id,
+        externalRef: candidate.externalRef,
+        threadId,
+        messageId,
+        computerId,
+        computerTaskId,
+      };
+    }
+
     if (targetType !== "agent") {
       return {
         status: "unsupported_target",

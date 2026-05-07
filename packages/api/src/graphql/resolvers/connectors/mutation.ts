@@ -363,6 +363,9 @@ function connectorDispatchResultToGraphql(
     externalRef: "externalRef" in result ? (result.externalRef ?? null) : null,
     threadId: "threadId" in result ? (result.threadId ?? null) : null,
     messageId: "messageId" in result ? (result.messageId ?? null) : null,
+    computerId: "computerId" in result ? (result.computerId ?? null) : null,
+    computerTaskId:
+      "computerTaskId" in result ? (result.computerTaskId ?? null) : null,
     targetType: "targetType" in result ? result.targetType : null,
     reason: "reason" in result ? result.reason : null,
     error: "error" in result ? result.error : null,

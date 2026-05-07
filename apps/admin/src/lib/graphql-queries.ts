@@ -517,6 +517,8 @@ export const RunConnectorNowMutation = graphql(`
         externalRef
         threadId
         messageId
+        computerId
+        computerTaskId
         targetType
         reason
         error

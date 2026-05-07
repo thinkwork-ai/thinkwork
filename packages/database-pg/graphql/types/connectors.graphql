@@ -107,6 +107,8 @@ type ConnectorDispatchResult {
   externalRef: String
   threadId: ID
   messageId: ID
+  computerId: ID
+  computerTaskId: ID
   targetType: DispatchTargetType
   reason: String
   error: String
