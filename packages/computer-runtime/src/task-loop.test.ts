@@ -34,6 +34,7 @@ describe("Computer task loop", () => {
         connected: true,
         tokenResolved: true,
         connectionId: "connection-1",
+        missingScopes: [],
         reason: null,
       },
     });
@@ -107,6 +108,7 @@ describe("Computer task loop", () => {
         calendarAvailable: true,
         eventCount: 2,
         reason: null,
+        missingScopes: [],
       },
     });
     expect(JSON.stringify(output)).not.toContain("ya29");
@@ -116,6 +118,58 @@ describe("Computer task loop", () => {
       googleCalendar: {
         calendarAvailable: true,
         eventCount: 2,
+      },
+    });
+  });
+
+  it("reports missing Calendar scope without invoking gws", async () => {
+    const api = {
+      appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-3" }),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
+        providerName: "google_productivity",
+        connected: true,
+        tokenResolved: true,
+        accessToken: "ya29.secret-token",
+        missingScopes: ["https://www.googleapis.com/auth/calendar"],
+      }),
+    };
+    const gws = vi.fn();
+
+    const output = await handleTask(
+      {
+        id: "task-3",
+        taskType: "google_calendar_upcoming",
+        input: {
+          timeMin: "2026-05-07T10:00:00.000Z",
+          timeMax: "2026-05-08T10:00:00.000Z",
+          maxResults: 10,
+        },
+      },
+      "/workspace",
+      api,
+      gws,
+    );
+
+    expect(gws).not.toHaveBeenCalled();
+    expect(api.appendTaskEvent).toHaveBeenCalledWith("task-3", {
+      eventType: "google_calendar_upcoming_checked",
+      level: "warn",
+      payload: {
+        providerName: "google_productivity",
+        connected: true,
+        tokenResolved: true,
+        calendarAvailable: false,
+        eventCount: 0,
+        reason: "missing_google_calendar_scope",
+        missingScopes: ["https://www.googleapis.com/auth/calendar"],
+      },
+    });
+    expect(JSON.stringify(output)).not.toContain("ya29");
+    expect(output).toMatchObject({
+      googleCalendar: {
+        calendarAvailable: false,
+        reason: "missing_google_calendar_scope",
       },
     });
   });
@@ -207,5 +261,32 @@ describe("Computer task loop", () => {
       message: "failed with token [redacted-token]",
     });
     expect(JSON.stringify(result)).not.toContain("opaque-secret-token");
+  });
+
+  it("classifies Google insufficient-scope errors", async () => {
+    const execFileAsync = vi.fn().mockRejectedValue(
+      new Error(
+        "Command failed: gws calendar events list\nerror[api]: Request had insufficient authentication scopes.\n",
+      ),
+    );
+
+    const result = await listGoogleCalendarUpcomingWithGws(
+      {
+        timeMin: "2026-05-07T10:00:00.000Z",
+        timeMax: "2026-05-08T10:00:00.000Z",
+        maxResults: 10,
+      },
+      {
+        accessToken: "ya29.secret-token",
+        binary: "gws",
+        execFileAsync,
+      },
+    );
+
+    expect(result).toMatchObject({
+      calendarAvailable: false,
+      reason: "missing_google_calendar_scope",
+    });
+    expect(JSON.stringify(result)).not.toContain("ya29");
   });
 });

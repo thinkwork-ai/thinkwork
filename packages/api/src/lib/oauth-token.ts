@@ -311,6 +311,38 @@ export async function resolveOAuthToken(
 	}
 }
 
+export async function resolveOAuthTokenDetails(
+	connectionId: string,
+	tenantId: string,
+	providerId: string,
+): Promise<{ accessToken: string; grantedScopes: string[] } | null> {
+	const accessToken = await resolveOAuthToken(connectionId, tenantId, providerId);
+	if (!accessToken) return null;
+
+	const secretId = `thinkwork/${STAGE}/oauth/${connectionId}`;
+	try {
+		const result = await sm.send(
+			new GetSecretValueCommand({ SecretId: secretId }),
+		);
+		if (!result.SecretString) {
+			return { accessToken, grantedScopes: [] };
+		}
+		const stored = JSON.parse(result.SecretString) as Partial<StoredOAuthToken>;
+		return {
+			accessToken,
+			grantedScopes: parseGrantedScopes(stored.scope),
+		};
+	} catch (err) {
+		console.warn(`[oauth-token] Failed to read granted scopes for connection ${connectionId}:`, err);
+		return { accessToken, grantedScopes: [] };
+	}
+}
+
+function parseGrantedScopes(scope: unknown): string[] {
+	if (typeof scope !== "string") return [];
+	return scope.split(/\s+/).map((value) => value.trim()).filter(Boolean);
+}
+
 /**
  * Build envOverrides for a skill that has a connectionId in its config.
  * Returns env vars that will be merged into os.environ by server.py.

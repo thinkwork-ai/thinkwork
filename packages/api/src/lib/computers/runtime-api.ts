@@ -5,9 +5,13 @@ import {
   computerEvents,
   computerTasks,
 } from "@thinkwork/database-pg/schema";
-import { resolveConnectionForUser, resolveOAuthToken } from "../oauth-token.js";
+import {
+  resolveConnectionForUser,
+  resolveOAuthTokenDetails,
+} from "../oauth-token.js";
 
 const db = getDb();
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 
 export class ComputerNotFoundError extends Error {
   constructor(readonly computerId: string) {
@@ -201,18 +205,23 @@ export async function checkGoogleWorkspaceConnection(input: {
     };
   }
 
-  const accessToken = await resolveOAuthToken(
+  const tokenDetails = await resolveOAuthTokenDetails(
     connection.connectionId,
     computer.tenant_id,
     connection.providerId,
   );
+  const grantedScopes = tokenDetails?.grantedScopes ?? [];
+  const missingScopes = missingGoogleCalendarScopes(grantedScopes);
 
   return {
     providerName: "google_productivity",
     connected: true,
-    tokenResolved: Boolean(accessToken),
+    tokenResolved: Boolean(tokenDetails?.accessToken),
     connectionId: connection.connectionId,
-    reason: accessToken ? null : "token_unavailable_or_expired",
+    grantedScopes,
+    missingScopes,
+    calendarScopeGranted: missingScopes.length === 0,
+    reason: tokenDetails?.accessToken ? null : "token_unavailable_or_expired",
     checkedAt,
   };
 }
@@ -243,13 +252,13 @@ export async function resolveGoogleWorkspaceCliToken(input: {
     };
   }
 
-  const accessToken = await resolveOAuthToken(
+  const tokenDetails = await resolveOAuthTokenDetails(
     connection.connectionId,
     computer.tenant_id,
     connection.providerId,
   );
 
-  if (!accessToken) {
+  if (!tokenDetails?.accessToken) {
     return {
       ...base,
       connected: true,
@@ -264,8 +273,10 @@ export async function resolveGoogleWorkspaceCliToken(input: {
     connected: true,
     tokenResolved: true,
     connectionId: connection.connectionId,
+    grantedScopes: tokenDetails.grantedScopes,
+    missingScopes: missingGoogleCalendarScopes(tokenDetails.grantedScopes),
     reason: null,
-    accessToken,
+    accessToken: tokenDetails.accessToken,
   };
 }
 
@@ -350,6 +361,12 @@ async function loadComputer(tenantId: string, computerId: string) {
     .limit(1);
   if (!computer) throw new ComputerNotFoundError(computerId);
   return computer;
+}
+
+function missingGoogleCalendarScopes(grantedScopes: string[]) {
+  return grantedScopes.includes(GOOGLE_CALENDAR_SCOPE)
+    ? []
+    : [GOOGLE_CALENDAR_SCOPE];
 }
 
 async function loadTask(tenantId: string, computerId: string, taskId: string) {

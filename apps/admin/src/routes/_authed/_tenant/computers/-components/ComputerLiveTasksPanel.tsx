@@ -80,6 +80,10 @@ function outputSummary(output: unknown, error: unknown): string {
   const googleWorkspace = payload.googleWorkspace;
   if (googleWorkspace && typeof googleWorkspace === "object") {
     const googlePayload = googleWorkspace as Record<string, unknown>;
+    const missingScopes = googlePayload.missingScopes;
+    if (Array.isArray(missingScopes) && missingScopes.length > 0) {
+      return "Google Workspace connected, Calendar scope missing";
+    }
     if (
       googlePayload.connected === true &&
       googlePayload.tokenResolved === true
@@ -101,6 +105,9 @@ function outputSummary(output: unknown, error: unknown): string {
     }
     if (calendarPayload.calendarAvailable !== true) {
       const reason = calendarPayload.reason;
+      if (reason === "missing_google_calendar_scope") {
+        return "Google Calendar scope missing. Reconnect Google Workspace.";
+      }
       return typeof reason === "string"
         ? `Google Calendar unavailable: ${reason}`
         : "Google Calendar unavailable";

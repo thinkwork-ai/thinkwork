@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import type { GoogleCalendarUpcomingInput } from "./api-client.js";
 
 const execFileAsync = promisify(execFile);
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 
 type ExecFileAsync = typeof execFileAsync;
 
@@ -53,9 +54,15 @@ export async function listGoogleCalendarUpcomingWithGws(
       maxResults: input.maxResults,
       events,
       eventCount: events.length,
+      missingScopes: [],
       reason: null,
     };
   } catch (err) {
+    const message = redactToken(
+      err instanceof Error ? err.message : String(err),
+      options.accessToken,
+    );
+    const reason = classifyGwsFailure(message);
     return {
       providerName: "google_productivity",
       connected: true,
@@ -67,13 +74,20 @@ export async function listGoogleCalendarUpcomingWithGws(
       maxResults: input.maxResults,
       events: [],
       eventCount: 0,
-      reason: "gws_command_failed",
-      message: redactToken(
-        err instanceof Error ? err.message : String(err),
-        options.accessToken,
-      ),
+      reason,
+      missingScopes:
+        reason === "missing_google_calendar_scope"
+          ? [GOOGLE_CALENDAR_SCOPE]
+          : [],
+      message,
     };
   }
+}
+
+function classifyGwsFailure(message: string): string {
+  return /insufficient authentication scopes/i.test(message)
+    ? "missing_google_calendar_scope"
+    : "gws_command_failed";
 }
 
 function parseJsonOutput(stdout: string): unknown {
