@@ -47,7 +47,10 @@ describe("compliance-anchor", () => {
       readerDb: readerDb as never,
       drainerDb: drainerDb as never,
       cadenceId: "0196b0f2-0800-7000-8000-000000000002",
-      anchorFn: () => ({ anchored: false }),
+      // U8b: anchorFn is async (real fn does S3 PutObject). Test stub
+      // resolves immediately with anchored:false to keep this test focused
+      // on the timestamp-normalization path through runAnchorPass.
+      anchorFn: async () => ({ anchored: false }),
     });
 
     expect(result.tenant_count).toBe(1);
