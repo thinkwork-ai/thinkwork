@@ -281,7 +281,7 @@ async function applyCleanup(opts: Options): Promise<void> {
             'reason', 'stale_connector_lifecycle',
             'source', 'cleanup-stale-connector-runs',
             'appliedAt', now(),
-            'olderThanHours', ${opts.olderThanHours}
+            'olderThanHours', ${opts.olderThanHours}::int
           )
         )
       FROM candidates c
@@ -301,7 +301,7 @@ async function applyCleanup(opts: Options): Promise<void> {
             'reason', 'stale_connector_lifecycle',
             'source', 'cleanup-stale-connector-runs',
             'appliedAt', now(),
-            'olderThanHours', ${opts.olderThanHours}
+            'olderThanHours', ${opts.olderThanHours}::int
           )
         )
       FROM candidates c
@@ -321,7 +321,7 @@ async function applyCleanup(opts: Options): Promise<void> {
             'reason', c.stale_reason,
             'source', 'cleanup-stale-connector-runs',
             'appliedAt', now(),
-            'olderThanHours', ${opts.olderThanHours},
+            'olderThanHours', ${opts.olderThanHours}::int,
             'previousState', ce.current_state,
             'computerTaskStatus', c.task_status,
             'delegationStatus', c.delegation_status,
