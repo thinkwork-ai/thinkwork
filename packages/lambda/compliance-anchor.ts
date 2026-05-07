@@ -324,6 +324,17 @@ interface ChainHead {
 	recorded_at: Date;
 }
 
+function coerceDbTimestamp(value: Date | string): Date {
+	if (value instanceof Date) return value;
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		throw new Error(
+			`compliance-anchor: invalid recorded_at timestamp: ${String(value)}`,
+		);
+	}
+	return date;
+}
+
 export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
 	// SQL: per tenant, pick the row with maximum (recorded_at, event_id)
 	// where recorded_at > tenant_anchor_state.last_anchored_recorded_at.
@@ -335,7 +346,7 @@ export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
 		tenant_id: string;
 		event_id: string;
 		event_hash: string;
-		recorded_at: Date;
+		recorded_at: Date | string;
 	}>(sql`
 		SELECT DISTINCT ON (ae.tenant_id)
 			ae.tenant_id::text AS tenant_id,
@@ -350,9 +361,14 @@ export async function readChainHeads(readerDb: Database): Promise<ChainHead[]> {
 	`);
 	// drizzle execute returns { rows: [...] } in node-postgres mode
 	const rows =
-		(result as unknown as { rows?: ChainHead[] }).rows ??
-		(result as unknown as ChainHead[]);
-	return rows;
+		(result as unknown as {
+			rows?: Array<ChainHead & { recorded_at: Date | string }>;
+		}).rows ??
+		(result as unknown as Array<ChainHead & { recorded_at: Date | string }>);
+	return rows.map((row) => ({
+		...row,
+		recorded_at: coerceDbTimestamp(row.recorded_at),
+	}));
 }
 
 /**
@@ -413,10 +429,7 @@ export async function runAnchorPass(
 	const tenantSlices: TenantSlice[] = heads.map((h, i) => ({
 		tenant_id: h.tenant_id,
 		latest_event_hash: h.event_hash,
-		latest_recorded_at:
-			h.recorded_at instanceof Date
-				? h.recorded_at.toISOString()
-				: new Date(h.recorded_at).toISOString(),
+		latest_recorded_at: h.recorded_at.toISOString(),
 		latest_event_id: h.event_id,
 		leaf_hash: leaves[i],
 		proof_path: deriveProofPath(levels, i),
