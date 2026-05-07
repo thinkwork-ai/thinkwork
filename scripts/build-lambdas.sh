@@ -148,6 +148,16 @@ build_handler "compliance-outbox-drainer" \
 build_handler "compliance-events" \
   "$REPO_ROOT/packages/api/src/handlers/compliance.ts"
 
+# Phase 3 U8a: periodic Merkle-anchor Lambda + watchdog. Inert in U8a
+# (no S3 PutObject; _anchor_fn_inert returns dispatched:true,
+# anchored:false). U8b swaps in _anchor_fn_live with real S3 + Object
+# Lock retention writes.
+build_handler "compliance-anchor" \
+  "$REPO_ROOT/packages/lambda/compliance-anchor.ts"
+
+build_handler "compliance-anchor-watchdog" \
+  "$REPO_ROOT/packages/lambda/compliance-anchor-watchdog.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------

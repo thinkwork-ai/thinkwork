@@ -17,11 +17,13 @@
     "@thinkwork/admin-ops": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "drizzle-orm": "^0.39.0",
-    "p-limit": "^6.2.0"
+    "p-limit": "^6.2.0",
+    "uuidv7": "^1.2.1"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1028.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
+    "@aws-sdk/client-cloudwatch": "^3.917.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.917.0",
     "@aws-sdk/client-iam": "^3.917.0",
     "@aws-sdk/client-lambda": "^3.917.0",

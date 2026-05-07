@@ -255,11 +255,15 @@ resource "aws_s3_bucket_policy" "anchor" {
 resource "aws_iam_role" "anchor_lambda" {
   name = "thinkwork-${var.stage}-compliance-anchor-lambda-role"
 
-  # `aws:SourceAccount` constrains AssumeRole to in-account service
-  # principals — confused-deputy defense. `aws:SourceArn` cannot be added
-  # until U8a creates the anchor Lambda function (the function ARN is
-  # known-after-apply); add it then in the U8a PR alongside the function
-  # itself.
+  # Phase 3 U8a — `aws:SourceArn` pin via string-construction to avoid
+  # the circular dependency between this trust policy and the anchor
+  # Lambda function (defined in lambda-api/handlers.tf, which depends on
+  # this role's ARN). The function name follows the predictable pattern
+  # `thinkwork-${stage}-api-compliance-anchor` so the literal ARN is
+  # known at plan time.
+  #
+  # `StringEquals` (NOT `StringEqualsIfExists`) so a missing/empty
+  # SourceArn on the AssumeRole call DENIES rather than no-ops.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -269,6 +273,7 @@ resource "aws_iam_role" "anchor_lambda" {
       Condition = {
         StringEquals = {
           "aws:SourceAccount" = var.account_id
+          "aws:SourceArn"     = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-compliance-anchor"
         }
       }
     }]
@@ -350,6 +355,67 @@ resource "aws_iam_role_policy" "anchor_kms" {
           "kms:DescribeKey",
         ]
         Resource = var.kms_key_arn
+      },
+    ]
+  })
+}
+
+# Phase 3 U8a — Secrets Manager read for the two compliance Aurora roles
+# the anchor Lambda connects as (compliance_reader for SELECT,
+# compliance_drainer for UPDATE on tenant_anchor_state).
+#
+# Note: today the compliance secrets use `aws/secretsmanager` (default
+# AWS-managed key) so no explicit KMS Decrypt grant is needed. If a
+# future hardening pass migrates the secrets to a customer-managed CMK,
+# add `kms:Decrypt` on that CMK to this role — the failure mode is a
+# confusing AccessDeniedException from KMS, not Secrets Manager.
+resource "aws_iam_role_policy" "anchor_secrets" {
+  name = "anchor-secrets"
+  role = aws_iam_role.anchor_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AnchorSecretsAllow"
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue"]
+        Resource = [
+          var.compliance_reader_secret_arn,
+          var.compliance_drainer_secret_arn,
+        ]
+      },
+    ]
+  })
+}
+
+# Phase 3 U8a — CloudWatch PutMetricData for the watchdog heartbeat
+# (Decision #16) and U8b's live ComplianceAnchorGap. Namespace-scoped
+# via condition so the role cannot publish into other namespaces.
+#
+# **Note on least-privilege:** the anchor Lambda itself never emits
+# metrics in U8a (only the watchdog does, via the shared lambda role's
+# compliance_watchdog_metrics policy). This grant on the U7 anchor role
+# is pre-plumbed for U8b — at which point the anchor Lambda may emit
+# its own metrics around the live S3 path. If U8b doesn't end up
+# needing it, this policy can be removed in U8b's PR.
+resource "aws_iam_role_policy" "anchor_cloudwatch_metrics" {
+  name = "anchor-cloudwatch-metrics"
+  role = aws_iam_role.anchor_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AnchorMetricsAllow"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "Thinkwork/Compliance"
+          }
+        }
       },
     ]
   })

@@ -739,6 +739,46 @@ jobs:
       - name: Run Flue smoke
         run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
 
+  # ── Compliance Anchor smoke (Phase 3 U8a) ───────────────────────
+  # Invokes both the anchor Lambda and the watchdog Lambda after
+  # terraform-apply has provisioned them, asserting the dispatch-pin
+  # response payloads:
+  #   compliance-anchor          → {dispatched: true, anchored: false, ...}
+  #   compliance-anchor-watchdog → {mode: "inert", ...}
+  #
+  # U8b will update the assertions to expect anchored:true + mode:live.
+  #
+  # Mirrors the flue-smoke-test pattern: NEVER use `if: env.X` at
+  # job-level — silently fails the entire workflow per
+  # feedback_gha_env_context_job_if. Stage gating is done by the
+  # wrapper script, not the workflow conditional.
+  compliance-anchor-smoke:
+    name: Compliance Anchor Smoke
+    needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run compliance-anchor smoke
+        run: bash scripts/post-deploy-smoke-compliance-anchor.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
   # terraform-apply has ensured the cluster exists. Fails the deploy if

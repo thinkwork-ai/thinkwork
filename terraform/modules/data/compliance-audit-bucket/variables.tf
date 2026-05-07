@@ -12,6 +12,36 @@ variable "account_id" {
   type        = string
 }
 
+variable "region" {
+  description = "AWS region. Used in the anchor Lambda role's trust-policy aws:SourceArn pin to constrain AssumeRole to the predictable function ARN `arn:aws:lambda:{region}:{account_id}:function:thinkwork-{stage}-api-compliance-anchor`. Required."
+  type        = string
+
+  validation {
+    condition     = length(var.region) > 0
+    error_message = "region must be non-empty. An empty region produces a malformed aws:SourceArn that silently fails to match at AssumeRole time."
+  }
+}
+
+variable "compliance_reader_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the `compliance_reader` Aurora role credentials (Phase 3 U2). The U8a anchor Lambda's anchor_secrets policy enumerates this ARN explicitly."
+  type        = string
+
+  validation {
+    condition     = length(var.compliance_reader_secret_arn) > 0
+    error_message = "compliance_reader_secret_arn must be non-empty."
+  }
+}
+
+variable "compliance_drainer_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the `compliance_drainer` Aurora role credentials (Phase 3 U2 / PR #887). The U8a anchor Lambda uses this to UPDATE compliance.tenant_anchor_state."
+  type        = string
+
+  validation {
+    condition     = length(var.compliance_drainer_secret_arn) > 0
+    error_message = "compliance_drainer_secret_arn must be non-empty."
+  }
+}
+
 variable "bucket_name" {
   description = "Name of the compliance audit-anchor S3 bucket (master-plan canonical: thinkwork-{stage}-compliance-anchors)"
   type        = string

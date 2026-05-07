@@ -268,6 +268,40 @@ export const exportJobs = compliance.table(
 );
 
 /**
+ * tenant_anchor_state — per-tenant high-water-mark for Merkle anchoring.
+ *
+ * Phase 3 U8a (docs/plans/2026-05-07-010-feat-compliance-u8a-anchor-lambda-inert-plan.md).
+ * The anchor Lambda runs every 15 minutes (AWS Scheduler), reads chain
+ * heads from compliance.audit_events where seq > last_anchored_seq,
+ * computes a global Merkle tree across tenants, and (in U8b) writes
+ * anchors/cadence-{cadence_id}.json to the WORM-protected S3 bucket.
+ *
+ * In U8a the anchor Lambda calls _anchor_fn_inert (no S3 writes) but
+ * still advances last_anchored_seq so the inert path is observable.
+ *
+ * Role grants (drizzle/0071_compliance_tenant_anchor_state.sql):
+ *   - compliance_drainer: SELECT, INSERT, UPDATE (no DELETE — append-or-update)
+ *   - compliance_reader: SELECT (for U10 admin Compliance UI showing anchor lag)
+ */
+export const tenantAnchorState = compliance.table(
+	"tenant_anchor_state",
+	{
+		tenant_id: uuid("tenant_id").primaryKey(),
+		last_anchored_recorded_at: timestamp("last_anchored_recorded_at", {
+			withTimezone: true,
+		}),
+		last_anchored_event_id: uuid("last_anchored_event_id"),
+		last_cadence_id: uuid("last_cadence_id"),
+		updated_at: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		index("idx_tenant_anchor_state_updated_at").on(table.updated_at),
+	],
+);
+
+/**
  * Canonical event-type slate (R10) — the 10 starter events for SOC2
  * Type 1 evidence + 5 reserved Phase 6 governance types (R14, declared
  * but not emitted in v1).
