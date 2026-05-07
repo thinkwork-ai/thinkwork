@@ -131,6 +131,7 @@ module "compliance_anchors" {
   source = "../data/compliance-audit-bucket"
 
   stage          = var.stage
+  account_id     = var.account_id
   bucket_name    = local.compliance_anchor_bucket_name
   kms_key_arn    = module.kms.key_arn
   mode           = var.compliance_anchor_object_lock_mode

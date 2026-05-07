@@ -7,6 +7,11 @@ variable "stage" {
   type        = string
 }
 
+variable "account_id" {
+  description = "AWS account ID. Used in the anchor Lambda role's trust policy as an aws:SourceAccount condition for confused-deputy defense — even if a malicious principal somehow obtained the role's ARN, they would need to assume it from inside this account."
+  type        = string
+}
+
 variable "bucket_name" {
   description = "Name of the compliance audit-anchor S3 bucket (master-plan canonical: thinkwork-{stage}-compliance-anchors)"
   type        = string

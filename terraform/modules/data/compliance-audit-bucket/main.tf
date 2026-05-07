@@ -81,6 +81,20 @@ resource "aws_s3_bucket_object_lock_configuration" "anchor" {
   # by Terraform — see HashiCorp v4.0 S3 refactor blog.
   depends_on = [aws_s3_bucket_versioning.anchor]
 
+  # Production stages must run COMPLIANCE mode. GOVERNANCE-mode in prod
+  # would let any principal with s3:BypassGovernanceRetention shorten or
+  # delete retention windows — the auditor question "can anyone bypass
+  # this?" gets the wrong answer. README documents the cutover playbook
+  # (one-line tfvars change at audit-engagement time). This precondition
+  # closes the operator-memory gap by failing the plan instead of silently
+  # shipping a misconfigured bucket.
+  lifecycle {
+    precondition {
+      condition     = !(contains(["prod", "production"], var.stage) && var.mode == "GOVERNANCE")
+      error_message = "var.mode must be COMPLIANCE for prod stages (var.stage = '${var.stage}'). See terraform/modules/data/compliance-audit-bucket/README.md COMPLIANCE-mode cutover playbook. Override at audit-engagement time via the composite-root tfvars compliance_anchor_object_lock_mode = \"COMPLIANCE\"."
+    }
+  }
+
   rule {
     default_retention {
       mode = var.mode
@@ -194,8 +208,8 @@ resource "aws_s3_bucket_policy" "anchor" {
         }
       },
       {
-        # Defense-in-depth against accidental or malicious deletes. The
-        # anchor Lambda role's allow grants do NOT include any Delete
+        # Defense-in-depth against accidental or malicious object deletes.
+        # The anchor Lambda role's allow grants do NOT include any Delete
         # action; this policy prevents any other principal (including a
         # principal that gains s3:BypassGovernanceRetention via a future
         # role broadening) from removing audit evidence. Master plan
@@ -208,6 +222,23 @@ resource "aws_s3_bucket_policy" "anchor" {
           "s3:DeleteObjectVersion",
         ]
         Resource = "${aws_s3_bucket.anchor.arn}/*"
+      },
+      {
+        # Defense-in-depth against bucket-level deletion. Object Lock
+        # protects the *contents*; this protects the *container* for the
+        # post-retention window when objects become deletable. We do NOT
+        # deny PutBucketPolicy / DeleteBucketPolicy here because Terraform
+        # itself calls PutBucketPolicy to manage this resource — denying
+        # it would lock out future module updates. Policy-rewrite defense
+        # belongs at the IAM-policy layer on the deploying principal, not
+        # at the bucket-policy layer.
+        Sid       = "DenyBucketDelete"
+        Effect    = "Deny"
+        Principal = "*"
+        Action = [
+          "s3:DeleteBucket",
+        ]
+        Resource = aws_s3_bucket.anchor.arn
       },
     ]
   })
@@ -224,12 +255,22 @@ resource "aws_s3_bucket_policy" "anchor" {
 resource "aws_iam_role" "anchor_lambda" {
   name = "thinkwork-${var.stage}-compliance-anchor-lambda-role"
 
+  # `aws:SourceAccount` constrains AssumeRole to in-account service
+  # principals — confused-deputy defense. `aws:SourceArn` cannot be added
+  # until U8a creates the anchor Lambda function (the function ARN is
+  # known-after-apply); add it then in the U8a PR alongside the function
+  # itself.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Principal = { Service = "lambda.amazonaws.com" }
       Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = var.account_id
+        }
+      }
     }]
   })
 }

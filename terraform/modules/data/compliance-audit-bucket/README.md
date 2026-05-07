@@ -52,11 +52,18 @@ Either way, `force_destroy = true` masks Object Lock retention behavior. Don't s
 
 ### Dev cleanup playbook
 
-Tearing down a dev bucket requires admin-tier intervention (not a routine operator action):
+Tearing down a dev bucket requires admin-tier intervention (not a routine operator action) and is **not supported by `terraform destroy` alone**. The repo does not currently provision a break-glass role with `s3:BypassGovernanceRetention`; the operator performs the cleanup using their own admin credentials (or grants themselves the bypass action ad-hoc via an IAM policy attachment for the duration of the cleanup, then revokes it).
 
-1. Assume an admin role that holds `s3:BypassGovernanceRetention` (out of band — not the anchor Lambda role).
-2. Empty the bucket with the bypass flag:
+1. **Pre-requisite**: confirm your active credentials hold both `s3:BypassGovernanceRetention` AND `s3:DeleteObjectVersion` on the bucket. The anchor Lambda role itself **does not** hold these — it is explicitly Denied. If your admin role lacks them, attach a temporary inline policy:
    ```bash
+   aws iam put-role-policy --role-name <your-admin-role> \
+     --policy-name compliance-anchor-bypass-temp \
+     --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:BypassGovernanceRetention","s3:DeleteObjectVersion","s3:DeleteObject"],"Resource":"arn:aws:s3:::thinkwork-dev-compliance-anchors/*"}]}'
+   ```
+2. Empty the bucket with the bypass flag (the bucket policy still denies `s3:DeleteObject` from any principal — see "Bucket-policy interaction" below before running this):
+   ```bash
+   # First, you'll need to remove the DenyDeleteObject statement from the
+   # bucket policy temporarily. See Step 3 of "Bucket-policy interaction".
    aws s3api list-object-versions --bucket thinkwork-dev-compliance-anchors \
      --query '{Objects: Versions[].{Key: Key, VersionId: VersionId}}' \
      | aws s3api delete-objects --bucket thinkwork-dev-compliance-anchors \
@@ -69,6 +76,24 @@ Tearing down a dev bucket requires admin-tier intervention (not a routine operat
    ```
 4. Wait at least 1 hour before recreating with the same name (S3 bucket-name reuse latency).
 5. If `terraform apply` is impatient, `terraform state rm module.compliance_anchors.aws_s3_bucket.anchor` to avoid the recreate-failure loop.
+6. Revoke the temporary policy from step 1: `aws iam delete-role-policy --role-name <your-admin-role> --policy-name compliance-anchor-bypass-temp`.
+
+#### Bucket-policy interaction
+
+This module's bucket policy includes a `DenyDeleteObject` statement that applies to **all principals**, including admin roles with `s3:BypassGovernanceRetention`. To complete the dev cleanup, you must temporarily replace the bucket policy with one that omits the `DenyDeleteObject` statement (or attaches a Condition exempting your admin role):
+
+```bash
+# 1. Save the current policy
+aws s3api get-bucket-policy --bucket thinkwork-dev-compliance-anchors \
+  --query Policy --output text > /tmp/anchor-bucket-policy-backup.json
+
+# 2. Replace with a permissive policy (delete-allow only — keep EnforceHTTPS)
+aws s3api put-bucket-policy --bucket thinkwork-dev-compliance-anchors \
+  --policy '{"Version":"2012-10-17","Statement":[{"Sid":"EnforceHTTPS","Effect":"Deny","Principal":"*","Action":"s3:*","Resource":["arn:aws:s3:::thinkwork-dev-compliance-anchors","arn:aws:s3:::thinkwork-dev-compliance-anchors/*"],"Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}'
+
+# 3. Now run the empty-bucket commands from the main playbook
+# 4. After delete, the policy is gone with the bucket — no restore needed.
+```
 
 This playbook applies only to GOVERNANCE-mode buckets. COMPLIANCE-mode buckets cannot be emptied until retention expires — by design.
 
@@ -86,10 +111,11 @@ This module is compatible with the repo-wide `hashicorp/aws ~> 5.0` pin (locked 
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `stage` | string | _required_ | Deployment stage (e.g., `dev`, `prod`). |
+| `stage` | string | _required_ | Deployment stage (e.g., `dev`, `prod`). Stages `prod` and `production` enforce `mode = "COMPLIANCE"` via Terraform `precondition`. |
+| `account_id` | string | _required_ | AWS account ID. Used as `aws:SourceAccount` condition on the anchor Lambda role's trust policy (confused-deputy defense). |
 | `bucket_name` | string | _required_ | Bucket name. Master-plan canonical: `thinkwork-${stage}-compliance-anchors`. |
 | `kms_key_arn` | string | _required_ | CMK ARN for SSE-KMS. Wired from `module.kms.key_arn` at the composite root. Validated non-empty. |
-| `mode` | string | `"GOVERNANCE"` | Object Lock retention mode. Validated ∈ {`GOVERNANCE`, `COMPLIANCE`}. |
+| `mode` | string | `"GOVERNANCE"` | Object Lock retention mode. Validated ∈ {`GOVERNANCE`, `COMPLIANCE`}. Production stages reject `GOVERNANCE` via plan-time `precondition`. |
 | `retention_days` | number | `365` | Default retention in days. Validated > 0. |
 
 ## Outputs
