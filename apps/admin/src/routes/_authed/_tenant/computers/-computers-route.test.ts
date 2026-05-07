@@ -70,6 +70,12 @@ describe("Computers admin routes", () => {
     );
     expect(liveTasksPanelSource).toContain("Reconnect Google");
     expect(liveTasksPanelSource).toContain("GOOGLE_WORKSPACE_SCOPES");
+    expect(liveTasksPanelSource).toContain(
+      "tasks.find(taskHasGoogleWorkspaceSignal)",
+    );
+    expect(liveTasksPanelSource).not.toContain(
+      "tasks.some(taskHasMissingGoogleCalendarScope)",
+    );
     expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
     expect(liveTasksPanelSource).not.toContain("CardAction");
     expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");

@@ -142,12 +142,7 @@ function taskHasMissingGoogleCalendarScope(task: {
   output?: unknown;
   error?: unknown;
 }): boolean {
-  const payload =
-    task.error && typeof task.error === "object"
-      ? (task.error as Record<string, unknown>)
-      : task.output && typeof task.output === "object"
-        ? (task.output as Record<string, unknown>)
-        : null;
+  const payload = taskPayload(task);
   if (!payload) return false;
 
   const googleCalendar = payload.googleCalendar;
@@ -169,6 +164,29 @@ function taskHasMissingGoogleCalendarScope(task: {
   return false;
 }
 
+function taskHasGoogleWorkspaceSignal(task: {
+  output?: unknown;
+  error?: unknown;
+}): boolean {
+  const payload = taskPayload(task);
+  return Boolean(
+    payload &&
+    ((payload.googleCalendar && typeof payload.googleCalendar === "object") ||
+      (payload.googleWorkspace && typeof payload.googleWorkspace === "object")),
+  );
+}
+
+function taskPayload(task: {
+  output?: unknown;
+  error?: unknown;
+}): Record<string, unknown> | null {
+  return task.error && typeof task.error === "object"
+    ? (task.error as Record<string, unknown>)
+    : task.output && typeof task.output === "object"
+      ? (task.output as Record<string, unknown>)
+      : null;
+}
+
 export function ComputerLiveTasksPanel({
   computer,
   onChanged,
@@ -185,10 +203,12 @@ export function ComputerLiveTasksPanel({
   );
 
   const tasks = tasksResult.data?.computerTasks ?? [];
-  const needsGoogleReconnect = useMemo(
-    () => tasks.some(taskHasMissingGoogleCalendarScope),
-    [tasks],
-  );
+  const needsGoogleReconnect = useMemo(() => {
+    const latestGoogleTask = tasks.find(taskHasGoogleWorkspaceSignal);
+    return latestGoogleTask
+      ? taskHasMissingGoogleCalendarScope(latestGoogleTask)
+      : false;
+  }, [tasks]);
   const hasOpenTask = useMemo(
     () =>
       tasks.some(
