@@ -100,6 +100,52 @@ type ConnectorExecution {
   createdAt: AWSDateTime!
 }
 
+type ConnectorRunComputerTask {
+  id: ID!
+  status: String!
+  input: AWSJSON
+  output: AWSJSON
+  error: AWSJSON
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type ConnectorRunDelegation {
+  id: ID!
+  status: String!
+  agentId: ID!
+  inputArtifacts: AWSJSON
+  outputArtifacts: AWSJSON
+  result: AWSJSON
+  error: AWSJSON
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type ConnectorRunThreadTurn {
+  id: ID!
+  threadId: ID
+  agentId: ID
+  status: String!
+  resultJson: AWSJSON
+  error: String
+  errorCode: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type ConnectorRunLifecycle {
+  execution: ConnectorExecution!
+  connector: Connector!
+  computerTask: ConnectorRunComputerTask
+  delegation: ConnectorRunDelegation
+  threadTurn: ConnectorRunThreadTurn
+  threadId: ID
+  messageId: ID
+  computerId: ID
+}
+
 type ConnectorDispatchResult {
   status: String!
   connectorId: ID!
@@ -128,6 +174,11 @@ extend type Query {
     limit: Int
     cursor: String
   ): [ConnectorExecution!]!
+  connectorRunLifecycles(
+    connectorId: ID
+    limit: Int
+    cursor: String
+  ): [ConnectorRunLifecycle!]!
   connectorExecution(id: ID!): ConnectorExecution
 }
 

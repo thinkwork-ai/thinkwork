@@ -883,10 +883,60 @@ export type ConnectorFilter = {
   type?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ConnectorRunComputerTask = {
+  __typename?: 'ConnectorRunComputerTask';
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  error?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  input?: Maybe<Scalars['AWSJSON']['output']>;
+  output?: Maybe<Scalars['AWSJSON']['output']>;
+  status: Scalars['String']['output'];
+};
+
+export type ConnectorRunDelegation = {
+  __typename?: 'ConnectorRunDelegation';
+  agentId: Scalars['ID']['output'];
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  error?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  inputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
+  outputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
+  result?: Maybe<Scalars['AWSJSON']['output']>;
+  status: Scalars['String']['output'];
+};
+
+export type ConnectorRunLifecycle = {
+  __typename?: 'ConnectorRunLifecycle';
+  computerId?: Maybe<Scalars['ID']['output']>;
+  computerTask?: Maybe<ConnectorRunComputerTask>;
+  connector: Connector;
+  delegation?: Maybe<ConnectorRunDelegation>;
+  execution: ConnectorExecution;
+  messageId?: Maybe<Scalars['ID']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+  threadTurn?: Maybe<ConnectorRunThreadTurn>;
+};
+
 export type ConnectorRunNowResult = {
   __typename?: 'ConnectorRunNowResult';
   connectorId: Scalars['ID']['output'];
   results: Array<ConnectorDispatchResult>;
+};
+
+export type ConnectorRunThreadTurn = {
+  __typename?: 'ConnectorRunThreadTurn';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  errorCode?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  resultJson?: Maybe<Scalars['AWSJSON']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
 };
 
 export enum ConnectorStatus {
@@ -2967,6 +3017,7 @@ export type Query = {
   connector?: Maybe<Connector>;
   connectorExecution?: Maybe<ConnectorExecution>;
   connectorExecutions: Array<ConnectorExecution>;
+  connectorRunLifecycles: Array<ConnectorRunLifecycle>;
   connectors: Array<Connector>;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
@@ -3308,6 +3359,13 @@ export type QueryConnectorExecutionsArgs = {
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ConnectorExecutionState>;
+};
+
+
+export type QueryConnectorRunLifecyclesArgs = {
+  connectorId?: InputMaybe<Scalars['ID']['input']>;
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
