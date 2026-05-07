@@ -268,9 +268,16 @@ echo "==> Verifying compliance roles" >&2
 # matches nothing. Use the glob form to list all compliance_* roles.
 psql "$DATABASE_URL" -c "\du compliance_*"
 
-if [[ -x "$REPO_ROOT/scripts/db-migrate-manual.sh" ]]; then
-  echo "==> Running drift gate (expect exit 0)" >&2
-  DATABASE_URL="$DATABASE_URL" bash "$REPO_ROOT/scripts/db-migrate-manual.sh" >/dev/null
-fi
+# TEMPORARILY DISABLED — the drift gate fires ~150 separate psql
+# connections and intermittently exits 1 on transient RDS connection-
+# rate / network blips. The gate also runs as its own
+# `migration-drift-check` job in .github/workflows/deploy.yml; that job
+# is disabled (`if: false`) for the same reason. Re-enable both
+# together once the gate is rewritten to share a single connection or
+# moved off the deploy critical path.
+# if [[ -x "$REPO_ROOT/scripts/db-migrate-manual.sh" ]]; then
+#   echo "==> Running drift gate (expect exit 0)" >&2
+#   DATABASE_URL="$DATABASE_URL" bash "$REPO_ROOT/scripts/db-migrate-manual.sh" >/dev/null
+# fi
 
 echo "==> Bootstrap complete for stage: $STAGE" >&2
