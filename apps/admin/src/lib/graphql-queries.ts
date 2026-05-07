@@ -246,6 +246,11 @@ export const ComputersListQuery = graphql(`
         templateKind
         model
       }
+      sourceAgent {
+        id
+        name
+        slug
+      }
       name
       slug
       status

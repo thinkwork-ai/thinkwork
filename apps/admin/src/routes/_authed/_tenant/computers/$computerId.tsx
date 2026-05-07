@@ -20,6 +20,10 @@ import { formatDateTime } from "@/lib/utils";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
+import {
+  AGENT_WORKSPACE_DEFAULT_FILES,
+  WorkspaceEditor,
+} from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
   component: ComputerDetailPage,
@@ -121,6 +125,23 @@ function ComputerDetailPage() {
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
+          {computer.sourceAgent ? (
+            <WorkspaceEditor
+              target={{ agentId: computer.sourceAgent.id }}
+              mode="agent"
+              agentId={computer.sourceAgent.id}
+              agentSlug={computer.sourceAgent.slug ?? undefined}
+              bootstrapFiles={AGENT_WORKSPACE_DEFAULT_FILES}
+              bootstrapLabel="Create Default Files"
+              className="min-h-[500px]"
+            />
+          ) : (
+            <EmptyState
+              icon={Monitor}
+              title="No Workspace Source"
+              description="This Computer is not linked to a source Agent workspace yet."
+            />
+          )}
           <ComputerStatusPanel
             computer={computer}
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}

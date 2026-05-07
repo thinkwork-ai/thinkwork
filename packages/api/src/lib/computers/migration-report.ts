@@ -10,6 +10,10 @@ export interface ComputerMigrationAgentCandidate {
   template_kind: string | null;
   template_name?: string | null;
   template_slug?: string | null;
+  adapter_type?: string | null;
+  workspace_run_count?: number | null;
+  thread_count?: number | null;
+  last_thread_at?: Date | string | null;
   runtime_config: unknown;
   budget_monthly_cents: number | null;
   spent_monthly_cents: number | null;
@@ -109,7 +113,7 @@ export function buildComputerMigrationReport(input: {
   }
 
   for (const [ownerUserId, candidates] of byOwner.entries()) {
-    const sorted = [...candidates].sort(compareMostRecentlyActive);
+    const sorted = [...candidates].sort(compareComputerSourcePriority);
     const primary = sorted[0]!;
     const existing = existingByOwner.get(ownerUserId);
     if (existing?.migrated_from_agent_id === primary.id) {
@@ -221,14 +225,35 @@ function summarize(
   return summary;
 }
 
-function compareMostRecentlyActive(
+function compareComputerSourcePriority(
   a: ComputerMigrationAgentCandidate,
   b: ComputerMigrationAgentCandidate,
 ): number {
+  const workspaceScoreDelta = workspaceScore(b) - workspaceScore(a);
+  if (workspaceScoreDelta !== 0) return workspaceScoreDelta;
+
+  const adapterDelta = adapterScore(b) - adapterScore(a);
+  if (adapterDelta !== 0) return adapterDelta;
+
   return timestampValue(b) - timestampValue(a);
 }
 
+function workspaceScore(agent: ComputerMigrationAgentCandidate): number {
+  return (
+    Number(agent.workspace_run_count ?? 0) * 1_000 +
+    Number(agent.thread_count ?? 0)
+  );
+}
+
+function adapterScore(agent: ComputerMigrationAgentCandidate): number {
+  return agent.adapter_type ? 1 : 0;
+}
+
 function timestampValue(agent: ComputerMigrationAgentCandidate): number {
-  const value = agent.last_heartbeat_at ?? agent.updated_at ?? agent.created_at;
+  const value =
+    agent.last_thread_at ??
+    agent.last_heartbeat_at ??
+    agent.updated_at ??
+    agent.created_at;
   return value ? new Date(value).getTime() : 0;
 }
