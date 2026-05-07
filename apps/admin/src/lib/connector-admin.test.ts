@@ -80,16 +80,80 @@ describe("connector admin helpers", () => {
   });
 
   it("labels dispatch target types", () => {
+    expect(connectorTargetLabel(DispatchTargetType.Computer)).toBe("Computer");
     expect(connectorTargetLabel(DispatchTargetType.Agent)).toBe("Agent");
     expect(connectorTargetLabel(DispatchTargetType.HybridRoutine)).toBe(
       "Hybrid Routine",
     );
   });
 
-  it("derives picker options for agents and non-legacy routines", () => {
+  it("defaults new connector forms to the first available Computer", () => {
+    expect(
+      connectorFormValues(null, {
+        computers: [
+          {
+            id: "computer_1",
+            name: "Marco",
+            owner: { name: "Eric", email: "eric@example.com" },
+            runtimeStatus: "RUNNING",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      dispatchTargetType: DispatchTargetType.Computer,
+      dispatchTargetId: "computer_1",
+    });
+
+    expect(connectorFormValues()).toMatchObject({
+      dispatchTargetType: DispatchTargetType.Computer,
+      dispatchTargetId: "",
+    });
+  });
+
+  it("preserves an existing advanced Agent target when editing", () => {
+    expect(
+      connectorFormValues(
+        {
+          dispatchTargetType: DispatchTargetType.Agent,
+          dispatchTargetId: "agent_1",
+        },
+        {
+          computers: [{ id: "computer_1", name: "Marco" }],
+        },
+      ),
+    ).toMatchObject({
+      dispatchTargetType: DispatchTargetType.Agent,
+      dispatchTargetId: "agent_1",
+    });
+  });
+
+  it("derives picker options for computers, agents, and non-legacy routines", () => {
+    expect(
+      connectorTargetOptions(
+        DispatchTargetType.Computer,
+        [
+          {
+            id: "computer_1",
+            name: "Marco",
+            owner: { email: "eric@example.com" },
+            runtimeStatus: "RUNNING",
+          },
+        ],
+        [],
+        [],
+      ),
+    ).toEqual([
+      {
+        id: "computer_1",
+        label: "Marco",
+        description: "eric@example.com · RUNNING",
+      },
+    ]);
+
     expect(
       connectorTargetOptions(
         DispatchTargetType.Agent,
+        [],
         [
           {
             id: "agent_1",
@@ -111,6 +175,7 @@ describe("connector admin helpers", () => {
     expect(
       connectorTargetOptions(
         DispatchTargetType.Routine,
+        [],
         [],
         [
           {

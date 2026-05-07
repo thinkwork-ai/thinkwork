@@ -30,6 +30,14 @@ export type ConnectorTargetOption = {
   description?: string | null;
 };
 
+export type ConnectorComputerTarget = {
+  id: string;
+  name: string;
+  owner?: { name?: string | null; email?: string | null } | null;
+  runtimeStatus?: string | null;
+  status?: string | null;
+};
+
 export type ConnectorAgentTarget = {
   id: string;
   name: string;
@@ -50,7 +58,7 @@ export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   description: "",
   connectionId: "",
   configJson: "{}",
-  dispatchTargetType: DispatchTargetType.Agent,
+  dispatchTargetType: DispatchTargetType.Computer,
   dispatchTargetId: "",
   enabled: true,
 };
@@ -92,8 +100,15 @@ export function linearTrackerStarterConfigJson(): string {
 
 export function connectorFormValues(
   source?: ConnectorFormSource | null,
+  options: { computers?: ConnectorComputerTarget[] } = {},
 ): ConnectorFormValues {
-  if (!source) return DEFAULT_CONNECTOR_FORM_VALUES;
+  const defaultComputerId = options.computers?.[0]?.id ?? "";
+  if (!source) {
+    return {
+      ...DEFAULT_CONNECTOR_FORM_VALUES,
+      dispatchTargetId: defaultComputerId,
+    };
+  }
 
   return {
     name: source.name ?? "",
@@ -102,17 +117,33 @@ export function connectorFormValues(
     connectionId: source.connectionId ?? "",
     configJson:
       source.configJson ?? formatConnectorConfig(source.config ?? null),
-    dispatchTargetType: source.dispatchTargetType ?? DispatchTargetType.Agent,
-    dispatchTargetId: source.dispatchTargetId ?? "",
+    dispatchTargetType:
+      source.dispatchTargetType ??
+      DEFAULT_CONNECTOR_FORM_VALUES.dispatchTargetType,
+    dispatchTargetId: source.dispatchTargetId ?? defaultComputerId,
     enabled: source.enabled ?? true,
   };
 }
 
 export function connectorTargetOptions(
   targetType: DispatchTargetType,
+  computers: ConnectorComputerTarget[],
   agents: ConnectorAgentTarget[],
   routines: ConnectorRoutineTarget[],
 ): ConnectorTargetOption[] {
+  if (targetType === DispatchTargetType.Computer) {
+    return computers.map((computer) => ({
+      id: computer.id,
+      label: computer.name,
+      description: [
+        computer.owner?.name ?? computer.owner?.email,
+        computer.runtimeStatus ?? computer.status,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    }));
+  }
+
   if (targetType === DispatchTargetType.Agent) {
     return agents.map((agent) => ({
       id: agent.id,
@@ -198,6 +229,8 @@ export function updateConnectorInput(
 
 export function connectorTargetLabel(targetType: DispatchTargetType): string {
   switch (targetType) {
+    case DispatchTargetType.Computer:
+      return "Computer";
     case DispatchTargetType.Agent:
       return "Agent";
     case DispatchTargetType.Routine:
