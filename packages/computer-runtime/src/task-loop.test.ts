@@ -289,4 +289,39 @@ describe("Computer task loop", () => {
     });
     expect(JSON.stringify(result)).not.toContain("ya29");
   });
+
+  it("classifies disabled Google Calendar API errors with the project link", async () => {
+    const execFileAsync = vi.fn().mockRejectedValue(
+      new Error(
+        [
+          "Command failed: gws calendar events list",
+          "error[api]: hint: API not enabled for your GCP project.",
+          "      Enable it at: https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=430475771862",
+        ].join("\n"),
+      ),
+    );
+
+    const result = await listGoogleCalendarUpcomingWithGws(
+      {
+        timeMin: "2026-05-07T10:00:00.000Z",
+        timeMax: "2026-05-08T10:00:00.000Z",
+        maxResults: 10,
+      },
+      {
+        accessToken: "ya29.secret-token",
+        binary: "gws",
+        execFileAsync,
+      },
+    );
+
+    expect(result).toMatchObject({
+      calendarAvailable: false,
+      reason: "google_calendar_api_disabled",
+      projectId: "430475771862",
+      enableUrl:
+        "https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=430475771862",
+      missingScopes: [],
+    });
+    expect(JSON.stringify(result)).not.toContain("ya29");
+  });
 });
