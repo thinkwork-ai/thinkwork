@@ -284,3 +284,63 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
     password = var.db_password
   })
 }
+
+################################################################################
+# Secrets Manager — Compliance Role Credentials (Phase 3 U2)
+#
+# Three role-scoped secret containers for the compliance.* schema introduced
+# in U1 (drizzle/0069_compliance_schema.sql, PR #880). Per Decision #4 of the
+# master plan (docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md):
+#
+#   - compliance/writer-credentials:  used by Yoga resolvers + Lambda handlers
+#                                     via the U3 emitAuditEvent helper.
+#   - compliance/drainer-credentials: used by the U4 outbox drainer Lambda
+#                                     (reserved-concurrency=1).
+#   - compliance/reader-credentials:  used by the graphql-http Lambda for
+#                                     U10 admin Compliance read paths.
+#
+# Naming follows the slash-delimited "thinkwork/${stage}/..." convention from
+# CLAUDE.md (the master `db_credentials` secret above uses the grandfathered
+# hyphen form). JSON shape is enriched vs the master's {username, password}:
+# {username, password, host, port, dbname} so each consumer is self-contained.
+#
+# Greenfield bootstrap is operator-driven via scripts/bootstrap-compliance-roles.sh
+# which reads passwords from env, populates these secrets via
+# `aws secretsmanager put-secret-value`, and runs
+# drizzle/0070_compliance_aurora_roles.sql to create the matching Aurora roles.
+# Terraform owns the SECRET CONTAINER; the operator owns the SECRET VALUE.
+#
+# `lifecycle.ignore_changes = [secret_string]` lets operators rotate via the
+# bootstrap script (or AWS console) without Terraform clobbering the value
+# on the next apply.
+################################################################################
+
+resource "aws_secretsmanager_secret" "compliance_writer" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/compliance/writer-credentials"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-writer-credentials"
+    Role = "compliance_writer"
+  }
+}
+
+resource "aws_secretsmanager_secret" "compliance_drainer" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/compliance/drainer-credentials"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-drainer-credentials"
+    Role = "compliance_drainer"
+  }
+}
+
+resource "aws_secretsmanager_secret" "compliance_reader" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/compliance/reader-credentials"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-reader-credentials"
+    Role = "compliance_reader"
+  }
+}
