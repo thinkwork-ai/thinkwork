@@ -1276,6 +1276,7 @@ export type DeploymentStatus = {
 
 export enum DispatchTargetType {
   Agent = 'agent',
+  Computer = 'computer',
   HybridRoutine = 'hybrid_routine',
   Routine = 'routine'
 }

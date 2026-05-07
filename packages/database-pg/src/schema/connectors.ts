@@ -64,8 +64,8 @@ export const connectors = pgTable(
 			sql`${table.status} IN ('active', 'paused', 'unhealthy', 'archived')`,
 		),
 		check(
-			"connectors_dispatch_target_type_enum",
-			sql`${table.dispatch_target_type} IN ('agent', 'routine', 'hybrid_routine')`,
+			"connectors_dispatch_target_type_enum_v2",
+			sql`${table.dispatch_target_type} IN ('agent', 'routine', 'hybrid_routine', 'computer')`,
 		),
 	],
 );

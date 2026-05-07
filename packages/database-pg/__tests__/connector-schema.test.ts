@@ -18,6 +18,19 @@ const rollback0065 = readFileSync(
 	join(HERE, "..", "drizzle", "0065_connector_tables_rollback.sql"),
 	"utf-8",
 );
+const migration0071 = readFileSync(
+	join(HERE, "..", "drizzle", "0071_connector_computer_dispatch_target.sql"),
+	"utf-8",
+);
+const rollback0071 = readFileSync(
+	join(
+		HERE,
+		"..",
+		"drizzle",
+		"0071_connector_computer_dispatch_target_rollback.sql",
+	),
+	"utf-8",
+);
 
 const indexNames = (table: Parameters<typeof getTableConfig>[0]) =>
 	getTableConfig(table).indexes.map((index) => index.config.name);
@@ -49,7 +62,7 @@ describe("connector schema", () => {
 		expect(checkNames(connectors)).toEqual(
 			expect.arrayContaining([
 				"connectors_status_enum",
-				"connectors_dispatch_target_type_enum",
+				"connectors_dispatch_target_type_enum_v2",
 			]),
 		);
 	});
@@ -83,6 +96,33 @@ describe("connector schema", () => {
 				"connector_executions_spend_envelope_nonnegative",
 				"connector_executions_retry_attempt_nonnegative",
 			]),
+		);
+	});
+});
+
+describe("migration 0071 — connector Computer dispatch target", () => {
+	it("declares a drift-detectable v2 target constraint marker", () => {
+		expect(migration0071).toMatch(
+			/--\s*creates-constraint:\s*public\.connectors\.connectors_dispatch_target_type_enum_v2\b/,
+		);
+		expect(migration0071).not.toMatch(/creates-index:/);
+	});
+
+	it("drops the old connector target check and allows Computer targets", () => {
+		expect(migration0071).toMatch(
+			/DROP CONSTRAINT IF EXISTS connectors_dispatch_target_type_enum/,
+		);
+		expect(migration0071).toMatch(
+			/ADD CONSTRAINT connectors_dispatch_target_type_enum_v2 CHECK \(\s*dispatch_target_type IN \('agent', 'routine', 'hybrid_routine', 'computer'\)/,
+		);
+	});
+
+	it("restores the original target check in rollback", () => {
+		expect(rollback0071).toMatch(
+			/DROP CONSTRAINT IF EXISTS connectors_dispatch_target_type_enum_v2/,
+		);
+		expect(rollback0071).toMatch(
+			/ADD CONSTRAINT connectors_dispatch_target_type_enum CHECK \(\s*dispatch_target_type IN \('agent', 'routine', 'hybrid_routine'\)/,
 		);
 	});
 });

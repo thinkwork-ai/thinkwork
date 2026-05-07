@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import {
   agents,
+  computers,
   connections,
   connectors as connectorsTable,
   routines,
@@ -14,7 +15,7 @@ import {
   type ConnectorDispatchResult,
 } from "../../../lib/connectors/runtime.js";
 
-type DispatchTargetType = "agent" | "routine" | "hybrid_routine";
+type DispatchTargetType = "agent" | "routine" | "hybrid_routine" | "computer";
 
 type CreateConnectorInput = {
   tenantId: string;
@@ -255,8 +256,9 @@ async function validateDispatchTarget(
   dispatchTargetType: DispatchTargetType,
   dispatchTargetId: string,
 ): Promise<void> {
-  let table: typeof agents | typeof routines | null = null;
+  let table: typeof agents | typeof routines | typeof computers | null = null;
   if (dispatchTargetType === "agent") table = agents;
+  if (dispatchTargetType === "computer") table = computers;
   if (
     dispatchTargetType === "routine" ||
     dispatchTargetType === "hybrid_routine"
