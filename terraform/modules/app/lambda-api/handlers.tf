@@ -387,14 +387,14 @@ resource "aws_lambda_function" "handler" {
     # Aurora via the master DATABASE_SECRET_ARN like every other narrow
     # handler (compliance_writer role is reserved for future hardening).
     "compliance-events",
-    # Phase 3 U8a watchdog. Inert in U8a (returns mode:"inert" + emits
-    # ComplianceAnchorWatchdogHeartbeat metric); U8b adds S3 HeadObject
-    # + ComplianceAnchorGap emission. Stays in for_each because the
-    # inert watchdog needs only AWSLambdaBasicExecutionRole. The anchor
-    # Lambda itself is a STANDALONE aws_lambda_function resource (defined
-    # below) because it uses the U7 IAM role (compliance-anchor-lambda-role),
-    # not the shared aws_iam_role.lambda.
-    "compliance-anchor-watchdog",
+    # Phase 3 U8b watchdog moved out of for_each into a standalone
+    # aws_lambda_function resource (see below). It now uses a sibling
+    # IAM role (kms:DescribeKey only on the CMK; s3:ListBucket scoped
+    # to anchors/) instead of the shared aws_iam_role.lambda — the
+    # widened S3+KMS grant on the shared role would have leaked into
+    # 60+ unrelated handlers. Pre-merge step: `terraform state mv`
+    # the existing handler["compliance-anchor-watchdog"] address to the
+    # new standalone resource (see U8b plan operator-step section).
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -410,11 +410,8 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  # The trailing default (30s) covers compliance-anchor-watchdog without
-  # a redundant explicit branch; watchdog memory_size still gets a
-  # specific 512 MB override below.
   timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "connector-poller" ? 120 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "compliance-anchor-watchdog" ? 512 : 256
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -1195,9 +1192,14 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
       # because it uses the U7 IAM role, not the shared aws_iam_role.lambda).
       # Splat (`[*]`) expansion handles count=0 cleanly when local.use_local_zips
       # is false; an indexed reference (`[0].arn`) would throw on graph eval.
+      # Phase 3 U8b — watchdog moved to standalone resource; its ARN must
+      # be added to the splat list explicitly (SEC-U8B-005). The splat
+      # `[*].arn` form handles count = 0 cleanly when local.use_local_zips
+      # is false; an indexed `[0].arn` would throw on graph eval.
       Resource = local.use_local_zips ? concat(
         [for k, v in aws_lambda_function.handler : v.arn],
         aws_lambda_function.compliance_anchor[*].arn,
+        aws_lambda_function.compliance_anchor_watchdog[*].arn,
       ) : []
     }]
   })
@@ -1285,9 +1287,13 @@ resource "aws_lambda_function" "compliance_anchor" {
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
       COMPLIANCE_READER_SECRET_ARN        = var.compliance_reader_secret_arn
       COMPLIANCE_DRAINER_SECRET_ARN       = var.compliance_drainer_secret_arn
-      # Pre-plumbed for U8b body-swap; unread in U8a.
-      COMPLIANCE_ANCHOR_BUCKET_NAME    = var.compliance_anchor_bucket_name
-      COMPLIANCE_ANCHOR_RETENTION_DAYS = tostring(var.compliance_anchor_object_lock_retention_days)
+      COMPLIANCE_ANCHOR_BUCKET_NAME       = var.compliance_anchor_bucket_name
+      COMPLIANCE_ANCHOR_RETENTION_DAYS    = tostring(var.compliance_anchor_object_lock_retention_days)
+      # Phase 3 U8b — required by `_anchor_fn_live`. The Lambda throws on
+      # boot if either of these is empty; the U8b composite root wires
+      # both from `module.compliance_anchors` outputs.
+      COMPLIANCE_ANCHOR_KMS_KEY_ARN      = var.compliance_anchor_kms_key_arn
+      COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE = var.compliance_anchor_object_lock_mode
     }
   }
 }
@@ -1329,30 +1335,44 @@ resource "aws_lambda_function_event_invoke_config" "compliance_anchor" {
 }
 
 # ---------------------------------------------------------------------------
-# Watchdog metrics IAM — small inline policy on the SHARED execution role
-# allowing PutMetricData scoped to the Thinkwork/Compliance namespace.
-# Used by the watchdog's heartbeat emit in U8a (Decision #16) and by
-# U8b's live ComplianceAnchorGap metric.
+# Phase 3 U8b — Watchdog Lambda (STANDALONE).
+#
+# Moves OFF the shared aws_iam_role.lambda onto a dedicated sibling role
+# (kms:DescribeKey only on the CMK, s3:ListBucket prefix-conditioned on
+# anchors/, no kms:Decrypt — the watchdog never reads object bodies).
+# The shared role's prior compliance_watchdog_metrics inline policy is
+# removed (its function is now on the sibling role).
+#
+# Operator pre-merge: `terraform state mv` the existing
+# `aws_lambda_function.handler["compliance-anchor-watchdog"]` address to
+# `aws_lambda_function.compliance_anchor_watchdog[0]`. Without it, apply
+# fails with ResourceConflictException on the function name.
 # ---------------------------------------------------------------------------
 
-resource "aws_iam_role_policy" "compliance_watchdog_metrics" {
+resource "aws_lambda_function" "compliance_anchor_watchdog" {
   count = local.use_local_zips ? 1 : 0
-  name  = "compliance-watchdog-metrics"
-  role  = aws_iam_role.lambda.id
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["cloudwatch:PutMetricData"]
-      Resource = "*"
-      Condition = {
-        StringEquals = {
-          "cloudwatch:namespace" = "Thinkwork/Compliance"
-        }
-      }
-    }]
-  })
+  function_name    = "thinkwork-${var.stage}-api-compliance-anchor-watchdog"
+  role             = var.compliance_anchor_watchdog_role_arn
+  handler          = "index.handler"
+  runtime          = local.runtime
+  timeout          = 30
+  memory_size      = 512
+  filename         = "${var.lambda_zips_dir}/compliance-anchor-watchdog.zip"
+  source_code_hash = filebase64sha256("${var.lambda_zips_dir}/compliance-anchor-watchdog.zip")
+
+  environment {
+    variables = {
+      STAGE                               = var.stage
+      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+      COMPLIANCE_ANCHOR_BUCKET_NAME       = var.compliance_anchor_bucket_name
+    }
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-api-compliance-anchor-watchdog"
+    Handler = "compliance-anchor-watchdog"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -1395,7 +1415,10 @@ resource "aws_scheduler_schedule" "compliance_anchor_watchdog" {
   }
 
   target {
-    arn      = aws_lambda_function.handler["compliance-anchor-watchdog"].arn
+    # Phase 3 U8b — points at the standalone watchdog resource (was
+    # aws_lambda_function.handler["compliance-anchor-watchdog"] before
+    # the for_each split-out).
+    arn      = aws_lambda_function.compliance_anchor_watchdog[0].arn
     role_arn = aws_iam_role.scheduler.arn
 
     retry_policy {
@@ -1405,17 +1428,28 @@ resource "aws_scheduler_schedule" "compliance_anchor_watchdog" {
 }
 
 # ---------------------------------------------------------------------------
-# CloudWatch alarm — wired in U8a but stays in OK / INSUFFICIENT_DATA
-# during the inert phase (treat_missing_data = notBreaching).
-# U8b flips treat_missing_data to "breaching" once the watchdog actually
-# emits ComplianceAnchorGap from S3 HeadObject.
+# CloudWatch alarms — Phase 3 U8b
+#
+# Two alarms split the failure space:
+#
+#   1. compliance-anchor-gap (treat_missing_data = "breaching"). Fires
+#      when ComplianceAnchorGap >= 1 for two consecutive 5-min periods
+#      OR when the watchdog stops emitting the metric entirely (IAM
+#      regression, code crash, S3 ListObjectsV2 perma-fail).
+#
+#   2. compliance-anchor-watchdog-heartbeat-missing
+#      (treat_missing_data = "notBreaching" born-state). Distinguishes
+#      "real anchor gap" from "watchdog metric path broken". Born-state
+#      is notBreaching to give Greenfield deploys a window before the
+#      first heartbeat lands; flip to breaching in a follow-up after
+#      first soak (Decision #7 / ADV-004).
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "compliance_anchor_gap" {
   count = local.use_local_zips ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-compliance-anchor-gap"
-  alarm_description   = "Anchor cadence gap exceeded threshold. INERT in U8a — alarm sits in OK/INSUFFICIENT_DATA until U8b flips treat_missing_data to breaching."
+  alarm_description   = "Anchor cadence gap exceeded threshold. LIVE in U8b — fires on >=1 ComplianceAnchorGap=1 OR missing metric (means watchdog broken)."
   namespace           = "Thinkwork/Compliance"
   metric_name         = "ComplianceAnchorGap"
   statistic           = "Maximum"
@@ -1423,6 +1457,26 @@ resource "aws_cloudwatch_metric_alarm" "compliance_anchor_gap" {
   evaluation_periods  = 2
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = []
+
+  dimensions = {
+    Stage = var.stage
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "compliance_anchor_watchdog_heartbeat_missing" {
+  count = local.use_local_zips ? 1 : 0
+
+  alarm_name          = "thinkwork-${var.stage}-compliance-anchor-watchdog-heartbeat-missing"
+  alarm_description   = "Watchdog heartbeat metric is missing. LIVE in U8b — born with treat_missing_data = notBreaching to absorb deploy-time gaps; promote to breaching in a follow-up after first soak."
+  namespace           = "Thinkwork/Compliance"
+  metric_name         = "ComplianceAnchorWatchdogHeartbeat"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = []
 

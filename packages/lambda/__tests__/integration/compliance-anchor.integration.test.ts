@@ -2,7 +2,7 @@
  * Integration: compliance-anchor end-to-end against dev
  * compliance.audit_events + compliance.tenant_anchor_state.
  *
- * Phase 3 U8a (docs/plans/2026-05-07-010-feat-compliance-u8a-anchor-lambda-inert-plan.md).
+ * Phase 3 U8b (docs/plans/2026-05-07-012-feat-compliance-u8b-anchor-lambda-live-plan.md).
  *
  * Tests cover:
  *   - Empty event set → tenant_count: 0, dispatched: true.
@@ -10,16 +10,21 @@
  *   - Single tenant odd-leaf duplication → leaf == root.
  *   - tenant_anchor_state UPDATE in single transaction (rollback on
  *     anchorFn throw).
- *   - Cadence ID is a valid UUIDv7.
- *   - Body-swap forcing function: getWiredAnchorFn() === _anchor_fn_inert
- *     (Decision #17). When U8b lands and replaces the wired fn with
- *     _anchor_fn_live, this assertion FAILS — and U8b's required fix is
- *     to replace it with a real body-swap safety test (asserting
- *     S3Client.send was called with PutObjectCommand), not to delete it.
+ *   - Cadence ID matches UUIDv7 wire format (now deterministic chain-head
+ *     fingerprint per Decision #5a; same heads → same id → idempotent retries).
+ *   - Body-swap forcing function (Layer 1): getWiredAnchorFn() === _anchor_fn_live.
+ *     Layer 2 (S3-spy assertion that PutObject is actually called) lives
+ *     in compliance-anchor-s3-spy.test.ts so that test can vi.mock the
+ *     S3 SDK without polluting this DB-backed test's process.
  *   - Leaf-encoding fixture (Decision #3): hardcoded
  *     (tenant_id, event_hash) → expected_leaf_hex test vector. U9's
  *     verifier CLI imports this same fixture for cross-implementation
  *     byte agreement.
+ *
+ * DB-backed tests pass a stub `anchorFn` so they exercise runAnchorPass
+ * semantics (chain reads, drainer transaction, cadence_id) without
+ * needing real S3 / KMS infrastructure. The wired-path body-swap test
+ * lives in compliance-anchor-s3-spy.test.ts.
  *
  * Skipped when DATABASE_URL is unset (CI test job has no Aurora creds).
  *
@@ -28,17 +33,17 @@
 
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { createHash } from "node:crypto";
-import { eq, inArray, and, gt } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createDb, type Database } from "@thinkwork/database-pg";
 import {
 	auditEvents,
-	auditOutbox,
 	tenantAnchorState,
 } from "@thinkwork/database-pg/schema";
 import {
-	_anchor_fn_inert,
+	_anchor_fn_live,
 	buildMerkleTree,
 	computeLeafHash,
+	deriveCadenceId,
 	deriveProofPath,
 	getWiredAnchorFn,
 	readChainHeads,
@@ -262,20 +267,34 @@ describe("compliance-anchor: Merkle math (RFC 6962 domain separation)", () => {
 	});
 });
 
-describe("compliance-anchor: body-swap forcing function (Decision #17)", () => {
-	it("getWiredAnchorFn() returns _anchor_fn_inert in U8a", () => {
-		// **When U8b lands and replaces the wired fn with `_anchor_fn_live`**,
-		// this assertion FAILS — and the U8b PR's required fix is to
-		// replace it with a real body-swap safety test (asserting
-		// S3Client.send was called with PutObjectCommand), NOT to delete it.
-		// This is the structural defense against U8b shipping the live
-		// function without its safety test.
-		expect(getWiredAnchorFn()).toBe(_anchor_fn_inert);
+describe("compliance-anchor: body-swap forcing function — Layer 1 (Decision #19)", () => {
+	it("getWiredAnchorFn() returns _anchor_fn_live in U8b", () => {
+		// Layer 1 identity assertion — locks the wired body to the live
+		// seam. If a future PR accidentally regresses this to a no-op stub
+		// or leftover inert function, this assertion fires before any S3
+		// behavior change ships. Layer 2 (S3-spy mock that asserts
+		// PutObjectCommand is actually invoked) lives in
+		// compliance-anchor-s3-spy.test.ts.
+		expect(getWiredAnchorFn()).toBe(_anchor_fn_live);
 	});
 
-	it("_anchor_fn_inert returns {anchored: false} regardless of inputs", () => {
-		const result = _anchor_fn_inert("0".repeat(64), []);
-		expect(result.anchored).toBe(false);
+	it("deriveCadenceId is deterministic — same heads produce same id (Decision #5a)", () => {
+		// Idempotent retries depend on this — same chain heads must yield
+		// the same cadence_id so a partial-S3-write retry overwrites its
+		// own slice keys instead of orphaning them under WORM lock.
+		const heads = [
+			{ tenant_id: ANCHOR_TEST_TENANT_A, event_hash: "aa".repeat(32) },
+			{ tenant_id: ANCHOR_TEST_TENANT_B, event_hash: "bb".repeat(32) },
+		];
+		const id1 = deriveCadenceId(heads);
+		const id2 = deriveCadenceId(heads);
+		expect(id1).toBe(id2);
+		expect(id1).toMatch(UUIDV7_RE);
+		// Different heads → different id.
+		const id3 = deriveCadenceId([
+			{ tenant_id: ANCHOR_TEST_TENANT_A, event_hash: "cc".repeat(32) },
+		]);
+		expect(id3).not.toBe(id1);
 	});
 });
 
@@ -288,6 +307,23 @@ describe.skipIf(skip)(
 	() => {
 		const tenants = [ANCHOR_TEST_TENANT_A, ANCHOR_TEST_TENANT_B];
 
+		// Stub anchorFn for DB-backed tests — they exercise runAnchorPass
+		// semantics (chain reads, cadence_id, drainer transaction) without
+		// needing real S3 / KMS / Object-Lock plumbing. The wired
+		// _anchor_fn_live path is exercised in compliance-anchor-s3-spy.test.ts
+		// against a mocked S3Client.
+		const stubAnchorFn = async (
+			_root: string,
+			_slices: TenantSlice[],
+			cadenceId: string,
+		) => ({
+			anchored: true as const,
+			s3_key: `anchors/cadence-${cadenceId}.json`,
+			retain_until_date: new Date(
+				Date.now() + 365 * 24 * 60 * 60 * 1000,
+			).toISOString(),
+		});
+
 		beforeEach(async () => {
 			const db = createDb(DATABASE_URL!);
 			await clearTestState(db, tenants);
@@ -298,7 +334,7 @@ describe.skipIf(skip)(
 			await clearTestState(db, tenants);
 		});
 
-		it("empty event set returns tenant_count: 0, dispatched: true", async () => {
+		it("empty event set returns tenant_count: 0, dispatched: true, anchored shape", async () => {
 			const db = createDb(DATABASE_URL!);
 			// Seed tenant_anchor_state with a future timestamp so all events
 			// are "already anchored" — yields an empty chain-head set.
@@ -317,13 +353,19 @@ describe.skipIf(skip)(
 			const result = await runAnchorPass({
 				readerDb: db,
 				drainerDb: db,
+				anchorFn: stubAnchorFn,
 			});
 
 			expect(result.dispatched).toBe(true);
-			expect(result.anchored).toBe(false);
+			// Stub anchorFn always returns anchored:true — runAnchorPass
+			// passes the seam result through verbatim; the live path covers
+			// the empty-tenant-set path separately under S3 mock.
+			expect(result.anchored).toBe(true);
 			expect(result.tenant_count).toBe(0);
 			expect(result.merkle_root).toMatch(SHA256_HEX_RE);
 			expect(result.cadence_id).toMatch(UUIDV7_RE);
+			expect(result.s3_key).toMatch(/^anchors\/cadence-[0-9a-f-]+\.json$/);
+			expect(typeof result.retain_until_date).toBe("string");
 		});
 
 		it("multi-tenant fixture produces deterministic Merkle root across runs", async () => {
@@ -345,10 +387,11 @@ describe.skipIf(skip)(
 			const result = await runAnchorPass({
 				readerDb: db,
 				drainerDb: db,
+				anchorFn: stubAnchorFn,
 			});
 
 			expect(result.dispatched).toBe(true);
-			expect(result.anchored).toBe(false);
+			expect(result.anchored).toBe(true);
 			expect(result.tenant_count).toBe(2);
 			expect(result.merkle_root).toMatch(SHA256_HEX_RE);
 
@@ -358,8 +401,11 @@ describe.skipIf(skip)(
 			const result2 = await runAnchorPass({
 				readerDb: db,
 				drainerDb: db,
+				anchorFn: stubAnchorFn,
 			});
 			expect(result2.merkle_root).toBe(result.merkle_root);
+			// Cadence id must also be deterministic (Decision #5a).
+			expect(result2.cadence_id).toBe(result.cadence_id);
 
 			// Sanity: chain heads carry the latest event hashes per tenant.
 			const heads = await readChainHeads(db);
@@ -376,11 +422,12 @@ describe.skipIf(skip)(
 			expect(tenantB?.event_hash).toBe(b.lastEventHash);
 		});
 
-		it("cadence ID is a valid UUIDv7", async () => {
+		it("cadence ID is a valid UUIDv7-shaped string", async () => {
 			const db = createDb(DATABASE_URL!);
 			const result = await runAnchorPass({
 				readerDb: db,
 				drainerDb: db,
+				anchorFn: stubAnchorFn,
 			});
 			expect(result.cadence_id).toMatch(UUIDV7_RE);
 		});
@@ -394,7 +441,7 @@ describe.skipIf(skip)(
 				runAnchorPass({
 					readerDb: db,
 					drainerDb: db,
-					anchorFn: () => {
+					anchorFn: async () => {
 						throw new Error("simulated seam failure");
 					},
 				}),

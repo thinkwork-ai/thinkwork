@@ -52,6 +52,15 @@ Either way, `force_destroy = true` masks Object Lock retention behavior. Don't s
 
 ### Dev cleanup playbook
 
+> **U8b cutover note (2026-05-07):** the anchor Lambda now writes real WORM-locked
+> bytes on every 15-minute cadence. A dev bucket that's been live for any non-trivial
+> period accumulates objects under default 365-day retention — the dev stage's
+> `GOVERNANCE` mode is the *only* thing that makes this playbook achievable. The
+> `proofs/` prefix relies on the bucket-default lock; both anchor and proof objects
+> require the bypass action below to delete. **Do not run this playbook against a
+> COMPLIANCE-mode bucket** (prod) — the `s3:BypassGovernanceRetention` action is
+> ineffective and the only recovery is rotating the bucket name on a fresh stage.
+
 Tearing down a dev bucket requires admin-tier intervention (not a routine operator action) and is **not supported by `terraform destroy` alone**. The repo does not currently provision a break-glass role with `s3:BypassGovernanceRetention`; the operator performs the cleanup using their own admin credentials (or grants themselves the bypass action ad-hoc via an IAM policy attachment for the duration of the cleanup, then revokes it).
 
 1. **Pre-requisite**: confirm your active credentials hold both `s3:BypassGovernanceRetention` AND `s3:DeleteObjectVersion` on the bucket. The anchor Lambda role itself **does not** hold these — it is explicitly Denied. If your admin role lacks them, attach a temporary inline policy:
@@ -130,5 +139,7 @@ This module is compatible with the repo-wide `hashicorp/aws ~> 5.0` pin (locked 
 
 - Master plan: `docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md` (U7 entry).
 - U7 sub-plan: `docs/plans/2026-05-07-009-feat-compliance-u7-anchor-bucket-plan.md`.
+- U8a sub-plan: `docs/plans/2026-05-07-010-feat-compliance-u8a-anchor-lambda-inert-plan.md` (inert seam).
+- U8b sub-plan: `docs/plans/2026-05-07-012-feat-compliance-u8b-anchor-lambda-live-plan.md` (live S3 PutObject + Object Lock retention).
 - AWS S3 Object Lock: <https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock-overview.html>.
 - Cohasset Associates Compliance Assessment: <https://d1.awsstatic.com/r2018/b/S3-Object-Lock/Amazon-S3-Compliance-Assessment.pdf>.

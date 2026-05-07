@@ -93,6 +93,17 @@ resource "aws_s3_bucket_object_lock_configuration" "anchor" {
       condition     = !(contains(["prod", "production"], var.stage) && var.mode == "GOVERNANCE")
       error_message = "var.mode must be COMPLIANCE for prod stages (var.stage = '${var.stage}'). See terraform/modules/data/compliance-audit-bucket/README.md COMPLIANCE-mode cutover playbook. Override at audit-engagement time via the composite-root tfvars compliance_anchor_object_lock_mode = \"COMPLIANCE\"."
     }
+    # Phase 3 U8b — block COMPLIANCE on non-prod by default (Decision #18).
+    # COMPLIANCE bytes are unrecoverable for the full retention window even by
+    # AWS root, so a typo'd stage name producing a dev-bucket COMPLIANCE
+    # cluster is a one-way disaster. The operator sets
+    # `allow_compliance_in_non_prod = true` in tfvars on the specific
+    # non-prod stage where COMPLIANCE is intentional (e.g., a staging
+    # rehearsal stage during audit prep).
+    precondition {
+      condition     = !(!contains(["prod", "production"], var.stage) && var.mode == "COMPLIANCE") || var.allow_compliance_in_non_prod
+      error_message = "var.mode = \"COMPLIANCE\" on non-prod stage '${var.stage}' is blocked by default. COMPLIANCE bytes are unrecoverable for the full ${var.retention_days}-day retention window. To intentionally enable on this stage, set `allow_compliance_in_non_prod = true` in tfvars. See terraform/modules/data/compliance-audit-bucket/README.md."
+    }
   }
 
   rule {
@@ -346,12 +357,12 @@ resource "aws_iam_role_policy" "anchor_kms" {
       {
         Sid    = "AnchorKmsAllow"
         Effect = "Allow"
-        # SSE-KMS uses GenerateDataKey (envelope encryption); we don't need
-        # kms:Encrypt. Decrypt is for read-back; DescribeKey covers the
-        # SDK pre-flight check that some clients perform.
+        # SSE-KMS PutObject (envelope encryption) needs only GenerateDataKey.
+        # DescribeKey is the SDK pre-flight check some clients perform.
+        # `kms:Decrypt` was removed in U8b — the anchor Lambda only writes;
+        # the verifier (U9, separate role) is the read path. Least-privilege.
         Action = [
           "kms:GenerateDataKey",
-          "kms:Decrypt",
           "kms:DescribeKey",
         ]
         Resource = var.kms_key_arn
@@ -408,6 +419,146 @@ resource "aws_iam_role_policy" "anchor_cloudwatch_metrics" {
     Statement = [
       {
         Sid      = "AnchorMetricsAllow"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "Thinkwork/Compliance"
+          }
+        }
+      },
+    ]
+  })
+}
+
+################################################################################
+# Phase 3 U8b — Sibling IAM role for the anchor watchdog Lambda.
+#
+# The watchdog moves OFF the shared `aws_iam_role.lambda` (which is bound
+# to ~60 unrelated handlers) onto a dedicated role. Two reasons:
+#   1. Least privilege — the watchdog needs s3:ListBucket + s3:GetObject
+#      against the WORM bucket, plus kms:DescribeKey on the CMK. Adding
+#      those grants to the shared lambda role widens the blast radius for
+#      every other handler.
+#   2. KMS posture — the watchdog gets `kms:DescribeKey` ONLY (NOT
+#      `kms:Decrypt`). Watchdog never reads object bodies; it issues
+#      ListObjectsV2 + LastModified metadata only. Decrypt-less is the
+#      correct boundary (Decision #5 / SEC-U8B-003).
+#
+# Policy boundary mirrors the anchor role: s3:* path-scoped to anchors/
+# (the watchdog only inspects the anchors/ prefix), explicit Deny on
+# s3:BypassGovernanceRetention + s3:PutObjectLegalHold + every Delete
+# action so a future broadening cannot turn the watchdog into a deletion
+# vector.
+################################################################################
+
+resource "aws_iam_role" "anchor_watchdog_lambda" {
+  name = "thinkwork-${var.stage}-compliance-anchor-watchdog"
+
+  # `aws:SourceArn` pin via string-construction — the watchdog Lambda's
+  # ARN follows the same predictable pattern as the anchor's, so we can
+  # tighten the trust policy without a circular dependency.
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = var.account_id
+          "aws:SourceArn"     = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-compliance-anchor-watchdog"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "anchor_watchdog_basic" {
+  role       = aws_iam_role.anchor_watchdog_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "anchor_watchdog_s3" {
+  name = "anchor-watchdog-s3"
+  role = aws_iam_role.anchor_watchdog_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Bucket-scoped ListBucket — prefix-conditioned so the watchdog
+        # cannot enumerate proofs/ (which carries per-tenant metadata that
+        # need not be visible to a metrics-only path).
+        Sid      = "WatchdogListBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.anchor.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["anchors/", "anchors/*"]
+          }
+        }
+      },
+      {
+        # GetObject grant on anchors/* is reserved for future HeadObject
+        # hardening — U8b's path uses ListObjectsV2 metadata only and
+        # never fetches body bytes. Granting now avoids re-running the
+        # IAM role-policy update on a hot-path the day we add HeadObject.
+        Sid      = "WatchdogGetAnchor"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.anchor.arn}/anchors/*"
+      },
+      {
+        # Defense-in-depth: even though the role's allow grants do not
+        # include any Delete or Bypass action, an explicit Deny survives
+        # any future role broadening (e.g., AWS-managed-policy attachment).
+        Sid    = "WatchdogDenyMutations"
+        Effect = "Deny"
+        Action = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+          "s3:PutObject",
+          "s3:PutObjectRetention",
+          "s3:PutObjectLegalHold",
+          "s3:BypassGovernanceRetention",
+        ]
+        Resource = "${aws_s3_bucket.anchor.arn}/*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "anchor_watchdog_kms" {
+  name = "anchor-watchdog-kms"
+  role = aws_iam_role.anchor_watchdog_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # `kms:DescribeKey` ONLY — the watchdog never reads object bodies
+        # so it never needs `kms:Decrypt`. SEC-U8B-003.
+        Sid      = "WatchdogKmsDescribe"
+        Effect   = "Allow"
+        Action   = ["kms:DescribeKey"]
+        Resource = var.kms_key_arn
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "anchor_watchdog_cloudwatch_metrics" {
+  name = "anchor-watchdog-cloudwatch-metrics"
+  role = aws_iam_role.anchor_watchdog_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "WatchdogMetricsAllow"
         Effect   = "Allow"
         Action   = ["cloudwatch:PutMetricData"]
         Resource = "*"

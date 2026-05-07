@@ -78,3 +78,16 @@ variable "retention_days" {
     error_message = "retention_days must be greater than 0."
   }
 }
+
+# Phase 3 U8b — explicit override for COMPLIANCE-mode in non-prod stages.
+# COMPLIANCE mode is irreversible; once any object is written under it, that
+# object is undeleteable for the full retention window — even AWS root cannot
+# remove it. Defaulting to false keeps a "stage typo" (stage = "prod-canary"
+# instead of "prod") from silently producing an unrecoverable dev bucket. The
+# operator must set this true in tfvars at audit-engagement time on the
+# specific non-prod stage that should run COMPLIANCE.
+variable "allow_compliance_in_non_prod" {
+  description = "Permit var.mode = COMPLIANCE on non-prod stages. Default false. Set true ONLY at audit-engagement time on the specific non-prod stage where COMPLIANCE is intended; the bucket's WORM bytes are unrecoverable once retention starts."
+  type        = bool
+  default     = false
+}
