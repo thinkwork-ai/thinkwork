@@ -18,19 +18,12 @@ export async function listGoogleCalendarUpcomingWithGws(
   const binary =
     options.binary ?? process.env.GOOGLE_WORKSPACE_CLI_BIN ?? "gws";
   const run = options.execFileAsync ?? execFileAsync;
-  const params = {
-    calendarId: "primary",
-    timeMin: input.timeMin,
-    timeMax: input.timeMax,
-    singleEvents: true,
-    orderBy: "startTime",
-    maxResults: input.maxResults,
-  };
+  const days = agendaDays(input.timeMin, input.timeMax);
 
   try {
     const result = await run(
       binary,
-      ["calendar", "events", "list", "--params", JSON.stringify(params)],
+      ["calendar", "+agenda", "--days", String(days), "--format", "json"],
       {
         timeout: 30_000,
         maxBuffer: 1024 * 1024,
@@ -121,6 +114,15 @@ function parseJsonOutput(stdout: string): unknown {
   return JSON.parse(trimmed);
 }
 
+function agendaDays(timeMin: string, timeMax: string): number {
+  const start = new Date(timeMin).getTime();
+  const end = new Date(timeMax).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 1;
+  }
+  return Math.min(7, Math.max(1, Math.ceil((end - start) / 86_400_000)));
+}
+
 function extractEvents(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -147,6 +149,13 @@ function sanitizeCalendarEvent(value: unknown): Record<string, unknown> {
 }
 
 function sanitizeCalendarTime(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    return {
+      dateTime: value.includes("T") ? value : null,
+      date: value.includes("T") ? null : value,
+      timeZone: null,
+    };
+  }
   if (!value || typeof value !== "object") return null;
   const time = value as Record<string, unknown>;
   return {
