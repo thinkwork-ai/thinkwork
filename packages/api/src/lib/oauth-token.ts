@@ -12,7 +12,7 @@
  * 5. On failure: mark connection status="expired" + notify
  */
 
-import { eq, and } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
 
@@ -160,10 +160,13 @@ export async function resolveConnectionForUser(
 				eq(connections.tenant_id, tenantId),
 				eq(connections.user_id, userId),
 				eq(connectProviders.name, providerName),
+				eq(connections.status, "active"),
 			),
-		);
+		)
+		.orderBy(desc(connections.updated_at), desc(connections.created_at))
+		.limit(1);
 
-	if (!row || row.status !== "active") return null;
+	if (!row) return null;
 	return { connectionId: row.connectionId, providerId: row.providerId };
 }
 
