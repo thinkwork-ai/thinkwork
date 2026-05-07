@@ -64,7 +64,6 @@ import {
   RefreshCw,
   Filter,
   ChevronDown,
-  Monitor,
   Zap,
   Lock,
   CreditCard,
@@ -165,13 +164,9 @@ function ComputerPickerModal({
       >
         <View
           className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
+          style={{ alignSelf: "flex-start", minWidth: 180, maxWidth: 280 }}
           onStartShouldSetResponder={() => true}
         >
-          <View className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-            <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              Computers
-            </Text>
-          </View>
           {computers.length === 0 ? (
             <View className="px-4 py-5">
               <Muted className="text-sm">No Computers available</Muted>
@@ -182,7 +177,7 @@ function ComputerPickerModal({
             return (
               <Pressable
                 key={computer.id}
-                className="flex-row items-center gap-3 px-4 py-3 active:opacity-70"
+                className="px-4 py-3 active:opacity-70"
                 style={
                   index < computers.length - 1
                     ? {
@@ -196,23 +191,14 @@ function ComputerPickerModal({
                   onClose();
                 }}
               >
-                <Monitor size={18} color={selected ? "#0ea5e9" : "#737373"} />
-                <View className="min-w-0 flex-1">
-                  <Text
-                    className="text-base font-medium text-neutral-900 dark:text-neutral-100"
-                    numberOfLines={1}
-                  >
-                    {computer.name || "Computer"}
-                  </Text>
-                  <Muted className="text-xs" numberOfLines={1}>
-                    {computer.slug || computer.runtimeStatus || computer.status}
-                  </Muted>
-                </View>
-                {selected ? (
-                  <Text className="text-xs font-semibold text-sky-500">
-                    Selected
-                  </Text>
-                ) : null}
+                <Text
+                  className={`text-base text-neutral-900 dark:text-neutral-100 ${
+                    selected ? "font-semibold" : "font-normal"
+                  }`}
+                  numberOfLines={1}
+                >
+                  {computer.name || "Computer"}
+                </Text>
               </Pressable>
             );
           })}
