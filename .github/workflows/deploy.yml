@@ -30,6 +30,7 @@ jobs:
       strands_container_source_sha: ${{ steps.container-source.outputs.strands_sha }}
       flue_container_source_sha: ${{ steps.container-source.outputs.flue_sha }}
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
+      computer_runtime: ${{ steps.filter.outputs.computer_runtime }}
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -52,6 +53,10 @@ jobs:
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
               # Python source moved.
+              - '.github/workflows/deploy.yml'
+            computer_runtime:
+              - 'packages/computer-runtime/**'
+              - 'scripts/build-computer-runtime-image.sh'
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
@@ -597,6 +602,94 @@ jobs:
             --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
             --wait-seconds 900
 
+  # ── Build + refresh ECS Computer runtime ────────────────────────
+  # Computer runtimes run as long-lived ECS/Fargate services. Pushing a
+  # mutable image tag is not enough: an already-running task keeps the old
+  # container until ECS starts a replacement. Build the arm64 image after
+  # terraform has created the dedicated ECR repository, then force existing
+  # Computer services to roll onto the freshly pushed phase2-skeleton tag.
+  build-computer-runtime:
+    name: Build Computer Runtime
+    needs: [detect-changes, terraform-apply]
+    if: >-
+      always()
+      && needs.terraform-apply.result == 'success'
+      && (
+        needs.detect-changes.outputs.computer_runtime == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
+      && (
+        github.event_name != 'workflow_dispatch' ||
+        inputs.skip_container != true
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Computer runtime TypeScript
+        run: pnpm --filter @thinkwork/computer-runtime build
+
+      - name: Build and push Computer runtime arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/computer-runtime
+          file: packages/computer-runtime/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-computer-runtime:phase2-skeleton
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-computer-runtime:${{ github.sha }}-arm64
+          cache-from: type=gha,scope=computer-runtime-arm64
+          cache-to: type=gha,scope=computer-runtime-arm64,mode=max
+          provenance: false
+
+      - name: Force ECS Computer services onto refreshed image
+        run: |
+          set -euo pipefail
+          CLUSTER="thinkwork-${{ env.STAGE }}-computer"
+          SERVICES=$(aws ecs list-services \
+            --cluster "$CLUSTER" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'serviceArns[]' \
+            --output text 2>/dev/null || true)
+          if [ -z "$SERVICES" ] || [ "$SERVICES" = "None" ]; then
+            echo "No Computer ECS services found in $CLUSTER."
+            exit 0
+          fi
+          for SERVICE in $SERVICES; do
+            echo "Forcing new deployment for $SERVICE"
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service "$SERVICE" \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }} \
+              --query '{service:service.serviceName,desiredCount:service.desiredCount,taskDefinition:service.taskDefinition}' \
+              --output json
+          done
+
   # ── Flue runtime end-to-end smoke ───────────────────────────────
   # Invokes the deployed Flue dispatcher Lambda with a populated
   # payload mirroring chat-agent-invoke's shape and asserts the
@@ -916,6 +1009,7 @@ jobs:
         build-container,
         terraform-apply,
         update-agentcore-runtimes,
+        build-computer-runtime,
         migration-drift-check,
         build-admin,
         build-docs,
@@ -1005,6 +1099,7 @@ jobs:
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
           echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
+          echo "║   Computer Runtime:       ${{ needs.build-computer-runtime.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
