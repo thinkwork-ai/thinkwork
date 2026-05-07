@@ -49,6 +49,9 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
+SET LOCAL "thinkwork.writer_pass" = :'writer_pass';
+SET LOCAL "thinkwork.drainer_pass" = :'drainer_pass';
+SET LOCAL "thinkwork.reader_pass" = :'reader_pass';
 
 -- Refuse to apply against an unexpected DB. Hand-rolled migrations are
 -- applied by an operator and a stale DATABASE_URL pointing at a non-dev
@@ -87,27 +90,27 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_writer') THEN
-    EXECUTE format('CREATE ROLE compliance_writer WITH LOGIN PASSWORD %L', :'writer_pass');
+    EXECUTE format('CREATE ROLE compliance_writer WITH LOGIN PASSWORD %L', current_setting('thinkwork.writer_pass'));
   ELSE
-    EXECUTE format('ALTER ROLE compliance_writer WITH LOGIN PASSWORD %L', :'writer_pass');
+    EXECUTE format('ALTER ROLE compliance_writer WITH LOGIN PASSWORD %L', current_setting('thinkwork.writer_pass'));
   END IF;
 END $$;
 
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_drainer') THEN
-    EXECUTE format('CREATE ROLE compliance_drainer WITH LOGIN PASSWORD %L', :'drainer_pass');
+    EXECUTE format('CREATE ROLE compliance_drainer WITH LOGIN PASSWORD %L', current_setting('thinkwork.drainer_pass'));
   ELSE
-    EXECUTE format('ALTER ROLE compliance_drainer WITH LOGIN PASSWORD %L', :'drainer_pass');
+    EXECUTE format('ALTER ROLE compliance_drainer WITH LOGIN PASSWORD %L', current_setting('thinkwork.drainer_pass'));
   END IF;
 END $$;
 
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_reader') THEN
-    EXECUTE format('CREATE ROLE compliance_reader WITH LOGIN PASSWORD %L', :'reader_pass');
+    EXECUTE format('CREATE ROLE compliance_reader WITH LOGIN PASSWORD %L', current_setting('thinkwork.reader_pass'));
   ELSE
-    EXECUTE format('ALTER ROLE compliance_reader WITH LOGIN PASSWORD %L', :'reader_pass');
+    EXECUTE format('ALTER ROLE compliance_reader WITH LOGIN PASSWORD %L', current_setting('thinkwork.reader_pass'));
   END IF;
 END $$;
 
