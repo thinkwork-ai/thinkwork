@@ -1,9 +1,10 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   ensureWorkspace,
+  readWorkspaceSystemPrompt,
   validateWorkspaceRelativePath,
   writeHealthCheck,
   writeWorkspaceFile,
@@ -36,6 +37,28 @@ describe("Computer runtime workspace", () => {
     await expect(readFile(join(root, "drafts/today.md"), "utf8")).resolves.toBe(
       "# Today\n",
     );
+  });
+
+  it("builds a system prompt from durable workspace files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    await writeFile(join(root, "IDENTITY.md"), "# Identity\nName: Marco\n", {
+      encoding: "utf8",
+    });
+    await writeFile(join(root, "USER.md"), "# User\nName: Eric\n", {
+      encoding: "utf8",
+    });
+
+    const prompt = await readWorkspaceSystemPrompt(root);
+
+    expect(prompt).toContain("# IDENTITY.md");
+    expect(prompt).toContain("Name: Marco");
+    expect(prompt).toContain("# USER.md");
+    expect(prompt).toContain("Name: Eric");
+  });
+
+  it("returns an empty prompt when no workspace files exist", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    await expect(readWorkspaceSystemPrompt(root)).resolves.toBe("");
   });
 
   it("normalizes safe relative paths", () => {

@@ -5,6 +5,7 @@ import {
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
 import type { ThreadTurnContext } from "./api-client.js";
+import { readWorkspaceSystemPrompt } from "./workspace.js";
 
 export type ComputerChatResult = {
   content: string;
@@ -33,14 +34,13 @@ export const runComputerChatTurn: ComputerChatRunner = async (
   options,
 ) => {
   const model = context.model || DEFAULT_COMPUTER_MODEL;
+  const systemPrompt = await buildSystemPrompt(context, options.workspaceRoot);
   const response = await bedrock.send(
     new ConverseCommand({
       modelId: model,
       system: [
         {
-          text:
-            context.systemPrompt ||
-            buildDefaultSystemPrompt(context, options.workspaceRoot),
+          text: systemPrompt,
         },
       ],
       messages: buildBedrockMessages(context.messagesHistory),
@@ -68,6 +68,16 @@ export const runComputerChatTurn: ComputerChatRunner = async (
       : undefined,
   };
 };
+
+export async function buildSystemPrompt(
+  context: ThreadTurnContext,
+  workspaceRoot: string,
+): Promise<string> {
+  const basePrompt =
+    context.systemPrompt || buildDefaultSystemPrompt(context, workspaceRoot);
+  const workspacePrompt = await readWorkspaceSystemPrompt(workspaceRoot);
+  return [basePrompt, workspacePrompt].filter(Boolean).join("\n\n---\n\n");
+}
 
 function buildBedrockMessages(
   history: ThreadTurnContext["messagesHistory"],
