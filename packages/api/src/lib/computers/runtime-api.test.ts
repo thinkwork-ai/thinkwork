@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   ],
   resolveConnectionForUser: vi.fn(),
   resolveOAuthToken: vi.fn(),
+  resolveOAuthTokenDetails: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -27,6 +28,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 vi.mock("../oauth-token.js", () => ({
   resolveConnectionForUser: mocks.resolveConnectionForUser,
   resolveOAuthToken: mocks.resolveOAuthToken,
+  resolveOAuthTokenDetails: mocks.resolveOAuthTokenDetails,
 }));
 
 import {
@@ -73,14 +75,17 @@ describe("Computer runtime API Google Workspace status", () => {
       connectionId: "connection-1",
       providerId: "provider-1",
     });
-    mocks.resolveOAuthToken.mockResolvedValue("ya29.secret-token");
+    mocks.resolveOAuthTokenDetails.mockResolvedValue({
+      accessToken: "ya29.secret-token",
+      grantedScopes: ["https://www.googleapis.com/auth/calendar"],
+    });
 
     const result = await checkGoogleWorkspaceConnection({
       tenantId: "tenant-1",
       computerId: "computer-1",
     });
 
-    expect(mocks.resolveOAuthToken).toHaveBeenCalledWith(
+    expect(mocks.resolveOAuthTokenDetails).toHaveBeenCalledWith(
       "connection-1",
       "tenant-1",
       "provider-1",
@@ -90,7 +95,33 @@ describe("Computer runtime API Google Workspace status", () => {
       connected: true,
       tokenResolved: true,
       connectionId: "connection-1",
+      calendarScopeGranted: true,
+      missingScopes: [],
       reason: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("ya29");
+  });
+
+  it("reports missing Google Calendar scope without returning token material", async () => {
+    mocks.resolveConnectionForUser.mockResolvedValue({
+      connectionId: "connection-1",
+      providerId: "provider-1",
+    });
+    mocks.resolveOAuthTokenDetails.mockResolvedValue({
+      accessToken: "ya29.secret-token",
+      grantedScopes: ["openid", "email"],
+    });
+
+    const result = await checkGoogleWorkspaceConnection({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      tokenResolved: true,
+      calendarScopeGranted: false,
+      missingScopes: ["https://www.googleapis.com/auth/calendar"],
     });
     expect(JSON.stringify(result)).not.toContain("ya29");
   });
@@ -100,7 +131,10 @@ describe("Computer runtime API Google Workspace status", () => {
       connectionId: "connection-1",
       providerId: "provider-1",
     });
-    mocks.resolveOAuthToken.mockResolvedValue("ya29.secret-token");
+    mocks.resolveOAuthTokenDetails.mockResolvedValue({
+      accessToken: "ya29.secret-token",
+      grantedScopes: ["openid"],
+    });
 
     const result = await resolveGoogleWorkspaceCliToken({
       tenantId: "tenant-1",
@@ -112,6 +146,7 @@ describe("Computer runtime API Google Workspace status", () => {
       tokenResolved: true,
       accessToken: "ya29.secret-token",
       connectionId: "connection-1",
+      missingScopes: ["https://www.googleapis.com/auth/calendar"],
     });
   });
 
@@ -133,7 +168,7 @@ describe("Computer runtime API Google Workspace status", () => {
       connectionId: "connection-1",
       providerId: "provider-1",
     });
-    mocks.resolveOAuthToken.mockResolvedValueOnce(null);
+    mocks.resolveOAuthTokenDetails.mockResolvedValueOnce(null);
 
     const result = await resolveGoogleWorkspaceCliToken({
       tenantId: "tenant-1",

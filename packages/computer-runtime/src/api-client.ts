@@ -83,6 +83,9 @@ export class ComputerRuntimeApi {
     connected: boolean;
     tokenResolved: boolean;
     connectionId?: string;
+    grantedScopes?: string[];
+    missingScopes?: string[];
+    calendarScopeGranted?: boolean;
     reason?: string | null;
     checkedAt?: string;
   }> {
@@ -101,6 +104,8 @@ export class ComputerRuntimeApi {
     tokenResolved: boolean;
     accessToken?: string;
     connectionId?: string;
+    grantedScopes?: string[];
+    missingScopes?: string[];
     reason?: string | null;
     checkedAt?: string;
   }> {

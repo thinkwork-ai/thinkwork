@@ -84,6 +84,7 @@ export async function handleTask(
         connected: googleWorkspace.connected,
         tokenResolved: googleWorkspace.tokenResolved,
         connectionId: googleWorkspace.connectionId ?? null,
+        missingScopes: googleWorkspace.missingScopes ?? [],
         reason: googleWorkspace.reason ?? null,
       },
     });
@@ -97,24 +98,52 @@ export async function handleTask(
     if (!api) throw new Error("Computer runtime API is required");
     const taskInput = parseCalendarUpcomingInput(task.input);
     const cliToken = await api.resolveGoogleWorkspaceCliToken();
-    const googleCalendar =
-      cliToken.connected && cliToken.tokenResolved && cliToken.accessToken
-        ? await googleWorkspaceCli(taskInput, {
-            accessToken: cliToken.accessToken,
-          })
-        : {
-            providerName: cliToken.providerName,
-            connected: cliToken.connected,
-            tokenResolved: cliToken.tokenResolved,
-            calendarAvailable: false,
-            connectionId: cliToken.connectionId ?? null,
-            reason: cliToken.reason ?? null,
-            timeMin: taskInput.timeMin,
-            timeMax: taskInput.timeMax,
-            maxResults: taskInput.maxResults,
-            events: [],
-            eventCount: 0,
-          };
+    let googleCalendar;
+    if (
+      cliToken.connected &&
+      cliToken.tokenResolved &&
+      cliToken.accessToken &&
+      Array.isArray(cliToken.missingScopes) &&
+      cliToken.missingScopes.length > 0
+    ) {
+      googleCalendar = {
+        providerName: cliToken.providerName,
+        connected: true,
+        tokenResolved: true,
+        calendarAvailable: false,
+        connectionId: cliToken.connectionId ?? null,
+        reason: "missing_google_calendar_scope",
+        missingScopes: cliToken.missingScopes,
+        timeMin: taskInput.timeMin,
+        timeMax: taskInput.timeMax,
+        maxResults: taskInput.maxResults,
+        events: [],
+        eventCount: 0,
+      };
+    } else if (
+      cliToken.connected &&
+      cliToken.tokenResolved &&
+      cliToken.accessToken
+    ) {
+      googleCalendar = await googleWorkspaceCli(taskInput, {
+        accessToken: cliToken.accessToken,
+      });
+    } else {
+      googleCalendar = {
+        providerName: cliToken.providerName,
+        connected: cliToken.connected,
+        tokenResolved: cliToken.tokenResolved,
+        calendarAvailable: false,
+        connectionId: cliToken.connectionId ?? null,
+        reason: cliToken.reason ?? null,
+        timeMin: taskInput.timeMin,
+        timeMax: taskInput.timeMax,
+        maxResults: taskInput.maxResults,
+        events: [],
+        eventCount: 0,
+        missingScopes: cliToken.missingScopes ?? [],
+      };
+    }
     await api.appendTaskEvent(task.id, {
       eventType: "google_calendar_upcoming_checked",
       level:
@@ -130,6 +159,7 @@ export async function handleTask(
         calendarAvailable: googleCalendar.calendarAvailable,
         eventCount: googleCalendar.eventCount,
         reason: googleCalendar.reason ?? null,
+        missingScopes: googleCalendar.missingScopes ?? [],
       },
     });
     return {
