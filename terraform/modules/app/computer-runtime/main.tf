@@ -104,6 +104,7 @@ data "aws_route_table" "computer_subnet" {
 
 resource "aws_vpc_endpoint" "interface" {
   for_each = toset([
+    "bedrock-runtime",
     "ecr.api",
     "ecr.dkr",
     "logs",
@@ -178,6 +179,26 @@ resource "aws_iam_role_policy" "task_secrets" {
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
       Resource = var.api_auth_secret_arn
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "task_bedrock" {
+  name = "computer-runtime-bedrock"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+      ]
+      Resource = [
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*:${var.account_id}:inference-profile/*",
+      ]
     }]
   })
 }

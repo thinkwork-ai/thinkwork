@@ -2,6 +2,10 @@ import { smokeGoogleWorkspaceCli } from "./google-cli-smoke.js";
 import { listGoogleCalendarUpcomingWithGws } from "./google-workspace-cli.js";
 import { writeHealthCheck, writeWorkspaceFile } from "./workspace.js";
 import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
+import {
+  runComputerChatTurn,
+  type ComputerChatRunner,
+} from "./computer-chat.js";
 
 type GoogleWorkspaceCliRunner = typeof listGoogleCalendarUpcomingWithGws;
 
@@ -14,11 +18,13 @@ export type TaskLoopOptions = {
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
     | "delegateConnectorWork"
-    | "executeThreadTurn"
+    | "loadThreadTurnContext"
+    | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
   >;
   workspaceRoot: string;
   idleDelayMs: number;
+  computerChat?: ComputerChatRunner;
 };
 
 export async function runTaskLoopOnce(options: TaskLoopOptions) {
@@ -29,7 +35,13 @@ export async function runTaskLoopOnce(options: TaskLoopOptions) {
   }
 
   try {
-    const output = await handleTask(task, options.workspaceRoot, options.api);
+    const output = await handleTask(
+      task,
+      options.workspaceRoot,
+      options.api,
+      undefined,
+      options.computerChat,
+    );
     await options.api.completeTask(task.id, output);
     return { handled: true as const, taskId: task.id, output };
   } catch (err) {
@@ -54,10 +66,12 @@ export async function handleTask(
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
     | "delegateConnectorWork"
-    | "executeThreadTurn"
+    | "loadThreadTurnContext"
+    | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
   >,
   googleWorkspaceCli: GoogleWorkspaceCliRunner = listGoogleCalendarUpcomingWithGws,
+  computerChat: ComputerChatRunner = runComputerChatTurn,
 ) {
   if (task.taskType === "noop") {
     return { ok: true, taskType: "noop" };
@@ -96,11 +110,12 @@ export async function handleTask(
         source: threadTurn.source,
       },
     });
-    const execution = await api.executeThreadTurn(task.id);
+    const context = await api.loadThreadTurnContext(task.id);
+    const response = await computerChat(context, { workspaceRoot });
+    const execution = await api.recordThreadTurnResponse(task.id, response);
     return {
       ok: true,
       taskType: "thread_turn",
-      accepted: true,
       ...execution,
     };
   }

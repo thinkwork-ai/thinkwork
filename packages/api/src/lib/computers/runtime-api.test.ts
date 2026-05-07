@@ -19,26 +19,32 @@ const mocks = vi.hoisted(() => ({
   resolveOAuthToken: vi.fn(),
   resolveOAuthTokenDetails: vi.fn(),
   invokeChatAgent: vi.fn(),
+  notifyNewMessage: vi.fn(),
+  notifyThreadUpdate: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          orderBy: () => ({
-            limit: async () =>
-              mocks.selectQueue.length > 0
-                ? mocks.selectQueue.shift()
-                : mocks.computerRows,
-          }),
-          limit: async () =>
-            mocks.selectQueue.length > 0
-              ? mocks.selectQueue.shift()
-              : mocks.computerRows,
-        }),
-      }),
-    }),
+    select: () => {
+      const rows = () =>
+        Promise.resolve(
+          mocks.selectQueue.length > 0
+            ? mocks.selectQueue.shift()
+            : mocks.computerRows,
+        );
+      const result = () => {
+        const chain = {
+          orderBy: () => chain,
+          limit: rows,
+          then: (
+            resolve: (value: unknown[] | undefined) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) => rows().then(resolve, reject),
+        };
+        return chain;
+      };
+      return { from: () => ({ where: result }) };
+    },
     insert: () => ({
       values: (value: Record<string, unknown>) => {
         mocks.inserts.push(value);
@@ -68,10 +74,17 @@ vi.mock("../../graphql/utils.js", () => ({
   invokeChatAgent: mocks.invokeChatAgent,
 }));
 
+vi.mock("../../graphql/notify.js", () => ({
+  notifyNewMessage: mocks.notifyNewMessage,
+  notifyThreadUpdate: mocks.notifyThreadUpdate,
+}));
+
 import {
   checkGoogleWorkspaceConnection,
   delegateConnectorWorkTask,
   executeThreadTurnTask,
+  loadThreadTurnContext,
+  recordThreadTurnResponse,
   resolveGoogleWorkspaceCliToken,
 } from "./runtime-api.js";
 
@@ -92,6 +105,8 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.inserts = [];
     mocks.updates = [];
     mocks.invokeChatAgent.mockResolvedValue(true);
+    mocks.notifyNewMessage.mockResolvedValue(undefined);
+    mocks.notifyThreadUpdate.mockResolvedValue(undefined);
   });
 
   it("reports no active Google Workspace connection for the Computer owner", async () => {
@@ -408,7 +423,7 @@ describe("Computer runtime API thread turn execution", () => {
     mocks.invokeChatAgent.mockResolvedValue(true);
   });
 
-  it("dispatches a Computer-owned Thread turn to the migrated managed agent", async () => {
+  it("loads Computer-owned Thread turn context for the native runtime", async () => {
     mocks.selectQueue = [
       [
         {
@@ -426,50 +441,123 @@ describe("Computer runtime API thread turn execution", () => {
           id: "computer-1",
           tenant_id: "tenant-1",
           owner_user_id: "user-1",
+          name: "Marco",
+          slug: "marco",
+          live_workspace_root: "/workspace",
+          runtime_config: { chatModel: "model-1" },
           migrated_from_agent_id: "agent-1",
         },
       ],
-      [{ id: "agent-1" }],
-      [{ id: "thread-1" }],
+      [{ id: "thread-1", title: "Hello", status: "in_progress" }],
       [{ id: "message-1", role: "user", content: "hello computer" }],
+      [
+        { id: "message-1", role: "user", content: "hello computer" },
+        { id: "message-0", role: "assistant", content: "previous reply" },
+      ],
     ];
 
-    const result = await executeThreadTurnTask({
+    const result = await loadThreadTurnContext({
       tenantId: "tenant-1",
       computerId: "computer-1",
       taskId: "task-1",
     });
 
     expect(result).toMatchObject({
-      dispatched: true,
-      mode: "managed_agent",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      messageId: "message-1",
+      taskId: "task-1",
       source: "chat_message",
-      status: "running",
+      computer: { id: "computer-1", name: "Marco", slug: "marco" },
+      thread: { id: "thread-1", title: "Hello" },
+      message: { id: "message-1", content: "hello computer" },
+      model: "model-1",
     });
-    expect(mocks.invokeChatAgent).toHaveBeenCalledWith({
+    expect(result.messagesHistory).toHaveLength(2);
+    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
+  });
+
+  it("records native Computer responses as assistant messages and events", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.selectQueue = [
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+            source: "chat_message",
+          },
+        },
+      ],
+      [{ id: "thread-1", title: "Hello", status: "in_progress" }],
+      [{ id: "message-1", role: "user", content: "hello computer" }],
+      [
+        {
+          id: "computer-1",
+          tenant_id: "tenant-1",
+          owner_user_id: "user-1",
+          migrated_from_agent_id: "agent-1",
+        },
+      ],
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+            source: "chat_message",
+          },
+        },
+      ],
+    ];
+
+    const result = await recordThreadTurnResponse({
       tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Native Computer response",
+      model: "model-1",
+      usage: { inputTokens: 5 },
+    });
+
+    expect(result).toMatchObject({
+      responded: true,
+      mode: "computer_native",
+      responseMessageId: "assistant-message-1",
       threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "hello computer",
       messageId: "message-1",
+      status: "completed",
+      model: "model-1",
     });
     expect(mocks.inserts).toContainEqual(
       expect.objectContaining({
-        event_type: "thread_turn_dispatch_started",
-        task_id: "task-1",
-        payload: expect.objectContaining({
-          agentId: "agent-1",
-          threadId: "thread-1",
-          messageId: "message-1",
+        role: "assistant",
+        content: "Native Computer response",
+        sender_type: "computer",
+        sender_id: "computer-1",
+        metadata: expect.objectContaining({
+          computerId: "computer-1",
+          taskId: "task-1",
+          sourceMessageId: "message-1",
         }),
+      }),
+    );
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        event_type: "thread_turn_response_recorded",
+        task_id: "task-1",
+      }),
+    );
+    expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: "assistant-message-1",
+        threadId: "thread-1",
+        senderType: "computer",
       }),
     );
   });
 
-  it("rejects Thread turns when the Computer has no delegated managed agent", async () => {
+  it("rejects legacy managed-agent Thread turn execution", async () => {
     mocks.selectQueue = [
       [
         {
@@ -481,14 +569,6 @@ describe("Computer runtime API thread turn execution", () => {
           },
         },
       ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          migrated_from_agent_id: null,
-        },
-      ],
     ];
 
     await expect(
@@ -497,7 +577,7 @@ describe("Computer runtime API thread turn execution", () => {
         computerId: "computer-1",
         taskId: "task-1",
       }),
-    ).rejects.toThrow("Computer has no delegated Managed Agent configured");
+    ).rejects.toThrow("Legacy Managed Agent thread_turn execution is disabled");
     expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 });

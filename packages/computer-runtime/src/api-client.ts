@@ -18,6 +18,32 @@ export type GoogleCalendarUpcomingInput = {
   maxResults: number;
 };
 
+export type ThreadTurnContext = {
+  taskId: string;
+  source: string;
+  computer: {
+    id: string;
+    name: string;
+    slug: string;
+    workspaceRoot?: string | null;
+  };
+  thread: {
+    id: string;
+    title: string;
+  };
+  message: {
+    id: string;
+    content: string;
+  };
+  messagesHistory: Array<{
+    id: string;
+    role: "user" | "assistant" | string;
+    content: string;
+  }>;
+  model?: string | null;
+  systemPrompt?: string | null;
+};
+
 export class ComputerRuntimeApi {
   constructor(private readonly config: RuntimeApiConfig) {}
 
@@ -167,6 +193,48 @@ export class ComputerRuntimeApi {
         body: JSON.stringify({
           tenantId: this.config.tenantId,
           computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
+  async loadThreadTurnContext(taskId: string): Promise<ThreadTurnContext> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/thread-turn-context`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
+  async recordThreadTurnResponse(
+    taskId: string,
+    input: {
+      content: string;
+      model?: string;
+      usage?: unknown;
+    },
+  ): Promise<{
+    responded: boolean;
+    mode: "computer_native";
+    responseMessageId: string;
+    threadId: string;
+    messageId: string;
+    status: string;
+    model?: string | null;
+  }> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/thread-turn-response`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+          ...input,
         }),
       },
     );

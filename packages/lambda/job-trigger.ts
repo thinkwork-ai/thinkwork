@@ -3,7 +3,8 @@
  *
  * Invoked by AWS EventBridge Scheduler when any scheduled job fires.
  *
- * For agent jobs: creates a thread + inserts wakeup request (wakeup-processor handles dispatch)
+ * For migrated agent jobs: queues a Computer thread turn. Jobs without a
+ * Computer are intentionally not dispatched to legacy Agent wakeups.
  * For routine jobs: creates thread_turns record + invokes routine runner
  * For one-time jobs: auto-deletes EventBridge schedule after firing
  *
@@ -14,10 +15,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
 import {
-  agentWakeupRequests,
   agents,
   agentSkills,
+  computers,
+  computerEvents,
+  computerTasks,
   evalRuns,
+  messages,
   routineExecutions,
   routines,
   scheduledJobs,
@@ -46,6 +50,12 @@ interface JobTriggerEvent {
   scheduleName?: string;
   oneTime?: boolean;
 }
+
+type ScheduledComputerTarget = {
+  id: string;
+  ownerUserId: string;
+  migratedAgentId: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // skill_run branch helpers (Unit 6)
@@ -220,6 +230,99 @@ async function invokeAgentcoreRunSkill(payload: {
 
 const SCHEDULE_GROUP = "thinkwork-jobs";
 
+async function resolveComputerForAgentSchedule(input: {
+  tenantId: string;
+  agentId: string;
+}): Promise<ScheduledComputerTarget | null> {
+  const db = getDb();
+  const [computer] = await db
+    .select({
+      id: computers.id,
+      ownerUserId: computers.owner_user_id,
+      migratedAgentId: computers.migrated_from_agent_id,
+    })
+    .from(computers)
+    .where(
+      and(
+        eq(computers.tenant_id, input.tenantId),
+        eq(computers.migrated_from_agent_id, input.agentId),
+        sql`${computers.status} <> 'archived'`,
+      ),
+    )
+    .limit(1);
+
+  return computer ?? null;
+}
+
+async function enqueueScheduledComputerThreadTurn(input: {
+  tenantId: string;
+  computerId: string;
+  threadId: string;
+  messageId: string;
+  triggerId: string;
+  triggerType: string;
+  scheduleName?: string;
+  actorType: "user" | "system";
+  actorId?: string | null;
+}) {
+  const db = getDb();
+  const idempotencyKey = [
+    "scheduled-thread-turn",
+    input.triggerId,
+    input.messageId,
+  ].join(":");
+  const taskInput = {
+    threadId: input.threadId,
+    messageId: input.messageId,
+    source: "schedule",
+    actorType: input.actorType,
+    actorId: input.actorId ?? null,
+    triggerId: input.triggerId,
+    triggerType: input.triggerType,
+    scheduleName: input.scheduleName ?? null,
+  };
+
+  const [task] = await db
+    .insert(computerTasks)
+    .values({
+      tenant_id: input.tenantId,
+      computer_id: input.computerId,
+      task_type: "thread_turn",
+      status: "pending",
+      input: taskInput,
+      idempotency_key: idempotencyKey,
+      created_by_user_id: input.actorType === "user" ? input.actorId : null,
+    })
+    .onConflictDoNothing({
+      target: [
+        computerTasks.tenant_id,
+        computerTasks.computer_id,
+        computerTasks.idempotency_key,
+      ],
+      where: sql`${computerTasks.idempotency_key} IS NOT NULL`,
+    })
+    .returning({ id: computerTasks.id });
+
+  if (task) {
+    await db.insert(computerEvents).values({
+      tenant_id: input.tenantId,
+      computer_id: input.computerId,
+      task_id: task.id,
+      event_type: "scheduled_thread_turn_enqueued",
+      level: "info",
+      payload: {
+        threadId: input.threadId,
+        messageId: input.messageId,
+        triggerId: input.triggerId,
+        triggerType: input.triggerType,
+        scheduleName: input.scheduleName ?? null,
+      },
+    });
+  }
+
+  return task ?? null;
+}
+
 export async function handler(event: JobTriggerEvent): Promise<void> {
   const {
     triggerId,
@@ -265,61 +368,70 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     const isAgentJob = triggerType.startsWith("agent_");
 
     if (isAgentJob && agentId) {
-      // Agent jobs: create a thread for tracking, then insert wakeup request
       const jobTitle = job?.name || `Scheduled job ${triggerId.slice(0, 8)}`;
-      const result = await ensureThreadForWork({
-        tenantId,
-        agentId,
-        title: jobTitle,
-        channel: "schedule",
-      });
-      const threadId = result.threadId;
-      console.log(
-        `[job-trigger] Created thread ${result.identifier} for agent ${agentId}`,
-      );
-
-      const source =
-        triggerType === "agent_heartbeat"
-          ? "timer"
-          : triggerType === "agent_reminder"
-            ? "on_demand"
-            : "trigger";
-
-      const reason =
-        triggerType === "agent_heartbeat"
-          ? "heartbeat_timer"
-          : prompt
-            ? "Scheduled wakeup with prompt"
-            : `trigger:${triggerType}`;
-
-      // Propagate the scheduled job's creator to the wakeup row.
-      // Only "user" actors carry an invoker id downstream — system /
-      // agent creators stay as "system" per R15 so CURRENT_USER_ID
-      // is never forged from an agent's own identity.
       const isUserScheduled =
         job?.created_by_type === "user" && !!job?.created_by_id;
-      await db.insert(agentWakeupRequests).values({
-        tenant_id: tenantId,
-        agent_id: agentId,
-        source,
-        reason,
-        trigger_detail: scheduleName
-          ? `schedule:${scheduleName}`
-          : `job:${triggerId}`,
-        payload: prompt
-          ? { message: prompt, triggerId, ...(threadId && { threadId }) }
-          : { triggerId, ...(threadId && { threadId }) },
-        requested_by_actor_type: isUserScheduled ? "user" : "system",
-        requested_by_actor_id: isUserScheduled ? job!.created_by_id : null,
+      const computer = await resolveComputerForAgentSchedule({
+        tenantId,
+        agentId,
       });
 
-      // Update agent last_heartbeat_at
-      await db
-        .update(agents)
-        .set({ last_heartbeat_at: new Date() })
-        .where(eq(agents.id, agentId));
+      if (computer) {
+        const result = await ensureThreadForWork({
+          tenantId,
+          computerId: computer.id,
+          userId: computer.ownerUserId,
+          title: jobTitle,
+          channel: "schedule",
+        });
+        const threadId = result.threadId;
+        const messageContent =
+          prompt?.trim() ||
+          `Scheduled job fired: ${jobTitle}. Handle the scheduled work for this Computer.`;
+        const [message] = await db
+          .insert(messages)
+          .values({
+            thread_id: threadId,
+            tenant_id: tenantId,
+            role: "user",
+            content: messageContent,
+            sender_type: isUserScheduled ? "user" : "system",
+            sender_id: isUserScheduled ? job!.created_by_id : null,
+            metadata: {
+              source: "scheduled_job",
+              triggerId,
+              triggerType,
+              scheduleName: scheduleName ?? null,
+            },
+          })
+          .returning({ id: messages.id });
+        await enqueueScheduledComputerThreadTurn({
+          tenantId,
+          computerId: computer.id,
+          threadId,
+          messageId: message.id,
+          triggerId,
+          triggerType,
+          scheduleName,
+          actorType: isUserScheduled ? "user" : "system",
+          actorId: isUserScheduled ? job!.created_by_id : null,
+        });
 
-      console.log(`[job-trigger] Wakeup request created for agent ${agentId}`);
+        // Keep the migrated Agent heartbeat fresh because it remains the
+        // managed execution substrate behind this Computer.
+        await db
+          .update(agents)
+          .set({ last_heartbeat_at: new Date() })
+          .where(eq(agents.id, agentId));
+
+        console.log(
+          `[job-trigger] Computer thread_turn queued for computer ${computer.id} from scheduled agent ${agentId}`,
+        );
+      } else {
+        console.log(
+          `[job-trigger] No Computer found for scheduled agent ${agentId}; legacy Agent wakeup disabled`,
+        );
+      }
     } else if (triggerType === "eval_scheduled") {
       // Eval-scheduled jobs: insert a pending eval_runs row + fire the
       // eval-runner Lambda async. Config carries the agent + categories

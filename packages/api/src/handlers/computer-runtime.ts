@@ -21,7 +21,9 @@ import {
   delegateConnectorWorkTask,
   executeThreadTurnTask,
   failComputerTask,
+  loadThreadTurnContext,
   recordComputerHeartbeat,
+  recordThreadTurnResponse,
   resolveGoogleWorkspaceCliToken,
   resolveComputerRuntimeConfig,
 } from "../lib/computers/runtime-api.js";
@@ -182,6 +184,39 @@ async function route(
         tenantId,
         computerId,
         taskId: validUuid(executeThreadTurnMatch[1], "taskId"),
+      }),
+    );
+  }
+
+  const threadTurnContextMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/thread-turn-context$/,
+  );
+  if (method === "POST" && threadTurnContextMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await loadThreadTurnContext({
+        tenantId,
+        computerId,
+        taskId: validUuid(threadTurnContextMatch[1], "taskId"),
+      }),
+    );
+  }
+
+  const threadTurnResponseMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/thread-turn-response$/,
+  );
+  if (method === "POST" && threadTurnResponseMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await recordThreadTurnResponse({
+        tenantId,
+        computerId,
+        taskId: validUuid(threadTurnResponseMatch[1], "taskId"),
+        content: requiredString(body.content, "content"),
+        model: optionalString(body.model),
+        usage: body.usage,
       }),
     );
   }
