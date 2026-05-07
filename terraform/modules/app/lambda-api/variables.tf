@@ -425,3 +425,13 @@ variable "routines_log_group_arn" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 U4 — compliance-outbox-drainer Aurora credentials
+# ---------------------------------------------------------------------------
+
+variable "compliance_drainer_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the `compliance_drainer` Aurora role credentials (Phase 3 U2 / PR #887). Wired from `module.database.compliance_drainer_secret_arn`. The compliance-outbox-drainer Lambda resolves this at module load to connect with INSERT-only access on `compliance.audit_events`."
+  type        = string
+  default     = ""
+}

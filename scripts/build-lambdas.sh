@@ -139,6 +139,9 @@ build_handler "scheduled-jobs" \
 build_handler "connector-poller" \
   "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"
 
+build_handler "compliance-outbox-drainer" \
+  "$REPO_ROOT/packages/lambda/compliance-outbox-drainer.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------
