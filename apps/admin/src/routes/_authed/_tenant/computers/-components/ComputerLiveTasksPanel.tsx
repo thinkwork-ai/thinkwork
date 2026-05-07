@@ -115,6 +115,12 @@ function outputSummary(output: unknown, error: unknown): string {
       if (reason === "missing_google_calendar_scope") {
         return "Google Calendar scope missing. Reconnect Google Workspace.";
       }
+      if (reason === "google_calendar_api_disabled") {
+        const projectId = calendarPayload.projectId;
+        return typeof projectId === "string"
+          ? `Google Calendar API disabled for project ${projectId}`
+          : "Google Calendar API disabled for the OAuth project";
+      }
       return typeof reason === "string"
         ? `Google Calendar unavailable: ${reason}`
         : "Google Calendar unavailable";

@@ -62,7 +62,7 @@ export async function listGoogleCalendarUpcomingWithGws(
       err instanceof Error ? err.message : String(err),
       options.accessToken,
     );
-    const reason = classifyGwsFailure(message);
+    const classification = classifyGwsFailure(message);
     return {
       providerName: "google_productivity",
       connected: true,
@@ -74,20 +74,45 @@ export async function listGoogleCalendarUpcomingWithGws(
       maxResults: input.maxResults,
       events: [],
       eventCount: 0,
-      reason,
+      reason: classification.reason,
       missingScopes:
-        reason === "missing_google_calendar_scope"
+        classification.reason === "missing_google_calendar_scope"
           ? [GOOGLE_CALENDAR_SCOPE]
           : [],
+      projectId: classification.projectId,
+      enableUrl: classification.enableUrl,
       message,
     };
   }
 }
 
-function classifyGwsFailure(message: string): string {
-  return /insufficient authentication scopes/i.test(message)
-    ? "missing_google_calendar_scope"
-    : "gws_command_failed";
+function classifyGwsFailure(message: string): {
+  reason:
+    | "missing_google_calendar_scope"
+    | "google_calendar_api_disabled"
+    | "gws_command_failed";
+  projectId?: string;
+  enableUrl?: string;
+} {
+  if (/insufficient authentication scopes/i.test(message)) {
+    return { reason: "missing_google_calendar_scope" };
+  }
+
+  if (
+    /API not enabled/i.test(message) &&
+    /calendar-json\.googleapis\.com/i.test(message)
+  ) {
+    const projectId = message.match(/[?&]project=([A-Za-z0-9_-]+)/)?.[1];
+    return {
+      reason: "google_calendar_api_disabled",
+      projectId,
+      enableUrl: projectId
+        ? `https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=${projectId}`
+        : undefined,
+    };
+  }
+
+  return { reason: "gws_command_failed" };
 }
 
 function parseJsonOutput(stdout: string): unknown {
