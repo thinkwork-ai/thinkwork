@@ -525,6 +525,34 @@ export const RunConnectorNowMutation = graphql(`
   }
 `);
 
+export const ConnectorExecutionsListQuery = graphql(`
+  query ConnectorExecutionsList(
+    $connectorId: ID
+    $status: ConnectorExecutionState
+    $limit: Int
+    $cursor: String
+  ) {
+    connectorExecutions(
+      connectorId: $connectorId
+      status: $status
+      limit: $limit
+      cursor: $cursor
+    ) {
+      id
+      tenantId
+      connectorId
+      externalRef
+      currentState
+      startedAt
+      finishedAt
+      errorClass
+      outcomePayload
+      retryAttempt
+      createdAt
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Email Channel (PRD-14)
 // ---------------------------------------------------------------------------

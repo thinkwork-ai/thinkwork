@@ -3297,7 +3297,7 @@ export type QueryConnectorExecutionArgs = {
 
 
 export type QueryConnectorExecutionsArgs = {
-  connectorId: Scalars['ID']['input'];
+  connectorId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ConnectorExecutionState>;

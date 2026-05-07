@@ -72,7 +72,7 @@ export async function connector(
 export async function connectorExecutions(
   _parent: unknown,
   args: {
-    connectorId: string;
+    connectorId?: string | null;
     status?: string | null;
     limit?: number | null;
     cursor?: string | null;
@@ -80,23 +80,28 @@ export async function connectorExecutions(
   ctx: GraphQLContext,
 ): Promise<unknown[]> {
   const tenantId = await requireResolvedTenantId(ctx);
-  const [connectorRow] = await db
-    .select({ id: connectorsTable.id })
-    .from(connectorsTable)
-    .where(
-      and(
-        eq(connectorsTable.id, args.connectorId),
-        eq(connectorsTable.tenant_id, tenantId),
-      ),
-    )
-    .limit(1);
 
-  if (!connectorRow) return [];
+  if (args.connectorId) {
+    const [connectorRow] = await db
+      .select({ id: connectorsTable.id })
+      .from(connectorsTable)
+      .where(
+        and(
+          eq(connectorsTable.id, args.connectorId),
+          eq(connectorsTable.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
 
-  const conditions = [
-    eq(connectorExecutionsTable.tenant_id, tenantId),
-    eq(connectorExecutionsTable.connector_id, args.connectorId),
-  ];
+    if (!connectorRow) return [];
+  }
+
+  const conditions = [eq(connectorExecutionsTable.tenant_id, tenantId)];
+  if (args.connectorId) {
+    conditions.push(
+      eq(connectorExecutionsTable.connector_id, args.connectorId),
+    );
+  }
   if (args.status) {
     conditions.push(eq(connectorExecutionsTable.current_state, args.status));
   }

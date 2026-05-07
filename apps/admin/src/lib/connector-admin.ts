@@ -222,6 +222,65 @@ export function connectorStatusTone(status: string): string {
   }
 }
 
+export function connectorExecutionStateTone(state: string): string {
+  switch (state) {
+    case "terminal":
+      return "bg-green-500/15 text-green-700 dark:text-green-300";
+    case "failed":
+      return "bg-red-500/15 text-red-700 dark:text-red-300";
+    case "cancelled":
+      return "bg-muted text-muted-foreground";
+    case "pending":
+    case "dispatching":
+    case "invoking":
+    case "recording_result":
+      return "bg-blue-500/15 text-blue-700 dark:text-blue-300";
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
+export function connectorExecutionThreadId(payload: unknown): string | null {
+  const parsed = parsePayloadRecord(payload);
+  const value = parsed?.threadId;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export function connectorExecutionLinearIdentifier(
+  payload: unknown,
+  fallback: string,
+): string {
+  const parsed = parsePayloadRecord(payload);
+  const linear = parsePayloadRecord(parsed?.linear);
+  const identifier = linear?.identifier;
+  if (typeof identifier === "string" && identifier.trim()) return identifier;
+  const title = linear?.title;
+  if (typeof title === "string" && title.trim()) return title;
+  return fallback;
+}
+
+export function connectorExecutionCleanupReason(
+  payload: unknown,
+): string | null {
+  const parsed = parsePayloadRecord(payload);
+  const cleanup = parsePayloadRecord(parsed?.cleanup);
+  const reason = cleanup?.reason;
+  return typeof reason === "string" && reason.trim() ? reason : null;
+}
+
+function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      return parsePayloadRecord(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
