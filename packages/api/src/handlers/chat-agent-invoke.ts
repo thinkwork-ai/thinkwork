@@ -40,6 +40,10 @@ import {
   resolveAgentRuntimeConfig,
 } from "../lib/resolve-agent-runtime-config.js";
 import { resolveRuntimeFunctionName } from "../lib/resolve-runtime-function-name.js";
+import {
+  markConnectorDelegationTurnCompleted,
+  markConnectorDelegationTurnFailed,
+} from "../lib/computers/delegation-lifecycle.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -73,6 +77,54 @@ const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 
 const db = getDb();
 const lambdaClient = new LambdaClient({});
+
+async function recordConnectorDelegationCompleted(input: {
+  tenantId: string;
+  agentId: string;
+  threadId: string;
+  threadTurnId: string;
+  messageId?: string;
+  responseText: string;
+  usage?: Record<string, unknown>;
+}) {
+  try {
+    const result = await markConnectorDelegationTurnCompleted(input);
+    if (result.updatedCount > 0) {
+      console.log(
+        `[chat-agent-invoke] Completed connector delegation(s): ${result.delegationIds.join(", ")}`,
+      );
+    }
+  } catch (err) {
+    console.error(
+      `[chat-agent-invoke] Failed to complete connector delegation:`,
+      err,
+    );
+  }
+}
+
+async function recordConnectorDelegationFailed(input: {
+  tenantId: string;
+  agentId: string;
+  threadId: string;
+  threadTurnId: string;
+  messageId?: string;
+  errorMessage: string;
+  errorCode?: string | null;
+}) {
+  try {
+    const result = await markConnectorDelegationTurnFailed(input);
+    if (result.updatedCount > 0) {
+      console.log(
+        `[chat-agent-invoke] Failed connector delegation(s): ${result.delegationIds.join(", ")}`,
+      );
+    }
+  } catch (err) {
+    console.error(
+      `[chat-agent-invoke] Failed to mark connector delegation failed:`,
+      err,
+    );
+  }
+}
 
 /** Extract plain text from AgentCore response (handles ChatCompletion, raw text, etc.) */
 function extractResponseText(data: unknown): string {
@@ -563,6 +615,15 @@ export async function handler(event: InvokeEvent): Promise<void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
+          await recordConnectorDelegationFailed({
+            tenantId,
+            threadId,
+            agentId,
+            threadTurnId: turnId,
+            messageId: event.messageId,
+            errorMessage: errMsgText,
+            errorCode: String(invokeRes.FunctionError),
+          });
           await notifyThreadTurnUpdate({
             runId: turnId,
             tenantId,
@@ -612,6 +673,15 @@ export async function handler(event: InvokeEvent): Promise<void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
+          await recordConnectorDelegationFailed({
+            tenantId,
+            threadId,
+            agentId,
+            threadTurnId: turnId,
+            messageId: event.messageId,
+            errorMessage: errMsgText,
+            errorCode: String(adapterStatus),
+          });
           await notifyThreadTurnUpdate({
             runId: turnId,
             tenantId,
@@ -805,34 +875,44 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // 2c. Update the thread_turn as succeeded
     if (turnId) {
       try {
+        const turnUsage = {
+          duration_ms: durationMs,
+          input_tokens: usage.inputTokens,
+          output_tokens: usage.outputTokens,
+          cached_read_tokens: usage.cachedReadTokens,
+          tools_called: (invokeResult.tools_called ||
+            (invokeResult.response as Record<string, unknown>)?.tools_called ||
+            []) as string[],
+          tool_costs: toolCosts.map((tc) => ({
+            event_type: tc.event_type,
+            amount_usd: tc.amount_usd,
+            provider: tc.provider,
+          })),
+          tool_invocations: (invokeResult.tool_invocations ||
+            (invokeResult.response as Record<string, unknown>)
+              ?.tool_invocations ||
+            []) as any[],
+        };
+
         await db
           .update(threadTurns)
           .set({
             status: "succeeded",
             finished_at: new Date(),
             result_json: { response: responseText.slice(0, 10000) },
-            usage_json: {
-              duration_ms: durationMs,
-              input_tokens: usage.inputTokens,
-              output_tokens: usage.outputTokens,
-              cached_read_tokens: usage.cachedReadTokens,
-              tools_called: (invokeResult.tools_called ||
-                (invokeResult.response as Record<string, unknown>)
-                  ?.tools_called ||
-                []) as string[],
-              tool_costs: toolCosts.map((tc) => ({
-                event_type: tc.event_type,
-                amount_usd: tc.amount_usd,
-                provider: tc.provider,
-              })),
-              tool_invocations: (invokeResult.tool_invocations ||
-                (invokeResult.response as Record<string, unknown>)
-                  ?.tool_invocations ||
-                []) as any[],
-            },
+            usage_json: turnUsage,
           })
           .where(eq(threadTurns.id, turnId));
 
+        await recordConnectorDelegationCompleted({
+          tenantId,
+          threadId,
+          agentId,
+          threadTurnId: turnId,
+          messageId: event.messageId,
+          responseText,
+          usage: turnUsage,
+        });
         await notifyThreadTurnUpdate({
           runId: turnId,
           tenantId,
@@ -978,6 +1058,14 @@ export async function handler(event: InvokeEvent): Promise<void> {
           })
           .where(eq(threadTurns.id, turnId));
 
+        await recordConnectorDelegationFailed({
+          tenantId,
+          threadId,
+          agentId,
+          threadTurnId: turnId,
+          messageId: event.messageId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
         await notifyThreadTurnUpdate({
           runId: turnId,
           tenantId,
