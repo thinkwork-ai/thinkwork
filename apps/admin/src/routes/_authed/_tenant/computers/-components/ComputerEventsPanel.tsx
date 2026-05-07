@@ -89,7 +89,7 @@ export function ComputerEventsPanel({
               return (
                 <div
                   key={event.id}
-                  className="grid gap-3 p-3 text-sm md:grid-cols-[minmax(0,1fr)_120px]"
+                  className="grid gap-3 p-3 text-sm md:grid-cols-[minmax(0,1fr)_140px]"
                 >
                   <div className="flex min-w-0 items-start gap-2">
                     <Icon
@@ -99,24 +99,24 @@ export function ComputerEventsPanel({
                     />
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="truncate font-medium">
+                        <span className="break-words font-medium">
                           {label(event.eventType)}
                         </span>
                         <Badge variant="outline" className="text-xs">
                           {label(event.level)}
                         </Badge>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <div className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
                         {payloadSummary(event.payload)}
                       </div>
                       {event.taskId ? (
-                        <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                        <div className="mt-1 break-all text-[11px] text-muted-foreground">
                           Task {event.taskId}
                         </div>
                       ) : null}
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground md:text-right">
                     {relativeTime(event.createdAt)}
                   </div>
                 </div>

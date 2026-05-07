@@ -14,7 +14,6 @@ import {
 import { toast } from "sonner";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -203,70 +202,76 @@ export function ComputerLiveTasksPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Live Runtime</CardTitle>
-        <CardDescription>
-          Browser-triggered actions and recent work claimed by the running ECS
-          worker.
-        </CardDescription>
-        <CardAction className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => enqueueRuntimeTask(ComputerTaskType.HealthCheck)}
-            disabled={enqueueing}
-            title="Queue a runtime health check"
-          >
-            {enqueueing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Activity className="h-4 w-4" />
-            )}
-            Health
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={enqueueWorkspaceMarker}
-            disabled={enqueueing}
-            title="Write a TTL-marked file into the Computer workspace"
-          >
-            <FileText className="h-4 w-4" />
-            Workspace
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => enqueueRuntimeTask(ComputerTaskType.GoogleCliSmoke)}
-            disabled={enqueueing}
-            title="Check whether the Google Workspace CLI is available in the runtime"
-          >
-            <Terminal className="h-4 w-4" />
-            Google CLI
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              enqueueRuntimeTask(ComputerTaskType.GoogleWorkspaceAuthCheck)
-            }
-            disabled={enqueueing}
-            title="Check the Computer owner's Google Workspace connection without exposing tokens"
-          >
-            <KeyRound className="h-4 w-4" />
-            Google Auth
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={enqueueCalendarUpcoming}
-            disabled={enqueueing}
-            title="List upcoming Google Calendar events without exposing tokens"
-          >
-            <CalendarDays className="h-4 w-4" />
-            Calendar
-          </Button>
-        </CardAction>
+      <CardHeader className="gap-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 max-w-2xl">
+            <CardTitle>Live Runtime</CardTitle>
+            <CardDescription>
+              Browser-triggered actions and recent work claimed by the running
+              ECS worker.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => enqueueRuntimeTask(ComputerTaskType.HealthCheck)}
+              disabled={enqueueing}
+              title="Queue a runtime health check"
+            >
+              {enqueueing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Activity className="h-4 w-4" />
+              )}
+              Health
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={enqueueWorkspaceMarker}
+              disabled={enqueueing}
+              title="Write a TTL-marked file into the Computer workspace"
+            >
+              <FileText className="h-4 w-4" />
+              Workspace
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                enqueueRuntimeTask(ComputerTaskType.GoogleCliSmoke)
+              }
+              disabled={enqueueing}
+              title="Check whether the Google Workspace CLI is available in the runtime"
+            >
+              <Terminal className="h-4 w-4" />
+              Google CLI
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                enqueueRuntimeTask(ComputerTaskType.GoogleWorkspaceAuthCheck)
+              }
+              disabled={enqueueing}
+              title="Check the Computer owner's Google Workspace connection without exposing tokens"
+            >
+              <KeyRound className="h-4 w-4" />
+              Google Auth
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={enqueueCalendarUpcoming}
+              disabled={enqueueing}
+              title="List upcoming Google Calendar events without exposing tokens"
+            >
+              <CalendarDays className="h-4 w-4" />
+              Calendar
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {tasksResult.error ? (
@@ -284,7 +289,7 @@ export function ComputerLiveTasksPanel({
               return (
                 <div
                   key={task.id}
-                  className="grid gap-3 p-3 text-sm md:grid-cols-[minmax(0,1fr)_110px_160px]"
+                  className="grid gap-3 p-3 text-sm lg:grid-cols-[minmax(0,1fr)_120px_180px]"
                 >
                   <div className="flex min-w-0 items-start gap-2">
                     <Icon
@@ -295,20 +300,20 @@ export function ComputerLiveTasksPanel({
                       }`}
                     />
                     <div className="min-w-0">
-                      <div className="truncate font-medium">
+                      <div className="break-words font-medium">
                         {label(task.taskType)}
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <div className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
                         {outputSummary(task.output, task.error)}
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div className="lg:text-center">
                     <Badge variant="outline" className="text-xs">
                       {label(task.status)}
                     </Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground lg:text-right">
                     {task.completedAt
                       ? `Completed ${relativeTime(task.completedAt)}`
                       : task.claimedAt
