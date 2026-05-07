@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "urql";
 import {
   Activity,
+  CalendarDays,
   CheckCircle2,
   Clock,
   FileText,
@@ -91,6 +92,28 @@ function outputSummary(output: unknown, error: unknown): string {
     }
     return "Google Workspace not connected";
   }
+  const googleCalendar = payload.googleCalendar;
+  if (googleCalendar && typeof googleCalendar === "object") {
+    const calendarPayload = googleCalendar as Record<string, unknown>;
+    if (calendarPayload.connected !== true)
+      return "Google Calendar not connected";
+    if (calendarPayload.tokenResolved !== true) {
+      return "Google Calendar token unavailable";
+    }
+    if (calendarPayload.calendarAvailable !== true) {
+      const reason = calendarPayload.reason;
+      return typeof reason === "string"
+        ? `Google Calendar unavailable: ${reason}`
+        : "Google Calendar unavailable";
+    }
+    const count =
+      typeof calendarPayload.eventCount === "number"
+        ? calendarPayload.eventCount
+        : Array.isArray(calendarPayload.events)
+          ? calendarPayload.events.length
+          : 0;
+    return `${count} ${count === 1 ? "event" : "events"} upcoming`;
+  }
   const message = payload.message;
   if (typeof message === "string") return message;
   return "Output recorded";
@@ -168,6 +191,16 @@ export function ComputerLiveTasksPanel({
     });
   }
 
+  function enqueueCalendarUpcoming() {
+    const now = new Date();
+    const timeMax = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    enqueueRuntimeTask(ComputerTaskType.GoogleCalendarUpcoming, {
+      timeMin: now.toISOString(),
+      timeMax: timeMax.toISOString(),
+      maxResults: 10,
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -222,6 +255,16 @@ export function ComputerLiveTasksPanel({
           >
             <KeyRound className="h-4 w-4" />
             Google Auth
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={enqueueCalendarUpcoming}
+            disabled={enqueueing}
+            title="List upcoming Google Calendar events without exposing tokens"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Calendar
           </Button>
         </CardAction>
       </CardHeader>

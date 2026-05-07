@@ -19,6 +19,7 @@ import {
   ComputerTaskNotFoundError,
   failComputerTask,
   recordComputerHeartbeat,
+  resolveGoogleWorkspaceCliToken,
   resolveComputerRuntimeConfig,
 } from "../lib/computers/runtime-api.js";
 import {
@@ -113,6 +114,20 @@ async function route(
     const tenantId = validUuid(body.tenantId, "tenantId");
     const computerId = validUuid(body.computerId, "computerId");
     return json(await checkGoogleWorkspaceConnection({ tenantId, computerId }));
+  }
+
+  if (
+    method === "POST" &&
+    path === "/api/computers/runtime/google-workspace/cli-token"
+  ) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await resolveGoogleWorkspaceCliToken({
+        tenantId,
+        computerId,
+      }),
+    );
   }
 
   const taskEventMatch = path.match(

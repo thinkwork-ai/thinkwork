@@ -12,6 +12,12 @@ export type RuntimeApiConfig = {
   computerId: string;
 };
 
+export type GoogleCalendarUpcomingInput = {
+  timeMin: string;
+  timeMax: string;
+  maxResults: number;
+};
+
 export class ComputerRuntimeApi {
   constructor(private readonly config: RuntimeApiConfig) {}
 
@@ -81,6 +87,24 @@ export class ComputerRuntimeApi {
     checkedAt?: string;
   }> {
     return this.request("/api/computers/runtime/google-workspace/check", {
+      method: "POST",
+      body: JSON.stringify({
+        tenantId: this.config.tenantId,
+        computerId: this.config.computerId,
+      }),
+    });
+  }
+
+  async resolveGoogleWorkspaceCliToken(): Promise<{
+    providerName: string;
+    connected: boolean;
+    tokenResolved: boolean;
+    accessToken?: string;
+    connectionId?: string;
+    reason?: string | null;
+    checkedAt?: string;
+  }> {
+    return this.request("/api/computers/runtime/google-workspace/cli-token", {
       method: "POST",
       body: JSON.stringify({
         tenantId: this.config.tenantId,

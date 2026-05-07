@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     claimNextComputerTask: vi.fn(),
     appendComputerTaskEvent: vi.fn(),
     checkGoogleWorkspaceConnection: vi.fn(),
+    resolveGoogleWorkspaceCliToken: vi.fn(),
     completeComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
     ComputerNotFoundError,
@@ -33,6 +34,7 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   claimNextComputerTask: mocks.claimNextComputerTask,
   appendComputerTaskEvent: mocks.appendComputerTaskEvent,
   checkGoogleWorkspaceConnection: mocks.checkGoogleWorkspaceConnection,
+  resolveGoogleWorkspaceCliToken: mocks.resolveGoogleWorkspaceCliToken,
   completeComputerTask: mocks.completeComputerTask,
   failComputerTask: mocks.failComputerTask,
   ComputerNotFoundError: mocks.ComputerNotFoundError,
@@ -86,6 +88,12 @@ describe("computer-runtime handler", () => {
       providerName: "google_productivity",
       connected: true,
       tokenResolved: true,
+    });
+    mocks.resolveGoogleWorkspaceCliToken.mockResolvedValue({
+      providerName: "google_productivity",
+      connected: true,
+      tokenResolved: true,
+      accessToken: "ya29.secret-token",
     });
     mocks.completeComputerTask.mockResolvedValue({
       id: TASK_ID,
@@ -209,6 +217,27 @@ describe("computer-runtime handler", () => {
       tokenResolved: true,
     });
     expect(response.body).not.toContain("accessToken");
+  });
+
+  it("resolves Google Workspace CLI token through the runtime service endpoint", async () => {
+    const response = await handler(
+      event("POST", "/api/computers/runtime/google-workspace/cli-token", {
+        body: {
+          tenantId: TENANT_ID,
+          computerId: COMPUTER_ID,
+        },
+      }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(mocks.resolveGoogleWorkspaceCliToken).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+    });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      connected: true,
+      tokenResolved: true,
+      accessToken: "ya29.secret-token",
+    });
   });
 
   it("validates UUID inputs before calling runtime code", async () => {

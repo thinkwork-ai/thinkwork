@@ -12,6 +12,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
     const result = await runTaskLoopOnce({
@@ -34,6 +35,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
     await expect(
@@ -71,9 +73,9 @@ describe("Computer runtime task loop", () => {
       relativePath: "notes/phase3.txt",
       bytes: 15,
     });
-    await expect(readFile(join(root, "notes/phase3.txt"), "utf8")).resolves.toBe(
-      "hello computer\n",
-    );
+    await expect(
+      readFile(join(root, "notes/phase3.txt"), "utf8"),
+    ).resolves.toBe("hello computer\n");
   });
 
   it("fails unsafe workspace file paths", async () => {
@@ -118,6 +120,7 @@ describe("Computer runtime task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
     const result = await runTaskLoopOnce({
