@@ -14,6 +14,7 @@ export type TaskLoopOptions = {
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
     | "delegateConnectorWork"
+    | "executeThreadTurn"
     | "resolveGoogleWorkspaceCliToken"
   >;
   workspaceRoot: string;
@@ -53,6 +54,7 @@ export async function handleTask(
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
     | "delegateConnectorWork"
+    | "executeThreadTurn"
     | "resolveGoogleWorkspaceCliToken"
   >,
   googleWorkspaceCli: GoogleWorkspaceCliRunner = listGoogleCalendarUpcomingWithGws,
@@ -83,8 +85,9 @@ export async function handleTask(
     };
   }
   if (task.taskType === "thread_turn") {
+    if (!api) throw new Error("Computer runtime API is required");
     const threadTurn = parseThreadTurnInput(task.input);
-    await api?.appendTaskEvent(task.id, {
+    await api.appendTaskEvent(task.id, {
       eventType: "thread_turn_claimed",
       level: "info",
       payload: {
@@ -93,13 +96,12 @@ export async function handleTask(
         source: threadTurn.source,
       },
     });
+    const execution = await api.executeThreadTurn(task.id);
     return {
       ok: true,
       taskType: "thread_turn",
-      threadId: threadTurn.threadId,
-      messageId: threadTurn.messageId,
-      source: threadTurn.source,
-      claimed: true,
+      accepted: true,
+      ...execution,
     };
   }
   if (task.taskType === "google_workspace_auth_check") {

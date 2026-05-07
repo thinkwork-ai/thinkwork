@@ -436,6 +436,129 @@ export async function delegateConnectorWorkTask(input: {
   };
 }
 
+export async function executeThreadTurnTask(input: {
+  tenantId: string;
+  computerId: string;
+  taskId: string;
+}) {
+  const task = await loadTask(input.tenantId, input.computerId, input.taskId);
+  if (task.task_type !== "thread_turn") {
+    throw new ComputerTaskDelegationError(
+      "Only thread_turn tasks can be executed as Thread turns",
+    );
+  }
+
+  const payload = threadTurnPayload(task.input);
+  const computer = await loadComputer(input.tenantId, input.computerId);
+  if (!computer.migrated_from_agent_id) {
+    throw new ComputerTaskDelegationError(
+      "Computer has no delegated Managed Agent configured",
+      409,
+    );
+  }
+
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.id, computer.migrated_from_agent_id),
+        eq(agents.tenant_id, input.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!agent) {
+    throw new ComputerTaskDelegationError(
+      "Delegated Managed Agent not found",
+      404,
+    );
+  }
+
+  const [thread] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.tenant_id, input.tenantId),
+        eq(threads.id, payload.threadId),
+        eq(threads.computer_id, input.computerId),
+      ),
+    )
+    .limit(1);
+  if (!thread) {
+    throw new ComputerTaskDelegationError(
+      "Computer-owned Thread not found for task",
+      409,
+    );
+  }
+
+  const [message] = await db
+    .select({
+      id: messages.id,
+      content: messages.content,
+      role: messages.role,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, payload.threadId),
+        eq(messages.id, payload.messageId),
+      ),
+    )
+    .limit(1);
+  if (!message) {
+    throw new ComputerTaskDelegationError(
+      "Thread turn message not found for task",
+      409,
+    );
+  }
+  if (message.role !== "user") {
+    throw new ComputerTaskDelegationError(
+      "Only user messages can trigger Computer thread turns",
+      400,
+    );
+  }
+
+  await appendComputerTaskEvent({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    taskId: input.taskId,
+    eventType: "thread_turn_dispatch_started",
+    level: "info",
+    payload: {
+      agentId: agent.id,
+      threadId: payload.threadId,
+      messageId: payload.messageId,
+      source: payload.source,
+    },
+  });
+
+  const invoked = await invokeChatAgent({
+    tenantId: input.tenantId,
+    threadId: payload.threadId,
+    agentId: agent.id,
+    userMessage: message.content ?? "",
+    messageId: payload.messageId,
+  });
+  if (!invoked) {
+    throw new ComputerTaskDelegationError(
+      "Computer thread turn dispatch failed",
+      502,
+    );
+  }
+
+  return {
+    dispatched: true,
+    mode: "managed_agent",
+    agentId: agent.id,
+    threadId: payload.threadId,
+    messageId: payload.messageId,
+    source: payload.source,
+    status: "running",
+  };
+}
+
 export async function completeComputerTask(input: {
   tenantId: string;
   computerId: string;
@@ -626,6 +749,21 @@ function connectorWorkPayload(input: unknown) {
       payload.metadata && typeof payload.metadata === "object"
         ? payload.metadata
         : null,
+  };
+}
+
+function threadTurnPayload(input: unknown) {
+  const payload =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  return {
+    threadId: requiredPayloadString(payload.threadId, "threadId"),
+    messageId: requiredPayloadString(payload.messageId, "messageId"),
+    source:
+      typeof payload.source === "string" && payload.source.trim()
+        ? payload.source.trim()
+        : "chat_message",
   };
 }
 

@@ -13,6 +13,7 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -37,6 +38,7 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -125,6 +127,7 @@ describe("Computer runtime task loop", () => {
         messageId: "message-1",
         status: "running",
       }),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
     const output = await handleTask(
@@ -186,6 +189,7 @@ describe("Computer runtime task loop", () => {
         messageId: "message-1",
         status: "running",
       }),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -213,6 +217,66 @@ describe("Computer runtime task loop", () => {
     expect(api.appendTaskEvent).not.toHaveBeenCalled();
   });
 
+  it("executes Computer thread turns before completing the task", async () => {
+    const api = {
+      claimTask: vi.fn().mockResolvedValue({
+        id: "task-10",
+        taskType: "thread_turn",
+        input: {
+          threadId: "thread-1",
+          messageId: "message-1",
+          source: "chat_message",
+        },
+      }),
+      completeTask: vi.fn(),
+      failTask: vi.fn(),
+      appendTaskEvent: vi.fn(),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn().mockResolvedValue({
+        dispatched: true,
+        mode: "managed_agent",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "chat_message",
+        status: "running",
+      }),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+    };
+
+    const result = await runTaskLoopOnce({
+      api,
+      workspaceRoot: "/tmp",
+      idleDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({ handled: true, taskId: "task-10" });
+    expect(api.appendTaskEvent).toHaveBeenCalledWith("task-10", {
+      eventType: "thread_turn_claimed",
+      level: "info",
+      payload: {
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "chat_message",
+      },
+    });
+    expect(api.executeThreadTurn).toHaveBeenCalledWith("task-10");
+    expect(api.completeTask).toHaveBeenCalledWith("task-10", {
+      ok: true,
+      taskType: "thread_turn",
+      accepted: true,
+      dispatched: true,
+      mode: "managed_agent",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "chat_message",
+      status: "running",
+    });
+    expect(api.failTask).not.toHaveBeenCalled();
+  });
+
   it("fails connector work tasks when delegation fails", async () => {
     const api = {
       claimTask: vi.fn().mockResolvedValue({
@@ -233,6 +297,7 @@ describe("Computer runtime task loop", () => {
       delegateConnectorWork: vi
         .fn()
         .mockRejectedValue(new Error("delegation unavailable")),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -270,6 +335,7 @@ describe("Computer runtime task loop", () => {
       appendTaskEvent: vi.fn(),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
+      executeThreadTurn: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 

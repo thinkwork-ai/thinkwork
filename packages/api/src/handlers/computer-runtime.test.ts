@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     checkGoogleWorkspaceConnection: vi.fn(),
     resolveGoogleWorkspaceCliToken: vi.fn(),
     delegateConnectorWorkTask: vi.fn(),
+    executeThreadTurnTask: vi.fn(),
     completeComputerTask: vi.fn(),
     failComputerTask: vi.fn(),
     ComputerTaskDelegationError: class ComputerTaskDelegationError extends Error {
@@ -45,6 +46,7 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   checkGoogleWorkspaceConnection: mocks.checkGoogleWorkspaceConnection,
   resolveGoogleWorkspaceCliToken: mocks.resolveGoogleWorkspaceCliToken,
   delegateConnectorWorkTask: mocks.delegateConnectorWorkTask,
+  executeThreadTurnTask: mocks.executeThreadTurnTask,
   completeComputerTask: mocks.completeComputerTask,
   failComputerTask: mocks.failComputerTask,
   ComputerTaskDelegationError: mocks.ComputerTaskDelegationError,
@@ -112,6 +114,14 @@ describe("computer-runtime handler", () => {
       delegationId: "delegation-1",
       agentId: "agent-1",
       threadId: "thread-1",
+      status: "running",
+    });
+    mocks.executeThreadTurnTask.mockResolvedValue({
+      dispatched: true,
+      mode: "managed_agent",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
       status: "running",
     });
     mocks.completeComputerTask.mockResolvedValue({
@@ -243,6 +253,33 @@ describe("computer-runtime handler", () => {
       delegated: true,
       mode: "managed_agent",
       delegationId: "delegation-1",
+    });
+  });
+
+  it("executes Computer-owned thread turns through the service-auth task endpoint", async () => {
+    const response = await handler(
+      event(
+        "POST",
+        `/api/computers/runtime/tasks/${TASK_ID}/execute-thread-turn`,
+        {
+          body: {
+            tenantId: TENANT_ID,
+            computerId: COMPUTER_ID,
+          },
+        },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.executeThreadTurnTask).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+      taskId: TASK_ID,
+    });
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      dispatched: true,
+      mode: "managed_agent",
+      agentId: "agent-1",
     });
   });
 

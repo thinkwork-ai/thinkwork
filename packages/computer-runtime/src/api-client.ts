@@ -151,6 +151,27 @@ export class ComputerRuntimeApi {
     );
   }
 
+  async executeThreadTurn(taskId: string): Promise<{
+    dispatched: boolean;
+    mode: "managed_agent";
+    agentId: string;
+    threadId: string;
+    messageId: string;
+    source?: string;
+    status: string;
+  }> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/execute-thread-turn`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
   async failTask(taskId: string, error: unknown) {
     return this.request(`/api/computers/runtime/tasks/${taskId}/fail`, {
       method: "POST",
