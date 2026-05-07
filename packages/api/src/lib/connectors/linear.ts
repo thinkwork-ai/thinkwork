@@ -27,10 +27,42 @@ export interface LinearFetchOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface LinearMoveIssueStateOptions {
+  apiKey: string;
+  issueId: string;
+  stateName: string;
+  fetchImpl?: typeof fetch;
+}
+
+export interface LinearMoveIssueStateResult {
+  issueId: string;
+  stateName: string;
+  stateId?: string;
+  updated: boolean;
+  skippedReason?: string;
+}
+
 type LinearGraphqlResponse = {
   data?: {
     issues?: {
       nodes?: unknown[];
+    } | null;
+  } | null;
+  errors?: Array<{ message?: string }>;
+};
+
+type LinearIssueStateResponse = {
+  data?: {
+    issue?: unknown;
+  } | null;
+  errors?: Array<{ message?: string }>;
+};
+
+type LinearIssueUpdateResponse = {
+  data?: {
+    issueUpdate?: {
+      success?: boolean;
+      issue?: unknown;
     } | null;
   } | null;
   errors?: Array<{ message?: string }>;
@@ -109,6 +141,117 @@ export async function fetchLinearIssues(
     const issue = linearNodeToIssue(node);
     return issue ? [issue] : [];
   });
+}
+
+export async function moveLinearIssueToState(
+  options: LinearMoveIssueStateOptions,
+): Promise<LinearMoveIssueStateResult> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const issuePayload = await linearGraphql<LinearIssueStateResponse>(
+    fetchImpl,
+    {
+      apiKey: options.apiKey,
+      query: LINEAR_ISSUE_STATE_QUERY,
+      variables: { id: options.issueId },
+    },
+  );
+
+  const issue = asRecord(issuePayload.data?.issue);
+  if (!issue) {
+    throw new Error(`Linear issue ${options.issueId} not found`);
+  }
+
+  const currentState = asRecord(issue.state);
+  const currentStateName = cleanString(currentState?.name);
+  if (currentStateName?.toLowerCase() === options.stateName.toLowerCase()) {
+    return {
+      issueId: options.issueId,
+      stateName: options.stateName,
+      stateId: cleanString(currentState?.id) ?? undefined,
+      updated: false,
+      skippedReason: "already_in_state",
+    };
+  }
+
+  const team = asRecord(issue.team);
+  const statesConnection = asRecord(team?.states);
+  const stateNodes = Array.isArray(statesConnection?.nodes)
+    ? statesConnection.nodes
+    : [];
+  const targetState = stateNodes
+    .map(asRecord)
+    .find(
+      (state) =>
+        cleanString(state?.name)?.toLowerCase() ===
+        options.stateName.toLowerCase(),
+    );
+  const stateId = cleanString(targetState?.id);
+  if (!stateId) {
+    throw new Error(
+      `Linear state ${options.stateName} not found for issue ${options.issueId}`,
+    );
+  }
+
+  const updatePayload = await linearGraphql<LinearIssueUpdateResponse>(
+    fetchImpl,
+    {
+      apiKey: options.apiKey,
+      query: LINEAR_ISSUE_UPDATE_STATE_MUTATION,
+      variables: {
+        id: options.issueId,
+        input: { stateId },
+      },
+    },
+  );
+  if (updatePayload.data?.issueUpdate?.success !== true) {
+    throw new Error(`Linear issue ${options.issueId} state update failed`);
+  }
+
+  return {
+    issueId: options.issueId,
+    stateName: options.stateName,
+    stateId,
+    updated: true,
+  };
+}
+
+async function linearGraphql<
+  TPayload extends { errors?: Array<{ message?: string }> },
+>(
+  fetchImpl: typeof fetch,
+  args: {
+    apiKey: string;
+    query: string;
+    variables: Record<string, unknown>;
+  },
+): Promise<TPayload> {
+  const response = await fetchImpl(LINEAR_GRAPHQL_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: args.apiKey,
+    },
+    body: JSON.stringify({
+      query: args.query,
+      variables: args.variables,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Linear API request failed with HTTP ${response.status} ${response.statusText}`.trim(),
+    );
+  }
+
+  const payload = (await response.json()) as TPayload;
+  if (payload.errors && payload.errors.length > 0) {
+    throw new Error(
+      `Linear API error: ${payload.errors
+        .map((error) => error.message ?? "Unknown error")
+        .join("; ")}`,
+    );
+  }
+  return payload;
 }
 
 function linearIssueFilter(
@@ -213,6 +356,44 @@ const LINEAR_ISSUES_QUERY = /* GraphQL */ `
           nodes {
             name
           }
+        }
+      }
+    }
+  }
+`;
+
+const LINEAR_ISSUE_STATE_QUERY = /* GraphQL */ `
+  query ConnectorLinearIssueState($id: String!) {
+    issue(id: $id) {
+      id
+      state {
+        id
+        name
+      }
+      team {
+        states(first: 100) {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+const LINEAR_ISSUE_UPDATE_STATE_MUTATION = /* GraphQL */ `
+  mutation ConnectorLinearIssueUpdateState(
+    $id: String!
+    $input: IssueUpdateInput!
+  ) {
+    issueUpdate(id: $id, input: $input) {
+      success
+      issue {
+        id
+        state {
+          id
+          name
         }
       }
     }

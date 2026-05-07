@@ -503,10 +503,21 @@ describe("runConnectorDispatchTick", () => {
         priority: 2,
       },
     ]);
+    const moveLinearIssueToState = vi.fn().mockResolvedValue({
+      issueId: "linear-issue-1",
+      stateName: "In Progress",
+      stateId: "state-started",
+      updated: true,
+    });
 
     const result = await runConnectorDispatchTick(
       { now: NOW },
-      { store, readTenantCredentialSecret, fetchLinearIssues },
+      {
+        store,
+        readTenantCredentialSecret,
+        fetchLinearIssues,
+        moveLinearIssueToState,
+      },
     );
 
     expect(store.credentialLookups).toEqual([
@@ -515,7 +526,13 @@ describe("runConnectorDispatchTick", () => {
         credentialId: undefined,
         credentialSlug: "linear",
       },
+      {
+        tenantId: "tenant-a",
+        credentialId: undefined,
+        credentialSlug: "linear",
+      },
     ]);
+    expect(readTenantCredentialSecret).toHaveBeenCalledTimes(2);
     expect(readTenantCredentialSecret).toHaveBeenCalledWith("secret-ref");
     expect(fetchLinearIssues).toHaveBeenCalledWith({
       apiKey: "lin_api_key",
@@ -524,6 +541,11 @@ describe("runConnectorDispatchTick", () => {
         labels: ["symphony"],
         limit: 1,
       }),
+    });
+    expect(moveLinearIssueToState).toHaveBeenCalledWith({
+      apiKey: "lin_api_key",
+      issueId: "linear-issue-1",
+      stateName: "In Progress",
     });
     expect(result).toEqual([
       {
@@ -542,6 +564,78 @@ describe("runConnectorDispatchTick", () => {
         nextPollAt: defaultNextPollAt(NOW),
       },
     ]);
+    expect(store.terminalUpdates[0]?.outcomePayload.providerWriteback).toEqual({
+      provider: "linear",
+      action: "move_issue_state",
+      status: "updated",
+      reason: null,
+      issueId: "linear-issue-1",
+      stateName: "In Progress",
+      stateId: "state-started",
+    });
+  });
+
+  it("records Linear writeback failures without failing dispatched work", async () => {
+    store.connectors = [
+      connector({
+        config: {
+          provider: "linear",
+          credentialSlug: "linear",
+          issueQuery: { labels: ["symphony"] },
+        },
+      }),
+    ];
+    store.credential = {
+      id: "credential-1",
+      tenant_id: "tenant-a",
+      slug: "linear",
+      kind: "api_key",
+      status: "active",
+      secret_ref: "secret-ref",
+    };
+    store.claimResult = {
+      status: "created",
+      execution: execution({ id: "execution-1" }),
+    };
+
+    const result = await runConnectorDispatchTick(
+      { now: NOW },
+      {
+        store,
+        readTenantCredentialSecret: vi.fn().mockResolvedValue({
+          apiKey: "lin_api_key",
+        }),
+        fetchLinearIssues: vi.fn().mockResolvedValue([
+          {
+            id: "linear-issue-1",
+            identifier: "SYM-101",
+            title: "Handle real Linear issue",
+            labels: ["symphony"],
+          },
+        ]),
+        moveLinearIssueToState: vi
+          .fn()
+          .mockRejectedValue(new Error("Linear rate limited")),
+      },
+    );
+
+    expect(result).toMatchObject([
+      {
+        status: "dispatched",
+        connectorId: "connector-1",
+        executionId: "execution-1",
+        externalRef: "linear-issue-1",
+      },
+    ]);
+    expect(store.failedUpdates).toEqual([]);
+    expect(store.terminalUpdates[0]?.outcomePayload.providerWriteback).toEqual({
+      provider: "linear",
+      action: "move_issue_state",
+      status: "failed",
+      issueId: "linear-issue-1",
+      stateName: "In Progress",
+      error: "Linear rate limited",
+    });
   });
 
   it("reports a failed connector when Linear credential lookup fails", async () => {
