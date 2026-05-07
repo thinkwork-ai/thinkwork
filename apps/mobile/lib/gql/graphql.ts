@@ -716,6 +716,7 @@ export type Computer = {
   runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
   runtimeStatus: ComputerRuntimeStatus;
   slug: Scalars['String']['output'];
+  sourceAgent?: Maybe<Agent>;
   spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
   status: ComputerStatus;
   template?: Maybe<AgentTemplate>;

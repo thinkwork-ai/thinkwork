@@ -42,6 +42,7 @@ type Computer {
   owner: User
   templateId: ID!
   template: AgentTemplate
+  sourceAgent: Agent
   name: String!
   slug: String!
   status: ComputerStatus!

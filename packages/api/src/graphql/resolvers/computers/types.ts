@@ -2,7 +2,9 @@ import {
   db,
   eq,
   users,
+  agents,
   agentTemplates,
+  agentToCamel,
   snakeToCamel,
   templateToCamel,
 } from "../../utils.js";
@@ -26,5 +28,11 @@ export const computerTypeResolvers = {
       .from(agentTemplates)
       .where(eq(agentTemplates.id, templateId));
     return row ? withGraphqlAgentRuntime(templateToCamel(row)) : null;
+  },
+  sourceAgent: async (parent: any) => {
+    const agentId = parent.migratedFromAgentId ?? parent.migrated_from_agent_id;
+    if (!agentId) return null;
+    const [row] = await db.select().from(agents).where(eq(agents.id, agentId));
+    return row ? agentToCamel(row) : null;
   },
 };

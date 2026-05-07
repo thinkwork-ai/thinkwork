@@ -1,10 +1,12 @@
-import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   agentTemplates,
+  agentWorkspaceRuns,
   computers,
   computerEvents,
+  threads,
   users,
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -90,7 +92,8 @@ export async function applyComputerMigration(
         runtime_config: agent.runtime_config,
         budget_monthly_cents: agent.budget_monthly_cents,
         spent_monthly_cents: agent.spent_monthly_cents,
-        last_active_at: agent.last_heartbeat_at ?? agent.updated_at,
+        last_active_at:
+          agent.last_thread_at ?? agent.last_heartbeat_at ?? agent.updated_at,
         migrated_from_agent_id: agent.id,
         migration_metadata: {
           source: "agent_to_computer_phase_one",
@@ -142,6 +145,22 @@ async function loadUserPairedAgents(tenantId: string) {
       template_kind: agentTemplates.template_kind,
       template_name: agentTemplates.name,
       template_slug: agentTemplates.slug,
+      adapter_type: agents.adapter_type,
+      workspace_run_count: sql<number>`coalesce((
+        select count(*)::int
+        from ${agentWorkspaceRuns}
+        where ${agentWorkspaceRuns.agent_id} = ${agents.id}
+      ), 0)`,
+      thread_count: sql<number>`coalesce((
+        select count(*)::int
+        from ${threads}
+        where ${threads.agent_id} = ${agents.id}
+      ), 0)`,
+      last_thread_at: sql<Date | null>`(
+        select max(${threads.updated_at})
+        from ${threads}
+        where ${threads.agent_id} = ${agents.id}
+      )`,
       runtime_config: agents.runtime_config,
       budget_monthly_cents: agents.budget_monthly_cents,
       spent_monthly_cents: agents.spent_monthly_cents,

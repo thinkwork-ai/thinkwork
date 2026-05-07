@@ -13,6 +13,10 @@ const BASE_AGENT = {
   template_kind: "computer",
   template_name: "Founder Computer",
   template_slug: "founder-computer",
+  adapter_type: null,
+  workspace_run_count: 0,
+  thread_count: 0,
+  last_thread_at: null,
   runtime_config: null,
   budget_monthly_cents: null,
   spent_monthly_cents: 0,
@@ -50,11 +54,17 @@ describe("buildComputerMigrationReport", () => {
     });
   });
 
-  it("selects the most recently active Agent when a user has multiple legacy Agents", () => {
+  it("selects the workspace-backed Agent when a user has multiple legacy Agents", () => {
     const report = buildComputerMigrationReport({
       tenantId: "tenant-1",
       agents: [
-        BASE_AGENT,
+        {
+          ...BASE_AGENT,
+          id: "agent-1",
+          workspace_run_count: 12,
+          thread_count: 80,
+          adapter_type: "strands",
+        },
         {
           ...BASE_AGENT,
           id: "agent-2",
@@ -70,8 +80,8 @@ describe("buildComputerMigrationReport", () => {
       severity: "ready",
       recommendedAction: "create_computer",
       applyDisposition: "create",
-      primaryAgentId: "agent-2",
-      agentIds: ["agent-2", "agent-1"],
+      primaryAgentId: "agent-1",
+      agentIds: ["agent-1", "agent-2"],
     });
     expect(report.groups[0]?.reasons).toContain(
       "1 additional user-paired Agent(s) remain as delegated Agents",
