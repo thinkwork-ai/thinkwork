@@ -99,6 +99,22 @@ describe("migration 0069 — compliance schema foundation", () => {
 			);
 		});
 
+		it("blocks TRUNCATE on audit_events via BEFORE TRUNCATE STATEMENT trigger", () => {
+			// TRUNCATE bypasses BEFORE DELETE triggers in Postgres — without
+			// this trigger an actor with TRUNCATE privilege could wipe the
+			// entire audit log without surfacing the immutability error.
+			expect(migration0069).toMatch(
+				/CREATE TRIGGER audit_events_block_truncate\s+BEFORE TRUNCATE ON compliance\.audit_events\s+FOR EACH STATEMENT/,
+			);
+			expect(migration0069).toMatch(
+				/--\s*creates-trigger:\s*compliance\.audit_events\.audit_events_block_truncate\b/,
+			);
+		});
+
+		it("trigger function switches on TG_OP so a single function serves ROW + STATEMENT firings", () => {
+			expect(migration0069).toMatch(/IF TG_OP = 'TRUNCATE' THEN/);
+		});
+
 		it("uses idempotent DROP TRIGGER IF EXISTS before each CREATE TRIGGER", () => {
 			// Portable across Postgres versions — CREATE OR REPLACE TRIGGER is
 			// 14+ but DROP IF EXISTS works on every supported version.
@@ -107,6 +123,9 @@ describe("migration 0069 — compliance schema foundation", () => {
 			);
 			expect(migration0069).toMatch(
 				/DROP TRIGGER IF EXISTS audit_events_block_delete ON compliance\.audit_events/,
+			);
+			expect(migration0069).toMatch(
+				/DROP TRIGGER IF EXISTS audit_events_block_truncate ON compliance\.audit_events/,
 			);
 		});
 	});

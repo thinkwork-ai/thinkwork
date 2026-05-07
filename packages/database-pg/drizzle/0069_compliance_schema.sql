@@ -60,6 +60,7 @@
 -- creates-function: compliance.raise_immutable
 -- creates-trigger: compliance.audit_events.audit_events_block_update
 -- creates-trigger: compliance.audit_events.audit_events_block_delete
+-- creates-trigger: compliance.audit_events.audit_events_block_truncate
 
 \set ON_ERROR_STOP on
 
@@ -310,9 +311,16 @@ CREATE INDEX IF NOT EXISTS idx_export_jobs_actor_requested
 -- Immutability trigger function + per-table triggers
 --
 -- Defense-in-depth on top of the role grants U2 ships. Even if the
--- writer role is mis-granted UPDATE or DELETE on audit_events (config
--- drift, mistaken break-glass grant, future privileged role), the
--- triggers RAISE EXCEPTION before the change applies.
+-- writer role is mis-granted UPDATE/DELETE/TRUNCATE on audit_events
+-- (config drift, mistaken break-glass grant, future privileged role),
+-- the triggers RAISE EXCEPTION before the change applies.
+--
+-- TRUNCATE bypasses BEFORE DELETE triggers in Postgres — it has its own
+-- BEFORE TRUNCATE trigger that fires FOR EACH STATEMENT. Without the
+-- truncate trigger, an actor with TRUNCATE privilege could wipe the
+-- entire audit log without producing the immutability error. The
+-- trigger function below switches on TG_OP so a single function serves
+-- ROW-level (UPDATE/DELETE) and STATEMENT-level (TRUNCATE) firings.
 --
 -- DROP TRIGGER IF EXISTS + CREATE TRIGGER is the portable idempotent
 -- pattern; CREATE OR REPLACE TRIGGER is Postgres 14+ but DROP IF EXISTS
@@ -324,6 +332,9 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'TRUNCATE' THEN
+    RAISE EXCEPTION 'compliance.audit_events rows are immutable (TRUNCATE blocked)';
+  END IF;
   RAISE EXCEPTION 'compliance.audit_events rows are immutable (event_id=%)', COALESCE(OLD.event_id::text, NEW.event_id::text);
 END;
 $$;
@@ -338,6 +349,12 @@ DROP TRIGGER IF EXISTS audit_events_block_delete ON compliance.audit_events;
 CREATE TRIGGER audit_events_block_delete
 BEFORE DELETE ON compliance.audit_events
 FOR EACH ROW
+EXECUTE FUNCTION compliance.raise_immutable();
+
+DROP TRIGGER IF EXISTS audit_events_block_truncate ON compliance.audit_events;
+CREATE TRIGGER audit_events_block_truncate
+BEFORE TRUNCATE ON compliance.audit_events
+FOR EACH STATEMENT
 EXECUTE FUNCTION compliance.raise_immutable();
 
 COMMIT;
