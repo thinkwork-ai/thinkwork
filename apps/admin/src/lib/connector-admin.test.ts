@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DispatchTargetType } from "@/gql/graphql";
 import {
   LINEAR_TRACKER_STARTER_CONFIG,
+  connectorExecutionCleanupReason,
+  connectorExecutionLinearIdentifier,
+  connectorExecutionStateTone,
+  connectorExecutionThreadId,
   connectorFormValues,
   connectorTargetLabel,
   connectorTargetOptions,
@@ -175,5 +179,30 @@ describe("connector admin helpers", () => {
         manualTargetId: false,
       }),
     ).toBe(false);
+  });
+
+  it("extracts connector execution display fields from AWSJSON payloads", () => {
+    const payload = JSON.stringify({
+      threadId: "thread_1",
+      linear: { identifier: "TECH-58", title: "Pickup proof" },
+      cleanup: { reason: "duplicate_connector_pickup_loop" },
+    });
+
+    expect(connectorExecutionThreadId(payload)).toBe("thread_1");
+    expect(connectorExecutionLinearIdentifier(payload, "external_1")).toBe(
+      "TECH-58",
+    );
+    expect(connectorExecutionCleanupReason(payload)).toBe(
+      "duplicate_connector_pickup_loop",
+    );
+    expect(connectorExecutionLinearIdentifier({}, "external_1")).toBe(
+      "external_1",
+    );
+  });
+
+  it("styles terminal, active, and noisy connector execution states", () => {
+    expect(connectorExecutionStateTone("terminal")).toContain("green");
+    expect(connectorExecutionStateTone("dispatching")).toContain("blue");
+    expect(connectorExecutionStateTone("cancelled")).toContain("muted");
   });
 });

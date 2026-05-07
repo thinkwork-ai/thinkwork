@@ -1,8 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import type { FormEvent, ReactNode } from "react";
 import {
   Archive,
+  ExternalLink,
+  Filter,
+  History,
   Loader2,
   Network,
   Pause,
@@ -58,6 +61,7 @@ import {
 import {
   AgentsListQuery,
   ArchiveConnectorMutation,
+  ConnectorExecutionsListQuery,
   ConnectorsListQuery,
   CreateConnectorMutation,
   PauseConnectorMutation,
@@ -68,6 +72,10 @@ import {
 } from "@/lib/graphql-queries";
 import {
   connectorFormValues,
+  connectorExecutionCleanupReason,
+  connectorExecutionLinearIdentifier,
+  connectorExecutionStateTone,
+  connectorExecutionThreadId,
   connectorStatusTone,
   connectorTargetLabel,
   connectorTargetOptions,
@@ -80,6 +88,7 @@ import {
 } from "@/lib/connector-admin";
 import {
   ConnectorStatus,
+  ConnectorExecutionState,
   DispatchTargetType,
   type ConnectorFilter,
 } from "@/gql/graphql";
@@ -108,11 +117,28 @@ type ConnectorRow = {
 
 type ConnectorAction = (connector: ConnectorRow) => void | Promise<void>;
 
+type ConnectorExecutionRow = {
+  id: string;
+  tenantId: string;
+  connectorId: string;
+  externalRef: string;
+  currentState: ConnectorExecutionState;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorClass: string | null;
+  outcomePayload: unknown;
+  retryAttempt: number;
+  createdAt: string;
+};
+
 const MANUAL_TARGET_ID = "__manual_target_id__";
 
 function SymphonyPage() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [executionConnectorId, setExecutionConnectorId] = useState("all");
+  const [showCancelledRuns, setShowCancelledRuns] = useState(false);
   const [editing, setEditing] = useState<ConnectorRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [runningConnectorId, setRunningConnectorId] = useState<string | null>(
@@ -127,6 +153,19 @@ function SymphonyPage() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const selectedExecutionConnectorId =
+    executionConnectorId === "all" ? null : executionConnectorId;
+  const [executionsResult, refetchExecutions] = useQuery({
+    query: ConnectorExecutionsListQuery,
+    variables: {
+      connectorId: selectedExecutionConnectorId,
+      status: null,
+      limit: 50,
+      cursor: null,
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
   const [, createConnector] = useMutation(CreateConnectorMutation);
   const [, updateConnector] = useMutation(UpdateConnectorMutation);
   const [, pauseConnector] = useMutation(PauseConnectorMutation);
@@ -135,6 +174,19 @@ function SymphonyPage() {
   const [, runConnectorNow] = useMutation(RunConnectorNowMutation);
 
   const connectors = (result.data?.connectors ?? []) as ConnectorRow[];
+  const executions = (executionsResult.data?.connectorExecutions ??
+    []) as ConnectorExecutionRow[];
+  const connectorById = useMemo(
+    () => new Map(connectors.map((connector) => [connector.id, connector])),
+    [connectors],
+  );
+  const visibleExecutions = useMemo(() => {
+    if (showCancelledRuns) return executions;
+    return executions.filter(
+      (execution) =>
+        execution.currentState !== ConnectorExecutionState.Cancelled,
+    );
+  }, [executions, showCancelledRuns]);
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return connectors;
@@ -165,7 +217,10 @@ function SymphonyPage() {
   ).length;
   const isLoading = result.fetching && !result.data;
 
-  const refresh = () => refetch({ requestPolicy: "network-only" });
+  const refresh = () => {
+    refetch({ requestPolicy: "network-only" });
+    refetchExecutions({ requestPolicy: "network-only" });
+  };
   const handleCreate = async (values: ConnectorFormValues) => {
     const response = await createConnector({
       input: createConnectorInput(tenantId, values),
@@ -305,24 +360,96 @@ function SymphonyPage() {
           description="Create a connector row for the upcoming Symphony dispatch runtime."
           action={{ label: "New Connector", onClick: () => setCreating(true) }}
         />
-      ) : rows.length === 0 ? (
-        <p className="py-4 text-sm text-muted-foreground">
-          No matching connectors.
-        </p>
       ) : (
-        <DataTable
-          columns={connectorColumns({
-            onEdit: setEditing,
-            onPause: handlePause,
-            onResume: handleResume,
-            onArchive: handleArchive,
-            onRunNow: handleRunNow,
-            runningConnectorId,
-          })}
-          data={rows}
-          pageSize={20}
-          tableClassName="table-fixed"
-        />
+        <div className="space-y-8">
+          {rows.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No matching connectors.
+            </p>
+          ) : (
+            <DataTable
+              columns={connectorColumns({
+                onEdit: setEditing,
+                onPause: handlePause,
+                onResume: handleResume,
+                onArchive: handleArchive,
+                onRunNow: handleRunNow,
+                runningConnectorId,
+              })}
+              data={rows}
+              pageSize={20}
+              tableClassName="table-fixed"
+            />
+          )}
+
+          <section className="space-y-3">
+            <div className="flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-base font-semibold">Connector runs</h2>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {executionsResult.fetching && !executionsResult.data
+                    ? "Loading recent pickup history..."
+                    : `${visibleExecutions.length} visible of ${executions.length} recent executions`}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={executionConnectorId}
+                  onValueChange={setExecutionConnectorId}
+                >
+                  <SelectTrigger className="h-8 w-[220px] text-xs">
+                    <Filter className="h-3.5 w-3.5" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All connectors</SelectItem>
+                    {connectors.map((connector) => (
+                      <SelectItem key={connector.id} value={connector.id}>
+                        {connector.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant={showCancelledRuns ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => setShowCancelledRuns((value) => !value)}
+                >
+                  <Archive className="h-4 w-4" />
+                  {showCancelledRuns ? "Hide cancelled" : "Show cancelled"}
+                </Button>
+              </div>
+            </div>
+
+            {executionsResult.error ? (
+              <p className="text-sm text-destructive">
+                {executionsResult.error.message}
+              </p>
+            ) : visibleExecutions.length === 0 ? (
+              <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                No connector runs match the current filters.
+              </div>
+            ) : (
+              <DataTable
+                columns={connectorExecutionColumns({
+                  connectorById,
+                  onOpenThread: (threadId) =>
+                    navigate({
+                      to: "/threads/$threadId",
+                      params: { threadId },
+                    }),
+                })}
+                data={visibleExecutions}
+                pageSize={15}
+                tableClassName="table-fixed"
+              />
+            )}
+          </section>
+        </div>
       )}
 
       <ConnectorFormDialog
@@ -340,6 +467,134 @@ function SymphonyPage() {
       />
     </PageLayout>
   );
+}
+
+function connectorExecutionColumns(args: {
+  connectorById: Map<string, ConnectorRow>;
+  onOpenThread: (threadId: string) => void;
+}): ColumnDef<ConnectorExecutionRow>[] {
+  return [
+    {
+      accessorKey: "currentState",
+      header: "State",
+      cell: ({ row }) => (
+        <Badge
+          variant="secondary"
+          className={cn(
+            "text-xs font-medium",
+            connectorExecutionStateTone(row.original.currentState),
+          )}
+        >
+          {statusLabel(row.original.currentState)}
+        </Badge>
+      ),
+      size: 125,
+    },
+    {
+      accessorKey: "connectorId",
+      header: "Connector",
+      cell: ({ row }) => {
+        const connector = args.connectorById.get(row.original.connectorId);
+        return (
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {connector?.name ?? row.original.connectorId}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {connector?.type ?? row.original.connectorId}
+            </div>
+          </div>
+        );
+      },
+      size: 240,
+    },
+    {
+      accessorKey: "externalRef",
+      header: "External ref",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-mono text-xs">
+            {connectorExecutionLinearIdentifier(
+              row.original.outcomePayload,
+              row.original.externalRef,
+            )}
+          </div>
+          <div className="truncate font-mono text-xs text-muted-foreground">
+            {row.original.externalRef}
+          </div>
+        </div>
+      ),
+      size: 230,
+    },
+    {
+      id: "thread",
+      header: "Thread",
+      cell: ({ row }) => {
+        const threadId = connectorExecutionThreadId(
+          row.original.outcomePayload,
+        );
+        return threadId ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 max-w-full justify-start gap-1 px-2 font-mono text-xs"
+            onClick={() => args.onOpenThread(threadId)}
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{threadId}</span>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">No thread</span>
+        );
+      },
+      size: 220,
+    },
+    {
+      id: "details",
+      header: "Details",
+      cell: ({ row }) => {
+        const cleanupReason = connectorExecutionCleanupReason(
+          row.original.outcomePayload,
+        );
+        const detail = cleanupReason ?? row.original.errorClass;
+        return detail ? (
+          <span className="block truncate text-xs text-muted-foreground">
+            {statusLabel(detail)}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Attempt {row.original.retryAttempt + 1}
+          </span>
+        );
+      },
+      size: 220,
+    },
+    {
+      accessorKey: "startedAt",
+      header: "Started",
+      cell: ({ row }) => (
+        <div className="text-xs text-muted-foreground">
+          {row.original.startedAt
+            ? relativeTime(row.original.startedAt)
+            : relativeTime(row.original.createdAt)}
+        </div>
+      ),
+      size: 115,
+    },
+    {
+      accessorKey: "finishedAt",
+      header: "Finished",
+      cell: ({ row }) => (
+        <div className="text-xs text-muted-foreground">
+          {row.original.finishedAt
+            ? relativeTime(row.original.finishedAt)
+            : "—"}
+        </div>
+      ),
+      size: 115,
+    },
+  ];
 }
 
 function connectorColumns(actions: {

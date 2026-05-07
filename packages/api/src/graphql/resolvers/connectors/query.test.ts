@@ -112,11 +112,9 @@ describe("connector queries", () => {
   it("filters connector list by explicit status including archived", async () => {
     mockRows.mockReturnValueOnce([]);
 
-    await resolvers.connectors_(
-      null,
-      { filter: { status: "archived" } },
-      { auth: { tenantId: "tenant-a" } } as any,
-    );
+    await resolvers.connectors_(null, { filter: { status: "archived" } }, {
+      auth: { tenantId: "tenant-a" },
+    } as any);
 
     expect(mockWhere).toHaveBeenCalledWith({
       and: [
@@ -143,17 +141,15 @@ describe("connector queries", () => {
   });
 
   it("returns connector executions only after the parent connector is tenant-visible", async () => {
-    mockRows
-      .mockReturnValueOnce([{ id: "connector-a" }])
-      .mockReturnValueOnce([
-        {
-          id: "execution-1",
-          tenant_id: "tenant-a",
-          connector_id: "connector-a",
-          current_state: "pending",
-          external_ref: "ISSUE-1",
-        },
-      ]);
+    mockRows.mockReturnValueOnce([{ id: "connector-a" }]).mockReturnValueOnce([
+      {
+        id: "execution-1",
+        tenant_id: "tenant-a",
+        connector_id: "connector-a",
+        current_state: "pending",
+        external_ref: "ISSUE-1",
+      },
+    ]);
 
     const result = await resolvers.connectorExecutions(
       null,
@@ -178,6 +174,36 @@ describe("connector queries", () => {
       ],
     });
     expect(mockLimit).toHaveBeenLastCalledWith(100);
+  });
+
+  it("lists recent tenant connector executions without a connector filter", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "execution-1",
+        tenant_id: "tenant-a",
+        connector_id: "connector-a",
+        current_state: "terminal",
+        external_ref: "ISSUE-1",
+      },
+    ]);
+
+    const result = await resolvers.connectorExecutions(null, { limit: 10 }, {
+      auth: { tenantId: "tenant-a" },
+    } as any);
+
+    expect(result).toEqual([
+      {
+        id: "execution-1",
+        tenantId: "tenant-a",
+        connectorId: "connector-a",
+        currentState: "terminal",
+        externalRef: "ISSUE-1",
+      },
+    ]);
+    expect(mockWhere).toHaveBeenCalledTimes(1);
+    expect(mockWhere).toHaveBeenCalledWith({
+      and: [{ eq: ["connector_executions.tenant_id", "tenant-a"] }],
+    });
   });
 
   it("returns an empty execution list for a cross-tenant connector", async () => {

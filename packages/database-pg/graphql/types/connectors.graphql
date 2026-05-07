@@ -120,7 +120,7 @@ extend type Query {
   connectors(filter: ConnectorFilter, limit: Int, cursor: String): [Connector!]!
   connector(id: ID!): Connector
   connectorExecutions(
-    connectorId: ID!
+    connectorId: ID
     status: ConnectorExecutionState
     limit: Int
     cursor: String
