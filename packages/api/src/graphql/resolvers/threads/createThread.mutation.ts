@@ -6,6 +6,11 @@ import {
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
+import {
+	computerThreadCutoverEnabled,
+	enqueueComputerThreadTurn,
+	resolveThreadComputer,
+} from "../../../lib/computers/thread-cutover.js";
 
 export const createThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
@@ -14,6 +19,14 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		createdByType === "user"
 			? (await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById
 			: i.createdById;
+	const computerCutoverEnabled = computerThreadCutoverEnabled();
+	const threadComputer = computerCutoverEnabled
+		? await resolveThreadComputer({
+				tenantId: i.tenantId,
+				ownerUserId: createdByType === "user" ? createdById : null,
+				requestedComputerId: i.computerId ?? null,
+			})
+		: null;
 
 	// PRD-09 §9.4.4: Agent-created thread validation
 	if (createdByType === "agent" && createdById) {
@@ -64,6 +77,8 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			.values({
 				tenant_id: i.tenantId,
 				agent_id: i.agentId,
+				computer_id: threadComputer?.id,
+				user_id: threadComputer?.owner_user_id,
 				number: nextNumber,
 				identifier,
 				title: effectiveTitle,
@@ -106,6 +121,19 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		status: row.status,
 		title: row.title,
 	}).catch(() => {});
+
+	if (firstMessageId && row.computer_id && computerCutoverEnabled) {
+		await enqueueComputerThreadTurn({
+			tenantId: row.tenant_id,
+			computerId: row.computer_id,
+			threadId: row.id,
+			messageId: firstMessageId,
+			source: "chat_message",
+			actorType: createdByType,
+			actorId: createdById,
+		});
+		return threadToCamel(row);
+	}
 
 	// When a firstMessage was supplied AND the thread has an agent, dispatch the
 	// chat-agent Lambda so the agent starts responding. Mirrors sendMessage's

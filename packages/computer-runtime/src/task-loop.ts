@@ -82,6 +82,26 @@ export async function handleTask(
       ...delegation,
     };
   }
+  if (task.taskType === "thread_turn") {
+    const threadTurn = parseThreadTurnInput(task.input);
+    await api?.appendTaskEvent(task.id, {
+      eventType: "thread_turn_claimed",
+      level: "info",
+      payload: {
+        threadId: threadTurn.threadId,
+        messageId: threadTurn.messageId,
+        source: threadTurn.source,
+      },
+    });
+    return {
+      ok: true,
+      taskType: "thread_turn",
+      threadId: threadTurn.threadId,
+      messageId: threadTurn.messageId,
+      source: threadTurn.source,
+      claimed: true,
+    };
+  }
   if (task.taskType === "google_workspace_auth_check") {
     if (!api) throw new Error("Computer runtime API is required");
     const googleWorkspace = await api.checkGoogleWorkspaceConnection();
@@ -200,6 +220,21 @@ function parseCalendarUpcomingInput(input: unknown) {
       ? payload.maxResults
       : 10;
   return { timeMin, timeMax, maxResults };
+}
+
+function parseThreadTurnInput(input: unknown) {
+  const payload =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  return {
+    threadId: requiredString(payload.threadId, "threadId"),
+    messageId: requiredString(payload.messageId, "messageId"),
+    source:
+      typeof payload.source === "string" && payload.source.trim()
+        ? payload.source.trim()
+        : "chat_message",
+  };
 }
 
 function requiredString(value: unknown, name: string): string {

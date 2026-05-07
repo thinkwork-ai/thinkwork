@@ -13,6 +13,7 @@ describe("Computer task helpers", () => {
       "workspace_file_write",
     );
     expect(parseComputerTaskType("CONNECTOR_WORK")).toBe("connector_work");
+    expect(parseComputerTaskType("THREAD_TURN")).toBe("thread_turn");
     expect(parseComputerTaskType("GOOGLE_CLI_SMOKE")).toBe("google_cli_smoke");
     expect(parseComputerTaskType("GOOGLE_WORKSPACE_AUTH_CHECK")).toBe(
       "google_workspace_auth_check",
@@ -71,6 +72,23 @@ describe("Computer task helpers", () => {
         body: "Linear issue body",
       }),
     ).toThrow("connectorExecutionId is required");
+  });
+
+  it("normalizes Computer-owned thread turn input", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        threadId: "thread-1",
+        messageId: "message-1",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    ).toEqual({
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "chat_message",
+      actorType: "user",
+      actorId: "user-1",
+    });
   });
 
   it("rejects unsafe workspace paths", () => {

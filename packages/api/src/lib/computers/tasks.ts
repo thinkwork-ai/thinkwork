@@ -18,6 +18,7 @@ export const COMPUTER_TASK_TYPES = [
   "health_check",
   "workspace_file_write",
   "connector_work",
+  "thread_turn",
   "google_cli_smoke",
   "google_workspace_auth_check",
   "google_calendar_upcoming",
@@ -181,6 +182,10 @@ export function normalizeTaskInput(
     return normalizeConnectorWorkInput(input);
   }
 
+  if (taskType === "thread_turn") {
+    return normalizeThreadTurnInput(input);
+  }
+
   if (taskType === "workspace_file_write") {
     const payload = coerceObject(input);
     const path = requiredString(payload.path, "path");
@@ -225,6 +230,26 @@ function normalizeConnectorWorkInput(input: unknown): Record<string, unknown> {
     metadata:
       payload.metadata && typeof payload.metadata === "object"
         ? payload.metadata
+        : null,
+  };
+}
+
+function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
+  const payload = coerceObject(input);
+  return {
+    threadId: requiredString(payload.threadId, "threadId"),
+    messageId: requiredString(payload.messageId, "messageId"),
+    source:
+      typeof payload.source === "string" && payload.source.trim()
+        ? payload.source.trim()
+        : "chat_message",
+    actorType:
+      typeof payload.actorType === "string" && payload.actorType.trim()
+        ? payload.actorType.trim()
+        : null,
+    actorId:
+      typeof payload.actorId === "string" && payload.actorId.trim()
+        ? payload.actorId.trim()
         : null,
   };
 }

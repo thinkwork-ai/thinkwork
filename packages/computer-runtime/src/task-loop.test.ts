@@ -3,6 +3,47 @@ import { handleTask } from "./task-loop.js";
 import { listGoogleCalendarUpcomingWithGws } from "./google-workspace-cli.js";
 
 describe("Computer task loop", () => {
+  it("claims and records Computer-owned thread turns", async () => {
+    const api = {
+      appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-thread" }),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+    };
+
+    const output = await handleTask(
+      {
+        id: "task-thread",
+        taskType: "thread_turn",
+        input: {
+          threadId: "thread-1",
+          messageId: "message-1",
+          source: "chat_message",
+        },
+      },
+      "/workspace",
+      api,
+    );
+
+    expect(api.appendTaskEvent).toHaveBeenCalledWith("task-thread", {
+      eventType: "thread_turn_claimed",
+      level: "info",
+      payload: {
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "chat_message",
+      },
+    });
+    expect(output).toEqual({
+      ok: true,
+      taskType: "thread_turn",
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "chat_message",
+      claimed: true,
+    });
+  });
+
   it("checks Google Workspace connection status through the runtime API", async () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-1" }),
