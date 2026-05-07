@@ -6,10 +6,7 @@ import {
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-import {
-	computerThreadCutoverEnabled,
-	enqueueComputerThreadTurn,
-} from "../../../lib/computers/thread-cutover.js";
+import { enqueueComputerThreadTurn } from "../../../lib/computers/thread-cutover.js";
 
 export const sendMessage = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
@@ -69,11 +66,7 @@ export const sendMessage = async (_parent: any, args: any, ctx: GraphQLContext) 
 
 	// Direct async Lambda invocation for instant chat response.
 	// Falls back to wakeup queue if the Lambda ARN isn't available.
-	if (
-		i.role.toLowerCase() === "user" &&
-		thread.computer_id &&
-		computerThreadCutoverEnabled()
-	) {
+	if (i.role.toLowerCase() === "user" && thread.computer_id) {
 		await enqueueComputerThreadTurn({
 			tenantId: thread.tenant_id,
 			computerId: thread.computer_id,

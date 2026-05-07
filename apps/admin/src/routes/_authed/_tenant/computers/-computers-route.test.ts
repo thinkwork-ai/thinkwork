@@ -73,6 +73,10 @@ describe("Computers admin routes", () => {
     expect(liveTasksPanelSource).toContain(
       "tasks.find(taskHasGoogleWorkspaceSignal)",
     );
+    expect(liveTasksPanelSource).toContain("ComputerThreadsQuery");
+    expect(liveTasksPanelSource).toContain("threadTurnContext");
+    expect(liveTasksPanelSource).toContain("Managed agent");
+    expect(liveTasksPanelSource).toContain("Assistant response pending");
     expect(liveTasksPanelSource).not.toContain(
       "tasks.some(taskHasMissingGoogleCalendarScope)",
     );
@@ -88,6 +92,8 @@ describe("Computers admin routes", () => {
     expect(queriesSource).toContain("sourceAgent");
     expect(queriesSource).toContain("query MyComputer");
     expect(queriesSource).toContain("query ComputerEvents");
+    expect(queriesSource).toContain("query ComputerThreads");
+    expect(queriesSource).toContain("lastResponsePreview");
     expect(queriesSource).toContain("mutation UpdateComputer");
   });
 });

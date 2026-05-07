@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   ComputerTasksQuery,
+  ComputerThreadsQuery,
   EnqueueComputerTaskMutation,
 } from "@/lib/graphql-queries";
 import {
@@ -37,12 +38,28 @@ import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 
 type ComputerLiveTasksPanelProps = {
-  computer: Pick<Computer, "id" | "slug" | "runtimeStatus">;
+  computer: Pick<Computer, "id" | "tenantId" | "slug" | "runtimeStatus">;
   onChanged?: () => void;
 };
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 const GOOGLE_WORKSPACE_SCOPES = ["gmail", "calendar", "identity"];
+
+type ComputerThreadSummary = {
+  id: string;
+  identifier?: string | null;
+  title: string;
+  lastResponsePreview?: string | null;
+};
+
+type ThreadTurnContext = {
+  threadId: string;
+  threadLabel: string;
+  lastResponsePreview?: string | null;
+  dispatchedAgentId?: string | null;
+  dispatchStatus?: string | null;
+  source?: string | null;
+};
 
 function label(value: string | null | undefined): string {
   if (!value) return "—";
@@ -73,7 +90,59 @@ function taskTimestamp(task: {
   return `Queued ${relativeTime(task.createdAt)}`;
 }
 
-function outputSummary(output: unknown, error: unknown): string {
+function objectPayload(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringField(
+  payload: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = payload?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function shortId(value?: string | null): string {
+  return value ? value.slice(0, 8) : "—";
+}
+
+function threadTurnContext(
+  task: {
+    taskType: ComputerTaskType;
+    input?: unknown;
+    output?: unknown;
+  },
+  threadsById: Map<string, ComputerThreadSummary>,
+): ThreadTurnContext | null {
+  if (task.taskType !== ComputerTaskType.ThreadTurn) return null;
+
+  const input = objectPayload(task.input);
+  const output = objectPayload(task.output);
+  const threadId =
+    stringField(output, "threadId") ?? stringField(input, "threadId");
+  if (!threadId) return null;
+
+  const thread = threadsById.get(threadId);
+  return {
+    threadId,
+    threadLabel: thread?.identifier
+      ? `${thread.identifier}: ${thread.title}`
+      : (thread?.title ?? `Thread ${shortId(threadId)}`),
+    lastResponsePreview: thread?.lastResponsePreview ?? null,
+    dispatchedAgentId: stringField(output, "agentId"),
+    dispatchStatus: stringField(output, "status"),
+    source: stringField(output, "source") ?? stringField(input, "source"),
+  };
+}
+
+function outputSummary(
+  output: unknown,
+  error: unknown,
+  threadContext?: ThreadTurnContext | null,
+): string {
+  if (threadContext) return threadContext.threadLabel;
   const payload =
     error && typeof error === "object"
       ? (error as Record<string, unknown>)
@@ -199,18 +268,21 @@ function taskPayload(task: {
 
 function TaskResultRow({
   task,
+  threadContext = null,
   highlighted = false,
 }: {
   task: {
     id: string;
     taskType: ComputerTaskType;
     status: ComputerTaskStatus;
+    input?: unknown;
     output?: unknown;
     error?: unknown;
     completedAt?: string | null;
     claimedAt?: string | null;
     createdAt: string;
   };
+  threadContext?: ThreadTurnContext | null;
   highlighted?: boolean;
 }) {
   const Icon = taskIcon(task.status);
@@ -230,8 +302,30 @@ function TaskResultRow({
         <div className="min-w-0">
           <div className="break-words font-medium">{label(task.taskType)}</div>
           <div className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
-            {outputSummary(task.output, task.error)}
+            {outputSummary(task.output, task.error, threadContext)}
           </div>
+          {threadContext ? (
+            <div className="mt-2 space-y-1 rounded-md border bg-background/40 p-2 text-xs leading-relaxed">
+              <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                <span>
+                  Managed agent {shortId(threadContext.dispatchedAgentId)}
+                </span>
+                {threadContext.dispatchStatus ? (
+                  <Badge variant="outline" className="h-5 text-[11px]">
+                    {label(threadContext.dispatchStatus)}
+                  </Badge>
+                ) : null}
+                {threadContext.source ? (
+                  <span>{label(threadContext.source)}</span>
+                ) : null}
+              </div>
+              <div className="break-words text-foreground/90">
+                {threadContext.lastResponsePreview
+                  ? `Assistant: ${threadContext.lastResponsePreview}`
+                  : "Assistant response pending"}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="lg:text-center">
@@ -257,11 +351,25 @@ export function ComputerLiveTasksPanel({
     variables: { computerId: computer.id, limit: 8 },
     requestPolicy: "cache-and-network",
   });
+  const [threadsResult, reexecuteThreads] = useQuery({
+    query: ComputerThreadsQuery,
+    variables: {
+      tenantId: computer.tenantId,
+      computerId: computer.id,
+      limit: 12,
+    },
+    requestPolicy: "cache-and-network",
+  });
   const [{ fetching: enqueueing }, enqueueTask] = useMutation(
     EnqueueComputerTaskMutation,
   );
 
   const tasks = tasksResult.data?.computerTasks ?? [];
+  const threadsById = useMemo(() => {
+    return new Map(
+      (threadsResult.data?.threads ?? []).map((thread) => [thread.id, thread]),
+    );
+  }, [threadsResult.data?.threads]);
   const latestTask = tasks[0] ?? null;
   const historicalTasks = tasks.slice(1);
   const needsGoogleReconnect = useMemo(() => {
@@ -279,15 +387,31 @@ export function ComputerLiveTasksPanel({
       ),
     [tasks],
   );
+  const hasRecentThreadTurn = useMemo(
+    () =>
+      tasks.some((task) => {
+        if (task.taskType !== ComputerTaskType.ThreadTurn) return false;
+        const stamp = task.completedAt ?? task.createdAt;
+        return Date.now() - new Date(stamp).getTime() < 2 * 60_000;
+      }),
+    [tasks],
+  );
 
   useEffect(() => {
-    if (!hasOpenTask) return;
+    if (!hasOpenTask && !hasRecentThreadTurn) return;
     const timer = window.setInterval(() => {
       reexecuteTasks({ requestPolicy: "network-only" });
+      reexecuteThreads({ requestPolicy: "network-only" });
       onChanged?.();
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [hasOpenTask, onChanged, reexecuteTasks]);
+  }, [
+    hasOpenTask,
+    hasRecentThreadTurn,
+    onChanged,
+    reexecuteTasks,
+    reexecuteThreads,
+  ]);
 
   async function enqueueRuntimeTask(
     taskType: ComputerTaskType,
@@ -309,6 +433,7 @@ export function ComputerLiveTasksPanel({
     }
     toast.success(`${label(taskType)} queued`);
     reexecuteTasks({ requestPolicy: "network-only" });
+    reexecuteThreads({ requestPolicy: "network-only" });
     onChanged?.();
   }
 
@@ -358,7 +483,8 @@ export function ComputerLiveTasksPanel({
       <CardHeader>
         <CardTitle>Live Runtime</CardTitle>
         <CardDescription>
-          Queue checks against the running Computer and review the latest result.
+          Queue checks against the running Computer and review the latest
+          result.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -467,6 +593,10 @@ export function ComputerLiveTasksPanel({
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
             {tasksResult.error.message}
           </div>
+        ) : threadsResult.error ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+            {threadsResult.error.message}
+          </div>
         ) : tasks.length === 0 ? (
           <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
             No runtime tasks yet.
@@ -484,7 +614,11 @@ export function ComputerLiveTasksPanel({
                 >
                   Latest Result
                 </h3>
-                <TaskResultRow task={latestTask} highlighted />
+                <TaskResultRow
+                  task={latestTask}
+                  threadContext={threadTurnContext(latestTask, threadsById)}
+                  highlighted
+                />
               </section>
             ) : null}
             <section className="space-y-2" aria-labelledby="task-history-title">
@@ -506,7 +640,11 @@ export function ComputerLiveTasksPanel({
               ) : (
                 <div className="divide-y rounded-md border">
                   {historicalTasks.map((task) => (
-                    <TaskResultRow key={task.id} task={task} />
+                    <TaskResultRow
+                      key={task.id}
+                      task={task}
+                      threadContext={threadTurnContext(task, threadsById)}
+                    />
                   ))}
                 </div>
               )}

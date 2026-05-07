@@ -7,7 +7,6 @@ import {
 import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
-	computerThreadCutoverEnabled,
 	enqueueComputerThreadTurn,
 	resolveThreadComputer,
 } from "../../../lib/computers/thread-cutover.js";
@@ -19,14 +18,11 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		createdByType === "user"
 			? (await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById
 			: i.createdById;
-	const computerCutoverEnabled = computerThreadCutoverEnabled();
-	const threadComputer = computerCutoverEnabled
-		? await resolveThreadComputer({
-				tenantId: i.tenantId,
-				ownerUserId: createdByType === "user" ? createdById : null,
-				requestedComputerId: i.computerId ?? null,
-			})
-		: null;
+	const threadComputer = await resolveThreadComputer({
+		tenantId: i.tenantId,
+		ownerUserId: createdByType === "user" ? createdById : null,
+		requestedComputerId: i.computerId ?? null,
+	});
 
 	// PRD-09 §9.4.4: Agent-created thread validation
 	if (createdByType === "agent" && createdById) {
@@ -76,7 +72,7 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			.insert(threads)
 			.values({
 				tenant_id: i.tenantId,
-				agent_id: i.agentId,
+				agent_id: threadComputer ? null : i.agentId,
 				computer_id: threadComputer?.id,
 				user_id: threadComputer?.owner_user_id,
 				number: nextNumber,
@@ -122,7 +118,7 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		title: row.title,
 	}).catch(() => {});
 
-	if (firstMessageId && row.computer_id && computerCutoverEnabled) {
+	if (firstMessageId && row.computer_id) {
 		await enqueueComputerThreadTurn({
 			tenantId: row.tenant_id,
 			computerId: row.computer_id,
