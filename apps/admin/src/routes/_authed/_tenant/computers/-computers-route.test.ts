@@ -65,6 +65,8 @@ describe("Computers admin routes", () => {
       "ComputerTaskType.GoogleCalendarUpcoming",
     );
     expect(liveTasksPanelSource).toContain("Google Calendar token unavailable");
+    expect(liveTasksPanelSource).toContain("Reconnect Google");
+    expect(liveTasksPanelSource).toContain("GOOGLE_WORKSPACE_SCOPES");
     expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
     expect(liveTasksPanelSource).not.toContain("CardAction");
     expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");

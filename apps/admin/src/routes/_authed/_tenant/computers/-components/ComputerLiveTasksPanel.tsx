@@ -2,9 +2,11 @@ import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "urql";
 import {
   Activity,
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Clock,
+  ExternalLink,
   FileText,
   KeyRound,
   Loader2,
@@ -31,11 +33,16 @@ import {
   type Computer,
 } from "@/gql/graphql";
 import { relativeTime } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import { useTenant } from "@/context/TenantContext";
 
 type ComputerLiveTasksPanelProps = {
   computer: Pick<Computer, "id" | "slug" | "runtimeStatus">;
   onChanged?: () => void;
 };
+
+const API_URL = import.meta.env.VITE_API_URL || "";
+const GOOGLE_WORKSPACE_SCOPES = ["gmail", "calendar", "identity"];
 
 function label(value: string | null | undefined): string {
   if (!value) return "—";
@@ -125,10 +132,43 @@ function outputSummary(output: unknown, error: unknown): string {
   return "Output recorded";
 }
 
+function taskHasMissingGoogleCalendarScope(task: {
+  output?: unknown;
+  error?: unknown;
+}): boolean {
+  const payload =
+    task.error && typeof task.error === "object"
+      ? (task.error as Record<string, unknown>)
+      : task.output && typeof task.output === "object"
+        ? (task.output as Record<string, unknown>)
+        : null;
+  if (!payload) return false;
+
+  const googleCalendar = payload.googleCalendar;
+  if (googleCalendar && typeof googleCalendar === "object") {
+    const calendarPayload = googleCalendar as Record<string, unknown>;
+    return calendarPayload.reason === "missing_google_calendar_scope";
+  }
+
+  const googleWorkspace = payload.googleWorkspace;
+  if (googleWorkspace && typeof googleWorkspace === "object") {
+    const workspacePayload = googleWorkspace as Record<string, unknown>;
+    const missingScopes = workspacePayload.missingScopes;
+    return (
+      Array.isArray(missingScopes) &&
+      missingScopes.includes("https://www.googleapis.com/auth/calendar")
+    );
+  }
+
+  return false;
+}
+
 export function ComputerLiveTasksPanel({
   computer,
   onChanged,
 }: ComputerLiveTasksPanelProps) {
+  const { user } = useAuth();
+  const { tenant } = useTenant();
   const [tasksResult, reexecuteTasks] = useQuery({
     query: ComputerTasksQuery,
     variables: { computerId: computer.id, limit: 8 },
@@ -139,6 +179,10 @@ export function ComputerLiveTasksPanel({
   );
 
   const tasks = tasksResult.data?.computerTasks ?? [];
+  const needsGoogleReconnect = useMemo(
+    () => tasks.some(taskHasMissingGoogleCalendarScope),
+    [tasks],
+  );
   const hasOpenTask = useMemo(
     () =>
       tasks.some(
@@ -179,6 +223,21 @@ export function ComputerLiveTasksPanel({
     toast.success(`${label(taskType)} queued`);
     reexecuteTasks({ requestPolicy: "network-only" });
     onChanged?.();
+  }
+
+  function reconnectGoogleWorkspace() {
+    if (!API_URL || !tenant?.id || !user?.sub) {
+      toast.error("Google reconnect is not ready for this session");
+      return;
+    }
+
+    const authUrl = new URL("/api/oauth/authorize", API_URL);
+    authUrl.searchParams.set("provider", "google_productivity");
+    authUrl.searchParams.set("scopes", GOOGLE_WORKSPACE_SCOPES.join(","));
+    authUrl.searchParams.set("userId", user.sub);
+    authUrl.searchParams.set("tenantId", tenant.id);
+    authUrl.searchParams.set("returnUrl", window.location.href);
+    window.location.assign(authUrl.toString());
   }
 
   function enqueueWorkspaceMarker() {
@@ -281,6 +340,31 @@ export function ComputerLiveTasksPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {needsGoogleReconnect ? (
+          <div className="flex flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div className="min-w-0">
+                <div className="font-medium text-foreground">
+                  Google Calendar scope missing
+                </div>
+                <div className="text-xs leading-relaxed text-muted-foreground">
+                  Reconnect Google Workspace to let this Computer read upcoming
+                  calendar events.
+                </div>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={reconnectGoogleWorkspace}
+              className="shrink-0"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Reconnect Google
+            </Button>
+          </div>
+        ) : null}
         {tasksResult.error ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
             {tasksResult.error.message}
