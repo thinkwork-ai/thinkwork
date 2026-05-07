@@ -27,6 +27,19 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 			);
 		});
 
+		it("guards against missing compliance schema (out-of-order apply vs U1)", () => {
+			// CREATE ROLE is not transactional in Postgres — without this
+			// pre-flight the 0070 apply against a DB without 0069 would
+			// leave roles with passwords but zero grants, and the drift
+			// gate would report APPLIED, masking the partial state.
+			expect(migration0070).toMatch(
+				/IF NOT EXISTS \(SELECT FROM information_schema\.schemata WHERE schema_name = 'compliance'\)/,
+			);
+			expect(migration0070).toMatch(
+				/RAISE EXCEPTION 'compliance schema missing[^']*0069/,
+			);
+		});
+
 		it("uses the canonical lock_timeout / statement_timeout pattern", () => {
 			expect(migration0070).toMatch(/SET LOCAL lock_timeout = '5s'/);
 			expect(migration0070).toMatch(/SET LOCAL statement_timeout = '60s'/);
@@ -193,5 +206,26 @@ describe("migration 0070 — compliance Aurora roles + grants", () => {
 			expect(formatMatches?.length ?? 0).toBeGreaterThanOrEqual(6);
 			// 6 = 3 roles × 2 branches (CREATE + ALTER)
 		});
+
+		it.each([
+			["compliance_writer", "writer_pass"],
+			["compliance_drainer", "drainer_pass"],
+			["compliance_reader", "reader_pass"],
+		])(
+			"%s has both CREATE and ALTER format(%%L) branches with the matching variable",
+			(role, passVar) => {
+				// Per-role assertion catches a missing branch that the
+				// >=6-count assertion above would silently pass — e.g. if a
+				// future edit drops the ALTER branch on one role.
+				const createPattern = new RegExp(
+					`format\\('CREATE ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
+				);
+				const alterPattern = new RegExp(
+					`format\\('ALTER ROLE ${role}[^']+%L'\\s*,\\s*:'${passVar}'\\)`,
+				);
+				expect(migration0070).toMatch(createPattern);
+				expect(migration0070).toMatch(alterPattern);
+			},
+		);
 	});
 });

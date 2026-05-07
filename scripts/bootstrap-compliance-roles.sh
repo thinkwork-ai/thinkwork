@@ -55,6 +55,27 @@ if [[ -z "${STAGE:-}" ]]; then
   exit 2
 fi
 
+# Stage allowlist gate. The bootstrap rotates Aurora role passwords + writes
+# Secrets Manager values; running it against the wrong stage is a SOC2-grade
+# operator footgun (auditable credential rotation by accident). Require an
+# explicit CONFIRM_NONDEV=1 acknowledgement for anything that isn't dev so a
+# typo or shell-history misfire doesn't ALTER ROLE on staging or prod.
+case "$STAGE" in
+  dev) ;;
+  staging|prod)
+    if [[ "${CONFIRM_NONDEV:-}" != "1" ]]; then
+      echo "STAGE=$STAGE detected. Re-run with CONFIRM_NONDEV=1 to acknowledge." >&2
+      echo "  This script ALTERs Aurora role passwords + rotates Secrets Manager." >&2
+      exit 2
+    fi
+    echo "==> CONFIRM_NONDEV=1 acknowledged for STAGE=$STAGE" >&2
+    ;;
+  *)
+    echo "STAGE=$STAGE not in known allowlist (dev|staging|prod). Refusing." >&2
+    exit 2
+    ;;
+esac
+
 if [[ ! -f "$MIGRATION_FILE" ]]; then
   echo "migration not found: $MIGRATION_FILE" >&2
   exit 2
@@ -81,7 +102,11 @@ DB_SECRET_RAW="$(aws secretsmanager get-secret-value \
 
 DB_USER="$(echo "$DB_SECRET_RAW" | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["username"])')"
 DB_PASS="$(echo "$DB_SECRET_RAW" | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["password"])')"
-DB_PASS_URL="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASS")"
+# Read password from stdin so it never appears in argv / `ps aux` /
+# /proc/<pid>/cmdline. Argv is readable to any co-located process; the
+# master Aurora password is too sensitive to expose for the lifetime of
+# even a short subprocess.
+DB_PASS_URL="$(printf '%s' "$DB_PASS" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')"
 
 DB_HOST="thinkwork-${STAGE}-db-1.cmfgkg8u8sgf.us-east-1.rds.amazonaws.com"
 DB_PORT="5432"
@@ -104,17 +129,45 @@ generate_pass() {
   openssl rand -base64 32 | tr -d '=+/' | head -c 32
 }
 
+# Resolve role passwords with three-way precedence so the script is safe
+# to re-run from CI on every deploy without rotating credentials:
+#   1. Operator-supplied env var (COMPLIANCE_X_PASS) — explicit override.
+#   2. Existing Secrets Manager value — re-runs preserve current passwords.
+#   3. Auto-generated via openssl — only on greenfield bootstrap.
+#
+# Plaintext values are never echoed — emitting "==> Generated VAR=$value"
+# would persist the credential in any log aggregator (CloudWatch, GHA
+# logs) or operator shell history. Operators retrieve any generated
+# value from Secrets Manager:
+#   aws secretsmanager get-secret-value --region "$AWS_REGION" \
+#     --secret-id "thinkwork/${STAGE}/compliance/<role>-credentials" \
+#     --query SecretString --output text | jq -r .password
+
+resolve_role_pass() {
+  local role="$1"
+  local secret_id="thinkwork/${STAGE}/compliance/${role}-credentials"
+  local existing
+  # Try to read the existing secret value (mode-0 stderr suppression so
+  # ResourceNotFoundException doesn't pollute the operator log).
+  existing="$(aws secretsmanager get-secret-value \
+    --region "$AWS_REGION" \
+    --secret-id "$secret_id" \
+    --query SecretString --output text 2>/dev/null || true)"
+  if [[ -n "$existing" ]]; then
+    printf '%s' "$existing" | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["password"])'
+  else
+    generate_pass
+  fi
+}
+
 if [[ -z "${COMPLIANCE_WRITER_PASS:-}" ]]; then
-  COMPLIANCE_WRITER_PASS="$(generate_pass)"
-  echo "==> Generated COMPLIANCE_WRITER_PASS=$COMPLIANCE_WRITER_PASS (capture this)" >&2
+  COMPLIANCE_WRITER_PASS="$(resolve_role_pass writer)"
 fi
 if [[ -z "${COMPLIANCE_DRAINER_PASS:-}" ]]; then
-  COMPLIANCE_DRAINER_PASS="$(generate_pass)"
-  echo "==> Generated COMPLIANCE_DRAINER_PASS=$COMPLIANCE_DRAINER_PASS (capture this)" >&2
+  COMPLIANCE_DRAINER_PASS="$(resolve_role_pass drainer)"
 fi
 if [[ -z "${COMPLIANCE_READER_PASS:-}" ]]; then
-  COMPLIANCE_READER_PASS="$(generate_pass)"
-  echo "==> Generated COMPLIANCE_READER_PASS=$COMPLIANCE_READER_PASS (capture this)" >&2
+  COMPLIANCE_READER_PASS="$(resolve_role_pass reader)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -132,20 +185,30 @@ put_secret_value() {
   local password="$2"
   local secret_id="thinkwork/${STAGE}/compliance/${role}-credentials"
 
-  local payload
-  payload="$(jq -n \
+  # Build the JSON payload in a mode-0600 temp file rather than passing it
+  # through `--secret-string "$payload"`. argv is visible in `ps aux` and
+  # /proc/<pid>/cmdline for the lifetime of the AWS CLI subprocess. Reading
+  # via `file://` keeps the credential off the process table entirely.
+  local payload_file
+  payload_file="$(mktemp)"
+  chmod 600 "$payload_file"
+  # shellcheck disable=SC2064  # we want the trap to use the *current* value
+  trap "rm -f '$payload_file'" RETURN
+
+  jq -n \
     --arg user "compliance_${role}" \
     --arg pass "$password" \
     --arg host "$DB_HOST" \
     --arg port "$DB_PORT" \
     --arg dbname "$DB_NAME" \
-    '{username: $user, password: $pass, host: $host, port: $port, dbname: $dbname}')"
+    '{username: $user, password: $pass, host: $host, port: $port, dbname: $dbname}' \
+    > "$payload_file"
 
   echo "==> Populating $secret_id" >&2
   aws secretsmanager put-secret-value \
     --region "$AWS_REGION" \
     --secret-id "$secret_id" \
-    --secret-string "$payload" \
+    --secret-string "file://$payload_file" \
     >/dev/null
 }
 
@@ -164,18 +227,43 @@ put_secret_value "reader" "$COMPLIANCE_READER_PASS"
 # ---------------------------------------------------------------------------
 
 echo "==> Applying migration $MIGRATION_FILE" >&2
-psql "$DATABASE_URL" \
-  -v writer_pass="$COMPLIANCE_WRITER_PASS" \
-  -v drainer_pass="$COMPLIANCE_DRAINER_PASS" \
-  -v reader_pass="$COMPLIANCE_READER_PASS" \
-  -f "$MIGRATION_FILE"
+
+# Write the password \set directives to a mode-0600 preamble file rather
+# than passing them via `psql -v writer_pass=...`. The -v form puts each
+# password literal in argv where it's readable via `ps aux` for the full
+# psql session (including the lock_timeout wait window). The preamble
+# file is consumed before the migration so :'writer_pass' substitutes
+# correctly inside the migration's DO blocks.
+PSQL_PREAMBLE="$(mktemp)"
+chmod 600 "$PSQL_PREAMBLE"
+trap "rm -f '$PSQL_PREAMBLE'" EXIT
+
+# Quote each password for psql variable assignment. Single-quoted form
+# requires escaping any embedded single quotes; generate_pass() and
+# operator-supplied values from the COMPLIANCE_*_PASS env vars are both
+# pre-stripped of `=+/` and shell-metas, so the simple `'...'` form is
+# safe — but the gsub handles any operator who deliberately supplies a
+# password with quotes.
+escape_psql() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+cat > "$PSQL_PREAMBLE" <<EOF
+\set writer_pass '$(escape_psql "$COMPLIANCE_WRITER_PASS")'
+\set drainer_pass '$(escape_psql "$COMPLIANCE_DRAINER_PASS")'
+\set reader_pass '$(escape_psql "$COMPLIANCE_READER_PASS")'
+EOF
+
+psql "$DATABASE_URL" -f "$PSQL_PREAMBLE" -f "$MIGRATION_FILE"
 
 # ---------------------------------------------------------------------------
 # 5. Verify roles exist + drift gate exits 0.
 # ---------------------------------------------------------------------------
 
 echo "==> Verifying compliance roles" >&2
-psql "$DATABASE_URL" -c "\du compliance_writer compliance_drainer compliance_reader"
+# `\du` accepts ONE optional pattern; passing three space-separated names
+# matches nothing. Use the glob form to list all compliance_* roles.
+psql "$DATABASE_URL" -c "\du compliance_*"
 
 if [[ -x "$REPO_ROOT/scripts/db-migrate-manual.sh" ]]; then
   echo "==> Running drift gate (expect exit 0)" >&2

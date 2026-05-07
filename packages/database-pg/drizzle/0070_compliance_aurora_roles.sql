@@ -60,6 +60,20 @@ BEGIN
   END IF;
 END $$;
 
+-- Refuse to apply if the U1 compliance schema is missing. PostgreSQL
+-- CREATE ROLE is NOT transactional — it commits to pg_authid before the
+-- subsequent GRANT statements run, so a 0070 apply against a database
+-- without 0069 would leave three roles with passwords but zero grants.
+-- The drift gate then probes pg_roles and reports APPLIED, masking the
+-- partial state. This guard converts the silent partial failure into a
+-- hard stop before any role creation.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM information_schema.schemata WHERE schema_name = 'compliance') THEN
+    RAISE EXCEPTION 'compliance schema missing: apply drizzle/0069_compliance_schema.sql first (U1, PR #880)';
+  END IF;
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- Role creation (idempotent)
 --
