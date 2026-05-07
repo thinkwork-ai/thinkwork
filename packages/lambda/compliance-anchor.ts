@@ -38,11 +38,8 @@
 
 import { createHash } from "node:crypto";
 import { createDb, type Database } from "@thinkwork/database-pg";
-import {
-	auditEvents,
-	tenantAnchorState,
-} from "@thinkwork/database-pg/schema";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { tenantAnchorState } from "@thinkwork/database-pg/schema";
+import { sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import {
 	S3Client,

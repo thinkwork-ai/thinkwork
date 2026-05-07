@@ -33,11 +33,10 @@
 
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { createHash } from "node:crypto";
-import { eq, inArray, and, gt } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { createDb, type Database } from "@thinkwork/database-pg";
 import {
 	auditEvents,
-	auditOutbox,
 	tenantAnchorState,
 } from "@thinkwork/database-pg/schema";
 import {
