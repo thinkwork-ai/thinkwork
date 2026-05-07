@@ -22,9 +22,18 @@ const CHANNEL_PREFIX: Record<string, string> = {
 	webhook: "HOOK",
 	api: "API",
 	task: "TASK",
+	connector: "CONN",
 };
 
-export type ThreadChannel = "chat" | "email" | "schedule" | "manual" | "webhook" | "api" | "task";
+export type ThreadChannel =
+	| "chat"
+	| "email"
+	| "schedule"
+	| "manual"
+	| "webhook"
+	| "api"
+	| "task"
+	| "connector";
 
 interface EnsureThreadOpts {
 	tenantId: string;

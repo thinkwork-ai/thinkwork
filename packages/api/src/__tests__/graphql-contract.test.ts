@@ -188,6 +188,13 @@ describe("GraphQL Schema Contract", () => {
 	describe("0.2.0 SDK surface additions", () => {
 		const schema = buildSchema(loadFullSchema());
 
+		it("ThreadChannel includes connector-created work", () => {
+			const enumType = schema.getType("ThreadChannel");
+			expect(enumType).toBeDefined();
+			const values = (enumType as any).getValues().map((value: { name: string }) => value.name);
+			expect(values).toContain("CONNECTOR");
+		});
+
 		it("CreateThreadInput accepts firstMessage for atomic create-and-send", () => {
 			const inputType = schema.getType("CreateThreadInput");
 			expect(inputType).toBeDefined();
