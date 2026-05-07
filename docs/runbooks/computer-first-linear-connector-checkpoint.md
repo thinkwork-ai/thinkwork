@@ -13,6 +13,15 @@ This proof is Linear-only. It does not prove Slack, GitHub, Google Workspace, au
 - The tenant has an active Linear credential, usually the `linear` credential slug.
 - The Symphony connector is active, enabled, type `linear_tracker`, and targets a Computer.
 - The connector config filters on the `symphony` Linear label. Do not use `symphony-eligible` for this proof.
+- The deployed connector poller schedule is enabled. For dev:
+
+```bash
+aws scheduler get-schedule \
+  --region us-east-1 \
+  --group-name default \
+  --name thinkwork-dev-connector-poller
+```
+
 - Any old Symphony process or temporary dev-only poller that also watches the tenant is stopped.
 - The Linear issue used for the proof is fresh and has not previously been seen by this connector.
 
@@ -43,8 +52,10 @@ Other config fields can narrow the team, project, or issue count, but the checkp
 
 1. Create a new Linear issue with a unique title.
 2. Add only the `symphony` label for the connector proof.
-3. Wait for the scheduled connector poller, or use **Run now** on the Symphony connector.
-4. Leave the issue open until the first pickup path has been verified.
+3. Wait for the scheduled connector poller. The dev schedule currently runs once per minute; allow at least two schedule windows before declaring failure.
+4. Do not manually invoke the poller Lambda for the checkpoint path. Manual invocation and **Run now** are debugging fallbacks after the unattended path fails.
+5. Confirm Linear moves the issue to **In Progress** after Thinkwork claims it. The connector should not add repeated pickup comments.
+6. Leave the issue open until the first pickup path has been verified.
 
 ## Verify In Admin
 
@@ -65,6 +76,19 @@ Then verify the Computer-owned side:
 ## Optional SQL Checks
 
 Use these checks when the UI is unclear. Replace the placeholders with the deployed tenant, connector, Computer, or Linear issue values.
+
+```sql
+select
+  id,
+  last_poll_at,
+  next_poll_at,
+  status,
+  enabled,
+  config -> 'issueQuery' -> 'labels' as labels,
+  updated_at
+from connectors
+where id = '<connector uuid>';
+```
 
 ```sql
 select
@@ -141,18 +165,20 @@ For the checkpoint, pass means:
 - one Computer task exists for that external reference
 - one `connector_work_received` event exists for that task
 - one Computer-owned connector thread exists for that external reference
+- the Linear issue has moved to `In Progress` without duplicate pickup comments
 
 ## Failure Signals
 
-| Symptom                                           | Likely check                                                                                                               |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| No execution appears                              | Connector is disabled, wrong credential, wrong Linear team/project filter, or the issue does not have the `symphony` label |
-| Execution fails before handoff                    | Linear credential or poller runtime failed; inspect connector run details and Lambda logs                                  |
-| Execution is terminal but no Computer task exists | Handoff runtime is not deployed or the connector target is not a valid Computer                                            |
-| Thread is assigned to an Agent                    | Connector is still using an advanced Agent target instead of a Computer target                                             |
-| Repeated Linear pickup notifications              | Duplicate/idempotency behavior regressed, or another Symphony process is watching the same issue                           |
-| UI still shows old issue label                    | The connector config still filters on `symphony-eligible`; update it to `symphony`                                         |
+| Symptom                                           | Likely check                                                                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No execution appears after two scheduler windows  | Connector is disabled, `next_poll_at` is still in the future, wrong credential, wrong Linear team/project filter, or the issue does not have the `symphony` label |
+| Execution fails before handoff                    | Linear credential or poller runtime failed; inspect connector run details and Lambda logs                                                                         |
+| Execution is terminal but no Computer task exists | Handoff runtime is not deployed or the connector target is not a valid Computer                                                                                   |
+| Thread is assigned to an Agent                    | Connector is still using an advanced Agent target instead of a Computer target                                                                                    |
+| Repeated Linear pickup notifications              | Duplicate/idempotency behavior regressed, or another Symphony process is watching the same issue                                                                  |
+| Linear card stays in Todo                         | Linear writeback failed, the target workflow lacks an `In Progress` state, or the connector credential lacks issue update permission                              |
+| UI still shows old issue label                    | The connector config still filters on `symphony-eligible`; update it to `symphony`                                                                                |
 
 ## Exit Criteria
 
-The checkpoint is complete when one fresh Linear issue labeled `symphony` produces exactly one terminal connector execution, one Computer task/event handoff, and one Computer-owned connector thread. Treat that as proof of the Linear connector path only; the broader connector-platform roadmap remains active follow-on work.
+The checkpoint is complete when one fresh Linear issue labeled `symphony` moves to `In Progress` and produces exactly one terminal connector execution, one Computer task/event handoff, one Computer-owned connector thread, one completed delegation, one succeeded thread turn, and one Symphony Runs lifecycle row without manual Lambda invocation. The connector row should also show a recent `last_poll_at` and future `next_poll_at`. Treat that as proof of the Linear connector path only; the broader connector-platform roadmap remains active follow-on work.

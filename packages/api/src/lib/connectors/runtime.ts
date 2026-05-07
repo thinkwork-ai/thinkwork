@@ -13,9 +13,12 @@ import {
 import { db as defaultDb, type Database } from "../db.js";
 import {
   fetchLinearIssues as defaultFetchLinearIssues,
+  moveLinearIssueToState as defaultMoveLinearIssueToState,
   parseLinearIssueQueryConfig,
   type LinearApiIssue,
   type LinearFetchOptions,
+  type LinearMoveIssueStateOptions,
+  type LinearMoveIssueStateResult,
 } from "./linear.js";
 import { readTenantCredentialSecret as defaultReadTenantCredentialSecret } from "../tenant-credentials/secret-store.js";
 import { normalizeTaskInput } from "../computers/tasks.js";
@@ -157,6 +160,11 @@ export interface ConnectorRuntimeStore {
     now: Date;
     error: string;
   }): Promise<void>;
+  markConnectorPolled(args: {
+    connectorId: string;
+    now: Date;
+    nextPollAt: Date;
+  }): Promise<void>;
   loadTenantCredential(args: {
     tenantId: string;
     credentialId?: string;
@@ -168,6 +176,10 @@ export type LinearIssueFetcher = (
   options: LinearFetchOptions,
 ) => Promise<LinearApiIssue[]>;
 
+export type LinearIssueStateMover = (
+  options: LinearMoveIssueStateOptions,
+) => Promise<LinearMoveIssueStateResult>;
+
 export type TenantCredentialSecretReader = (
   secretRef: string,
 ) => Promise<Record<string, unknown>>;
@@ -176,6 +188,7 @@ export interface ConnectorRuntimeDeps {
   store?: ConnectorRuntimeStore;
   invokeAgent?: AgentInvoker;
   fetchLinearIssues?: LinearIssueFetcher;
+  moveLinearIssueToState?: LinearIssueStateMover;
   readTenantCredentialSecret?: TenantCredentialSecretReader;
 }
 
@@ -185,6 +198,8 @@ const ACTIVE_EXECUTION_STATES = [
   "invoking",
   "recording_result",
 ];
+
+const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
 export async function runConnectorDispatchTick(
   options: ConnectorRuntimeTickOptions = {},
@@ -226,6 +241,7 @@ export async function runConnectorDispatchTick(
         connectorId: connector.id,
         error: error instanceof Error ? error.message : String(error),
       });
+      await markConnectorPolled(store, connector.id, now);
       continue;
     }
     if (candidates.length === 0) {
@@ -234,14 +250,26 @@ export async function runConnectorDispatchTick(
         connectorId: connector.id,
         reason: "no_dispatch_candidates",
       });
+      await markConnectorPolled(store, connector.id, now);
       continue;
     }
 
     for (const candidate of candidates) {
       results.push(
-        await dispatchCandidate({ store, connector, candidate, now }),
+        await dispatchCandidate({
+          store,
+          connector,
+          candidate,
+          now,
+          moveLinearIssueToState:
+            deps.moveLinearIssueToState ?? defaultMoveLinearIssueToState,
+          readTenantCredentialSecret:
+            deps.readTenantCredentialSecret ??
+            defaultReadTenantCredentialSecret,
+        }),
       );
     }
+    await markConnectorPolled(store, connector.id, now);
   }
 
   return results;
@@ -675,6 +703,17 @@ export function createDrizzleConnectorRuntimeStore(
         .where(eq(connectorExecutions.id, executionId));
     },
 
+    async markConnectorPolled({ connectorId, now, nextPollAt }) {
+      await db
+        .update(connectors)
+        .set({
+          last_poll_at: now,
+          next_poll_at: nextPollAt,
+          updated_at: now,
+        })
+        .where(eq(connectors.id, connectorId));
+    },
+
     async loadTenantCredential({ tenantId, credentialId, credentialSlug }) {
       if (!credentialId && !credentialSlug) return null;
       const conditions = [
@@ -709,13 +748,38 @@ async function invokeChatAgentByDefault(
   return invokeChatAgent(payload);
 }
 
+async function markConnectorPolled(
+  store: ConnectorRuntimeStore,
+  connectorId: string,
+  now: Date,
+): Promise<void> {
+  await store.markConnectorPolled({
+    connectorId,
+    now,
+    nextPollAt: defaultNextPollAt(now),
+  });
+}
+
+export function defaultNextPollAt(now: Date): Date {
+  return new Date(now.getTime() + DEFAULT_POLL_INTERVAL_MS);
+}
+
 async function dispatchCandidate(args: {
   store: ConnectorRuntimeStore;
   connector: ConnectorRuntimeRow;
   candidate: ConnectorDispatchCandidate;
   now: Date;
+  moveLinearIssueToState: LinearIssueStateMover;
+  readTenantCredentialSecret: TenantCredentialSecretReader;
 }): Promise<ConnectorDispatchResult> {
-  const { store, connector, candidate, now } = args;
+  const {
+    store,
+    connector,
+    candidate,
+    now,
+    moveLinearIssueToState,
+    readTenantCredentialSecret,
+  } = args;
   let execution: ConnectorExecutionRow | undefined;
 
   try {
@@ -740,11 +804,19 @@ async function dispatchCandidate(args: {
           execution,
           now,
         });
+      const providerWriteback = await applyLinearDispatchWriteback({
+        connector,
+        candidate,
+        store,
+        moveLinearIssueToState,
+        readTenantCredentialSecret,
+      });
       await store.markExecutionTerminal({
         executionId: execution.id,
         now,
         outcomePayload: {
           ...candidate.metadata,
+          providerWriteback,
           threadId,
           messageId,
           computerId,
@@ -782,11 +854,19 @@ async function dispatchCandidate(args: {
       execution,
       now,
     });
+    const providerWriteback = await applyLinearDispatchWriteback({
+      connector,
+      candidate,
+      store,
+      moveLinearIssueToState,
+      readTenantCredentialSecret,
+    });
     await store.markExecutionTerminal({
       executionId: execution.id,
       now,
       outcomePayload: {
         ...candidate.metadata,
+        providerWriteback,
         threadId,
         messageId,
         dispatchTargetType: targetType,
@@ -819,6 +899,97 @@ async function dispatchCandidate(args: {
       error: message,
     };
   }
+}
+
+async function applyLinearDispatchWriteback(args: {
+  connector: ConnectorRuntimeRow;
+  candidate: ConnectorDispatchCandidate;
+  store: Pick<ConnectorRuntimeStore, "loadTenantCredential">;
+  moveLinearIssueToState: LinearIssueStateMover;
+  readTenantCredentialSecret: TenantCredentialSecretReader;
+}): Promise<Record<string, unknown> | null> {
+  const { connector, candidate, store } = args;
+  if (connector.type !== "linear_tracker") return null;
+
+  const config = asRecord(connector.config);
+  if (!isLinearTrackerConfig(config)) return null;
+
+  const writeback = parseLinearDispatchWritebackConfig(config);
+  if (!writeback.enabled) return null;
+
+  const query = parseLinearIssueQueryConfig(config);
+  if (!query) {
+    return {
+      provider: "linear",
+      action: "move_issue_state",
+      status: "skipped",
+      reason: "missing_credential_config",
+      stateName: writeback.stateName,
+    };
+  }
+
+  try {
+    const credential = await store.loadTenantCredential({
+      tenantId: connector.tenant_id,
+      credentialId: query.credentialId,
+      credentialSlug: query.credentialSlug,
+    });
+    if (!credential) throw new Error("Linear credential not found");
+    if (credential.kind !== "api_key") {
+      throw new Error("Linear connector credential must be an api_key");
+    }
+
+    const secret = await args.readTenantCredentialSecret(credential.secret_ref);
+    const apiKey = cleanString(secret.apiKey);
+    if (!apiKey) throw new Error("Linear credential secret is missing apiKey");
+
+    const result = await args.moveLinearIssueToState({
+      apiKey,
+      issueId: candidate.externalRef,
+      stateName: writeback.stateName,
+    });
+
+    return {
+      provider: "linear",
+      action: "move_issue_state",
+      status: result.updated ? "updated" : "skipped",
+      reason: result.skippedReason ?? null,
+      issueId: result.issueId,
+      stateName: result.stateName,
+      stateId: result.stateId ?? null,
+    };
+  } catch (error) {
+    return {
+      provider: "linear",
+      action: "move_issue_state",
+      status: "failed",
+      issueId: candidate.externalRef,
+      stateName: writeback.stateName,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function parseLinearDispatchWritebackConfig(
+  config: Record<string, unknown> | null,
+): { enabled: boolean; stateName: string } {
+  const writeback = asRecord(config?.writeback) ?? {};
+  const moveOnDispatch =
+    asRecord(writeback.moveOnDispatch) ??
+    asRecord(config?.moveOnDispatch) ??
+    {};
+  const enabledValue =
+    moveOnDispatch.enabled ?? writeback.enabled ?? config?.writebackEnabled;
+  const stateName =
+    cleanString(moveOnDispatch.stateName) ??
+    cleanString(writeback.onDispatchState) ??
+    cleanString(config?.onDispatchState) ??
+    "In Progress";
+
+  return {
+    enabled: enabledValue !== false,
+    stateName,
+  };
 }
 
 function readSeedIssues(config: Record<string, unknown>): LinearSeedIssue[] {

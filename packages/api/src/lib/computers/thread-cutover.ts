@@ -9,14 +9,6 @@ import { normalizeTaskInput } from "./tasks.js";
 
 const db = getDb();
 
-export function computerThreadCutoverEnabled(env = process.env) {
-  const raw =
-    env.THINKWORK_COMPUTER_THREAD_CUTOVER_ENABLED ??
-    env.COMPUTER_THREAD_CUTOVER_ENABLED ??
-    "";
-  return ["1", "true", "enabled", "on"].includes(raw.toLowerCase());
-}
-
 export async function resolveThreadComputer(input: {
   tenantId: string;
   ownerUserId?: string | null;

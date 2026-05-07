@@ -376,6 +376,19 @@ export const ComputerTasksQuery = graphql(`
   }
 `);
 
+export const ComputerThreadsQuery = graphql(`
+  query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
+    threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
+      id
+      identifier
+      title
+      status
+      lastResponsePreview
+      updatedAt
+    }
+  }
+`);
+
 export const ComputerEventsQuery = graphql(`
   query ComputerEvents($computerId: ID!, $limit: Int) {
     computerEvents(computerId: $computerId, limit: $limit) {

@@ -8,17 +8,37 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-thread" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn().mockResolvedValue({
-        dispatched: true,
-        mode: "managed_agent",
-        agentId: "agent-1",
+      loadThreadTurnContext: vi.fn().mockResolvedValue({
+        taskId: "task-thread",
+        source: "chat_message",
+        computer: {
+          id: "computer-1",
+          name: "Marco",
+          slug: "marco",
+          workspaceRoot: "/workspace",
+        },
+        thread: { id: "thread-1", title: "Hello Marco" },
+        message: { id: "message-1", content: "Hello" },
+        messagesHistory: [{ id: "message-1", role: "user", content: "Hello" }],
+        model: "model-1",
+        systemPrompt: "You are Marco.",
+      }),
+      recordThreadTurnResponse: vi.fn().mockResolvedValue({
+        responded: true,
+        mode: "computer_native",
+        responseMessageId: "message-2",
         threadId: "thread-1",
         messageId: "message-1",
-        source: "chat_message",
-        status: "running",
+        status: "completed",
+        model: "model-1",
       }),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
+    const computerChat = vi.fn().mockResolvedValue({
+      content: "Hi from Marco",
+      model: "model-1",
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+    });
 
     const output = await handleTask(
       {
@@ -32,6 +52,8 @@ describe("Computer task loop", () => {
       },
       "/workspace",
       api,
+      undefined,
+      computerChat,
     );
 
     expect(api.appendTaskEvent).toHaveBeenCalledWith("task-thread", {
@@ -43,18 +65,26 @@ describe("Computer task loop", () => {
         source: "chat_message",
       },
     });
-    expect(api.executeThreadTurn).toHaveBeenCalledWith("task-thread");
+    expect(api.loadThreadTurnContext).toHaveBeenCalledWith("task-thread");
+    expect(computerChat).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-thread" }),
+      { workspaceRoot: "/workspace" },
+    );
+    expect(api.recordThreadTurnResponse).toHaveBeenCalledWith("task-thread", {
+      content: "Hi from Marco",
+      model: "model-1",
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+    });
     expect(output).toEqual({
       ok: true,
       taskType: "thread_turn",
-      accepted: true,
-      dispatched: true,
-      mode: "managed_agent",
-      agentId: "agent-1",
+      responded: true,
+      mode: "computer_native",
+      responseMessageId: "message-2",
       threadId: "thread-1",
       messageId: "message-1",
-      source: "chat_message",
-      status: "running",
+      status: "completed",
+      model: "model-1",
     });
   });
 
@@ -69,7 +99,8 @@ describe("Computer task loop", () => {
         checkedAt: "2026-05-07T00:00:00.000Z",
       }),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
     };
 
@@ -110,7 +141,8 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-2" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
@@ -186,7 +218,8 @@ describe("Computer task loop", () => {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-3" }),
       checkGoogleWorkspaceConnection: vi.fn(),
       delegateConnectorWork: vi.fn(),
-      executeThreadTurn: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
         providerName: "google_productivity",
         connected: true,
@@ -341,15 +374,17 @@ describe("Computer task loop", () => {
   });
 
   it("classifies disabled Google Calendar API errors with the project link", async () => {
-    const execFileAsync = vi.fn().mockRejectedValue(
-      new Error(
-        [
-          "Command failed: gws calendar +agenda",
-          "error[api]: hint: API not enabled for your GCP project.",
-          "      Enable it at: https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=430475771862",
-        ].join("\n"),
-      ),
-    );
+    const execFileAsync = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          [
+            "Command failed: gws calendar +agenda",
+            "error[api]: hint: API not enabled for your GCP project.",
+            "      Enable it at: https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=430475771862",
+          ].join("\n"),
+        ),
+      );
 
     const result = await listGoogleCalendarUpcomingWithGws(
       {
