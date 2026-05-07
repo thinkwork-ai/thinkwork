@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 U5: Destroy System Workflows Step Functions module + IAM"
 type: refactor
-status: active
+status: completed
 date: 2026-05-06
 origin: docs/plans/2026-05-06-001-refactor-system-workflows-activation-removal-plan.md
 ---
