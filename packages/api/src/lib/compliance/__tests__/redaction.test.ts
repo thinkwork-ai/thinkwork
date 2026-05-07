@@ -14,14 +14,16 @@ describe("redactPayload", () => {
 	});
 
 	describe("happy path — fields in allow-list pass through", () => {
-		it("agent.skills_changed retains agentId + skillIds", () => {
+		it("agent.skills_changed retains agentId + addedSkills + removedSkills", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1", "s2"],
+				addedSkills: ["s1", "s2"],
+				removedSkills: ["s3"],
 			});
 			expect(result.redacted).toEqual({
 				agentId: "a1",
-				skillIds: ["s1", "s2"],
+				addedSkills: ["s1", "s2"],
+				removedSkills: ["s3"],
 			});
 			expect(result.redactedFields).toEqual([]);
 		});
@@ -46,7 +48,7 @@ describe("redactPayload", () => {
 		it("drops apiKey from agent.skills_changed", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1"],
+				addedSkills: ["s1"],
 				apiKey: "sk-proj-deadbeef",
 			});
 			expect(result.redacted).not.toHaveProperty("apiKey");
@@ -383,9 +385,9 @@ describe("redactPayload", () => {
 		it("preserves array values without sanitization", () => {
 			const result = redactPayload("agent.skills_changed", {
 				agentId: "a1",
-				skillIds: ["s1", "s2", "s3"],
+				addedSkills: ["s1", "s2", "s3"],
 			});
-			expect(result.redacted.skillIds).toEqual(["s1", "s2", "s3"]);
+			expect(result.redacted.addedSkills).toEqual(["s1", "s2", "s3"]);
 		});
 	});
 });

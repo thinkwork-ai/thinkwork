@@ -172,10 +172,15 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 		},
 		"agent.skills_changed": {
 			// Direct evidence of effective-capability change (CC8.1).
+			// Delta shape: addedSkills / removedSkills are the slugs that
+			// changed; the absolute current/previous skill set can be
+			// reconstructed from prior `agent.skills_changed` rows in the
+			// chain. This avoids a round-trip to read absolute state at
+			// emit time.
 			allowedFields: new Set([
 				"agentId",
-				"skillIds",
-				"previousSkillIds",
+				"addedSkills",
+				"removedSkills",
 				"reason",
 			]),
 		},

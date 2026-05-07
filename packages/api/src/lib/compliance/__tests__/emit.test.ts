@@ -27,7 +27,9 @@ const validInput = {
 	actorType: "user" as const,
 	eventType: "agent.skills_changed" as const,
 	source: "graphql" as const,
-	payload: { agentId: "a1", skillIds: ["s1"] },
+	// U5 swapped the agent.skills_changed allow-list from
+	// {skillIds, previousSkillIds} → {addedSkills, removedSkills}.
+	payload: { agentId: "a1", addedSkills: ["s1"] },
 };
 
 describe("emitAuditEvent", () => {
@@ -47,7 +49,7 @@ describe("emitAuditEvent", () => {
 				actor_type: "user",
 				event_type: "agent.skills_changed",
 				source: "graphql",
-				payload: { agentId: "a1", skillIds: ["s1"] },
+				payload: { agentId: "a1", addedSkills: ["s1"] },
 				payload_redacted_fields: [],
 				control_ids: [],
 				payload_schema_version: 1,
@@ -70,7 +72,7 @@ describe("emitAuditEvent", () => {
 
 			const result = await emitAuditEvent(tx, {
 				...validInput,
-				payload: { agentId: "a1", skillIds: ["s1"], apiKey: "sk-bad" },
+				payload: { agentId: "a1", addedSkills: ["s1"], apiKey: "sk-bad" },
 			});
 
 			expect(result.redactedFields).toContain("apiKey");

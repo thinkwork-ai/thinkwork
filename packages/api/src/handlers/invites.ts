@@ -29,6 +29,7 @@ import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../lib/db.js";
 import { handleCors, json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
+import { emitAuditEvent } from "../lib/compliance/emit.js";
 
 // ---------------------------------------------------------------------------
 // Token helpers (Paperclip-aligned)
@@ -113,7 +114,7 @@ export async function handler(
 				requiredRoles: ["owner", "admin"],
 			});
 			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return createInvite(verdict.tenantId, event);
+			return createInvite(verdict.tenantId, verdict.userId, event);
 		}
 
 		// GET /api/tenants/:tenantId/join-requests
@@ -204,28 +205,71 @@ export async function handler(
 
 async function createInvite(
 	tenantId: string,
+	verdictUserId: string | null,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const body = JSON.parse(event.body || "{}");
 	const agentName = body.agentName || body.agent_name || "External Agent";
-	const userId = body.userId || body.user_id || event.headers["x-principal-id"];
+
+	// `invited_by_user_id` is the legacy column for the existing UI
+	// flow, which still allows body-supplied user_id and the
+	// `x-principal-id` header. Audit `actorId`, by contrast, is
+	// branched by auth path and NEVER reads `x-principal-id` directly
+	// (per SEC-001 — that header is unverified on the apikey path).
+	const legacyInvitedBy =
+		body.userId || body.user_id || event.headers["x-principal-id"];
 
 	const plainToken = createInviteToken();
 	const tokenHash = hashToken(plainToken);
 	const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
-	const [invite] = await db
-		.insert(invites)
-		.values({
-			tenant_id: tenantId,
-			invite_type: "agent",
-			token_hash: tokenHash,
-			defaults_payload: { agentName },
-			max_uses: 1,
-			invited_by_user_id: userId || undefined,
-			expires_at: expiresAt,
-		})
-		.returning();
+	// Compliance audit actor branching:
+	//   apikey path → actorType: "system", actorId: "platform-credential"
+	//   cognito path → actorType: "user", actorId: verdictUserId
+	const auditActor: { actorId: string; actorType: "user" | "system" } =
+		verdictUserId
+			? { actorId: verdictUserId, actorType: "user" }
+			: { actorId: "platform-credential", actorType: "system" };
+
+	// Wrap the invite insert + audit emit in a single transaction so
+	// audit-write failure rolls back the invite (control-evidence tier
+	// per master plan U5).
+	const [invite] = await db.transaction(async (tx) => {
+		const [inserted] = await tx
+			.insert(invites)
+			.values({
+				tenant_id: tenantId,
+				invite_type: "agent",
+				token_hash: tokenHash,
+				defaults_payload: { agentName },
+				max_uses: 1,
+				invited_by_user_id: legacyInvitedBy || undefined,
+				expires_at: expiresAt,
+			})
+			.returning();
+
+		await emitAuditEvent(tx, {
+			tenantId,
+			actorId: auditActor.actorId,
+			actorType: auditActor.actorType,
+			eventType: "user.invited",
+			source: "lambda",
+			payload: {
+				// `email` allow-listed for the registry but invite flow
+				// stores agent identifiers, not user emails. The audit
+				// row records the agent-name + invite role even though
+				// the field name is `email` for the canonical schema.
+				role: "agent",
+				invitedBy: auditActor.actorId,
+			},
+			resourceType: "invite",
+			resourceId: inserted.id,
+			action: "create",
+			outcome: "success",
+		});
+
+		return [inserted];
+	});
 
 	const apiUrl = process.env.API_URL || `https://${event.headers.host}`;
 
