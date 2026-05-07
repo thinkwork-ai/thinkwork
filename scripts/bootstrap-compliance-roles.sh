@@ -112,7 +112,10 @@ DB_HOST="thinkwork-${STAGE}-db-1.cmfgkg8u8sgf.us-east-1.rds.amazonaws.com"
 DB_PORT="5432"
 DB_NAME="thinkwork"
 
-DATABASE_URL="postgres://${DB_USER}:${DB_PASS_URL}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+# sslmode=require matches the drift-check job in deploy.yml. RDS encrypts
+# at the network layer regardless, but psql in CI errors on missing TLS
+# unless this is set explicitly.
+DATABASE_URL="postgres://${DB_USER}:${DB_PASS_URL}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
 
 # Sanity-check connectivity before generating passwords or touching secrets.
 echo "==> Verifying DB connectivity" >&2
