@@ -37,9 +37,11 @@
 -- drops: public.system_workflow_evidence
 -- drops: public.system_workflow_change_events
 -- drops: public.idx_activation_sessions_user_status
+-- drops: public.idx_activation_sessions_tenant
 -- drops: public.uq_activation_sessions_user_in_progress
 -- drops: public.idx_activation_session_turns_session_order
 -- drops: public.idx_activation_apply_outbox_status_created
+-- drops: public.idx_activation_apply_outbox_session
 -- drops: public.idx_activation_automation_candidates_session
 -- drops: public.idx_activation_automation_candidates_user_status
 -- drops: public.uq_activation_automation_candidates_active_duplicate

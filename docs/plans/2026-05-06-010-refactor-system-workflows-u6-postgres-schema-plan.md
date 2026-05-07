@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 U6: Drop SW + Activation schema + Postgres tables"
 type: refactor
-status: active
+status: completed
 date: 2026-05-06
 origin: docs/plans/2026-05-06-001-refactor-system-workflows-activation-removal-plan.md
 ---
