@@ -40,7 +40,8 @@
     "expo-server-sdk": "^6.1.0",
     "jszip": "^3.10.1",
     "pg": "^8.16.3",
-    "stripe": "^17.5.0"
+    "stripe": "^17.5.0",
+    "uuidv7": "^1.2.1"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",
