@@ -43,6 +43,8 @@ interface DataTableProps<TData, TValue> {
   toolbar?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode;
   /** Additional className for the <table> element */
   tableClassName?: string;
+  /** Disable horizontal scrolling and clip overflowing fixed-width content. */
+  allowHorizontalScroll?: boolean;
   /** When true, table body scrolls within its container and pagination sticks to bottom. Parent must constrain height. */
   scrollable?: boolean;
   /** Server-side pagination: total row count (enables manual pagination mode) */
@@ -67,6 +69,7 @@ export function DataTable<TData, TValue>({
   enableRowSelection = false,
   toolbar,
   tableClassName,
+  allowHorizontalScroll = true,
   scrollable = false,
   totalCount,
   pageIndex: controlledPageIndex,
@@ -213,8 +216,8 @@ export function DataTable<TData, TValue>({
         </div>
       )}
 
-      <div className={scrollable ? "flex-1 min-h-0 overflow-y-auto rounded-md border" : "overflow-x-auto rounded-md border"}>
-        <Table className={tableClassName}>
+      <div className={scrollable ? "flex-1 min-h-0 overflow-y-auto rounded-md border" : allowHorizontalScroll ? "overflow-x-auto rounded-md border" : "overflow-hidden rounded-md border"}>
+        <Table className={tableClassName} containerClassName={allowHorizontalScroll ? undefined : "overflow-hidden"}>
           {colgroup}
           {headerRow}
           {bodyRows}
