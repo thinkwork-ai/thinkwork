@@ -435,3 +435,27 @@ variable "compliance_drainer_secret_arn" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 U7 — compliance audit-anchor bucket (S3 Object Lock)
+# Default empty until U8a wires the anchor Lambda. The variables exist so
+# U8a can reference them without forcing this PR to also wire a Lambda body.
+# ---------------------------------------------------------------------------
+
+variable "compliance_anchor_bucket_arn" {
+  description = "ARN of the WORM-protected compliance audit-anchor S3 bucket. Default empty until U8a wires the anchor Lambda."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_anchor_bucket_name" {
+  description = "Name of the WORM-protected compliance audit-anchor S3 bucket. Default empty until U8a wires the anchor Lambda."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_anchor_lambda_role_arn" {
+  description = "ARN of the IAM role the anchor Lambda will assume. Default empty until U8a wires the anchor Lambda."
+  type        = string
+  default     = ""
+}

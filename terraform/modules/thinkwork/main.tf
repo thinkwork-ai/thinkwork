@@ -10,8 +10,9 @@
 ################################################################################
 
 locals {
-  bucket_name         = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
-  backups_bucket_name = "thinkwork-${var.stage}-backups"
+  bucket_name                   = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
+  backups_bucket_name           = "thinkwork-${var.stage}-backups"
+  compliance_anchor_bucket_name = "thinkwork-${var.stage}-compliance-anchors"
   computer_task_subnet_ids = (
     length(module.vpc.public_subnet_ids) > 0
     ? module.vpc.public_subnet_ids
@@ -120,6 +121,22 @@ module "s3_backups" {
   bucket_name = local.backups_bucket_name
 }
 
+# Phase 3 U7 — WORM-protected S3 bucket for SOC2 Type 1 tamper-evident audit
+# anchoring. Inert in this PR: the IAM role exists but no Lambda assumes it
+# until U8a (master plan Decision #9 — inert→live seam swap). The bucket
+# itself is fully provisioned (Object Lock enabled at create time, KMS-
+# encrypted, lifecycle to Glacier IR at 90 days, deny-DeleteObject bucket
+# policy). See `terraform/modules/data/compliance-audit-bucket/README.md`.
+module "compliance_anchors" {
+  source = "../data/compliance-audit-bucket"
+
+  stage          = var.stage
+  bucket_name    = local.compliance_anchor_bucket_name
+  kms_key_arn    = module.kms.key_arn
+  mode           = var.compliance_anchor_object_lock_mode
+  retention_days = var.compliance_anchor_retention_days
+}
+
 module "database" {
   source = "../data/aurora-postgres"
 
@@ -206,6 +223,12 @@ module "api" {
   # via this dedicated secret (provisioned in U2 / PR #887, populated by
   # the compliance-bootstrap CI step in deploy.yml).
   compliance_drainer_secret_arn = module.database.compliance_drainer_secret_arn
+
+  # Phase 3 U7 — anchor bucket + IAM role wiring. Inert in this PR (no Lambda
+  # in lambda-api references these yet); U8a wires the anchor Lambda function.
+  compliance_anchor_bucket_arn      = module.compliance_anchors.bucket_arn
+  compliance_anchor_bucket_name     = module.compliance_anchors.bucket_name
+  compliance_anchor_lambda_role_arn = module.compliance_anchors.lambda_role_arn
 
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn

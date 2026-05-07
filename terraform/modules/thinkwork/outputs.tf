@@ -200,3 +200,22 @@ output "mcp_custom_domain_target" {
   description = "Regional target for the final mcp CNAME — only populated on the second apply after mcp_custom_domain_ready=true. { target_domain_name, hosted_zone_id } or null."
   value       = module.api.mcp_custom_domain_target
 }
+
+# Phase 3 U7 — Compliance audit-anchor bucket (S3 Object Lock). Consumed by
+# operator runbooks for post-deploy verification (`aws s3api get-object-lock-
+# configuration`) and by U8a/U8b when the anchor Lambda lands.
+
+output "compliance_anchor_bucket_arn" {
+  description = "ARN of the WORM-protected compliance audit-anchor S3 bucket."
+  value       = module.compliance_anchors.bucket_arn
+}
+
+output "compliance_anchor_bucket_name" {
+  description = "Name of the WORM-protected compliance audit-anchor S3 bucket (thinkwork-{stage}-compliance-anchors)."
+  value       = module.compliance_anchors.bucket_name
+}
+
+output "compliance_anchor_lambda_role_arn" {
+  description = "ARN of the IAM role the anchor Lambda (U8a/U8b) will assume. Inert in U7 — no Lambda function references this yet."
+  value       = module.compliance_anchors.lambda_role_arn
+}
