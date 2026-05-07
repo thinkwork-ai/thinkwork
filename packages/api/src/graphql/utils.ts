@@ -101,10 +101,6 @@ import {
   sandboxInvocations,
   // Resolved Capability Manifest (plan §U15)
   resolvedCapabilityManifests,
-  activationSessions,
-  activationSessionTurns,
-  activationApplyOutbox,
-  activationAutomationCandidates,
   tenantMcpContextTools,
   tenantCredentials,
 } from "@thinkwork/database-pg/schema";
@@ -186,10 +182,6 @@ export {
   tenantPolicyEvents,
   sandboxInvocations,
   resolvedCapabilityManifests,
-  activationSessions,
-  activationSessionTurns,
-  activationApplyOutbox,
-  activationAutomationCandidates,
   tenantMcpContextTools,
   tenantCredentials,
   checkAndFireUnblockWakeups,
