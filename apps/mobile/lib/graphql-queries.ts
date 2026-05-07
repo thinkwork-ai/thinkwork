@@ -241,6 +241,19 @@ export const MyComputerQuery = graphql(`
   }
 `);
 
+export const ComputersQuery = graphql(`
+  query Computers($tenantId: ID!) {
+    computers(tenantId: $tenantId) {
+      id
+      name
+      slug
+      status
+      runtimeStatus
+      ownerUserId
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Teams
 // ---------------------------------------------------------------------------
