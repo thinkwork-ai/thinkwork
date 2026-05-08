@@ -18,7 +18,9 @@ import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedShellInboxRouteImport } from "./routes/_authed/_shell/inbox";
 import { Route as AuthedShellComputerRouteImport } from "./routes/_authed/_shell/computer";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
+import { Route as AuthedShellTasksIndexRouteImport } from "./routes/_authed/_shell/tasks.index";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
+import { Route as AuthedShellTasksIdRouteImport } from "./routes/_authed/_shell/tasks.$id";
 
 const SignInRoute = SignInRouteImport.update({
   id: "/sign-in",
@@ -63,9 +65,19 @@ const AuthedShellAutomationsRoute = AuthedShellAutomationsRouteImport.update({
   path: "/automations",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellTasksIndexRoute = AuthedShellTasksIndexRouteImport.update({
+  id: "/tasks/",
+  path: "/tasks/",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
+const AuthedShellTasksIdRoute = AuthedShellTasksIdRouteImport.update({
+  id: "/tasks/$id",
+  path: "/tasks/$id",
   getParentRoute: () => AuthedShellRoute,
 } as any);
 
@@ -77,7 +89,9 @@ export interface FileRoutesByFullPath {
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
   "/inbox": typeof AuthedShellInboxRoute;
+  "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/tasks/": typeof AuthedShellTasksIndexRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -87,7 +101,9 @@ export interface FileRoutesByTo {
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
   "/inbox": typeof AuthedShellInboxRoute;
+  "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/tasks": typeof AuthedShellTasksIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -100,7 +116,9 @@ export interface FileRoutesById {
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRoute;
   "/_authed/_shell/computer": typeof AuthedShellComputerRoute;
   "/_authed/_shell/inbox": typeof AuthedShellInboxRoute;
+  "/_authed/_shell/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/_authed/_shell/tasks/": typeof AuthedShellTasksIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -112,7 +130,9 @@ export interface FileRouteTypes {
     | "/automations"
     | "/computer"
     | "/inbox"
-    | "/threads/$id";
+    | "/tasks/$id"
+    | "/threads/$id"
+    | "/tasks/";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -122,7 +142,9 @@ export interface FileRouteTypes {
     | "/automations"
     | "/computer"
     | "/inbox"
-    | "/threads/$id";
+    | "/tasks/$id"
+    | "/threads/$id"
+    | "/tasks";
   id:
     | "__root__"
     | "/"
@@ -134,7 +156,9 @@ export interface FileRouteTypes {
     | "/_authed/_shell/automations"
     | "/_authed/_shell/computer"
     | "/_authed/_shell/inbox"
-    | "/_authed/_shell/threads/$id";
+    | "/_authed/_shell/tasks/$id"
+    | "/_authed/_shell/threads/$id"
+    | "/_authed/_shell/tasks/";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -210,11 +234,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellAutomationsRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/tasks/": {
+      id: "/_authed/_shell/tasks/";
+      path: "/tasks";
+      fullPath: "/tasks/";
+      preLoaderRoute: typeof AuthedShellTasksIndexRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/threads/$id": {
       id: "/_authed/_shell/threads/$id";
       path: "/threads/$id";
       fullPath: "/threads/$id";
       preLoaderRoute: typeof AuthedShellThreadsIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
+    "/_authed/_shell/tasks/$id": {
+      id: "/_authed/_shell/tasks/$id";
+      path: "/tasks/$id";
+      fullPath: "/tasks/$id";
+      preLoaderRoute: typeof AuthedShellTasksIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
   }
@@ -224,14 +262,18 @@ interface AuthedShellRouteChildren {
   AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRoute;
   AuthedShellComputerRoute: typeof AuthedShellComputerRoute;
   AuthedShellInboxRoute: typeof AuthedShellInboxRoute;
+  AuthedShellTasksIdRoute: typeof AuthedShellTasksIdRoute;
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
+  AuthedShellTasksIndexRoute: typeof AuthedShellTasksIndexRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellAutomationsRoute: AuthedShellAutomationsRoute,
   AuthedShellComputerRoute: AuthedShellComputerRoute,
   AuthedShellInboxRoute: AuthedShellInboxRoute,
+  AuthedShellTasksIdRoute: AuthedShellTasksIdRoute,
   AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
+  AuthedShellTasksIndexRoute: AuthedShellTasksIndexRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(

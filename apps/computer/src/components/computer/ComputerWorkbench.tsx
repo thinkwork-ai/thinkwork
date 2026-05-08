@@ -67,22 +67,15 @@ export function ComputerWorkbench() {
       return;
     }
 
-    navigate({ to: "/threads/$id", params: { id: threadId } });
+    navigate({ to: "/tasks/$id", params: { id: threadId } });
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-8 px-4 py-8 sm:px-6">
-      <section className="grid gap-3 text-center">
-        <p className="text-sm font-medium text-muted-foreground">
+    <main className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-6 px-4 py-8 sm:px-6">
+      <section className="text-center">
+        <h1 className="text-balance text-4xl font-light tracking-normal sm:text-5xl">
           ThinkWork Computer
-        </p>
-        <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-          What should your Computer work on?
         </h1>
-        <p className="mx-auto max-w-2xl text-sm leading-6 text-muted-foreground">
-          Start with a business question. Your Computer can turn connected data
-          and research into threads, dashboards, and reviewable work.
-        </p>
       </section>
 
       <ComputerComposer

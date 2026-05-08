@@ -26,8 +26,51 @@ export const ComputerThreadsQuery = gql`
       title
       status
       channel
+      lifecycleStatus
+      lastResponsePreview
       createdAt
       updatedAt
+    }
+  }
+`;
+
+export const ComputerThreadQuery = gql`
+  query ComputerThread($id: ID!, $messageLimit: Int) {
+    thread(id: $id) {
+      id
+      number
+      identifier
+      title
+      status
+      channel
+      lifecycleStatus
+      lastResponsePreview
+      costSummary
+      createdAt
+      updatedAt
+      messages(limit: $messageLimit) {
+        edges {
+          node {
+            id
+            role
+            content
+            metadata
+            toolCalls
+            toolResults
+            createdAt
+            durableArtifact {
+              id
+              title
+              type
+              status
+              summary
+              metadata
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      }
     }
   }
 `;
