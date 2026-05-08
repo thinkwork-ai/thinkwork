@@ -108,12 +108,17 @@ function getSecretsClient(env: RunnerEnv): SecretsManagerClient {
 	return _secrets;
 }
 
+// The writer-pool secret in this stack stores only `{username, password}`.
+// Host/port/dbname are passed as separate env vars from Terraform —
+// matches the fallback shape in `packages/database-pg/src/db.ts`'s
+// `resolveDatabaseUrlFromSecrets`. RDS-managed secrets (which DO carry
+// host/port/dbname) are also supported via `secret.*` fields when present.
 interface SecretShape {
-	username: string;
-	password: string;
-	host: string;
-	port: number | string;
-	dbname: string;
+	username?: string;
+	password?: string;
+	host?: string;
+	port?: number | string;
+	dbname?: string;
 }
 
 let _databaseUrlPromise: Promise<string> | undefined;
@@ -138,9 +143,26 @@ async function getDatabaseUrl(env: RunnerEnv): Promise<string> {
 			const secret = JSON.parse(
 				result.SecretString ?? "{}",
 			) as SecretShape;
-			const user = encodeURIComponent(secret.username);
-			const pass = encodeURIComponent(secret.password);
-			return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=no-verify`;
+			const user = encodeURIComponent(secret.username ?? "thinkwork_admin");
+			const pass = encodeURIComponent(secret.password ?? "");
+			const host =
+				secret.host ??
+				process.env.DATABASE_HOST ??
+				process.env.DB_CLUSTER_ENDPOINT;
+			const port = secret.port ?? process.env.DATABASE_PORT ?? "5432";
+			const dbname =
+				secret.dbname ?? process.env.DATABASE_NAME ?? "thinkwork";
+			if (!host) {
+				throw new Error(
+					"compliance-export-runner: DATABASE_HOST (or DB_CLUSTER_ENDPOINT) is unset and the secret does not carry a host field. Wire DATABASE_HOST via Terraform.",
+				);
+			}
+			if (!secret.password) {
+				throw new Error(
+					"compliance-export-runner: secret payload missing 'password' field — verify DATABASE_URL_SECRET_ARN points at the writer-pool credentials.",
+				);
+			}
+			return `postgresql://${user}:${pass}@${host}:${port}/${dbname}?sslmode=no-verify`;
 		})();
 	}
 	return _databaseUrlPromise;
