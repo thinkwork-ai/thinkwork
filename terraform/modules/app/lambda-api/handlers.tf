@@ -196,11 +196,13 @@ locals {
       # thinkwork/* wildcard, so no new IAM resource is needed.
       COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
       # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
-      # jobId to this SQS queue after committing the export_jobs row.
-      # An unset value produces a deterministic INTERNAL_SERVER_ERROR
-      # at resolver time; the queue URL is wired at the composite
-      # root from the new compliance-exports Lambda's queue resource.
-      COMPLIANCE_EXPORTS_QUEUE_URL = aws_sqs_queue.compliance_exports[0].url
+      # jobId to a known-name SQS queue. We do NOT pass the queue URL
+      # as an env var here: graphql-http's env block is already at the
+      # AWS 4 KB ceiling, and adding another URL pushed the deploy over
+      # the limit. The mutation derives the URL from STAGE + AWS_REGION
+      # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
+      # Lambda (separate function below) keeps an explicit
+      # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
