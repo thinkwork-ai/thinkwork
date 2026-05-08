@@ -1,12 +1,15 @@
 ---
 title: 'feat: scaffold apps/computer with sidebar shell (no auth)'
 type: feat
-status: active
+status: superseded
 date: 2026-05-08
 origin: docs/plans/2026-05-08-001-feat-computer-thinkwork-ai-end-user-app-plan.md
+superseded_by: docs/plans/2026-05-08-014-feat-thinkwork-computer-v1-consolidated-plan.md
 ---
 
 # feat: scaffold apps/computer with sidebar shell (no auth)
+
+This plan is superseded by `docs/plans/2026-05-08-014-feat-thinkwork-computer-v1-consolidated-plan.md`. Its scoped apps/computer scaffold work shipped via PR #962, and the consolidated Computer v1 plan now carries the remaining milestone sequencing.
 
 ## Summary
 
