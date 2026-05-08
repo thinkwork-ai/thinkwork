@@ -84,6 +84,7 @@ import {
   connectorFormValues,
   connectorExecutionCleanupDisplay,
   connectorExecutionLinearIdentifier,
+  connectorExecutionPrDisplay,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
   connectorExecutionWritebackDisplay,
@@ -585,6 +586,12 @@ function connectorRunLifecycleColumns(args: {
       size: 110,
     },
     {
+      id: "pr",
+      header: "PR",
+      cell: ({ row }) => <PrStage run={row.original} />,
+      size: 72,
+    },
+    {
       id: "thread",
       header: "Open",
       cell: ({ row }) => {
@@ -620,6 +627,31 @@ function connectorRunLifecycleColumns(args: {
       size: 62,
     },
   ];
+}
+
+function PrStage({ run }: { run: ConnectorRunLifecycleRow }) {
+  const display = connectorExecutionPrDisplay(
+    run.delegation?.result,
+    run.delegation?.outputArtifacts,
+    run.threadTurn?.resultJson,
+    run.execution.outcomePayload,
+  );
+  if (!display) {
+    return <span className="text-xs text-muted-foreground">No PR</span>;
+  }
+
+  return (
+    <a
+      href={display.url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-primary hover:underline"
+      title={display.title}
+    >
+      <ExternalLink className="h-3 w-3 shrink-0" />
+      <span className="truncate">{display.label}</span>
+    </a>
+  );
 }
 
 function WritebackStage({ payload }: { payload: unknown }) {

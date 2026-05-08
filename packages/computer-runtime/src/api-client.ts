@@ -158,11 +158,14 @@ export class ComputerRuntimeApi {
   async delegateConnectorWork(taskId: string): Promise<{
     delegated: boolean;
     idempotent: boolean;
-    mode: "managed_agent";
+    mode: "managed_agent" | "symphony_pr_harness";
     delegationId: string;
     agentId: string;
     threadId: string;
     messageId?: string;
+    branch?: string;
+    prUrl?: string;
+    threadTurnId?: string;
     status: string;
   }> {
     return this.request(

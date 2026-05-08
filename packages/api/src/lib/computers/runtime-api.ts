@@ -15,6 +15,7 @@ import {
 } from "../oauth-token.js";
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
+import { runSymphonyPrConnectorWork } from "./symphony-pr-harness.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -336,13 +337,26 @@ export async function delegateConnectorWorkTask(input: {
   const payload = connectorWorkPayload(task.input);
   const existing = await loadDelegation(input.tenantId, input.taskId);
   if (existing && ["running", "completed"].includes(existing.status)) {
+    const output = (existing.result ??
+      existing.output_artifacts ??
+      {}) as Record<string, unknown>;
     return {
       delegated: false,
       idempotent: true,
-      mode: "managed_agent",
+      mode:
+        typeof output.mode === "string" && output.mode.trim()
+          ? output.mode
+          : "managed_agent",
       delegationId: existing.id,
       agentId: existing.agent_id,
       threadId: String((existing.input_artifacts as any)?.threadId ?? ""),
+      messageId: String((existing.input_artifacts as any)?.messageId ?? ""),
+      branch: typeof output.branch === "string" ? output.branch : undefined,
+      prUrl: typeof output.prUrl === "string" ? output.prUrl : undefined,
+      threadTurnId:
+        typeof output.threadTurnId === "string"
+          ? output.threadTurnId
+          : undefined,
       status: existing.status,
     };
   }
@@ -396,6 +410,46 @@ export async function delegateConnectorWorkTask(input: {
       externalRef: payload.externalRef,
     },
   });
+
+  try {
+    const harnessResult = await runSymphonyPrConnectorWork({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      taskId: input.taskId,
+      delegationId: delegation.id,
+      agentId: agent.id,
+      threadId: handoff.threadId,
+      messageId: handoff.messageId,
+      payload,
+    });
+    if (harnessResult.handled) {
+      return {
+        delegated: true,
+        idempotent: false,
+        mode: "symphony_pr_harness",
+        delegationId: delegation.id,
+        agentId: agent.id,
+        threadId: handoff.threadId,
+        messageId: handoff.messageId,
+        branch: harnessResult.branch,
+        prUrl: harnessResult.prUrl,
+        threadTurnId: harnessResult.threadTurnId,
+        status: "completed",
+      };
+    }
+  } catch (error) {
+    await db
+      .update(computerDelegations)
+      .set({
+        status: "failed",
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+        completed_at: new Date(),
+      })
+      .where(eq(computerDelegations.id, delegation.id));
+    throw error;
+  }
 
   const invoked = await invokeChatAgent({
     tenantId: input.tenantId,
@@ -831,6 +885,8 @@ async function loadDelegation(tenantId: string, taskId: string) {
       agent_id: computerDelegations.agent_id,
       status: computerDelegations.status,
       input_artifacts: computerDelegations.input_artifacts,
+      output_artifacts: computerDelegations.output_artifacts,
+      result: computerDelegations.result,
     })
     .from(computerDelegations)
     .where(
