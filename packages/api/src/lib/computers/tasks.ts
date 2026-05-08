@@ -16,7 +16,10 @@ const MAX_GOOGLE_CALENDAR_RESULTS = 25;
 
 export const COMPUTER_TASK_TYPES = [
   "health_check",
+  "workspace_file_list",
+  "workspace_file_read",
   "workspace_file_write",
+  "workspace_file_delete",
   "connector_work",
   "thread_turn",
   "google_cli_smoke",
@@ -168,6 +171,7 @@ export function normalizeTaskInput(
 ): Record<string, unknown> | null {
   if (
     taskType === "health_check" ||
+    taskType === "workspace_file_list" ||
     taskType === "google_cli_smoke" ||
     taskType === "google_workspace_auth_check"
   ) {
@@ -196,6 +200,16 @@ export function normalizeTaskInput(
       );
     }
     return { path: validateWorkspaceRelativePath(path), content };
+  }
+
+  if (
+    taskType === "workspace_file_read" ||
+    taskType === "workspace_file_delete"
+  ) {
+    const payload = coerceObject(input);
+    return {
+      path: validateWorkspaceRelativePath(requiredString(payload.path, "path")),
+    };
   }
 
   return assertNever(taskType);

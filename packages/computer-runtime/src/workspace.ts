@@ -1,4 +1,12 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { dirname, join } from "node:path";
 
 const MAX_WORKSPACE_FILE_BYTES = 256 * 1024;
@@ -59,6 +67,57 @@ export async function writeWorkspaceFile(
   return { path, relativePath, bytes };
 }
 
+export async function listWorkspaceFiles(root: string): Promise<{
+  files: Array<{ path: string; bytes: number; updatedAt: string }>;
+}> {
+  const files: Array<{ path: string; bytes: number; updatedAt: string }> = [];
+  await walkWorkspace(root, "", files);
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { files };
+}
+
+export async function readWorkspaceFile(root: string, input: unknown): Promise<{
+  path: string;
+  relativePath: string;
+  content: string | null;
+  exists: boolean;
+}> {
+  const payload = requireObject(input);
+  const relativePath = validateWorkspaceRelativePath(
+    requireString(payload.path, "path"),
+  );
+  const path = join(root, relativePath);
+  try {
+    const content = await readFile(path, "utf8");
+    return { path, relativePath, content, exists: true };
+  } catch (err) {
+    if (isMissingFile(err)) {
+      return { path, relativePath, content: null, exists: false };
+    }
+    throw err;
+  }
+}
+
+export async function deleteWorkspaceFile(
+  root: string,
+  input: unknown,
+): Promise<{ path: string; relativePath: string; deleted: boolean }> {
+  const payload = requireObject(input);
+  const relativePath = validateWorkspaceRelativePath(
+    requireString(payload.path, "path"),
+  );
+  const path = join(root, relativePath);
+  try {
+    await unlink(path);
+    return { path, relativePath, deleted: true };
+  } catch (err) {
+    if (isMissingFile(err)) {
+      return { path, relativePath, deleted: false };
+    }
+    throw err;
+  }
+}
+
 export async function readWorkspaceSystemPrompt(
   root: string,
   fileReader: WorkspacePromptFileReader = readPromptFile,
@@ -103,6 +162,55 @@ async function readPromptFile(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function walkWorkspace(
+  root: string,
+  relativeDir: string,
+  files: Array<{ path: string; bytes: number; updatedAt: string }>,
+) {
+  const absoluteDir = join(root, relativeDir);
+  let entries: Dirent<string>[];
+  try {
+    entries = await readdir(absoluteDir, { withFileTypes: true });
+  } catch (err) {
+    if (isMissingFile(err)) return;
+    throw err;
+  }
+
+  for (const entry of entries) {
+    const relativePath = relativeDir
+      ? `${relativeDir}/${entry.name}`
+      : entry.name;
+    if (isRuntimeWorkspacePath(relativePath)) continue;
+    const absolutePath = join(root, relativePath);
+    if (entry.isDirectory()) {
+      await walkWorkspace(root, relativePath, files);
+    } else if (entry.isFile()) {
+      const info = await stat(absolutePath);
+      files.push({
+        path: relativePath,
+        bytes: info.size,
+        updatedAt: info.mtime.toISOString(),
+      });
+    }
+  }
+}
+
+function isRuntimeWorkspacePath(relativePath: string): boolean {
+  return (
+    relativePath === ".thinkwork-computer-health" ||
+    relativePath.startsWith(".thinkwork-health-") ||
+    relativePath.startsWith(".thinkwork/")
+  );
+}
+
+function isMissingFile(err: unknown): boolean {
+  return (
+    Boolean(err) &&
+    typeof err === "object" &&
+    (err as { code?: string }).code === "ENOENT"
+  );
 }
 
 function requireObject(input: unknown): Record<string, unknown> {

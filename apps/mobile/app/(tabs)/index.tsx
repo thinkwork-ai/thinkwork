@@ -15,7 +15,6 @@ import {
   Keyboard,
   Alert,
   AppState,
-  Modal,
 } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
@@ -63,7 +62,6 @@ import {
   LogOut,
   RefreshCw,
   Filter,
-  ChevronDown,
   Zap,
   Lock,
   CreditCard,
@@ -137,77 +135,6 @@ type HomeComputer = {
   runtimeStatus?: string | null;
 };
 
-function ComputerPickerModal({
-  visible,
-  computers,
-  selectedComputerId,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  computers: HomeComputer[];
-  selectedComputerId?: string | null;
-  onSelect: (computer: HomeComputer) => void;
-  onClose: () => void;
-}) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        className="flex-1 justify-start bg-black/30"
-        style={{ paddingTop: 96, paddingHorizontal: 16 }}
-        onPress={onClose}
-      >
-        <View
-          className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
-          style={{ alignSelf: "flex-start", minWidth: 180, maxWidth: 280 }}
-          onStartShouldSetResponder={() => true}
-        >
-          {computers.length === 0 ? (
-            <View className="px-4 py-5">
-              <Muted className="text-sm">No Computers available</Muted>
-            </View>
-          ) : null}
-          {computers.map((computer, index) => {
-            const selected = computer.id === selectedComputerId;
-            return (
-              <Pressable
-                key={computer.id}
-                className="px-4 py-3 active:opacity-70"
-                style={
-                  index < computers.length - 1
-                    ? {
-                        borderBottomWidth: 1,
-                        borderBottomColor: "rgba(115,115,115,0.18)",
-                      }
-                    : undefined
-                }
-                onPress={() => {
-                  onSelect(computer);
-                  onClose();
-                }}
-              >
-                <Text
-                  className={`text-base text-neutral-900 dark:text-neutral-100 ${
-                    selected ? "font-semibold" : "font-normal"
-                  }`}
-                  numberOfLines={1}
-                >
-                  {computer.name || "Computer"}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Pressable>
-    </Modal>
-  );
-}
-
 export default function ThreadsScreen() {
   const router = useRouter();
   const { user, refreshCounter, signOut, getToken } = useAuth();
@@ -278,7 +205,6 @@ export default function ThreadsScreen() {
   const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
     null,
   );
-  const [computerPickerOpen, setComputerPickerOpen] = useState(false);
 
   useEffect(() => {
     if (selectedComputerId && computers.some((c) => c.id === selectedComputerId)) {
@@ -766,18 +692,12 @@ export default function ThreadsScreen() {
             className="flex-row items-center justify-between px-4"
             style={{ height: 48 }}
           >
-            {/* Left: Computer selector */}
-            <Pressable
-              className="min-w-0 flex-1 flex-row items-center gap-1.5 active:opacity-70"
-              onPress={() => setComputerPickerOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Select Computer"
-            >
+            {/* Left: Computer identity */}
+            <View className="min-w-0 flex-1">
               <Text size="xl" weight="bold">
                 {computerDisplayName}
               </Text>
-              <ChevronDown size={18} color={colors.mutedForeground} />
-            </Pressable>
+            </View>
 
             {/* Right: Brain graph labels + Filter + Menu */}
             <View className="flex-row items-center gap-3">
@@ -1247,14 +1167,6 @@ export default function ThreadsScreen() {
         providers={brainProviders}
         colors={colors}
         onClose={() => setBrainProvidersVisible(false)}
-      />
-
-      <ComputerPickerModal
-        visible={computerPickerOpen}
-        computers={computers}
-        selectedComputerId={selectedComputer?.id}
-        onSelect={(computer) => setSelectedComputerId(computer.id)}
-        onClose={() => setComputerPickerOpen(false)}
       />
 
       {activeTab === "brain" ? <ToastHost bottomOffset={96} /> : null}

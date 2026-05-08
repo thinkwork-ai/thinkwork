@@ -120,6 +120,18 @@ vi.mock("../graphql/utils.js", () => {
       role: tableCol("tenant_members.role"),
       status: tableCol("tenant_members.status"),
     },
+    computers: {
+      id: tableCol("computers.id"),
+      tenant_id: tableCol("computers.tenant_id"),
+    },
+    computerTasks: {
+      id: tableCol("computer_tasks.id"),
+      tenant_id: tableCol("computer_tasks.tenant_id"),
+      computer_id: tableCol("computer_tasks.computer_id"),
+      status: tableCol("computer_tasks.status"),
+      output: tableCol("computer_tasks.output"),
+      error: tableCol("computer_tasks.error"),
+    },
   };
 });
 
@@ -174,6 +186,14 @@ vi.mock("../lib/compliance/emit.js", () => ({
   emitAuditEvent: emitMockImpl,
 }));
 
+const { enqueueComputerTaskMock } = vi.hoisted(() => ({
+  enqueueComputerTaskMock: vi.fn(),
+}));
+
+vi.mock("../lib/computers/tasks.js", () => ({
+  enqueueComputerTask: enqueueComputerTaskMock,
+}));
+
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
 const s3Mock = mockClient(S3Client);
@@ -191,6 +211,7 @@ const TENANT_A = "tenant-a-id";
 const TENANT_B = "tenant-b-id";
 const AGENT_ID = "agent-marco-id";
 const TEMPLATE_ID = "template-exec-id";
+const COMPUTER_ID = "computer-marco-id";
 const USER_ID = "user-eric-id";
 const EMAIL = "eric@acme.com";
 
@@ -235,6 +256,10 @@ function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
   return { id, slug, name };
 }
 
+function computerRow(overrides: Record<string, unknown> = {}) {
+  return { id: COMPUTER_ID, tenant_id: TENANT_A, ...overrides };
+}
+
 function body(content: string) {
   return {
     Body: {
@@ -260,6 +285,8 @@ beforeEach(() => {
   resetDbQueue();
   resetEqCalls();
   authMockImpl.mockReset();
+  enqueueComputerTaskMock.mockReset();
+  enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
   deriveMockImpl.mockReset();
   deriveMockImpl.mockResolvedValue({
     changed: false,
@@ -520,6 +547,130 @@ describe("agent GET / LIST", () => {
       "SOUL.md",
       "skills/workspace-memory/SKILL.md",
     ]);
+  });
+});
+
+describe("computer EFS workspace target", () => {
+  it("lists and reads files through Computer runtime tasks", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([
+      {
+        status: "completed",
+        output: {
+          files: [{ path: "USER.md" }, { path: "memory/contacts.md" }],
+        },
+        error: null,
+      },
+    ]);
+
+    const listRes = await parse(
+      await handler(event({ action: "list", computerId: COMPUTER_ID })),
+    );
+
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body.files).toEqual([
+      {
+        path: "USER.md",
+        source: "computer",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "memory/contacts.md",
+        source: "computer",
+        sha256: "",
+        overridden: false,
+      },
+    ]);
+    expect(enqueueComputerTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_A,
+        computerId: COMPUTER_ID,
+        taskType: "workspace_file_list",
+      }),
+    );
+
+    enqueueComputerTaskMock.mockResolvedValueOnce({ id: "computer-task-2" });
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([
+      {
+        status: "completed",
+        output: { content: "Name: Eric\n" },
+        error: null,
+      },
+    ]);
+
+    const getRes = await parse(
+      await handler(
+        event({ action: "get", computerId: COMPUTER_ID, path: "USER.md" }),
+      ),
+    );
+
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.body).toMatchObject({
+      ok: true,
+      source: "computer",
+      content: "Name: Eric\n",
+    });
+    expect(enqueueComputerTaskMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        taskType: "workspace_file_read",
+        taskInput: { path: "USER.md" },
+      }),
+    );
+  });
+
+  it("writes and deletes files through Computer runtime tasks", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([{ role: "admin" }]);
+    pushDbRows([{ status: "completed", output: { ok: true }, error: null }]);
+
+    const putRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          computerId: COMPUTER_ID,
+          path: "USER.md",
+          content: "Name: Eric Updated\n",
+        }),
+      ),
+    );
+
+    expect(putRes.statusCode).toBe(200);
+    expect(enqueueComputerTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskType: "workspace_file_write",
+        taskInput: {
+          path: "USER.md",
+          content: "Name: Eric Updated\n",
+        },
+      }),
+    );
+
+    enqueueComputerTaskMock.mockResolvedValueOnce({ id: "computer-task-2" });
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([{ role: "admin" }]);
+    pushDbRows([{ status: "completed", output: { ok: true }, error: null }]);
+
+    const deleteRes = await parse(
+      await handler(
+        event({ action: "delete", computerId: COMPUTER_ID, path: "USER.md" }),
+      ),
+    );
+
+    expect(deleteRes.statusCode).toBe(200);
+    expect(enqueueComputerTaskMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        taskType: "workspace_file_delete",
+        taskInput: { path: "USER.md" },
+      }),
+    );
   });
 });
 

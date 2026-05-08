@@ -110,7 +110,11 @@ type PinStatusEntry = {
   latestContent: string | null;
 };
 
-export type WorkspaceEditorMode = "agent" | "template" | "defaults";
+export type WorkspaceEditorMode =
+  | "agent"
+  | "template"
+  | "computer"
+  | "defaults";
 
 export type WorkspaceEditorAction =
   | "add-sub-agent"
@@ -136,6 +140,17 @@ export interface WorkspaceEditorCapabilities {
 export function workspaceEditorCapabilities(
   mode: WorkspaceEditorMode,
 ): WorkspaceEditorCapabilities {
+  if (mode === "computer") {
+    return {
+      canImportBundle: false,
+      canReviewTemplateUpdates: false,
+      canAddSubAgent: false,
+      canCreateLocalSkill: true,
+      canAddCatalogSkill: false,
+      canBootstrapDefaults: false,
+    };
+  }
+
   return {
     canImportBundle: mode === "agent",
     canReviewTemplateUpdates: mode === "agent",
@@ -261,6 +276,7 @@ function isAgentOverride(source: ComposeSource | undefined): boolean {
 function targetKey(target: Target): string {
   if ("agentId" in target) return `agent:${target.agentId}`;
   if ("templateId" in target) return `template:${target.templateId}`;
+  if ("computerId" in target) return `computer:${target.computerId}`;
   return "defaults";
 }
 

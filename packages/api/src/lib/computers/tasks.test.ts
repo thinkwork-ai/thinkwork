@@ -12,6 +12,15 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("workspace_file_write")).toBe(
       "workspace_file_write",
     );
+    expect(parseComputerTaskType("WORKSPACE_FILE_LIST")).toBe(
+      "workspace_file_list",
+    );
+    expect(parseComputerTaskType("WORKSPACE_FILE_READ")).toBe(
+      "workspace_file_read",
+    );
+    expect(parseComputerTaskType("WORKSPACE_FILE_DELETE")).toBe(
+      "workspace_file_delete",
+    );
     expect(parseComputerTaskType("CONNECTOR_WORK")).toBe("connector_work");
     expect(parseComputerTaskType("THREAD_TURN")).toBe("thread_turn");
     expect(parseComputerTaskType("GOOGLE_CLI_SMOKE")).toBe("google_cli_smoke");
@@ -41,6 +50,18 @@ describe("Computer task helpers", () => {
         content: "hello",
       }),
     ).toEqual({ path: "notes/today.md", content: "hello" });
+  });
+
+  it("normalizes workspace file list/read/delete inputs", () => {
+    expect(
+      normalizeTaskInput("workspace_file_list", { ignored: true }),
+    ).toBeNull();
+    expect(
+      normalizeTaskInput("workspace_file_read", { path: "USER.md" }),
+    ).toEqual({ path: "USER.md" });
+    expect(
+      normalizeTaskInput("workspace_file_delete", { path: "memory/old.md" }),
+    ).toEqual({ path: "memory/old.md" });
   });
 
   it("normalizes connector work input", () => {

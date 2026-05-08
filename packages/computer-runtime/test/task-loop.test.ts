@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
@@ -82,6 +82,68 @@ describe("Computer runtime task loop", () => {
     await expect(
       readFile(join(root, "notes/phase3.txt"), "utf8"),
     ).resolves.toBe("hello computer\n");
+  });
+
+  it("lists, reads, and deletes workspace files under the workspace root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    await writeFile(join(root, "USER.md"), "Name: Eric\n", "utf8");
+    await writeFile(join(root, ".thinkwork-computer-health"), "ok\n", "utf8");
+
+    const listOutput = await handleTask(
+      { id: "task-list", taskType: "workspace_file_list" },
+      root,
+    );
+    expect(listOutput).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_list",
+      files: [expect.objectContaining({ path: "USER.md", bytes: 11 })],
+    });
+
+    const readOutput = await handleTask(
+      {
+        id: "task-read",
+        taskType: "workspace_file_read",
+        input: { path: "USER.md" },
+      },
+      root,
+    );
+    expect(readOutput).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_read",
+      relativePath: "USER.md",
+      content: "Name: Eric\n",
+      exists: true,
+    });
+
+    const deleteOutput = await handleTask(
+      {
+        id: "task-delete",
+        taskType: "workspace_file_delete",
+        input: { path: "USER.md" },
+      },
+      root,
+    );
+    expect(deleteOutput).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_delete",
+      relativePath: "USER.md",
+      deleted: true,
+    });
+
+    const missingOutput = await handleTask(
+      {
+        id: "task-read-missing",
+        taskType: "workspace_file_read",
+        input: { path: "USER.md" },
+      },
+      root,
+    );
+    expect(missingOutput).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_read",
+      content: null,
+      exists: false,
+    });
   });
 
   it("fails unsafe workspace file paths", async () => {
