@@ -54,6 +54,12 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
   );
 
   const computerId = myComputerData?.myComputer?.id ?? null;
+  // myComputerData with a present `myComputer: null` field means the query
+  // resolved but the caller has no Computer assigned. Distinguish that from
+  // "still loading" so we can show an actionable message instead of leaving
+  // the Create button permanently disabled with no feedback.
+  const myComputerLoaded = myComputerData !== undefined;
+  const noComputerAssigned = myComputerLoaded && computerId === null;
   const canSubmit = !!tenantId && !!computerId && !fetching;
 
   async function handleSubmit(event: React.FormEvent) {
@@ -97,14 +103,23 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-4">
-            <Label htmlFor="new-thread-title">Title</Label>
-            <Input
-              id="new-thread-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-              disabled={fetching}
-            />
+            {noComputerAssigned ? (
+              <p className="text-sm text-muted-foreground">
+                You don't have a Computer assigned yet. Ask your tenant operator
+                to provision one before creating threads.
+              </p>
+            ) : (
+              <>
+                <Label htmlFor="new-thread-title">Title</Label>
+                <Input
+                  id="new-thread-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  autoFocus
+                  disabled={fetching}
+                />
+              </>
+            )}
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
             ) : null}
@@ -116,11 +131,13 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
               onClick={() => onOpenChange(false)}
               disabled={fetching}
             >
-              Cancel
+              {noComputerAssigned ? "Close" : "Cancel"}
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              {fetching ? "Creating…" : "Create"}
-            </Button>
+            {!noComputerAssigned && (
+              <Button type="submit" disabled={!canSubmit}>
+                {fetching ? "Creating…" : "Create"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

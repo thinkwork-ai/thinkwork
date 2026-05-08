@@ -140,7 +140,9 @@ const mocks = vi.hoisted(() => {
 		select: vi.fn(() => ({ from: buildSelect })),
 	};
 
+	const callerTenantImpl = { current: "tenant-T" as string | null };
 	const resolveCallerUserId = vi.fn(async () => USER_A as string | null);
+	const resolveCallerTenantId = vi.fn(async () => callerTenantImpl.current);
 	const requireComputerReadAccess = vi.fn(async (_ctx: unknown, computer: ComputerRow) => {
 		await accessCheckImpl.current(computer);
 	});
@@ -154,6 +156,7 @@ const mocks = vi.hoisted(() => {
 	return {
 		dbState,
 		accessCheckImpl,
+		callerTenantImpl,
 		eq,
 		and,
 		desc,
@@ -161,6 +164,7 @@ const mocks = vi.hoisted(() => {
 		sql,
 		db,
 		resolveCallerUserId,
+		resolveCallerTenantId,
 		requireComputerReadAccess,
 		threadToCamel,
 		computersTable,
@@ -182,6 +186,7 @@ vi.mock("../../src/graphql/utils.js", () => ({
 
 vi.mock("../../src/graphql/resolvers/core/resolve-auth-user.js", () => ({
 	resolveCallerUserId: mocks.resolveCallerUserId,
+	resolveCallerTenantId: mocks.resolveCallerTenantId,
 }));
 
 vi.mock("../../src/graphql/resolvers/computers/shared.js", () => ({
@@ -203,8 +208,10 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
 		mocks.dbState.computers = [COMPUTER_A, COMPUTER_B];
 		mocks.dbState.threads = [...A_THREADS, ...B_THREADS];
 		mocks.accessCheckImpl.current = async () => undefined; // allow by default
+		mocks.callerTenantImpl.current = TENANT_T; // caller in tenant T by default
 		mocks.db.select.mockClear();
 		mocks.requireComputerReadAccess.mockClear();
+		mocks.resolveCallerTenantId.mockClear();
 	});
 
 	it("returns the caller's threads when scoped to the caller's own Computer", async () => {
@@ -255,6 +262,29 @@ describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
 		expect(result).toEqual([]);
 		// Did not even reach the access check — short-circuits on missing row.
 		expect(mocks.requireComputerReadAccess).not.toHaveBeenCalled();
+	});
+
+	it("returns [] when the caller's tenant doesn't match args.tenantId (cross-tenant probe)", async () => {
+		// A Cognito user holding a JWT for a different tenant tries to read
+		// tenant T's threads by spoofing args.tenantId. resolveCallerTenantId
+		// returns their actual tenant; the cross-tenant gate fails closed.
+		mocks.callerTenantImpl.current = "tenant-OTHER";
+		const result = await threads_query(
+			null,
+			{ tenantId: TENANT_T },
+			cognitoCtx,
+		);
+		expect(result).toEqual([]);
+	});
+
+	it("returns [] when caller-tenant resolution fails (no membership lookup match)", async () => {
+		mocks.callerTenantImpl.current = null;
+		const result = await threads_query(
+			null,
+			{ tenantId: TENANT_T },
+			cognitoCtx,
+		);
+		expect(result).toEqual([]);
 	});
 
 	it("apikey callers bypass the ownership gate entirely (service-to-service trust)", async () => {

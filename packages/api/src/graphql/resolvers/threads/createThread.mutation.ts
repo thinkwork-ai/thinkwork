@@ -10,6 +10,7 @@ import {
   threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   enqueueComputerThreadTurn,
@@ -22,6 +23,17 @@ export const createThread = async (
   ctx: GraphQLContext,
 ) => {
   const i = args.input;
+
+  // Tenant gate. Cognito callers must belong to the target tenant — without
+  // this, an authenticated user holding a JWT for tenant A could supply
+  // i.tenantId = tenant B and create threads in B's namespace. Closes the
+  // F5 P0 from #959 review. apikey callers are pre-authorized service
+  // identities (agentcore runtime, schedulers); they are validated by the
+  // shared API secret and may legitimately create threads across tenants.
+  if (ctx.auth.authType === "cognito") {
+    await requireTenantMember(ctx, i.tenantId);
+  }
+
   const createdByType = i.createdByType ?? "user";
   const createdById =
     createdByType === "user"

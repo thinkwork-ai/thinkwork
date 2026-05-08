@@ -12,6 +12,7 @@ export const MyComputerQuery = gql`
     myComputer {
       id
       name
+      tenantId
     }
   }
 `;
