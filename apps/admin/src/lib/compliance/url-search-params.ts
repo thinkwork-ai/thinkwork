@@ -23,13 +23,13 @@ export interface ComplianceSearchParams {
 const ACTOR_TYPES = new Set<string>(Object.values(ComplianceActorType));
 const EVENT_TYPES = new Set<string>(Object.values(ComplianceEventType));
 
-function pickActorType(v: unknown): ComplianceActorType | undefined {
+export function pickActorType(v: unknown): ComplianceActorType | undefined {
   return typeof v === "string" && ACTOR_TYPES.has(v)
     ? (v as ComplianceActorType)
     : undefined;
 }
 
-function pickEventType(v: unknown): ComplianceEventType | undefined {
+export function pickEventType(v: unknown): ComplianceEventType | undefined {
   return typeof v === "string" && EVENT_TYPES.has(v)
     ? (v as ComplianceEventType)
     : undefined;

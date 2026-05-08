@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClient } from "urql";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -24,6 +24,18 @@ interface ChainHop {
   eventHash: string;
 }
 
+interface ChainEventNode {
+  eventId: string;
+  eventType: string;
+  recordedAt: string;
+  eventHash: string;
+  prevHash?: string | null;
+}
+
+type LookupResult =
+  | { ok: true; event: ChainEventNode }
+  | { ok: false; reason: "missing" | "error" };
+
 export function ChainPositionPanel({
   eventHash,
   prevHash,
@@ -33,24 +45,50 @@ export function ChainPositionPanel({
   const [walking, setWalking] = useState(false);
   const [hops, setHops] = useState<ChainHop[]>([]);
   const [reachedGenesis, setReachedGenesis] = useState(false);
+  const [walkError, setWalkError] = useState<string | null>(null);
+  // Generation counter: each walk_back / prev-hash click increments. State
+  // writes are gated on the generation matching to suppress stale awaits
+  // when the user navigates mid-walk or kicks off a second walk.
+  const walkGenRef = useRef(0);
 
-  const lookupByHash = async (hash: string) => {
+  // Reset the panel when the parent navigates to a different event. Without
+  // this, a fresh detail page renders the previous event's accumulated hops.
+  useEffect(() => {
+    walkGenRef.current++;
+    setHops([]);
+    setReachedGenesis(false);
+    setWalking(false);
+    setWalkError(null);
+  }, [eventHash]);
+
+  const lookupByHash = async (hash: string): Promise<LookupResult> => {
     const result = await client
-      .query(ComplianceEventByHashQuery, { eventHash: hash }, { requestPolicy: "cache-first" })
+      .query(
+        ComplianceEventByHashQuery,
+        { eventHash: hash },
+        { requestPolicy: "cache-first" },
+      )
       .toPromise();
-    return result.data?.complianceEventByHash ?? null;
+    if (result.error) return { ok: false, reason: "error" };
+    const event = result.data?.complianceEventByHash;
+    if (!event) return { ok: false, reason: "missing" };
+    return { ok: true, event };
   };
 
   const handlePrevHashClick = async () => {
-    if (!prevHash) return;
-    const event = await lookupByHash(prevHash);
-    if (!event) {
-      toast.error("Previous event not visible to your tenant scope.");
+    if (!prevHash || walking) return;
+    const out = await lookupByHash(prevHash);
+    if (!out.ok) {
+      toast.error(
+        out.reason === "missing"
+          ? "Previous event not visible to your tenant scope."
+          : "Failed to load previous event. Try again.",
+      );
       return;
     }
     navigate({
       to: "/compliance/events/$eventId",
-      params: { eventId: event.eventId },
+      params: { eventId: out.event.eventId },
       search: (prev) => prev,
     });
   };
@@ -60,30 +98,53 @@ export function ChainPositionPanel({
       setReachedGenesis(true);
       return;
     }
+    const myGen = ++walkGenRef.current;
     setWalking(true);
     setHops([]);
     setReachedGenesis(false);
+    setWalkError(null);
     try {
       let nextHash: string | null = prevHash;
       const collected: ChainHop[] = [];
+      // Detect cycles defensively. The chain is structurally a Merkle list
+      // and shouldn't loop, but if a malformed import or hash collision
+      // produces one, surface it explicitly rather than rendering 10
+      // identical hops with duplicate React keys.
+      const seen = new Set<string>();
+      let cycleDetected = false;
+      let lookupFailedAt: number | null = null;
       for (let i = 0; i < WALK_BACK_LIMIT && nextHash; i++) {
-        const event = await lookupByHash(nextHash);
-        if (!event) break;
-        collected.push({
-          eventId: event.eventId,
-          eventType: event.eventType,
-          recordedAt: event.recordedAt,
-          eventHash: event.eventHash,
-        });
-        if (!event.prevHash) {
-          setReachedGenesis(true);
+        if (seen.has(nextHash)) {
+          cycleDetected = true;
           break;
         }
-        nextHash = event.prevHash;
+        seen.add(nextHash);
+        const out = await lookupByHash(nextHash);
+        if (!out.ok) {
+          if (out.reason === "error") lookupFailedAt = i + 1;
+          break;
+        }
+        const ev = out.event;
+        collected.push({
+          eventId: ev.eventId,
+          eventType: ev.eventType,
+          recordedAt: ev.recordedAt,
+          eventHash: ev.eventHash,
+        });
+        if (!ev.prevHash) {
+          if (walkGenRef.current === myGen) setReachedGenesis(true);
+          break;
+        }
+        nextHash = ev.prevHash;
       }
+      // Suppress writes if a newer walk superseded this one.
+      if (walkGenRef.current !== myGen) return;
       setHops(collected);
+      if (cycleDetected) setWalkError("Chain cycle detected — stopping walk.");
+      else if (lookupFailedAt !== null)
+        setWalkError(`Failed to load hop ${lookupFailedAt}. Partial chain shown.`);
     } finally {
-      setWalking(false);
+      if (walkGenRef.current === myGen) setWalking(false);
     }
   };
 
@@ -125,6 +186,12 @@ export function ChainPositionPanel({
             )}
           </Button>
         </div>
+
+        {walkError ? (
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            {walkError}
+          </div>
+        ) : null}
 
         {hops.length > 0 || reachedGenesis ? (
           <div className="space-y-2 pt-2">

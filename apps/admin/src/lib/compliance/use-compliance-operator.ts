@@ -1,11 +1,12 @@
-import { useQuery } from "urql";
+import { useQuery, type CombinedError } from "urql";
 import { ComplianceOperatorCheckQuery } from "@/lib/compliance/queries";
 
 export interface UseComplianceOperatorResult {
   isOperator: boolean;
   allowlistConfigured: boolean;
   fetching: boolean;
-  error: Error | undefined;
+  /** Preserve graphQLErrors / networkError fields for callers that need them. */
+  error: CombinedError | undefined;
 }
 
 /**
@@ -25,6 +26,6 @@ export function useComplianceOperator(): UseComplianceOperatorResult {
       data?.complianceOperatorCheck?.allowlistConfigured,
     ),
     fetching,
-    error: error as Error | undefined,
+    error,
   };
 }

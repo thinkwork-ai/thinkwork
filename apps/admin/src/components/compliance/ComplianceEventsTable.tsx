@@ -63,7 +63,7 @@ export function ComplianceEventsTable({
     ],
   );
 
-  const [{ data, fetching, error }] = useQuery({
+  const [{ data, fetching, error }, refetch] = useQuery({
     query: ComplianceEventsListQuery,
     variables: {
       filter,
@@ -86,8 +86,16 @@ export function ComplianceEventsTable({
   return (
     <div className="space-y-3">
       {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-          Failed to load compliance events: {error.message}
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive flex items-center justify-between gap-3">
+          <span>Failed to load compliance events: {error.message}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => refetch({ requestPolicy: "network-only" })}
+          >
+            Retry
+          </Button>
         </div>
       ) : null}
 
@@ -114,7 +122,7 @@ export function ComplianceEventsTable({
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 </TableRow>
               ))
-            : edges.length === 0 ? (
+            : edges.length === 0 && !error ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-12">
                     {hasActiveFilter
@@ -122,7 +130,7 @@ export function ComplianceEventsTable({
                       : "No audit events have been recorded yet."}
                   </TableCell>
                 </TableRow>
-              ) : (
+              ) : edges.length === 0 ? null : (
                 edges.map((edge) => {
                   const event = edge.node;
                   return (
@@ -184,26 +192,29 @@ export function ComplianceEventsTable({
         </TableBody>
       </Table>
 
-      {pageInfo?.hasNextPage && pageInfo.endCursor ? (
-        <div className="flex justify-center pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={fetching}
-            onClick={() => onCursorAdvance(pageInfo.endCursor!)}
-          >
-            {fetching ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              "Load more"
-            )}
-          </Button>
-        </div>
-      ) : null}
+      {pageInfo?.hasNextPage && pageInfo.endCursor ? (() => {
+        const nextCursor = pageInfo.endCursor;
+        return (
+          <div className="flex justify-center pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={fetching}
+              onClick={() => onCursorAdvance(nextCursor)}
+            >
+              {fetching ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                "Load more"
+              )}
+            </Button>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

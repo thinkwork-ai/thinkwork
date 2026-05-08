@@ -7,6 +7,8 @@ import {
 import { ComplianceTenantsQuery } from "@/lib/compliance/queries";
 import {
   COMPLIANCE_RANGE_VALUES,
+  pickActorType,
+  pickEventType,
   type ComplianceRange,
   type ComplianceSearchParams,
 } from "@/lib/compliance/url-search-params";
@@ -63,15 +65,26 @@ export interface ComplianceFilterBarProps {
   onChange: (next: ComplianceSearchParams) => void;
 }
 
+// `<input type="datetime-local">` has no timezone. Treating its value as
+// implicit-local would silently shift Since/Until by the operator's UTC
+// offset on every blur. We anchor everything to UTC explicitly so an
+// audit window selected in PST renders identically in EST.
 function isoToInputValue(iso: string | undefined): string {
   if (!iso) return "";
-  // datetime-local wants `YYYY-MM-DDTHH:mm`. Trim the trailing seconds + Z.
-  return iso.slice(0, 16);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getUTCFullYear().toString().padStart(4, "0");
+  const mm = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+  const dd = d.getUTCDate().toString().padStart(2, "0");
+  const hh = d.getUTCHours().toString().padStart(2, "0");
+  const mi = d.getUTCMinutes().toString().padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
 function inputValueToIso(value: string): string | undefined {
   if (!value) return undefined;
-  const date = new Date(value);
+  // Append Z so `new Date(...)` parses the wall-clock value as UTC, not local.
+  const date = new Date(`${value}:00Z`);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
@@ -171,7 +184,7 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
           <Select
             value={search.actorType ?? "__all__"}
             onValueChange={(v) =>
-              patch({ actorType: v === "__all__" ? undefined : (v as ComplianceActorType) })
+              patch({ actorType: v === "__all__" ? undefined : pickActorType(v) })
             }
           >
             <SelectTrigger className="w-[10rem]">
@@ -194,7 +207,7 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
           <Select
             value={search.eventType ?? "__all__"}
             onValueChange={(v) =>
-              patch({ eventType: v === "__all__" ? undefined : (v as ComplianceEventType) })
+              patch({ eventType: v === "__all__" ? undefined : pickEventType(v) })
             }
           >
             <SelectTrigger className="w-[16rem]">
@@ -226,6 +239,7 @@ export function ComplianceFilterBar({ search, onChange }: ComplianceFilterBarPro
               }
               prefix={<Building2 className="size-3.5 text-muted-foreground" />}
               triggerClassName="w-[18rem]"
+              disabled={tenantsResult.fetching}
             />
           </div>
         ) : null}

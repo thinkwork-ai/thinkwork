@@ -11,11 +11,16 @@ interface CopyableRowProps {
 export function CopyableRow({ label, value, url, onClick }: CopyableRowProps) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleCopy = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Permission denied, insecure context, or older Safari without clipboard API.
+      // Don't flip the icon — leaving Copy visible signals "nothing copied".
+    }
   };
 
   return (

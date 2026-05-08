@@ -28,9 +28,9 @@ function ComplianceListPage() {
       navigate({
         to: "/compliance",
         search: (prev) => {
-          const next = { ...prev };
-          delete (next as ComplianceSearchParams).invalid;
-          return next;
+          const next = { ...prev } as Record<string, unknown>;
+          delete next.invalid;
+          return next as ComplianceSearchParams;
         },
         replace: true,
       });

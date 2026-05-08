@@ -15,11 +15,39 @@ function ComplianceLayout() {
   // Brief flicker on first paint accepted in v1: the operator-check query
   // returns from cache after the first navigation. While fetching with no
   // data yet, render the Outlet — the list page handles its own loading.
+  if (!fetching && error) {
+    return <ComplianceOperatorCheckFailed message={error.message} />;
+  }
   if (!fetching && !error && !allowlistConfigured) {
     return <ComplianceAllowlistMissing />;
   }
 
   return <Outlet />;
+}
+
+function ComplianceOperatorCheckFailed({ message }: { message: string }) {
+  return (
+    <div className="mx-auto max-w-2xl py-12">
+      <Card className="border-destructive/40">
+        <CardContent className="space-y-3 p-6">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="size-5" />
+            <span className="font-medium">
+              Could not verify compliance-operator status
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            The platform operator check failed. Compliance browse is gated on
+            this check, so the section is unavailable until the platform GraphQL
+            is reachable.
+          </p>
+          <p className="text-xs text-muted-foreground font-mono break-words">
+            {message}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function ComplianceAllowlistMissing() {
