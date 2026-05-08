@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ComputerWorkbench } from "./ComputerWorkbench";
 
@@ -48,17 +54,18 @@ describe("ComputerWorkbench", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
-    await screen.findByText("Start");
-    expect(createThreadMock).toHaveBeenCalledWith({
-      input: {
-        tenantId: "tenant-A",
-        computerId: "computer-1",
-        title: "Build a board summary",
-        channel: "CHAT",
-      },
+    await waitFor(() => {
+      expect(createThreadMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-A",
+          computerId: "computer-1",
+          title: "Build a board summary",
+          channel: "CHAT",
+        },
+      });
     });
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/threads/$id",
+      to: "/tasks/$id",
       params: { id: "thread-1" },
     });
   });

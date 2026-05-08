@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
   Inbox,
+  ListTodo,
   Monitor,
   PenSquare,
   Repeat,
@@ -20,7 +21,11 @@ import {
 } from "@thinkwork/ui";
 import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
-import { COMPUTER_WORKBENCH_ROUTE } from "@/lib/computer-routes";
+import {
+  COMPUTER_TASKS_ROUTE,
+  COMPUTER_WORKBENCH_ROUTE,
+  computerTaskRoute,
+} from "@/lib/computer-routes";
 import {
   ComputerThreadsQuery,
   MyComputerQuery,
@@ -35,6 +40,7 @@ interface NavItem {
 
 const PERMANENT_NAV: NavItem[] = [
   { to: COMPUTER_WORKBENCH_ROUTE, icon: Monitor, label: "Computer" },
+  { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Tasks" },
   { to: "/automations", icon: Repeat, label: "Automations" },
   { to: "/inbox", icon: Inbox, label: "Inbox" },
 ];
@@ -168,7 +174,7 @@ export function ComputerSidebar() {
                   </SidebarMenuItem>
                 ) : (
                   threads.map((thread) => {
-                    const threadPath = `/threads/${thread.id}`;
+                    const threadPath = computerTaskRoute(thread.id);
                     const isActive =
                       pathname === threadPath ||
                       pathname.startsWith(`${threadPath}/`);
@@ -179,11 +185,11 @@ export function ComputerSidebar() {
                           isActive={isActive}
                           tooltip={thread.title ?? "(Untitled)"}
                         >
-                          <Link to="/threads/$id" params={{ id: thread.id }}>
+                          <a href={threadPath}>
                             <span className="truncate">
                               {thread.title?.trim() ? thread.title : "(Untitled)"}
                             </span>
-                          </Link>
+                          </a>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );

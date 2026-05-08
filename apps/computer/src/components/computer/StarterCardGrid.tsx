@@ -83,27 +83,24 @@ export function StarterCardGrid({
           id="starter-card-heading"
           className="text-sm font-medium text-muted-foreground"
         >
-          Start with
+          Not sure where to start?
         </h2>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <Button
             key={card.id}
             type="button"
             variant="outline"
-            className="h-auto min-h-28 justify-start rounded-lg border-border/70 bg-background/40 p-4 text-left transition-colors hover:bg-accent/40"
+            className="h-auto min-h-14 justify-start rounded-lg border-border/70 bg-background/40 p-3 text-left transition-colors hover:bg-accent/40"
             onClick={() => onSelect(card.prompt)}
           >
-            <span className="flex min-w-0 flex-col gap-3">
-              <span className="flex items-center gap-2">
-                <card.icon className="size-4 shrink-0 text-primary" />
-                <span className="truncate text-sm font-medium text-foreground">
-                  {card.title}
-                </span>
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/60">
+                <card.icon className="size-4 text-muted-foreground" />
               </span>
-              <span className="whitespace-normal text-xs leading-5 text-muted-foreground">
-                {card.description}
+              <span className="truncate text-sm font-medium text-foreground">
+                {card.title}
               </span>
             </span>
           </Button>
