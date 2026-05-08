@@ -267,11 +267,16 @@ export function AppSidebar() {
                 <img
                   src="/logo.png"
                   alt="ThinkWork"
-                  className="h-6 w-8 shrink-0 object-contain"
+                  className="h-9 w-9 shrink-0 object-contain"
                 />
-                <span className="text-lg font-semibold truncate">
-                  ThinkWork
-                </span>
+                <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
+                  <span className="text-base font-semibold tracking-tight leading-none truncate">
+                    ThinkWork
+                  </span>
+                  <span className="text-xs text-muted-foreground leading-none truncate mt-0.5">
+                    Administration
+                  </span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
