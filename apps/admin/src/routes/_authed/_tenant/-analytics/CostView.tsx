@@ -199,10 +199,16 @@ function AgentBudgetTable() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="h-4 w-4 text-muted-foreground" />
-            Cost by Agent
-          </CardTitle>
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              Cost by Agent
+            </CardTitle>
+            <CardDescription>
+              Per-agent spend over the selected period. Computer-owned cost
+              is not yet broken out separately.
+            </CardDescription>
+          </div>
           {hasArchived && (
             <button
               type="button"
@@ -293,6 +299,9 @@ function CostByModelCard() {
           <BrainCircuit className="h-4 w-4 text-muted-foreground" />
           Cost by Model
         </CardTitle>
+        <CardDescription>
+          Spend by model across all agents and Computers.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
