@@ -812,6 +812,7 @@ export const ThreadsListQuery = graphql(`
       assigneeType
       assigneeId
       agentId
+      computerId
       agent {
         id
         name
@@ -891,6 +892,7 @@ export const ThreadDetailQuery = graphql(`
       assigneeType
       assigneeId
       agentId
+      computerId
       agent {
         id
         name

@@ -1,14 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import {
-  ArrowLeft,
-  Bot,
-  DollarSign,
-  Monitor,
-  Server,
-  User,
-} from "lucide-react";
+import { ArrowLeft, DollarSign, Monitor, Server, User } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -193,7 +186,7 @@ function ComputerDetailPage() {
               {ownerLabel}
             </Badge>
             <Badge variant="outline" className="gap-1">
-              <Bot className="h-3 w-3" />
+              <Monitor className="h-3 w-3" />
               {computer.template?.name ?? "No template"}
             </Badge>
             <Badge variant="outline" className="gap-1">
@@ -228,11 +221,7 @@ function ComputerDetailPage() {
       ) : null}
 
       {tab === "workspace" ? (
-        <WorkspaceEditor
-          target={{ computerId: computer.id }}
-          mode="computer"
-          className="min-h-[650px]"
-        />
+        <ComputerWorkspaceTab computerId={computer.id} />
       ) : null}
 
       {tab === "config" ? (
@@ -243,6 +232,17 @@ function ComputerDetailPage() {
         </div>
       ) : null}
     </PageLayout>
+  );
+}
+
+function ComputerWorkspaceTab({ computerId }: { computerId: string }) {
+  const target = useMemo(() => ({ computerId }), [computerId]);
+  return (
+    <WorkspaceEditor
+      target={target}
+      mode="computer"
+      className="min-h-[650px]"
+    />
   );
 }
 
@@ -272,16 +272,13 @@ function IdentityCard({
           </div>
           <div className="min-w-0">
             <dt className="text-xs font-medium text-muted-foreground">
-              Template
+              Base Template
             </dt>
             <dd className="mt-1">
               {computer.template ? (
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="text-xs">
                     {computer.template.name}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {computer.template.templateKind}
                   </Badge>
                 </div>
               ) : (

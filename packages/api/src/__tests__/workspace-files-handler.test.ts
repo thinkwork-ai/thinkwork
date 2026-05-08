@@ -621,6 +621,8 @@ describe("computer EFS workspace target", () => {
         taskInput: { path: "USER.md" },
       }),
     );
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
   });
 
   it("writes and deletes files through Computer runtime tasks", async () => {
@@ -642,6 +644,7 @@ describe("computer EFS workspace target", () => {
     );
 
     expect(putRes.statusCode).toBe(200);
+    expect(putRes.body).toMatchObject({ ok: true });
     expect(enqueueComputerTaskMock).toHaveBeenCalledWith(
       expect.objectContaining({
         taskType: "workspace_file_write",
@@ -665,12 +668,15 @@ describe("computer EFS workspace target", () => {
     );
 
     expect(deleteRes.statusCode).toBe(200);
+    expect(deleteRes.body).toMatchObject({ ok: true });
     expect(enqueueComputerTaskMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         taskType: "workspace_file_delete",
         taskInput: { path: "USER.md" },
       }),
     );
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
   });
 });
 

@@ -308,7 +308,7 @@ function TaskResultRow({
             <div className="mt-2 space-y-1 rounded-md border bg-background/40 p-2 text-xs leading-relaxed">
               <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                 <span>
-                  Managed agent {shortId(threadContext.dispatchedAgentId)}
+                  Response worker {shortId(threadContext.dispatchedAgentId)}
                 </span>
                 {threadContext.dispatchStatus ? (
                   <Badge variant="outline" className="h-5 text-[11px]">
