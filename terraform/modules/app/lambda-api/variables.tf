@@ -509,3 +509,25 @@ variable "compliance_anchor_watchdog_role_name" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Phase 3 U11.U2 — compliance export runner Lambda
+# ---------------------------------------------------------------------------
+
+variable "compliance_exports_bucket_name" {
+  description = "Name of the compliance-exports S3 bucket. Forwarded to the runner Lambda as COMPLIANCE_EXPORTS_BUCKET so the U11.U3 live body knows where to write CSV/NDJSON artifacts. Default empty — the runner function still deploys but the live body throws on boot."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_exports_runner_role_arn" {
+  description = "ARN of the IAM role the U11 export runner Lambda assumes. Wired from `module.compliance_exports.runner_role_arn`. Default empty until U11.U2 ships."
+  type        = string
+  default     = ""
+}
+
+variable "compliance_exports_runner_role_name" {
+  description = "Name of the IAM role the U11 export runner Lambda assumes (extracted from the role resource for inline-policy attachments — DLQ SendMessage, SQS receive)."
+  type        = string
+  default     = ""
+}
