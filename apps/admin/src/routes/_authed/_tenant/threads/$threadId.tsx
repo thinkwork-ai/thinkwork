@@ -316,7 +316,7 @@ function ThreadDetailPage() {
   }, [turnSub.data, reexecuteThread]);
 
   const thread = threadResult.data?.thread;
-  const isComputerOwnedThread = Boolean((thread as any)?.computerId);
+  const isComputerOwnedThread = Boolean(thread?.computerId);
   const agents = agentsResult.data?.agents ?? [];
 
   // ---- Derived data ----
