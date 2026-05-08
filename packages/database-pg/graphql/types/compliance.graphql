@@ -151,7 +151,39 @@ extend type Query {
 
   """
   Single event by event_hash. Used by the chain-position panel's
-  prev_hash click-through. Tenant-scoped for non-operators.
+  prev_hash click-through and the walk-back-N-events iterator.
+  Tenant-scoped for non-operators. The eventHash MUST be a 64-char
+  lowercase hex SHA-256 digest; malformed input returns null without
+  hitting the DB (resolver-level format guard).
   """
   complianceEventByHash(eventHash: String!): ComplianceEvent
+
+  """
+  Distinct tenant_ids visible to the caller. Operators get the full
+  set (DISTINCT tenant_id from compliance.audit_events); non-operators
+  get a 1-element list of their own tenant. Powers the operator
+  tenant-filter typeahead in the admin Compliance section.
+  """
+  complianceTenants: [ID!]!
+
+  """
+  Caller's compliance-operator status + dev-environment configuration
+  signal. Mirrors the adminRoleCheck pattern (top-level Query field,
+  NOT a User-type field — operator status is caller-dependent and
+  attaching it to User would leak the semantic across every
+  User-returning query).
+  """
+  complianceOperatorCheck: ComplianceOperatorCheckResult!
+}
+
+type ComplianceOperatorCheckResult {
+  """True when the caller's email matches THINKWORK_PLATFORM_OPERATOR_EMAILS."""
+  isOperator: Boolean!
+  """
+  True when the env var is non-empty. False means the dev/staging
+  environment hasn't configured the allowlist; admin UI surfaces a
+  distinct "allowlist not configured" message rather than silently
+  flipping to non-operator UI.
+  """
+  allowlistConfigured: Boolean!
 }
