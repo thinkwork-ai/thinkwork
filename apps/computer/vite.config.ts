@@ -14,6 +14,10 @@ export default defineConfig({
       "@": new URL("./src", import.meta.url).pathname,
     },
   },
+  define: {
+    // amazon-cognito-identity-js uses Node.js globals
+    global: "globalThis",
+  },
   server: {
     port: 5180,
   },

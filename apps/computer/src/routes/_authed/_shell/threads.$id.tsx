@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 
-export const Route = createFileRoute("/_shell/threads/$id")({
+export const Route = createFileRoute("/_authed/_shell/threads/$id")({
   component: ThreadDetailPage,
 });
 
