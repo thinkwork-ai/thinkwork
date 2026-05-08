@@ -124,6 +124,7 @@ The body-swap safety test for the live PR should build the server/runtime withou
 
 ## Related
 
+- [`inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`](./inert-first-seam-swap-multi-pr-pattern-2026-05-08.md) — extension capturing substrate-first multi-layer ordering (DB schema → Terraform/IAM → Lambda shell → consumer) and the throw-don't-no-op stub rule, with the master compliance arc (~17 PRs over 2 days) as the production case study
 - `feedback_ship_inert_pattern` (auto-memory) — original team-level capture of "ship inert; integrate later"
 - `feedback_completion_callback_snapshot_pattern` (auto-memory) — load-bearing companion: factory snapshots `os.environ` reads at construction, the live spawn body never re-reads
 - `docs/solutions/workflow-issues/workspace-defaults-md-byte-parity-needs-ts-test-2026-04-25.md` — companion doc capturing the pre-push verification gap that bit PR #589 specifically (different topic, same session)
