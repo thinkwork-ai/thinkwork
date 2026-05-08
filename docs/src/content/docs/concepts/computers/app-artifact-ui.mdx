@@ -1,0 +1,35 @@
+---
+title: Computer app artifact UI
+description: The split-view contract for generated Computer apps, fixture-backed dashboards, provenance, refresh, and responsive behavior.
+---
+
+Generated Computer apps are private, route-based artifacts. They open in a split-view shell so the app canvas can feel finished while the Computer transcript and provenance remain visible.
+
+## Layout contract
+
+- Workbench routes keep the Computer sidebar. Concrete generated app routes such as `/apps/:artifactId` hide the sidebar and use a minimal top bar.
+- Desktop generated app routes use two bounded panels: provenance on the left and the app canvas on the right.
+- Both panels own their scroll region. The page shell stays `h-svh` so long transcripts and dense dashboard tables do not move the whole viewport.
+- Mobile and narrow layouts stack the panels in one column, with the app canvas first and provenance still reachable below it.
+
+## Provenance contract
+
+The provenance panel must show the artifact title, original task context, source/query steps, generated artifact save event, and refresh recipe metadata. It is part of the trust model, not a debugging drawer.
+
+## App canvas contract
+
+V1 renders trusted dashboard components from a manifest. It does not iframe arbitrary generated React apps.
+
+For the CRM pipeline-risk dashboard, the canvas includes:
+
+- a compact header with private/read-only status and as-of timestamp
+- deterministic refresh controls separated from the agentic **Ask Computer** action
+- KPI strip, stage exposure, product-line exposure, opportunity-risk table, source coverage, and evidence
+- stable chart heights so filters and fixture variants do not resize the dashboard unexpectedly
+- truncation or wrapping constraints for long opportunity and account names
+
+## Source and refresh states
+
+Source coverage must distinguish complete, partial, and failed inputs. Partial or failed source states should keep the prior dashboard visible and explain what is missing.
+
+Routine refresh re-runs saved source queries, deterministic transforms, scoring, charts, and templated summaries. It must not imply the Computer is reinterpreting the business question, changing the scoring model, adding new sources, or mutating CRM, email, or calendar data.

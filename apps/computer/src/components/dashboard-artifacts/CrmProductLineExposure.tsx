@@ -42,7 +42,11 @@ export function CrmProductLineExposure({
           Concentration by product with high-risk amount separated.
         </p>
       </div>
-      <ChartContainer config={productChartConfig} className="aspect-auto h-64 w-full">
+      <ChartContainer
+        config={productChartConfig}
+        data-testid="product-exposure-chart"
+        className="aspect-auto h-64 w-full"
+      >
         <BarChart data={data} margin={{ left: 8, right: 8 }}>
           <CartesianGrid vertical={false} />
           <XAxis

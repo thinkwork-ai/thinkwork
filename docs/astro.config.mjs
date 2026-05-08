@@ -58,6 +58,17 @@ export default defineConfig({
               ],
             },
             {
+              label: "Computers",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "concepts/computers" },
+                {
+                  label: "App Artifact UI",
+                  slug: "concepts/computers/app-artifact-ui",
+                },
+              ],
+            },
+            {
               label: "Agents",
               collapsed: true,
               items: [
