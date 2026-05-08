@@ -7,6 +7,7 @@ import {
   Monitor,
   PenSquare,
   Repeat,
+  Shapes,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,6 +23,7 @@ import {
 import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
 import {
+  COMPUTER_APPS_ROUTE,
   COMPUTER_TASKS_ROUTE,
   COMPUTER_WORKBENCH_ROUTE,
   computerTaskRoute,
@@ -41,6 +43,7 @@ interface NavItem {
 const PERMANENT_NAV: NavItem[] = [
   { to: COMPUTER_WORKBENCH_ROUTE, icon: Monitor, label: "Computer" },
   { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Tasks" },
+  { to: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
   { to: "/automations", icon: Repeat, label: "Automations" },
   { to: "/inbox", icon: Inbox, label: "Inbox" },
 ];
