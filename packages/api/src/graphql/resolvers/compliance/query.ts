@@ -322,6 +322,8 @@ interface ComplianceEventByHashArgs {
 	eventHash: string;
 }
 
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/i;
+
 export async function complianceEventByHash(
 	_parent: unknown,
 	args: ComplianceEventByHashArgs,
@@ -329,9 +331,19 @@ export async function complianceEventByHash(
 ): Promise<ReturnType<typeof rowToGql> | null> {
 	const auth = await requireComplianceReader(ctx, undefined);
 
+	// Format guard (SEC-004 finding): event_hash MUST be exactly 64 hex
+	// chars (SHA-256 hex output length). Reject malformed input BEFORE
+	// hitting the DB — closes the chain-walk amplification path where a
+	// caller could fire the resolver with an oversized string at high
+	// frequency. Returns null (consistent with "not found" semantics)
+	// rather than throwing so the chain-walk UI degrades gracefully.
+	if (!SHA256_HEX_RE.test(args.eventHash)) {
+		return null;
+	}
+
 	const client = await getComplianceReaderClient();
 	const wheres = [`event_hash = $1`];
-	const values: unknown[] = [args.eventHash];
+	const values: unknown[] = [args.eventHash.toLowerCase()];
 	if (!auth.isOperator && auth.effectiveTenantId) {
 		wheres.push(`tenant_id = $2::uuid`);
 		values.push(auth.effectiveTenantId);
@@ -350,4 +362,69 @@ export async function complianceEventByHash(
 
 	const anchor = await fetchAnchorState(client, row.tenant_id);
 	return rowToGql(row, anchor);
+}
+
+// ---------------------------------------------------------------------------
+// complianceTenants — distinct tenant_ids visible to caller
+// ---------------------------------------------------------------------------
+
+export async function complianceTenants(
+	_parent: unknown,
+	_args: unknown,
+	ctx: GraphQLContext,
+): Promise<string[]> {
+	const auth = await requireComplianceReader(ctx, undefined);
+
+	// Non-operator short-circuit: skip the DB roundtrip entirely; the
+	// caller can only see their own tenant. Cross-validates the auth
+	// pre-check (effectiveTenantId is non-null for non-operators
+	// because requireComplianceReader fail-closes UNAUTHENTICATED if
+	// it's null).
+	if (!auth.isOperator) {
+		return auth.effectiveTenantId ? [auth.effectiveTenantId] : [];
+	}
+
+	const client = await getComplianceReaderClient();
+	const res = await client.query(
+		`SELECT DISTINCT tenant_id::text AS tenant_id
+		   FROM compliance.audit_events
+		  ORDER BY tenant_id::text ASC`,
+		[],
+	);
+	const rows = res.rows as { tenant_id: string }[];
+	return rows.map((r) => r.tenant_id);
+}
+
+// ---------------------------------------------------------------------------
+// complianceOperatorCheck — caller's operator status + dev-env signal
+// ---------------------------------------------------------------------------
+
+export interface ComplianceOperatorCheckResult {
+	isOperator: boolean;
+	allowlistConfigured: boolean;
+}
+
+export async function complianceOperatorCheck(
+	_parent: unknown,
+	_args: unknown,
+	ctx: GraphQLContext,
+): Promise<ComplianceOperatorCheckResult> {
+	// Apikey hard-block: even the operator-check is Cognito-only —
+	// internal tools holding API_AUTH_SECRET have no business asking
+	// "am I an operator." Mirrors requireComplianceReader's gate.
+	if (ctx.auth.authType !== "cognito") {
+		// Return both false rather than throw — UI-friendlier; the apikey
+		// caller is hard-blocked at the actual list/event resolvers anyway.
+		return { isOperator: false, allowlistConfigured: false };
+	}
+	const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+		.split(",")
+		.map((e) => e.trim().toLowerCase())
+		.filter(Boolean);
+	const allowlistConfigured = allowlist.length > 0;
+	const email =
+		typeof ctx.auth.email === "string" ? ctx.auth.email.toLowerCase() : "";
+	const isOperator =
+		allowlistConfigured && email !== "" && allowlist.includes(email);
+	return { isOperator, allowlistConfigured };
 }
