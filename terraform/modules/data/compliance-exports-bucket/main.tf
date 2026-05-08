@@ -148,8 +148,17 @@ resource "aws_iam_role" "runner_lambda" {
   # ARN). The function name follows the predictable pattern
   # `thinkwork-${stage}-api-compliance-export-runner`.
   #
-  # `StringEquals` (NOT `StringEqualsIfExists`) so a missing/empty
-  # SourceArn on the AssumeRole call DENIES rather than no-ops.
+  # `StringEqualsIfExists` (NOT `StringEquals`) on `aws:SourceArn`
+  # because `aws_lambda_event_source_mapping` triggers an internal
+  # `sts:AssumeRole` validation at CreateEventSourceMapping time WITHOUT
+  # a SourceArn context — `StringEquals` rejects that call and the
+  # event-source mapping creation fails with "Please add Lambda as a
+  # Trusted Entity for ...". `aws:SourceAccount` stays as a strict
+  # equals — that key IS present in every AssumeRole call from Lambda,
+  # and pinning the account is the substantive confused-deputy guard.
+  # The anchor Lambda role can use strict StringEquals on SourceArn
+  # because EventBridge Scheduler always passes SourceArn; SQS event
+  # source mapping does not.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -159,7 +168,9 @@ resource "aws_iam_role" "runner_lambda" {
       Condition = {
         StringEquals = {
           "aws:SourceAccount" = var.account_id
-          "aws:SourceArn"     = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-compliance-export-runner"
+        }
+        StringEqualsIfExists = {
+          "aws:SourceArn" = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-compliance-export-runner"
         }
       }
     }]

@@ -156,14 +156,22 @@ function validateFilter(filter: ComplianceEventFilterInput): void {
 }
 
 function getQueueUrl(): string {
-	const url = process.env.COMPLIANCE_EXPORTS_QUEUE_URL;
-	if (!url) {
+	// Construct the queue URL from STAGE + AWS_REGION + AWS_ACCOUNT_ID
+	// rather than an explicit COMPLIANCE_EXPORTS_QUEUE_URL env var.
+	// graphql-http's env block is at the AWS 4 KB ceiling; adding another
+	// long URL pushed the deploy over the limit. The queue name is
+	// stable (`thinkwork-{stage}-compliance-exports`), so the URL is
+	// fully derivable from values the Lambda already has.
+	const stage = process.env.STAGE;
+	const region = process.env.AWS_REGION;
+	const accountId = process.env.AWS_ACCOUNT_ID;
+	if (!stage || !region || !accountId) {
 		throw new GraphQLError(
-			"compliance exports are not available in this environment — COMPLIANCE_EXPORTS_QUEUE_URL is unset on the graphql-http Lambda.",
+			"compliance exports are not available in this environment — STAGE, AWS_REGION, or AWS_ACCOUNT_ID is unset on the graphql-http Lambda.",
 			{ extensions: { code: "INTERNAL_SERVER_ERROR" } },
 		);
 	}
-	return url;
+	return `https://sqs.${region}.amazonaws.com/${accountId}/thinkwork-${stage}-compliance-exports`;
 }
 
 let _sqs: SQSClient | undefined;

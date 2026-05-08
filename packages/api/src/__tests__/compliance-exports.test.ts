@@ -52,8 +52,10 @@ import { emitAuditEvent } from "../lib/compliance/emit.js";
 const TENANT_A = "11111111-1111-7111-8111-aaaaaaaaaaaa";
 const TENANT_B = "22222222-2222-7222-8222-bbbbbbbbbbbb";
 const ACTOR_ALICE = "aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa";
+// Matches what the resolver constructs from STAGE=test, AWS_REGION=us-east-1,
+// AWS_ACCOUNT_ID=123 in beforeEach.
 const QUEUE_URL =
-	"https://sqs.us-east-1.amazonaws.com/123/thinkwork-dev-compliance-exports";
+	"https://sqs.us-east-1.amazonaws.com/123/thinkwork-test-compliance-exports";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -73,7 +75,12 @@ beforeEach(() => {
 	process.env = { ...ORIGINAL_ENV };
 	process.env.COMPLIANCE_READER_SECRET_ARN =
 		"arn:aws:secretsmanager:us-east-1:123:secret:test";
-	process.env.COMPLIANCE_EXPORTS_QUEUE_URL = QUEUE_URL;
+	// graphql-http's env block is at the AWS 4 KB ceiling, so the queue
+	// URL is constructed at resolver time from STAGE + AWS_REGION +
+	// AWS_ACCOUNT_ID rather than passed in directly.
+	process.env.STAGE = "test";
+	process.env.AWS_REGION = "us-east-1";
+	process.env.AWS_ACCOUNT_ID = "123";
 	process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS = "operator@thinkwork.example";
 	mockedDb.execute.mockReset();
 	mockedDb.transaction.mockReset();
@@ -419,13 +426,15 @@ describe("createComplianceExport — SQS failure", () => {
 });
 
 describe("createComplianceExport — env misconfiguration", () => {
-	it("throws INTERNAL_SERVER_ERROR when COMPLIANCE_EXPORTS_QUEUE_URL is unset", async () => {
+	it("throws INTERNAL_SERVER_ERROR when STAGE/AWS_REGION/AWS_ACCOUNT_ID is unset", async () => {
 		mockedRequireReader.mockResolvedValue({
 			isOperator: false,
 			effectiveTenantId: TENANT_A,
 		});
 		mockedResolveUserId.mockResolvedValue(ACTOR_ALICE);
-		delete process.env.COMPLIANCE_EXPORTS_QUEUE_URL;
+		// Drop one of the required env vars; the resolver constructs the
+		// queue URL from STAGE + AWS_REGION + AWS_ACCOUNT_ID at runtime.
+		delete process.env.AWS_ACCOUNT_ID;
 
 		await expect(
 			createComplianceExport(
