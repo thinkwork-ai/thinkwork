@@ -351,7 +351,17 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
         {thread && (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {thread.agent && <div><span className="text-muted-foreground text-xs">Agent</span><p>{thread.agent.name}</p></div>}
+              {thread.computerId ? (
+                <div>
+                  <span className="text-muted-foreground text-xs">Computer</span>
+                  <p>Computer-owned</p>
+                </div>
+              ) : thread.agent ? (
+                <div>
+                  <span className="text-muted-foreground text-xs">Agent</span>
+                  <p>{thread.agent.name}</p>
+                </div>
+              ) : null}
               {thread.createdAt && <div><span className="text-muted-foreground text-xs">Created</span><p>{new Date(thread.createdAt).toLocaleString()}</p></div>}
             </div>
           </div>
