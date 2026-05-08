@@ -779,6 +779,40 @@ jobs:
       - name: Run compliance-anchor smoke
         run: bash scripts/post-deploy-smoke-compliance-anchor.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
 
+  # ── Compliance export runner smoke (U11.U3) ─────────────────────
+  # Invokes the runner Lambda directly with a synthesized SQS event
+  # containing a non-existent UUIDv7 jobId. The runner returns an empty
+  # batchItemFailures list, exercising SQS body parse, Aurora connect,
+  # and the CAS-guard SELECT/UPDATE without depending on a queued job.
+  # Catches deploy regressions on env vars, IAM role wiring, and the
+  # Secrets Manager fetch at boot.
+  compliance-export-runner-smoke:
+    name: Compliance Export Runner Smoke
+    needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run compliance-export-runner smoke
+        run: bash scripts/post-deploy-smoke-compliance-export-runner.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
   # terraform-apply has ensured the cluster exists. Fails the deploy if
