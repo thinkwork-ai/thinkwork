@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { Provider as UrqlProvider } from "urql";
-import { ThemeProvider } from "@thinkwork/ui";
+import { ThemeProvider, TooltipProvider } from "@thinkwork/ui";
 import { AuthProvider } from "@/context/AuthContext";
 import { TenantProvider } from "@/context/TenantContext";
 import { graphqlClient } from "@/lib/graphql-client";
@@ -21,7 +21,9 @@ createRoot(document.getElementById("root")!).render(
       <UrqlProvider value={graphqlClient}>
         <AuthProvider>
           <TenantProvider>
-            <RouterProvider router={router} />
+            <TooltipProvider>
+              <RouterProvider router={router} />
+            </TooltipProvider>
           </TenantProvider>
         </AuthProvider>
       </UrqlProvider>
