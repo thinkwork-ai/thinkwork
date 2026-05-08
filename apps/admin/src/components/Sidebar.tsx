@@ -250,11 +250,11 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/people", icon: Users, label: "People" },
+    { to: "/compliance", icon: ScrollText, label: "Compliance" },
     ...(isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
     { to: "/settings", icon: Settings, label: "Settings" },
-    { to: "/compliance", icon: ScrollText, label: "Compliance" },
   ];
 
   return (
