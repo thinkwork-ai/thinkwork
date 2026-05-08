@@ -218,11 +218,18 @@ export async function complianceEvents(
 	}
 
 	const whereClause = wheres.length > 0 ? `WHERE ${wheres.join(" AND ")}` : "";
+	// Parameterize LIMIT for consistency with the rest of the query.
+	// `limit` is sanitized by the Math.min/Math.max clamp above; pushing
+	// it as a parameter just avoids hand-built SQL string interpolation
+	// for a value that's reviewed-as-safe today but easy to extend
+	// unsafely tomorrow.
+	const limitPlaceholder = next();
+	values.push(limit + 1);
 	const sql = `SELECT ${SELECT_AUDIT_EVENT_COLS}
 		   FROM compliance.audit_events
 		   ${whereClause}
 		   ORDER BY occurred_at DESC, event_id DESC
-		   LIMIT ${limit + 1}`;
+		   LIMIT ${limitPlaceholder}`;
 
 	const client = await getComplianceReaderClient();
 	const res = await client.query(sql, values);
@@ -237,10 +244,15 @@ export async function complianceEvents(
 	const distinctTenants = Array.from(
 		new Set(pageRows.map((r) => r.tenant_id)),
 	);
-	const anchorStateByTenant = new Map<string, TenantAnchorStateRow | null>();
-	for (const tid of distinctTenants) {
-		anchorStateByTenant.set(tid, await fetchAnchorState(client, tid));
-	}
+	const anchorEntries = await Promise.all(
+		distinctTenants.map(
+			async (tid) =>
+				[tid, await fetchAnchorState(client, tid)] as const,
+		),
+	);
+	const anchorStateByTenant = new Map<string, TenantAnchorStateRow | null>(
+		anchorEntries,
+	);
 
 	const edges = pageRows.map((row) => {
 		const anchor = anchorStateByTenant.get(row.tenant_id) ?? null;

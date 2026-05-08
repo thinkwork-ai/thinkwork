@@ -75,7 +75,7 @@ type ComplianceEvent {
   eventType: ComplianceEventType!
   eventHash: String!
   prevHash: String
-  payload: JSON!
+  payload: AWSJSON!
   anchorStatus: ComplianceAnchorStatus!
 }
 

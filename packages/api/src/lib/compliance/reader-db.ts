@@ -113,8 +113,21 @@ export async function getComplianceReaderClient(): Promise<PgClientType> {
 /**
  * Test-only: clear the cached client so a fresh connection is built
  * on the next call. Used by integration tests + mocks.
+ *
+ * Closes the existing connection (if any) before clearing the cache so
+ * test reruns don't leak open pg connections. Errors during `end()` are
+ * swallowed — the test fixture's only concern is that the cache slot is
+ * empty for the next call.
  */
-export function _resetComplianceReaderClient(): void {
+export async function _resetComplianceReaderClient(): Promise<void> {
+	const existing = _client;
 	_client = undefined;
 	_secretsManager = undefined;
+	if (existing) {
+		try {
+			await existing.end();
+		} catch {
+			// best-effort close — fixture already discarded the reference
+		}
+	}
 }
