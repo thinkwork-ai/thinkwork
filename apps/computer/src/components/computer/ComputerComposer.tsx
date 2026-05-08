@@ -22,7 +22,7 @@ export function ComputerComposer({
 
   return (
     <form
-      className="grid gap-4 rounded-2xl border border-border/80 bg-background/70 p-4 shadow-sm"
+      className="grid gap-4 rounded-2xl border border-border/80 bg-transparent p-4 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault();
         if (canSubmit) onSubmit();
@@ -33,7 +33,7 @@ export function ComputerComposer({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Type @ for connectors and sources"
-        className="min-h-24 resize-none border-0 bg-transparent p-1 text-lg shadow-none focus-visible:ring-0"
+        className="min-h-24 resize-none border-0 bg-transparent p-1 text-lg shadow-none focus-visible:ring-0 dark:bg-transparent"
         disabled={disabled || isSubmitting}
       />
       <div className="flex items-center justify-between gap-3">
