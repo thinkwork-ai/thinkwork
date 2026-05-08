@@ -332,7 +332,24 @@ export async function exchangeCodeForSession(code: string): Promise<OAuthTokens>
     throw new Error(`Token exchange failed: ${text}`);
   }
 
-  return res.json();
+  // Runtime guard: validate the response shape rather than trusting an
+  // implicit `any` cast from `res.json()`. A misconfigured Cognito domain,
+  // a network proxy returning HTML, or a future endpoint change would
+  // otherwise silently propagate undefined fields into localStorage and
+  // produce an unhelpful "missing token" failure later.
+  const raw = (await res.json()) as Record<string, unknown>;
+  if (
+    typeof raw.id_token !== "string" ||
+    typeof raw.access_token !== "string" ||
+    typeof raw.refresh_token !== "string"
+  ) {
+    throw new Error("Token exchange returned an unexpected response shape");
+  }
+  return {
+    id_token: raw.id_token,
+    access_token: raw.access_token,
+    refresh_token: raw.refresh_token,
+  };
 }
 
 export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {

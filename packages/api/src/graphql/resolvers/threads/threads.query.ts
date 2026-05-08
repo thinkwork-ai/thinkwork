@@ -4,10 +4,25 @@ import {
 	db, eq, and, desc, sql,
 	threads, computers, threadToCamel,
 } from "../../utils.js";
-import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { resolveCallerTenantId, resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { requireComputerReadAccess } from "../computers/shared.js";
 
 export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext) => {
+	// Cross-tenant gate. The caller-supplied args.tenantId must match the
+	// caller's authoritative tenant. Without this, a Cognito user with a
+	// valid JWT for tenant A can pass args.tenantId = tenant B and read all
+	// non-task threads in tenant B (the no-computerId Inbox path bypassed the
+	// owner check entirely). resolveCallerTenantId returns null for apikey
+	// callers — they are pre-authorized service identities and may legitimately
+	// read across tenants, so we only enforce when the caller is a Cognito
+	// user. ctx.auth.tenantId is null for Google-federated users until the
+	// pre-token Cognito trigger lands, so resolveCallerTenantId is the right
+	// helper (it does the email-fallback DB lookup).
+	if (ctx.auth.authType === "cognito") {
+		const callerTenantId = await resolveCallerTenantId(ctx);
+		if (!callerTenantId || callerTenantId !== args.tenantId) return [];
+	}
+
 	// When the caller scopes to a specific Computer, enforce per-user ownership
 	// of that Computer in the same tenant. Without this gate, a user with a
 	// valid Cognito JWT for tenant T can pass any Computer's id and read its
