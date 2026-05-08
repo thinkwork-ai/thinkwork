@@ -157,6 +157,11 @@ build_handler "compliance-anchor" \
 build_handler "compliance-anchor-watchdog" \
   "$REPO_ROOT/packages/lambda/compliance-anchor-watchdog.ts"
 
+# Phase 3 U11.U2 (INERT): SQS-triggered async export runner. Stub body
+# throws — U11.U3 ships the live runner that streams CSV/NDJSON to S3.
+build_handler "compliance-export-runner" \
+  "$REPO_ROOT/packages/lambda/compliance-export-runner.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------

@@ -195,6 +195,12 @@ locals {
       # in main.tf grants secretsmanager:GetSecretValue on the
       # thinkwork/* wildcard, so no new IAM resource is needed.
       COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+      # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
+      # jobId to this SQS queue after committing the export_jobs row.
+      # An unset value produces a deterministic INTERNAL_SERVER_ERROR
+      # at resolver time; the queue URL is wired at the composite
+      # root from the new compliance-exports Lambda's queue resource.
+      COMPLIANCE_EXPORTS_QUEUE_URL = aws_sqs_queue.compliance_exports[0].url
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
@@ -1488,5 +1494,170 @@ resource "aws_cloudwatch_metric_alarm" "compliance_anchor_watchdog_heartbeat_mis
 
   dimensions = {
     Stage = var.stage
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Phase 3 U11.U2 — Compliance export runner (STANDALONE, INERT)
+#
+# The U11.U1 createComplianceExport mutation (PR #944) inserts a queued
+# row into compliance.export_jobs and dispatches `{jobId}` to this SQS
+# queue. The runner Lambda below has a STUB body in U11.U2 (throws
+# "not implemented") — U11.U3 swaps in the live body that streams
+# CSV/NDJSON to the exports S3 bucket and publishes a 15-minute
+# presigned URL.
+#
+# Inert-substrate posture (per `feedback_ship_inert_pattern`):
+#   - SQS messages from the U11.U1 mutation accumulate.
+#   - After maxReceiveCount=3 attempts the stub throw routes them to
+#     the DLQ.
+#   - The DLQ depth alarm signals operators that the runner needs U11.U3.
+#   - This is the visible inert state — silent no-op stubs are an
+#     anti-pattern (queued jobs would stay QUEUED forever with no signal).
+#
+# Standalone Lambda (NOT in the for_each pool) — isolates the runner's
+# bucket-scoped IAM role from the 60+ unrelated handlers. Mirrors the
+# U8a anchor Lambda's standalone-resource pattern.
+# ---------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "compliance_exports_dlq" {
+  count                     = local.use_local_zips ? 1 : 0
+  name                      = "thinkwork-${var.stage}-compliance-exports-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  sqs_managed_sse_enabled   = true
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-exports-dlq"
+  }
+}
+
+resource "aws_sqs_queue" "compliance_exports" {
+  count                      = local.use_local_zips ? 1 : 0
+  name                       = "thinkwork-${var.stage}-compliance-exports"
+  visibility_timeout_seconds = 900   # matches Lambda 15-min timeout
+  message_retention_seconds  = 86400 # 1 day; DLQ holds longer-stuck messages
+  sqs_managed_sse_enabled    = true
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.compliance_exports_dlq[0].arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name = "thinkwork-${var.stage}-compliance-exports"
+  }
+}
+
+# graphql-http needs sqs:SendMessage on the new queue to dispatch jobIds
+# from the createComplianceExport mutation. Attached to the shared
+# lambda role (which graphql-http assumes); scope is queue-specific.
+resource "aws_iam_role_policy" "compliance_exports_send" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "compliance-exports-send"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.compliance_exports[0].arn
+    }]
+  })
+}
+
+# Runner role's SQS receive grants — only the runner consumes the queue.
+resource "aws_iam_role_policy" "compliance_exports_runner_sqs" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "compliance-exports-runner-sqs"
+  role  = var.compliance_exports_runner_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunnerSqsReceive"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility",
+        ]
+        Resource = aws_sqs_queue.compliance_exports[0].arn
+      },
+      {
+        Sid      = "RunnerDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.compliance_exports_dlq[0].arn
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "compliance_export_runner" {
+  count = local.use_local_zips ? 1 : 0
+
+  function_name                  = "thinkwork-${var.stage}-api-compliance-export-runner"
+  role                           = var.compliance_exports_runner_role_arn
+  handler                        = "index.handler"
+  runtime                        = local.runtime
+  timeout                        = 900
+  memory_size                    = 1024
+  filename                       = "${var.lambda_zips_dir}/compliance-export-runner.zip"
+  source_code_hash               = filebase64sha256("${var.lambda_zips_dir}/compliance-export-runner.zip")
+  reserved_concurrent_executions = 2
+
+  environment {
+    variables = {
+      STAGE                               = var.stage
+      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+      COMPLIANCE_EXPORTS_BUCKET           = var.compliance_exports_bucket_name
+      COMPLIANCE_EXPORTS_QUEUE_URL        = aws_sqs_queue.compliance_exports[0].url
+      # Phase 3 U11.U3 — the live runner connects to Aurora as the
+      # writer pool (existing app role) for INSERT/UPDATE on
+      # compliance.export_jobs and SELECT on compliance.audit_events.
+      # The stub body in U11.U2 doesn't read this; pre-plumbed for U11.U3.
+      DATABASE_URL_SECRET_ARN = var.graphql_db_secret_arn
+    }
+  }
+}
+
+# SQS → Lambda event source mapping. batch_size=1 so each export is a
+# discrete invocation; ReportBatchItemFailures lets the runner mark
+# individual messages failed without re-enqueuing the whole batch.
+# Concurrency is bounded by the Lambda function's
+# reserved_concurrent_executions=2 (set above) — the
+# `maximum_concurrency` argument on the event-source mapping requires a
+# newer aws provider version than this codebase currently pins, and the
+# function-level reservation gives the equivalent ceiling at v1 scale.
+resource "aws_lambda_event_source_mapping" "compliance_exports" {
+  count = local.use_local_zips ? 1 : 0
+
+  event_source_arn        = aws_sqs_queue.compliance_exports[0].arn
+  function_name           = aws_lambda_function.compliance_export_runner[0].function_name
+  batch_size              = 1
+  enabled                 = true
+  function_response_types = ["ReportBatchItemFailures"]
+}
+
+resource "aws_cloudwatch_metric_alarm" "compliance_exports_dlq_depth" {
+  count = local.use_local_zips ? 1 : 0
+
+  alarm_name          = "thinkwork-${var.stage}-compliance-exports-dlq-depth"
+  alarm_description   = "Compliance exports DLQ has messages — runner Lambda crashed (or is inert pre-U11.U3); operator must inspect."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = []
+
+  dimensions = {
+    QueueName = aws_sqs_queue.compliance_exports_dlq[0].name
   }
 }

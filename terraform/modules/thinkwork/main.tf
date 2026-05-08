@@ -10,9 +10,10 @@
 ################################################################################
 
 locals {
-  bucket_name                   = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
-  backups_bucket_name           = "thinkwork-${var.stage}-backups"
-  compliance_anchor_bucket_name = "thinkwork-${var.stage}-compliance-anchors"
+  bucket_name                    = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
+  backups_bucket_name            = "thinkwork-${var.stage}-backups"
+  compliance_anchor_bucket_name  = "thinkwork-${var.stage}-compliance-anchors"
+  compliance_exports_bucket_name = "thinkwork-${var.stage}-compliance-exports"
   computer_task_subnet_ids = (
     length(module.vpc.public_subnet_ids) > 0
     ? module.vpc.public_subnet_ids
@@ -145,6 +146,23 @@ module "compliance_anchors" {
   compliance_drainer_secret_arn = module.database.compliance_drainer_secret_arn
 }
 
+# Phase 3 U11.U2 — Compliance exports bucket + runner IAM role.
+#
+# Ephemeral S3 bucket with 7-day lifecycle expiration. NOT Object Lock
+# — exports are derivable from compliance.audit_events; the bucket is
+# delivery plumbing, not the system of record. The runner Lambda assumes
+# `module.compliance_exports.runner_role_arn` and writes CSV/NDJSON
+# artifacts under any key (no per-prefix grant needed). U11.U2 ships the
+# function with a stub body; U11.U3 swaps in the live runner.
+module "compliance_exports" {
+  source = "../data/compliance-exports-bucket"
+
+  stage       = var.stage
+  account_id  = var.account_id
+  region      = var.region
+  bucket_name = local.compliance_exports_bucket_name
+}
+
 module "database" {
   source = "../data/aurora-postgres"
 
@@ -260,6 +278,14 @@ module "api" {
   # override applied to anchors/.
   compliance_anchor_kms_key_arn      = module.compliance_anchors.kms_key_arn
   compliance_anchor_object_lock_mode = module.compliance_anchors.object_lock_mode
+
+  # Phase 3 U11.U2 — exports bucket + runner role wiring. The U11.U1
+  # createComplianceExport mutation dispatches jobIds to the SQS queue
+  # provisioned inside lambda-api; the runner Lambda assumes the role
+  # below and writes CSV/NDJSON artifacts to the bucket.
+  compliance_exports_bucket_name      = module.compliance_exports.bucket_name
+  compliance_exports_runner_role_arn  = module.compliance_exports.runner_role_arn
+  compliance_exports_runner_role_name = module.compliance_exports.runner_role_name
 
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
