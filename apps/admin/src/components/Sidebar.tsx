@@ -285,7 +285,6 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup className="pt-0">
-          <SidebarGroupLabel>Work</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={workItems} />
           </SidebarGroupContent>
