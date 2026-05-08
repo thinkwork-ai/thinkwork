@@ -31,7 +31,7 @@ describe("CrmPipelineRiskApp", () => {
     render(<CrmPipelineRiskApp manifest={fixtureManifest()} />);
 
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Ask Computer" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ask Computer" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /send email/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /update crm/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /create calendar/i })).toBeNull();

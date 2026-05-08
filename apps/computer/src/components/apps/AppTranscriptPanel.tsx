@@ -33,6 +33,10 @@ export function AppTranscriptPanel({ manifest }: AppTranscriptPanelProps) {
           <MetadataRow label="Generated" value={generatedAt} />
           <MetadataRow label="Artifact" value={manifest.snapshot.artifactId} />
           <MetadataRow label="Thread" value={manifest.snapshot.threadId} />
+          <MetadataRow
+            label="Refresh"
+            value={`Recipe v${manifest.refresh.recipeVersion}`}
+          />
         </div>
       </div>
 
@@ -57,6 +61,12 @@ export function AppTranscriptPanel({ manifest }: AppTranscriptPanelProps) {
             icon={<FileText className="size-4" />}
             title="Dashboard artifact saved"
             detail={`${manifest.views.length} views, ${manifest.sources.length} sources, ${manifest.tables.length} table`}
+            state="done"
+          />
+          <TranscriptStep
+            icon={<CircleDashed className="size-4" />}
+            title="Refresh recipe frozen"
+            detail="Routine refresh can update data without reinterpreting the prompt."
             state="done"
           />
         </section>
