@@ -122,3 +122,12 @@ See [SECURITY.md](./SECURITY.md) for vulnerability disclosure.
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+
+<!-- thinkwork-symphony:TECH-70:start -->
+## Symphony checkpoint: TECH-70
+
+- Linear issue: TECH-70
+- Title: Thinkwork Symphony GitHub setup smoke 2026-05-08T02-00-18-550Z
+- URL: https://linear.app/lastmileintel/issue/TECH-70/thinkwork-symphony-github-setup-smoke-2026-05-08t02-00-18-550z
+- Connector task: b6f0f01d-71c3-4abc-bdf8-a2c1f5f7f952
+<!-- thinkwork-symphony:TECH-70:end -->
