@@ -798,6 +798,9 @@ export enum ComputerTaskType {
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
   HealthCheck = 'HEALTH_CHECK',
   ThreadTurn = 'THREAD_TURN',
+  WorkspaceFileDelete = 'WORKSPACE_FILE_DELETE',
+  WorkspaceFileList = 'WORKSPACE_FILE_LIST',
+  WorkspaceFileRead = 'WORKSPACE_FILE_READ',
   WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
 }
 

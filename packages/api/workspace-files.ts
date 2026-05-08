@@ -7,14 +7,15 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, defaults?: true,
+ *     agentId?: string, templateId?: string, computerId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / defaults:true identifies the
- *   target surface. Tenant identity is derived from the caller's JWT via
- *   `resolveCallerFromAuth` — the handler NEVER trusts a tenantSlug body
- *   field. Requests that still include one are rejected (400) so buggy
- *   clients surface loud instead of drifting silently across tenants.
+ *   Exactly one of agentId / templateId / computerId / defaults:true
+ *   identifies the target surface. Tenant identity is derived from the
+ *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
+ *   tenantSlug body field. Requests that still include one are rejected
+ *   (400) so buggy clients surface loud instead of drifting silently across
+ *   tenants.
  *
  * Responses:
  *   get  → { ok: true, content, source, sha256 }
@@ -60,12 +61,18 @@ import {
   agents,
   agentTemplates,
   and,
+  computerTasks,
+  computers,
   db,
   eq,
   tenantMembers,
   tenants,
 } from "./src/graphql/utils.js";
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
+import {
+  enqueueComputerTask,
+  type ComputerTaskType,
+} from "./src/lib/computers/tasks.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -185,7 +192,13 @@ interface DefaultsTarget {
   key: (path: string) => string;
 }
 
-type Target = AgentTarget | TemplateTarget | DefaultsTarget;
+interface ComputerTarget {
+  kind: "computer";
+  computerId: string;
+  tenantId: string;
+}
+
+type Target = AgentTarget | TemplateTarget | DefaultsTarget | ComputerTarget;
 
 async function resolveAgentTarget(
   tenantId: string,
@@ -268,6 +281,25 @@ async function resolveDefaultsTarget(
   };
 }
 
+async function resolveComputerTarget(
+  tenantId: string,
+  computerId: string,
+): Promise<ComputerTarget | null> {
+  const [computer] = await db
+    .select({
+      id: computers.id,
+      tenant_id: computers.tenant_id,
+    })
+    .from(computers)
+    .where(eq(computers.id, computerId));
+  if (!computer || computer.tenant_id !== tenantId) return null;
+  return {
+    kind: "computer",
+    computerId: computer.id,
+    tenantId: computer.tenant_id,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Authz — REST analogue of requireTenantAdmin (mirrors plugin-upload.ts)
 // ---------------------------------------------------------------------------
@@ -315,6 +347,9 @@ async function handleGet(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
+  if (target.kind === "computer") {
+    return await handleComputerGet(target, path);
+  }
   // Per docs/plans/2026-04-27-003: every target tier (agent / template /
   // defaults) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
@@ -348,6 +383,9 @@ async function handleList(
   includeContent: boolean,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
+  if (target.kind === "computer") {
+    return await handleComputerList(target, includeContent);
+  }
   // Per docs/plans/2026-04-27-003: every tier reads its own prefix
   // directly. The agent prefix IS the agent's workspace — no overlay,
   // no fallback, no `agent-override` vs `template` source labels.
@@ -409,6 +447,145 @@ async function handleList(
     }),
   );
   return json(200, { ok: true, files });
+}
+
+async function handleComputerList(
+  target: ComputerTarget,
+  includeContent: boolean,
+): Promise<APIGatewayProxyResult> {
+  const output = await runComputerWorkspaceTask(target, "workspace_file_list");
+  const files = asWorkspaceListOutput(output).files.map((file) => ({
+    path: file.path,
+    source: "computer",
+    sha256: "",
+    overridden: false,
+    ...(includeContent ? { content: "" } : {}),
+  }));
+
+  if (!includeContent) return json(200, { ok: true, files });
+
+  const filesWithContent = await Promise.all(
+    files.map(async (file) => {
+      const readOutput = await runComputerWorkspaceTask(
+        target,
+        "workspace_file_read",
+        { path: file.path },
+      );
+      return {
+        ...file,
+        content: asWorkspaceReadOutput(readOutput).content ?? "",
+      };
+    }),
+  );
+  return json(200, { ok: true, files: filesWithContent });
+}
+
+async function handleComputerGet(
+  target: ComputerTarget,
+  path: string,
+): Promise<APIGatewayProxyResult> {
+  const output = await runComputerWorkspaceTask(target, "workspace_file_read", {
+    path,
+  });
+  const read = asWorkspaceReadOutput(output);
+  return json(200, {
+    ok: true,
+    content: read.content,
+    source: "computer",
+    sha256: "",
+  });
+}
+
+async function handleComputerPut(
+  target: ComputerTarget,
+  path: string,
+  content: string,
+): Promise<APIGatewayProxyResult> {
+  await runComputerWorkspaceTask(target, "workspace_file_write", {
+    path,
+    content,
+  });
+  return json(200, { ok: true });
+}
+
+async function handleComputerDelete(
+  target: ComputerTarget,
+  path: string,
+): Promise<APIGatewayProxyResult> {
+  await runComputerWorkspaceTask(target, "workspace_file_delete", { path });
+  return json(200, { ok: true });
+}
+
+const COMPUTER_WORKSPACE_TASK_TIMEOUT_MS = 12_000;
+const COMPUTER_WORKSPACE_TASK_POLL_MS = 300;
+
+async function runComputerWorkspaceTask(
+  target: ComputerTarget,
+  taskType: ComputerTaskType,
+  taskInput?: unknown,
+): Promise<unknown> {
+  const task = await enqueueComputerTask({
+    tenantId: target.tenantId,
+    computerId: target.computerId,
+    taskType,
+    taskInput,
+    idempotencyKey: null,
+  });
+  const taskId = task.id;
+  const deadline = Date.now() + COMPUTER_WORKSPACE_TASK_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const [row] = await db
+      .select({
+        status: computerTasks.status,
+        output: computerTasks.output,
+        error: computerTasks.error,
+      })
+      .from(computerTasks)
+      .where(
+        and(
+          eq(computerTasks.tenant_id, target.tenantId),
+          eq(computerTasks.computer_id, target.computerId),
+          eq(computerTasks.id, taskId),
+        ),
+      )
+      .limit(1);
+
+    if (row?.status === "completed") return row.output;
+    if (row?.status === "failed") {
+      throw new Error(
+        `Computer workspace task failed: ${JSON.stringify(row.error ?? {})}`,
+      );
+    }
+    await delay(COMPUTER_WORKSPACE_TASK_POLL_MS);
+  }
+
+  throw new Error(
+    "Computer runtime did not complete the workspace operation in time",
+  );
+}
+
+function asWorkspaceListOutput(output: unknown): {
+  files: Array<{ path: string }>;
+} {
+  const files = (output as { files?: unknown })?.files;
+  if (!Array.isArray(files)) return { files: [] };
+  return {
+    files: files
+      .map((file) => ({
+        path: String((file as { path?: unknown }).path ?? ""),
+      }))
+      .filter((file) => file.path),
+  };
+}
+
+function asWorkspaceReadOutput(output: unknown): { content: string | null } {
+  const content = (output as { content?: unknown })?.content;
+  return { content: typeof content === "string" ? content : null };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isSkillMarkerPath(path: string): boolean {
@@ -474,18 +651,22 @@ async function handlePut(
     });
   }
 
-  if (target.kind === "agent" && isProtectedOrchestrationWritePath(cleanPath)) {
-    return json(403, {
-      ok: false,
-      error: "use orchestration writer",
-    });
-  }
-
   if (isBuiltinToolWorkspacePath(cleanPath)) {
     return json(403, {
       ok: false,
       error:
         "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
+    });
+  }
+
+  if (target.kind === "computer") {
+    return await handleComputerPut(target, cleanPath, content);
+  }
+
+  if (target.kind === "agent" && isProtectedOrchestrationWritePath(cleanPath)) {
+    return json(403, {
+      ok: false,
+      error: "use orchestration writer",
     });
   }
 
@@ -815,6 +996,9 @@ async function handleDelete(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
+  if (target.kind === "computer") {
+    return await handleComputerDelete(target, path);
+  }
   await s3.send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
   );
@@ -996,6 +1180,7 @@ interface RequestBody {
   action?: string;
   agentId?: string;
   templateId?: string;
+  computerId?: string;
   defaults?: boolean;
   path?: string;
   content?: string;
@@ -1068,11 +1253,13 @@ export async function handler(
   const targetCount =
     (body.agentId ? 1 : 0) +
     (body.templateId ? 1 : 0) +
+    (body.computerId ? 1 : 0) +
     (body.defaults ? 1 : 0);
   if (targetCount !== 1) {
     return json(400, {
       ok: false,
-      error: "Exactly one of agentId, templateId, defaults is required",
+      error:
+        "Exactly one of agentId, templateId, computerId, defaults is required",
     });
   }
 
@@ -1081,6 +1268,8 @@ export async function handler(
     target = await resolveAgentTarget(tenantId, body.agentId);
   } else if (body.templateId) {
     target = await resolveTemplateTarget(tenantId, body.templateId);
+  } else if (body.computerId) {
+    target = await resolveComputerTarget(tenantId, body.computerId);
   } else if (body.defaults) {
     target = await resolveDefaultsTarget(tenantId);
   }

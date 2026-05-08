@@ -26,6 +26,25 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorActions("template")).not.toContain("import-bundle");
   });
 
+  it("treats Computer workspaces as direct file editing surfaces", () => {
+    expect(workspaceEditorCapabilities("computer")).toMatchObject({
+      canImportBundle: false,
+      canReviewTemplateUpdates: false,
+      canAddSubAgent: false,
+      canCreateLocalSkill: true,
+      canAddCatalogSkill: false,
+      canBootstrapDefaults: false,
+    });
+    expect(workspaceEditorActions("computer")).toEqual([
+      "new-skill",
+      "new-file",
+      "add-docs-folder",
+      "add-procedures-folder",
+      "add-templates-folder",
+      "add-memory-folder",
+    ]);
+  });
+
   it("limits defaults to file and folder authoring", () => {
     expect(workspaceEditorCapabilities("defaults")).toMatchObject({
       canImportBundle: false,

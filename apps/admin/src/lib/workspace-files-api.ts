@@ -14,6 +14,7 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 export type Target =
   | { agentId: string }
   | { templateId: string }
+  | { computerId: string }
   | { defaults: true };
 
 export type ComposeSource =
@@ -21,6 +22,7 @@ export type ComposeSource =
   | "agent-override-pinned"
   | "template"
   | "template-pinned"
+  | "computer"
   | "defaults";
 
 export interface WorkspaceFileMeta {

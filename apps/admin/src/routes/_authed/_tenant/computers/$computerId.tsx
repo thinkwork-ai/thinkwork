@@ -32,10 +32,7 @@ import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
 import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
 import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
-import {
-  AGENT_WORKSPACE_DEFAULT_FILES,
-  WorkspaceEditor,
-} from "@/components/agent-builder/WorkspaceEditor";
+import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
   component: ComputerDetailPage,
@@ -231,23 +228,11 @@ function ComputerDetailPage() {
       ) : null}
 
       {tab === "workspace" ? (
-        computer.sourceAgent ? (
-          <WorkspaceEditor
-            target={{ agentId: computer.sourceAgent.id }}
-            mode="agent"
-            agentId={computer.sourceAgent.id}
-            agentSlug={computer.sourceAgent.slug ?? undefined}
-            bootstrapFiles={AGENT_WORKSPACE_DEFAULT_FILES}
-            bootstrapLabel="Create Default Files"
-            className="min-h-[650px]"
-          />
-        ) : (
-          <EmptyState
-            icon={Monitor}
-            title="No Workspace Source"
-            description="This Computer is not linked to a source Agent workspace yet."
-          />
-        )
+        <WorkspaceEditor
+          target={{ computerId: computer.id }}
+          mode="computer"
+          className="min-h-[650px]"
+        />
       ) : null}
 
       {tab === "config" ? (

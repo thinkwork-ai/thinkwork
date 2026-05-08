@@ -1,6 +1,12 @@
 import { smokeGoogleWorkspaceCli } from "./google-cli-smoke.js";
 import { listGoogleCalendarUpcomingWithGws } from "./google-workspace-cli.js";
-import { writeHealthCheck, writeWorkspaceFile } from "./workspace.js";
+import {
+  deleteWorkspaceFile,
+  listWorkspaceFiles,
+  readWorkspaceFile,
+  writeHealthCheck,
+  writeWorkspaceFile,
+} from "./workspace.js";
 import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
 import {
   runComputerChatTurn,
@@ -80,9 +86,21 @@ export async function handleTask(
     const markerPath = await writeHealthCheck(workspaceRoot, task.id);
     return { ok: true, taskType: "health_check", markerPath };
   }
+  if (task.taskType === "workspace_file_list") {
+    const listed = await listWorkspaceFiles(workspaceRoot);
+    return { ok: true, taskType: "workspace_file_list", ...listed };
+  }
+  if (task.taskType === "workspace_file_read") {
+    const read = await readWorkspaceFile(workspaceRoot, task.input);
+    return { ok: true, taskType: "workspace_file_read", ...read };
+  }
   if (task.taskType === "workspace_file_write") {
     const written = await writeWorkspaceFile(workspaceRoot, task.input);
     return { ok: true, taskType: "workspace_file_write", ...written };
+  }
+  if (task.taskType === "workspace_file_delete") {
+    const deleted = await deleteWorkspaceFile(workspaceRoot, task.input);
+    return { ok: true, taskType: "workspace_file_delete", ...deleted };
   }
   if (task.taskType === "google_cli_smoke") {
     const smoke = await smokeGoogleWorkspaceCli();

@@ -34,6 +34,9 @@ describe("Computers admin routes", () => {
 
   it("renders detail panels for status, runtime, migration, and identity", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
+    expect(detailRouteSource).toContain("target={{ computerId: computer.id }}");
+    expect(detailRouteSource).toContain('mode="computer"');
+    expect(detailRouteSource).not.toContain("target={{ agentId:");
     expect(detailRouteSource).toContain(
       'type ComputerDetailTab = "dashboard" | "workspace" | "config"',
     );
