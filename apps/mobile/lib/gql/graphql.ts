@@ -686,6 +686,131 @@ export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
 };
 
+export enum ComplianceActorType {
+  Agent = 'AGENT',
+  System = 'SYSTEM',
+  User = 'USER'
+}
+
+export enum ComplianceAnchorState {
+  Anchored = 'ANCHORED',
+  Pending = 'PENDING'
+}
+
+export type ComplianceAnchorStatus = {
+  __typename?: 'ComplianceAnchorStatus';
+  anchoredRecordedAt?: Maybe<Scalars['String']['output']>;
+  cadenceId?: Maybe<Scalars['ID']['output']>;
+  nextCadenceWithinMinutes?: Maybe<Scalars['Int']['output']>;
+  state: ComplianceAnchorState;
+};
+
+export type ComplianceEvent = {
+  __typename?: 'ComplianceEvent';
+  actor: Scalars['String']['output'];
+  actorType: ComplianceActorType;
+  anchorStatus: ComplianceAnchorStatus;
+  eventHash: Scalars['String']['output'];
+  eventId: Scalars['ID']['output'];
+  eventType: ComplianceEventType;
+  occurredAt: Scalars['String']['output'];
+  payload: Scalars['AWSJSON']['output'];
+  prevHash?: Maybe<Scalars['String']['output']>;
+  recordedAt: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+export type ComplianceEventConnection = {
+  __typename?: 'ComplianceEventConnection';
+  edges: Array<ComplianceEventEdge>;
+  pageInfo: ComplianceEventPageInfo;
+};
+
+export type ComplianceEventEdge = {
+  __typename?: 'ComplianceEventEdge';
+  cursor: Scalars['String']['output'];
+  node: ComplianceEvent;
+};
+
+export type ComplianceEventFilter = {
+  actorType?: InputMaybe<ComplianceActorType>;
+  eventType?: InputMaybe<ComplianceEventType>;
+  since?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  until?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type ComplianceEventPageInfo = {
+  __typename?: 'ComplianceEventPageInfo';
+  endCursor?: Maybe<Scalars['String']['output']>;
+  hasNextPage: Scalars['Boolean']['output'];
+};
+
+export enum ComplianceEventType {
+  AgentCreated = 'AGENT_CREATED',
+  AgentDeleted = 'AGENT_DELETED',
+  AgentSkillsChanged = 'AGENT_SKILLS_CHANGED',
+  ApprovalRecorded = 'APPROVAL_RECORDED',
+  AuthSigninFailure = 'AUTH_SIGNIN_FAILURE',
+  AuthSigninSuccess = 'AUTH_SIGNIN_SUCCESS',
+  AuthSignout = 'AUTH_SIGNOUT',
+  DataExportInitiated = 'DATA_EXPORT_INITIATED',
+  McpAdded = 'MCP_ADDED',
+  McpRemoved = 'MCP_REMOVED',
+  PolicyAllowed = 'POLICY_ALLOWED',
+  PolicyBlocked = 'POLICY_BLOCKED',
+  PolicyBypassed = 'POLICY_BYPASSED',
+  PolicyEvaluated = 'POLICY_EVALUATED',
+  UserCreated = 'USER_CREATED',
+  UserDeleted = 'USER_DELETED',
+  UserDisabled = 'USER_DISABLED',
+  UserInvited = 'USER_INVITED',
+  WorkspaceGovernanceFileEdited = 'WORKSPACE_GOVERNANCE_FILE_EDITED'
+}
+
+export type ComplianceExport = {
+  __typename?: 'ComplianceExport';
+  completedAt?: Maybe<Scalars['String']['output']>;
+  filter: Scalars['AWSJSON']['output'];
+  format: ComplianceExportFormat;
+  jobError?: Maybe<Scalars['String']['output']>;
+  jobId: Scalars['ID']['output'];
+  presignedUrl?: Maybe<Scalars['String']['output']>;
+  presignedUrlExpiresAt?: Maybe<Scalars['String']['output']>;
+  requestedAt: Scalars['String']['output'];
+  requestedByActorId: Scalars['ID']['output'];
+  s3Key?: Maybe<Scalars['String']['output']>;
+  startedAt?: Maybe<Scalars['String']['output']>;
+  status: ComplianceExportStatus;
+  tenantId: Scalars['ID']['output'];
+};
+
+export enum ComplianceExportFormat {
+  Csv = 'CSV',
+  Json = 'JSON'
+}
+
+export enum ComplianceExportStatus {
+  Complete = 'COMPLETE',
+  Failed = 'FAILED',
+  Queued = 'QUEUED',
+  Running = 'RUNNING'
+}
+
+export type ComplianceOperatorCheckResult = {
+  __typename?: 'ComplianceOperatorCheckResult';
+  /**
+   * True when the env var is non-empty. False means the dev/staging
+   * environment hasn't configured the allowlist; admin UI surfaces a
+   * distinct "allowlist not configured" message rather than silently
+   * flipping to non-operator UI.
+   */
+  allowlistConfigured: Scalars['Boolean']['output'];
+  /** True when the caller's email matches THINKWORK_PLATFORM_OPERATOR_EMAILS. */
+  isOperator: Scalars['Boolean']['output'];
+};
+
 export type CompositionFeedbackSummary = {
   __typename?: 'CompositionFeedbackSummary';
   negative: Scalars['Int']['output'];
@@ -793,6 +918,7 @@ export enum ComputerTaskStatus {
 
 export enum ComputerTaskType {
   ConnectorWork = 'CONNECTOR_WORK',
+  DashboardArtifactRefresh = 'DASHBOARD_ARTIFACT_REFRESH',
   GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
@@ -1298,6 +1424,21 @@ export type DailyCostPoint = {
   llmUsd: Scalars['Float']['output'];
   toolsUsd: Scalars['Float']['output'];
   totalUsd: Scalars['Float']['output'];
+};
+
+export type DashboardArtifact = {
+  __typename?: 'DashboardArtifact';
+  artifact: Artifact;
+  canRefresh: Scalars['Boolean']['output'];
+  latestRefreshTask?: Maybe<ComputerTask>;
+  manifest: Scalars['AWSJSON']['output'];
+};
+
+export type DashboardRefreshResult = {
+  __typename?: 'DashboardRefreshResult';
+  artifact: Artifact;
+  idempotencyKey: Scalars['String']['output'];
+  task: ComputerTask;
 };
 
 export type DecideRoutineApprovalInput = {
@@ -1868,6 +2009,20 @@ export type Mutation = {
   createAgentFromTemplate: Agent;
   createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
+  /**
+   * Queue an async export of audit events matching the filter. Validates:
+   *   - 90-day cap on (until - since)
+   *   - 4 KB serialized filter byte cap
+   *   - 10 exports / hour rate limit per actor
+   * Throws typed errors with extensions.code in
+   *   {RATE_LIMIT_EXCEEDED, FILTER_RANGE_TOO_WIDE, FILTER_TOO_LARGE,
+   *    FORBIDDEN, UNAUTHENTICATED, INTERNAL_SERVER_ERROR}.
+   * Inserts the job row + emits data.export_initiated audit event in a
+   * single transaction; SQS dispatch happens after commit (queue write
+   * cannot be rolled back). If SQS send fails, the job is marked FAILED
+   * with jobError set.
+   */
+  createComplianceExport: ComplianceExport;
   createComputer: Computer;
   createConnector: Connector;
   createEvalTestCase: EvalTestCase;
@@ -1926,6 +2081,7 @@ export type Mutation = {
   planRoutineDraft: RoutineDraft;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
+  refreshDashboardArtifact: DashboardRefreshResult;
   refreshGenUI?: Maybe<Message>;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2171,6 +2327,12 @@ export type MutationCreateAgentTemplateArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateComplianceExportArgs = {
+  filter: ComplianceEventFilter;
+  format: ComplianceExportFormat;
 };
 
 
@@ -2511,6 +2673,11 @@ export type MutationPublishRoutineVersionArgs = {
 
 export type MutationRebuildRoutineVersionArgs = {
   input: RebuildRoutineVersionInput;
+};
+
+
+export type MutationRefreshDashboardArtifactArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -3011,6 +3178,49 @@ export type Query = {
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  /**
+   * Single event by event_id. Non-operator callers reading another tenant's
+   * event_id see null (existence-oracle defense — SQL filter applies in the
+   * WHERE clause so the timing-side-channel is closed).
+   */
+  complianceEvent?: Maybe<ComplianceEvent>;
+  /**
+   * Single event by event_hash. Used by the chain-position panel's
+   * prev_hash click-through and the walk-back-N-events iterator.
+   * Tenant-scoped for non-operators. The eventHash MUST be a 64-char
+   * lowercase hex SHA-256 digest; malformed input returns null without
+   * hitting the DB (resolver-level format guard).
+   */
+  complianceEventByHash?: Maybe<ComplianceEvent>;
+  /**
+   * Paginated audit-event list, sorted by `occurred_at DESC, event_id DESC`
+   * (matches the existing `(tenant_id, occurred_at DESC)` index on
+   * `compliance.audit_events`). Cursor encodes
+   * `{occurred_at_iso_with_microseconds, event_id}` as base64-url JSON.
+   * Page size capped at 200 server-side; client-recommended default 50.
+   */
+  complianceEvents: ComplianceEventConnection;
+  /**
+   * Caller's recent export jobs, sorted requested_at DESC, LIMIT 50.
+   * Operators see all tenants; non-operators are tenant-scoped via the
+   * same auth model as complianceEvents.
+   */
+  complianceExports: Array<ComplianceExport>;
+  /**
+   * Caller's compliance-operator status + dev-environment configuration
+   * signal. Mirrors the adminRoleCheck pattern (top-level Query field,
+   * NOT a User-type field — operator status is caller-dependent and
+   * attaching it to User would leak the semantic across every
+   * User-returning query).
+   */
+  complianceOperatorCheck: ComplianceOperatorCheckResult;
+  /**
+   * Distinct tenant_ids visible to the caller. Operators get the full
+   * set (DISTINCT tenant_id from compliance.audit_events); non-operators
+   * get a 1-element list of their own tenant. Powers the operator
+   * tenant-filter typeahead in the admin Compliance section.
+   */
+  complianceTenants: Array<Scalars['ID']['output']>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   computer?: Maybe<Computer>;
   computerEvents: Array<ComputerEvent>;
@@ -3026,6 +3236,7 @@ export type Query = {
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
+  dashboardArtifact?: Maybe<DashboardArtifact>;
   deploymentStatus: DeploymentStatus;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
@@ -3312,6 +3523,23 @@ export type QueryBudgetStatusArgs = {
 };
 
 
+export type QueryComplianceEventArgs = {
+  eventId: Scalars['ID']['input'];
+};
+
+
+export type QueryComplianceEventByHashArgs = {
+  eventHash: Scalars['String']['input'];
+};
+
+
+export type QueryComplianceEventsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ComplianceEventFilter>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryCompositionFeedbackSummaryArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -3403,6 +3631,11 @@ export type QueryCostSummaryArgs = {
 export type QueryCostTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryDashboardArtifactArgs = {
+  id: Scalars['ID']['input'];
 };
 
 

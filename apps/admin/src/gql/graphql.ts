@@ -918,6 +918,7 @@ export enum ComputerTaskStatus {
 
 export enum ComputerTaskType {
   ConnectorWork = 'CONNECTOR_WORK',
+  DashboardArtifactRefresh = 'DASHBOARD_ARTIFACT_REFRESH',
   GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
@@ -1423,6 +1424,21 @@ export type DailyCostPoint = {
   llmUsd: Scalars['Float']['output'];
   toolsUsd: Scalars['Float']['output'];
   totalUsd: Scalars['Float']['output'];
+};
+
+export type DashboardArtifact = {
+  __typename?: 'DashboardArtifact';
+  artifact: Artifact;
+  canRefresh: Scalars['Boolean']['output'];
+  latestRefreshTask?: Maybe<ComputerTask>;
+  manifest: Scalars['AWSJSON']['output'];
+};
+
+export type DashboardRefreshResult = {
+  __typename?: 'DashboardRefreshResult';
+  artifact: Artifact;
+  idempotencyKey: Scalars['String']['output'];
+  task: ComputerTask;
 };
 
 export type DecideRoutineApprovalInput = {
@@ -2065,6 +2081,7 @@ export type Mutation = {
   planRoutineDraft: RoutineDraft;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
+  refreshDashboardArtifact: DashboardRefreshResult;
   refreshGenUI?: Maybe<Message>;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2659,6 +2676,11 @@ export type MutationRebuildRoutineVersionArgs = {
 };
 
 
+export type MutationRefreshDashboardArtifactArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRefreshGenUiArgs = {
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
@@ -3214,6 +3236,7 @@ export type Query = {
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
+  dashboardArtifact?: Maybe<DashboardArtifact>;
   deploymentStatus: DeploymentStatus;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
@@ -3608,6 +3631,11 @@ export type QueryCostSummaryArgs = {
 export type QueryCostTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryDashboardArtifactArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
