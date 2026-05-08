@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ArtifactsListQuery, ArtifactDetailQuery } from "@/lib/graphql-queries";
 import { useClient } from "urql";
+import { buildThreadBreadcrumbs } from "./-thread-breadcrumbs";
 
 // ---------------------------------------------------------------------------
 // Route
@@ -360,25 +361,16 @@ function ThreadDetailPage() {
   );
 
   // ---- Breadcrumbs ----
+  // Computer-owned threads route through /computers/$computerId; Agent-owned
+  // threads with a `?fromAgent=...` query param keep the existing Agent
+  // breadcrumb; everything else falls back to the Threads root. Decision logic
+  // lives in `-thread-breadcrumbs.ts` so it can be unit-tested.
   useBreadcrumbs(
-    fromAgentId
-      ? [
-          { label: "Agents", href: "/agents" },
-          { label: fromAgentName ?? "Agent", href: `/agents/${fromAgentId}` },
-          {
-            label: thread
-              ? `${thread.identifier ?? `#${thread.number}`} ${thread.title}`
-              : "Loading...",
-          },
-        ]
-      : [
-          { label: "Threads", href: "/threads" },
-          {
-            label: thread
-              ? `${thread.identifier ?? `#${thread.number}`} ${thread.title}`
-              : "Loading...",
-          },
-        ],
+    buildThreadBreadcrumbs({
+      thread,
+      fromAgentId,
+      fromAgentName,
+    }),
   );
 
   // ---- Side panel for properties ----

@@ -35,6 +35,10 @@ import {
 import { ThreadsPagedQuery, AgentsListQuery, UpdateThreadMutation, OnThreadUpdatedSubscription, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import { useActiveTurnsStore } from "@/stores/active-turns-store";
+import {
+  threadAssigneeGroupKey,
+  threadAssigneeGroupLabel,
+} from "./-thread-grouping";
 
 export const Route = createFileRoute("/_authed/_tenant/threads/")({
   component: ThreadsPage,
@@ -126,7 +130,7 @@ function InboxIndicator({ status }: { status: "running" | "unread" | "read" }) {
   if (status === "read") return null;
   if (status === "running") {
     return (
-      <span className="relative flex h-2.5 w-2.5 shrink-0" title="Agent running">
+      <span className="relative flex h-2.5 w-2.5 shrink-0" title="Worker running">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-500" />
       </span>
@@ -158,6 +162,7 @@ type ThreadItem = {
   readonly title: string;
   readonly status: string;
   readonly agentId?: string | null;
+  readonly computerId?: string | null;
   readonly agent?: { readonly id: string; readonly name: string; readonly avatarUrl?: string | null } | null;
   readonly assigneeType?: string | null;
   readonly assigneeId?: string | null;
@@ -319,11 +324,12 @@ function ThreadsPage() {
     if (viewState.groupBy === "none") {
       return [{ key: "__all", label: null as string | null, items: filtered }];
     }
-    // assignee
-    const groups = groupBy(filtered, (t) => t.agentId ?? "__unassigned");
+    // assignee — Computer ownership wins over Agent assignment so Computer-owned
+    // threads land in a "Computer" group instead of being miscounted as Unassigned.
+    const groups = groupBy(filtered, threadAssigneeGroupKey);
     return Object.keys(groups).map((key) => ({
       key,
-      label: key === "__unassigned" ? "Unassigned" : (agentName(key) ?? key.slice(0, 8)),
+      label: threadAssigneeGroupLabel(key, agentName),
       items: groups[key]!,
     }));
   }, [filtered, viewState.groupBy, agentName]);
@@ -403,7 +409,11 @@ function ThreadsPage() {
                       className="flex w-[160px] shrink-0 items-center justify-center rounded-md px-2 py-1 transition-colors hover:bg-accent/50"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     >
-                      {thread.agent ? (
+                      {thread.computerId ? (
+                        <Badge variant="outline" className="text-xs">
+                          Computer-owned
+                        </Badge>
+                      ) : thread.agent ? (
                         <Badge variant="outline" className="text-xs">
                           {thread.agent.name}
                         </Badge>
