@@ -203,6 +203,21 @@ resource "aws_iam_role_policy" "task_bedrock" {
   })
 }
 
+resource "aws_iam_role_policy" "task_appsync" {
+  count = var.appsync_api_arn != "" ? 1 : 0
+  name  = "computer-runtime-appsync"
+  role  = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["appsync:GraphQL"]
+      Resource = "${var.appsync_api_arn}/types/Mutation/fields/publishComputerThreadChunk"
+    }]
+  })
+}
+
 resource "aws_iam_policy" "manager" {
   name        = "thinkwork-${var.stage}-computer-manager"
   description = "Allow the Computer manager Lambda to reconcile per-Computer ECS/EFS resources"

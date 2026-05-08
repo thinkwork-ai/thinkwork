@@ -30,6 +30,7 @@ cat > "$DST" <<SCHEMA
 # Source: packages/database-pg/graphql/types/subscriptions.graphql
 
 scalar AWSDateTime
+scalar AWSJSON
 
 schema {
   query: Query
@@ -58,11 +59,11 @@ SCHEMA
 # Every field needs @aws_api_key @aws_cognito_user_pools @aws_iam for multi-auth
 AUTH="@aws_api_key @aws_cognito_user_pools @aws_iam"
 
-# Add to mutation return types (lines with "): XxxEvent")
-sed -i '' "s/): \([A-Za-z]*Event\)$/): \1 ${AUTH}/" "$DST"
+# Add to mutation return types (lines with "): XxxEvent" or "): XxxEvent!")
+sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
 
 # Add to subscription fields — on the line with the return type (before @aws_subscribe)
 # Pattern: "  onXxx(tenantId: ID!): XxxEvent"
-sed -i '' "s/): \([A-Za-z]*Event\)$/): \1 ${AUTH}/" "$DST"
+sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
 
 echo "Done — $(wc -l < "$DST" | tr -d ' ') lines written"

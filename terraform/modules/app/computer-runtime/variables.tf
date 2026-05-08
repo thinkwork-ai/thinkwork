@@ -41,6 +41,12 @@ variable "api_auth_secret_arn" {
   default     = ""
 }
 
+variable "appsync_api_arn" {
+  description = "Optional AppSync API ARN for Computer runtime streaming publishes."
+  type        = string
+  default     = ""
+}
+
 variable "default_cpu" {
   description = "Default Fargate CPU units for one Computer runtime task"
   type        = number

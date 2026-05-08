@@ -57,3 +57,22 @@ export async function notifyNewMessage(payload: {
 		payload,
 	);
 }
+
+export async function publishComputerThreadChunk(payload: {
+	threadId: string;
+	chunk: Record<string, unknown>;
+	seq: number;
+}): Promise<void> {
+	await postToAppSync(
+		`mutation($threadId: ID!, $chunk: AWSJSON!, $seq: Int!) {
+			publishComputerThreadChunk(threadId: $threadId, chunk: $chunk, seq: $seq) {
+				threadId chunk seq publishedAt
+			}
+		}`,
+		{
+			threadId: payload.threadId,
+			chunk: JSON.stringify(payload.chunk),
+			seq: payload.seq,
+		},
+	);
+}

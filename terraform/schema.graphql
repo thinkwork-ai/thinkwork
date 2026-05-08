@@ -4,6 +4,7 @@
 # Source: packages/database-pg/graphql/types/subscriptions.graphql
 
 scalar AWSDateTime
+scalar AWSJSON
 
 schema {
   query: Query
@@ -76,6 +77,13 @@ type ThreadTurnUpdateEvent {
   status: String!
   triggerName: String
   updatedAt: AWSDateTime!
+}
+
+type ComputerThreadChunkEvent {
+  threadId: ID!
+  chunk: AWSJSON
+  seq: Int
+  publishedAt: AWSDateTime!
 }
 
 type OrgUpdateEvent {
@@ -167,6 +175,12 @@ type Mutation {
     triggerName: String
   ): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
+  publishComputerThreadChunk(
+    threadId: ID!
+    chunk: AWSJSON!
+    seq: Int!
+  ): ComputerThreadChunkEvent! @aws_api_key @aws_cognito_user_pools @aws_iam
+
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
@@ -215,6 +229,9 @@ type Subscription {
 
   onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
+
+  onComputerThreadChunk(threadId: ID!): ComputerThreadChunkEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+    @aws_subscribe(mutations: ["publishComputerThreadChunk"])
 
   onOrgUpdated(tenantId: ID!): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyOrgUpdate"])

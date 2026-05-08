@@ -247,6 +247,7 @@ module "computer_runtime" {
   subnet_ids       = module.vpc.private_subnet_ids
   task_subnet_ids  = local.computer_task_subnet_ids
   assign_public_ip = length(module.vpc.public_subnet_ids) > 0
+  appsync_api_arn  = module.appsync.graphql_api_arn
 }
 
 module "api" {

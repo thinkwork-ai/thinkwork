@@ -930,6 +930,14 @@ export enum ComputerTaskType {
   WorkspaceFileWrite = 'WORKSPACE_FILE_WRITE'
 }
 
+export type ComputerThreadChunkEvent = {
+  __typename?: 'ComputerThreadChunkEvent';
+  chunk?: Maybe<Scalars['AWSJSON']['output']>;
+  publishedAt: Scalars['AWSDateTime']['output'];
+  seq?: Maybe<Scalars['Int']['output']>;
+  threadId: Scalars['ID']['output'];
+};
+
 export type ConcurrencySnapshot = {
   __typename?: 'ConcurrencySnapshot';
   byAgent: Array<AgentCount>;
@@ -2079,6 +2087,7 @@ export type Mutation = {
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   pauseConnector: Connector;
   planRoutineDraft: RoutineDraft;
+  publishComputerThreadChunk: ComputerThreadChunkEvent;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
   refreshDashboardArtifact: DashboardRefreshResult;
@@ -2663,6 +2672,13 @@ export type MutationPauseConnectorArgs = {
 
 export type MutationPlanRoutineDraftArgs = {
   input: PlanRoutineDraftInput;
+};
+
+
+export type MutationPublishComputerThreadChunkArgs = {
+  chunk: Scalars['AWSJSON']['input'];
+  seq: Scalars['Int']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -4561,6 +4577,7 @@ export type Subscription = {
   __typename?: 'Subscription';
   _empty?: Maybe<Scalars['String']['output']>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
+  onComputerThreadChunk?: Maybe<ComputerThreadChunkEvent>;
   onCostRecorded?: Maybe<CostRecordedEvent>;
   onEvalRunUpdated?: Maybe<EvalRunUpdateEvent>;
   onHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
@@ -4574,6 +4591,11 @@ export type Subscription = {
 
 export type SubscriptionOnAgentStatusChangedArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnComputerThreadChunkArgs = {
+  threadId: Scalars['ID']['input'];
 };
 
 
