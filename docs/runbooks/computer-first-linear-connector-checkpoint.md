@@ -33,8 +33,11 @@ In Admin, open **Symphony** and create or edit the Linear connector:
 1. Set **Type** to `linear_tracker`.
 2. Set **Target Type** to **Computer**.
 3. Select the target Computer.
-4. Use the Linear starter config and confirm it includes the `symphony` label and the expected Linear credential.
-5. Keep the connector enabled.
+4. Confirm **Linear team key**, **Label**, **Credential**, and **Writeback state** in the structured Linear fields. The checkpoint label must be `symphony`.
+5. In **GitHub PR setup**, select an active GitHub credential and confirm the repo owner, repo name, base branch, and checkpoint file path.
+6. Keep the connector enabled.
+
+If the Connectors table shows **GitHub setup required**, the selected GitHub credential slug is not active for the tenant. Create or reactivate that credential under **Automations > Credentials**, then return to Symphony and save the connector again. Do not rely on Advanced JSON to hide this state; the structured GitHub fields are the operator source of truth.
 
 The important shape is:
 

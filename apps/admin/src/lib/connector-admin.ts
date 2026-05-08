@@ -13,6 +13,11 @@ export type ConnectorFormValues = {
   linearLabel: string;
   linearCredentialSlug: string;
   linearWritebackState: string;
+  githubCredentialSlug: string;
+  githubOwner: string;
+  githubRepoName: string;
+  githubBaseBranch: string;
+  githubFilePath: string;
   configJson: string;
   dispatchTargetType: DispatchTargetType;
   dispatchTargetId: string;
@@ -56,6 +61,13 @@ export type ConnectorRoutineTarget = {
   engine?: string | null;
 };
 
+export type ConnectorCredentialOption = {
+  id: string;
+  displayName: string;
+  slug: string;
+  status?: string | null;
+};
+
 export type ConnectorExecutionWritebackDisplay = {
   label: string;
   title: string;
@@ -76,6 +88,12 @@ export type ConnectorExecutionCleanupDisplay = {
 export const LINEAR_CHECKPOINT_LABEL = "symphony";
 export const DEFAULT_LINEAR_CREDENTIAL_SLUG = "linear";
 export const DEFAULT_LINEAR_WRITEBACK_STATE = "In Progress";
+export const DEFAULT_LINEAR_PR_WRITEBACK_STATE = "In Review";
+export const DEFAULT_GITHUB_CREDENTIAL_SLUG = "github";
+export const DEFAULT_GITHUB_OWNER = "thinkwork-ai";
+export const DEFAULT_GITHUB_REPO_NAME = "thinkwork";
+export const DEFAULT_GITHUB_BASE_BRANCH = "main";
+export const DEFAULT_GITHUB_FILE_PATH = "README.md";
 
 export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   name: "",
@@ -86,6 +104,11 @@ export const DEFAULT_CONNECTOR_FORM_VALUES: ConnectorFormValues = {
   linearLabel: LINEAR_CHECKPOINT_LABEL,
   linearCredentialSlug: DEFAULT_LINEAR_CREDENTIAL_SLUG,
   linearWritebackState: DEFAULT_LINEAR_WRITEBACK_STATE,
+  githubCredentialSlug: DEFAULT_GITHUB_CREDENTIAL_SLUG,
+  githubOwner: DEFAULT_GITHUB_OWNER,
+  githubRepoName: DEFAULT_GITHUB_REPO_NAME,
+  githubBaseBranch: DEFAULT_GITHUB_BASE_BRANCH,
+  githubFilePath: DEFAULT_GITHUB_FILE_PATH,
   configJson: "{}",
   dispatchTargetType: DispatchTargetType.Computer,
   dispatchTargetId: "",
@@ -112,6 +135,17 @@ export const LINEAR_TRACKER_STARTER_CONFIG = {
       enabled: true,
       stateName: DEFAULT_LINEAR_WRITEBACK_STATE,
     },
+    moveOnPrOpened: {
+      enabled: true,
+      stateName: DEFAULT_LINEAR_PR_WRITEBACK_STATE,
+    },
+  },
+  github: {
+    credentialSlug: DEFAULT_GITHUB_CREDENTIAL_SLUG,
+    owner: DEFAULT_GITHUB_OWNER,
+    repoName: DEFAULT_GITHUB_REPO_NAME,
+    baseBranch: DEFAULT_GITHUB_BASE_BRANCH,
+    filePath: DEFAULT_GITHUB_FILE_PATH,
   },
 };
 
@@ -158,6 +192,11 @@ export function connectorFormValues(
     linearLabel: linearFields.label,
     linearCredentialSlug: linearFields.credentialSlug,
     linearWritebackState: linearFields.writebackState,
+    githubCredentialSlug: linearFields.githubCredentialSlug,
+    githubOwner: linearFields.githubOwner,
+    githubRepoName: linearFields.githubRepoName,
+    githubBaseBranch: linearFields.githubBaseBranch,
+    githubFilePath: linearFields.githubFilePath,
     configJson,
     dispatchTargetType:
       source.dispatchTargetType ??
@@ -238,6 +277,7 @@ export function parseConnectorConfig(configJson: string): unknown {
 
 export function validateConnectorFormValues(
   values: ConnectorFormValues,
+  options: { activeCredentialSlugs?: readonly string[] } = {},
 ): string | null {
   if (!values.name.trim()) return "Name is required.";
   if (!values.type.trim()) return "Type is required.";
@@ -254,6 +294,20 @@ export function validateConnectorFormValues(
   }
   if (!values.linearWritebackState.trim()) {
     return "Linear writeback state is required.";
+  }
+  if (!values.githubCredentialSlug.trim()) {
+    return "GitHub credential slug is required.";
+  }
+  if (!values.githubOwner.trim()) return "GitHub owner is required.";
+  if (!values.githubRepoName.trim()) return "GitHub repository is required.";
+  if (!values.githubBaseBranch.trim()) return "GitHub base branch is required.";
+  if (!values.githubFilePath.trim()) return "GitHub file path is required.";
+  if (
+    values.enabled &&
+    options.activeCredentialSlugs &&
+    !options.activeCredentialSlugs.includes(values.githubCredentialSlug.trim())
+  ) {
+    return `Active GitHub credential "${values.githubCredentialSlug.trim()}" is required before enabling this connector.`;
   }
 
   try {
@@ -274,6 +328,8 @@ export function linearConnectorConfigFromValues(
   const payload = parsePayloadRecord(config.payload) ?? {};
   const writeback = parsePayloadRecord(config.writeback) ?? {};
   const moveOnDispatch = parsePayloadRecord(writeback.moveOnDispatch) ?? {};
+  const moveOnPrOpened = parsePayloadRecord(writeback.moveOnPrOpened) ?? {};
+  const github = parsePayloadRecord(config.github) ?? {};
 
   return {
     ...config,
@@ -299,6 +355,21 @@ export function linearConnectorConfigFromValues(
         enabled: moveOnDispatch.enabled ?? true,
         stateName: values.linearWritebackState.trim(),
       },
+      moveOnPrOpened: {
+        ...moveOnPrOpened,
+        enabled: moveOnPrOpened.enabled ?? true,
+        stateName:
+          cleanString(moveOnPrOpened.stateName) ??
+          DEFAULT_LINEAR_PR_WRITEBACK_STATE,
+      },
+    },
+    github: {
+      ...github,
+      credentialSlug: values.githubCredentialSlug.trim(),
+      owner: values.githubOwner.trim(),
+      repoName: values.githubRepoName.trim(),
+      baseBranch: values.githubBaseBranch.trim(),
+      filePath: values.githubFilePath.trim(),
     },
   };
 }
@@ -507,6 +578,24 @@ export function connectorExecutionPrDisplay(
   return null;
 }
 
+export function connectorGitHubCredentialStatus(
+  config: unknown,
+  activeCredentialSlugs: readonly string[],
+): { slug: string; missing: boolean; label: string; title: string } {
+  const fields = linearConnectorFieldsFromConfig(config);
+  const slug = fields.githubCredentialSlug;
+  const missing = !activeCredentialSlugs.includes(slug);
+
+  return {
+    slug,
+    missing,
+    label: missing ? "GitHub setup required" : "GitHub ready",
+    title: missing
+      ? `Active GitHub credential "${slug}" is missing.`
+      : `Using GitHub credential "${slug}".`,
+  };
+}
+
 function parsePayloadRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value === "string") {
     try {
@@ -525,12 +614,18 @@ function linearConnectorFieldsFromConfig(config: unknown): {
   label: string;
   credentialSlug: string;
   writebackState: string;
+  githubCredentialSlug: string;
+  githubOwner: string;
+  githubRepoName: string;
+  githubBaseBranch: string;
+  githubFilePath: string;
 } {
   const parsed = parsePayloadRecord(config);
   const issueQuery = parsePayloadRecord(parsed?.issueQuery);
   const labels = readStringArray(issueQuery?.labels ?? parsed?.labels);
   const writeback = parsePayloadRecord(parsed?.writeback);
   const moveOnDispatch = parsePayloadRecord(writeback?.moveOnDispatch);
+  const github = parsePayloadRecord(parsed?.github);
 
   return {
     teamKey: cleanString(parsed?.teamKey ?? issueQuery?.teamKey) ?? "",
@@ -547,6 +642,21 @@ function linearConnectorFieldsFromConfig(config: unknown): {
           writeback?.onDispatchState ??
           parsed?.onDispatchState,
       ) ?? DEFAULT_LINEAR_WRITEBACK_STATE,
+    githubCredentialSlug:
+      cleanString(github?.credentialSlug ?? parsed?.githubCredentialSlug) ??
+      DEFAULT_GITHUB_CREDENTIAL_SLUG,
+    githubOwner:
+      cleanString(github?.owner ?? parsed?.githubOwner) ?? DEFAULT_GITHUB_OWNER,
+    githubRepoName:
+      cleanString(
+        github?.repoName ?? github?.repository ?? parsed?.githubRepoName,
+      ) ?? DEFAULT_GITHUB_REPO_NAME,
+    githubBaseBranch:
+      cleanString(github?.baseBranch ?? parsed?.githubBaseBranch) ??
+      DEFAULT_GITHUB_BASE_BRANCH,
+    githubFilePath:
+      cleanString(github?.filePath ?? parsed?.githubFilePath) ??
+      DEFAULT_GITHUB_FILE_PATH,
   };
 }
 

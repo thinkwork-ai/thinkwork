@@ -16,6 +16,13 @@ describe("Symphony connector setup route", () => {
     expect(routeSource).toContain("linearTeamKey");
     expect(routeSource).toContain("linearCredentialSlug");
     expect(routeSource).toContain("linearWritebackState");
+    expect(routeSource).toContain("GitHub PR setup");
+    expect(routeSource).toContain("GitHub credential");
+    expect(routeSource).toContain("githubCredentialSlug");
+    expect(routeSource).toContain("githubOwner");
+    expect(routeSource).toContain("githubRepoName");
+    expect(routeSource).toContain("githubBaseBranch");
+    expect(routeSource).toContain("githubFilePath");
     expect(routeSource).toContain("Target Computer");
     expect(routeSource).toContain("linear_tracker");
   });
@@ -27,6 +34,9 @@ describe("Symphony connector setup route", () => {
     expect(routeSource.indexOf("Linear team key")).toBeLessThan(
       routeSource.indexOf("Config JSON"),
     );
+    expect(routeSource.indexOf("GitHub PR setup")).toBeLessThan(
+      routeSource.indexOf("Config JSON"),
+    );
   });
 
   it("keeps the checkpoint connector pinned to the symphony label", () => {
@@ -35,6 +45,18 @@ describe("Symphony connector setup route", () => {
       "Checkpoint connector label must be symphony.",
     );
     expect(helperSource).toContain("labels: [values.linearLabel.trim()]");
+  });
+
+  it("surfaces missing GitHub credentials before runtime failure", () => {
+    expect(routeSource).toContain("TenantCredentialsQuery");
+    expect(routeSource).toContain("TenantCredentialStatus.Active");
+    expect(routeSource).toContain("connectorGitHubCredentialStatus");
+    expect(routeSource).toContain("GitHub setup required");
+    expect(routeSource).toContain("Active GitHub credential");
+    expect(helperSource).toContain("github: {");
+    expect(helperSource).toContain(
+      "credentialSlug: values.githubCredentialSlug.trim()",
+    );
   });
 
   it("preserves single-line, no-scroll Symphony tables", () => {

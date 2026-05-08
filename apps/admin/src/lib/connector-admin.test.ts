@@ -4,6 +4,7 @@ import {
   LINEAR_TRACKER_STARTER_CONFIG,
   connectorExecutionCleanupDisplay,
   connectorExecutionCleanupReason,
+  connectorGitHubCredentialStatus,
   connectorExecutionLinearIdentifier,
   connectorExecutionPrDisplay,
   connectorExecutionStateTone,
@@ -44,6 +45,11 @@ describe("connector admin helpers", () => {
       linearLabel: "symphony",
       linearCredentialSlug: "linear-prod",
       linearWritebackState: "In Progress",
+      githubCredentialSlug: "github-prod",
+      githubOwner: "acme",
+      githubRepoName: "product",
+      githubBaseBranch: "develop",
+      githubFilePath: "CHANGELOG.md",
       configJson: '{"customFlag":true}',
       dispatchTargetType: DispatchTargetType.Agent,
       dispatchTargetId: " agent_1 ",
@@ -76,6 +82,17 @@ describe("connector admin helpers", () => {
             enabled: true,
             stateName: "In Progress",
           },
+          moveOnPrOpened: {
+            enabled: true,
+            stateName: "In Review",
+          },
+        },
+        github: {
+          credentialSlug: "github-prod",
+          owner: "acme",
+          repoName: "product",
+          baseBranch: "develop",
+          filePath: "CHANGELOG.md",
         },
       },
       dispatchTargetType: DispatchTargetType.Agent,
@@ -111,6 +128,14 @@ describe("connector admin helpers", () => {
         },
         writeback: {
           moveOnDispatch: { enabled: true, stateName: "In Progress" },
+          moveOnPrOpened: { enabled: true, stateName: "In Review" },
+        },
+        github: {
+          credentialSlug: "github",
+          owner: "thinkwork-ai",
+          repoName: "thinkwork",
+          baseBranch: "main",
+          filePath: "README.md",
         },
       },
       dispatchTargetType: DispatchTargetType.Routine,
@@ -155,6 +180,11 @@ describe("connector admin helpers", () => {
       linearLabel: "symphony",
       linearCredentialSlug: "linear",
       linearWritebackState: "In Progress",
+      githubCredentialSlug: "github",
+      githubOwner: "thinkwork-ai",
+      githubRepoName: "thinkwork",
+      githubBaseBranch: "main",
+      githubFilePath: "README.md",
     });
   });
 
@@ -175,6 +205,13 @@ describe("connector admin helpers", () => {
               stateName: "Started",
             },
           },
+          github: {
+            credentialSlug: "github-prod",
+            owner: "acme",
+            repoName: "product",
+            baseBranch: "develop",
+            filePath: "CHANGELOG.md",
+          },
         },
       }),
     ).toMatchObject({
@@ -182,6 +219,11 @@ describe("connector admin helpers", () => {
       linearLabel: "symphony",
       linearCredentialSlug: "linear-prod",
       linearWritebackState: "Started",
+      githubCredentialSlug: "github-prod",
+      githubOwner: "acme",
+      githubRepoName: "product",
+      githubBaseBranch: "develop",
+      githubFilePath: "CHANGELOG.md",
     });
   });
 
@@ -292,8 +334,23 @@ describe("connector admin helpers", () => {
         provider: "linear",
         issueQuery: { teamKey: "OLD", labels: ["old"], states: ["Todo"] },
         payload: { includeAttachments: true },
-        writeback: { moveOnDispatch: { enabled: false } },
+        writeback: {
+          moveOnDispatch: { enabled: false },
+          moveOnPrOpened: { enabled: false, stateName: "Review" },
+        },
+        github: {
+          credentialSlug: "old-github",
+          owner: "old",
+          repoName: "old-repo",
+          baseBranch: "old-base",
+          filePath: "old.md",
+        },
       }),
+      githubCredentialSlug: "github-prod",
+      githubOwner: "acme",
+      githubRepoName: "product",
+      githubBaseBranch: "develop",
+      githubFilePath: "CHANGELOG.md",
     });
 
     expect(config).toMatchObject({
@@ -315,6 +372,17 @@ describe("connector admin helpers", () => {
           enabled: false,
           stateName: "In Progress",
         },
+        moveOnPrOpened: {
+          enabled: false,
+          stateName: "Review",
+        },
+      },
+      github: {
+        credentialSlug: "github-prod",
+        owner: "acme",
+        repoName: "product",
+        baseBranch: "develop",
+        filePath: "CHANGELOG.md",
       },
     });
   });
@@ -329,6 +397,11 @@ describe("connector admin helpers", () => {
 
     expect(validateConnectorFormValues(valid)).toBeNull();
     expect(
+      validateConnectorFormValues(valid, {
+        activeCredentialSlugs: ["linear", "github"],
+      }),
+    ).toBeNull();
+    expect(
       validateConnectorFormValues({ ...valid, linearLabel: "wrong" }),
     ).toBe("Checkpoint connector label must be symphony.");
     expect(validateConnectorFormValues({ ...valid, linearTeamKey: "" })).toBe(
@@ -337,6 +410,45 @@ describe("connector admin helpers", () => {
     expect(validateConnectorFormValues({ ...valid, configJson: "{nope" })).toBe(
       "Advanced JSON must be valid JSON.",
     );
+    expect(
+      validateConnectorFormValues({ ...valid, githubCredentialSlug: "" }),
+    ).toBe("GitHub credential slug is required.");
+    expect(validateConnectorFormValues({ ...valid, githubOwner: "" })).toBe(
+      "GitHub owner is required.",
+    );
+    expect(
+      validateConnectorFormValues(valid, {
+        activeCredentialSlugs: ["linear"],
+      }),
+    ).toBe(
+      'Active GitHub credential "github" is required before enabling this connector.',
+    );
+    expect(
+      validateConnectorFormValues(
+        { ...valid, enabled: false },
+        { activeCredentialSlugs: ["linear"] },
+      ),
+    ).toBeNull();
+  });
+
+  it("summarizes configured GitHub credential readiness for connector rows", () => {
+    expect(
+      connectorGitHubCredentialStatus(
+        { github: { credentialSlug: "github-prod" } },
+        ["github-prod"],
+      ),
+    ).toEqual({
+      slug: "github-prod",
+      missing: false,
+      label: "GitHub ready",
+      title: 'Using GitHub credential "github-prod".',
+    });
+
+    expect(connectorGitHubCredentialStatus({}, [])).toMatchObject({
+      slug: "github",
+      missing: true,
+      label: "GitHub setup required",
+    });
   });
 
   it("uses manual target input for hybrid, empty, and missing targets", () => {
