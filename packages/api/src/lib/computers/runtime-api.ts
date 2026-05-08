@@ -16,6 +16,7 @@ import {
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { runSymphonyPrConnectorWork } from "./symphony-pr-harness.js";
+import { ensureMigratedComputerWorkspaceSeeded } from "./workspace-seed.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -93,6 +94,18 @@ export async function recordComputerHeartbeat(input: {
       last_active_at: computers.last_active_at,
     });
   if (!row) throw new ComputerNotFoundError(input.computerId);
+  try {
+    await ensureMigratedComputerWorkspaceSeeded({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+    });
+  } catch (err) {
+    console.error("[computer-runtime] failed to seed migrated workspace", {
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   return {
     computerId: row.id,
     runtimeStatus: row.runtime_status,
