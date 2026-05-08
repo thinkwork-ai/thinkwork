@@ -1,0 +1,207 @@
+# On-call notes
+
+When a compliance alarm fires, find it in the table below and follow the linked playbook. For background read [overview.md](./overview.md). For operator-side procedures (export request flow, GOVERNANCE→COMPLIANCE flip, password rotation) read [operator-runbook.md](./operator-runbook.md).
+
+## Alarm → playbook
+
+| Alarm | Playbook |
+|-------|----------|
+| `thinkwork-{stage}-compliance-anchor-dlq-depth` (or U8a/U8b equivalent) | [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero) |
+| `thinkwork-{stage}-compliance-exports-dlq-depth` | [Exports DLQ depth non-zero](#exports-dlq-depth-non-zero) |
+| `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing` | [Anchor watchdog heartbeat missing](#anchor-watchdog-heartbeat-missing) |
+| `thinkwork-{stage}-compliance-anchor-gap` | [Anchor gap too large](#anchor-gap-too-large) |
+| (CI gate, not CloudWatch) deploy fails on drift gate | [Drift gate fails on deploy](#drift-gate-fails-on-deploy) |
+| (No alarm; surface via DB monitoring) `audit_outbox` growing unbounded | [audit_outbox runaway](#audit_outbox-runaway) |
+| (No alarm; surface via Strands runtime errors) audit emits silently failing | [Strands runtime emit silent failure](#strands-runtime-emit-silent-failure) |
+
+---
+
+## Anchor DLQ depth non-zero
+
+**Symptom:** SQS queue `thinkwork-{stage}-compliance-anchor-dlq` has at least one message visible.
+
+**Likely cause:** The anchor Lambda crashed on a scheduled invocation. EventBridge Scheduler routed the failure to the DLQ via the `aws_lambda_function_event_invoke_config.compliance_anchor` `destination_config.on_failure` block. `MaximumRetryAttempts=0` on the function means a single failure goes straight to DLQ.
+
+**Resolution:**
+
+1. Open CloudWatch logs for `thinkwork-{stage}-api-compliance-anchor`. Find the most recent ERROR-level entries around the SQS message's `SentTimestamp`.
+2. Diagnose the failure class:
+   - **Aurora connection drop / KMS rate limit / S3 throttle:** transient. Next 15-minute cadence will succeed; the chain self-heals. Purge the DLQ message.
+   - **Code regression (handler exception, missing env var):** patch first. Redeploy. Then purge.
+   - **WORM write rejected (Object Lock retention shortened, KMS key denied):** check IAM and bucket policy. Anchor objects already written are immutable; the next cadence picks up where this one failed.
+3. The anchor Lambda is **idempotent on cadence_id** — `cadence_id` is a deterministic hash of the chain-head fingerprint, so re-running for the same chain head produces the same anchor. **Do not** replay anchor DLQ messages by hand; the next scheduled tick will produce the right anchor at the right cadence boundary.
+
+Anchor Lambda: [`packages/lambda/compliance-anchor.ts`](../../packages/lambda/compliance-anchor.ts).
+
+---
+
+## Exports DLQ depth non-zero
+
+**Symptom:** SQS queue `thinkwork-{stage}-compliance-exports-dlq` has at least one message visible.
+
+**Likely cause:** The export runner Lambda crashed (handler exception, env var unset, IAM regression) on a real export request. The runner's design path for **business** failures writes `failed` to `compliance.export_jobs` and returns SQS success — so DLQ messages are reserved for **handler crashes**.
+
+**Resolution:**
+
+1. Inspect a DLQ message body — should be `{"jobId": "<uuidv7>"}`.
+2. Look up the row in `compliance.export_jobs`:
+
+   ```sql
+   SELECT job_id, status, started_at, completed_at, job_error
+     FROM compliance.export_jobs
+    WHERE job_id = '<uuidv7>';
+   ```
+
+3. Decision tree by current status:
+   - **`running` for >15 minutes:** runner crashed mid-stream. Mark `failed`:
+
+     ```sql
+     UPDATE compliance.export_jobs
+        SET status = 'failed',
+            job_error = 'runner crashed; see DLQ',
+            completed_at = now()
+      WHERE job_id = '<uuidv7>'
+        AND status = 'running';
+     ```
+
+     Purge the DLQ message. Operator submits a fresh export with the same filter.
+   - **`failed`:** runner already wrote the failure before exiting. DLQ message is redundant. Purge.
+   - **`queued`:** the runner never claimed the job (CAS guard didn't fire). The Lambda likely crashed at boot — env var missing, Aurora connection failed at module-load. Check CloudWatch logs for the function. After fixing, **replay is safe** because the CAS guard makes re-delivery a no-op when the job is no longer queued; but typically the underlying problem (env or IAM) needs a code/Terraform fix first.
+4. Once the root cause is fixed and any stuck rows are reconciled, purge the DLQ.
+
+Runner Lambda: [`packages/lambda/compliance-export-runner.ts`](../../packages/lambda/compliance-export-runner.ts). DLQ + alarm provisioned by [`terraform/modules/app/lambda-api/handlers.tf`](../../terraform/modules/app/lambda-api/handlers.tf).
+
+---
+
+## Anchor watchdog heartbeat missing
+
+**Symptom:** Alarm `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing` fires (`ComplianceAnchorWatchdogHeartbeat` metric missing for 2+ evaluation periods of 5 minutes each).
+
+**Likely cause (in priority order):**
+
+1. **Watchdog Lambda dead.** Check CloudWatch logs for `thinkwork-{stage}-api-compliance-anchor-watchdog`. Schedule should fire every 5 minutes via EventBridge.
+2. **CloudWatch metric publish failing.** The watchdog uses `cloudwatch:PutMetricData` scoped to namespace `Thinkwork/Compliance` (per the IAM policy in [`terraform/modules/data/compliance-audit-bucket/main.tf`](../../terraform/modules/data/compliance-audit-bucket/main.tf)). A namespace condition mismatch silently drops metrics.
+3. **EventBridge Scheduler disabled or misconfigured.** Confirm the schedule is `Enabled` in the AWS console.
+
+**Resolution:**
+
+1. Open CloudWatch logs for the watchdog. If logs show recent invocations + the metric publish call but the alarm still fires, suspect a metric-name typo or namespace mismatch.
+2. If logs show no recent invocations, suspect the schedule. Re-enable in console; if scheduled trigger is correct but Lambda doesn't fire, check that the Lambda's IAM trust policy still allows `events.amazonaws.com` AssumeRole.
+3. The watchdog itself has an explicit Deny on s3:DeleteObject, s3:PutObject, etc. against the anchor bucket (per U8b's sibling-role design — [`terraform/modules/data/compliance-audit-bucket/main.tf`](../../terraform/modules/data/compliance-audit-bucket/main.tf)). A heartbeat failure does NOT mean the watchdog is mutating data; the worst case is silent observability gap.
+
+Watchdog Lambda: [`packages/lambda/compliance-anchor-watchdog.ts`](../../packages/lambda/compliance-anchor-watchdog.ts).
+
+---
+
+## Anchor gap too large
+
+**Symptom:** Alarm fires when `>30 minutes` elapsed since the last successful anchor (the watchdog publishes `ComplianceAnchorGap` measuring `now - last_anchored_recorded_at`).
+
+**Likely cause:**
+
+1. **Anchor Lambda dead** for ≥2 cadences. Check the anchor Lambda's CloudWatch logs first.
+2. **Cadence drift** — Lambda is alive but invocations are running >15 min so the next one is delayed. Check duration metrics.
+3. **Deploy window** — if a `terraform-apply` was running at the cadence boundary, the schedule may have been briefly disabled. False positive; will self-resolve at the next 15-min tick.
+
+**Resolution:**
+
+1. Check anchor Lambda logs + duration metrics. If logs are empty for >30 min, suspect schedule / Lambda failure path; jump to [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero).
+2. If logs show successful anchors but `last_anchored_recorded_at` isn't moving forward, the drainer is the bottleneck — check `compliance.audit_outbox` row count (see [audit_outbox runaway](#audit_outbox-runaway)). The anchor only advances when the drainer publishes new chain heads.
+3. Resolution is the same as anchor-DLQ recovery: fix root cause, let the next cadence self-heal. The anchor catches up automatically.
+
+The 30-min threshold is the master plan's documented detection target ("attacker disables job" risk row). Anchor cadence is rate(15min); two missed cadences crosses the threshold.
+
+---
+
+## Drift gate fails on deploy
+
+**Symptom:** GitHub Actions deploy job fails on the `drift-gate` step with output like:
+
+```
+ERROR: hand-rolled migration 0074_compliance_event_hash_index.sql declares
+  -- creates: compliance.idx_audit_events_event_hash
+but the object is missing on dev.
+```
+
+**Likely cause:** A PR added or modified a hand-rolled migration under `packages/database-pg/drizzle/00NN_*.sql` (one not registered in `meta/_journal.json`) but the operator did not apply it to dev before merging. The drift gate runs `pnpm db:migrate-manual` post-Terraform-apply; missing objects fail the deploy.
+
+**Resolution:**
+
+1. Confirm which migration: `pnpm db:migrate-manual --stage dev` outputs the gap.
+2. Resolve dev `DATABASE_URL`:
+
+   ```bash
+   aws secretsmanager get-secret-value \
+     --region us-east-1 \
+     --secret-id thinkwork-dev-db-credentials \
+     --query SecretString --output text
+   ```
+
+   Construct the URL: `postgresql://<username>:<URL-encoded-password>@<host>:<port>/<dbname>?sslmode=require`. The `!` character URL-encodes to `%21` if present in the password.
+3. Apply the migration: `psql "$DATABASE_URL" -f packages/database-pg/drizzle/00NN_<name>.sql`.
+4. Re-run the failed GitHub Actions job. Drift gate passes.
+
+The drift gate exists because hand-rolled migrations (those with explicit `-- creates:` markers) are deliberately outside Drizzle's `db:push` scope — they encode constraints (CHECK, partial indexes, FK ordering) that Drizzle doesn't represent cleanly. The gate ensures the production migration log stays consistent.
+
+Reference: [feedback_handrolled_migrations_apply_to_dev](../../.claude/projects/-Users-ericodom-Projects-thinkwork/memory/feedback_handrolled_migrations_apply_to_dev.md). Drift gate temporarily disabled in [#905](https://github.com/thinkwork-ai/thinkwork/pull/905); re-enable when stable.
+
+---
+
+## audit_outbox runaway
+
+**Symptom:** `compliance.audit_outbox` row count grows unbounded; queries against it slow down; chain advancement stalls (the anchor's `last_anchored_recorded_at` doesn't move).
+
+**Likely cause:** The drainer Lambda is dead or stuck. Healthy drainer holds row count near zero (FOR UPDATE SKIP LOCKED + UPDATE drained_at runs every 5 seconds; reserved-concurrency=1 guarantees no parallel drainers).
+
+**Resolution:**
+
+1. Confirm with a row count:
+
+   ```sql
+   SELECT count(*) FROM compliance.audit_outbox WHERE drained_at IS NULL;
+   ```
+
+   Healthy: <100. Concerning: >10,000. Critical: >100,000 (index degradation impacts emit-side performance).
+2. Check drainer Lambda CloudWatch logs. Look for ERROR-level entries; these are usually:
+   - **Aurora reader credential expired** — rotate via `STAGE=<stage> bash scripts/bootstrap-compliance-roles.sh`. The drainer reads as `compliance_drainer`; secret name is `thinkwork-{stage}-compliance-drainer-credentials`.
+   - **Reserved-concurrency exhausted** — another invocation is hung. Check the Lambda's "Throttles" metric; if non-zero, force-stop hung executions via the AWS console.
+   - **Hash-chain integrity failure** — the drainer panics if `prev_hash` of the next outbox row doesn't match the current chain head in `audit_events`. This indicates a manual mutation of `audit_events` or a race in concurrent drainers (which the reserved-concurrency=1 guarantee should prevent). Stop the drainer; investigate the chain manually.
+3. Once the drainer is healthy, it self-heals: the FOR UPDATE SKIP LOCKED loop drains the backlog at ~1000 rows / second.
+
+Drainer Lambda: [`packages/lambda/compliance-outbox-drainer.ts`](../../packages/lambda/compliance-outbox-drainer.ts). Drainer DLQ: `thinkwork-{stage}-compliance-drainer-dlq`.
+
+---
+
+## Strands runtime emit silent failure
+
+**Symptom:** Audit events from Strands runtime (sub-agent operations, tool invocations from Python containers) stop appearing in `audit_events` while Yoga-emitted events continue normally. Strands logs show no obvious errors.
+
+**Likely cause:** Env-var shadowing on the Strands container. The `ComplianceClient` reads `THINKWORK_API_URL` + `API_AUTH_SECRET` once at module load; if Lambda's warm-container update path re-injects these env vars mid-process, a re-read mid-handler can pick up stale values that don't match the live API endpoint.
+
+This was observed on AgentCore deploys mid-2026 — see [project_agentcore_deploy_race_env](../../.claude/projects/-Users-ericodom-Projects-thinkwork/memory/project_agentcore_deploy_race_env.md).
+
+**Resolution:**
+
+1. Check `compliance-events` REST handler logs for failed bearer validations. If you see auth failures from Strands, the `API_AUTH_SECRET` env var on the Strands container is stale.
+2. Force a warm pool flush on the Strands AgentCore Endpoint. The DEFAULT endpoint does not expose a flush API ([project_agentcore_default_endpoint_no_flush](../../.claude/projects/-Users-ericodom-Projects-thinkwork/memory/project_agentcore_default_endpoint_no_flush.md)) — the 15-minute reconciler is the only flush mechanism.
+3. Verify the Python `ComplianceClient` snapshots env at coroutine entry, not on each call. The fix landed in U6 but is fragile to refactor — if a contributor inadvertently moved the env read into a per-request function, audit emits silently break on the next AgentCore deploy.
+
+Cross-runtime emit reference: [developer-guide.md → Cross-runtime emit path](./developer-guide.md#cross-runtime-emit-path-strands-python).
+
+---
+
+## Irreversibility warnings
+
+These operations are NOT autonomous on-call decisions. Page the operator-tier owner first:
+
+- **GOVERNANCE → COMPLIANCE Object Lock cutover** on the anchor bucket. Once any object is written under COMPLIANCE retention, that object cannot be deleted or shortened by anyone (including AWS root) until retention expires (default 365 days). A wrong-stage flip is an unrecoverable disaster. See [operator-runbook.md → GOVERNANCE → COMPLIANCE flip](./operator-runbook.md#flip-s3-object-lock-governance--compliance-for-an-audit-engagement).
+- **TRUNCATE / DELETE on `compliance.audit_events`.** The schema's immutability triggers (defined in [`packages/database-pg/drizzle/0069_compliance_schema.sql`](../../packages/database-pg/drizzle/0069_compliance_schema.sql)) raise EXCEPTION on any DELETE / TRUNCATE attempt. If a privileged role bypasses the trigger, the chain is broken; auditors lose verification ability.
+- **Lowering `var.retention_days` on the anchor bucket** while in COMPLIANCE mode. Object Lock COMPLIANCE only honors retention extensions, not reductions. Lowering retention has no effect on existing objects; new objects get the new (lower) value, producing inconsistent retention across the chain.
+- **Deleting a row from `compliance.export_jobs`.** Loses the `data.export_initiated` audit trail's downstream artifact. Failed exports stay in the table for traceability — never DELETE; mark `failed` and let the row persist.
+
+## Where to escalate
+
+- Operator-tier action needed → [operator-runbook.md](./operator-runbook.md).
+- Code regression suspected → page the compliance-module owner; revert the suspected PR; redeploy.
+- Auditor engagement is in progress and an alarm is firing → page the engagement lead; document the alarm + resolution in the engagement evidence ZIP.
+- Master plan reference for any "is this expected behavior?" question → [`docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md`](../plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md).

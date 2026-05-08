@@ -1,0 +1,55 @@
+# Overview
+
+The compliance module records every security- and policy-relevant action against the platform into an append-only, hash-chained, WORM-anchored audit log. It exists to close the SOC2 Type 1 walkthrough — auditors can browse the events, verify the Merkle anchor against an external clock, and export filtered slices as evidence.
+
+## What the module does
+
+- Captures audit events at every emit site (Yoga resolvers + Strands runtime) inside the originating transaction (control-evidence) or out-of-band (telemetry).
+- Stores events in `compliance.audit_outbox`, drains them in single-writer order into `compliance.audit_events` with a per-tenant SHA-256 hash chain.
+- Anchors the chain heads every 15 minutes into a WORM-protected (S3 Object Lock) anchor bucket as a Merkle tree.
+- Exposes a read API + admin browse UI (the **Compliance** section) and an async CSV/NDJSON export pipeline that produces 15-minute presigned URLs.
+- Ships a standalone `audit-verifier` CLI auditors run against the anchor bucket + chain to verify retention, Merkle proofs, and chain continuity.
+
+## Non-goals
+
+These are explicitly outside scope (carried from the master plan's Scope Boundaries):
+
+- **Workflow orchestration.** The module records events; it does not drive multi-step processes. The System Workflows revert ([project_system_workflows_revert_compliance_reframe](../../.claude/projects/-Users-ericodom-Projects-thinkwork/memory/project_system_workflows_revert_compliance_reframe.md) — see also PRs [#843](https://github.com/thinkwork-ai/thinkwork/pull/843), [#845](https://github.com/thinkwork-ai/thinkwork/pull/845), [#848](https://github.com/thinkwork-ai/thinkwork/pull/848), [#851](https://github.com/thinkwork-ai/thinkwork/pull/851), [#873](https://github.com/thinkwork-ai/thinkwork/pull/873)) is the strategic context.
+- **AI-system-specific compliance** (tool-call audit, memory provenance, agent self-modification, prompt-injection blast-radius accounting). Phase 5 future work; the SOC2 Type 2 horizon is documented separately as a strategic direction.
+- **Real-time anomaly detection.** The module is the substrate; rules engines built on top are out of scope.
+- **GDPR right-to-be-forgotten erasure.** The chain hashes opaque actor_id values; pseudonym-table erasure leaves the chain intact, but full DPIA work is deferred to Phase 4.
+
+## Master arc unit roster
+
+The module shipped via 11 implementation units (U1–U11) over PRs #880 through #951.
+
+| Unit | What shipped | Primary PR | Date |
+|------|-------------|-----------|------|
+| U1 | `compliance.*` schema (audit_events, audit_outbox, actor_pseudonym, export_jobs) + immutability triggers | [#880](https://github.com/thinkwork-ai/thinkwork/pull/880) | 2026-05-07 |
+| U2 | Aurora roles (writer / drainer / reader) + Secrets Manager + GRANT migration | [#887](https://github.com/thinkwork-ai/thinkwork/pull/887) | 2026-05-07 |
+| U3 | `emitAuditEvent` helper + redaction allow-list | [#890](https://github.com/thinkwork-ai/thinkwork/pull/890) | 2026-05-07 |
+| U4 | Outbox drainer Lambda + per-tenant SHA-256 hash chain | [#893](https://github.com/thinkwork-ai/thinkwork/pull/893) | 2026-05-07 |
+| U5 | Wire `emitAuditEvent` at 9 SOC2 starter-slate call sites | [#903](https://github.com/thinkwork-ai/thinkwork/pull/903) | 2026-05-07 |
+| U6 | Strands runtime audit emit path (REST + Python client) | [#911](https://github.com/thinkwork-ai/thinkwork/pull/911) | 2026-05-07 |
+| U7 | S3 Object Lock anchor bucket Terraform module | [#917](https://github.com/thinkwork-ai/thinkwork/pull/917) | 2026-05-07 |
+| U8a | Anchor Lambda inert + EventBridge Scheduler + watchdog + alarm | [#921](https://github.com/thinkwork-ai/thinkwork/pull/921) | 2026-05-07 |
+| U8b | Anchor Lambda live (real S3 PutObject + Object Lock retention) | [#927](https://github.com/thinkwork-ai/thinkwork/pull/927) | 2026-05-07 |
+| U9 | Standalone `audit-verifier` CLI | [#932](https://github.com/thinkwork-ai/thinkwork/pull/932) | 2026-05-08 |
+| U10 | Admin Compliance section: GraphQL read API + reader role + admin SPA list/detail/walk-back | [#937](https://github.com/thinkwork-ai/thinkwork/pull/937), [#939](https://github.com/thinkwork-ai/thinkwork/pull/939), [#941](https://github.com/thinkwork-ai/thinkwork/pull/941) | 2026-05-08 |
+| U11 | Async export — backend + Terraform + live runner + admin Exports page | [#944](https://github.com/thinkwork-ai/thinkwork/pull/944), [#948](https://github.com/thinkwork-ai/thinkwork/pull/948), [#950](https://github.com/thinkwork-ai/thinkwork/pull/950), [#951](https://github.com/thinkwork-ai/thinkwork/pull/951) | 2026-05-08 |
+
+The full chronological table including fixes lives in [`changelog.md`](./changelog.md).
+
+## Strategic context
+
+The compliance module replaced the System Workflows feature, which the team retired in early May 2026 because the multi-step orchestration substrate was not earning its complexity budget. The reframe was a deliberate pivot toward a flat audit-event log designed to clear SOC2 Type 1 first, with SOC2 Type 2 + AI-specific compliance topics as the strategic horizon for Phase 5.
+
+## Where to read more
+
+- [architecture.md](./architecture.md) — substrate flow + Aurora role split + S3 prefix contract.
+- [operator-runbook.md](./operator-runbook.md) — what to do when running the system.
+- [auditor-walkthrough.md](./auditor-walkthrough.md) — the SOC2 narrative.
+- [developer-guide.md](./developer-guide.md) — how to extend the module.
+- [oncall.md](./oncall.md) — what to do when an alarm fires.
+- [changelog.md](./changelog.md) — chronological PR history.
+- [`packages/audit-verifier/README.md`](../../packages/audit-verifier/README.md) — verifier CLI reference.
