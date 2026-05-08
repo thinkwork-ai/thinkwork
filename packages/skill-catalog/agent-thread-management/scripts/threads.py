@@ -91,7 +91,7 @@ def _resolve_user_by_email(email: str) -> dict | None:
 # Public API — 10 functions (all use GraphQL)
 # ---------------------------------------------------------------------------
 
-THREAD_FIELDS = "id title status channel agentId assigneeType assigneeId number identifier dueAt createdAt"
+THREAD_FIELDS = "id title status channel agentId computerId assigneeType assigneeId number identifier dueAt createdAt"
 
 
 @_safe
