@@ -226,6 +226,23 @@ describe("GraphQL Schema Contract", () => {
 			expect(fields).toContain("notifyAgentStatus");
 			expect(fields).toContain("notifyNewMessage");
 			expect(fields).toContain("notifyThreadUpdate");
+			expect(fields).toContain("publishComputerThreadChunk");
+		});
+
+		it("has Computer thread chunk subscription contract", () => {
+			const mutationType = tfSchema.getMutationType();
+			const subscriptionType = tfSchema.getSubscriptionType();
+			const eventType = tfSchema.getType("ComputerThreadChunkEvent") as any;
+
+			expect(eventType).toBeDefined();
+			expect(Object.keys(eventType.getFields())).toEqual([
+				"threadId",
+				"chunk",
+				"seq",
+				"publishedAt",
+			]);
+			expect(mutationType?.getFields().publishComputerThreadChunk).toBeDefined();
+			expect(subscriptionType?.getFields().onComputerThreadChunk).toBeDefined();
 		});
 
 		it("does NOT have product Query fields", () => {

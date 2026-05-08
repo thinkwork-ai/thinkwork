@@ -77,6 +77,7 @@ locals {
     "notifyThreadUpdate",
     "notifyInboxItemUpdate",
     "notifyThreadTurnUpdate",
+    "publishComputerThreadChunk",
     "notifyOrgUpdate",
   ]
 }
@@ -100,6 +101,9 @@ resource "aws_appsync_resolver" "notifications" {
     #end
     #if(!$result.createdAt)
       #set($result.createdAt = $util.time.nowISO8601())
+    #end
+    #if(!$result.publishedAt)
+      #set($result.publishedAt = $util.time.nowISO8601())
     #end
     $util.toJson($result)
   EOF

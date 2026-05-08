@@ -3,6 +3,11 @@ output "graphql_api_id" {
   value       = aws_appsync_graphql_api.subscriptions.id
 }
 
+output "graphql_api_arn" {
+  description = "AppSync GraphQL API ARN"
+  value       = aws_appsync_graphql_api.subscriptions.arn
+}
+
 output "graphql_api_url" {
   description = "AppSync GraphQL endpoint URL (used by backend to push notifications)"
   value       = aws_appsync_graphql_api.subscriptions.uris["GRAPHQL"]
