@@ -1,10 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "urql";
+import { useEffect } from "react";
+import { useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
-import { ComputerThreadQuery } from "@/lib/graphql-queries";
+import { useTenant } from "@/context/TenantContext";
+import {
+  ComputerThreadQuery,
+  ThreadTurnUpdatedSubscription,
+} from "@/lib/graphql-queries";
+import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 
 export const Route = createFileRoute("/_authed/_shell/tasks/$id")({
   component: TaskDetailPage,
@@ -39,16 +45,32 @@ interface ThreadResult {
 
 function TaskDetailPage() {
   const { id } = Route.useParams();
-  const [{ data, fetching, error }] = useQuery<ThreadResult>({
+  const { tenantId } = useTenant();
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
     query: ComputerThreadQuery,
     variables: { id, messageLimit: 100 },
   });
+  const chunks = useComputerThreadChunks(id);
+  const [{ data: turnUpdate }] = useSubscription<{
+    onThreadTurnUpdated?: { threadId?: string | null } | null;
+  }>({
+    query: ThreadTurnUpdatedSubscription,
+    variables: { tenantId },
+    pause: !tenantId,
+  });
+
+  useEffect(() => {
+    if (turnUpdate?.onThreadTurnUpdated?.threadId === id) {
+      reexecuteQuery({ requestPolicy: "network-only" });
+    }
+  }, [id, reexecuteQuery, turnUpdate?.onThreadTurnUpdated?.threadId]);
 
   return (
     <TaskThreadView
       thread={data?.thread ? toTaskThread(data.thread) : null}
       isLoading={fetching && !data}
       error={error?.message ?? null}
+      streamingChunks={chunks}
     />
   );
 }
