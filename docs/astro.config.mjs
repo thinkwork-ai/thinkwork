@@ -147,6 +147,10 @@ export default defineConfig({
               items: [
                 { label: "Overview", slug: "concepts/connectors" },
                 {
+                  label: "Lifecycle",
+                  slug: "concepts/connectors/lifecycle",
+                },
+                {
                   label: "Integrations",
                   slug: "concepts/connectors/integrations",
                 },
@@ -204,6 +208,10 @@ export default defineConfig({
               items: [
                 { label: "Skill Packs", slug: "guides/skill-packs" },
                 { label: "Connectors", slug: "guides/connectors" },
+                {
+                  label: "Symphony Linear Checkpoint",
+                  slug: "guides/symphony-linear-checkpoint",
+                },
                 { label: "Evaluations", slug: "guides/evaluations" },
                 {
                   label: "Operating Compiled Pages",
@@ -279,6 +287,10 @@ export default defineConfig({
                         {
                           label: "Dashboard",
                           slug: "applications/admin/dashboard",
+                        },
+                        {
+                          label: "Symphony",
+                          slug: "applications/admin/symphony",
                         },
                         {
                           label: "Threads",

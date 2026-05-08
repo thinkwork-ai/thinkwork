@@ -2,6 +2,8 @@
 
 This runbook verifies the first honest connector checkpoint: one fresh Linear issue with the `symphony` label is picked up by the Linear connector, recorded as a terminal connector execution, handed to a Computer as a `connector_work` task/event, surfaced as a Computer-owned connector thread, and completed with a branch, draft PR, Linear comments, and `In Review` writeback.
 
+For the normal operator walkthrough, start with the docs guide: `docs/src/content/docs/guides/symphony-linear-checkpoint.mdx`. This runbook keeps the lower-level scheduler checks, optional SQL, stale cleanup path, and failure table.
+
 ## Scope
 
 This proof is Linear-only. It does not prove Slack, GitHub, Google Workspace, automatic actor matching, signed provider callbacks, spend enforcement, or the full Computer runtime delegation loop. Direct Agent, routine, and hybrid connector targets still exist as advanced/admin paths, but the checkpoint path should use a Computer target.

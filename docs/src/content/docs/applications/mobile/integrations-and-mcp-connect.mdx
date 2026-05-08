@@ -3,12 +3,16 @@ title: Mobile — Integrations & MCP Connect
 description: Self-serve per-user OAuth for connectors and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, and any MCP server registered at the tenant level.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The mobile app owns the **user side** of connector and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers lives in the [Admin Web App](/applications/admin/mcp-servers/).
 
 <Aside type="note">
-Why the split? Admin registers infrastructure (the MCP server's URL, transport, and authentication type; the tenant's OAuth client ID for Google). The mobile app handles user-owned credentials (each user's personal OAuth refresh token, each user's per-MCP-server access token). This keeps operator concerns and user concerns cleanly separated.
+  Why the split? Admin registers infrastructure (the MCP server's URL,
+  transport, and authentication type; the tenant's OAuth client ID for Google).
+  The mobile app handles user-owned credentials (each user's personal OAuth
+  refresh token, each user's per-MCP-server access token). This keeps operator
+  concerns and user concerns cleanly separated.
 </Aside>
 
 ## Integrations screen
@@ -17,11 +21,11 @@ Why the split? Admin registers infrastructure (the MCP server's URL, transport, 
 
 The Integrations screen is the user's home for connecting their personal accounts to ThinkWork. It lists every integration the tenant supports alongside the user's current status for each:
 
-| Integration | What it unlocks |
-|---|---|
+| Integration             | What it unlocks                                                                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
 | **Google Productivity** | Gmail read, Calendar read/write, Drive read for agents that have the Google built-in tool assigned |
-| **Microsoft 365** | Outlook, Calendar, OneDrive for agents that have the Microsoft built-in tool assigned |
-| **External Tasks** | Webhook-driven task cards, save-edit round-trip, assigned-task push notifications |
+| **Microsoft 365**       | Outlook, Calendar, OneDrive for agents that have the Microsoft built-in tool assigned              |
+| **External Tasks**      | Webhook-driven task cards, save-edit round-trip, assigned-task push notifications                  |
 
 Each row shows a status badge:
 
@@ -31,9 +35,9 @@ Each row shows a status badge:
 
 Tapping **Connect** launches a WebBrowser session to the tenant's OAuth authorize URL for the provider. The user consents in their browser, the provider redirects back, and the mobile app stores the new token in Secrets Manager (via the API) and updates the badge.
 
-### Per-provider agent picker
+### Per-provider target picker
 
-For integrations that route inbound work to agents, the integration row has a **default agent picker**. This determines which agent gets assigned when a new task lands in the user's Tasks tab. The picker shows the agents the user has access to in this tenant, and the selection is stored per-user-per-provider.
+For integrations that route inbound work, the integration row can expose a **target picker**. The default target is a Computer, which gives the user a stable always-on orchestrator while still allowing the Computer to delegate to managed Agents or routines. The selection is stored per-user-per-provider when the provider supports user-level routing.
 
 ### Disconnecting
 

@@ -38,7 +38,7 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 ### Work
 
 - [Dashboard](/applications/admin/dashboard/) — the landing page with metric cards, recent activity, and recent threads
-- **Symphony** (`/symphony`) — connector configuration and connector runs, including the Computer-first Linear checkpoint path
+- [Symphony](/applications/admin/symphony/) — connector configuration and connector runs, including the Computer-first Linear checkpoint path
 - [Threads](/applications/admin/threads/) — the thread list and detail view with Kanban, grouped table, live subscriptions, inline edit, and thread audit
 - [Inbox](/applications/admin/inbox/) — the approval queue for agent-requested human-in-the-loop actions, including system-agent workspace reviews
 - [Automations](/applications/admin/automations/) — recurring agent work, scheduled jobs, and routine triggers (cron, rate, one-shot, multi-step workflows)
@@ -46,7 +46,7 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Agents**,
 ### Agents
 
 - [Company Brain](/applications/admin/knowledge/) — Memory, Pages, Knowledge Bases, and Sources verification/configuration in one tabbed surface
-- [Computers](/applications/admin/computers/) — durable per-user orchestration runtimes and valid connector-facing actors
+- [Computers](/applications/admin/computers/) — durable per-user orchestration runtimes and the happy-path owners for connector-origin work
 - [Agents](/applications/admin/agents/) — the agent roster plus agent workspace/configuration flows
 - [Agent Templates](/applications/admin/agent-templates/) — reusable template bundles and the explicit sync flow to linked agents
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB agent invitations and join-request approvals
@@ -87,4 +87,5 @@ When in doubt: tenant-level → admin, user-level → mobile.
 - [Mobile App](/applications/mobile/) — the end-user client
 - [CLI](/applications/cli/) — the `thinkwork-cli` deploy and management tool
 - [Architecture](/architecture/) — how the admin app fits into the three-tier deployment model
-- [Concepts](/concepts/threads/) — the underlying product model the admin app exposes
+- [Connectors](/concepts/connectors/) — the external-system boundary surfaced through Symphony and Webhooks
+- [Concepts: Threads](/concepts/threads/) — the underlying work-record model the admin app exposes

@@ -1,8 +1,10 @@
 # Thinkwork Connector Recipe — Example
 
 This directory is a template for building a custom connector: an AWS Lambda
-that receives webhooks from an external service and routes messages into
-Thinkwork threads. It pairs with a skill that sends replies back.
+or poller that receives provider activity, authenticates the provider boundary,
+normalizes the payload, and hands work to ThinkWork. Modern connector work should
+target a Computer first; managed Agents and routines are delegated workers or
+advanced direct targets.
 
 ## Structure
 
@@ -11,10 +13,10 @@ connector-recipe/
   handler/
     main.py            # Lambda entry point — signature verification + routing
     auth.py            # HMAC-SHA256 webhook signature verification
-    thread.py          # Thinkwork API helpers (create/resume thread)
+    thread.py          # ThinkWork API helpers (create/resume visible work)
     requirements.txt   # Python stdlib only, no pip install needed
   skill/
-    SKILL.md           # Agent skill for sending replies back to the external service
+    SKILL.md           # Optional tool guidance for provider writeback
   terraform/
     main.tf            # Lambda + API Gateway v2 infrastructure
     variables.tf       # Input variables
@@ -25,12 +27,12 @@ connector-recipe/
 
 ## How It Works
 
-1. External service posts a webhook to the API Gateway endpoint.
+1. External service posts a webhook to the API Gateway endpoint, or a poller finds a provider item.
 2. `handler/auth.py` verifies the HMAC-SHA256 signature to authenticate the request.
 3. `handler/main.py` parses the payload and calls `create_or_resume_thread` in `handler/thread.py`.
-4. The Thinkwork inbound API routes the message to the configured agent.
-5. The agent uses the `send_reply` tool from `skill/SKILL.md` to deliver the response
-   back to the external service.
+4. The ThinkWork inbound API records provenance and hands work to the configured Computer.
+5. The Computer handles the work or delegates to a managed Agent or routine.
+6. Provider writeback uses tenant credentials, not tokens exposed to the worker.
 
 ## Deployment
 
@@ -43,7 +45,7 @@ thinkwork_api_url      = "https://api.thinkwork.ai"
 thinkwork_api_key      = "tw_..."
 webhook_signing_secret = "whsec_..."
 connector_id           = "my-slack-connector"
-default_agent_id       = "agt_abc123"
+target_computer_id     = "computer_abc123"
 stage                  = "dev"
 ```
 
@@ -67,13 +69,13 @@ can inject it into the agent context.
 
 ## Customization
 
-| File               | What to change                                                          |
-| ------------------ | ----------------------------------------------------------------------- |
-| `handler/main.py`  | Adapt payload parsing to match your external service's webhook format  |
-| `handler/auth.py`  | Replace HMAC scheme if your service uses a different signing algorithm  |
-| `handler/thread.py`| Extend with metadata fields your agent needs                           |
-| `skill/SKILL.md`   | Update tool descriptions and usage guidelines for your use case         |
-| `terraform/main.tf`| Add VPC config, reserved concurrency, or DLQ as needed                 |
+| File                | What to change                                                         |
+| ------------------- | ---------------------------------------------------------------------- |
+| `handler/main.py`   | Adapt payload parsing to match your external service's webhook format  |
+| `handler/auth.py`   | Replace HMAC scheme if your service uses a different signing algorithm |
+| `handler/thread.py` | Extend with metadata fields the Computer and thread need               |
+| `skill/SKILL.md`    | Update optional provider writeback guidance for your use case          |
+| `terraform/main.tf` | Add VPC config, reserved concurrency, or DLQ as needed                 |
 
 ## Validation
 
@@ -83,3 +85,15 @@ node test.mjs
 
 Checks that all required handler, skill, and Terraform files are present and
 that `skill/SKILL.md` has valid YAML frontmatter.
+
+## Current connector model
+
+This example is intentionally small. For current product guidance, read:
+
+- `docs/src/content/docs/concepts/connectors.mdx`
+- `docs/src/content/docs/concepts/connectors/lifecycle.mdx`
+- `docs/src/content/docs/guides/connectors.mdx`
+
+Do not copy older default-agent patterns into new connector work. Use a stable
+external reference, idempotent claim behavior, tenant credentials, Computer
+handoff, and explicit provider writeback.

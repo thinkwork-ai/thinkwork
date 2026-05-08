@@ -1,7 +1,7 @@
 ---
 title: "docs: Symphony and connector documentation"
 type: docs
-status: active
+status: completed
 date: 2026-05-08
 origin: docs/brainstorms/2026-05-07-computer-first-connector-routing-requirements.md
 ---
@@ -198,6 +198,10 @@ The reader path should be:
 **Dependencies:** None.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Modify: `docs/src/content/docs/concepts/connectors.mdx`
 - Modify: `docs/src/content/docs/concepts/connectors/integrations.mdx`
 - Modify: `docs/src/content/docs/concepts/connectors/mcp-tools.mdx`
@@ -206,6 +210,10 @@ The reader path should be:
 **Test expectation:** No dedicated test file -- validate with docs build and targeted content checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Lead with connectors as the system boundary for external systems, not as "send a thread to an agent."
 - Introduce the three connector shapes currently worth naming: integration/event sources, MCP tools, and tracker/work-item connectors.
 - State the Computer-first default: external work routes to a Computer, and the Computer may delegate to managed Agents or routines.
@@ -215,17 +223,29 @@ The reader path should be:
 - Cross-link Computers, Threads, Symphony admin page, and the checkpoint guide.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/STYLE.md`
 - `docs/src/content/docs/concepts/computers.mdx`
 - `docs/src/content/docs/applications/admin/index.mdx`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: a reader can learn that connector-origin work is Computer-owned by default from the first half of the hub page.
 - Regression: the page no longer claims the normal connector default is "route to an agent."
 - Regression: Integrations and MCP Tools still read as connector subtypes rather than unrelated concepts.
 - Edge case: future connector examples are clearly marked as future examples, not shipped surfaces.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Docs build succeeds.
 - Search results for "default agent" or "default agent for the connector" in connector docs are either removed or explicitly framed as legacy/advanced.
 
@@ -240,12 +260,20 @@ The reader path should be:
 **Dependencies:** U1.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Create: `docs/src/content/docs/concepts/connectors/lifecycle.mdx`
 - Modify: `docs/astro.config.mjs`
 
 **Test expectation:** No dedicated test file -- validate with docs build and link/sidebar checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Use the Linear tracker path as the worked example.
 - Explain each durable record in plain language:
   - connector row: configured source and target;
@@ -259,18 +287,30 @@ The reader path should be:
 - Place code paths and schema references under `## Under the hood`.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/src/content/docs/concepts/threads/lifecycle-and-types.mdx`
 - `docs/runbooks/computer-first-linear-connector-checkpoint.md`
 - `packages/database-pg/graphql/types/connectors.graphql`
 - `packages/api/src/lib/connectors/runtime.ts`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: page explains the fresh Linear checkpoint lifecycle without requiring SQL.
 - Integration: page links to the Symphony admin page, Computers concept, Threads concept, and checkpoint guide.
 - Error path: "What can go wrong" covers missing GitHub credential and duplicate pickup regressions.
 - Scope guard: page does not imply Slack/Jira/GitHub Issues connector behavior is already shipped.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - The sidebar includes the lifecycle page under Connectors.
 - Docs build succeeds with the new Starlight page.
 
@@ -285,6 +325,10 @@ The reader path should be:
 **Dependencies:** U1.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Create: `docs/src/content/docs/applications/admin/symphony.mdx`
 - Modify: `docs/src/content/docs/applications/admin/index.mdx`
 - Modify: `docs/astro.config.mjs`
@@ -292,6 +336,10 @@ The reader path should be:
 **Test expectation:** No dedicated test file -- validate with docs build and sidebar/link checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Define Symphony as the admin surface for connector setup and connector-run visibility, currently centered on the Linear tracker proof.
 - Document the two tabs:
   - Connectors: active/paused/archived connector rows, structured setup form, Advanced JSON, manual run, archive/pause/resume.
@@ -303,18 +351,30 @@ The reader path should be:
 - Keep rows/table UX detail brief; this is docs, not a UI spec.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/src/content/docs/applications/admin/computers.mdx`
 - `docs/src/content/docs/applications/admin/threads.mdx`
 - `apps/admin/src/routes/_authed/_tenant/symphony.tsx`
 - `apps/admin/src/lib/connector-admin.ts`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: operator can identify where to configure the connector and where to verify a run.
 - Error path: operator can identify what a missing GitHub setup warning means.
 - Scope guard: page says Symphony currently proves the Linear path and does not document other connectors as shipped.
 - Regression: admin index links to the dedicated Symphony page instead of leaving `/symphony` as plain text.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Admin sidebar docs include Symphony under Work.
 - Docs build succeeds.
 
@@ -329,6 +389,10 @@ The reader path should be:
 **Dependencies:** U2, U3.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Create: `docs/src/content/docs/guides/symphony-linear-checkpoint.mdx`
 - Modify: `docs/astro.config.mjs`
 - Modify: `docs/runbooks/computer-first-linear-connector-checkpoint.md`
@@ -336,6 +400,10 @@ The reader path should be:
 **Test expectation:** No dedicated test file -- validate with docs build and runbook consistency review.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Keep this as a guide, not another runbook copy.
 - Start with entry criteria: deployed stack, active Computer, Linear credential, GitHub credential, active connector, scheduled poller, fresh issue, only `symphony` label.
 - Walk the operator through:
@@ -349,17 +417,29 @@ The reader path should be:
 - Update the runbook only where needed to cross-link the new docs pages and keep it current with any wording changes.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/runbooks/computer-first-linear-connector-checkpoint.md`
 - `docs/src/content/docs/guides/compounding-memory-operations.mdx`
 - `docs/src/content/docs/guides/evaluations.mdx`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: guide has enough steps for a non-authoring operator to run a fresh checkpoint without SQL.
 - Error path: guide points to the runbook for scheduler, stale cleanup, and SQL fallback instead of duplicating all operational detail.
 - Regression: guide consistently says the label is `symphony`.
 - Integration: guide links back to Connectors, Symphony admin, Computers, Threads, and the runbook.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Authoring Guides sidebar includes the guide.
 - Docs build succeeds.
 
@@ -374,12 +454,20 @@ The reader path should be:
 **Dependencies:** U1, U2.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Modify: `docs/src/content/docs/guides/connectors.mdx`
 - Modify: `examples/connector-recipe/README.md`
 
 **Test expectation:** No dedicated test file -- validate with docs build and stale-pattern content checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Reframe the guide as future/custom connector guidance, not the main path for the shipped Linear/Symphony connector.
 - Replace stale vault examples with tenant credential language that matches the current system.
 - Replace `DEFAULT_AGENT_ID`-style defaults with Computer-first target language and clear advanced direct target exceptions.
@@ -389,18 +477,30 @@ The reader path should be:
 - Point to the connector lifecycle page and runbook rather than embedding operational detail.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/STYLE.md`
 - `examples/connector-recipe/README.md`
 - `packages/api/src/lib/connectors/runtime.ts`
 - `packages/api/src/lib/tenant-credentials/secret-store.ts`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: a developer understands the current expected connector responsibilities without copying stale code.
 - Regression: guide no longer presents SSM/DynamoDB token storage as the current ThinkWork credential vault path.
 - Regression: guide no longer teaches "choose an agent" as the default happy path.
 - Scope guard: guide says custom connector recipes are not the shipped Linear setup path.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Docs build succeeds.
 - A targeted grep confirms stale phrases such as `DEFAULT_AGENT_ID` do not remain in the public guide unless explicitly framed as legacy.
 
@@ -415,6 +515,10 @@ The reader path should be:
 **Dependencies:** U1, U2, U3, U4, U5.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Modify: `docs/src/content/docs/applications/admin/index.mdx`
 - Modify: `docs/src/content/docs/applications/admin/computers.mdx`
 - Modify: `docs/src/content/docs/concepts/computers.mdx`
@@ -425,6 +529,10 @@ The reader path should be:
 **Test expectation:** No dedicated test file -- validate with docs build and cross-link checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Add concise cross-links from Computers to connector-origin tasks and from Threads to connector-origin threads.
 - Update Roadmap language only enough to point to Linear as the current connector proof and future connectors as roadmap work.
 - Ensure "Agent" pages do not imply managed Agents are the default owner of connector-origin work.
@@ -432,17 +540,29 @@ The reader path should be:
 - Keep this as a vocabulary sweep, not a site-wide docs rewrite.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/STYLE.md`
 - `docs/src/content/docs/applications/admin/index.mdx`
 - `docs/src/content/docs/concepts/agents/managed-agents.mdx`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: a reader moving from Admin -> Symphony -> Connectors -> Computers sees consistent ownership language.
 - Regression: no new broken sidebar slug is introduced.
 - Regression: Roadmap does not claim additional connectors have shipped.
 - Edge case: "managed Agents" remains capitalized and positioned as delegated workers, not erased from the product model.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Docs build succeeds.
 - Manual link scan of new/changed pages finds no dead internal links.
 
@@ -457,11 +577,19 @@ The reader path should be:
 **Dependencies:** U1, U2, U3, U4, U5, U6.
 
 **Files:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Modify: `docs/STYLE.md` only if the docs pass reveals a reusable connector-docs rule worth capturing
 
 **Test expectation:** No dedicated test file -- validate with Starlight build and targeted content checks.
 
 **Approach:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Build the docs site with the Starlight build.
 - Check that each substantive page has:
   - a useful hook paragraph;
@@ -474,10 +602,18 @@ The reader path should be:
 - Optionally run the fresh Linear checkpoint only if implementation drift makes docs accuracy uncertain; do not make a live external smoke mandatory for a docs-only PR.
 
 **Patterns to follow:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - `docs/STYLE.md`
 - `docs/runbooks/computer-first-linear-connector-checkpoint.md`
 
 **Test scenarios:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Happy path: docs build succeeds.
 - Regression: no changed page tells operators to use `symphony-eligible`.
 - Regression: no changed page says connector-origin work is Agent-owned by default.
@@ -485,6 +621,10 @@ The reader path should be:
 - Integration: new pages are reachable from the sidebar and from at least one related page.
 
 **Verification:**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 - Starlight build passes.
 - The PR description lists the docs pages changed and the current production behavior they document.
 
@@ -502,6 +642,7 @@ The reader path should be:
 
 ## Risks & Dependencies
 
+<<<<<<< HEAD
 | Risk | Mitigation |
 |------|------------|
 | Docs overclaim the connector platform as broader than the shipped Linear proof | Add `Known limits` to Symphony and lifecycle pages; keep future connector mentions clearly deferred |
@@ -509,6 +650,15 @@ The reader path should be:
 | Custom connector guide becomes another stale code dump | Keep examples directional and short; move technical detail to `Under the hood` |
 | Sidebar grows noisy | Keep Connectors to overview, lifecycle, integrations, MCP tools; keep Symphony under Admin |
 | Operator guide duplicates the runbook and drifts | Summarize in the guide, link to runbook for exact checks |
+=======
+| Risk                                                                           | Mitigation                                                                                              |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Docs overclaim the connector platform as broader than the shipped Linear proof | Add `Known limits` to Symphony and lifecycle pages; keep future connector mentions clearly deferred     |
+| Stale local checkout hides latest post-merge behavior                          | Implement from `origin/main` after fetching; use the runbook and current admin/runtime files as sources |
+| Custom connector guide becomes another stale code dump                         | Keep examples directional and short; move technical detail to `Under the hood`                          |
+| Sidebar grows noisy                                                            | Keep Connectors to overview, lifecycle, integrations, MCP tools; keep Symphony under Admin              |
+| Operator guide duplicates the runbook and drifts                               | Summarize in the guide, link to runbook for exact checks                                                |
+>>>>>>> 1a64e1bf (docs: document Symphony connector model)
 
 ---
 

@@ -1,11 +1,11 @@
 ---
 title: Routing and Metadata
-description: How inbound connector events become threads — the normalization path, the channel-specific metadata, and how agents see source context when they reply.
+description: How inbound connector events become threads — the normalization path, channel-specific metadata, and how Computers and managed Agents see source context.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes a structured thread an agent can reason over. The metadata that carries through is what makes the **Security** operating guarantee work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
+When a Slack message, a GitHub issue comment, or an inbound Linear issue arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that the Computer or delegated managed Agent can write back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes structured work. The metadata that carries through is what makes the **Security** operating guarantee work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
 
 ## The routing question
 
@@ -13,9 +13,9 @@ Every inbound connector event answers the same three routing questions before it
 
 1. **Does a thread already exist for this external conversation?** A Slack threaded reply should land in the same ThinkWork thread as the original message, not a new one.
 2. **If yes, is that thread still open?** A reply to a `DONE` thread should reopen it, not silently drop.
-3. **If no thread exists, which agent should own the new one?** The inbound event may name a target (an @-mention, an assignment), or the tenant may have a default routing rule.
+3. **If no thread exists, which Computer should own the new one?** The inbound event may name a target, or the tenant may have a default routing rule.
 
-Each connector Lambda runs through those questions before calling `createThread` or `updateThread`. The answers live in channel-specific metadata.
+Each connector runtime runs through those questions before creating or updating a thread. The answers live in channel-specific metadata.
 
 ## What metadata carries
 
@@ -69,7 +69,9 @@ SES inbound lookup uses `inReplyTo` and `references` to stitch replies into exis
 {
   "provider": "linear",
   "externalTaskId": "task_abc123",
-  "latestEnvelope": { /* provider-normalized task state */ }
+  "latestEnvelope": {
+    /* provider-normalized task state */
+  }
 }
 ```
 
@@ -84,14 +86,14 @@ Internal channels have simpler metadata:
 
 ## How to configure it
 
-Routing is configured per connector in [Admin: Connectors](/applications/admin/connectors/) (and per-connector subroutes — Slack settings, GitHub settings, etc.). The thread side of routing — which agent owns a new thread, what channel a thread starts in — is downstream of the connector configuration.
+Routing is configured per connector in the relevant admin surface, such as [Symphony](/applications/admin/symphony/) for Linear tracker work or [Webhooks](/applications/admin/webhooks/) for custom inbound events. The thread side of routing — which Computer owns a new thread, what channel a thread starts in, and what metadata follows it — is downstream of the connector configuration.
 
 ### What's tenant-scoped (admin web)
 
-- **Default agent per connector.** Every connector ships with a "default agent for new threads" setting. When inbound routing finds no more-specific match (no `@-mention`, no channel binding, no per-recipient rule), the new thread routes here. Required to ship a connector to production; defaults to unset.
-- **Routing rules per connector.** A list of (predicate → agent) pairs evaluated in order. Predicates can be: `@-mention` of a specific agent, `channel = #engineering`, `from-domain = customer.com`, `label = bug`. Define the rules at [Admin: Connectors → \<provider\> → Routing](/applications/admin/connectors/). The first matching rule wins; if none match, the default agent runs.
+- **Target Computer per connector.** Every connector that creates work needs a target Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
+- **Routing rules per connector.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the connector's target Computer runs.
 - **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the connector's reopen mode to `disabled`.
-- **Signing secret rotation.** Each connector's webhook signing secret lives in the credential vault (SSM + KMS). Rotate from [Admin: Connectors → \<provider\> → Credentials → Rotate](/applications/admin/connectors/); active connector Lambdas pick up the new value within 60 seconds (Lambda env-var cache TTL). See [Connectors → credential vault](/concepts/connectors/#credential-vault).
+- **Signing secret rotation.** Each connector's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active connector runtimes pick up the new value from deployed configuration. See [Connectors → credential vault](/concepts/connectors/#credential-vault).
 
 ### What's deployment-scoped (Terraform)
 
@@ -103,25 +105,25 @@ Routing is configured per connector in [Admin: Connectors](/applications/admin/c
 Here's the full path of an inbound Slack message becoming a thread turn.
 
 1. **Slack fires a webhook.** Slack POSTs an `event_callback` to `/connectors/slack/webhook` on API Gateway.
-2. **Webhook signature verified.** The Slack connector Lambda validates the `X-Slack-Signature` header against the signing secret in SSM.
+2. **Webhook signature verified.** The Slack connector runtime validates the `X-Slack-Signature` header against the tenant credential vault.
 3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the connector-agnostic shape the thread path consumes.
-4. **Routing check.** The Lambda queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
-5. **Agent resolution.** For a new thread, the Lambda picks an agent: the target of an @-mention, a channel-default binding, or the tenant default. For an existing thread, the assigned agent already owns it.
+4. **Routing check.** The connector queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
+5. **Target resolution.** For a new thread, the Lambda picks a Computer target: the target of an @-mention, a channel binding, or the connector default. For an existing thread, the assigned Computer already owns it.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
-7. **Agent invoked.** The AgentCore runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
-8. **Agent replies.** The agent produces a response message. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
+7. **Computer invoked.** The Computer runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
+8. **Reply or delegation.** The Computer handles the work or delegates to a managed Agent. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
 
-Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the agent invocation shows tool calls and memory reads, and the outbound Slack response is logged with its Slack message id.
+Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the Computer task/delegation shows tool calls and memory reads, and the outbound Slack response is logged with its Slack message id.
 
-## Why agents see metadata
+## Why Computers and managed Agents see metadata
 
-When AgentCore assembles context for a turn, it includes the thread's metadata as-is in the agent's working context (not verbatim in the prompt, but exposed via structured fields the agent's skill packs can read). That's how an agent's `reply_via_slack` tool knows to post into `threadTs = "1708..."` without the agent itself having to parse or pass it around.
+When ThinkWork assembles context for a Computer task or delegated managed-Agent turn, it includes thread metadata as structured context. That's how a `reply_via_slack` tool knows to post into `threadTs = "1708..."` without the worker itself having to parse or pass around raw provider state.
 
-This is the system boundary made useful: the agent is channel-agnostic in its logic, but channel-aware in its tools.
+This is the system boundary made useful: the worker is channel-agnostic in its reasoning, but channel-aware in its tools.
 
 ## Known limits
 
-- **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops agent *and* the PagerDuty integration" requires two separate routing setups today.
+- **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops Computer _and_ the PagerDuty integration" requires two separate routing setups today.
 - **Thread merging is manual.** If a customer emails and then follows up on Slack, the two threads stay separate. An operator can mark one as a duplicate, but the system doesn't auto-merge.
 - **Webhook replay isn't idempotent at the event level.** A connector Lambda deduping on provider-specific event ids is the right fix; today it happens inconsistently across providers.
 

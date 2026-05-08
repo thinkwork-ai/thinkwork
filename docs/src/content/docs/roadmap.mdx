@@ -3,7 +3,7 @@ title: Roadmap
 description: What's in v1, what's not yet, and what's planned. Honest about scope — ThinkWork v1 is a solid foundation, not a finished product.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 ThinkWork v1 is a working, production-deployable Agent Harness. It is not a finished product. This page is honest about what's in scope for v1 across all three deployment tiers (ThinkWork open / ThinkWork for Business / ThinkWork Enterprise), what's explicitly out of scope, and what the roadmap looks like. The harness mechanics — PPAF agent loop, operating guarantees, six-component model — are stable; what continues to evolve is the depth of each component.
 
@@ -11,36 +11,39 @@ ThinkWork v1 is a working, production-deployable Agent Harness. It is not a fini
 
 These features are complete and supported in v1:
 
-| Feature | Status |
-|---------|--------|
-| Managed agents (AgentCore + Bedrock) | Stable |
-| ThinkWork Computers (product surface + migration foundation) | Beta |
-| Pi managed runtime substrate (parallel AgentCore runtime) | Beta |
-| Connected agents (BYO runtime webhook) | Stable |
-| Templates (Computer Templates + Agent Templates) | Stable |
-| Skill packs (SKILL.md → S3 → invoke-time loading) | Stable |
-| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB) | Stable |
-| AgentCore managed memory with automatic per-turn retention (always on) | Stable |
-| Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate) | Beta |
-| Knowledge Bases (Bedrock KB + document upload) | Stable |
-| Slack connector | Stable |
-| GitHub connector | Stable |
-| Google Workspace connector (Gmail + Calendar) | Beta |
-| Connector credential vault (SSM + KMS) | Stable |
-| Scheduled automations (EventBridge + Step Functions) | Stable |
-| Event-driven automations | Beta |
-| Guardrails (Bedrock Guardrails integration) | Stable |
-| Budgets and usage tracking (turn-level) | Stable |
-| Audit logging (S3 NDJSON) | Stable |
-| Admin web app (React/Vite) | Beta |
-| CLI (`thinkwork-cli`) | Beta |
-| Terraform module (`thinkwork-ai/thinkwork/aws`) | Beta |
-| BYO VPC, database, Cognito | Stable |
-| Evaluations (in-app authoring, runs, scoring) | Beta |
-| Multi-tenancy (Postgres RLS) | Stable |
+| Feature                                                                  | Status |
+| ------------------------------------------------------------------------ | ------ |
+| Managed agents (AgentCore + Bedrock)                                     | Stable |
+| ThinkWork Computers (product surface + migration foundation)             | Beta   |
+| Pi managed runtime substrate (parallel AgentCore runtime)                | Beta   |
+| Connected agents (BYO runtime webhook)                                   | Stable |
+| Templates (Computer Templates + Agent Templates)                         | Stable |
+| Skill packs (SKILL.md → S3 → invoke-time loading)                        | Stable |
+| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB)                    | Stable |
+| AgentCore managed memory with automatic per-turn retention (always on)   | Stable |
+| Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)         | Beta   |
+| Knowledge Bases (Bedrock KB + document upload)                           | Stable |
+| Slack connector                                                          | Stable |
+| GitHub connector                                                         | Stable |
+| Google Workspace connector (Gmail + Calendar)                            | Beta   |
+| Symphony Linear tracker connector (Computer-first pickup + PR writeback) | Beta   |
+| Tenant credential vault (KMS-backed provider credentials)                | Stable |
+| Scheduled automations (EventBridge + Step Functions)                     | Stable |
+| Event-driven automations                                                 | Beta   |
+| Guardrails (Bedrock Guardrails integration)                              | Stable |
+| Budgets and usage tracking (turn-level)                                  | Stable |
+| Audit logging (S3 NDJSON)                                                | Stable |
+| Admin web app (React/Vite)                                               | Beta   |
+| CLI (`thinkwork-cli`)                                                    | Beta   |
+| Terraform module (`thinkwork-ai/thinkwork/aws`)                          | Beta   |
+| BYO VPC, database, Cognito                                               | Stable |
+| Evaluations (in-app authoring, runs, scoring)                            | Beta   |
+| Multi-tenancy (Postgres RLS)                                             | Stable |
 
 <Aside type="note">
-"Beta" means the feature works and is deployed in production by early users, but the API or configuration interface may change before v1.0 is declared stable.
+  "Beta" means the feature works and is deployed in production by early users,
+  but the API or configuration interface may change before v1.0 is declared
+  stable.
 </Aside>
 
 ## What's NOT in v1
@@ -94,12 +97,13 @@ The ThinkWork Computer foundation ships the product model, ECS/EFS substrate, ru
 These are the highest-priority items being actively worked on:
 
 1. **ThinkWork Computers** — Product surface, migration operationalization, ECS/EFS runtime skeleton
-2. **Computer runtime hardening** — CLI/tool install, stronger isolation, runtime reconciliation, browser/computer-use path
-3. **Cost tracking** — Aggregated cost reports by tenant, Computer, Agent, and time period
-4. **Places module** — Location intelligence as an optional Terraform module
-5. **AutoResearch** — Step Functions-based iterative research loop
-6. **End-user web client** — White-label React app for end users
-7. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
+2. **Connector platform expansion** — Linear is the current proof; future connector ordering is still being planned
+3. **Computer runtime hardening** — CLI/tool install, stronger isolation, runtime reconciliation, browser/computer-use path
+4. **Cost tracking** — Aggregated cost reports by tenant, Computer, Agent, and time period
+5. **Places module** — Location intelligence as an optional Terraform module
+6. **AutoResearch** — Step Functions-based iterative research loop
+7. **End-user web client** — White-label React app for end users
+8. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
 
 ## Contributing
 

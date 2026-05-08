@@ -95,7 +95,7 @@ Authorization: Bearer <API_AUTH_SECRET>
 
 Supported actions are `provision`, `start`, `stop`, `restart`, and `status`.
 
-The task surface currently supports `health_check`, `workspace_file_write`, `google_cli_smoke`, and `connector_work`. `connector_work` is the connector handoff/audit task used by the Linear checkpoint; full provider-specific runtime delegation is intentionally deferred. Google Workspace OAuth-backed actions are also deferred; the smoke only verifies image tooling.
+The task surface currently supports `health_check`, `workspace_file_write`, `google_cli_smoke`, and `connector_work`. `connector_work` is the connector handoff task used by the Linear checkpoint. For the Symphony proof, that task now delegates repo-backed coding work to a managed Agent and links the result back to the Computer-owned thread. Google Workspace OAuth-backed actions are still deferred; the smoke only verifies image tooling.
 
 ## Connector checkpoint
 
@@ -106,11 +106,15 @@ The first Computer-facing connector proof is Linear-only:
 3. The connector runtime records a terminal connector execution.
 4. The target Computer receives a `connector_work` task and `connector_work_received` event.
 5. ThinkWork creates a connector thread assigned to that Computer.
+6. The Computer delegates the coding turn, receives PR metadata, and the Symphony Runs tab shows the lifecycle.
 
-Use `docs/runbooks/computer-first-linear-connector-checkpoint.md` for deploy verification and duplicate-check expectations.
+Use [Run the Symphony Linear Checkpoint](/guides/symphony-linear-checkpoint/) for the normal operator walkthrough and `docs/runbooks/computer-first-linear-connector-checkpoint.md` for lower-level deploy verification and duplicate-check expectations.
 
 ## Related pages
 
 - [Computers](/concepts/computers/) — product and runtime model
+- [Connectors](/concepts/connectors/) — external-system work routing
+- [Connector Lifecycle](/concepts/connectors/lifecycle/) — connector execution, Computer task, thread, delegation, and writeback
+- [Admin: Symphony](/applications/admin/symphony/) — Linear connector setup and run visibility
 - [Admin: Agents](/applications/admin/agents/) — delegated managed workers
 - [Admin: Agent Templates](/applications/admin/agent-templates/) — Computer Templates vs Agent Templates
