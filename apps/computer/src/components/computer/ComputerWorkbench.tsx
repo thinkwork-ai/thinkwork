@@ -71,10 +71,10 @@ export function ComputerWorkbench() {
   }
 
   return (
-    <section className="flex min-h-full w-full flex-1 bg-muted/30 text-foreground dark:bg-card">
+    <section className="flex min-h-full w-full flex-1 bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-5 px-4 py-8 sm:px-6">
         <header className="text-center">
-          <h1 className="text-balance text-3xl font-semibold leading-tight tracking-normal sm:text-4xl">
+          <h1 className="text-balance text-3xl font-medium leading-tight tracking-normal sm:text-4xl">
             ThinkWork Computer
           </h1>
         </header>
