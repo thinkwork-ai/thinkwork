@@ -19,6 +19,7 @@ import {
   LayoutTemplate,
   ShieldCheck,
   Network,
+  ScrollText,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -253,6 +254,7 @@ export function AppSidebar() {
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
     { to: "/settings", icon: Settings, label: "Settings" },
+    { to: "/compliance", icon: ScrollText, label: "Compliance" },
   ];
 
   return (
