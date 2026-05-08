@@ -122,3 +122,12 @@ See [SECURITY.md](./SECURITY.md) for vulnerability disclosure.
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+
+<!-- thinkwork-symphony:TECH-69:start -->
+## Symphony checkpoint: TECH-69
+
+- Linear issue: TECH-69
+- Title: ThinkWork PR-producing connector checkpoint 2026-05-08T00:59Z
+- URL: https://linear.app/lastmileintel/issue/TECH-69/thinkwork-pr-producing-connector-checkpoint-2026-05-08t0059z
+- Connector task: 87307d67-e67d-4e9c-abb7-4ccf6b6cff7a
+<!-- thinkwork-symphony:TECH-69:end -->
