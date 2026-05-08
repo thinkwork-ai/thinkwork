@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { Copy, Check } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,6 +7,7 @@ import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CopyableRow } from "@/components/ui/copyable-row";
 import { TenantDetailQuery, DeploymentStatusQuery } from "@/lib/graphql-queries";
 import { formatCents, formatDateTime } from "@/lib/utils";
 
@@ -128,39 +127,3 @@ function StatusRow({ label, value, active }: { label: string; value: string | nu
   );
 }
 
-function CopyableRow({ label, value, url }: { label: string; value: string; url?: boolean }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="flex items-center justify-between text-sm gap-4">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <div className="flex items-center gap-1.5 min-w-0">
-        {url ? (
-          <a
-            href={value}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="truncate text-primary hover:underline"
-          >
-            {value.replace(/^https?:\/\//, "")}
-          </a>
-        ) : (
-          <span className="truncate">{value}</span>
-        )}
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-        </button>
-      </div>
-    </div>
-  );
-}
