@@ -96,7 +96,7 @@ export function ComputerSidebar() {
                   <img
                     src="/logo.png"
                     alt="ThinkWork"
-                    className="h-8 w-8 shrink-0 object-contain"
+                    className="h-9 w-9 shrink-0 object-contain"
                   />
                   <div className="flex flex-col min-w-0">
                     <span className="text-base font-semibold tracking-tight leading-none truncate">
