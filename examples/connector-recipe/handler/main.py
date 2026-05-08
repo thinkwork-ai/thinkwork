@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 THINKWORK_API_URL = os.environ.get("THINKWORK_API_URL", "")
 THINKWORK_API_KEY = os.environ.get("THINKWORK_API_KEY", "")
 CONNECTOR_ID = os.environ.get("CONNECTOR_ID", "my-connector")
-DEFAULT_AGENT_ID = os.environ.get("DEFAULT_AGENT_ID", "")
+TARGET_COMPUTER_ID = os.environ.get("TARGET_COMPUTER_ID", "")
 
 
 def handler(event, context):
@@ -53,7 +53,7 @@ def handler(event, context):
     result = create_or_resume_thread(
         api_url=THINKWORK_API_URL,
         api_key=THINKWORK_API_KEY,
-        agent_id=DEFAULT_AGENT_ID,
+        target_computer_id=TARGET_COMPUTER_ID,
         connector_id=CONNECTOR_ID,
         external_thread_id=external_thread_id,
         sender_id=sender_id,

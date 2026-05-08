@@ -16,8 +16,8 @@ provider "aws" {
 }
 
 locals {
-  name_prefix  = "thinkwork-connector-${var.connector_id}-${var.stage}"
-  handler_dir  = "${path.module}/../handler"
+  name_prefix = "thinkwork-connector-${var.connector_id}-${var.stage}"
+  handler_dir = "${path.module}/../handler"
 }
 
 # ── Lambda deployment package ────────────────────────────────────────────────
@@ -68,7 +68,7 @@ resource "aws_lambda_function" "connector" {
       THINKWORK_API_KEY      = var.thinkwork_api_key
       WEBHOOK_SIGNING_SECRET = var.webhook_signing_secret
       CONNECTOR_ID           = var.connector_id
-      DEFAULT_AGENT_ID       = var.default_agent_id
+      TARGET_COMPUTER_ID     = var.target_computer_id
     }
   }
 }

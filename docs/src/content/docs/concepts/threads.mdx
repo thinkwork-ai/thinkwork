@@ -3,7 +3,7 @@ title: Threads
 description: The universal work container in ThinkWork. Every conversation, automation run, and connector event lands in the same durable record with history, status, and channel context.
 ---
 
-import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
 A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** operating guarantee.
 
@@ -24,7 +24,9 @@ ThinkWork picks the other tradeoff: every piece of work is a thread, and every c
 - **Replay.** The audit log is partitioned by thread id. Reconstructing a turn from three months ago — or replaying a bad automation run against a fixed agent prompt — is one scan, not a cross-system archaeology.
 
 <Aside type="tip">
-  If you're coming from a system that separates conversations from workflows, expect a small rewiring. Once you see a chat thread and an automation run render through the same admin surface with the same filters, the shape clicks.
+  If you're coming from a system that separates conversations from workflows,
+  expect a small rewiring. Once you see a chat thread and an automation run
+  render through the same admin surface with the same filters, the shape clicks.
 </Aside>
 
 ## Anatomy of a thread
@@ -52,7 +54,7 @@ Thread
 
 ### Messages vs. turns — why both exist
 
-This distinction trips people up on first read. Consider a single user message: *"what's my calendar look like next Tuesday?"*
+This distinction trips people up on first read. Consider a single user message: _"what's my calendar look like next Tuesday?"_
 
 - Exactly **one** message is written for the user's input.
 - Exactly **one** turn is written for the agent's invocation.
@@ -67,14 +69,14 @@ If the user asks a follow-up, that's another message plus another turn, same thr
 
 Every thread has a channel set at creation time. Channel determines the prefix and which system produced the work:
 
-| Channel | Prefix | How work arrives | How agents reply |
-|---|---|---|---|
-| `CHAT` | `CHAT-` | User sends message in admin or mobile app | Streamed back to the app over a real-time subscription |
-| `AUTO` | `AUTO-` | Scheduler or event trigger fires | Response recorded on the thread; optional tool-call side-effects |
-| `SLACK` | `SLACK-` | Inbound Slack event to the Slack connector | Reply posted back to the originating Slack channel/thread |
-| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | Comment posted via the GitHub API |
-| `EMAIL` | `EMAIL-` | Inbound email | Reply sent; `In-Reply-To` / `References` preserved |
-| `TASK` | `TASK-` | External task system webhook | Task state normalized back to the external system |
+| Channel  | Prefix    | How work arrives                           | How agents reply                                                 |
+| -------- | --------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| `CHAT`   | `CHAT-`   | User sends message in admin or mobile app  | Streamed back to the app over a real-time subscription           |
+| `AUTO`   | `AUTO-`   | Scheduler or event trigger fires           | Response recorded on the thread; optional tool-call side-effects |
+| `SLACK`  | `SLACK-`  | Inbound Slack event to the Slack connector | Reply posted back to the originating Slack channel/thread        |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment)        | Comment posted via the GitHub API                                |
+| `EMAIL`  | `EMAIL-`  | Inbound email                              | Reply sent; `In-Reply-To` / `References` preserved               |
+| `TASK`   | `TASK-`   | External task system webhook               | Task state normalized back to the external system                |
 
 The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn't just cosmetic — it's the first thing humans and tools read when orienting to a thread:
 
@@ -86,6 +88,8 @@ The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn
 
 Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each connector fills it in.
 
+Connector-origin threads also carry provider metadata, such as Linear issue id, connector execution id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the metadata ties the visible thread back to the durable connector lifecycle.
+
 ## Reopen, don't recreate
 
 This is the single most important invariant in the thread model.
@@ -94,30 +98,32 @@ When a user follows up on a conversation ThinkWork had archived — say, someone
 
 The reopen key is the channel-specific metadata, not the ThinkWork thread id directly:
 
-| Channel | Reopen key |
-|---|---|
-| Slack | The Slack thread timestamp (`thread_ts`) |
-| GitHub | The `(repo, issue_number)` pair |
-| Email | The email `Message-Id` chain (`In-Reply-To` + `References`) |
-| Task | The `(provider, external_task_id)` pair |
+| Channel | Reopen key                                                  |
+| ------- | ----------------------------------------------------------- |
+| Slack   | The Slack thread timestamp (`thread_ts`)                    |
+| GitHub  | The `(repo, issue_number)` pair                             |
+| Email   | The email `Message-Id` chain (`In-Reply-To` + `References`) |
+| Task    | The `(provider, external_task_id)` pair                     |
 
 That guarantees conversation continuity. An agent that answered a Slack question in March sees its own earlier answer when someone follows up in April. Without this, every follow-up would be a fresh thread with no memory of the conversation that preceded it.
 
 The reopen happens at the connector boundary — whenever an inbound event arrives, the connector looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
 
+Tracker-style connector work, such as the Symphony Linear checkpoint, also uses provider metadata to keep one external work item linked to one Computer-owned thread. Repeated polling of the same Linear issue should update or recognize the existing lifecycle instead of creating duplicate visible work.
+
 ## The status lifecycle
 
-Status answers *"where is this thread in its workflow right now?"* Seven values with deliberate semantics:
+Status answers _"where is this thread in its workflow right now?"_ Seven values with deliberate semantics:
 
-| Status | Meaning |
-|---|---|
-| `BACKLOG` | Captured, but not scheduled for work yet |
-| `TODO` | Ready to be picked up |
-| `IN_PROGRESS` | Currently being worked on |
-| `IN_REVIEW` | Waiting on human review or approval |
-| `BLOCKED` | Stuck on a dependency or error |
-| `DONE` | Completed |
-| `CANCELLED` | Abandoned |
+| Status        | Meaning                                  |
+| ------------- | ---------------------------------------- |
+| `BACKLOG`     | Captured, but not scheduled for work yet |
+| `TODO`        | Ready to be picked up                    |
+| `IN_PROGRESS` | Currently being worked on                |
+| `IN_REVIEW`   | Waiting on human review or approval      |
+| `BLOCKED`     | Stuck on a dependency or error           |
+| `DONE`        | Completed                                |
+| `CANCELLED`   | Abandoned                                |
 
 The state machine is deliberately loose — any-to-any transitions are allowed — because real work doesn't flow cleanly. A thread can go `IN_PROGRESS → BLOCKED → IN_PROGRESS` multiple times in a day. `DONE` is terminal by convention but not by enforcement; a new message into a `DONE` thread reopens it (implicit `DONE → IN_PROGRESS`).
 
@@ -127,13 +133,13 @@ The one hard rule: **no transitions are triggered by reads.** Opening a thread i
 
 Status answers "what workflow phase?" Priority answers "how urgent?" They're orthogonal:
 
-| Priority | Use |
-|---|---|
+| Priority   | Use                                            |
+| ---------- | ---------------------------------------------- |
 | `CRITICAL` | Page-me-now work — outages, security incidents |
-| `URGENT` | Same-day, pre-empts other work |
-| `HIGH` | Next up in the queue |
-| `MEDIUM` | Default |
-| `LOW` | Eventually |
+| `URGENT`   | Same-day, pre-empts other work                 |
+| `HIGH`     | Next up in the queue                           |
+| `MEDIUM`   | Default                                        |
+| `LOW`      | Eventually                                     |
 
 The two together let operators group threads usefully — `IN_PROGRESS + CRITICAL` is a meaningfully different bucket than `IN_PROGRESS + LOW`. See [Admin: Threads](/applications/admin/threads/) for how the grouping surfaces in the operator UI.
 
@@ -233,7 +239,7 @@ The mobile app has no delete surface at all. End-users archive, operators can de
 
 - **Bulk actions.** Multi-select for bulk archive, bulk assign, or bulk status change isn't part of the thread model today. Operators change threads one at a time.
 - **Thread merging.** Two threads can't currently be merged into one. A customer who emails and then follows up on Slack stays as two threads.
-- **Cross-channel routing rules.** A rule like "route any GitHub issue mentioning @on-call to the ops agent *and* fire PagerDuty" requires two separate routing configs today.
+- **Cross-channel routing rules.** A rule like "route any GitHub issue mentioning @on-call to the ops agent _and_ fire PagerDuty" requires two separate routing configs today.
 - **Attachment upload.** The admin surfaces an attachment upload affordance on thread detail, but the handler is stubbed — the UI renders, the mutation is not wired end-to-end.
 - **No partial-thread export.** Exporting a single thread's full record (messages + turns + audit) has no dedicated export path — operators assemble it from the pieces.
 - **Concurrent-turn queueing is FIFO, not priority-aware.** If a `CRITICAL` thread has three queued turns behind an in-flight turn, they execute in arrival order, not priority order.
@@ -246,6 +252,7 @@ The mobile app has no delete surface at all. End-users archive, operators can de
 - [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
 - [Concepts: Connectors](/concepts/connectors/) — how inbound events become threads
+- [Connector Lifecycle](/concepts/connectors/lifecycle/) — how connector executions, Computer tasks, and threads link together
 - [API Reference: GraphQL](/api/graphql/) — the thread queries, mutations, and subscriptions
 
 ## Under the hood

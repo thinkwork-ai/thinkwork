@@ -3,27 +3,31 @@ title: MCP Tools
 description: Use MCP-based external tool connectors under the Connectors model.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-MCP (Model Context Protocol) is the harness's connector path for external tool systems — the tool/capability half of the harness's I/O surface, peer to [Integrations](/concepts/connectors/integrations/) which handles app and channel events. MCP lives under **Connectors**, not as a separate platform pillar, because the same trust boundary applies to both: the **Security** operating guarantee gates which MCP tools an agent's template allows it to call (capability grants), routes the call through a tenant-scoped MCP client (no shared sessions), and traces every MCP invocation in the same turn record as every other tool call.
+MCP (Model Context Protocol) is ThinkWork's connector path for external tool systems — the tool/capability half of the I/O surface, peer to [Integrations](/concepts/connectors/integrations/) and tracker connectors. MCP lives under **Connectors**, not as a separate platform pillar, because the same trust boundary applies: ThinkWork gates which tools a Computer or managed Agent may call, routes the call through tenant-scoped credentials, and traces every MCP invocation in the same turn record as other tool calls.
 
-Use MCP tools when agents need to call remote capabilities during work, such as CRM actions, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
+Use MCP tools when a Computer or delegated managed Agent needs to call remote capabilities during work, such as CRM actions, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
 
 <Aside type="note">
-For the broader connector model, start with [Connectors Overview](/concepts/connectors/). For app and channel integrations like Slack, GitHub, and Google Workspace, see [Integrations](/concepts/connectors/integrations/).
+  For the broader connector model, start with [Connectors
+  Overview](/concepts/connectors/). For app and channel integrations like Slack,
+  GitHub, and Google Workspace, see
+  [Integrations](/concepts/connectors/integrations/).
 </Aside>
 
 ## How MCP tools fit
 
-ThinkWork uses two broad connector paths:
+ThinkWork uses three broad connector paths:
 
-1. **Integrations** bring external messages and events into threads
-2. **MCP tools** give agents external capabilities they can call during a turn
+1. **Tracker connectors** reconcile external work items into Computer-owned work.
+2. **Integrations** bring external messages and events into threads.
+3. **MCP tools** give Computers and managed Agents external capabilities they can call during a turn.
 
 Both still operate inside the same ThinkWork model:
 
-- threads remain the unit of work
-- agents decide what to do
+- threads remain the visible unit of work
+- Computers own continuity and may delegate to managed Agents
 - controls govern access and usage
 - audit trails capture tool activity
 
@@ -31,26 +35,26 @@ Both still operate inside the same ThinkWork model:
 
 ```text
 Admin registers MCP server
-    → Assigns it to agent template or agent
-    → Agent invocation resolves auth
-    → Agent container connects to MCP server
+    → Assigns it to a template, Computer, or managed Agent
+    → Invocation resolves tenant or user auth
+    → Runtime connects to MCP server
     → Tools are discovered
-    → Agent calls tools during the turn
+    → Computer or managed Agent calls tools during the turn
     → Calls are logged in the thread timeline
 ```
 
 ## Registration
 
-MCP servers are registered at the tenant level, then assigned to agent templates or agents.
+MCP servers are registered at the tenant level, then assigned to templates, Computers, or managed Agents depending on the product surface.
 
 Typical config includes:
 
-| Field | Description |
-|---|---|
-| Name | Display name for the MCP server |
-| URL | HTTP endpoint for the server |
-| Transport | Streamable HTTP or SSE |
-| Auth | None, tenant API key, or per-user OAuth |
+| Field     | Description                             |
+| --------- | --------------------------------------- |
+| Name      | Display name for the MCP server         |
+| URL       | HTTP endpoint for the server            |
+| Transport | Streamable HTTP or SSE                  |
+| Auth      | None, tenant API key, or per-user OAuth |
 
 In the admin experience, this should appear under **Connectors → MCP Tools**.
 
@@ -82,12 +86,14 @@ A shared secret is stored securely and resolved at invocation time for any agent
 Useful when downstream tools need user-scoped access. ThinkWork resolves the paired user's token before opening the MCP connection.
 
 <Aside type="note">
-If a per-user OAuth token is missing, ThinkWork can skip that MCP server for the invocation while still allowing the rest of the agent run to proceed.
+  If a per-user OAuth token is missing, ThinkWork can skip that MCP server for
+  the invocation while still allowing the rest of the Computer or managed-Agent
+  run to proceed.
 </Aside>
 
 ## Runtime behavior
 
-At runtime, ThinkWork discovers tools from the MCP server and adds them beside built-in tools and skill-provided tools. If an MCP server is unavailable, the agent can continue with its remaining toolset.
+At runtime, ThinkWork discovers tools from the MCP server and adds them beside built-in tools and skill-provided tools. If an MCP server is unavailable, the worker can continue with its remaining toolset.
 
 MCP usage is tracked in the thread timeline, including:
 
@@ -113,11 +119,12 @@ Internal conversations occasionally conflate two things with the same name:
 - **A provider's MCP server** — the remote HTTP(S) endpoint you register here. That's what this page is about.
 - **A provider's task-connector surface** — a different surface that routes tasks into ThinkWork threads. Not the same thing as an MCP server, even when both belong to the same provider.
 
-When an integration has both an MCP server and a task-connector surface, name the surface explicitly. The task-connector surface is documented separately under external-task integrations.
+When an integration has both an MCP server and a tracker connector surface, name the surface explicitly. MCP tools are called during work; tracker connectors create or update work.
 
 ## Related pages
 
 - [Connectors Overview](/concepts/connectors/)
+- [Connector Lifecycle](/concepts/connectors/lifecycle/)
 - [Integrations](/concepts/connectors/integrations/)
 - [Admin: Tenant MCP Servers](/applications/admin/mcp-servers/) — the operator surface for registering and managing servers
 - [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — where per-user OAuth actually happens

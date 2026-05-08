@@ -1,139 +1,108 @@
 ---
 title: Connectors
-description: Connect ThinkWork to external channels, event sources, and tool systems. Use built-in integrations for Slack, GitHub, and Google Workspace, or add MCP-based external tools and custom recipes.
+description: How ThinkWork connects external systems to Computers, threads, managed Agents, routines, and auditable provider writeback.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-Connectors are the harness's I/O surface — how ThinkWork interfaces with the outside world. They bring external systems into the thread model so agents can perceive them, and let agents act back on those systems in a controlled way as part of the [Action phase of PPAF](/architecture/#the-ppaf-agent-loop). The Security operating guarantee lives at the connector boundary: outbound tool calls go through Bedrock guardrails, inbound events are normalized into the thread model under your IAM, and the connector credential vault keeps third-party tokens off the agent runtime path.
+Connectors are ThinkWork's boundary with external systems. They watch tools such as Linear, Slack, GitHub, Google Workspace, CRMs, support queues, and internal APIs; normalize external activity into ThinkWork records; and write results back without exposing provider credentials to the runtime that performs the work.
 
-ThinkWork uses connectors in three broad ways:
+The default owner for connector-origin work is a [Computer](/concepts/computers/). A connector claims an external item, records provenance, hands the work to the target Computer, and the Computer decides whether to handle it directly or delegate to a managed Agent, routine, or hybrid workflow. That ownership model keeps the user's durable workspace, credentials context, thread history, and delegated workers in one place.
 
-1. **Integrations** turn inbound messages, webhooks, and app events into threads, then send responses back out.
-2. **MCP tools** give agents access to external capabilities they can call during work.
-3. **External task connectors** turn work items owned by an external task system into native ThinkWork threads with GenUI cards, realtime activity, and round-trip edits.
+## Connector shapes
 
-All three fit the same architectural story: ThinkWork keeps threads, agents, controls, and auditability in one system while connectors handle the system boundary.
+ThinkWork uses the word connector for several related surfaces. They share the same trust boundary, but they enter the system differently.
 
-## Connectors at a glance
+| Shape              | What it does                                                                         | Current example                                  |
+| ------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| Tracker connector  | Polls an external work system and reconciles matching items into Computer-owned work | Linear issues with the `symphony` label          |
+| Integration        | Receives app, channel, or webhook events and can post replies back                   | Slack, GitHub, Google Workspace, custom webhooks |
+| MCP tool connector | Gives managed Agents or Computers remote tools they can call during work             | Tenant-registered MCP servers                    |
 
-### Integrations
+All three keep ThinkWork's internal model intact: threads are the visible work record, Computers own continuity, managed Agents are delegated workers, credentials stay tenant-scoped, and every execution path leaves audit metadata.
 
-Integrations cover app and system connectivity, including Slack, GitHub, Google Workspace, inbound webhook flows, outbound actions, and connector routing.
+## Computer-first routing
 
-Use integrations when ThinkWork needs to receive or send activity through an external product surface.
+The connector path now starts with an explicit target Computer.
 
-### MCP tools
-
-MCP tools cover remote external capabilities that agents call during a turn. They are still connectors, but they are tool-oriented instead of message-oriented.
-
-Use MCP when the capability already exists outside ThinkWork and you want agents to use it without rebuilding it inside the platform.
-
-Common examples include:
-
-- CRM lookups and account updates
-- Task and ticket operations
-- Internal API actions
-- Search or retrieval against external systems
-- Database or business-system queries exposed through an MCP server
-
-## Navigate this section
-
-- See [Integrations](/concepts/connectors/integrations/) for Slack, GitHub, Google Workspace, inbound and outbound flows, auth, and routing
-- See [MCP Tools](/concepts/connectors/mcp-tools/) for MCP-based external tool connectors
-
-MCP (Model Context Protocol) lives under Connectors rather than as a separate top-level concept because it *is* a connector — it brings an outside capability surface into the thread model, the same way Slack or GitHub does. The difference is that MCP connectors are tool-oriented (agents call them) while integrations are message-oriented (they produce threads). Threads are still the unit of work; agents still decide; controls still govern.
-
-## Credential vault
-
-All connector credentials are stored in the **credential vault** — a KMS-encrypted table in Aurora Postgres. Credentials never leave your AWS account.
-
-The vault stores:
-
-| Credential type | Example |
-|-----------------|---------|
-| OAuth access + refresh tokens | Slack, Google |
-| Webhook signing secrets | Slack, GitHub |
-| API keys | Custom connectors |
-| Service account JSON | Google Workspace (service accounts) |
-
-Credentials are encrypted at rest using a KMS key dedicated to the vault (created automatically during deploy). The Lambda functions that handle connector events have IAM permissions to decrypt only the credentials they need.
-
-### Rotating credentials
-
-Credentials with refresh tokens are refreshed automatically before expiry. For credentials that require manual rotation (API keys, webhook secrets), use the admin app:
-
-1. Navigate to **Connectors → [Connector Name] → Credentials**
-2. Click **Rotate**
-3. Enter the new credential value
-4. The vault updates and all active connector functions pick up the new value within 60 seconds (Lambda environment variable cache TTL)
-
-## OAuth flows
-
-For connectors that use OAuth (Slack, Google), ThinkWork handles the full OAuth dance:
-
-```
-Admin app: "Connect Slack"
-    → Redirect to Slack OAuth authorize URL
-    → User approves
-    → Slack redirects to /connectors/slack/callback
-    → Lambda exchanges code for access + refresh tokens
-    → Tokens stored in credential vault
-    → Connector marked as "active"
+```text
+External system
+    -> connector claim / execution provenance
+    -> Computer task and event
+    -> Computer-owned thread
+    -> optional managed-Agent or routine delegation
+    -> provider writeback
 ```
 
-The OAuth callback URL is `https://<api-gateway-url>/connectors/<connector-id>/callback`. This URL must be registered with the external service as an allowed redirect URI.
+That is different from the older "pick an agent for this connector" model. Direct managed-Agent, routine, and hybrid-routine targets can still exist as advanced automation paths, but they are not the main setup path for user-owned work. The normal product story is external system -> Computer -> delegated execution.
 
-## Connector recipes
+This matters because a Computer can preserve the workspace around the work item: local files, repository state, CLI setup, prior context, and future browser or desktop state. Managed Agents remain useful, but as hired workers behind the Computer rather than as the durable owner of the external item.
 
-A connector recipe is a template for building custom connectors. The `examples/connector-recipe/` directory in the ThinkWork repo contains a complete working example with:
+## The shipped proof: Symphony and Linear
 
-- A Lambda handler for inbound events (webhook validation, thread creation)
-- A skill pack with outbound tool definitions
-- A Terraform module for the connector infrastructure
-- An admin app plugin for the connector configuration UI
+The first production tracker connector is the Symphony Linear path. A tenant admin configures a Linear connector in [Admin: Symphony](/applications/admin/symphony/) with:
 
-See [Authoring Guide: Connectors](/guides/connectors/) for the full walkthrough.
+- a Linear team and label filter;
+- the checkpoint label `symphony`;
+- a Linear credential for issue reads and state writeback;
+- a target Computer;
+- a GitHub credential and repository settings for draft PR creation.
 
-## Connector routing
+When a fresh Linear issue matches the connector, ThinkWork records a connector execution, creates a `connector_work` task/event for the Computer, opens a Computer-owned thread, delegates coding work, opens a draft PR, comments back on Linear, and moves the Linear card to `In Review` after the PR exists.
 
-When a connector creates a thread, it uses the **connector routing rules** to determine which agent handles it. Routing rules are evaluated in order:
+See [Connector Lifecycle](/concepts/connectors/lifecycle/) for the data flow and [Run the Symphony Linear Checkpoint](/guides/symphony-linear-checkpoint/) for the operator checklist.
 
-| Rule type | Example |
-|-----------|---------|
-| Keyword match | If message contains "billing" → billing-agent |
-| Channel/source | If Slack channel = #engineering → eng-agent |
-| User mapping | If GitHub user = @alice → alice-agent |
-| Default | Catch-all agent for the connector |
+## Credentials and trust boundary
 
-Routing rules are configured per connector in the admin app. If no rule matches, the thread goes to the connector's default agent.
+Connector credentials are tenant-scoped secrets resolved by the connector runtime only when it needs to call the external provider. A managed Agent or Computer receives the normalized work context; it does not receive raw provider tokens by default.
 
-<Aside type="tip">
-For simple deployments, set a default agent on each connector and skip routing rules entirely. Add rules later when you need to fan work out to specialized agents.
+The vault stores credentials such as:
+
+| Credential type         | Example                        |
+| ----------------------- | ------------------------------ |
+| API keys                | Linear, custom providers       |
+| OAuth tokens            | Google Workspace, Slack        |
+| Webhook signing secrets | Slack, GitHub, custom webhooks |
+| GitHub credentials      | PR-producing connector work    |
+
+<Aside type="caution">
+  A connector is a trust boundary. Inbound events must be authenticated or
+  reconciled from a trusted API, outbound writeback must use tenant credentials,
+  and duplicate provider deliveries must not create duplicate visible work.
 </Aside>
 
-## Thread metadata from connectors
+## Idempotency and provenance
 
-Connector threads carry metadata about their origin:
+Connector-origin work is intentionally split into several durable records:
 
-```json
-// Slack thread metadata
-{
-  "channelId": "C08ABC123",
-  "messageTs": "1712345678.123456",
-  "teamId": "T08XYZ456",
-  "userId": "U08DEF789",
-  "username": "alice"
-}
+- **Connector** — configuration for one tenant/provider/target.
+- **Connector execution** — provenance for one external item or poll result.
+- **Computer task/event** — the Computer-owned handoff and audit stream.
+- **Thread** — the visible work artifact for operators and users.
+- **Delegation or turn** — the managed worker execution detail, when the Computer delegates.
+- **Outcome metadata** — provider writeback, branch, PR URL, cleanup state, or failure detail.
 
-// GitHub thread metadata
-{
-  "repoFullName": "acme/backend",
-  "issueNumber": 1234,
-  "eventType": "issues.opened",
-  "actor": "bob",
-  "labels": ["bug", "priority-high"]
-}
-```
+This split lets the same external issue be polled many times without creating duplicate branches, duplicate PRs, duplicate Linear comments, or duplicate threads.
 
-The agent receives this metadata in its context on every turn, so it can tailor responses (e.g., addressing the Slack user by name, linking back to the GitHub issue).
+## Known limits
+
+- **Linear is the only shipped tracker proof.** Slack-facing Computers, GitHub Issues, Jira, Salesforce, Zendesk, and other connector types should use this model, but they are follow-up plans.
+- **Routing is explicit in v0.** A connector targets a chosen Computer. Automatic actor-to-Computer matching and team queues are not part of the current proof.
+- **Symphony is the first connector experience, not the whole platform.** The broader connector framework still needs future connector types, custom recipe hardening, and richer catalog UX.
+- **Advanced direct targets still exist.** They are useful for automation and internal paths, but Computer is the happy-path owner for user-facing connector work.
+
+## Related pages
+
+- [Connector Lifecycle](/concepts/connectors/lifecycle/) — how external work becomes Computer-owned work
+- [Admin: Symphony](/applications/admin/symphony/) — configure and inspect the Linear connector
+- [Run the Symphony Linear Checkpoint](/guides/symphony-linear-checkpoint/) — operator checklist for the Linear proof
+- [Computers](/concepts/computers/) — the durable owner/orchestrator model
+- [Threads](/concepts/threads/) — the visible work record
+- [Integrations](/concepts/connectors/integrations/) — app, channel, and webhook connector flows
+- [MCP Tools](/concepts/connectors/mcp-tools/) — external tool connectors
+
+## Under the hood
+
+Connector configuration and execution records live in `packages/database-pg/src/schema/connectors.ts` and `packages/database-pg/src/schema/connector-executions.ts`. The GraphQL contract lives in `packages/database-pg/graphql/types/connectors.graphql`, with resolvers under `packages/api/src/graphql/resolvers/connectors/`.
+
+The Linear runtime path is implemented in `packages/api/src/lib/connectors/runtime.ts` and is invoked by `packages/api/src/handlers/connector-poller.ts`. The Symphony admin surface lives at `apps/admin/src/routes/_authed/_tenant/symphony.tsx`, with setup defaults and display helpers in `apps/admin/src/lib/connector-admin.ts`.

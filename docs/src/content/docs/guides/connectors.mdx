@@ -1,344 +1,148 @@
 ---
 title: Building Custom Connectors
-description: How to build a custom connector. OAuth flow, credential vault integration, inbound webhook handler, outbound skill pack. Reference examples/connector-recipe/.
+description: How to design custom connector flows that preserve Computer ownership, tenant credentials, idempotency, threads, and provider writeback.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-ThinkWork ships with Slack, GitHub, and Google Workspace connectors. When you need to integrate a service that isn't covered, you can build a custom connector using the connector recipe pattern.
+Custom connectors bring an external system into ThinkWork without turning that system into a one-off agent integration. A good connector normalizes inbound work, records provenance, hands ownership to a Computer, and writes results back through tenant-scoped credentials.
 
-A connector has four parts:
+Use this guide when planning a connector beyond the shipped Linear/Symphony path. If you only need to operate the current Linear connector, start with [Admin: Symphony](/applications/admin/symphony/) and [Run the Symphony Linear Checkpoint](/guides/symphony-linear-checkpoint/).
 
-1. **Webhook handler** — A Lambda function that receives events from the external service, validates them, and creates threads
-2. **Credential vault integration** — Secure storage for OAuth tokens or API keys
-3. **Outbound skill pack** — A `SKILL.md` with tools that call back to the external service
-4. **Terraform module** — Infrastructure for the Lambda, API Gateway route, and connector record
+## Before you build
 
-## The connector recipe
+Decide which connector shape you are building:
 
-The `examples/connector-recipe/` directory contains a complete, working connector template. Copy it and fill in the service-specific details.
+| Shape               | Use when                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| Tracker connector   | The external system owns work-item lifecycle and ThinkWork reconciles it on a poll cadence |
+| Webhook integration | The external system pushes signed events to ThinkWork                                      |
+| Channel integration | Users message ThinkWork through a product surface such as chat or email                    |
+| MCP tool connector  | ThinkWork workers need tools they can call during a turn                                   |
 
-```
-examples/connector-recipe/
-├── handler/
-│   ├── main.py          # Lambda handler for inbound events
-│   ├── auth.py          # Webhook signature verification
-│   ├── thread.py        # Thread creation helpers
-│   └── requirements.txt
-├── skill/
-│   └── SKILL.md         # Outbound tools (optional)
-├── terraform/
-│   ├── main.tf          # Lambda, route, connector record
-│   ├── variables.tf
-│   └── outputs.tf
-└── README.md
-```
+The current production tracker example is Linear. Future providers should reuse its ownership and idempotency model rather than inventing a provider-specific shortcut.
 
-## Step 1: Build the webhook handler
+## Core responsibilities
 
-The handler receives raw HTTP requests from the external service, validates the signature, and calls the ThinkWork API to create threads.
+A connector is responsible for:
 
-```python
-# handler/main.py
-import json
-import os
-import boto3
-import httpx
+1. **Authenticating the provider boundary.** Poll with a tenant credential or verify inbound signatures before processing.
+2. **Normalizing provider data.** Convert provider-specific payloads into a small ThinkWork candidate: title, body, external reference, provider metadata, and writeback targets.
+3. **Claiming idempotently.** Use a stable external reference so repeated polls or webhook retries do not create duplicate visible work.
+4. **Handing work to a Computer.** The normal owner is a configured Computer. Direct managed-Agent, routine, or hybrid-routine targets are advanced paths.
+5. **Creating or updating a thread.** The thread is the visible work artifact.
+6. **Writing back through credentials.** Provider comments, status transitions, labels, PR links, or replies use tenant credentials, not raw tokens exposed to the worker.
+7. **Recording outcomes.** Store enough metadata for the admin UI to show status, errors, branches, PRs, and cleanup state.
 
-from auth import verify_signature
-from thread import create_thread, send_initial_message
+## Computer-first target
 
-THINKWORK_API_URL = os.environ["THINKWORK_API_URL"]
-THINKWORK_API_KEY = os.environ["THINKWORK_API_KEY"]  # Internal service key
-CONNECTOR_ID = os.environ["CONNECTOR_ID"]
-DEFAULT_AGENT_ID = os.environ["DEFAULT_AGENT_ID"]
-
-def handler(event, context):
-    body = event.get("body", "")
-    headers = event.get("headers", {})
-    
-    # Step 1: Verify the webhook signature
-    try:
-        verify_signature(body, headers)
-    except ValueError as e:
-        return {"statusCode": 401, "body": json.dumps({"error": str(e)})}
-    
-    # Step 2: Parse the event payload
-    payload = json.loads(body)
-    event_type = headers.get("x-your-service-event", "")
-    
-    # Step 3: Decide whether to handle this event type
-    if event_type not in HANDLED_EVENT_TYPES:
-        return {"statusCode": 200, "body": json.dumps({"ignored": True})}
-    
-    # Step 4: Extract the message content and metadata
-    message_body = extract_message(payload, event_type)
-    metadata = extract_metadata(payload, event_type)
-    
-    # Step 5: Determine which agent should handle this
-    agent_id = route_to_agent(payload, event_type) or DEFAULT_AGENT_ID
-    
-    # Step 6: Create the thread and send the initial message
-    thread = create_thread(
-        api_url=THINKWORK_API_URL,
-        api_key=THINKWORK_API_KEY,
-        channel="CUSTOM",          # Register your channel type in the connector record
-        title=build_title(payload, event_type),
-        agent_id=agent_id,
-        metadata=metadata
-    )
-    
-    send_initial_message(
-        api_url=THINKWORK_API_URL,
-        api_key=THINKWORK_API_KEY,
-        thread_id=thread["id"],
-        body=message_body
-    )
-    
-    return {"statusCode": 200, "body": json.dumps({"threadId": thread["id"]})}
-```
-
-### Signature verification
-
-Always verify webhook signatures before processing. The pattern varies by service:
-
-```python
-# auth.py
-import hashlib
-import hmac
-import os
-import time
-
-SIGNING_SECRET = os.environ["WEBHOOK_SIGNING_SECRET"]
-
-def verify_signature(body: str, headers: dict) -> None:
-    """
-    Verify the webhook signature. Raise ValueError if invalid.
-    Example: HMAC-SHA256 with timestamp anti-replay.
-    """
-    timestamp = headers.get("x-timestamp", "")
-    signature = headers.get("x-signature", "")
-    
-    # Anti-replay: reject requests older than 5 minutes
-    if abs(time.time() - int(timestamp)) > 300:
-        raise ValueError("Request timestamp too old")
-    
-    expected = hmac.new(
-        SIGNING_SECRET.encode(),
-        f"{timestamp}:{body}".encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    if not hmac.compare_digest(f"sha256={expected}", signature):
-        raise ValueError("Invalid signature")
-```
-
-<Aside type="caution">
-Never skip signature verification. Without it, anyone who knows your webhook URL can create threads and invoke agents in your deployment.
-</Aside>
-
-## Step 2: Integrate with the credential vault
-
-If your connector uses OAuth, store tokens in the credential vault.
-
-### Storing credentials (at OAuth callback time)
-
-```python
-import boto3
-import json
-
-def store_oauth_tokens(connector_id: str, user_id: str, tokens: dict) -> None:
-    """Store OAuth tokens in the ThinkWork credential vault (DynamoDB + KMS)."""
-    ssm = boto3.client("ssm")
-    
-    key = f"/thinkwork/connectors/{connector_id}/tokens/{user_id}"
-    ssm.put_parameter(
-        Name=key,
-        Value=json.dumps(tokens),
-        Type="SecureString",
-        KeyId=os.environ["KMS_KEY_ID"],   # KMS key for credential vault
-        Overwrite=True
-    )
-
-def get_oauth_tokens(connector_id: str, user_id: str) -> dict:
-    """Retrieve OAuth tokens from the credential vault."""
-    ssm = boto3.client("ssm")
-    
-    key = f"/thinkwork/connectors/{connector_id}/tokens/{user_id}"
-    response = ssm.get_parameter(Name=key, WithDecryption=True)
-    return json.loads(response["Parameter"]["Value"])
-```
-
-### OAuth callback handler
-
-```python
-# oauth_callback.py
-import httpx
-
-CLIENT_ID = os.environ["OAUTH_CLIENT_ID"]
-CLIENT_SECRET = os.environ["OAUTH_CLIENT_SECRET"]
-REDIRECT_URI = os.environ["OAUTH_REDIRECT_URI"]
-
-def handle_oauth_callback(code: str, state: str) -> dict:
-    """Exchange authorization code for tokens."""
-    response = httpx.post(
-        "https://your-service.com/oauth/token",
-        data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": REDIRECT_URI,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET
-        }
-    )
-    response.raise_for_status()
-    tokens = response.json()
-    
-    # Parse state to get connector_id + user_id
-    connector_id, user_id = parse_state(state)
-    store_oauth_tokens(connector_id, user_id, tokens)
-    
-    return {"status": "connected"}
-```
-
-## Step 3: Build the outbound skill pack
-
-For the agent to send responses back to the originating service, create a skill pack with outbound tools.
-
-The skill's **header and instructions** (`skill/SKILL.md`, first two sections):
+The happy path for user-owned external work is:
 
 ```text
-# my-service
-
-Connector for My Service. Allows posting responses and looking up data.
-
-## Instructions
-
-When responding to a My Service event, always use send_reply to post your
-response back to the originating conversation. Do not just return text —
-the user won't see it unless you call send_reply.
+Provider event or poll result
+    -> connector execution
+    -> connector_work Computer task
+    -> Computer-owned thread
+    -> optional managed-Agent or routine delegation
+    -> provider writeback
 ```
 
-The skill's **Tools section** (Python code block in the SKILL.md):
+The external system may still be the canonical owner of lifecycle. Linear, for example, owns the issue state; ThinkWork reconciles and writes back `In Progress` or `In Review` at the right points.
 
-```python
-## Tools
-
-import httpx
-import os
-import json
-import boto3
-
-def _get_token(user_id: str) -> str:
-    ssm = boto3.client("ssm")
-    key = f"/thinkwork/connectors/my-service/tokens/{user_id}"
-    response = ssm.get_parameter(Name=key, WithDecryption=True)
-    return json.loads(response["Parameter"]["Value"])["access_token"]
-
-def send_reply(thread_id: str, message: str) -> dict:
-    """
-    Post a reply back to the originating My Service conversation.
-
-    Args:
-        thread_id: The ThinkWork thread ID (used to look up the original message metadata)
-        message: The reply text to send
-
-    Returns:
-        dict with 'success' and 'message_id' fields
-    """
-    # Look up thread metadata to get original conversation IDs
-    # ... implementation specific to your service
-    pass
-
-def lookup_user(email: str) -> dict:
-    """
-    Look up a user in My Service by email address.
-
-    Args:
-        email: User email address
-
-    Returns:
-        dict with user id, name, email, and role
-    """
-    pass
-```
-
-## Step 4: Terraform module
-
-```hcl
-# terraform/main.tf
-
-# Lambda function for webhook handler
-resource "aws_lambda_function" "connector_handler" {
-  function_name = "${var.stage}-thinkwork-connector-my-service"
-  role          = aws_iam_role.connector.arn
-  handler       = "main.handler"
-  runtime       = "python3.12"
-  timeout       = 30
-  memory_size   = 256
-
-  filename         = data.archive_file.handler.output_path
-  source_code_hash = data.archive_file.handler.output_base64sha256
-
-  environment {
-    variables = {
-      THINKWORK_API_URL        = var.thinkwork_api_url
-      CONNECTOR_ID             = "my-service"
-      DEFAULT_AGENT_ID         = var.default_agent_id
-      WEBHOOK_SIGNING_SECRET   = var.webhook_signing_secret
-      KMS_KEY_ID               = var.credential_vault_kms_key_id
-      OAUTH_CLIENT_ID          = var.oauth_client_id
-      OAUTH_CLIENT_SECRET      = var.oauth_client_secret
-      OAUTH_REDIRECT_URI       = "${var.api_gateway_url}/connectors/my-service/callback"
-    }
-  }
-}
-
-# API Gateway route for inbound webhooks
-resource "aws_apigatewayv2_route" "webhook" {
-  api_id    = var.api_gateway_id
-  route_key = "POST /connectors/my-service/webhook"
-  target    = "integrations/${aws_apigatewayv2_integration.connector.id}"
-}
-
-# API Gateway route for OAuth callback
-resource "aws_apigatewayv2_route" "oauth_callback" {
-  api_id    = var.api_gateway_id
-  route_key = "GET /connectors/my-service/callback"
-  target    = "integrations/${aws_apigatewayv2_integration.connector.id}"
-}
-```
-
-## Registering the connector
-
-After deploying the infrastructure, register the connector in ThinkWork:
-
-```graphql
-mutation RegisterConnector {
-  createConnector(input: {
-    id: "my-service"
-    name: "My Service"
-    description: "Integration with My Service"
-    webhookUrl: "https://api.example.com/connectors/my-service/webhook"
-    oauthCallbackUrl: "https://api.example.com/connectors/my-service/callback"
-    skillPackId: "my-service"
-    defaultAgentId: "agent-abc123"
-    enabled: true
-  }) {
-    id
-    status
-  }
-}
-```
-
-## Testing your connector
-
-1. Deploy the connector infrastructure with `terraform apply`
-2. Configure the webhook URL in the external service's settings
-3. Send a test event from the external service (most services have a "send test" button)
-4. Check the AWS Lambda logs: `aws logs tail /aws/lambda/<stage>-thinkwork-connector-my-service --follow`
-5. Check the ThinkWork admin app for the new thread
-
-<Aside type="tip">
-Use [ngrok](https://ngrok.com) during development to expose your local Lambda to the internet for webhook testing, or use the AWS Lambda function URL directly for quick iteration.
+<Aside type="note">
+  Do not start a new connector by choosing a default managed Agent. Pick the
+  Computer that owns the work, then let the Computer delegate if the task needs
+  a managed Agent or routine.
 </Aside>
+
+## Credential handling
+
+Use tenant credentials for provider access. A connector should refer to credentials by id or slug in its config, then resolve the secret at runtime through the credential store.
+
+Avoid patterns that copy provider tokens into:
+
+- thread metadata;
+- task input visible to workers;
+- skill files;
+- Lambda environment variables that are not explicitly deployment-owned secrets;
+- provider-specific ad hoc storage.
+
+For the Linear/Symphony proof, the connector uses one credential for Linear and one credential for GitHub PR-producing writeback. The setup form makes both explicit so a missing GitHub credential is visible before the connector is enabled for PR work.
+
+## Idempotency
+
+Connector retries are normal. Pollers run repeatedly, webhooks retry, and operators may use "Run now" while debugging.
+
+Design each connector around:
+
+| Concern            | Requirement                                                          |
+| ------------------ | -------------------------------------------------------------------- |
+| External reference | Stable provider id or composite key for the same item                |
+| Claim              | Only one active execution should own a provider item                 |
+| Computer task      | Use an idempotency key derived from connector and external reference |
+| Thread             | Reuse or link the same provider item to one visible thread           |
+| Provider comments  | Do not post duplicate "working" or "done" comments on retry          |
+| Provider writeback | State transitions should be safe if repeated                         |
+
+The Linear checkpoint is the reference behavior: repeated polling of the same issue should not create duplicate branches, PRs, comments, tasks, events, or threads.
+
+## Provider writeback
+
+Writeback is part of the connector contract, not a random tool call. The connector config should make provider writeback explicit:
+
+- which credential to use;
+- which provider states to write;
+- which provider comments to post;
+- which external links to attach;
+- what to do when the provider rejects the update.
+
+For Linear/Symphony, dispatch writeback moves the issue to `In Progress` after ThinkWork claims it. PR-opened writeback moves the issue to `In Review` only after the draft PR exists.
+
+## Minimal recipe
+
+A custom connector recipe usually needs:
+
+- connector config metadata;
+- tenant credential requirements;
+- poller or webhook handler;
+- candidate normalizer;
+- idempotent claim logic;
+- Computer handoff;
+- thread creation or resume behavior;
+- provider writeback adapter;
+- admin visibility for status and failures;
+- runbook or checkpoint docs.
+
+The `examples/connector-recipe/` directory remains a starting point for custom connector structure, but treat it as a template to modernize for the Computer-first connector model.
+
+## Testing checklist
+
+Before shipping a connector:
+
+- A valid provider event creates exactly one connector execution.
+- A duplicate provider event creates no duplicate visible work.
+- A missing or inactive credential fails clearly.
+- A connector targeting the wrong tenant cannot read or write another tenant's data.
+- A successful handoff creates a Computer task/event and a visible thread.
+- Provider writeback failure is visible in outcome metadata.
+- The admin UI can show success, failure, and cancelled/stale states without SQL.
+
+## Known limits
+
+- **Linear is the only current production tracker connector.** Other providers should follow the model, but they need their own plans and tests.
+- **The recipe example is illustrative.** It is not a generated connector SDK.
+- **Custom connector UI is not fully catalog-driven yet.** The Symphony form is structured for the Linear proof; broader custom setup UX is future work.
+
+## Related pages
+
+- [Connectors](/concepts/connectors/)
+- [Connector Lifecycle](/concepts/connectors/lifecycle/)
+- [Admin: Symphony](/applications/admin/symphony/)
+- [MCP Tools](/concepts/connectors/mcp-tools/)
+- [Integrations](/concepts/connectors/integrations/)
+
+## Under the hood
+
+Connector runtime code lives in `packages/api/src/lib/connectors/`. The scheduled poller entry point is `packages/api/src/handlers/connector-poller.ts`. Tenant credential secret resolution lives under `packages/api/src/lib/tenant-credentials/`. Connector GraphQL resolvers live under `packages/api/src/graphql/resolvers/connectors/`.
+
+The example recipe directory is `examples/connector-recipe/`. If you update it for a real provider, keep its README aligned with this guide and avoid provider-token examples that bypass tenant credentials.

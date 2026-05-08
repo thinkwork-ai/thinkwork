@@ -33,7 +33,7 @@ variable "connector_id" {
   default     = "my-connector"
 }
 
-variable "default_agent_id" {
-  description = "Thinkwork agent ID to route inbound messages to"
+variable "target_computer_id" {
+  description = "ThinkWork Computer ID that should own inbound connector work"
   type        = string
 }
