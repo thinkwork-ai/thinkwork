@@ -18,7 +18,7 @@ describe("AppArtifactSplitShell", () => {
       screen.getAllByText("LastMile CRM pipeline risk").length,
     ).toBeGreaterThan(0);
     expect(screen.getByLabelText("Computer provenance")).toBeTruthy();
-    expect(screen.getByText("Dashboard views")).toBeTruthy();
+    expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getAllByText("Source coverage").length).toBeGreaterThan(0);
   });
 });
