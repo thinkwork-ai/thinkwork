@@ -542,6 +542,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
       // composer fetch.
       thinkwork_api_url: THINKWORK_API_URL || undefined,
       thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
+      appsync_endpoint: APPSYNC_ENDPOINT || undefined,
+      appsync_api_key: APPSYNC_API_KEY || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: runtimeConfig.webSearchConfig,
       send_email_config: runtimeConfig.sendEmailConfig
