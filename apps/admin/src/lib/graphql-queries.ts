@@ -863,6 +863,7 @@ export const ThreadsPagedQuery = gql`
         assigneeType
         assigneeId
         agentId
+        computerId
         agent {
           id
           name
