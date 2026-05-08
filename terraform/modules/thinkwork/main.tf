@@ -84,15 +84,28 @@ module "cognito" {
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
+  # Single ThinkworkAdmin Cognito client serves both admin and computer SPAs.
+  # apps/computer reuses this client by design — same humans, same tenant
+  # invitations, single sign-in across both surfaces. Each origin (admin
+  # distribution, admin custom domain, computer distribution, computer custom
+  # domain, plus localhost dev for both) needs both bare and /auth/callback
+  # entries because the OAuth flow lands on /auth/callback and the SPA's
+  # post-OAuth redirect lands on the bare origin.
   admin_callback_urls = concat(
     var.admin_callback_urls,
     ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"],
-    var.admin_domain != "" ? ["https://${var.admin_domain}", "https://${var.admin_domain}/auth/callback"] : []
+    var.admin_domain != "" ? ["https://${var.admin_domain}", "https://${var.admin_domain}/auth/callback"] : [],
+    ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
+    var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : [],
+    ["http://localhost:5180", "http://localhost:5180/auth/callback"]
   )
   admin_logout_urls = concat(
     var.admin_logout_urls,
     ["https://${module.admin_site.distribution_domain}"],
-    var.admin_domain != "" ? ["https://${var.admin_domain}"] : []
+    var.admin_domain != "" ? ["https://${var.admin_domain}"] : [],
+    ["https://${module.computer_site.distribution_domain}"],
+    var.computer_domain != "" ? ["https://${var.computer_domain}"] : [],
+    ["http://localhost:5180"]
   )
   mobile_callback_urls = var.mobile_callback_urls
   mobile_logout_urls   = var.mobile_logout_urls
@@ -553,6 +566,20 @@ module "admin_site" {
   is_spa          = true
   custom_domain   = var.admin_domain
   certificate_arn = var.admin_certificate_arn
+}
+
+################################################################################
+# Computer Static Site (apps/computer — end-user surface at computer.thinkwork.ai)
+################################################################################
+
+module "computer_site" {
+  source = "../app/static-site"
+
+  stage           = var.stage
+  site_name       = "computer"
+  is_spa          = true
+  custom_domain   = var.computer_domain
+  certificate_arn = var.computer_certificate_arn
 }
 
 ################################################################################

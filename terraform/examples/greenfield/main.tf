@@ -255,6 +255,7 @@ locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
   admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
+  computer_domain = var.www_domain != "" ? "computer.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
 }
 
@@ -288,6 +289,11 @@ module "thinkwork" {
   # Admin SPA custom domain (derived from www_domain — admin.<apex>).
   admin_domain          = local.www_dns_enabled ? local.admin_domain : ""
   admin_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
+  # Computer SPA custom domain (derived from www_domain — computer.<apex>).
+  # Same ACM cert covers it via the include_computer SAN gate on www_dns.
+  computer_domain          = local.www_dns_enabled ? local.computer_domain : ""
+  computer_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
@@ -339,6 +345,10 @@ module "www_dns" {
   # Admin: same cycle-avoidance pattern.
   include_admin                = true
   admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
+
+  # Computer: same cycle-avoidance pattern.
+  include_computer                = true
+  computer_cloudfront_domain_name = module.thinkwork.computer_distribution_domain
 
   # API custom domain (api.<apex>). Same cycle-avoidance — the ACM cert SAN
   # list is gated on include_api (a plain bool), while api_gateway_id (which
@@ -476,6 +486,21 @@ output "admin_distribution_id" {
 output "admin_bucket_name" {
   description = "S3 bucket for admin app assets"
   value       = module.thinkwork.admin_bucket_name
+}
+
+output "computer_url" {
+  description = "Computer app URL"
+  value       = local.www_dns_enabled ? "https://${local.computer_domain}" : "https://${module.thinkwork.computer_distribution_domain}"
+}
+
+output "computer_distribution_id" {
+  description = "CloudFront distribution ID for computer (for cache invalidation)"
+  value       = module.thinkwork.computer_distribution_id
+}
+
+output "computer_bucket_name" {
+  description = "S3 bucket for computer app assets"
+  value       = module.thinkwork.computer_bucket_name
 }
 
 output "docs_url" {

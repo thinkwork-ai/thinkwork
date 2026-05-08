@@ -65,6 +65,8 @@ jobs:
               - 'packages/workspace-defaults/files/**'
             admin:
               - 'apps/admin/**'
+            computer:
+              - 'apps/computer/**'
             docs:
               - 'docs/**'
 
@@ -979,6 +981,45 @@ jobs:
         # The server-side Lambda env injection (terraform-apply step
         # above) is a separate path and remains untouched.
 
+  # ── Build & deploy computer SPA (apps/computer at computer.thinkwork.ai) ─
+  build-computer:
+    name: Build & Deploy Computer
+    needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+
+      - name: Build & deploy
+        run: bash scripts/build-computer.sh ${{ env.STAGE }}
+        # Same API_AUTH_SECRET hygiene as build-admin: the computer SPA
+        # authenticates REST calls with the user's Cognito id token (via
+        # apps/computer/src/lib/api-fetch.ts). Never inline a service-to-
+        # service secret into the public JS bundle.
+
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:
     name: Build & Deploy Docs
@@ -1095,6 +1136,7 @@ jobs:
         build-computer-runtime,
         migration-drift-check,
         build-admin,
+        build-computer,
         build-docs,
         bootstrap,
       ]
@@ -1169,6 +1211,7 @@ jobs:
           echo "║ Stage: ${{ env.STAGE }}"
           echo "║"
           echo "║ Admin App:  $(tf_output_raw admin_url || echo 'N/A')"
+          echo "║ Computer:   $(tf_output_raw computer_url || echo 'N/A')"
           echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
@@ -1185,6 +1228,7 @@ jobs:
           echo "║   Computer Runtime:       ${{ needs.build-computer-runtime.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
+          echo "║   Build Computer:         ${{ needs.build-computer.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"
