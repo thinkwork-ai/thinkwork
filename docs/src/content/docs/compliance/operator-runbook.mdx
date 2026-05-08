@@ -1,6 +1,9 @@
-# Operator runbook
+---
+title: Operator runbook
+description: "How to inspect /compliance, request exports, drain DLQs, apply hand-rolled migrations, rotate Aurora roles, and flip GOVERNANCE→COMPLIANCE for an audit engagement."
+---
 
-How to do things to the running compliance module. For background on why the module exists, read [overview.md](./overview.md). For the architectural shape, read [architecture.md](./architecture.md). When an alarm fires, jump to [oncall.md](./oncall.md).
+How to do things to the running compliance module. For background on why the module exists, read [overview](/compliance/overview/). For the architectural shape, read [architecture](/compliance/architecture/). When an alarm fires, jump to [oncall](/compliance/oncall/).
 
 ## Procedures
 
@@ -26,10 +29,10 @@ How to do things to the running compliance module. For background on why the mod
    - Event metadata (event_id, occurred_at, recorded_at, actor, source).
    - Chain position panel: the event's own hash + previous-event hash (clickable to walk backward).
    - Anchor status: ANCHORED with `cadence_id` once the next 15-minute cadence completes; PENDING in the meantime.
-   - Payload (redacted per the per-event-type allow-list at write time; see [developer-guide.md](./developer-guide.md#audit-event-tier-semantics)).
+   - Payload (redacted per the per-event-type allow-list at write time; see [developer-guide](/compliance/developer-guide/#audit-event-tier-semantics)).
 5. To browse cross-tenant (operators only): toggle **Cross-tenant view** in the filter bar. Off by default; the toggle adds the tenant Combobox to the filter row.
 
-The /compliance read API source: [`packages/api/src/graphql/resolvers/compliance/query.ts`](../../packages/api/src/graphql/resolvers/compliance/query.ts).
+The /compliance read API source: [`packages/api/src/graphql/resolvers/compliance/query.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/graphql/resolvers/compliance/query.ts).
 
 ---
 
@@ -53,7 +56,7 @@ The /compliance read API source: [`packages/api/src/graphql/resolvers/compliance
 
 The export emits a `data.export_initiated` audit event with the filter as payload — exporting is itself audited.
 
-Resolver source: [`packages/api/src/graphql/resolvers/compliance/exports.ts`](../../packages/api/src/graphql/resolvers/compliance/exports.ts).
+Resolver source: [`packages/api/src/graphql/resolvers/compliance/exports.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/graphql/resolvers/compliance/exports.ts).
 
 ---
 
@@ -69,7 +72,7 @@ Resolver source: [`packages/api/src/graphql/resolvers/compliance/exports.ts`](..
 
 If you forget this step, the PR's deploy job fails on the drift gate with a list of missing objects. The fix is to apply the migration to dev and re-run the failed job — no code change needed.
 
-Reference: [feedback_handrolled_migrations_apply_to_dev](../../.claude/projects/-Users-ericodom-Projects-thinkwork/memory/feedback_handrolled_migrations_apply_to_dev.md). Recent compliance migrations applied this way: `0069`, `0070`, `0073`, `0074`.
+Reference: [feedback_handrolled_migrations_apply_to_dev](`memory/feedback_handrolled_migrations_apply_to_dev.md`). Recent compliance migrations applied this way: `0069`, `0070`, `0073`, `0074`.
 
 ---
 
@@ -97,7 +100,7 @@ psql "$DATABASE_URL" \
   -f packages/database-pg/drizzle/0070_compliance_aurora_roles.sql
 ```
 
-Migration: [`packages/database-pg/drizzle/0070_compliance_aurora_roles.sql`](../../packages/database-pg/drizzle/0070_compliance_aurora_roles.sql). Helper: [`scripts/bootstrap-compliance-roles.sh`](../../scripts/bootstrap-compliance-roles.sh).
+Migration: [`packages/database-pg/drizzle/0070_compliance_aurora_roles.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0070_compliance_aurora_roles.sql). Helper: [`scripts/bootstrap-compliance-roles.sh`](https://github.com/thinkwork-ai/thinkwork/blob/main/scripts/bootstrap-compliance-roles.sh).
 
 ---
 
@@ -115,7 +118,7 @@ Migration: [`packages/database-pg/drizzle/0070_compliance_aurora_roles.sql`](../
 6. After apply, verify in the S3 console that the anchor bucket's Object Lock retention mode reads COMPLIANCE.
 
 The Terraform module README has the full playbook:
-[`terraform/modules/data/compliance-audit-bucket/README.md`](../../terraform/modules/data/compliance-audit-bucket/README.md).
+[`terraform/modules/data/compliance-audit-bucket/README.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/terraform/modules/data/compliance-audit-bucket/README.md).
 
 ---
 
@@ -134,7 +137,7 @@ The Terraform module README has the full playbook:
 
 **Do not** "replay" anchor DLQ messages — the schedule is rate-based, so replaying produces a duplicate cadence at an unintended time. Let the next 15-minute tick re-anchor.
 
-Anchor Lambda: [`packages/lambda/compliance-anchor.ts`](../../packages/lambda/compliance-anchor.ts).
+Anchor Lambda: [`packages/lambda/compliance-anchor.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-anchor.ts).
 
 ---
 
@@ -150,7 +153,7 @@ Anchor Lambda: [`packages/lambda/compliance-anchor.ts`](../../packages/lambda/co
    - If `queued`: the runner never claimed the job (CAS guard didn't fire). Investigate the Lambda — likely env-var regression. Purge after fix.
 4. Replaying the message **is safe** because the runner's CAS guard (`UPDATE … WHERE status='queued'`) makes re-delivery a no-op when the job is no longer queued. But replay is rarely useful — the underlying problem (handler crash) needs a code fix first.
 
-Runner: [`packages/lambda/compliance-export-runner.ts`](../../packages/lambda/compliance-export-runner.ts).
+Runner: [`packages/lambda/compliance-export-runner.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-export-runner.ts).
 
 ---
 
@@ -168,7 +171,7 @@ There is no "clone failed job" mutation at v1. Reconstructing the filter from th
 
 ## Where to escalate
 
-- An alarm fired and the playbook didn't fix it → [oncall.md](./oncall.md).
-- A migration failed mid-apply or the drift gate is stuck → [oncall.md](./oncall.md#drift-gate-fails-on-deploy).
+- An alarm fired and the playbook didn't fix it → [oncall](/compliance/oncall/).
+- A migration failed mid-apply or the drift gate is stuck → [oncall](/compliance/oncall/#drift-gate-fails-on-deploy).
 - An operator email needs adding to the allowlist → set `THINKWORK_PLATFORM_OPERATOR_EMAILS` on the graphql-http Lambda's environment via Terraform; redeploy graphql-http.
-- An auditor needs the verifier CLI run against an attested slice → [`packages/audit-verifier/README.md`](../../packages/audit-verifier/README.md).
+- An auditor needs the verifier CLI run against an attested slice → [`packages/audit-verifier/README.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/README.md).

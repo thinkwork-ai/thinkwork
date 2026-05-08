@@ -187,6 +187,23 @@ export default defineConfig({
           ],
         },
         {
+          label: "Compliance",
+          collapsed: true,
+          items: [
+            { label: "Overview", slug: "compliance" },
+            { label: "What it does", slug: "compliance/overview" },
+            { label: "Architecture", slug: "compliance/architecture" },
+            { label: "Operator runbook", slug: "compliance/operator-runbook" },
+            {
+              label: "Auditor walkthrough",
+              slug: "compliance/auditor-walkthrough",
+            },
+            { label: "Developer guide", slug: "compliance/developer-guide" },
+            { label: "On-call notes", slug: "compliance/oncall" },
+            { label: "Changelog", slug: "compliance/changelog" },
+          ],
+        },
+        {
           label: "Configure",
           collapsed: true,
           items: [
