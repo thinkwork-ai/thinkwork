@@ -70,6 +70,7 @@ import { Route as AuthedTenantAgentsInvitesRouteImport } from "./routes/_authed/
 import { Route as AuthedTenantAgentsAgentIdRouteImport } from "./routes/_authed/_tenant/agents/$agentId";
 import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from "./routes/_authed/_tenant/agent-templates/defaults";
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from "./routes/_authed/_tenant/evaluations/studio/index";
+import { Route as AuthedTenantComplianceExportsIndexRouteImport } from "./routes/_authed/_tenant/compliance/exports/index";
 import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/skills/index";
 import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from "./routes/_authed/_tenant/capabilities/plugins/index";
 import { Route as AuthedTenantAutomationsWebhooksIndexRouteImport } from "./routes/_authed/_tenant/automations/webhooks/index";
@@ -446,6 +447,12 @@ const AuthedTenantEvaluationsStudioIndexRoute =
     path: "/evaluations/studio/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
+const AuthedTenantComplianceExportsIndexRoute =
+  AuthedTenantComplianceExportsIndexRouteImport.update({
+    id: "/exports/",
+    path: "/exports/",
+    getParentRoute: () => AuthedTenantComplianceRouteRoute,
+  } as any);
 const AuthedTenantCapabilitiesSkillsIndexRoute =
   AuthedTenantCapabilitiesSkillsIndexRouteImport.update({
     id: "/skills/",
@@ -728,6 +735,7 @@ export interface FileRoutesByFullPath {
   "/automations/webhooks/": typeof AuthedTenantAutomationsWebhooksIndexRoute;
   "/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/capabilities/skills/": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/compliance/exports/": typeof AuthedTenantComplianceExportsIndexRoute;
   "/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/agents/$agentId/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
   "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -817,6 +825,7 @@ export interface FileRoutesByTo {
   "/automations/webhooks": typeof AuthedTenantAutomationsWebhooksIndexRoute;
   "/capabilities/plugins": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/capabilities/skills": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/compliance/exports": typeof AuthedTenantComplianceExportsIndexRoute;
   "/evaluations/studio": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/agents/$agentId/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
   "/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -913,6 +922,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/automations/webhooks/": typeof AuthedTenantAutomationsWebhooksIndexRoute;
   "/_authed/_tenant/capabilities/plugins/": typeof AuthedTenantCapabilitiesPluginsIndexRoute;
   "/_authed/_tenant/capabilities/skills/": typeof AuthedTenantCapabilitiesSkillsIndexRoute;
+  "/_authed/_tenant/compliance/exports/": typeof AuthedTenantComplianceExportsIndexRoute;
   "/_authed/_tenant/evaluations/studio/": typeof AuthedTenantEvaluationsStudioIndexRoute;
   "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId": typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute;
   "/_authed/_tenant/evaluations/studio/edit/$testCaseId": typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute;
@@ -1008,6 +1018,7 @@ export interface FileRouteTypes {
     | "/automations/webhooks/"
     | "/capabilities/plugins/"
     | "/capabilities/skills/"
+    | "/compliance/exports/"
     | "/evaluations/studio/"
     | "/agents/$agentId/scheduled-jobs/$scheduledJobId"
     | "/evaluations/studio/edit/$testCaseId"
@@ -1097,6 +1108,7 @@ export interface FileRouteTypes {
     | "/automations/webhooks"
     | "/capabilities/plugins"
     | "/capabilities/skills"
+    | "/compliance/exports"
     | "/evaluations/studio"
     | "/agents/$agentId/scheduled-jobs/$scheduledJobId"
     | "/evaluations/studio/edit/$testCaseId"
@@ -1192,6 +1204,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/automations/webhooks/"
     | "/_authed/_tenant/capabilities/plugins/"
     | "/_authed/_tenant/capabilities/skills/"
+    | "/_authed/_tenant/compliance/exports/"
     | "/_authed/_tenant/evaluations/studio/"
     | "/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId"
     | "/_authed/_tenant/evaluations/studio/edit/$testCaseId"
@@ -1638,6 +1651,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantEvaluationsStudioIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
+    "/_authed/_tenant/compliance/exports/": {
+      id: "/_authed/_tenant/compliance/exports/";
+      path: "/exports";
+      fullPath: "/compliance/exports/";
+      preLoaderRoute: typeof AuthedTenantComplianceExportsIndexRouteImport;
+      parentRoute: typeof AuthedTenantComplianceRouteRoute;
+    };
     "/_authed/_tenant/capabilities/skills/": {
       id: "/_authed/_tenant/capabilities/skills/";
       path: "/skills";
@@ -1868,6 +1888,7 @@ declare module "@tanstack/react-router" {
 interface AuthedTenantComplianceRouteRouteChildren {
   AuthedTenantComplianceIndexRoute: typeof AuthedTenantComplianceIndexRoute;
   AuthedTenantComplianceEventsEventIdRoute: typeof AuthedTenantComplianceEventsEventIdRoute;
+  AuthedTenantComplianceExportsIndexRoute: typeof AuthedTenantComplianceExportsIndexRoute;
 }
 
 const AuthedTenantComplianceRouteRouteChildren: AuthedTenantComplianceRouteRouteChildren =
@@ -1875,6 +1896,8 @@ const AuthedTenantComplianceRouteRouteChildren: AuthedTenantComplianceRouteRoute
     AuthedTenantComplianceIndexRoute: AuthedTenantComplianceIndexRoute,
     AuthedTenantComplianceEventsEventIdRoute:
       AuthedTenantComplianceEventsEventIdRoute,
+    AuthedTenantComplianceExportsIndexRoute:
+      AuthedTenantComplianceExportsIndexRoute,
   };
 
 const AuthedTenantComplianceRouteRouteWithChildren =

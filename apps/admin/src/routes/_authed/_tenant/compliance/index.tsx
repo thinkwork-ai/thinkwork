@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { Download } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
+import { Button } from "@/components/ui/button";
 import { ComplianceFilterBar } from "@/components/compliance/ComplianceFilterBar";
 import { ComplianceEventsTable } from "@/components/compliance/ComplianceEventsTable";
 import {
@@ -59,6 +61,17 @@ function ComplianceListPage() {
         <PageHeader
           title="Compliance"
           description="Audit-event log for SOC2 walkthroughs"
+          actions={
+            <Button asChild variant="outline" size="sm">
+              <Link
+                to="/compliance/exports"
+                search={{ ...search, from: "current-filter" as const }}
+              >
+                <Download className="size-3.5" />
+                Export this view
+              </Link>
+            </Button>
+          }
         />
       }
     >
