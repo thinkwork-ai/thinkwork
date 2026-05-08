@@ -4,11 +4,21 @@ import { useQuery, useSubscription } from "urql";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, Bot, User, Loader2 } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ThreadDetailQuery, OnNewMessageSubscription, OnThreadUpdatedSubscription } from "@/lib/graphql-queries";
+import {
+  ThreadDetailQuery,
+  OnNewMessageSubscription,
+  OnThreadUpdatedSubscription,
+} from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { relativeTime } from "@/lib/utils";
 
@@ -18,7 +28,11 @@ interface ThreadDetailSheetProps {
   onClose: () => void;
 }
 
-export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheetProps) {
+export function ThreadDetailSheet({
+  threadId,
+  open,
+  onClose,
+}: ThreadDetailSheetProps) {
   const { tenantId } = useTenant();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +73,7 @@ export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheet
   // Auto-scroll to bottom when messages change
   const prevMsgCount = useRef(0);
   const thread = data?.thread as any;
+  const assistantLabel = thread?.computerId ? "Computer" : "Agent";
   const messages = (thread?.messages?.edges ?? [])
     .map((e: any) => e.node)
     .filter((m: any) => {
@@ -70,14 +85,22 @@ export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheet
   useEffect(() => {
     if (messages.length > prevMsgCount.current) {
       setTimeout(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: "smooth",
+        });
       }, 100);
     }
     prevMsgCount.current = messages.length;
   }, [messages.length]);
 
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <SheetContent className="flex flex-col sm:max-w-md p-0">
         {/* Header */}
         <SheetHeader className="px-4 pt-4 pb-3 border-b border-border space-y-1.5">
@@ -97,15 +120,22 @@ export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheet
               <SheetTitle className="text-sm leading-snug">
                 {thread.title}
               </SheetTitle>
-              {thread.agent && (
+              {thread.computerId ? (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Bot className="h-3 w-3" />
+                  Computer-owned
+                </div>
+              ) : thread.agent ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Bot className="h-3 w-3" />
                   {thread.agent.name}
                 </div>
-              )}
+              ) : null}
             </>
           ) : (
-            <SheetTitle className="text-sm text-muted-foreground">Thread not found</SheetTitle>
+            <SheetTitle className="text-sm text-muted-foreground">
+              Thread not found
+            </SheetTitle>
           )}
         </SheetHeader>
 
@@ -113,15 +143,14 @@ export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheet
         <ScrollArea ref={scrollRef} className="flex-1 min-h-0">
           <div className="px-4 py-3 space-y-3">
             {messages.length === 0 && !fetching && (
-              <p className="text-xs text-muted-foreground text-center py-6">No messages yet</p>
+              <p className="text-xs text-muted-foreground text-center py-6">
+                No messages yet
+              </p>
             )}
             {messages.map((msg: any) => {
               const isUser = msg.role?.toLowerCase() === "user";
               return (
-                <div
-                  key={msg.id}
-                  className={`flex gap-2 ${isUser ? "" : ""}`}
-                >
+                <div key={msg.id} className={`flex gap-2 ${isUser ? "" : ""}`}>
                   <div className="shrink-0 mt-0.5">
                     {isUser ? (
                       <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted">
@@ -136,7 +165,7 @@ export function ThreadDetailSheet({ threadId, open, onClose }: ThreadDetailSheet
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="text-[10px] font-medium text-muted-foreground">
-                        {isUser ? "User" : "Agent"}
+                        {isUser ? "User" : assistantLabel}
                       </span>
                       <span className="text-[10px] text-muted-foreground/60">
                         {relativeTime(msg.createdAt)}

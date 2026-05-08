@@ -511,7 +511,7 @@ describe("job-trigger skill_run misconfiguration", () => {
 });
 
 describe("job-trigger Computer scheduled thread turns", () => {
-  it("queues migrated agent schedules as Computer-owned thread_turn tasks", async () => {
+  it("queues migrated agent schedules as Computer-owned thread_turn tasks with zero Agent wakeups", async () => {
     mockSelect
       .mockReturnValueOnce([
         {
@@ -580,6 +580,7 @@ describe("job-trigger Computer scheduled thread turns", () => {
         return value.agent_id === "A1" && value.reason;
       }),
     ).toBe(false);
+    expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 
   it("does not create legacy Agent wakeups when a scheduled agent has no Computer", async () => {

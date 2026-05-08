@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useSubscription } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -12,8 +20,17 @@ import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { graphql } from "@/gql";
@@ -44,7 +61,11 @@ import { ThreadFormDialog } from "@/components/threads/CreateThreadDialog";
 import { ArtifactViewDialog } from "@/components/threads/ArtifactViewDialog";
 import { ExecutionTrace } from "@/components/threads/ExecutionTrace";
 import { ThreadTraces, xrayTraceUrl } from "@/components/threads/ThreadTraces";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ArtifactsListQuery, ArtifactDetailQuery } from "@/lib/graphql-queries";
 import { useClient } from "urql";
 
@@ -54,7 +75,9 @@ import { useClient } from "urql";
 
 export const Route = createFileRoute("/_authed/_tenant/threads/$threadId")({
   component: ThreadDetailPage,
-  validateSearch: (search: Record<string, unknown>): { fromAgentId?: string; fromAgentName?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { fromAgentId?: string; fromAgentName?: string } => ({
     fromAgentId: (search.fromAgentId as string) || undefined,
     fromAgentName: (search.fromAgentName as string) || undefined,
   }),
@@ -89,7 +112,9 @@ function formatTurnCostSummary(
   const parts: string[] = [];
   parts.push(`${turnCount} turn${turnCount === 1 ? "" : "s"}`);
   if (tokenCount > 0) {
-    parts.push(`${tokenCount.toLocaleString()} token${tokenCount === 1 ? "" : "s"}`);
+    parts.push(
+      `${tokenCount.toLocaleString()} token${tokenCount === 1 ? "" : "s"}`,
+    );
   }
   if (costSummary !== null && costSummary !== undefined && costSummary > 0) {
     parts.push(`$${costSummary.toFixed(4)}`);
@@ -206,7 +231,12 @@ function ThreadDetailPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const { openNewThread } = useDialog();
-  const { open: openPanel, close: closePanel, isOpen: panelVisible, toggle: togglePanel } = usePanel();
+  const {
+    open: openPanel,
+    close: closePanel,
+    isOpen: panelVisible,
+    toggle: togglePanel,
+  } = usePanel();
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -218,20 +248,25 @@ function ThreadDetailPage() {
   const [viewingArtifact, setViewingArtifact] = useState<any>(null);
   const urqlClient = useClient();
 
-  const openArtifact = useCallback(async (a: any) => {
-    // Fetch full content if not already loaded
-    if (a.content) {
-      setViewingArtifact(a);
-      return;
-    }
-    try {
-      const result = await urqlClient.query(ArtifactDetailQuery, { id: a.id }).toPromise();
-      const full = (result.data as any)?.artifact;
-      setViewingArtifact(full ?? a);
-    } catch {
-      setViewingArtifact(a);
-    }
-  }, [urqlClient]);
+  const openArtifact = useCallback(
+    async (a: any) => {
+      // Fetch full content if not already loaded
+      if (a.content) {
+        setViewingArtifact(a);
+        return;
+      }
+      try {
+        const result = await urqlClient
+          .query(ArtifactDetailQuery, { id: a.id })
+          .toPromise();
+        const full = (result.data as any)?.artifact;
+        setViewingArtifact(full ?? a);
+      } catch {
+        setViewingArtifact(a);
+      }
+    },
+    [urqlClient],
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ---- Queries ----
@@ -280,6 +315,7 @@ function ThreadDetailPage() {
   }, [turnSub.data, reexecuteThread]);
 
   const thread = threadResult.data?.thread;
+  const isComputerOwnedThread = Boolean((thread as any)?.computerId);
   const agents = agentsResult.data?.agents ?? [];
 
   // ---- Derived data ----
@@ -310,12 +346,18 @@ function ThreadDetailPage() {
   const hasAttachments = attachmentList.length > 0;
 
   // ---- Handlers (must be before useEffect that references them) ----
-  const refetch = useCallback(() => reexecuteThread({ requestPolicy: "network-only" }), [reexecuteThread]);
+  const refetch = useCallback(
+    () => reexecuteThread({ requestPolicy: "network-only" }),
+    [reexecuteThread],
+  );
 
-  const handleFieldUpdate = useCallback(async (data: Record<string, unknown>) => {
-    await updateThread({ id: threadId, input: data as any });
-    reexecuteThread({ requestPolicy: "network-only" });
-  }, [threadId, updateThread, reexecuteThread]);
+  const handleFieldUpdate = useCallback(
+    async (data: Record<string, unknown>) => {
+      await updateThread({ id: threadId, input: data as any });
+      reexecuteThread({ requestPolicy: "network-only" });
+    },
+    [threadId, updateThread, reexecuteThread],
+  );
 
   // ---- Breadcrumbs ----
   useBreadcrumbs(
@@ -408,151 +450,198 @@ function ThreadDetailPage() {
 
   return (
     <div className="space-y-6 min-w-0">
-    <div className="flex gap-8 min-w-0">
-      {/* ── Main content (left) ───────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-6">
-        {/* Header: identifier / title / description */}
-        <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-mono text-muted-foreground">
-            {thread.identifier ?? `#${thread.number}`}
-          </span>
-          {thread.checkoutRunId && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-700 dark:text-yellow-300">
-              <Lock className="h-3 w-3" />
-              {thread.checkoutRunId.slice(0, 8)}
-            </span>
-          )}
+      <div className="flex gap-8 min-w-0">
+        {/* ── Main content (left) ───────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-6">
+          {/* Header: identifier / title / description */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-mono text-muted-foreground">
+                {thread.identifier ?? `#${thread.number}`}
+              </span>
+              {thread.checkoutRunId && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-700 dark:text-yellow-300">
+                  <Lock className="h-3 w-3" />
+                  {thread.checkoutRunId.slice(0, 8)}
+                </span>
+              )}
 
-          {/* Mobile properties toggle */}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="ml-auto md:hidden shrink-0"
-            onClick={() => setMobilePropsOpen(true)}
-            title="Properties"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
-
-          <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className="shrink-0 ml-auto hidden md:flex">
-                <MoreHorizontal className="h-4 w-4" />
+              {/* Mobile properties toggle */}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto md:hidden shrink-0"
+                onClick={() => setMobilePropsOpen(true)}
+                title="Properties"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-44 p-1" align="end">
-              <Popover open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+
+              <Popover open={moreOpen} onOpenChange={setMoreOpen}>
                 <PopoverTrigger asChild>
-                  <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive">
-                    <Trash2 className="h-3 w-3" />
-                    Delete thread
-                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 ml-auto hidden md:flex"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-56 p-3" align="end">
-                  <p className="text-sm mb-3">Are you sure? This action cannot be undone.</p>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
-                    <Button variant="destructive" size="sm" onClick={() => { setDeleteConfirmOpen(false); setMoreOpen(false); void handleDelete(); }}>Delete</Button>
-                  </div>
+                <PopoverContent className="w-44 p-1" align="end">
+                  <Popover
+                    open={deleteConfirmOpen}
+                    onOpenChange={setDeleteConfirmOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive">
+                        <Trash2 className="h-3 w-3" />
+                        Delete thread
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <p className="text-sm mb-3">
+                        Are you sure? This action cannot be undone.
+                      </p>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirmOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            setDeleteConfirmOpen(false);
+                            setMoreOpen(false);
+                            void handleDelete();
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </PopoverContent>
               </Popover>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {/* Title */}
-        <InlineEditor
-          value={thread.title}
-          onSave={(title) => handleFieldUpdate({ title })}
-          as="h2"
-          className="text-xl font-bold"
-        />
-        </div>
-
-        {/* ── Activity (turns + messages merged timeline) ─────────── */}
-        <Separator />
-        <div className="space-y-2">
-          <LiveRunWidget threadId={threadId} tenantId={tenantId} />
-          <ExecutionTrace
-            threadId={threadId}
-            tenantId={tenantId || ""}
-            messages={threadMessages}
-            agentMap={agentMap}
-            defaultAgentName={thread.agent?.name}
-            onOpenArtifact={openArtifact}
-          />
-        </div>
-
-        {/* ── Traces ───────────────────────────────────────────────── */}
-        {tenantId && (
-          <>
-            <Separator />
-            <TracesSection threadId={threadId} tenantId={tenantId} />
-          </>
-        )}
-
-      </div>
-
-      {/* ── Right sidebar ─────────────────────────────────────────── */}
-      <aside className="hidden md:block w-64 shrink-0 space-y-3">
-        {/* Properties */}
-        <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Properties</h3>
-          <ThreadProperties
-            thread={thread}
-            inline
-            loading={threadResult.fetching && !thread.lifecycleStatus}
-          />
-        </div>
-
-        {/* Attachments */}
-        <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Attachments</h3>
-          {attachmentList.map((attachment) => (
-            <div key={attachment.id} className="rounded-md border border-border bg-background p-2">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-xs truncate" title={attachment.name ?? attachment.id}>
-                  {attachment.name ?? attachment.id}
-                </span>
-                <button type="button" className="text-muted-foreground hover:text-destructive shrink-0" title="Delete">
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                {attachment.mimeType ?? "unknown"}
-                {attachment.sizeBytes ? ` · ${(attachment.sizeBytes / 1024).toFixed(1)} KB` : ""}
-              </p>
             </div>
-          ))}
-          {attachmentUploadButton}
-          {attachmentError && <p className="text-xs text-destructive">{attachmentError}</p>}
-        </div>
 
-        {/* Artifacts */}
-        {artifacts.length > 0 && (
-          <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Artifacts</h3>
-            <div className="rounded-md border border-border divide-y divide-border bg-background">
-              {artifacts.map((a: any) => (
-                <button
-                  key={a.id}
-                  onClick={() => openArtifact(a)}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-xs hover:bg-accent/40 transition-colors"
-                >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
-                  <span className="truncate">{a.title}</span>
-                </button>
-              ))}
-            </div>
+            {/* Title */}
+            <InlineEditor
+              value={thread.title}
+              onSave={(title) => handleFieldUpdate({ title })}
+              as="h2"
+              className="text-xl font-bold"
+            />
           </div>
-        )}
-      </aside>
-    </div>
+
+          {/* ── Activity (turns + messages merged timeline) ─────────── */}
+          <Separator />
+          <div className="space-y-2">
+            <LiveRunWidget threadId={threadId} tenantId={tenantId} />
+            <ExecutionTrace
+              threadId={threadId}
+              tenantId={tenantId || ""}
+              messages={threadMessages}
+              agentMap={agentMap}
+              defaultAgentName={thread.agent?.name}
+              assistantLabel={isComputerOwnedThread ? "Computer" : undefined}
+              onOpenArtifact={openArtifact}
+            />
+          </div>
+
+          {/* ── Traces ───────────────────────────────────────────────── */}
+          {tenantId && (
+            <>
+              <Separator />
+              <TracesSection threadId={threadId} tenantId={tenantId} />
+            </>
+          )}
+        </div>
+
+        {/* ── Right sidebar ─────────────────────────────────────────── */}
+        <aside className="hidden md:block w-64 shrink-0 space-y-3">
+          {/* Properties */}
+          <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-3">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Properties
+            </h3>
+            <ThreadProperties
+              thread={thread}
+              inline
+              loading={threadResult.fetching && !thread.lifecycleStatus}
+            />
+          </div>
+
+          {/* Attachments */}
+          <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Attachments
+            </h3>
+            {attachmentList.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="rounded-md border border-border bg-background p-2"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span
+                    className="text-xs truncate"
+                    title={attachment.name ?? attachment.id}
+                  >
+                    {attachment.name ?? attachment.id}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-destructive shrink-0"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {attachment.mimeType ?? "unknown"}
+                  {attachment.sizeBytes
+                    ? ` · ${(attachment.sizeBytes / 1024).toFixed(1)} KB`
+                    : ""}
+                </p>
+              </div>
+            ))}
+            {attachmentUploadButton}
+            {attachmentError && (
+              <p className="text-xs text-destructive">{attachmentError}</p>
+            )}
+          </div>
+
+          {/* Artifacts */}
+          {artifacts.length > 0 && (
+            <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Artifacts
+              </h3>
+              <div className="rounded-md border border-border divide-y divide-border bg-background">
+                {artifacts.map((a: any) => (
+                  <button
+                    key={a.id}
+                    onClick={() => openArtifact(a)}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left text-xs hover:bg-accent/40 transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="truncate">{a.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
 
       <ArtifactViewDialog
         open={viewingArtifact !== null}
-        onOpenChange={(open) => { if (!open) setViewingArtifact(null); }}
+        onOpenChange={(open) => {
+          if (!open) setViewingArtifact(null);
+        }}
         artifact={viewingArtifact}
       />
 
@@ -605,7 +694,12 @@ interface ThreadPropertiesProps {
     readonly channel?: string | null;
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
-    readonly agent?: { readonly id: string; readonly name: string; readonly avatarUrl?: string | null } | null;
+    readonly computerId?: string | null;
+    readonly agent?: {
+      readonly id: string;
+      readonly name: string;
+      readonly avatarUrl?: string | null;
+    } | null;
     readonly billingCode?: string | null;
     readonly dueAt?: string | null;
     readonly startedAt?: string | null;
@@ -642,11 +736,19 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
     if (node.role === "assistant") turnCount++;
     if (typeof node.tokenCount === "number") tokenCount += node.tokenCount;
   }
-  const turnCostSummary = formatTurnCostSummary(turnCount, tokenCount, thread.costSummary ?? null);
+  const turnCostSummary = formatTurnCostSummary(
+    turnCount,
+    tokenCount,
+    thread.costSummary ?? null,
+  );
 
   return (
     <div className={cn("space-y-3", !inline && "p-4")}>
-      {!inline && <h3 className="text-sm font-semibold text-muted-foreground">Properties</h3>}
+      {!inline && (
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          Properties
+        </h3>
+      )}
 
       <PropRow label="Status">
         <ThreadLifecycleBadge
@@ -662,11 +764,19 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
 
       {turnCount > 0 && (
         <PropRow label="Turns">
-          <span className="text-xs text-muted-foreground">{turnCostSummary}</span>
+          <span className="text-xs text-muted-foreground">
+            {turnCostSummary}
+          </span>
         </PropRow>
       )}
 
-      {thread.agent && (
+      {thread.computerId ? (
+        <PropRow label="Computer">
+          <Badge variant="outline" className="text-xs">
+            Computer-owned
+          </Badge>
+        </PropRow>
+      ) : thread.agent ? (
         <PropRow label="Agent">
           <Link
             to="/agents/$agentId"
@@ -681,11 +791,14 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           </Link>
         </PropRow>
-      )}
+      ) : null}
 
       {thread.checkoutRunId && (
         <PropRow label="Checkout">
-          <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+          <Badge
+            variant="outline"
+            className="text-yellow-600 border-yellow-600"
+          >
             <Lock className="h-3 w-3 mr-1" />
             {thread.checkoutRunId.slice(0, 8)}
           </Badge>
@@ -698,17 +811,23 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
         </PropRow>
       )}
 
-      {thread.dueAt && <PropRow label="Due">{formatDateTime(thread.dueAt)}</PropRow>}
+      {thread.dueAt && (
+        <PropRow label="Due">{formatDateTime(thread.dueAt)}</PropRow>
+      )}
       <PropRow label="Created">{formatDateTime(thread.createdAt)}</PropRow>
       <PropRow label="Updated">{relativeTime(thread.updatedAt)}</PropRow>
       {thread.startedAt && (
         <PropRow label="Started">{formatDateTime(thread.startedAt)}</PropRow>
       )}
       {thread.completedAt && (
-        <PropRow label="Completed">{formatDateTime(thread.completedAt)}</PropRow>
+        <PropRow label="Completed">
+          {formatDateTime(thread.completedAt)}
+        </PropRow>
       )}
       {thread.cancelledAt && (
-        <PropRow label="Cancelled">{formatDateTime(thread.cancelledAt)}</PropRow>
+        <PropRow label="Cancelled">
+          {formatDateTime(thread.cancelledAt)}
+        </PropRow>
       )}
     </div>
   );
@@ -733,7 +852,13 @@ function PropRow({
 // Traces section
 // ---------------------------------------------------------------------------
 
-function TracesSection({ threadId, tenantId }: { threadId: string; tenantId: string }) {
+function TracesSection({
+  threadId,
+  tenantId,
+}: {
+  threadId: string;
+  tenantId: string;
+}) {
   const [open, setOpen] = useState(false);
 
   // Fetch traces at the section level so the header can deeplink to the
@@ -752,7 +877,11 @@ function TracesSection({ threadId, tenantId }: { threadId: string; tenantId: str
       <div className="flex items-center py-1">
         <CollapsibleTrigger className="flex-1 text-left">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            {open ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
             Traces
           </div>
         </CollapsibleTrigger>

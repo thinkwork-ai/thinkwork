@@ -16,10 +16,7 @@ import { toast } from "sonner";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 import { useTenant } from "@/context/TenantContext";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -273,7 +270,7 @@ function isAgentOverride(source: ComposeSource | undefined): boolean {
   return source === "agent-override" || source === "agent-override-pinned";
 }
 
-function targetKey(target: Target): string {
+export function workspaceEditorTargetKey(target: Target): string {
   if ("agentId" in target) return `agent:${target.agentId}`;
   if ("templateId" in target) return `template:${target.templateId}`;
   if ("computerId" in target) return `computer:${target.computerId}`;
@@ -293,7 +290,8 @@ export function WorkspaceEditor({
 }: WorkspaceEditorProps) {
   const { tenant } = useTenant();
   const capabilities = workspaceEditorCapabilities(mode);
-  const key = targetKey(target);
+  const key = workspaceEditorTargetKey(target);
+  const stableTarget = useMemo(() => target, [key]);
   const [files, setFiles] = useState<string[]>([]);
   const [fileSources, setFileSources] = useState<Record<string, ComposeSource>>(
     {},
@@ -358,7 +356,7 @@ export function WorkspaceEditor({
       fileListRequestId.current = requestId;
       if (showLoading) setLoadingFiles(true);
       try {
-        const data = await agentBuilderApi.listFiles(target);
+        const data = await agentBuilderApi.listFiles(stableTarget);
         if (fileListRequestId.current !== requestId) return;
         setFiles(data.files.map((file) => file.path));
         const sources: Record<string, ComposeSource> = {};
@@ -374,7 +372,7 @@ export function WorkspaceEditor({
         }
       }
     },
-    [target, key],
+    [stableTarget],
   );
 
   const refreshFilesInBackground = useCallback(() => {
@@ -388,7 +386,7 @@ export function WorkspaceEditor({
     }
     let cancelled = false;
     agentBuilderApi
-      .getFile(target, "AGENTS.md")
+      .getFile(stableTarget, "AGENTS.md")
       .then((data) => {
         if (cancelled) return;
         const parsed = parseRoutingTable(data.content ?? "");
@@ -402,7 +400,7 @@ export function WorkspaceEditor({
     return () => {
       cancelled = true;
     };
-  }, [files, target, key]);
+  }, [files, stableTarget]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -493,10 +491,15 @@ export function WorkspaceEditor({
     async (filePath: string) => {
       const requestId = loadRequestId.current + 1;
       loadRequestId.current = requestId;
+      const previousOpenFile = openFileRef.current;
       setOpenFile(filePath);
       setLoadingContent(true);
+      if (previousOpenFile !== filePath) {
+        setContent("");
+        setEditValue("");
+      }
       try {
-        const data = await agentBuilderApi.getFile(target, filePath);
+        const data = await agentBuilderApi.getFile(stableTarget, filePath);
         if (loadRequestId.current !== requestId) return;
         const fileContent = data.content ?? "";
         setContent(fileContent);
@@ -512,7 +515,7 @@ export function WorkspaceEditor({
         }
       }
     },
-    [target, key],
+    [stableTarget],
   );
 
   useEffect(() => {
@@ -544,7 +547,7 @@ export function WorkspaceEditor({
     setGenerating(true);
     try {
       for (const [path, fileContent] of Object.entries(bootstrapFiles)) {
-        await agentBuilderApi.putFile(target, path, fileContent);
+        await agentBuilderApi.putFile(stableTarget, path, fileContent);
       }
       await fetchFiles();
     } catch (err) {
@@ -558,7 +561,7 @@ export function WorkspaceEditor({
     const template = FOLDER_TEMPLATES[folderKey];
     if (!template) return;
     for (const [path, fileContent] of Object.entries(template.files)) {
-      await agentBuilderApi.putFile(target, path, fileContent);
+      await agentBuilderApi.putFile(stableTarget, path, fileContent);
     }
     await fetchFiles();
   };
@@ -571,7 +574,7 @@ export function WorkspaceEditor({
       const fileContent = path.endsWith(".md")
         ? `# ${path.split("/").pop()?.replace(".md", "")}\n\n`
         : "";
-      await agentBuilderApi.putFile(target, path, fileContent);
+      await agentBuilderApi.putFile(stableTarget, path, fileContent);
       await fetchFiles();
       await openWorkspaceFile(path);
       setShowNewFileDialog(false);
@@ -598,7 +601,7 @@ export function WorkspaceEditor({
         );
       } else {
         await agentBuilderApi.putFile(
-          target,
+          stableTarget,
           `${input.slug}/CONTEXT.md`,
           input.contextContent,
         );
@@ -654,13 +657,13 @@ export function WorkspaceEditor({
         return;
       }
 
-      await agentBuilderApi.putFile(target, skillPath, skillContent);
+      await agentBuilderApi.putFile(stableTarget, skillPath, skillContent);
       for (const [extraPath, extraContent] of Object.entries(
         renderSkillExtraFiles(options),
       )) {
         const localPath = buildLocalSkillPath(newSkillSlug, extraPath);
         try {
-          await agentBuilderApi.putFile(target, localPath, extraContent);
+          await agentBuilderApi.putFile(stableTarget, localPath, extraContent);
         } catch (err) {
           console.error(
             `Failed to create local skill support file ${localPath}:`,
@@ -746,11 +749,12 @@ export function WorkspaceEditor({
     const savedValue = editValue;
     setSaving(true);
     try {
-      await agentBuilderApi.putFile(target, savedPath, savedValue);
+      await agentBuilderApi.putFile(stableTarget, savedPath, savedValue);
       if (openFileRef.current === savedPath) {
         setContent(savedValue);
+        setEditValue(savedValue);
       }
-      await fetchFiles();
+      await fetchFiles({ showLoading: false });
     } catch (err) {
       console.error("Failed to save workspace file:", err);
     } finally {
@@ -793,7 +797,7 @@ export function WorkspaceEditor({
     setDeletingPath(path);
     try {
       for (const filePath of paths) {
-        await agentBuilderApi.deleteFile(target, filePath);
+        await agentBuilderApi.deleteFile(stableTarget, filePath);
       }
       setFiles((current) => current.filter((file) => !paths.includes(file)));
       setFileSources((current) => {
@@ -1028,9 +1032,7 @@ export function WorkspaceEditor({
             >
               <div className="flex h-9 items-center justify-between bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
                 <span>{files.length} files</span>
-                <div className="flex items-center gap-1.5">
-                  {addMenu}
-                </div>
+                <div className="flex items-center gap-1.5">{addMenu}</div>
               </div>
               {capabilities.canImportBundle && agentId ? (
                 <CollapsibleContent>

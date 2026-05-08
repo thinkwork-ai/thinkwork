@@ -34,7 +34,8 @@ describe("Computers admin routes", () => {
 
   it("renders detail panels for status, runtime, migration, and identity", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
-    expect(detailRouteSource).toContain("target={{ computerId: computer.id }}");
+    expect(detailRouteSource).toContain("ComputerWorkspaceTab");
+    expect(detailRouteSource).toContain("useMemo(() => ({ computerId })");
     expect(detailRouteSource).toContain('mode="computer"');
     expect(detailRouteSource).not.toContain("target={{ agentId:");
     expect(detailRouteSource).toContain(
@@ -78,7 +79,7 @@ describe("Computers admin routes", () => {
     );
     expect(liveTasksPanelSource).toContain("ComputerThreadsQuery");
     expect(liveTasksPanelSource).toContain("threadTurnContext");
-    expect(liveTasksPanelSource).toContain("Managed agent");
+    expect(liveTasksPanelSource).toContain("Response worker");
     expect(liveTasksPanelSource).toContain("Assistant response pending");
     expect(liveTasksPanelSource).not.toContain(
       "tasks.some(taskHasMissingGoogleCalendarScope)",

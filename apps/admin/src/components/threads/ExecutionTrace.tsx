@@ -7,9 +7,18 @@ import { useQuery, useSubscription } from "urql";
 import { graphql } from "@/gql";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { formatCost } from "@/lib/activity-utils";
-import { ThreadTurnsForThreadQuery, ThreadTurnEventsQuery, TurnInvocationLogsQuery, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import {
+  ThreadTurnsForThreadQuery,
+  ThreadTurnEventsQuery,
+  TurnInvocationLogsQuery,
+  OnThreadTurnUpdatedSubscription,
+} from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import {
   Activity,
@@ -38,17 +47,38 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const statusConfig: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
-  succeeded: { icon: CheckCircle2, color: "text-green-500", label: "Succeeded" },
+const statusConfig: Record<
+  string,
+  { icon: typeof CheckCircle2; color: string; label: string }
+> = {
+  succeeded: {
+    icon: CheckCircle2,
+    color: "text-green-500",
+    label: "Succeeded",
+  },
   failed: { icon: AlertCircle, color: "text-red-500", label: "Failed" },
   running: { icon: Loader2, color: "text-blue-500", label: "Running" },
-  skipped: { icon: SkipForward, color: "text-muted-foreground", label: "Skipped" },
-  cancelled: { icon: AlertCircle, color: "text-muted-foreground", label: "Cancelled" },
+  skipped: {
+    icon: SkipForward,
+    color: "text-muted-foreground",
+    label: "Skipped",
+  },
+  cancelled: {
+    icon: AlertCircle,
+    color: "text-muted-foreground",
+    label: "Cancelled",
+  },
 };
 
 function parseJsonField(raw: unknown): Record<string, unknown> | null {
   if (!raw) return null;
-  if (typeof raw === "string") { try { return JSON.parse(raw); } catch { return null; } }
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
   return raw as Record<string, unknown>;
 }
 
@@ -82,7 +112,10 @@ function formatInvocationSource(source: unknown): string | null {
     api: "Automation",
     email: "Email",
   };
-  return labels[key] ?? raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    labels[key] ??
+    raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
 }
 
 // ─── Turn Events ────────────────────────────────────────────────────────────
@@ -94,7 +127,10 @@ function TurnEvents({ runId }: { runId: string }) {
   });
 
   const events = (result.data as any)?.threadTurnEvents ?? [];
-  if (events.length === 0) return <p className="text-xs text-muted-foreground pl-6">No events recorded.</p>;
+  if (events.length === 0)
+    return (
+      <p className="text-xs text-muted-foreground pl-6">No events recorded.</p>
+    );
 
   return (
     <div className="pl-6 space-y-1">
@@ -102,9 +138,13 @@ function TurnEvents({ runId }: { runId: string }) {
         const payload = parseJsonField(evt.payload);
         return (
           <div key={evt.id} className="flex items-start gap-2 text-xs">
-            <span className="shrink-0 font-mono text-muted-foreground w-5 text-right">{evt.seq}</span>
+            <span className="shrink-0 font-mono text-muted-foreground w-5 text-right">
+              {evt.seq}
+            </span>
             <EventBadge type={evt.eventType} level={evt.level} />
-            <span className="text-foreground">{evt.message || evt.eventType}</span>
+            <span className="text-foreground">
+              {evt.message || evt.eventType}
+            </span>
             {payload && Object.keys(payload).length > 0 && (
               <span className="text-muted-foreground truncate max-w-[300px]">
                 {evt.eventType === "signal" && payload.signal
@@ -116,7 +156,9 @@ function TurnEvents({ runId }: { runId: string }) {
                       : ""}
               </span>
             )}
-            <span className="ml-auto text-muted-foreground shrink-0 pr-4">{relativeTime(evt.createdAt)}</span>
+            <span className="ml-auto text-muted-foreground shrink-0 pr-4">
+              {relativeTime(evt.createdAt)}
+            </span>
           </div>
         );
       })}
@@ -133,7 +175,9 @@ function EventBadge({ type, level }: { type: string; level?: string }) {
     turn_loop: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   };
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${colors[type] || "bg-muted text-muted-foreground"}`}>
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${colors[type] || "bg-muted text-muted-foreground"}`}
+    >
       {type}
     </span>
   );
@@ -203,7 +247,9 @@ function buildTimelineFromUsage(
 
   // Add LLM call if we have model info
   if (model) {
-    const shortModel = model.replace(/^us\.anthropic\./, "").replace(/-v\d+:\d+$/, "");
+    const shortModel = model
+      .replace(/^us\.anthropic\./, "")
+      .replace(/-v\d+:\d+$/, "");
     events.push({
       type: "llm",
       timestamp: "",
@@ -221,7 +267,10 @@ function buildTimelineFromUsage(
     events.push({
       type: "tool_call",
       timestamp: "",
-      branch: ti.type === "sub_agent" ? `sub-agent:${(ti.tool_name || "").toLowerCase()}` : "parent",
+      branch:
+        ti.type === "sub_agent"
+          ? `sub-agent:${(ti.tool_name || "").toLowerCase()}`
+          : "parent",
       toolName: ti.tool_name || "unknown",
       toolType: ti.type || "tool",
       toolInput: ti.input_preview || "",
@@ -270,12 +319,16 @@ function buildTimeline(
 
     if (inv.toolUses?.length > 0) {
       for (const toolName of inv.toolUses) {
-        const matchingTool = toolInvocations.find((ti: any) => ti.tool_name === toolName);
+        const matchingTool = toolInvocations.find(
+          (ti: any) => ti.tool_name === toolName,
+        );
 
         let toolInput = matchingTool?.input_preview || "";
         if (!toolInput && inv.outputPreview) {
           const toolUseMatch = inv.outputPreview.match(
-            new RegExp(`\\[tool_use:\\s*${toolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\((.+?)\\)\\]`)
+            new RegExp(
+              `\\[tool_use:\\s*${toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\((.+?)\\)\\]`,
+            ),
           );
           if (toolUseMatch) toolInput = toolUseMatch[1];
         }
@@ -286,7 +339,9 @@ function buildTimeline(
           for (let j = invIdx + 1; j < invocations.length; j++) {
             const nextInv = invocations[j];
             if (nextInv.inputPreview?.includes("tool_result")) {
-              const resultMatch = nextInv.inputPreview.match(/\[tool_result:\s*([\s\S]*?)(?:\]$|\[(?:Assistant|User|Tools)\])/);
+              const resultMatch = nextInv.inputPreview.match(
+                /\[tool_result:\s*([\s\S]*?)(?:\]$|\[(?:Assistant|User|Tools)\])/,
+              );
               if (resultMatch) {
                 toolOutput = resultMatch[1].trim();
                 break;
@@ -295,9 +350,10 @@ function buildTimeline(
           }
         }
 
-        const toolBranch = matchingTool?.type === "sub_agent"
-          ? `sub-agent:${toolName.toLowerCase()}`
-          : branch;
+        const toolBranch =
+          matchingTool?.type === "sub_agent"
+            ? `sub-agent:${toolName.toLowerCase()}`
+            : branch;
 
         events.push({
           type: "tool_call",
@@ -420,8 +476,11 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
   return branches;
 }
 
-function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan | null {
-  return branches.find(b => b.eventIndices.includes(eventIdx)) ?? null;
+function getBranchForEvent(
+  eventIdx: number,
+  branches: BranchSpan[],
+): BranchSpan | null {
+  return branches.find((b) => b.eventIndices.includes(eventIdx)) ?? null;
 }
 
 function ExecutionTimeline({
@@ -453,40 +512,72 @@ function ExecutionTimeline({
   });
 
   const invocations = (result.data as any)?.turnInvocationLogs ?? [];
-  if (result.fetching && invocations.length === 0) return <p className="text-[10px] text-muted-foreground px-3">Loading timeline...</p>;
+  if (result.fetching && invocations.length === 0)
+    return (
+      <p className="text-[10px] text-muted-foreground px-3">
+        Loading timeline...
+      </p>
+    );
 
   // Build timeline from CloudWatch invocations if available, otherwise from tool_invocations usage data
-  const events = invocations.length > 0
-    ? buildTimeline(invocations, toolInvocations, "", responseText)
-    : buildTimelineFromUsage(toolInvocations, responseText, model, inputTokens, outputTokens, totalCostFromTurn);
+  const events =
+    invocations.length > 0
+      ? buildTimeline(invocations, toolInvocations, "", responseText)
+      : buildTimelineFromUsage(
+          toolInvocations,
+          responseText,
+          model,
+          inputTokens,
+          outputTokens,
+          totalCostFromTurn,
+        );
 
   if (events.length === 0) return null;
 
-  const totalCost = invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0);
-  const totalInputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.inputTokenCount || 0), 0);
-  const totalOutputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.outputTokenCount || 0), 0);
+  const totalCost = invocations.reduce(
+    (sum: number, inv: any) => sum + (inv.costUsd || 0),
+    0,
+  );
+  const totalInputTokens = invocations.reduce(
+    (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
+    0,
+  );
+  const totalOutputTokens = invocations.reduce(
+    (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
+    0,
+  );
   const svgHeight = events.length * ROW_H;
 
   const branches = buildBranches(events);
   const hasBranches = branches.length > 0;
-  const maxLane = hasBranches ? Math.max(...branches.map(b => b.laneIndex)) : -1;
+  const maxLane = hasBranches
+    ? Math.max(...branches.map((b) => b.laneIndex))
+    : -1;
   const svgWidth = hasBranches ? laneX(maxLane) + 12 : 52;
   const contentPadding = hasBranches ? laneX(maxLane) + 14 : 34;
 
-  const firstFork = hasBranches ? Math.min(...branches.map(b => b.forkIdx)) : -1;
-  const lastMerge = hasBranches ? Math.max(...branches.map(b => b.mergeIdx)) : -1;
+  const firstFork = hasBranches
+    ? Math.min(...branches.map((b) => b.forkIdx))
+    : -1;
+  const lastMerge = hasBranches
+    ? Math.max(...branches.map((b) => b.mergeIdx))
+    : -1;
 
   let lastParentBeforeFork = 0;
   if (hasBranches) {
     for (let i = firstFork - 1; i >= 0; i--) {
-      if (!isSubAgentBranch(events[i].branch)) { lastParentBeforeFork = i; break; }
+      if (!isSubAgentBranch(events[i].branch)) {
+        lastParentBeforeFork = i;
+        break;
+      }
     }
   }
 
   return (
     <div className="px-3 space-y-2">
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
+        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in
+        + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
       </p>
       <div className="relative" style={{ paddingLeft: contentPadding }}>
         {/* SVG branch lines */}
@@ -497,12 +588,44 @@ function ExecutionTimeline({
           style={{ overflow: "visible" }}
         >
           {!hasBranches ? (
-            <line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
+            <line
+              x1={MAIN_X}
+              y1={ROW_H / 2}
+              x2={MAIN_X}
+              y2={svgHeight - ROW_H / 2}
+              stroke={MAIN_COLOR}
+              strokeWidth={2.5}
+              strokeOpacity={0.5}
+            />
           ) : (
             <>
-              <line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={firstFork * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
-              <line x1={MAIN_X} y1={firstFork * ROW_H + ROW_H / 2} x2={MAIN_X} y2={lastMerge * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.3} />
-              <line x1={MAIN_X} y1={lastMerge * ROW_H + ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
+              <line
+                x1={MAIN_X}
+                y1={ROW_H / 2}
+                x2={MAIN_X}
+                y2={firstFork * ROW_H + ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                strokeOpacity={0.5}
+              />
+              <line
+                x1={MAIN_X}
+                y1={firstFork * ROW_H + ROW_H / 2}
+                x2={MAIN_X}
+                y2={lastMerge * ROW_H + ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                strokeOpacity={0.3}
+              />
+              <line
+                x1={MAIN_X}
+                y1={lastMerge * ROW_H + ROW_H / 2}
+                x2={MAIN_X}
+                y2={svgHeight - ROW_H / 2}
+                stroke={MAIN_COLOR}
+                strokeWidth={2.5}
+                strokeOpacity={0.5}
+              />
 
               {branches.map((branch) => {
                 const bx = laneX(branch.laneIndex);
@@ -510,25 +633,42 @@ function ExecutionTimeline({
                 const mergeY = branch.mergeIdx * ROW_H + ROW_H / 2;
                 const forkEndY = departY + ROW_H;
                 const mergeStartY = mergeY - ROW_H;
-                const lineTopY = Math.min(forkEndY, branch.forkIdx * ROW_H + ROW_H / 2);
-                const lineBottomY = Math.max(mergeStartY, branch.eventIndices[branch.eventIndices.length - 1] * ROW_H + ROW_H / 2);
+                const lineTopY = Math.min(
+                  forkEndY,
+                  branch.forkIdx * ROW_H + ROW_H / 2,
+                );
+                const lineBottomY = Math.max(
+                  mergeStartY,
+                  branch.eventIndices[branch.eventIndices.length - 1] * ROW_H +
+                    ROW_H / 2,
+                );
 
                 return (
                   <g key={branch.name}>
                     <path
                       d={`M ${MAIN_X} ${departY} C ${MAIN_X} ${departY + ROW_H * 0.6} ${bx} ${forkEndY - ROW_H * 0.4} ${bx} ${forkEndY}`}
-                      fill="none" stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                      fill="none"
+                      stroke={branch.color}
+                      strokeWidth={2.5}
+                      strokeOpacity={0.5}
                     />
                     {lineTopY < lineBottomY && (
                       <line
-                        x1={bx} y1={lineTopY}
-                        x2={bx} y2={lineBottomY}
-                        stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                        x1={bx}
+                        y1={lineTopY}
+                        x2={bx}
+                        y2={lineBottomY}
+                        stroke={branch.color}
+                        strokeWidth={2.5}
+                        strokeOpacity={0.5}
                       />
                     )}
                     <path
                       d={`M ${bx} ${mergeStartY} C ${bx} ${mergeStartY + ROW_H * 0.6} ${MAIN_X} ${mergeY - ROW_H * 0.4} ${MAIN_X} ${mergeY}`}
-                      fill="none" stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                      fill="none"
+                      stroke={branch.color}
+                      strokeWidth={2.5}
+                      strokeOpacity={0.5}
                     />
                   </g>
                 );
@@ -541,9 +681,7 @@ function ExecutionTimeline({
             const cx = branch ? laneX(branch.laneIndex) : MAIN_X;
             const cy = i * ROW_H + ROW_H / 2;
             const color = branch ? branch.color : MAIN_COLOR;
-            return (
-              <circle key={i} cx={cx} cy={cy} r={NODE_R} fill={color} />
-            );
+            return <circle key={i} cx={cx} cy={cy} r={NODE_R} fill={color} />;
           })}
         </svg>
 
@@ -563,54 +701,93 @@ function ExecutionTimeline({
             label = ev.modelId || "LLM";
             rightDetail = (
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                {formatTokens(ev.inputTokens || 0)}→{formatTokens(ev.outputTokens || 0)}
-                {ev.cacheReadTokens ? <span className="text-green-500 ml-1">({formatTokens(ev.cacheReadTokens)} cached)</span> : null}
-                {" "}{formatCost(ev.costUsd || 0)}
+                {formatTokens(ev.inputTokens || 0)}→
+                {formatTokens(ev.outputTokens || 0)}
+                {ev.cacheReadTokens ? (
+                  <span className="text-green-500 ml-1">
+                    ({formatTokens(ev.cacheReadTokens)} cached)
+                  </span>
+                ) : null}{" "}
+                {formatCost(ev.costUsd || 0)}
               </span>
             );
             const parts: string[] = [];
-            parts.push(`Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${ev.inputTokens} in → ${ev.outputTokens} out  ·  ${formatCost(ev.costUsd || 0)}`);
-            if (ev.inputPreview) parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
-            if (ev.outputPreview) parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
+            parts.push(
+              `Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${ev.inputTokens} in → ${ev.outputTokens} out  ·  ${formatCost(ev.costUsd || 0)}`,
+            );
+            if (ev.inputPreview)
+              parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
+            if (ev.outputPreview)
+              parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
             clickTitle = `${ev.modelId}${isOnBranch ? ` (${branch!.name})` : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "tool_call") {
             const isSub = ev.toolType === "sub_agent";
-            icon = isSub
-              ? <Bot className="h-3.5 w-3.5" style={{ color: branch?.color || "rgb(168, 85, 247)" }} />
-              : <Zap className="h-3.5 w-3.5 text-amber-400" />;
+            icon = isSub ? (
+              <Bot
+                className="h-3.5 w-3.5"
+                style={{ color: branch?.color || "rgb(168, 85, 247)" }}
+              />
+            ) : (
+              <Zap className="h-3.5 w-3.5 text-amber-400" />
+            );
             label = ev.toolName || "tool";
 
             if (isSub && branch) {
               const branchEvents = branch.eventIndices
-                .map(idx => events[idx])
-                .filter(e => e.type === "llm");
-              const branchIn = branchEvents.reduce((s, e) => s + (e.inputTokens || 0), 0);
-              const branchOut = branchEvents.reduce((s, e) => s + (e.outputTokens || 0), 0);
-              const branchCost = branchEvents.reduce((s, e) => s + (e.costUsd || 0), 0);
+                .map((idx) => events[idx])
+                .filter((e) => e.type === "llm");
+              const branchIn = branchEvents.reduce(
+                (s, e) => s + (e.inputTokens || 0),
+                0,
+              );
+              const branchOut = branchEvents.reduce(
+                (s, e) => s + (e.outputTokens || 0),
+                0,
+              );
+              const branchCost = branchEvents.reduce(
+                (s, e) => s + (e.costUsd || 0),
+                0,
+              );
               rightDetail = (
                 <span className="flex items-center gap-2">
-                  <span className="text-[11px] tabular-nums" style={{ color: branch.color }}>
-                    {formatTokens(branchIn)}→{formatTokens(branchOut)} {formatCost(branchCost)}
+                  <span
+                    className="text-[11px] tabular-nums"
+                    style={{ color: branch.color }}
+                  >
+                    {formatTokens(branchIn)}→{formatTokens(branchOut)}{" "}
+                    {formatCost(branchCost)}
                   </span>
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">sub-agent</Badge>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] px-1.5 py-0 text-muted-foreground"
+                  >
+                    sub-agent
+                  </Badge>
                 </span>
               );
             } else {
               rightDetail = (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+                <Badge
+                  variant="outline"
+                  className="text-[9px] px-1.5 py-0 text-muted-foreground"
+                >
                   {isSub ? "sub-agent" : "tool"}
                 </Badge>
               );
             }
             const parts: string[] = [];
-            parts.push(`${isSub ? "Sub-Agent" : "MCP Tool"}  ·  ${ev.toolName}`);
+            parts.push(
+              `${isSub ? "Sub-Agent" : "MCP Tool"}  ·  ${ev.toolName}`,
+            );
             if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
             clickTitle = `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
-            icon = <Bot className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />;
+            icon = (
+              <Bot className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />
+            );
             label = agentName || "Agent";
             rightDetail = (
               <span className="text-[11px] text-muted-foreground truncate max-w-[250px]">
@@ -644,9 +821,18 @@ function ExecutionTimeline({
 
 // ─── Single Turn Row ────────────────────────────────────────────────────────
 
-function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) {
+function TurnRow({
+  turn,
+  agentName,
+}: {
+  turn: any;
+  agentName?: string | null;
+}) {
   const [open, setOpen] = useState(false);
-  const [detailDialog, setDetailDialog] = useState<{ title: string; content: string } | null>(null);
+  const [detailDialog, setDetailDialog] = useState<{
+    title: string;
+    content: string;
+  } | null>(null);
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
   const cfg = statusConfig[turn.status] || statusConfig.failed;
@@ -656,7 +842,9 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
   const outputTokens = usage?.output_tokens;
   const cachedTokens = usage?.cached_read_tokens;
   const title = "Thinking";
-  const sourceLabel = formatInvocationSource(turn.triggerName || turn.invocationSource);
+  const sourceLabel = formatInvocationSource(
+    turn.triggerName || turn.invocationSource,
+  );
   const statusColorClass = cfg.color;
 
   return (
@@ -676,40 +864,57 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
               </span>
             )}
           </div>
-          {open
-            ? <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            : <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          {open ? (
+            <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          )}
 
           {turn.turnNumber && (
-            <span className="text-xs text-muted-foreground">Turn #{turn.turnNumber}</span>
+            <span className="text-xs text-muted-foreground">
+              Turn #{turn.turnNumber}
+            </span>
           )}
 
           {turn.retryAttempt > 0 && (
-            <Badge variant="secondary" className="text-[10px]">retry #{turn.retryAttempt}</Badge>
+            <Badge variant="secondary" className="text-[10px]">
+              retry #{turn.retryAttempt}
+            </Badge>
           )}
 
           {/* Metrics row */}
           <div className="mt-1 flex min-w-0 flex-1 items-center justify-end gap-3 overflow-hidden text-xs text-muted-foreground">
             {inputTokens != null && (
-              <span className="flex min-w-0 items-center gap-0.5 truncate" title="Input / Output tokens">
+              <span
+                className="flex min-w-0 items-center gap-0.5 truncate"
+                title="Input / Output tokens"
+              >
                 <Zap className="h-3 w-3" />
                 {formatTokens(inputTokens)} → {formatTokens(outputTokens)}
                 {cachedTokens ? ` (${formatTokens(cachedTokens)} cached)` : ""}
               </span>
             )}
             {durationMs != null && (
-              <span className="flex min-w-0 items-center gap-0.5 truncate" title="Duration">
+              <span
+                className="flex min-w-0 items-center gap-0.5 truncate"
+                title="Duration"
+              >
                 <Clock className="h-3 w-3" />
                 {formatDuration(durationMs)}
               </span>
             )}
             {turn.totalCost != null && turn.totalCost > 0 && (
-              <span className="flex min-w-0 items-center gap-0.5 truncate font-medium" title="Cost">
+              <span
+                className="flex min-w-0 items-center gap-0.5 truncate font-medium"
+                title="Cost"
+              >
                 <DollarSign className="h-3 w-3" />
                 {formatCost(turn.totalCost)}
               </span>
             )}
-            <span className="w-16 shrink-0 text-right">{relativeTime(turn.startedAt || turn.createdAt)}</span>
+            <span className="w-16 shrink-0 text-right">
+              {relativeTime(turn.startedAt || turn.createdAt)}
+            </span>
           </div>
         </div>
       </CollapsibleTrigger>
@@ -719,9 +924,15 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
           {/* Summary info at top */}
           <div className="px-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground font-mono">
             <span>ID: {turn.id.slice(0, 8)}</span>
-            {turn.startedAt && <span>Started: {formatDateTime(turn.startedAt)}</span>}
-            {turn.finishedAt && <span>Finished: {formatDateTime(turn.finishedAt)}</span>}
-            {turn.invocationSource && <span>Source: {turn.invocationSource}</span>}
+            {turn.startedAt && (
+              <span>Started: {formatDateTime(turn.startedAt)}</span>
+            )}
+            {turn.finishedAt && (
+              <span>Finished: {formatDateTime(turn.finishedAt)}</span>
+            )}
+            {turn.invocationSource && (
+              <span>Source: {turn.invocationSource}</span>
+            )}
           </div>
 
           {/* Error */}
@@ -738,8 +949,11 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
               toolInvocations={
                 (usage?.tool_invocations?.length > 0
                   ? usage.tool_invocations
-                  : (usage?.tools_called || []).map((name: string) => ({ tool_name: name, type: "tool", status: "success" }))
-                ) as any[]
+                  : (usage?.tools_called || []).map((name: string) => ({
+                      tool_name: name,
+                      type: "tool",
+                      status: "success",
+                    }))) as any[]
               }
               model={usage?.model || ""}
               inputTokens={usage?.input_tokens || 0}
@@ -754,11 +968,21 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
       </CollapsibleContent>
 
       {/* Detail viewer dialog */}
-      <Dialog open={!!detailDialog} onOpenChange={(open) => { if (!open) setDetailDialog(null); }}>
-        <DialogContent className="h-[85vh] flex flex-col" style={{ width: "90vw", maxWidth: 900 }}>
+      <Dialog
+        open={!!detailDialog}
+        onOpenChange={(open) => {
+          if (!open) setDetailDialog(null);
+        }}
+      >
+        <DialogContent
+          className="h-[85vh] flex flex-col"
+          style={{ width: "90vw", maxWidth: 900 }}
+        >
           <DialogHeader>
             <div className="flex items-center justify-between pr-8">
-              <DialogTitle className="text-sm font-medium font-mono">{detailDialog?.title}</DialogTitle>
+              <DialogTitle className="text-sm font-medium font-mono">
+                {detailDialog?.title}
+              </DialogTitle>
               <button
                 type="button"
                 className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-accent"
@@ -806,12 +1030,19 @@ const MessageRow = memo(function MessageRow({
   message,
   agentMap,
   defaultAgentName,
+  assistantLabel,
   onOpenArtifact,
 }: {
   message: ChatMessage;
   agentMap?: Map<string, AgentRef>;
   defaultAgentName?: string | null;
-  onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
+  assistantLabel?: string | null;
+  onOpenArtifact?: (artifact: {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+  }) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -819,7 +1050,10 @@ const MessageRow = memo(function MessageRow({
   const Icon = isUser ? User : Bot;
   const label = isUser
     ? "User"
-    : (message.senderId ? agentMap?.get(message.senderId)?.name : null) || defaultAgentName || "Agent";
+    : (message.senderId ? agentMap?.get(message.senderId)?.name : null) ||
+      assistantLabel ||
+      defaultAgentName ||
+      "Agent";
   const content = (message.content || "").trim();
   const firstLine = content.split("\n")[0].slice(0, 120);
   const hasContent = content.length > 0;
@@ -845,17 +1079,22 @@ const MessageRow = memo(function MessageRow({
           onClick={hasContent ? () => setExpanded((v) => !v) : undefined}
         >
           <span className="text-sm font-medium">{label}</span>
-          {hasContent && (
-            expanded
-              ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span className="ml-auto text-xs text-muted-foreground shrink-0">{relativeTime(message.createdAt)}</span>
+          {hasContent &&
+            (expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ))}
+          <span className="ml-auto text-xs text-muted-foreground shrink-0">
+            {relativeTime(message.createdAt)}
+          </span>
         </div>
         {expanded ? (
           <>
             <div className="text-sm text-muted-foreground prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:my-2 max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </ReactMarkdown>
             </div>
             {!isUser && (
               <div className="flex justify-end mt-1">
@@ -865,9 +1104,11 @@ const MessageRow = memo(function MessageRow({
                   className="p-1 rounded hover:bg-accent transition-colors"
                   title="Copy message"
                 >
-                  {copied
-                    ? <Check className="h-3.5 w-3.5 text-green-500" />
-                    : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
                 </button>
               </div>
             )}
@@ -880,11 +1121,16 @@ const MessageRow = memo(function MessageRow({
         {artifact && onOpenArtifact && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onOpenArtifact(artifact); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenArtifact(artifact);
+            }}
             className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md border border-border hover:bg-accent/40 transition-colors text-left w-full"
           >
             <FileText className="h-4 w-4 shrink-0 text-primary" />
-            <span className="text-sm font-medium text-primary truncate">{artifact.title}</span>
+            <span className="text-sm font-medium text-primary truncate">
+              {artifact.title}
+            </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground ml-auto" />
           </button>
         )}
@@ -922,7 +1168,13 @@ interface ExecutionTraceProps {
   messages?: ChatMessage[];
   agentMap?: Map<string, AgentRef>;
   defaultAgentName?: string | null;
-  onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
+  assistantLabel?: string | null;
+  onOpenArtifact?: (artifact: {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+  }) => void;
 }
 
 export function ExecutionTrace({
@@ -931,6 +1183,7 @@ export function ExecutionTrace({
   messages = [],
   agentMap,
   defaultAgentName,
+  assistantLabel,
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const { user } = useAuth();
@@ -969,12 +1222,19 @@ export function ExecutionTrace({
   ].sort((a, b) => a.sortDate - b.sortDate);
 
   // Aggregate turn stats
-  const totalCost = turns.reduce((sum: number, t: any) => sum + (t.totalCost || 0), 0);
+  const totalCost = turns.reduce(
+    (sum: number, t: any) => sum + (t.totalCost || 0),
+    0,
+  );
   const totalTurns = turns.length;
-  const succeededTurns = turns.filter((t: any) => t.status === "succeeded").length;
+  const succeededTurns = turns.filter(
+    (t: any) => t.status === "succeeded",
+  ).length;
   const totalTokens = turns.reduce((sum: number, t: any) => {
     const u = parseJsonField(t.usageJson);
-    return sum + (Number(u?.input_tokens) || 0) + (Number(u?.output_tokens) || 0);
+    return (
+      sum + (Number(u?.input_tokens) || 0) + (Number(u?.output_tokens) || 0)
+    );
   }, 0);
 
   const activityHeader = (
@@ -987,7 +1247,8 @@ export function ExecutionTrace({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Cpu className="h-3.5 w-3.5" />
-            {totalTurns} turn{totalTurns !== 1 ? "s" : ""} ({succeededTurns} succeeded)
+            {totalTurns} turn{totalTurns !== 1 ? "s" : ""} ({succeededTurns}{" "}
+            succeeded)
           </span>
           {totalTokens > 0 && (
             <span className="flex items-center gap-1">
@@ -1031,7 +1292,11 @@ export function ExecutionTrace({
               <TurnRow
                 key={item.turn.id}
                 turn={item.turn}
-                agentName={item.turn.agentId ? agentMap?.get(item.turn.agentId)?.name : null}
+                agentName={
+                  item.turn.agentId
+                    ? agentMap?.get(item.turn.agentId)?.name
+                    : null
+                }
               />
             ) : (
               <MessageRow
@@ -1039,13 +1304,13 @@ export function ExecutionTrace({
                 message={item.message}
                 agentMap={agentMap}
                 defaultAgentName={defaultAgentName}
+                assistantLabel={assistantLabel}
                 onOpenArtifact={onOpenArtifact}
               />
             ),
           )}
         </div>
       )}
-
     </div>
   );
 }

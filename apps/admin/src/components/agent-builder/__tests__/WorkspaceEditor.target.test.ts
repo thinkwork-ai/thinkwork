@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   workspaceEditorActions,
   workspaceEditorCapabilities,
+  workspaceEditorTargetKey,
 } from "../WorkspaceEditor";
 
 describe("workspace editor target capabilities", () => {
@@ -43,6 +44,15 @@ describe("workspace editor target capabilities", () => {
       "add-templates-folder",
       "add-memory-folder",
     ]);
+  });
+
+  it("keys Computer targets by durable id instead of object identity", () => {
+    expect(workspaceEditorTargetKey({ computerId: "computer-marco" })).toBe(
+      "computer:computer-marco",
+    );
+    expect(workspaceEditorTargetKey({ computerId: "computer-marco" })).toBe(
+      workspaceEditorTargetKey({ computerId: "computer-marco" }),
+    );
   });
 
   it("limits defaults to file and folder authoring", () => {
