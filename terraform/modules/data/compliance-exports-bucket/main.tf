@@ -215,6 +215,29 @@ resource "aws_iam_role_policy" "runner_s3_allow" {
   })
 }
 
+resource "aws_iam_role_policy" "runner_secrets" {
+  count = length(var.database_secret_arn) > 0 ? 1 : 0
+  name  = "exports-runner-secrets"
+  role  = aws_iam_role.runner_lambda.id
+
+  # The runner reads the writer-pool DB credentials at module-load via
+  # GetSecretValue. Without this grant the runner throws AccessDenied
+  # at the first SQS-triggered invocation (deploy run 25561658625
+  # failed the smoke gate with this exact error). Scoped to the single
+  # secret ARN — no wildcard.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "RunnerDatabaseSecretRead"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.database_secret_arn
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "runner_s3_deny_other_buckets" {
   name = "exports-s3-deny-other-buckets"
   role = aws_iam_role.runner_lambda.id

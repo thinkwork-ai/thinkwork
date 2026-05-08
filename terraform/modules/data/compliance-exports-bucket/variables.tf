@@ -32,6 +32,12 @@ variable "bucket_name" {
   }
 }
 
+variable "database_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the writer-pool DB credentials. The runner Lambda reads this at module-load to construct the Aurora connection string for INSERT/UPDATE on compliance.export_jobs and SELECT on compliance.audit_events. Default empty so existing module consumers don't break before they wire it; the runner throws a deterministic error if unset at runtime."
+  type        = string
+  default     = ""
+}
+
 variable "expiration_days" {
   description = "Number of days an export object lives before lifecycle expiration. SOC2 walkthrough auditors typically download artifacts within hours; 7 days is the audit-window default."
   type        = number

@@ -161,6 +161,12 @@ module "compliance_exports" {
   account_id  = var.account_id
   region      = var.region
   bucket_name = local.compliance_exports_bucket_name
+  # Runner Lambda reads writer-pool DB credentials at module-load to
+  # construct the Aurora connection string for INSERT/UPDATE on
+  # compliance.export_jobs and SELECT on compliance.audit_events.
+  # Without this grant the runner throws AccessDenied at first SQS
+  # invocation (deploy run 25561658625 failed the smoke gate this way).
+  database_secret_arn = module.database.graphql_db_secret_arn
 }
 
 module "database" {
