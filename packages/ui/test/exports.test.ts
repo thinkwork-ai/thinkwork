@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   Avatar,
+  BadgeSelectorText,
   Button,
+  ChartContainer,
+  Combobox,
+  CopyableRow,
+  DataTable,
   Dialog,
+  FilterBarSearch,
+  InputGroup,
+  MultiSelect,
   Sidebar,
+  Spinner,
   ThemeProvider,
+  Toaster,
   cn,
   useIsMobile,
   useTheme,
@@ -34,5 +44,18 @@ describe("@thinkwork/ui barrel exports", () => {
     expect(Dialog).toBeDefined();
     expect(Sidebar).toBeDefined();
     expect(Avatar).toBeDefined();
+    expect(Toaster).toBeDefined();
+    expect(ChartContainer).toBeDefined();
+  });
+
+  it("exposes the 7 non-stock custom components from the root barrel", () => {
+    expect(BadgeSelectorText).toBeDefined();
+    expect(MultiSelect).toBeDefined();
+    expect(CopyableRow).toBeDefined();
+    expect(InputGroup).toBeDefined();
+    expect(DataTable).toBeDefined();
+    expect(FilterBarSearch).toBeDefined();
+    expect(Combobox).toBeDefined();
+    expect(Spinner).toBeDefined();
   });
 });

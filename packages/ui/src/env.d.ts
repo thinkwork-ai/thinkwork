@@ -3,12 +3,21 @@
 // a Vite (or compatible) bundler that provides import.meta.env at runtime;
 // this declaration lets the package's own typecheck pass without pulling
 // vite/client as a dependency.
-interface ImportMetaEnv {
-  readonly DEV?: boolean;
-  readonly PROD?: boolean;
-  readonly MODE?: string;
-}
+//
+// `export {}` makes this a module so the augmentation is scoped via
+// `declare global` rather than leaking unconditionally. Field shapes
+// match Vite's canonical declaration (DEV/PROD as required boolean,
+// MODE as required string) so consumers don't get a weaker subtype.
+export {};
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
+declare global {
+  interface ImportMetaEnv {
+    readonly DEV: boolean;
+    readonly PROD: boolean;
+    readonly MODE: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
 }
