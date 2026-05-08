@@ -71,23 +71,25 @@ export function ComputerWorkbench() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-6 px-4 py-8 sm:px-6">
-      <section className="text-center">
-        <h1 className="text-balance text-4xl font-light tracking-normal sm:text-5xl">
-          ThinkWork Computer
-        </h1>
-      </section>
+    <section className="flex min-h-full w-full flex-1 bg-muted/30 text-foreground dark:bg-card">
+      <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-5 px-4 py-8 sm:px-6">
+        <header className="text-center">
+          <h1 className="text-balance text-3xl font-semibold leading-tight tracking-normal sm:text-4xl">
+            ThinkWork Computer
+          </h1>
+        </header>
 
-      <ComputerComposer
-        value={prompt}
-        onChange={setPrompt}
-        onSubmit={handleSubmit}
-        isSubmitting={fetching}
-        error={error}
-      />
+        <ComputerComposer
+          value={prompt}
+          onChange={setPrompt}
+          onSubmit={handleSubmit}
+          isSubmitting={fetching}
+          error={error}
+        />
 
-      <StarterCardGrid onSelect={setPrompt} />
-    </main>
+        <StarterCardGrid onSelect={setPrompt} />
+      </div>
+    </section>
   );
 }
 
