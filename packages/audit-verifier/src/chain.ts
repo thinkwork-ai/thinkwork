@@ -25,7 +25,13 @@ export interface ChainFailure {
 
 export interface WalkOptions {
 	dbUrl: string;
-	tenants: string[];
+	/**
+	 * Tenants to walk. Pass `"all"` to enumerate `SELECT DISTINCT
+	 * tenant_id FROM compliance.audit_events` — important when the
+	 * caller wants to catch tenants whose slices failed verification
+	 * (and so wouldn't appear in any anchor-verification-derived set).
+	 */
+	tenants: string[] | "all";
 }
 
 interface ChainRow {
@@ -40,7 +46,9 @@ export async function walkTenantChain(
 	opts: WalkOptions,
 ): Promise<ChainFailure[]> {
 	const failures: ChainFailure[] = [];
-	if (opts.tenants.length === 0) return failures;
+	if (Array.isArray(opts.tenants) && opts.tenants.length === 0) {
+		return failures;
+	}
 
 	// Lazy import — only loads pg if the auditor actually requested
 	// chain checking. R3-friendly: anchor-only consumers never trigger
@@ -60,7 +68,20 @@ export async function walkTenantChain(
 	const client = new Client({ connectionString: opts.dbUrl });
 	await client.connect();
 	try {
-		for (const tenantId of opts.tenants) {
+		// Resolve `"all"` → SELECT DISTINCT tenant_id from audit_events.
+		// This is the case where the caller doesn't know the tenant
+		// universe up-front (e.g. multi-tenant audit run). We DO NOT
+		// fall back to anchor-derived tenant sets because tenants
+		// whose slices failed verification would be silently skipped —
+		// exactly the tenants that most need a chain check.
+		let tenants: string[];
+		if (opts.tenants === "all") {
+			const distinct = await runDistinctTenants(client);
+			tenants = distinct;
+		} else {
+			tenants = opts.tenants;
+		}
+		for (const tenantId of tenants) {
 			try {
 				const cursor = client.query(
 					new Cursor(
@@ -72,7 +93,7 @@ export async function walkTenantChain(
                          ORDER BY recorded_at ASC, event_id ASC`,
 						[tenantId],
 					),
-				);
+				) as PgCursor;
 
 				let isFirst = true;
 				let lastEventHash: string | null = null;
@@ -141,7 +162,7 @@ type PgClientCtor = new (config: { connectionString: string }) => PgClient;
 
 interface PgClient {
 	connect(): Promise<void>;
-	query(cursor: PgCursor): PgCursor;
+	query(cursorOrText: PgCursor | string, values?: unknown[]): PgCursor | Promise<{ rows: unknown[] }>;
 	end(): Promise<void>;
 }
 
@@ -153,6 +174,13 @@ type PgCursorCtor = new (
 interface PgCursor {
 	read(rowCount: number, callback: (err: Error | null, rows: ChainRow[]) => void): void;
 	close(callback: (err: Error | null) => void): void;
+}
+
+async function runDistinctTenants(client: PgClient): Promise<string[]> {
+	const res = (await client.query(
+		"SELECT DISTINCT tenant_id::text AS tenant_id FROM compliance.audit_events ORDER BY tenant_id ASC",
+	)) as unknown as { rows: { tenant_id: string }[] };
+	return res.rows.map((r) => r.tenant_id);
 }
 
 function readChunk(cursor: PgCursor, n: number): Promise<ChainRow[]> {

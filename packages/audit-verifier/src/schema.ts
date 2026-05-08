@@ -102,16 +102,6 @@ export class SchemaVersionUnsupportedError extends Error {
 	}
 }
 
-/** Cheap pre-parse: check the schema_version field before zod-validating. */
-function isV1Body(value: unknown): value is { schema_version: number } {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"schema_version" in value &&
-		(value as { schema_version: unknown }).schema_version === 1
-	);
-}
-
 /** Lift schema_version to the top so unknown-version errors fire FIRST. */
 function getSchemaVersion(value: unknown): unknown {
 	if (typeof value === "object" && value !== null && "schema_version" in value) {
@@ -125,19 +115,12 @@ export function parseAnchor(json: unknown, key?: string): AnchorV1 {
 	if (version !== 1) {
 		throw new SchemaVersionUnsupportedError(version, key);
 	}
-	if (!isV1Body(json)) {
-		// Belt-and-suspenders — getSchemaVersion already established this.
-		throw new SchemaVersionUnsupportedError(version, key);
-	}
 	return AnchorSchemaV1.parse(json);
 }
 
 export function parseSlice(json: unknown, key?: string): SliceV1 {
 	const version = getSchemaVersion(json);
 	if (version !== 1) {
-		throw new SchemaVersionUnsupportedError(version, key);
-	}
-	if (!isV1Body(json)) {
 		throw new SchemaVersionUnsupportedError(version, key);
 	}
 	return SliceSchemaV1.parse(json);

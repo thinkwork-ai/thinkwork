@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import {
 	EMPTY_TREE_ROOT,
 	buildMerkleTree,
@@ -92,7 +91,10 @@ function buildSyntheticCadence(opts?: { tenants?: number }): {
 			cadence_id: CADENCE_ID,
 		};
 	});
-	void levels; // silence unused warning
+	// `levels` is computed by buildMerkleTree but the synthetic-cadence
+	// fixture only needs the root. Keep the destructuring for clarity at
+	// call sites that might want to inspect intermediate levels later.
+	void levels;
 
 	const anchor: AnchorBody = {
 		schema_version: 1,
@@ -543,8 +545,3 @@ describe("verifyBucket — flags echo + report shape", () => {
 		).rejects.toThrow(/db-url/);
 	});
 });
-
-// Suppress unused-import warning at module level for `createHash` —
-// kept as a defensive helper if a future test needs to recompute
-// expected hashes inline.
-void createHash;

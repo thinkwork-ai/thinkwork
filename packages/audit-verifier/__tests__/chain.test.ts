@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { walkTenantChain } from "../src/chain";
 
 /**
@@ -31,13 +31,21 @@ const { mockClientCtor, mockCursorCtor } = vi.hoisted(() => {
 			this.config = config;
 		}
 		async connect() {}
-		query(cursor: MockCursor): MockCursor {
-			// Pull the rows configured for this tenant_id.
-			const tenantId = cursor.values[0];
+		query(
+			arg: MockCursor | string,
+		): MockCursor | Promise<{ rows: { tenant_id: string }[] }> {
+			if (typeof arg === "string") {
+				// SELECT DISTINCT tenant_id query (the "all" path).
+				const rows = Array.from(mockClientCtor.fixture.keys())
+					.sort()
+					.map((tenant_id) => ({ tenant_id }));
+				return Promise.resolve({ rows });
+			}
+			const tenantId = arg.values[0];
 			const rows = (mockClientCtor.fixture.get(String(tenantId)) ??
 				[]) as MockChainRow[];
-			cursorStates.set(cursor, { rows, idx: 0 });
-			return cursor;
+			cursorStates.set(arg, { rows, idx: 0 });
+			return arg;
 		}
 		async end() {}
 	}
@@ -93,8 +101,6 @@ const TENANT_B = "22222222-2222-7222-8222-222222222222";
 beforeEach(() => {
 	mockClientCtor.fixture.clear();
 });
-
-import { beforeEach } from "vitest";
 
 describe("walkTenantChain", () => {
 	it("happy path: 3-row chain with valid prev_hash links produces no failures", async () => {
@@ -196,5 +202,30 @@ describe("walkTenantChain", () => {
 			tenants: [],
 		});
 		expect(failures).toEqual([]);
+	});
+
+	it("'all' tenants resolves DISTINCT tenant_id from audit_events (catches verification-skipped tenants)", async () => {
+		// Tenants A and B are present in audit_events but A's slice
+		// (in some hypothetical anchor verification) failed parsing.
+		// `tenants: "all"` MUST still walk both — this is the soundness
+		// fix vs Plan U8 (ce-doc-review P1 #1).
+		mockClientCtor.fixture.set(TENANT_A, [
+			{ event_id: "a1", event_hash: "11".repeat(32), prev_hash: null },
+		]);
+		mockClientCtor.fixture.set(TENANT_B, [
+			{ event_id: "b1", event_hash: "22".repeat(32), prev_hash: null },
+			{
+				event_id: "b2",
+				event_hash: "33".repeat(32),
+				prev_hash: "ff".repeat(32), // BROKEN
+			},
+		]);
+		const failures = await walkTenantChain({
+			dbUrl: "postgres://stub",
+			tenants: "all",
+		});
+		// Only tenant B has a break; tenant A is clean.
+		expect(failures).toHaveLength(1);
+		expect(failures[0].tenant_id).toBe(TENANT_B);
 	});
 });

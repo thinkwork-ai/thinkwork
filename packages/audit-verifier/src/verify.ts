@@ -139,27 +139,27 @@ export async function verifyBucket(
 	const schemaDrift: SchemaDrift[] = [];
 	let cadencesChecked = 0;
 	let anchorsVerified = 0;
-	const tenantsSeen = new Set<string>();
 	let firstAnchorAt: Date | null = null;
 	let lastAnchorAt: Date | null = null;
 
 	// Phase 1: enumerate anchor keys.
+	// Any error thrown by the enumerator (recoverable or not) propagates
+	// out of verifyBucket — the CLI catches at the top-level boundary and
+	// decides exit code 2 vs 1. isUnrecoverableS3Error is consulted in
+	// Phase 2's per-cadence loop where we want to keep going across other
+	// cadences when one slice fails for a recoverable reason; here, a
+	// failed enumeration means we have no work, so just propagate.
 	const anchorKeys: { key: string; lastModified: Date }[] = [];
-	try {
-		for await (const a of enumerateAnchors(s3, {
-			bucket: opts.bucket,
-			since: opts.since,
-			until: opts.until,
-		})) {
-			anchorKeys.push(a);
-			if (!firstAnchorAt || a.lastModified < firstAnchorAt)
-				firstAnchorAt = a.lastModified;
-			if (!lastAnchorAt || a.lastModified > lastAnchorAt)
-				lastAnchorAt = a.lastModified;
-		}
-	} catch (err) {
-		if (isUnrecoverableS3Error(err)) throw err;
-		throw err; // pass through; CLI decides exit code
+	for await (const a of enumerateAnchors(s3, {
+		bucket: opts.bucket,
+		since: opts.since,
+		until: opts.until,
+	})) {
+		anchorKeys.push(a);
+		if (!firstAnchorAt || a.lastModified < firstAnchorAt)
+			firstAnchorAt = a.lastModified;
+		if (!lastAnchorAt || a.lastModified > lastAnchorAt)
+			lastAnchorAt = a.lastModified;
 	}
 
 	// Phase 2: verify each cadence under the shared concurrency gate.
@@ -261,7 +261,6 @@ export async function verifyBucket(
 					continue;
 				}
 				const slice: SliceV1 = r.value.slice;
-				tenantsSeen.add(slice.tenant_id);
 
 				// (a) Leaf-drift check.
 				const expectedLeaf = computeLeafHash(
@@ -336,9 +335,14 @@ export async function verifyBucket(
 				"audit-verifier: --check-chain requires --db-url-env <VAR> or programmatic dbUrl option",
 			);
 		}
-		const targetTenants = opts.tenantId
-			? [opts.tenantId]
-			: Array.from(tenantsSeen);
+		// `tenantsSeen` is the set of tenants whose slices we successfully
+		// parsed during anchor verification. Using it as the chain-walk
+		// scope would silently skip tenants whose slices were missing or
+		// schema-drifted — exactly the tenants most likely to need a chain
+		// audit. Per Plan U8 + ce-doc-review, scope the chain walk to
+		// either an explicit --tenant-id OR the full DISTINCT set in
+		// audit_events (resolved inside walkTenantChain via lazy pg).
+		const targetTenants = opts.tenantId ? [opts.tenantId] : "all";
 		const failures = await walkTenantChain({
 			dbUrl: opts.dbUrl,
 			tenants: targetTenants,
