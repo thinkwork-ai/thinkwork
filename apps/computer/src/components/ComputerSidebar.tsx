@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
@@ -65,6 +65,13 @@ export function ComputerSidebar() {
   });
   const computerId = computerData?.myComputer?.id ?? null;
 
+  // urql's document cache only invalidates queries that previously returned
+  // the mutation's typename. When the threads list is empty, the cache has
+  // no Thread typenames — so a freshly-created thread won't refresh the
+  // sidebar. `additionalTypenames: ["Thread"]` registers the dependency so
+  // any `Thread`-touching mutation (createThread) invalidates this query.
+  const threadsContext = useMemo(() => ({ additionalTypenames: ["Thread"] }), []);
+
   const [{ data: threadsData, fetching: threadsFetching, error: threadsError }] =
     useQuery<ThreadsResult>({
       query: ComputerThreadsQuery,
@@ -74,6 +81,7 @@ export function ComputerSidebar() {
         limit: THREAD_LIMIT,
       },
       pause: !tenantId || !computerId,
+      context: threadsContext,
     });
 
   const threads = threadsData?.threads ?? [];

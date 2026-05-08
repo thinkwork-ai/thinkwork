@@ -1,23 +1,23 @@
 /**
  * Integration: the threads(tenantId, computerId) resolver enforces per-user
- * ownership of the Computer being queried. A user with a valid Cognito JWT
- * for tenant T must NOT be able to read threads on another user's Computer
- * in the same tenant.
+ * ownership of the Computer being queried, with bypasses for tenant admins
+ * (so admin's Computer detail page keeps working) and apikey callers
+ * (service-to-service trust boundary).
  *
- * Regression guard for the F1/F5 P0 findings on PR #959.
+ * Regression guard for the F1/F5 P0 findings on PR #959 plus the AC-001
+ * admin-operator regression flagged on PR #962's review.
  *
- * Strategy: a full DB-backed harness for the threads resolver does not
- * exist yet, so this test stubs `db` and `resolveCallerUserId` and
- * exercises the resolver as a unit. Behavior under verification: the
- * ownership pre-flight check returns [] when the caller does not own
- * the Computer.
+ * Strategy: stub `db` plus the `requireComputerReadAccess` helper from
+ * computers/shared. The helper already encodes owner-OR-tenant-admin and
+ * is unit-tested in its own surface; here we only verify that the
+ * threads resolver consults it correctly and that the apikey path bypasses.
  */
 
+import { GraphQLError } from "graphql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const TENANT_T = "tenant-T";
 const USER_A = "user-A";
-const USER_B = "user-B";
 
 interface ComputerRow {
 	id: string;
@@ -41,7 +41,7 @@ const COMPUTER_A: ComputerRow = {
 const COMPUTER_B: ComputerRow = {
 	id: "computer-B",
 	tenant_id: TENANT_T,
-	owner_user_id: USER_B,
+	owner_user_id: "user-B",
 };
 const A_THREADS: ThreadRow[] = [
 	{ id: "t-A1", tenant_id: TENANT_T, computer_id: "computer-A", channel: "chat", created_at: new Date("2026-05-08T10:00:00Z") },
@@ -52,8 +52,9 @@ const B_THREADS: ThreadRow[] = [
 ];
 
 const mocks = vi.hoisted(() => {
-	const callerRef = { current: "user-A" as string | null };
 	const dbState = { computers: [] as ComputerRow[], threads: [] as ThreadRow[] };
+	// Set per-test: throw to deny, return undefined to allow.
+	const accessCheckImpl = { current: (async () => undefined) as (computer: ComputerRow) => Promise<void> };
 
 	function harvestEqs(predicate: unknown): Record<string, unknown> {
 		const out: Record<string, unknown> = {};
@@ -122,12 +123,9 @@ const mocks = vi.hoisted(() => {
 		function resolveRows(): unknown[] {
 			if (isComputers) {
 				const match = dbState.computers.find(
-					(c) =>
-						c.id === captured.id &&
-						c.tenant_id === captured.tenant_id &&
-						c.owner_user_id === captured.owner_user_id,
+					(c) => c.id === captured.id && c.tenant_id === captured.tenant_id,
 				);
-				return match ? [{ id: match.id }] : [];
+				return match ? [match] : [];
 			}
 			let rows = dbState.threads.filter((r) => r.tenant_id === captured.tenant_id);
 			if (captured.computer_id) rows = rows.filter((r) => r.computer_id === captured.computer_id);
@@ -142,7 +140,10 @@ const mocks = vi.hoisted(() => {
 		select: vi.fn(() => ({ from: buildSelect })),
 	};
 
-	const resolveCallerUserId = vi.fn(async () => callerRef.current);
+	const resolveCallerUserId = vi.fn(async () => USER_A as string | null);
+	const requireComputerReadAccess = vi.fn(async (_ctx: unknown, computer: ComputerRow) => {
+		await accessCheckImpl.current(computer);
+	});
 
 	const threadToCamel = (row: ThreadRow) => ({
 		id: row.id,
@@ -151,8 +152,8 @@ const mocks = vi.hoisted(() => {
 	});
 
 	return {
-		callerRef,
 		dbState,
+		accessCheckImpl,
 		eq,
 		and,
 		desc,
@@ -160,6 +161,7 @@ const mocks = vi.hoisted(() => {
 		sql,
 		db,
 		resolveCallerUserId,
+		requireComputerReadAccess,
 		threadToCamel,
 		computersTable,
 		threadsTable,
@@ -182,47 +184,91 @@ vi.mock("../../src/graphql/resolvers/core/resolve-auth-user.js", () => ({
 	resolveCallerUserId: mocks.resolveCallerUserId,
 }));
 
+vi.mock("../../src/graphql/resolvers/computers/shared.js", () => ({
+	requireComputerReadAccess: mocks.requireComputerReadAccess,
+}));
+
 import { threads_query } from "../../src/graphql/resolvers/threads/threads.query.js";
 
-const ctxStub = {
+const cognitoCtx = {
 	auth: { authType: "cognito" as const, principalId: "principal-A" },
+} as unknown as Parameters<typeof threads_query>[2];
+
+const apikeyCtx = {
+	auth: { authType: "apikey" as const, principalId: "service-x" },
 } as unknown as Parameters<typeof threads_query>[2];
 
 describe("threads(tenantId, computerId) resolver — multi-user scope", () => {
 	beforeEach(() => {
-		mocks.callerRef.current = USER_A;
 		mocks.dbState.computers = [COMPUTER_A, COMPUTER_B];
 		mocks.dbState.threads = [...A_THREADS, ...B_THREADS];
+		mocks.accessCheckImpl.current = async () => undefined; // allow by default
 		mocks.db.select.mockClear();
+		mocks.requireComputerReadAccess.mockClear();
 	});
 
 	it("returns the caller's threads when scoped to the caller's own Computer", async () => {
+		// Owner-allow: requireComputerReadAccess does not throw.
 		const result = await threads_query(
 			null,
 			{ tenantId: TENANT_T, computerId: "computer-A" },
-			ctxStub,
+			cognitoCtx,
 		);
-		expect(Array.isArray(result)).toBe(true);
 		const ids = (result as { id: string }[]).map((r) => r.id);
 		expect(ids).toEqual(["t-A2", "t-A1"]);
+		// Verifies the resolver actually consulted the access helper.
+		expect(mocks.requireComputerReadAccess).toHaveBeenCalledTimes(1);
 	});
 
-	it("returns [] when the caller queries another user's Computer in the same tenant", async () => {
+	it("returns [] when requireComputerReadAccess throws (non-owner non-admin)", async () => {
+		mocks.accessCheckImpl.current = async () => {
+			throw new GraphQLError("Forbidden", { extensions: { code: "FORBIDDEN" } });
+		};
 		const result = await threads_query(
 			null,
 			{ tenantId: TENANT_T, computerId: "computer-B" },
-			ctxStub,
+			cognitoCtx,
 		);
 		expect(result).toEqual([]);
 	});
 
-	it("returns [] when caller-id resolution fails", async () => {
-		mocks.callerRef.current = null;
+	it("allows admin operators to read any tenant Computer's threads (admin-bypass via requireComputerReadAccess)", async () => {
+		// Admin scenario: requireComputerReadAccess succeeds even though the
+		// caller is not the Computer's owner. The real helper does this via
+		// requireTenantAdmin; here we just simulate the success path.
+		mocks.accessCheckImpl.current = async () => undefined;
 		const result = await threads_query(
 			null,
-			{ tenantId: TENANT_T, computerId: "computer-A" },
-			ctxStub,
+			{ tenantId: TENANT_T, computerId: "computer-B" },
+			cognitoCtx,
+		);
+		const ids = (result as { id: string }[]).map((r) => r.id);
+		expect(ids).toEqual(["t-B1"]);
+	});
+
+	it("returns [] when the queried Computer doesn't exist (or wrong tenant)", async () => {
+		const result = await threads_query(
+			null,
+			{ tenantId: TENANT_T, computerId: "nonexistent-computer" },
+			cognitoCtx,
 		);
 		expect(result).toEqual([]);
+		// Did not even reach the access check — short-circuits on missing row.
+		expect(mocks.requireComputerReadAccess).not.toHaveBeenCalled();
+	});
+
+	it("apikey callers bypass the ownership gate entirely (service-to-service trust)", async () => {
+		// Even if the access helper would deny, apikey callers skip it.
+		mocks.accessCheckImpl.current = async () => {
+			throw new GraphQLError("Forbidden");
+		};
+		const result = await threads_query(
+			null,
+			{ tenantId: TENANT_T, computerId: "computer-B" },
+			apikeyCtx,
+		);
+		const ids = (result as { id: string }[]).map((r) => r.id);
+		expect(ids).toEqual(["t-B1"]);
+		expect(mocks.requireComputerReadAccess).not.toHaveBeenCalled();
 	});
 });

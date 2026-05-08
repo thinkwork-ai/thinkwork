@@ -43,12 +43,12 @@ function AuthCallback() {
         storeTokensInCognitoStorage(tokens);
         // If opened as popup, notify parent and close
         if (window.opener) {
-          window.opener.location.href = "/dashboard";
+          window.opener.location.href = "/computer";
           window.close();
           return;
         }
         // Full reload so AuthProvider picks up the new session from localStorage
-        window.location.href = "/dashboard";
+        window.location.href = "/computer";
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
