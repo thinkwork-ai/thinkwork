@@ -320,6 +320,18 @@ variable "admin_certificate_arn" {
   default     = ""
 }
 
+variable "computer_domain" {
+  description = "Custom domain for the computer SPA (e.g. computer.thinkwork.ai). Leave empty for CloudFront default."
+  type        = string
+  default     = ""
+}
+
+variable "computer_certificate_arn" {
+  description = "ACM certificate ARN for the computer domain (us-east-1, required for CloudFront custom domains)."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # API Gateway (custom domain — optional)
 # ---------------------------------------------------------------------------

@@ -29,14 +29,15 @@ terraform {
 }
 
 locals {
-  apex    = var.domain
-  www     = "www.${var.domain}"
-  docs    = "docs.${var.domain}"
-  admin   = "admin.${var.domain}"
-  api     = "api.${var.domain}"
-  name_id = replace(var.domain, ".", "-")
+  apex     = var.domain
+  www      = "www.${var.domain}"
+  docs     = "docs.${var.domain}"
+  admin    = "admin.${var.domain}"
+  computer = "computer.${var.domain}"
+  api      = "api.${var.domain}"
+  name_id  = replace(var.domain, ".", "-")
 
-  # ACM SANs: always include www, conditionally include docs, admin, api.
+  # ACM SANs: always include www, conditionally include docs, admin, computer, api.
   # Gated on plain bool vars (not on CloudFront/API Gateway outputs) to keep
   # the dependency graph acyclic — distributions / custom domain names
   # depend on the cert, so the cert mustn't depend on those outputs.
@@ -44,15 +45,17 @@ locals {
     [local.www],
     var.include_docs ? [local.docs] : [],
     var.include_admin ? [local.admin] : [],
+    var.include_computer ? [local.computer] : [],
     var.include_api ? [local.api] : [],
   )
 
   # CNAME records can only be created when we have the target domain to
   # point at. Those inputs come after the cert is done, so they don't
   # participate in the cert's dependency graph.
-  create_docs_record  = var.include_docs && var.docs_cloudfront_domain_name != ""
-  create_admin_record = var.include_admin && var.admin_cloudfront_domain_name != ""
-  create_api_record   = var.include_api && var.api_gateway_id != ""
+  create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
+  create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
+  create_computer_record = var.include_computer && var.computer_cloudfront_domain_name != ""
+  create_api_record      = var.include_api && var.api_gateway_id != ""
 }
 
 ################################################################################
@@ -245,6 +248,22 @@ resource "cloudflare_record" "admin" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} admin → CloudFront"
+}
+
+################################################################################
+# computer.<domain> → computer CloudFront distribution (optional)
+################################################################################
+
+resource "cloudflare_record" "computer" {
+  count = local.create_computer_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.computer
+  content = var.computer_cloudfront_domain_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} computer → CloudFront"
 }
 
 ################################################################################

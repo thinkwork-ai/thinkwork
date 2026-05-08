@@ -42,6 +42,18 @@ variable "admin_cloudfront_domain_name" {
   default     = ""
 }
 
+variable "include_computer" {
+  description = "When true, add computer.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Same cycle-avoidance rationale as include_docs."
+  type        = bool
+  default     = false
+}
+
+variable "computer_cloudfront_domain_name" {
+  description = "CloudFront distribution domain name for the computer SPA. Used as the target for the computer.<domain> Cloudflare CNAME when include_computer is true."
+  type        = string
+  default     = ""
+}
+
 variable "include_api" {
   description = "When true, add api.<domain> to the ACM cert SANs, create an API Gateway v2 custom domain name + base-path mapping, and create a Cloudflare CNAME pointing api.<domain> at the API Gateway regional domain. The API Gateway must be in the same region as this module since regional custom domains require a cert in the same region."
   type        = bool

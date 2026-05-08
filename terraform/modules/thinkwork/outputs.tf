@@ -132,6 +132,32 @@ output "admin_bucket_name" {
   value       = module.admin_site.bucket_name
 }
 
+output "admin_url" {
+  description = "Public URL for the admin app (custom domain when set, CloudFront default otherwise)"
+  value       = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
+}
+
+# Computer static site (apps/computer — end-user surface)
+output "computer_distribution_id" {
+  description = "CloudFront distribution ID for the computer app"
+  value       = module.computer_site.distribution_id
+}
+
+output "computer_distribution_domain" {
+  description = "CloudFront domain for the computer app"
+  value       = module.computer_site.distribution_domain
+}
+
+output "computer_bucket_name" {
+  description = "S3 bucket for computer app assets"
+  value       = module.computer_site.bucket_name
+}
+
+output "computer_url" {
+  description = "Public URL for the computer app (custom domain when set, CloudFront default otherwise)"
+  value       = var.computer_domain != "" ? "https://${var.computer_domain}" : "https://${module.computer_site.distribution_domain}"
+}
+
 # Docs static site
 output "docs_distribution_id" {
   description = "CloudFront distribution ID for the docs site"
