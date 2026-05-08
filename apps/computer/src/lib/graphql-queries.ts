@@ -75,6 +75,27 @@ export const ComputerThreadQuery = gql`
   }
 `;
 
+export const ComputerThreadChunkSubscription = gql`
+  subscription ComputerThreadChunk($threadId: ID!) {
+    onComputerThreadChunk(threadId: $threadId) {
+      threadId
+      chunk
+      seq
+      publishedAt
+    }
+  }
+`;
+
+export const ThreadTurnUpdatedSubscription = gql`
+  subscription ThreadTurnUpdated($tenantId: ID!) {
+    onThreadTurnUpdated(tenantId: $tenantId) {
+      threadId
+      status
+      updatedAt
+    }
+  }
+`;
+
 export const CreateThreadMutation = gql`
   mutation CreateThread($input: CreateThreadInput!) {
     createThread(input: $input) {

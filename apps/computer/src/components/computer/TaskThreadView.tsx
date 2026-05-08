@@ -5,8 +5,10 @@ import {
   type GeneratedArtifact,
 } from "@/components/computer/GeneratedArtifactCard";
 import { SourceCountButton } from "@/components/computer/SourceCountButton";
+import { StreamingMessageBuffer } from "@/components/computer/StreamingMessageBuffer";
 import { TaskEventRow } from "@/components/computer/TaskEventRow";
 import { UsageButton } from "@/components/computer/UsageButton";
+import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 export interface TaskThreadMessage {
   id: string;
@@ -29,12 +31,14 @@ interface TaskThreadViewProps {
   thread: TaskThread | null;
   isLoading?: boolean;
   error?: string | null;
+  streamingChunks?: ComputerThreadChunk[];
 }
 
 export function TaskThreadView({
   thread,
   isLoading = false,
   error,
+  streamingChunks = [],
 }: TaskThreadViewProps) {
   if (isLoading) {
     return <TaskThreadState label="Loading task" />;
@@ -87,6 +91,7 @@ export function TaskThreadView({
               <TranscriptMessage key={message.id} message={message} />
             ))
           )}
+          <StreamingMessageBuffer chunks={streamingChunks} />
         </section>
 
         <form className="sticky bottom-4 mt-auto grid gap-2 rounded-lg border border-border/80 bg-background/95 p-3 shadow-sm">

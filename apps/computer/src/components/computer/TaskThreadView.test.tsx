@@ -57,4 +57,30 @@ describe("TaskThreadView", () => {
 
     expect(screen.getByText("Task created")).toBeTruthy();
   });
+
+  it("renders streaming assistant chunks below persisted messages", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Streaming task",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Think out loud",
+            },
+          ],
+        }}
+        streamingChunks={[
+          { seq: 1, text: "Working" },
+          { seq: 2, text: " on it" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Working on it")).toBeTruthy();
+    expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+  });
 });
