@@ -306,12 +306,22 @@ function ThreadsPage() {
     return agents.find((a: any) => a.id === id)?.name ?? null;
   }, [agents]);
 
-  // Assignee filtering remains client-side (not in server query)
+  // Assignee filtering remains client-side (not in server query).
+  // Computer-owned threads (`thread.computerId` set) are not Unassigned —
+  // they live in the synthetic "Computer" group when grouped by assignee, and
+  // must be excluded from the Unassigned filter so the filter and grouping
+  // axes do not diverge.
   const filtered = useMemo(() => {
     if (viewState.assignees.length === 0) return rawThreads;
     return rawThreads.filter((thread) => {
       for (const assignee of viewState.assignees) {
-        if (assignee === "__unassigned" && !thread.agentId && !thread.assigneeId) return true;
+        if (
+          assignee === "__unassigned" &&
+          !thread.agentId &&
+          !thread.assigneeId &&
+          !thread.computerId
+        )
+          return true;
         if (thread.agentId === assignee) return true;
       }
       return false;

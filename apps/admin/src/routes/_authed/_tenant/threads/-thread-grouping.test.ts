@@ -28,6 +28,24 @@ describe("threadAssigneeGroupKey", () => {
       threadAssigneeGroupKey({ computerId: "comp-1", agentId: "agent-42" }),
     ).toBe("__computer");
   });
+
+  it("treats an empty-string agentId as unassigned (defensive normalization)", () => {
+    expect(
+      threadAssigneeGroupKey({ computerId: null, agentId: "" }),
+    ).toBe("__unassigned");
+  });
+
+  it("treats an empty-string computerId as unassigned (defensive normalization)", () => {
+    expect(
+      threadAssigneeGroupKey({ computerId: "", agentId: null }),
+    ).toBe("__unassigned");
+  });
+
+  it("falls through empty-string computerId to a real agentId", () => {
+    expect(
+      threadAssigneeGroupKey({ computerId: "", agentId: "agent-42" }),
+    ).toBe("agent-42");
+  });
 });
 
 describe("threadAssigneeGroupLabel", () => {
