@@ -1,0 +1,10 @@
+# Build output
+dist/
+
+# Local env
+.env
+.env.local
+.env.production
+
+# Vite cache
+node_modules/.vite/
