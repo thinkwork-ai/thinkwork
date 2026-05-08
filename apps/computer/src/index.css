@@ -1,1 +1,8 @@
 @import "@thinkwork/ui/theme.css";
+
+/* Tailwind v4 scans the project root by default, but won't pick up
+   Tailwind classes used inside the @thinkwork/ui workspace package
+   (sidebar, tooltip, button variants, sr-only, etc.) without an
+   explicit @source directive. Without this, shadcn primitives from
+   the shared UI package render unstyled. */
+@source "../../../packages/ui/src/**/*.{ts,tsx}";

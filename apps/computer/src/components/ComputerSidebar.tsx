@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
-  Bot,
   Inbox,
   Monitor,
   PenSquare,
@@ -88,35 +87,44 @@ export function ComputerSidebar() {
 
   return (
     <>
-      <Sidebar>
-        <SidebarHeader className="px-3 py-3">
-          <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            <span className="text-base font-semibold tracking-tight">ThinkWork</span>
-          </div>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="pb-0">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <Link to="/computer">
+                  <img
+                    src="/logo.png"
+                    alt="ThinkWork"
+                    className="h-8 w-8 shrink-0 object-contain"
+                  />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-base font-semibold tracking-tight leading-none truncate">
+                      ThinkWork
+                    </span>
+                    <span className="text-xs text-muted-foreground leading-none truncate mt-0.5">
+                      Cloud Computer
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
 
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-0.5">
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() => setNewThreadOpen(true)}
-                    tooltip="New Thread"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 data-[active=true]:bg-primary/90"
+                    tooltip="New"
                   >
                     <PenSquare />
-                    <span>New Thread</span>
+                    <span>New</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
                 {PERMANENT_NAV.map((item) => {
                   const isActive =
                     pathname === item.to || pathname.startsWith(`${item.to}/`);
@@ -135,7 +143,7 @@ export function ComputerSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
 
-          <SidebarGroup>
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel>Threads</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
@@ -154,7 +162,7 @@ export function ComputerSidebar() {
                 ) : threads.length === 0 ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton disabled className="opacity-60">
-                      <span>No threads yet — click New Thread</span>
+                      <span>No threads yet — click New</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ) : (
