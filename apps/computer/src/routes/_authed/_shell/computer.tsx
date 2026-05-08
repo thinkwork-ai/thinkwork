@@ -1,15 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { ComputerWorkbench } from "@/components/computer/ComputerWorkbench";
 
 export const Route = createFileRoute("/_authed/_shell/computer")({
   component: ComputerPage,
 });
 
 function ComputerPage() {
-  return (
-    <PlaceholderPage
-      title="Your Computer"
-      subtitle="The persistent AI work surface for your account. Real workspace, files, and tools land in the next phase — auth wiring + GraphQL + the Strands runtime connection."
-    />
-  );
+  return <ComputerWorkbench />;
 }
