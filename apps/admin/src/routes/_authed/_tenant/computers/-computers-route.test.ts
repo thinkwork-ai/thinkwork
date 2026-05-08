@@ -45,6 +45,8 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain('value="workspace"');
     expect(detailRouteSource).toContain('value="config"');
     expect(detailRouteSource).toContain("ComputerStatusPanel");
+    expect(detailRouteSource).toContain("ComputerDashboardMetrics");
+    expect(detailRouteSource).toContain("ComputerDashboardActivity");
     expect(detailRouteSource).toContain("ComputerLiveTasksPanel");
     expect(detailRouteSource).toContain("ComputerEventsPanel");
     expect(detailRouteSource).toContain("activityRefreshKey");
@@ -97,6 +99,8 @@ describe("Computers admin routes", () => {
     expect(queriesSource).toContain("query MyComputer");
     expect(queriesSource).toContain("query ComputerEvents");
     expect(queriesSource).toContain("query ComputerThreads");
+    expect(queriesSource).toContain("costSummary");
+    expect(queriesSource).toContain("channel");
     expect(queriesSource).toContain("lastResponsePreview");
     expect(queriesSource).toContain("mutation UpdateComputer");
   });
