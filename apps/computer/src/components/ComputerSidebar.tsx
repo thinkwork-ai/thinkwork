@@ -17,9 +17,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@thinkwork/ui";
+import type { FileRouteTypes } from "@/routeTree.gen";
 
 interface NavItem {
-  to: string;
+  to: FileRouteTypes["to"];
   icon: React.ComponentType<{ className?: string }>;
   label: string;
 }
@@ -82,7 +83,7 @@ export function ComputerSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {PERMANENT_NAV.map((item) => {
-                const isActive = pathname.startsWith(item.to);
+                const isActive = pathname === item.to || pathname.startsWith(`${item.to}/`);
                 return (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
@@ -103,7 +104,9 @@ export function ComputerSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {PLACEHOLDER_THREADS.map((thread) => {
-                const isActive = pathname === `/threads/${thread.id}`;
+                const threadPath = `/threads/${thread.id}`;
+                const isActive =
+                  pathname === threadPath || pathname.startsWith(`${threadPath}/`);
                 return (
                   <SidebarMenuItem key={thread.id}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={thread.title}>
