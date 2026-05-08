@@ -1,6 +1,8 @@
 import crmPipelineRiskManifest from "@/test/fixtures/crm-pipeline-risk-dashboard.json";
 import { computerAppArtifactRoute } from "@/lib/computer-routes";
 
+export type DashboardArtifactManifest = typeof crmPipelineRiskManifest;
+
 export interface AppArtifactPreview {
   id: string;
   title: string;
@@ -20,6 +22,28 @@ export interface AppArtifactPreview {
 export const FIXTURE_APP_ARTIFACTS: AppArtifactPreview[] = [
   toPipelineRiskPreview(crmPipelineRiskManifest),
 ];
+
+export const FIXTURE_APP_MANIFESTS: DashboardArtifactManifest[] = [
+  crmPipelineRiskManifest,
+];
+
+export function getFixtureAppArtifactById(
+  artifactId: string,
+): AppArtifactPreview | null {
+  return (
+    FIXTURE_APP_ARTIFACTS.find((artifact) => artifact.id === artifactId) ?? null
+  );
+}
+
+export function getFixtureDashboardManifestByArtifactId(
+  artifactId: string,
+): DashboardArtifactManifest | null {
+  return (
+    FIXTURE_APP_MANIFESTS.find(
+      (manifest) => manifest.snapshot.artifactId === artifactId,
+    ) ?? null
+  );
+}
 
 export function isAppArtifactMetadata(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
