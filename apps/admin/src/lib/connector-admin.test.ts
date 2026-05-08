@@ -5,6 +5,7 @@ import {
   connectorExecutionCleanupDisplay,
   connectorExecutionCleanupReason,
   connectorExecutionLinearIdentifier,
+  connectorExecutionPrDisplay,
   connectorExecutionStateTone,
   connectorExecutionThreadId,
   connectorExecutionWritebackDisplay,
@@ -469,6 +470,36 @@ describe("connector admin helpers", () => {
         "Linear writeback failed - Linear credential lacks issue update permission",
       tone: "destructive",
     });
+  });
+
+  it("formats Symphony PR metadata from delegation and execution payloads", () => {
+    expect(
+      connectorExecutionPrDisplay({
+        mode: "symphony_pr_harness",
+        branch: "symphony/tech-70/abcdef12",
+        prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+        prNumber: 123,
+      }),
+    ).toEqual({
+      url: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+      label: "PR #123",
+      title:
+        "symphony/tech-70/abcdef12 - https://github.com/thinkwork-ai/thinkwork/pull/123",
+    });
+
+    expect(
+      connectorExecutionPrDisplay({
+        symphony: {
+          branch: "symphony/tech-70/abcdef12",
+          prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+        },
+      }),
+    ).toMatchObject({
+      url: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+      label: "Draft PR",
+    });
+
+    expect(connectorExecutionPrDisplay({})).toBeNull();
   });
 
   it("omits writeback display for old, malformed, and non-Linear payloads", () => {

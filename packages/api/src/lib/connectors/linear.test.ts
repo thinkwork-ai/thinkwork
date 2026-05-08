@@ -3,6 +3,7 @@ import {
   fetchLinearIssues,
   moveLinearIssueToState,
   parseLinearIssueQueryConfig,
+  postLinearIssueCommentOnce,
 } from "./linear.js";
 
 describe("parseLinearIssueQueryConfig", () => {
@@ -231,6 +232,104 @@ describe("moveLinearIssueToState", () => {
       stateId: "state-started",
       updated: false,
       skippedReason: "already_in_state",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("postLinearIssueCommentOnce", () => {
+  it("creates a comment with a hidden dedupe marker when no matching comment exists", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: {
+            issue: {
+              id: "issue-1",
+              comments: { nodes: [{ id: "comment-old", body: "hello" }] },
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: {
+            commentCreate: {
+              success: true,
+              comment: { id: "comment-new" },
+            },
+          },
+        }),
+      });
+
+    await expect(
+      postLinearIssueCommentOnce({
+        apiKey: "lin_api_key",
+        issueId: "issue-1",
+        body: "Symphony agent is now working.",
+        dedupeMarker: "thinkwork:symphony:dispatch:task-1",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      issueId: "issue-1",
+      commentId: "comment-new",
+      created: true,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toMatchObject({
+      variables: {
+        input: {
+          issueId: "issue-1",
+        },
+      },
+    });
+    expect(
+      JSON.parse(fetchImpl.mock.calls[1][1].body).variables.input.body,
+    ).toContain("<!-- thinkwork:symphony:dispatch:task-1 -->");
+  });
+
+  it("skips comment creation when the dedupe marker already exists", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        data: {
+          issue: {
+            id: "issue-1",
+            comments: {
+              nodes: [
+                {
+                  id: "comment-existing",
+                  body: "<!-- thinkwork:symphony:pr:task-1 -->",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+
+    await expect(
+      postLinearIssueCommentOnce({
+        apiKey: "lin_api_key",
+        issueId: "issue-1",
+        body: "PR opened.",
+        dedupeMarker: "thinkwork:symphony:pr:task-1",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      issueId: "issue-1",
+      created: false,
+      skippedReason: "duplicate_marker",
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);

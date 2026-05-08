@@ -62,6 +62,12 @@ export type ConnectorExecutionWritebackDisplay = {
   tone: "success" | "destructive" | "muted";
 };
 
+export type ConnectorExecutionPrDisplay = {
+  url: string;
+  label: string;
+  title: string;
+};
+
 export type ConnectorExecutionCleanupDisplay = {
   label: string;
   title: string;
@@ -466,6 +472,38 @@ export function connectorExecutionWritebackDisplay(
     };
   }
 
+  return null;
+}
+
+export function connectorExecutionPrDisplay(
+  ...payloads: unknown[]
+): ConnectorExecutionPrDisplay | null {
+  for (const payload of payloads) {
+    const parsed = parsePayloadRecord(payload);
+    const symphony = parsePayloadRecord(parsed?.symphony);
+    const github = parsePayloadRecord(parsed?.github);
+    const url =
+      cleanString(parsed?.prUrl) ??
+      cleanString(symphony?.prUrl) ??
+      cleanString(github?.prUrl);
+    if (!url) continue;
+
+    const branch =
+      cleanString(parsed?.branch) ??
+      cleanString(symphony?.branch) ??
+      cleanString(github?.branch);
+    const prNumber =
+      typeof parsed?.prNumber === "number"
+        ? parsed.prNumber
+        : typeof symphony?.prNumber === "number"
+          ? symphony.prNumber
+          : null;
+    return {
+      url,
+      label: prNumber ? `PR #${prNumber}` : "Draft PR",
+      title: [branch, url].filter(Boolean).join(" - "),
+    };
+  }
   return null;
 }
 

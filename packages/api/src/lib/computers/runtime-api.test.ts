@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   resolveOAuthToken: vi.fn(),
   resolveOAuthTokenDetails: vi.fn(),
   invokeChatAgent: vi.fn(),
+  runSymphonyPrConnectorWork: vi.fn(),
   notifyNewMessage: vi.fn(),
   notifyThreadUpdate: vi.fn(),
 }));
@@ -79,6 +80,10 @@ vi.mock("../../graphql/notify.js", () => ({
   notifyThreadUpdate: mocks.notifyThreadUpdate,
 }));
 
+vi.mock("./symphony-pr-harness.js", () => ({
+  runSymphonyPrConnectorWork: mocks.runSymphonyPrConnectorWork,
+}));
+
 import {
   checkGoogleWorkspaceConnection,
   delegateConnectorWorkTask,
@@ -105,6 +110,10 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.inserts = [];
     mocks.updates = [];
     mocks.invokeChatAgent.mockResolvedValue(true);
+    mocks.runSymphonyPrConnectorWork.mockResolvedValue({
+      handled: false,
+      reason: "not_linear_connector_work",
+    });
     mocks.notifyNewMessage.mockResolvedValue(undefined);
     mocks.notifyThreadUpdate.mockResolvedValue(undefined);
   });
@@ -323,6 +332,84 @@ describe("Computer runtime API connector work delegation", () => {
       ]),
     );
     expect(mocks.updates).toContainEqual({ status: "running" });
+  });
+
+  it("runs the Symphony PR harness for Linear connector work", async () => {
+    mocks.runSymphonyPrConnectorWork.mockResolvedValueOnce({
+      handled: true,
+      branch: "symphony/tech-60/aaaaaaaa",
+      commitSha: "commit-1",
+      prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+      prNumber: 123,
+      threadTurnId: "turn-1",
+      linear: {
+        dispatchComment: { created: true },
+        prComment: { created: true },
+        reviewWriteback: { updated: true, stateName: "In Review" },
+      },
+    });
+    mocks.selectQueue = [
+      [
+        {
+          id: "task-1",
+          task_type: "connector_work",
+          input: {
+            connectorId: "connector-1",
+            connectorExecutionId: "execution-1",
+            externalRef: "issue-uuid",
+            title: "Handle Linear issue",
+            body: "Linear body",
+            metadata: { linear: { identifier: "TECH-60" } },
+          },
+        },
+      ],
+      [
+        {
+          id: "computer-1",
+          tenant_id: "tenant-1",
+          owner_user_id: "user-1",
+          migrated_from_agent_id: "agent-1",
+        },
+      ],
+      [{ id: "agent-1" }],
+      [],
+      [{ id: "thread-1" }],
+      [{ id: "message-1" }],
+    ];
+
+    const result = await delegateConnectorWorkTask({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+    });
+
+    expect(result).toMatchObject({
+      delegated: true,
+      idempotent: false,
+      mode: "symphony_pr_harness",
+      delegationId: "delegation-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      branch: "symphony/tech-60/aaaaaaaa",
+      prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
+      threadTurnId: "turn-1",
+      status: "completed",
+    });
+    expect(mocks.runSymphonyPrConnectorWork).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      delegationId: "delegation-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      payload: expect.objectContaining({
+        connectorId: "connector-1",
+        connectorExecutionId: "execution-1",
+      }),
+    });
+    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 
   it("returns an existing delegation without invoking a duplicate managed-agent run", async () => {

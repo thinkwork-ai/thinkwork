@@ -34,11 +34,26 @@ export interface LinearMoveIssueStateOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface LinearPostIssueCommentOptions {
+  apiKey: string;
+  issueId: string;
+  body: string;
+  dedupeMarker: string;
+  fetchImpl?: typeof fetch;
+}
+
 export interface LinearMoveIssueStateResult {
   issueId: string;
   stateName: string;
   stateId?: string;
   updated: boolean;
+  skippedReason?: string;
+}
+
+export interface LinearPostIssueCommentResult {
+  issueId: string;
+  commentId?: string;
+  created: boolean;
   skippedReason?: string;
 }
 
@@ -63,6 +78,27 @@ type LinearIssueUpdateResponse = {
     issueUpdate?: {
       success?: boolean;
       issue?: unknown;
+    } | null;
+  } | null;
+  errors?: Array<{ message?: string }>;
+};
+
+type LinearIssueCommentsResponse = {
+  data?: {
+    issue?: {
+      comments?: {
+        nodes?: unknown[];
+      } | null;
+    } | null;
+  } | null;
+  errors?: Array<{ message?: string }>;
+};
+
+type LinearCommentCreateResponse = {
+  data?: {
+    commentCreate?: {
+      success?: boolean;
+      comment?: unknown;
     } | null;
   } | null;
   errors?: Array<{ message?: string }>;
@@ -212,6 +248,61 @@ export async function moveLinearIssueToState(
     stateName: options.stateName,
     stateId,
     updated: true,
+  };
+}
+
+export async function postLinearIssueCommentOnce(
+  options: LinearPostIssueCommentOptions,
+): Promise<LinearPostIssueCommentResult> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const marker = options.dedupeMarker.trim();
+  if (!marker) throw new Error("Linear comment dedupe marker is required");
+
+  const commentsPayload = await linearGraphql<LinearIssueCommentsResponse>(
+    fetchImpl,
+    {
+      apiKey: options.apiKey,
+      query: LINEAR_ISSUE_COMMENTS_QUERY,
+      variables: { id: options.issueId },
+    },
+  );
+  const issue = commentsPayload.data?.issue;
+  if (!issue) {
+    throw new Error(`Linear issue ${options.issueId} not found`);
+  }
+  const nodes = issue.comments?.nodes ?? [];
+  const alreadyPosted = nodes
+    .map(asRecord)
+    .some((comment) => cleanString(comment?.body)?.includes(marker));
+  if (alreadyPosted) {
+    return {
+      issueId: options.issueId,
+      created: false,
+      skippedReason: "duplicate_marker",
+    };
+  }
+
+  const createdPayload = await linearGraphql<LinearCommentCreateResponse>(
+    fetchImpl,
+    {
+      apiKey: options.apiKey,
+      query: LINEAR_COMMENT_CREATE_MUTATION,
+      variables: {
+        input: {
+          issueId: options.issueId,
+          body: `${options.body}\n\n<!-- ${marker} -->`,
+        },
+      },
+    },
+  );
+  if (createdPayload.data?.commentCreate?.success !== true) {
+    throw new Error(`Linear issue ${options.issueId} comment create failed`);
+  }
+  const comment = asRecord(createdPayload.data.commentCreate.comment);
+  return {
+    issueId: options.issueId,
+    commentId: cleanString(comment?.id) ?? undefined,
+    created: true,
   };
 }
 
@@ -395,6 +486,31 @@ const LINEAR_ISSUE_UPDATE_STATE_MUTATION = /* GraphQL */ `
           id
           name
         }
+      }
+    }
+  }
+`;
+
+const LINEAR_ISSUE_COMMENTS_QUERY = /* GraphQL */ `
+  query ConnectorLinearIssueComments($id: String!) {
+    issue(id: $id) {
+      id
+      comments(first: 50) {
+        nodes {
+          id
+          body
+        }
+      }
+    }
+  }
+`;
+
+const LINEAR_COMMENT_CREATE_MUTATION = /* GraphQL */ `
+  mutation ConnectorLinearCommentCreate($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+      comment {
+        id
       }
     }
   }
