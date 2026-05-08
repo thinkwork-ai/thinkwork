@@ -277,6 +277,7 @@ function ComputersPage() {
             navigate({
               to: "/computers/$computerId",
               params: { computerId: row.id },
+              search: { tab: "dashboard" },
             })
           }
         />

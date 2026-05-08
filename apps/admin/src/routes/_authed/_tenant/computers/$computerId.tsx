@@ -17,7 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ComputerDetailQuery } from "@/lib/graphql-queries";
+import {
+  ComputerDetailQuery,
+  ComputerEventsQuery,
+  ComputerTasksQuery,
+  ComputerThreadsQuery,
+} from "@/lib/graphql-queries";
 import { formatDateTime, formatUsd } from "@/lib/utils";
 import { type Computer } from "@/gql/graphql";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
@@ -25,6 +30,8 @@ import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
 import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
 import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
+import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
+import { ComputerDashboardActivity } from "./-components/ComputerDashboardActivity";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
@@ -202,22 +209,7 @@ function ComputerDetailPage() {
       }
     >
       {tab === "dashboard" ? (
-        <div className="space-y-4">
-          <ComputerStatusPanel
-            computer={computer}
-            onUpdated={() => reexecute({ requestPolicy: "network-only" })}
-          />
-          <ComputerLiveTasksPanel
-            computer={computer}
-            onChanged={refreshActivity}
-          />
-          <ComputerEventsPanel
-            computer={computer}
-            refreshKey={activityRefreshKey}
-          />
-          <ComputerRuntimePanel computer={computer} />
-          <IdentityCard computer={computer} ownerLabel={ownerLabel} />
-        </div>
+        <ComputerDashboardTab computer={computer} onChanged={refreshActivity} />
       ) : null}
 
       {tab === "workspace" ? (
@@ -226,12 +218,89 @@ function ComputerDetailPage() {
 
       {tab === "config" ? (
         <div className="space-y-4">
+          <ComputerStatusPanel
+            computer={computer}
+            onUpdated={() => reexecute({ requestPolicy: "network-only" })}
+          />
           <ComputerRuntimePanel computer={computer} />
+          <ComputerEventsPanel
+            computer={computer}
+            refreshKey={activityRefreshKey}
+          />
           <ComputerMigrationPanel computer={computer} />
           <IdentityCard computer={computer} ownerLabel={ownerLabel} />
         </div>
       ) : null}
     </PageLayout>
+  );
+}
+
+function ComputerDashboardTab({
+  computer,
+  onChanged,
+}: {
+  computer: Pick<
+    Computer,
+    "id" | "tenantId" | "slug" | "runtimeStatus" | "spentMonthlyCents"
+  >;
+  onChanged: () => void;
+}) {
+  const [tasksResult, reexecuteTasks] = useQuery({
+    query: ComputerTasksQuery,
+    variables: { computerId: computer.id, limit: 50 },
+    requestPolicy: "cache-and-network",
+  });
+  const [threadsResult, reexecuteThreads] = useQuery({
+    query: ComputerThreadsQuery,
+    variables: {
+      tenantId: computer.tenantId,
+      computerId: computer.id,
+      limit: 50,
+    },
+    requestPolicy: "cache-and-network",
+  });
+  const [eventsResult, reexecuteEvents] = useQuery({
+    query: ComputerEventsQuery,
+    variables: { computerId: computer.id, limit: 24 },
+    requestPolicy: "cache-and-network",
+  });
+
+  const tasks = tasksResult.data?.computerTasks ?? [];
+  const threads = threadsResult.data?.threads ?? [];
+  const events = eventsResult.data?.computerEvents ?? [];
+
+  function refreshDashboard() {
+    reexecuteTasks({ requestPolicy: "network-only" });
+    reexecuteThreads({ requestPolicy: "network-only" });
+    reexecuteEvents({ requestPolicy: "network-only" });
+    onChanged();
+  }
+
+  return (
+    <div className="space-y-4">
+      <ComputerDashboardMetrics
+        computer={computer}
+        tasks={tasks}
+        threads={threads}
+      />
+      <ComputerDashboardActivity
+        tasks={tasks}
+        threads={threads}
+        events={events}
+        onRefresh={refreshDashboard}
+      />
+      <ComputerLiveTasksPanel
+        computer={computer}
+        onChanged={refreshDashboard}
+      />
+      {tasksResult.error || threadsResult.error || eventsResult.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          {tasksResult.error?.message ??
+            threadsResult.error?.message ??
+            eventsResult.error?.message}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -250,7 +319,12 @@ function IdentityCard({
   computer,
   ownerLabel,
 }: {
-  computer: Pick<Computer, "slug" | "createdAt" | "updatedAt" | "template">;
+  computer: {
+    slug: string;
+    createdAt: string;
+    updatedAt: string;
+    template?: { name: string } | null;
+  };
   ownerLabel: string;
 }) {
   return (

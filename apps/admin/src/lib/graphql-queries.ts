@@ -380,10 +380,14 @@ export const ComputerThreadsQuery = graphql(`
   query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
     threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
       id
+      number
       identifier
       title
       status
+      channel
+      costSummary
       lastResponsePreview
+      createdAt
       updatedAt
     }
   }
