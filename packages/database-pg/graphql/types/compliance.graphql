@@ -1,0 +1,157 @@
+# Compliance audit-event read API (Phase 3 U10).
+#
+# Read-only browse of compliance.audit_events written by the U4 outbox
+# drainer. Backed by the compliance_reader Aurora role, NOT the writer
+# pool. No mutations exist on this surface — the audit_events table is
+# append-only at the DB layer (audit_events_block_delete trigger).
+#
+# Auth: graphql-http resolvers gate on Cognito-only callers (apikey
+# blocked) + THINKWORK_PLATFORM_OPERATOR_EMAILS for cross-tenant
+# browse. Non-operator callers see only their own tenant's events.
+#
+# Connection shape: relay-style { edges { node, cursor }, pageInfo }
+# (NEW pattern in this repo — established here for cursor-stable
+# pagination across equal-microsecond timestamps).
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+# Mirror of COMPLIANCE_ACTOR_TYPES in
+# packages/database-pg/src/schema/compliance.ts. A unit test in
+# packages/api asserts the GraphQL values exactly match the runtime
+# slate — fails CI if the schema and enum drift.
+enum ComplianceActorType {
+  USER
+  SYSTEM
+  AGENT
+}
+
+# Mirror of COMPLIANCE_EVENT_TYPES in
+# packages/database-pg/src/schema/compliance.ts. The 14 Phase 3 starter
+# events plus 5 Phase 6 reserved events. Resolver translates
+# UPPER_UNDERSCORE GraphQL values to dotted lowercase DB strings via a
+# canonical helper.
+enum ComplianceEventType {
+  AUTH_SIGNIN_SUCCESS
+  AUTH_SIGNIN_FAILURE
+  AUTH_SIGNOUT
+  USER_INVITED
+  USER_CREATED
+  USER_DISABLED
+  USER_DELETED
+  AGENT_CREATED
+  AGENT_DELETED
+  AGENT_SKILLS_CHANGED
+  MCP_ADDED
+  MCP_REMOVED
+  WORKSPACE_GOVERNANCE_FILE_EDITED
+  DATA_EXPORT_INITIATED
+  POLICY_EVALUATED
+  POLICY_ALLOWED
+  POLICY_BLOCKED
+  POLICY_BYPASSED
+  APPROVAL_RECORDED
+}
+
+enum ComplianceAnchorState {
+  ANCHORED
+  PENDING
+}
+
+# ---------------------------------------------------------------------------
+# Core types
+# ---------------------------------------------------------------------------
+
+# A single compliance.audit_events row decorated with anchor status.
+type ComplianceEvent {
+  eventId: ID!
+  tenantId: ID!
+  occurredAt: String!
+  recordedAt: String!
+  actor: String!
+  actorType: ComplianceActorType!
+  source: String!
+  eventType: ComplianceEventType!
+  eventHash: String!
+  prevHash: String
+  payload: JSON!
+  anchorStatus: ComplianceAnchorStatus!
+}
+
+# Flat object with discriminant enum (NOT a GraphQL union — one
+# consumer doesn't justify union ergonomics in zod / urql).
+# When state == ANCHORED, cadenceId + anchoredRecordedAt are non-null.
+# When state == PENDING, nextCadenceWithinMinutes is non-null.
+type ComplianceAnchorStatus {
+  state: ComplianceAnchorState!
+  cadenceId: ID
+  anchoredRecordedAt: String
+  nextCadenceWithinMinutes: Int
+}
+
+# ---------------------------------------------------------------------------
+# Pagination (relay-style edges + cursor — new pattern in this repo)
+# ---------------------------------------------------------------------------
+
+type ComplianceEventEdge {
+  node: ComplianceEvent!
+  cursor: String!
+}
+
+type ComplianceEventConnection {
+  edges: [ComplianceEventEdge!]!
+  pageInfo: ComplianceEventPageInfo!
+}
+
+type ComplianceEventPageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+# ---------------------------------------------------------------------------
+# Filter input
+# ---------------------------------------------------------------------------
+
+# All fields optional. tenantId is server-side-overridden for
+# non-operator callers (whose scope is forced to their own tenant).
+# since/until are ISO8601 strings; bounds are half-open [since, until).
+input ComplianceEventFilter {
+  tenantId: ID
+  actorType: ComplianceActorType
+  eventType: ComplianceEventType
+  since: String
+  until: String
+}
+
+# ---------------------------------------------------------------------------
+# Queries
+# ---------------------------------------------------------------------------
+
+extend type Query {
+  """
+  Paginated audit-event list, sorted by `occurred_at DESC, event_id DESC`
+  (matches the existing `(tenant_id, occurred_at DESC)` index on
+  `compliance.audit_events`). Cursor encodes
+  `{occurred_at_iso_with_microseconds, event_id}` as base64-url JSON.
+  Page size capped at 200 server-side; client-recommended default 50.
+  """
+  complianceEvents(
+    filter: ComplianceEventFilter
+    after: String
+    first: Int
+  ): ComplianceEventConnection!
+
+  """
+  Single event by event_id. Non-operator callers reading another tenant's
+  event_id see null (existence-oracle defense — SQL filter applies in the
+  WHERE clause so the timing-side-channel is closed).
+  """
+  complianceEvent(eventId: ID!): ComplianceEvent
+
+  """
+  Single event by event_hash. Used by the chain-position panel's
+  prev_hash click-through. Tenant-scoped for non-operators.
+  """
+  complianceEventByHash(eventHash: String!): ComplianceEvent
+}
