@@ -1277,6 +1277,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       workspace_prefix: workspacePrefix,
+      appsync_endpoint: APPSYNC_ENDPOINT || undefined,
+      appsync_api_key: APPSYNC_API_KEY || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: webSearchConfig,
       send_email_config: sendEmailConfig
@@ -1750,6 +1752,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: WORKSPACE_BUCKET || undefined,
             workspace_prefix: workspacePrefix,
+            appsync_endpoint: APPSYNC_ENDPOINT || undefined,
+            appsync_api_key: APPSYNC_API_KEY || undefined,
             hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
             web_search_config: webSearchConfig,
             send_email_config: sendEmailConfig

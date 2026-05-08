@@ -620,7 +620,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         send_email_config: dict | None = None,
                         context_engine_enabled: bool = False,
                         context_engine_config: dict | None = None,
-                        browser_automation_enabled: bool = False) -> tuple[str, dict]:
+                        browser_automation_enabled: bool = False,
+                        stream_thread_id: str | None = None) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
     ``disabled_builtin_tools`` / ``template_blocked_tools`` implement the
@@ -679,6 +680,18 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
     logger.info("Invoking Strands agent: model=%s, history=%d msgs, prompt_len=%d, system_len=%d",
                 effective_model, len(history), len(current_msg), len(system_prompt))
+    stream_callback_handler = None
+    stream_publisher = None
+    if stream_thread_id:
+        try:
+            from appsync_publisher import build_appsync_chunk_callback
+            stream_callback_handler, stream_publisher = build_appsync_chunk_callback(
+                stream_thread_id
+            )
+            if stream_callback_handler:
+                logger.info("AppSync chunk streaming enabled for thread=%s", stream_thread_id)
+        except Exception as e:
+            logger.warning("AppSync chunk streaming setup failed: %s", e)
 
     # 3. Build tool list: memory tools + policy-enabled built-ins + file_read + script skills
     tools = []
@@ -1542,7 +1555,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
         tools=tools,
         plugins=plugins,
         messages=history if history else None,
-        callback_handler=None,
+        callback_handler=stream_callback_handler,
     )
 
     global _tracker_installed
@@ -1575,6 +1588,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 _a.get_event_loop().run_until_complete(_sandbox_cleanup_fn())
             except Exception as _sb_err:
                 logger.warning("sandbox cleanup failed: %s", _sb_err)
+        if stream_publisher is not None:
+            stream_publisher.drain()
     bedrock_request_ids = get_captured_request_ids()
 
     # 5. Extract response and usage
@@ -1988,6 +2003,13 @@ def _execute_agent_turn(payload: dict) -> dict:
     if thinkwork_api_secret:
         os.environ["THINKWORK_API_SECRET"] = thinkwork_api_secret
         os.environ["API_AUTH_SECRET"] = thinkwork_api_secret
+    appsync_endpoint = payload.get("appsync_endpoint") or ""
+    if appsync_endpoint:
+        os.environ["APPSYNC_ENDPOINT"] = appsync_endpoint
+    appsync_api_key = payload.get("appsync_api_key") or ""
+    if appsync_api_key:
+        os.environ["APPSYNC_API_KEY"] = appsync_api_key
+        os.environ["GRAPHQL_API_KEY"] = appsync_api_key
     hindsight_endpoint = payload.get("hindsight_endpoint") or ""
     if hindsight_endpoint:
         os.environ["HINDSIGHT_ENDPOINT"] = hindsight_endpoint
@@ -2090,6 +2112,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             context_engine_enabled=context_engine_enabled,
             context_engine_config=context_engine_config,
             browser_automation_enabled=browser_automation_enabled,
+            stream_thread_id=ticket_id or None,
         )
         duration_ms = int(time.time() * 1000) - start_ms
 
