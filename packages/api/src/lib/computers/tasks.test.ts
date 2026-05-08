@@ -30,6 +30,9 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("GOOGLE_CALENDAR_UPCOMING")).toBe(
       "google_calendar_upcoming",
     );
+    expect(parseComputerTaskType("DASHBOARD_ARTIFACT_REFRESH")).toBe(
+      "dashboard_artifact_refresh",
+    );
   });
 
   it("rejects unsupported task types", () => {
@@ -179,5 +182,35 @@ describe("Computer task helpers", () => {
         timeMax: "2026-05-07T09:59:59.000Z",
       }),
     ).toThrow("timeMax must be after timeMin");
+  });
+
+  it("normalizes dashboard artifact refresh input", () => {
+    expect(
+      normalizeTaskInput("dashboard_artifact_refresh", {
+        artifactId: "artifact-1",
+        requestedByUserId: "user-1",
+        recipeId: "recipe-1",
+        recipeVersion: 2,
+      }),
+    ).toEqual({
+      artifactId: "artifact-1",
+      requestedByUserId: "user-1",
+      recipeId: "recipe-1",
+      recipeVersion: 2,
+      dashboardKind: "pipeline_risk",
+    });
+  });
+
+  it("requires a dashboard artifact id and requester for refresh tasks", () => {
+    expect(() =>
+      normalizeTaskInput("dashboard_artifact_refresh", {
+        requestedByUserId: "user-1",
+      }),
+    ).toThrow("artifactId is required");
+    expect(() =>
+      normalizeTaskInput("dashboard_artifact_refresh", {
+        artifactId: "artifact-1",
+      }),
+    ).toThrow("requestedByUserId is required");
   });
 });

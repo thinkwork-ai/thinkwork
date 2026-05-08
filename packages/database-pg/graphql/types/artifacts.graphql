@@ -17,6 +17,19 @@ type Artifact {
   updatedAt: AWSDateTime!
 }
 
+type DashboardArtifact {
+  artifact: Artifact!
+  manifest: AWSJSON!
+  latestRefreshTask: ComputerTask
+  canRefresh: Boolean!
+}
+
+type DashboardRefreshResult {
+  artifact: Artifact!
+  task: ComputerTask!
+  idempotencyKey: String!
+}
+
 enum ArtifactType {
   DATA_VIEW
   NOTE
@@ -59,10 +72,12 @@ input UpdateArtifactInput {
 extend type Query {
   artifacts(tenantId: ID!, threadId: ID, agentId: ID, type: ArtifactType, status: ArtifactStatus, limit: Int, cursor: String): [Artifact!]!
   artifact(id: ID!): Artifact
+  dashboardArtifact(id: ID!): DashboardArtifact
 }
 
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
+  refreshDashboardArtifact(id: ID!): DashboardRefreshResult!
 }
