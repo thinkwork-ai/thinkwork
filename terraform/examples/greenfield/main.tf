@@ -346,9 +346,25 @@ module "www_dns" {
   include_admin                = true
   admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
 
-  # Computer: same cycle-avoidance pattern.
+  # Computer: same cycle-avoidance pattern, with a two-phase first deploy.
+  #
+  # On the FIRST apply that creates module.thinkwork.computer_site, its
+  # distribution_domain output is "(known after apply)", which makes the
+  # `!= ""` test inside www-dns's `create_computer_record` local
+  # itself unknown — and `count = unknown ? 1 : 0` on cloudflare_record.computer
+  # fails with "Invalid count argument" during plan.
+  #
+  # The static empty string here is intentional: it keeps include_computer=true
+  # so computer.thinkwork.ai stays on the cert SAN list, but resolves
+  # `create_computer_record` to false statically (because "" != "" is a known
+  # false), so count is 0 and the CNAME is skipped on this first apply.
+  #
+  # After this apply succeeds (distribution + cert SAN exist), flip this back
+  # to module.thinkwork.computer_distribution_domain in a follow-up PR — the
+  # distribution_domain output will be known from state and the gate evaluates
+  # to true statically, creating the Cloudflare CNAME on the second apply.
   include_computer                = true
-  computer_cloudfront_domain_name = module.thinkwork.computer_distribution_domain
+  computer_cloudfront_domain_name = ""
 
   # API custom domain (api.<apex>). Same cycle-avoidance — the ACM cert SAN
   # list is gated on include_api (a plain bool), while api_gateway_id (which
