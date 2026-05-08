@@ -1620,8 +1620,14 @@ resource "aws_lambda_function" "compliance_export_runner" {
       # Phase 3 U11.U3 — the live runner connects to Aurora as the
       # writer pool (existing app role) for INSERT/UPDATE on
       # compliance.export_jobs and SELECT on compliance.audit_events.
-      # The stub body in U11.U2 doesn't read this; pre-plumbed for U11.U3.
       DATABASE_URL_SECRET_ARN = var.graphql_db_secret_arn
+      # The writer-pool secret stores only {username, password}; the
+      # runner constructs the URL from these env vars + the secret.
+      # Mirrors the fallback in packages/database-pg/src/db.ts's
+      # `resolveDatabaseUrlFromSecrets` (deploy run 25563132057
+      # surfaced this as "Invalid URL" when only the ARN was wired).
+      DATABASE_HOST = var.db_cluster_endpoint
+      DATABASE_NAME = var.database_name
     }
   }
 }
