@@ -189,6 +189,12 @@ locals {
       ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
       ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
       SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
+      # Phase 3 U10 — compliance read resolvers (complianceEvents,
+      # complianceEvent, complianceEventByHash) connect to Aurora as
+      # the compliance_reader role. The existing lambda_secrets policy
+      # in main.tf grants secretsmanager:GetSecretValue on the
+      # thinkwork/* wildcard, so no new IAM resource is needed.
+      COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
