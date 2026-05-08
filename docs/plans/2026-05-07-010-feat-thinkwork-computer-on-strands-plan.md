@@ -10,25 +10,26 @@ origin: docs/brainstorms/2026-05-07-thinkwork-computer-on-strands-requirements.m
 
 ## Summary
 
-Build the ThinkWork Computer on the Strands agent loop in three substrate layers: a new shared Python package `packages/computer-stdlib/` for tools and primitives, a new long-lived Python container `packages/computer-strands/` deployed to the existing `thinkwork-${stage}-computer-runtime` ECR (replacing the TS task-dispatcher), and a CE-derived skills folder + `load_skill` + adapter shims shipped only with a separate `packages/coding-worker-strands/` delegated worker. The existing per-Computer ECS+EFS reconciler in `terraform/modules/app/computer-runtime/` is preserved unchanged. Strands' first-class interrupt primitive bridges through a new `inbox.type='computer_approval'` row to mobile and back, with paused session state durable across ECS restart via a custom Aurora-backed SessionManager. The plan delivers in five phases ending with one golden workflow end-to-end on Eric's dev tenant.
+Build the ThinkWork Computer as the closest possible enterprise-managed analogue to the Perplexity Computer experience: a long-running AWS-owned AI work computer that can plan, browse live web apps, use connected tools, ask for approval, delegate specialist work, and leave an inspectable audit trail. The implementation runs on the Strands agent loop in three substrate layers: a new shared Python package `packages/computer-stdlib/` for tools and primitives, a new long-lived Python container `packages/computer-strands/` deployed to the existing `thinkwork-${stage}-computer-runtime` ECR (replacing the TS task-dispatcher), and a CE-derived skills folder + `load_skill` + adapter shims shipped only with a separate `packages/coding-worker-strands/` delegated worker. The existing per-Computer ECS+EFS reconciler in `terraform/modules/app/computer-runtime/` is preserved unchanged. Browser/computer-use is a v1 requirement, implemented primarily as an admin-enabled AgentCore Browser/Nova Act tool that the Computer agent can call, with screenshots/session artifacts, policy checks, approval gates, and cost attribution. Strands' first-class interrupt primitive bridges through a new `inbox.type='computer_approval'` row to mobile and back, with paused session state durable across ECS restart via a custom Aurora-backed SessionManager. The plan delivers in five phases ending with one browser-backed golden workflow end-to-end on Eric's dev tenant.
 
 ---
 
 ## Problem Frame
 
-The 2026-05-06 Computer reframe committed the Computer to ECS+EFS, always-on, per-user. The 2026-05-07 brainstorm committed Strands as the single foundation for the Computer and delegated workers. Today, `packages/computer-runtime/` is a TypeScript task-dispatcher with no model and no real tool surface; `packages/agentcore-strands/` runs Strands but is shaped for short-lived AgentCore Lambda invocations rather than a long-lived ECS service; and no path exists from external connectors into `computer_tasks`. This plan turns those three gaps into a staged delivery while preserving Marco/Flue work on its own track. (See origin: `docs/brainstorms/2026-05-07-thinkwork-computer-on-strands-requirements.md`.)
+The 2026-05-06 Computer reframe committed the Computer to ECS+EFS, always-on, per-user. The 2026-05-07 brainstorm committed Strands as the single foundation for the Computer and delegated workers. The 2026-05-08 direction raises the product bar: v1 must feel much closer to Perplexity Computer, but under an AWS-managed enterprise control plane with tenant governance, audit, budgets, approvals, and customer-owned runtime boundaries. Today, `packages/computer-runtime/` is a TypeScript task-dispatcher with only a narrow Bedrock chat turn and no real agentic tool surface; `packages/agentcore-strands/` runs Strands but is shaped for short-lived AgentCore Lambda invocations rather than a long-lived ECS service; and the current browser automation path exists for Managed Agents, not as an admin-enabled Computer tool with Computer-owned policy, evidence, and audit. This plan turns those gaps into a staged delivery while preserving Marco/Flue work on its own track. (See origin: `docs/brainstorms/2026-05-07-thinkwork-computer-on-strands-requirements.md`.)
 
 ---
 
 ## Requirements
 
-The plan must satisfy all 34 origin requirements (with R16's Drive/Docs/Sheets explicitly deferred to follow-up work — see Scope Boundaries). Tracing the most load-bearing:
+The plan must satisfy all 34 origin requirements, with one explicit v1 override: the origin's "Browser / computer-use hooks" scope boundary is superseded by the 2026-05-08 product direction. Browser-first computer-use is now non-negotiable for v1. R16's Drive/Docs/Sheets native API coverage remains deferred to follow-up work, but the browser layer may operate the web UI for demo/proof workflows when APIs are not yet native. Tracing the most load-bearing:
 
 - R1, R3 (substrate): Strands as single foundation; Computer on ECS+EFS.
-- R6, R7, R8 (stdlib): new `packages/computer-stdlib/`; eleven modules; reuses ThinkWork APIs.
+- R6, R7, R8 (stdlib): new `packages/computer-stdlib/`; origin eleven modules plus a plan-local browser/computer-use module; reuses ThinkWork APIs.
 - R9–R13 (session + goal loop): runtime/session loader; durable resume; structured turn status; event streaming.
 - R14, R15 (workspace): workpapers convention `/workspace/.thinkwork/workpapers/<task-id>/`; safe path validation.
 - R16, R17, R18 (tool surface): Google Workspace + MCP broker with approval gates and OAuth isolation.
+- R16b (plan-local override): browser-first computer-use as an admin-enabled AgentCore Browser/Nova Act tool callable by the Computer agent, with screenshot/session artifacts, policy gates, approval before sensitive writes, cost attribution, and deterministic smoke coverage.
 - R19, R20, R21 (routines + memory): routine trigger/poll; Hindsight as primary backend; async-wrapper pattern.
 - R22 (delegation): bounded delegation with input/output schema, budget, attribution.
 - R23, R24 (approvals): Strands interrupts → ThinkWork HITL records → mobile → resume.
@@ -42,7 +43,7 @@ The plan must satisfy all 34 origin requirements (with R16's Drive/Docs/Sheets e
 **Origin flows:** F1 (connector intake), F2 (goal-driven multi-step with approvals), F3 (parallel research), F4 (delegation), F5 (HITL interrupt + resume).
 
 **Origin acceptance examples:** AE1–AE15. Plan-level coverage:
-- Phase 5 acceptance smokes cover AE1–AE4, AE10, AE14, AE15 directly.
+- Phase 5 acceptance smokes cover AE1–AE4, AE10, AE14, AE15 directly and add a plan-local browser/computer-use acceptance gate: the Computer must use the browser to inspect or operate a live website/web app, capture visible evidence, and complete or block with audit.
 - Stdlib + worker unit/integration tests cover AE5, AE8, AE11, AE12, AE13.
 - AE6 (Personal Daily Briefing), AE7 (Inbox-to-Task Conversion), and AE9 (Google Docs Drafting) are deferred — AE6 needs richer memory retention patterns; AE7 needs MCP-backed task creation bridges; AE9 needs Google Docs tools (deferred per the Drive/Docs/Sheets follow-up below).
 
@@ -53,7 +54,7 @@ The plan must satisfy all 34 origin requirements (with R16's Drive/Docs/Sheets e
 Single list per Deep-feature tier. Origin scope boundaries carried forward, plan-local additions noted.
 
 - Realtime voice / BidiAgent mode (origin).
-- Generic desktop replacement UI for the Computer (origin).
+- Generic desktop replacement UI for the Computer (origin); v1 browser/computer-use is agent-controlled, not a customer-controlled cloud desktop.
 - Arbitrary unapproved external mutations (origin).
 - Multiple Computers per user (origin).
 - Customer-uploaded arbitrary worker runtimes (origin).
@@ -64,7 +65,6 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - The `/lfg` slash-command UX (origin).
 - Plugin auto-update from upstream EveryInc compound-engineering plugin (origin; vendored snapshot only).
 - Skills folder for the Computer agent (origin; coding worker only).
-- Browser / computer-use hooks (origin).
 - Generalist coding for the coding worker beyond bug-fix scope (origin).
 - PR-merge automation by the coding worker (origin).
 - Multi-delegation persistent workspace cache across worker invocations (origin).
@@ -79,6 +79,7 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - **Header-callable MCP transport wrapper** for OAuth token rotation — v1 reconstructs MCP clients per invocation; rotation patterns refined when token rotation matters in production.
 - **`packages/computer-runtime/` (TS) deletion** — kept in repo for reference until the Strands runtime has shipped two clean deploys; deletion follows in a separate small PR.
 - **Marketing positioning of "ThinkWork has a coding agent"** (origin; separate doc if pursued).
+- **Raw remote-desktop takeover UI** — v1 records latest screenshot/video/trace artifacts and exposes enough evidence for audit/debugging. A live human-steerable desktop stream is not required for v1.
 
 ---
 
@@ -98,11 +99,15 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - `inbox` table — existing mobile surface; extended with `type='computer_approval'` row type in U8.
 - `packages/agentcore-flue/agent-container/src/__smoke__/flue-marco-smoke.ts` (referenced via `flue-runtime-launch-2026-05-04.md`) — 3-scenario deploy smoke gate pattern; mirrored for Computer in U4.
 - `packages/agentcore/scripts/build-and-push.sh:50-52` — already accepts `--runtime strands`; extended for `--runtime computer-strands` in U3.
-- `packages/api/src/lib/connectors/runtime.ts` — current connector runtime (zero `computer` references); the integration target for U15.
+- `packages/api/src/lib/connectors/runtime.ts` — current connector runtime already supports `dispatch_target_type='computer'`, creates `computer_tasks`, and creates Computer-owned connector threads. U15 reconciles the newer narrow-endpoint plan with this existing implementation rather than assuming zero Computer references.
+- `docs/plans/2026-04-25-002-feat-agentcore-browser-automation-plan.md` — existing Browser Automation plan for Managed Agents. Computer v1 promotes that capability into a Computer-callable, admin-enabled tool with Computer-owned policy, evidence, and audit.
+- `packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py` — existing hidden AgentCore Browser + Nova Act tool extraction. Useful reference for dependency probing, split cost events, unavailable-state behavior, and wrapper isolation.
+- `packages/agentcore-strands/agent-container/test_browser_automation_tool.py` — characterization tests for missing-key behavior and split Nova/AgentCore Browser costs.
+- `packages/database-pg/drizzle/0032_add_browser_automation_template_config.sql` — existing capability-catalog seed for `browser_automation`; Computer v1 must not duplicate the slug or drift the catalog contract.
 
 ### Institutional Learnings
 
-- `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` — 3-scenario deploy smoke gate (`fresh-thread`, `multi-turn-history`, `memory-bearing`); regression detectors per row. Computer mirrors with a 4th scenario `interrupt-and-resume`.
+- `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` — 3-scenario deploy smoke gate (`fresh-thread`, `multi-turn-history`, `memory-bearing`); regression detectors per row. Computer mirrors those baselines and adds `interrupt-and-resume` plus `browser-computer-use`.
 - `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md` — env snapshot at coroutine entry is load-bearing. PR #563's pattern (`test_snapshot_params_override_empty_env`) is reused in U4.
 - `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md` — multi-PR seam pattern; applied to U6 (approvals inert → live), U15 (connector dispatch inert → live), U16 (golden workflow).
 - `docs/solutions/runtime-errors/lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md` — await Lambda dispatches; surface dispatch status in response payload (PR #838 `flue_retain` field). Pattern reused for Computer-side approval callback.
@@ -112,6 +117,7 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - `docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md` — explicit user-id predicate in multi-user OAuth. Applied to MCP broker in U11.
 - `docs/solutions/best-practices/service-endpoint-vs-widening-resolvecaller-auth-2026-04-21.md` — narrow REST endpoint over widened `resolveCaller`. Connector dispatch (U15) uses a narrow `POST /api/connectors/dispatch-to-computer`.
 - `docs/solutions/integration-issues/flue-supply-chain-integrity-2026-05-04.md` — supply-chain baseline for Python deps.
+- `docs/plans/2026-04-25-002-feat-agentcore-browser-automation-plan.md` — Browser Automation scope/cost/capability decisions. Computer v1 should reuse AgentCore Browser + Nova Act as the default substrate and add Computer-owned policy, evidence, approval, and audit around it. A Computer-local Chromium/Playwright substrate is a fallback only if the managed browser cannot satisfy a concrete v1 workflow.
 
 ### External References
 
@@ -123,6 +129,8 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - https://strandsagents.com/docs/community/session-managers/agentcore-memory/ — `AgentCoreMemorySessionManager` (deferred to v2).
 - https://strandsagents.com/docs/user-guide/concepts/tools/mcp-tools/ — `MCPClient` + `streamablehttp_client(url, headers)`; headers read at construction.
 - Strands version 1.38.0 (released 2026-04-30); Python ≥ 3.10.
+- https://www.perplexity.ai/hub/blog/introducing-perplexity-computer — product target reference: digital worker with long-running computer-backed work. Use as positioning input, not implementation specification.
+- https://www.builder.io/blog/perplexity-computer — product-review signal: strengths are polished orchestration, connectors, memory, and skill playbooks; weaknesses include black-box execution, no live preview, connector fragility, limited customization, and loop/cost risk. ThinkWork should compete by making browser sessions inspectable, governed, and auditable.
 
 ---
 
@@ -138,9 +146,13 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - **Sub-agent delegation = Strands agents-as-tools (in-process)** for v1 lightweight subagents. The coding worker is a *separate container* invoked via `InvokeAgentRuntime` (heavier blast radius, isolated scaling, AgentCore-managed) — chosen because `/lfg` runs minutes-to-hours and shouldn't share the Computer's process resources. Both shapes use the same `delegation` stdlib module; substrate is a delegation-payload field.
 - **Result rows for delegations live in `computer_delegations`** (already shaped, currently unused). `agent_id` FK can be NULL for in-process subagents; populated for AgentCore-managed coding worker invocations.
 - **CE skills folder ships only with the coding worker container.** Computer uses purpose-built tools.
+- **Browser/computer-use ships in v1 as an admin-enabled Computer tool backed primarily by AgentCore Browser + Nova Act.** The Computer container should not install Chromium/Playwright for v1 unless implementation proves a hard limitation in the managed browser path. The Strands agent receives URL/title, bounded visible-state summaries, action/result text, screenshot/session artifact references, and cost metadata; screenshots/traces/videos are persisted as Computer artifacts for audit/debugging.
+- **Computer-local browser is a fallback, not the default.** Defer bundling local Chromium/Playwright unless a concrete v1 workflow needs EFS-local uploads/downloads, private VPC/intranet access unavailable to AgentCore Browser, persistent per-Computer profiles/cookies, or lower-level deterministic control that Nova Act cannot provide.
+- **Browser actions are policy-gated and approval-aware.** Read-only navigation/extraction is allowed when `runtime_config.tool_policy.browser.enabled=true` and the admin has enabled the Browser Automation built-in; credential entry, form submission, purchase/payment, external writes, file downloads outside workpapers, and cross-origin OAuth flows require `approvals.request(...)` unless an explicit tenant policy grants a narrower exception.
+- **Browser is not a generic human remote desktop in v1.** Admin/mobile can view latest screenshot/session artifacts and stop/block the task; live co-browsing/takeover can follow once the AgentCore-backed browser tool is reliable.
 - **Adapter shim list expands beyond the four named in origin** (`Skill`, `AskUserQuestion`, `TaskCreate/Get/List`, `Agent`). Spike (U13) enumerates `lfg.md` + transitively-loaded skills' tool references; production set (U14) extends to cover them. Confirmed candidates from spec-flow analysis: `WebSearch`, `WebFetch`, `TodoWrite`, `Mcp__*`, `ExitPlanMode`, `BashOutput`, `KillShell`, `SlashCommand`. `NotebookEdit` is excluded (Jupyter-only; out of v1 coding scope).
 - **Env snapshot at runtime entry** — `_load_runtime_secrets()` at coroutine entry loads `THINKWORK_API_URL`, `API_AUTH_SECRET`, `HINDSIGHT_ENDPOINT` once; passes via parameters; never re-reads `os.environ` post-turn. Pattern from PR #563 reused.
-- **3-scenario deploy smoke gate** (`fresh-thread`, `multi-turn-history`, `memory-bearing`) plus a 4th `interrupt-and-resume` scenario specific to Computer. Mirrors `flue-marco-smoke` shape exactly.
+- **5-scenario deploy smoke gate**: `fresh-thread`, `multi-turn-history`, `memory-bearing`, `interrupt-and-resume`, and `browser-computer-use`. The first three mirror `flue-marco-smoke` intent; the latter two are Computer-specific.
 - **Computer ECR image is arm64** to match the existing per-Computer ECS reconciler — `packages/api/src/lib/computers/runtime-control.ts:325` hard-codes `cpuArchitecture: "ARM64"` in the task-definition builder, and flipping that is out of scope here. Coding worker image is also arm64 (AgentCore Runtime). The cited solution doc (`multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24`) is about Lambda-vs-AgentCore arch, not Fargate defaults; both Computer and coding-worker land on arm64.
 - **Bedrock model strings use full inference-profile prefix** (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`). Default Computer model: `us.anthropic.claude-sonnet-4-6` (or whichever Sonnet is current at deploy time).
 - **Per-tenant Code Interpreter `codeInterpreterIdentifier`** resolved by trusted handler from invocation context (FR-9a gap closure). Applies to coding worker; Computer doesn't use Code Interpreter directly.
@@ -178,6 +190,8 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 - **Aurora SessionManager indexing strategy** for fast resume by `(tenant_id, computer_id, session_id)`.
 - **Workpaper cleanup policy** on task completion / failure (retention period; S3 archive vs. EFS delete).
 - **Tool-permission policy schema** (`runtime_config.tool_policy`).
+- **Browser session persistence strategy:** start with AgentCore Browser session artifacts and S3-backed screenshots/traces linked to the Computer task; do not persist cookies/storage state across tasks by default. If a v1 workflow requires persistent profiles, add it as an explicit tenant-policy-controlled extension rather than silently introducing local browser state.
+- **Browser artifact retention:** choose retention period and redaction for screenshots/video/traces, since browser evidence can contain PII, credentials, email bodies, or internal app data. Default should be short retention with S3 SSE-KMS and admin-visible metadata.
 - **Whether to use `service_tier="priority"`** on `BedrockModel` for the Computer (latency-sensitive) vs. coding worker (cost-tolerant).
 - **Coding worker ECR location:** new `thinkwork-${stage}-coding-worker` ECR vs. sub-tag of `thinkwork-${stage}-agentcore`.
 - **Heartbeat granularity for delegations:** 60s default, but exact cadence and emit point inside Strands lifecycle.
@@ -186,10 +200,11 @@ Single list per Deep-feature tier. Origin scope boundaries carried forward, plan
 #### From doc-review (2026-05-08, interactive walkthrough)
 
 - **R16 v1 cut for Drive/Docs/Sheets:** is the Drive search/read + Docs create/update/comment + Sheets read/update set actually deferrable for v1, or does the v1 demo workflow surface a need? Plan currently defers; re-validate at planning time.
+- **Browser/computer-use is now v1, not deferred:** the older origin boundary excluding browser/computer-use is intentionally superseded by the 2026-05-08 product direction. Any implementation plan or review comment that treats browser as follow-up is stale.
 - **Pre-U6 Strands SessionManager round-trip spike:** stand up Strands 1.38.0 with `tool_context.interrupt`, persist + rehydrate `agent.state + messages` via msgpack against the real version, kill the process between persist and rehydrate, verify the resumed agent calls the model with the original conversation history intact. The current U6 inert phase only proves the snapshot is written; doesn't prove correct semantic resume.
 - **Computer container Dockerfile entrypoint shape:** explicit polling-loop CMD (`python -m computer_strands.entrypoint`) rather than LWA HTTP server pattern inherited from `agentcore-strands`. The existing Strands Dockerfile expects AgentCore Runtime invocation context; ECS Fargate is fundamentally different.
 - **CI image-build path filter additions in `.github/workflows/deploy.yml`:** new `computer_container` filter group; new `build-computer-container` job pointing at `packages/computer-strands/Dockerfile` and pushing to `thinkwork-${stage}-computer-runtime` ECR; new staleness detector. Existing `build-container` job builds only agentcore-strands and agentcore-flue.
-- **4-scenario smoke gate ECS-async shape:** the smoke is NOT a verbatim mirror of `flue-marco-smoke` (Lambda invoke + read response) — Computer is a long-lived ECS poller. Smoke must INSERT `computer_tasks` row → poll status → POST approval response → poll completed. Only `interrupt-and-resume` is genuinely Computer-specific; the other three scenarios become "task lifecycle" with different goals.
+- **5-scenario smoke gate ECS-async shape:** the smoke is NOT a verbatim mirror of `flue-marco-smoke` (Lambda invoke + read response) — Computer is a long-lived ECS poller. Smoke must INSERT `computer_tasks` row → poll status → POST approval response where relevant → poll completed/blocked. `interrupt-and-resume` and `browser-computer-use` are genuinely Computer-specific; the other three scenarios become "task lifecycle" with different goals.
 - **Default Fargate sizing tuning:** `default_cpu = 256`, `default_memory = 512` likely undersized for Strands + Bedrock + Hindsight + MCP working set with multi-MCP concurrent connections. Bump to `512 / 2048` upfront, or treat as Phase 5 tuning gated by a memory-pressure smoke.
 - **`AGENTCORE_MEMORY_ID` and `OTEL_EXPORTER_OTLP_ENDPOINT` resolution on ECS:** AgentCore Runtime injects these; ECS Fargate does not. Decide whether the Computer uses AgentCore Memory at all in v1 (R20 says Hindsight is primary, AgentCore Memory recall-only — confirm whether the AgentCore Memory client is needed). For OTEL, decide between dropping it on the Computer, running an ADOT sidecar, or pointing at a stage-level OTLP collector.
 - **Encrypted-at-rest for `computer_snapshots.payload`:** paused session state (serialized `messages`) may include OAuth tokens, drafted email bodies, MCP tool outputs. Decide between column-level encryption (pgcrypto / RDS field encryption) vs. S3-reference + SSE-KMS per-tenant key. Aurora volume-level encryption is the floor; this question is about the second layer.
@@ -216,6 +231,7 @@ packages/
 │   │   ├── runtime.py                            # session loader, env snapshot
 │   │   ├── goal_loop.py                          # turn status, budget enforcement, iteration hook
 │   │   ├── workspace.py                          # workspace tools + workpaper convention
+│   │   ├── browser.py                            # browser-first computer-use tools + screenshot artifacts
 │   │   ├── memory.py                             # Hindsight async wrappers
 │   │   ├── approvals.py                          # interrupt → inbox → resume bridge
 │   │   ├── google_workspace.py                   # Gmail + Calendar tools (Drive/Docs/Sheets deferred)
@@ -334,7 +350,7 @@ The implementing agent may adjust this layout (e.g., merge sibling packages, spl
 ```
 computer-stdlib (Python package)
   ├── tools (decorated with @tool from strands)
-  │     workspace, memory, google_workspace, mcp_broker, routines, ...
+  │     workspace, browser, memory, google_workspace, mcp_broker, routines, ...
   │     each tool ↔ thinkwork API call
   │
   ├── Strands hooks
@@ -353,6 +369,28 @@ computer-stdlib (Python package)
         AskUserQuestion → tool_context.interrupt(name='approval', reason={question, options})
         TaskCreate/Get/List → thinkwork API calls
         Agent → strands agents-as-tools
+```
+
+### Browser/computer-use loop
+
+```
+Computer agent decides a website/web app is needed
+   |
+   v
+browser.act(url, task) -> calls AgentCore Browser + Nova Act and returns
+                          session_id, current_url, title,
+                          screenshot_artifact_id, visible_summary
+   |
+   v
+optional browser follow-up action/extraction tools
+   |
+   +--> each invocation emits computer_event + stores screenshot/trace artifact
+   |
+   +--> sensitive action? approvals.request(...) before submit/send/pay/download
+   |
+   v
+Computer summarizes visible result into thread/workpaper,
+with links to browser evidence for audit/debugging
 ```
 
 ### Connector → Computer dispatch (F1)
@@ -379,7 +417,7 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 
 #### U1. Create `packages/computer-stdlib/` Python package skeleton
 
-**Goal:** New uv workspace member with module layout for the eleven stdlib modules; tests scaffolding; ruff + pyright passing on empty stubs.
+**Goal:** New uv workspace member with module layout for the origin eleven stdlib modules plus the plan-local browser/computer-use module; tests scaffolding; ruff + pyright passing on empty stubs.
 
 **Requirements:** R6, R7, R8.
 
@@ -388,7 +426,7 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 **Files:**
 - Create: `packages/computer-stdlib/pyproject.toml`
 - Create: `packages/computer-stdlib/src/computer_stdlib/__init__.py`
-- Create: `packages/computer-stdlib/src/computer_stdlib/{runtime,goal_loop,workspace,memory,approvals,google_workspace,mcp_broker,routines,delegation,observability,session_store}.py` (stubs)
+- Create: `packages/computer-stdlib/src/computer_stdlib/{runtime,goal_loop,workspace,browser,memory,approvals,google_workspace,mcp_broker,routines,delegation,observability,session_store}.py` (stubs)
 - Create: `packages/computer-stdlib/src/computer_stdlib/shims/{__init__,skill_loader,ask_user_question,task_tools,agent_tool}.py` (stubs)
 - Create: `packages/computer-stdlib/tests/test_package_imports.py`
 - Modify: `pyproject.toml` (root) — add `packages/computer-stdlib` as uv workspace member
@@ -494,9 +532,9 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 
 ---
 
-#### U4. Env-snapshot pattern + 4-scenario deploy smoke gate
+#### U4. Env-snapshot pattern + 5-scenario deploy smoke gate
 
-**Goal:** Establish env-snapshot at coroutine entry (regression test pattern from PR #563); ship a deploy-time smoke gate scenarios (`fresh-thread`, `multi-turn-history`, `memory-bearing`, `interrupt-and-resume`) wired into `.github/workflows/deploy.yml`.
+**Goal:** Establish env-snapshot at coroutine entry (regression test pattern from PR #563); ship a deploy-time smoke gate harness for (`fresh-thread`, `multi-turn-history`, `memory-bearing`, `interrupt-and-resume`, `browser-computer-use`) wired into `.github/workflows/deploy.yml`.
 
 **Requirements:** R10, R11, R31.
 
@@ -505,13 +543,13 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 **Files:**
 - Modify: `packages/computer-strands/src/computer_strands/entrypoint.py` — explicit `_load_runtime_secrets()` snapshot pattern with regression-test hooks.
 - Create: `packages/computer-strands/tests/test_env_snapshot.py` — `test_snapshot_params_override_empty_env`, `test_snapshot_params_take_precedence_over_env` (mirroring PR #563).
-- Create: `packages/api/src/__smoke__/computer-marco-smoke.ts` — three baseline scenarios + interrupt-and-resume (latter is inert until U6 ships, then live).
+- Create: `packages/api/src/__smoke__/computer-marco-smoke.ts` — three baseline scenarios + interrupt-and-resume + browser-computer-use (`interrupt-and-resume` is inert until U6 ships; `browser-computer-use` is inert until U9b ships).
 - Create: `scripts/post-deploy-smoke-computer.sh` — runner.
 - Modify: `.github/workflows/deploy.yml` — `computer-smoke-test` job after `update-computer-runtime`.
 
 **Approach:**
-- Smoke scenarios mirror `flue-marco-smoke` shape verbatim. `interrupt-and-resume` scenario invokes the Computer with a goal that requires HITL approval; verifies the task transitions to `needs_approval`, then simulates an approval response and verifies the task completes.
-- The 4th scenario lands inert in U4 (just the harness), goes live when U6 ships the approval bridge — see U6's seam-swap.
+- Smoke scenarios mirror `flue-marco-smoke` intent, not invocation mechanics. `interrupt-and-resume` invokes the Computer with a goal that requires HITL approval; verifies the task transitions to `needs_approval`, then simulates an approval response and verifies the task completes. `browser-computer-use` invokes the Computer with a goal that requires opening a stable page, extracting visible content, and storing screenshot evidence.
+- The Computer-specific scenarios land inert in U4 (just the harness). `interrupt-and-resume` goes live when U6 ships the approval bridge; `browser-computer-use` goes live when U9b ships browser tools.
 
 **Patterns to follow:**
 - `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` smoke-gate table (regressions caught per scenario).
@@ -526,7 +564,7 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 **Verification:**
 - `uv run pytest packages/computer-strands/tests/test_env_snapshot.py` passes.
 - `bash scripts/post-deploy-smoke-computer.sh dev` returns 0 against deployed dev Computer.
-- CI deploy fails if any of the 4 scenarios regresses.
+- CI deploy fails if any live smoke scenario regresses. Once U9b lands, browser-computer-use is counted as required, not optional.
 
 ---
 
@@ -753,6 +791,58 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 **Verification:**
 - `uv run pytest packages/computer-stdlib/tests/test_google_workspace.py` passes.
 - `pnpm --filter @thinkwork/api test` for `computer-google-token.test.ts` passes.
+
+---
+
+#### U9b. Browser/computer-use tool + visible session artifacts
+
+**Goal:** `computer_stdlib.browser` gives the Computer a governed browser/computer-use tool backed primarily by AgentCore Browser + Nova Act. The Computer agent calls a high-level browser tool for dynamic websites/web apps; the tool emits `computer_events`, persists screenshot/session artifacts, records split browser costs, and returns bounded visible-state summaries so the work is inspectable rather than black-box.
+
+**Requirements:** R16b (plan-local override), R24, R28, R29, R31.
+
+**Dependencies:** U1, U5, U6, U7.
+
+**Files:**
+- Modify: `packages/computer-stdlib/src/computer_stdlib/browser.py`
+- Modify: `packages/computer-strands/src/computer_strands/entrypoint.py` — include Browser Automation tool when admin/template/runtime policy allows.
+- Modify: `packages/computer-strands/src/computer_strands/system_prompt.py` — instruct the Computer to use Browser Automation for dynamic websites/web apps, capture evidence, and ask before sensitive actions.
+- Modify: `packages/api/src/lib/computers/events.ts` or equivalent event helper — normalize browser event payloads.
+- Test: `packages/computer-stdlib/tests/test_browser.py`
+- Test: `packages/computer-strands/tests/test_browser_tools_registration.py`
+- Test: `packages/computer-strands/tests/test_browser_artifact_smoke.py`
+
+**Approach:**
+- Browser sessions are per Computer task by default and run on the managed AgentCore Browser substrate. Runtime state is recorded as Computer task artifacts: screenshots/traces/videos/session IDs are registered to S3/workpapers via `computer_snapshots`/artifact helpers, but raw browser cookies/storage are not persisted into the Computer workspace.
+- Tool set for v1:
+  - `browser_act(url, task)` starts an AgentCore Browser session, drives it with Nova Act, captures visible evidence, and returns `{session_id, current_url, title, screenshot_artifact_id, visible_summary, cost_events}`.
+  - `browser_extract(url, instruction)` is a read-focused wrapper over the same substrate with stricter no-mutation policy.
+  - `browser_screenshot(session_id?, label?)` captures or retrieves the latest screenshot artifact when the substrate exposes one.
+- Avoid installing Chromium/Playwright in `packages/computer-strands/Dockerfile` for v1. Add a local browser substrate only if implementation proves AgentCore Browser cannot satisfy a concrete acceptance workflow.
+- Each tool returns a bounded text/JSON summary plus a screenshot artifact reference. Do not dump raw page HTML into model context; use Nova Act output plus any available visible/accessibility summary capped by token budget.
+- Sensitive actions require approval: credential entry, form submit, purchase/payment, irreversible external mutation, OAuth connect/consent, file download outside workpapers, upload, or any action matching tenant policy patterns. Approval payload must include screenshot artifact ID and visible action summary.
+- Policy is revalidated on every browser action. If browser policy is disabled mid-task, the next action emits `policy_changed_mid_task` and returns `blocked`.
+- Browser artifacts must be redaction-aware. Do not log typed secrets, raw cookies, bearer tokens, or full localStorage/sessionStorage. Screenshots can still contain sensitive visible content, so they inherit the browser artifact retention policy from Deferred to Implementation.
+
+**Patterns to follow:**
+- `docs/plans/2026-04-25-002-feat-agentcore-browser-automation-plan.md` — Browser Automation slug, cost separation, unavailable-state behavior, and capability catalog integration.
+- `packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py` — existing AgentCore Browser + Nova Act mechanics; reuse lessons, not necessarily code.
+- `packages/agentcore-strands/agent-container/test_browser_automation_tool.py` — split cost / missing-key characterization pattern.
+- `packages/computer-runtime/src/workspace.ts` — safe workspace path validation shape for browser downloads and traces.
+
+**Test scenarios:**
+- Happy path: `browser_act(url, task)` uses injected fake AgentCore Browser/Nova Act clients, captures a screenshot artifact reference, and records split `nova_act_browser_automation` + `agentcore_browser_session` cost metadata.
+- Happy path: `browser_extract(url, instruction)` runs in no-mutation mode and returns visible-state summary plus evidence artifact.
+- Happy path: `browser_screenshot("after-submit")` writes or registers a workpaper artifact and returns an artifact ID/path, not raw image bytes.
+- Edge case: browser policy disabled before registration → browser tools are absent from the Computer tool list.
+- Edge case: browser policy disabled mid-task → next browser action returns blocked and emits `policy_changed_mid_task`.
+- Edge case: form submission triggers `approvals.request(...)` with screenshot artifact ID; approval-deny prevents the submit.
+- Error path: AgentCore Browser or Nova Act dependency/key unavailable returns structured unavailable error and fails the task only if browser use was required for the goal.
+- Security: typed secret values are redacted from events/logs; cookies/localStorage are not serialized into workpapers.
+- Integration: dev smoke calls the AgentCore-backed Browser tool against a real stable page, performs at least one extraction/action, persists screenshot evidence, and links that evidence from `computer_events`.
+
+**Verification:**
+- `uv run pytest packages/computer-stdlib/tests/test_browser.py packages/computer-strands/tests/test_browser_*.py` passes.
+- Manual/dev-gated smoke proves the Computer can call the AgentCore-backed Browser tool and record screenshot/session evidence, not only return model text.
 
 ---
 
@@ -1041,40 +1131,45 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 
 #### U16. Golden workflow E2E demo + acceptance smoke
 
-**Goal:** Wire the full v1 acceptance flow on Eric's dev tenant: Linear bug-fix issue arrives → Computer claims → reads memory + workspace context → drafts plan → at least one HITL approval round-trip via mobile → optionally delegates to coding worker → external action applied (PR created or email sent or calendar event made) → final thread update + audit. Add the 4th smoke scenario to deploy gate.
+**Goal:** Wire the full v1 acceptance flow on Eric's dev tenant: Linear bug-fix issue or user request arrives → Computer claims → reads memory + workspace context → uses browser/computer-use to inspect a live website/web app or verify external state → drafts plan → at least one HITL approval round-trip via mobile → optionally delegates to coding worker → external action applied (PR created or email sent or calendar event made) → final thread update + audit with browser evidence. Make the smoke gate count both Computer-specific scenarios (`interrupt-and-resume`, `browser-computer-use`) and add a browser evidence check to the golden workflow.
 
-**Requirements:** R33 (origin), R34 (origin), AE1, AE2, AE3, AE10, AE14, AE15.
+**Requirements:** R33 (origin), R34 (origin), R16b (plan-local), AE1, AE2, AE3, AE10, AE14, AE15.
 
-**Dependencies:** U1–U9, U12, U13, U14, U15 are blocking for golden-workflow acceptance per origin R34's priority sequence. U10 (MCP broker) and U11 (routines) are NOT on the golden-workflow critical path (origin R34 doesn't list them as v1-acceptance prerequisites) — they may be in-flight or land after U16 without delaying acceptance. The observability half of U10 lands with U5 (event emission is critical-path); the MCP-broker half can ship later.
+**Dependencies:** U1–U9b, U12, U13, U14, U15 are blocking for golden-workflow acceptance per origin R34 plus the 2026-05-08 browser/computer-use override. U10 (MCP broker) and U11 (routines) are NOT on the golden-workflow critical path (origin R34 doesn't list them as v1-acceptance prerequisites) — they may be in-flight or land after U16 without delaying acceptance. The observability half of U10 lands with U5 (event emission is critical-path); the MCP-broker half can ship later.
 
 **Files:**
 - Modify: `packages/api/src/__smoke__/computer-marco-smoke.ts` — wire the `interrupt-and-resume` scenario live (was inert in U4)
 - Create: `packages/computer-strands/tests/test_golden_workflow_e2e.py` — E2E test exercising the full flow on dev (gated to manual run)
+- Create: `packages/computer-strands/tests/test_browser_golden_smoke.py` — dev-gated smoke proving the Computer calls the AgentCore-backed Browser tool, performs action/extract, records screenshot/session artifacts, and links `computer_events`.
 - Modify: `docs/solutions/architecture-patterns/` — write `computer-strands-launch-2026-MM-DD.md` capturing the launch verdict (mirrors `flue-runtime-launch-2026-05-04.md` shape)
 - Modify: `STRATEGY.md` (if exists) — note the Computer launch milestone
 
 **Approach:**
-- E2E test creates a sandbox Linear issue with a known label; submits a webhook event simulating a Linear notification; polls for the `computer_tasks` row; waits for the Computer to handle it; verifies thread updates + at least one inbox approval round-trip; verifies the external action lands; verifies audit completeness.
+- E2E test creates a sandbox Linear issue with a known label or a user-visible browser-backed goal; submits a webhook event simulating a Linear notification; polls for the `computer_tasks` row; waits for the Computer to handle it; verifies the Computer used browser/computer-use at least once; verifies thread updates + at least one inbox approval round-trip; verifies the external action lands; verifies audit completeness.
+- Browser evidence check: assert at least one `browser_*` `computer_event` exists, at least one screenshot/trace artifact exists, and the final thread links or references that evidence. Text-only "I browsed it" claims are not sufficient.
 - Launch doc captures: what's true after launch, smoke gate behavior, deferred items, rollback playbook.
 
 **Patterns to follow:**
 - `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` — launch doc shape.
 
 **Test scenarios:**
-- Happy path: golden workflow runs end-to-end on dev; PR opened (if delegation path) OR email sent (if email path) OR calendar event created (if calendar path).
+- Happy path: golden workflow runs end-to-end on dev; Computer uses browser/computer-use against a stable live page or web app; screenshot evidence is persisted; PR opened (if delegation path) OR email sent (if email path) OR calendar event created (if calendar path).
+- Happy path: browser smoke opens a deterministic page, extracts visible data, captures screenshot artifact, and emits ordered browser events.
 - Edge case: HITL approval denied mid-flow → task transitions to `blocked`; user notified; no external action.
 - Edge case: ECS task restarts mid-pause → on next claim, paused state hydrates correctly; resume continues.
 - Edge case: budget exceeded mid-flow → `policy_changed_mid_task` or `budget_exceeded` event; transition to `blocked`.
+- Edge case: AgentCore Browser/Nova Act unavailable or target site unavailable → bounded retry; if still unavailable, task transitions to `blocked` with clear next action and browser failure event/artifact.
 - **Covers AE1.** (email path) Email triage round-trip with approval.
 - **Covers AE2.** (calendar path) Calendar scheduling round-trip with approval.
 - **Covers AE3.** (Linear path) Linear → Computer → delegate → result.
 - **Covers AE10.** Approval resume with full audit context.
 - **Covers AE14.** Failure recovery: a tool call fails → bounded retry → blocked state with clear next-action.
 - **Covers AE15.** Governance: admin disables a tool mid-task → policy re-validate → blocked.
+- **Covers plan-local browser acceptance.** Browser/computer-use is proven in the ECS runtime with visible artifact evidence and audit linkage.
 
 **Verification:**
 - E2E test passes on dev.
-- Smoke gate's 4 scenarios (`fresh-thread`, `multi-turn-history`, `memory-bearing`, `interrupt-and-resume`) all pass on every dev deploy.
+- Smoke gate's 5 scenarios (`fresh-thread`, `multi-turn-history`, `memory-bearing`, `interrupt-and-resume`, `browser-computer-use`) all pass on every dev deploy.
 - Launch doc lands in `docs/solutions/architecture-patterns/`.
 - Rollback playbook documented and tested (column-flip rollback or ECR image revert).
 
@@ -1082,11 +1177,11 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 
 ## System-Wide Impact
 
-- **Interaction graph:** New surfaces — `POST /api/connectors/dispatch-to-computer` (U15), `POST /api/computers/approval/respond` (U6), `POST /api/computers/runtime/google/token` (U9). Existing `chat-agent-invoke` MCP config builder is reused. Mobile inbox extends with `type='computer_approval'` (U6).
+- **Interaction graph:** New surfaces — `POST /api/connectors/dispatch-to-computer` (U15), `POST /api/computers/approval/respond` (U6), `POST /api/computers/runtime/google/token` (U9). Browser/computer-use persists evidence through `computer_events`, workpapers, and snapshot/artifact helpers (U9b). Existing `chat-agent-invoke` MCP config builder is reused. Mobile inbox extends with `type='computer_approval'` (U6).
 - **Error propagation:** Tool failures emit `level=error` events but don't propagate as task failures unless the goal loop exhausts retries (U5). Approval timeouts transition to `blocked`. Persistent infra failures (Hindsight, MCP) degrade gracefully with `level=warn` events.
 - **State lifecycle risks:** Paused Strands sessions are durable in `computer_snapshots`; ECS task restart is recoverable. `computer_tasks` row idempotency prevents duplicates from connector retries. `computer_delegations` heartbeat detects orphaned worker invocations.
 - **API surface parity:** No existing API surface is changed in v1 except the additions above. The TS `computer-runtime` API endpoints (claim/complete/fail/heartbeat/appendEvent) are unchanged; the new Python container speaks the same contract.
-- **Integration coverage:** Body-swap-safety integration tests on inert→live seams (U6, U15). End-to-end golden workflow on dev (U16). 4-scenario deploy smoke gate (U4 + U16).
+- **Integration coverage:** Body-swap-safety integration tests on inert→live seams (U6, U15). End-to-end golden workflow on dev (U16). 5-scenario deploy smoke gate (U4 + U16), including browser/computer-use evidence.
 - **Unchanged invariants:** Existing Marco/Flue runtime, agent_templates dispatcher (`packages/api/src/lib/resolve-runtime-function-name.ts`), AgentCore Strands runtime for non-Computer agents, Hindsight async-wrapper pattern, Bedrock model inference profile prefixing, supply-chain baseline.
 
 ---
@@ -1102,6 +1197,9 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 | Connector-side connector_execution → Computer dispatch ordering creates orphan rows on partial failure | U15 makes the dispatch transactional with the connector_execution write where possible; orphan rows have a sweeper job per `mcp-approval-sweeper` pattern. |
 | Mobile inbox UX for `computer_approval` queue rendering is more work than expected | U6 v1 uses minimal UX (single thread message + push per approval); rich queue UI deferred. |
 | HITL no-response timeout sweeper job missed → tasks stuck in `needs_approval` forever | Cron-style sweeper Lambda runs daily; emits metric on expired-approval count for ops dashboards. |
+| Browser/computer-use becomes a black box like competitor agents | U9b requires screenshot/trace artifacts and ordered browser events for every browser smoke; U16 fails if browser evidence is missing even when the final text answer is plausible. |
+| Browser sessions leak sensitive visible data into logs or long-lived artifacts | U9b redacts typed secrets and storage state, keeps raw cookies/localStorage out of workpapers, and requires a short-retention encrypted artifact policy before launch. |
+| AgentCore Browser/Nova Act availability, quotas, or credentials are flaky | U9b adds a dev smoke for the managed browser tool and U5/U16 keep blocked-state recovery explicit. Browser tool unavailability is a launch blocker, not a warning. |
 | Per-tenant GitHub App installation flow has gaps | U14 explicitly defers tenant onboarding for GitHub App to a separate concern; v1 assumes Eric's tenant has the App installed manually. |
 | Strands version 1.38.0 has breaking changes vs. 1.34.0 (current `agentcore-strands` pin) | Pin to a tested Strands version in U1; bump existing `agentcore-strands` only after Computer ships and is stable. |
 | Build-pipeline image-tag drift (per `multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24`) leaks across Computer + coding worker | Use split-arch tags from day one (amd64 for Computer/Lambda, arm64 for AgentCore); explicit `--min-source-sha --strict` post-deploy verification. |
@@ -1114,7 +1212,7 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 - **Spike verdicts** for U13 land at `docs/solutions/architecture-patterns/computer-strands-ce-skill-port-spike-verdict-2026-MM-DD.md`.
 - **Operator runbook**: smoke gate behavior on every dev deploy; rollback via image-revert or per-Computer ECS reconciler config flip.
 - **Memory updates**: after Phase 5 ships, update `MEMORY.md` index with a `project_thinkwork_computer_strands_launched.md` entry.
-- **Cost monitoring**: per-Computer ECS Fargate cost is the dominant driver; CloudWatch dashboard tracking per-tenant spend.
+- **Cost monitoring**: per-Computer ECS Fargate cost is the base driver; browser/computer-use adds AgentCore Browser substrate and Nova Act agent-hour costs. Launch monitoring must separate base Computer runtime, browser session artifacts/storage, AgentCore Browser substrate, and Nova Act estimates.
 
 ---
 
@@ -1123,6 +1221,7 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 - **Origin document:** `docs/brainstorms/2026-05-07-thinkwork-computer-on-strands-requirements.md`
 - **Related brainstorms:** `docs/brainstorms/2026-05-06-thinkwork-computer-product-reframe-requirements.md`, `docs/brainstorms/2026-05-07-computer-first-connector-routing-requirements.md`, `docs/brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md` (separate-track context)
 - **Superseded brainstorm:** `docs/brainstorms/archived/2026-05-07-computer-generalist-and-coding-subagent-requirements.md`
+- **Browser plan:** `docs/plans/2026-04-25-002-feat-agentcore-browser-automation-plan.md`
 - **Architecture patterns:** `docs/solutions/architecture-patterns/flue-runtime-launch-2026-05-04.md` (smoke-gate pattern), `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`, `docs/solutions/architecture-patterns/flue-fr9a-integration-spike-verdict-2026-05-03.md`
 - **Workflow learnings:** `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`
 - **Runtime errors:** `docs/solutions/runtime-errors/lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md`
@@ -1130,4 +1229,5 @@ Five phases. U-IDs are stable; reorder/split keeps existing IDs in place.
 - **Integration issues:** `docs/solutions/integration-issues/agentcore-runtime-role-missing-code-interpreter-perms-2026-04-24.md`, `docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md`
 - **Best practices:** `docs/solutions/best-practices/service-endpoint-vs-widening-resolvecaller-auth-2026-04-21.md`, `docs/solutions/best-practices/oauth-client-credentials-in-secrets-manager-2026-04-21.md`
 - **External docs:** Strands SDK 1.38.0 — agent loop, interrupts, session management, multi-agent patterns, MCP, streaming, Bedrock provider (URLs in Context & Research → External References)
-- **Related code:** `packages/agentcore-strands/agent-container/container-sources/server.py:683-1401, 580-599, 1531-1538`, `packages/database-pg/src/schema/computers.ts:25-247`, `terraform/modules/app/computer-runtime/main.tf:14-227`, `packages/api/src/lib/connectors/runtime.ts`, `packages/computer-runtime/src/{index,task-loop,api-client,workspace}.ts`
+- **Product references:** Perplexity Computer launch post and Builder.io Perplexity Computer review (URLs in Context & Research → External References)
+- **Related code:** `packages/agentcore-strands/agent-container/container-sources/server.py:683-1401, 580-599, 1531-1538`, `packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py`, `packages/database-pg/src/schema/computers.ts:25-247`, `terraform/modules/app/computer-runtime/main.tf:14-227`, `packages/api/src/lib/connectors/runtime.ts`, `packages/computer-runtime/src/{index,task-loop,api-client,workspace}.ts`
