@@ -295,6 +295,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
+      '@graphql-typed-document-node/core':
+        specifier: ^3.2.0
+        version: 3.2.0(graphql@16.13.2)
       '@radix-ui/react-label':
         specifier: ^2.1.8
         version: 2.1.8(@types/react-dom@19.2.3(@types/react@19.1.17))(@types/react@19.1.17)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -316,6 +319,12 @@ importers:
       '@thinkwork/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@urql/core':
+        specifier: ^6.0.0
+        version: 6.0.1(graphql@16.13.2)
+      amazon-cognito-identity-js:
+        specifier: ^6.3.16
+        version: 6.3.16
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -325,6 +334,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.1.17))(@types/react@19.1.17)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      graphql:
+        specifier: ^16.10.0
+        version: 16.13.2
       lucide-react:
         specifier: ^0.574.0
         version: 0.574.0(react@19.1.0)
@@ -355,6 +367,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      urql:
+        specifier: ^5.0.1
+        version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.1.0)
     devDependencies:
       '@tailwindcss/typography':
         specifier: ^0.5.16

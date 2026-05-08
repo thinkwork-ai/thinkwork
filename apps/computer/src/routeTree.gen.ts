@@ -9,16 +9,24 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
-import { Route as ShellRouteImport } from "./routes/_shell";
+import { Route as SignInRouteImport } from "./routes/sign-in";
+import { Route as AuthedRouteImport } from "./routes/_authed";
 import { Route as SplatRouteImport } from "./routes/$";
 import { Route as IndexRouteImport } from "./routes/index";
-import { Route as ShellInboxRouteImport } from "./routes/_shell/inbox";
-import { Route as ShellComputerRouteImport } from "./routes/_shell/computer";
-import { Route as ShellAutomationsRouteImport } from "./routes/_shell/automations";
-import { Route as ShellThreadsIdRouteImport } from "./routes/_shell/threads.$id";
+import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
+import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
+import { Route as AuthedShellInboxRouteImport } from "./routes/_authed/_shell/inbox";
+import { Route as AuthedShellComputerRouteImport } from "./routes/_authed/_shell/computer";
+import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
+import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 
-const ShellRoute = ShellRouteImport.update({
-  id: "/_shell",
+const SignInRoute = SignInRouteImport.update({
+  id: "/sign-in",
+  path: "/sign-in",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AuthedRoute = AuthedRouteImport.update({
+  id: "/_authed",
   getParentRoute: () => rootRouteImport,
 } as any);
 const SplatRoute = SplatRouteImport.update({
@@ -31,88 +39,126 @@ const IndexRoute = IndexRouteImport.update({
   path: "/",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ShellInboxRoute = ShellInboxRouteImport.update({
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: "/auth/callback",
+  path: "/auth/callback",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AuthedShellRoute = AuthedShellRouteImport.update({
+  id: "/_shell",
+  getParentRoute: () => AuthedRoute,
+} as any);
+const AuthedShellInboxRoute = AuthedShellInboxRouteImport.update({
   id: "/inbox",
   path: "/inbox",
-  getParentRoute: () => ShellRoute,
+  getParentRoute: () => AuthedShellRoute,
 } as any);
-const ShellComputerRoute = ShellComputerRouteImport.update({
+const AuthedShellComputerRoute = AuthedShellComputerRouteImport.update({
   id: "/computer",
   path: "/computer",
-  getParentRoute: () => ShellRoute,
+  getParentRoute: () => AuthedShellRoute,
 } as any);
-const ShellAutomationsRoute = ShellAutomationsRouteImport.update({
+const AuthedShellAutomationsRoute = AuthedShellAutomationsRouteImport.update({
   id: "/automations",
   path: "/automations",
-  getParentRoute: () => ShellRoute,
+  getParentRoute: () => AuthedShellRoute,
 } as any);
-const ShellThreadsIdRoute = ShellThreadsIdRouteImport.update({
+const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
-  getParentRoute: () => ShellRoute,
+  getParentRoute: () => AuthedShellRoute,
 } as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
-  "/automations": typeof ShellAutomationsRoute;
-  "/computer": typeof ShellComputerRoute;
-  "/inbox": typeof ShellInboxRoute;
-  "/threads/$id": typeof ShellThreadsIdRoute;
+  "/sign-in": typeof SignInRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/automations": typeof AuthedShellAutomationsRoute;
+  "/computer": typeof AuthedShellComputerRoute;
+  "/inbox": typeof AuthedShellInboxRoute;
+  "/threads/$id": typeof AuthedShellThreadsIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
-  "/automations": typeof ShellAutomationsRoute;
-  "/computer": typeof ShellComputerRoute;
-  "/inbox": typeof ShellInboxRoute;
-  "/threads/$id": typeof ShellThreadsIdRoute;
+  "/sign-in": typeof SignInRoute;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/automations": typeof AuthedShellAutomationsRoute;
+  "/computer": typeof AuthedShellComputerRoute;
+  "/inbox": typeof AuthedShellInboxRoute;
+  "/threads/$id": typeof AuthedShellThreadsIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
-  "/_shell": typeof ShellRouteWithChildren;
-  "/_shell/automations": typeof ShellAutomationsRoute;
-  "/_shell/computer": typeof ShellComputerRoute;
-  "/_shell/inbox": typeof ShellInboxRoute;
-  "/_shell/threads/$id": typeof ShellThreadsIdRoute;
+  "/_authed": typeof AuthedRouteWithChildren;
+  "/sign-in": typeof SignInRoute;
+  "/_authed/_shell": typeof AuthedShellRouteWithChildren;
+  "/auth/callback": typeof AuthCallbackRoute;
+  "/_authed/_shell/automations": typeof AuthedShellAutomationsRoute;
+  "/_authed/_shell/computer": typeof AuthedShellComputerRoute;
+  "/_authed/_shell/inbox": typeof AuthedShellInboxRoute;
+  "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
     | "/$"
+    | "/sign-in"
+    | "/auth/callback"
     | "/automations"
     | "/computer"
     | "/inbox"
     | "/threads/$id";
   fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/$" | "/automations" | "/computer" | "/inbox" | "/threads/$id";
+  to:
+    | "/"
+    | "/$"
+    | "/sign-in"
+    | "/auth/callback"
+    | "/automations"
+    | "/computer"
+    | "/inbox"
+    | "/threads/$id";
   id:
     | "__root__"
     | "/"
     | "/$"
-    | "/_shell"
-    | "/_shell/automations"
-    | "/_shell/computer"
-    | "/_shell/inbox"
-    | "/_shell/threads/$id";
+    | "/_authed"
+    | "/sign-in"
+    | "/_authed/_shell"
+    | "/auth/callback"
+    | "/_authed/_shell/automations"
+    | "/_authed/_shell/computer"
+    | "/_authed/_shell/inbox"
+    | "/_authed/_shell/threads/$id";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   SplatRoute: typeof SplatRoute;
-  ShellRoute: typeof ShellRouteWithChildren;
+  AuthedRoute: typeof AuthedRouteWithChildren;
+  SignInRoute: typeof SignInRoute;
+  AuthCallbackRoute: typeof AuthCallbackRoute;
 }
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/_shell": {
-      id: "/_shell";
+    "/sign-in": {
+      id: "/sign-in";
+      path: "/sign-in";
+      fullPath: "/sign-in";
+      preLoaderRoute: typeof SignInRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/_authed": {
+      id: "/_authed";
       path: "";
       fullPath: "/";
-      preLoaderRoute: typeof ShellRouteImport;
+      preLoaderRoute: typeof AuthedRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/$": {
@@ -129,57 +175,86 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/_shell/inbox": {
-      id: "/_shell/inbox";
+    "/auth/callback": {
+      id: "/auth/callback";
+      path: "/auth/callback";
+      fullPath: "/auth/callback";
+      preLoaderRoute: typeof AuthCallbackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/_authed/_shell": {
+      id: "/_authed/_shell";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof AuthedShellRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
+    "/_authed/_shell/inbox": {
+      id: "/_authed/_shell/inbox";
       path: "/inbox";
       fullPath: "/inbox";
-      preLoaderRoute: typeof ShellInboxRouteImport;
-      parentRoute: typeof ShellRoute;
+      preLoaderRoute: typeof AuthedShellInboxRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
-    "/_shell/computer": {
-      id: "/_shell/computer";
+    "/_authed/_shell/computer": {
+      id: "/_authed/_shell/computer";
       path: "/computer";
       fullPath: "/computer";
-      preLoaderRoute: typeof ShellComputerRouteImport;
-      parentRoute: typeof ShellRoute;
+      preLoaderRoute: typeof AuthedShellComputerRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
-    "/_shell/automations": {
-      id: "/_shell/automations";
+    "/_authed/_shell/automations": {
+      id: "/_authed/_shell/automations";
       path: "/automations";
       fullPath: "/automations";
-      preLoaderRoute: typeof ShellAutomationsRouteImport;
-      parentRoute: typeof ShellRoute;
+      preLoaderRoute: typeof AuthedShellAutomationsRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
-    "/_shell/threads/$id": {
-      id: "/_shell/threads/$id";
+    "/_authed/_shell/threads/$id": {
+      id: "/_authed/_shell/threads/$id";
       path: "/threads/$id";
       fullPath: "/threads/$id";
-      preLoaderRoute: typeof ShellThreadsIdRouteImport;
-      parentRoute: typeof ShellRoute;
+      preLoaderRoute: typeof AuthedShellThreadsIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
   }
 }
 
-interface ShellRouteChildren {
-  ShellAutomationsRoute: typeof ShellAutomationsRoute;
-  ShellComputerRoute: typeof ShellComputerRoute;
-  ShellInboxRoute: typeof ShellInboxRoute;
-  ShellThreadsIdRoute: typeof ShellThreadsIdRoute;
+interface AuthedShellRouteChildren {
+  AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRoute;
+  AuthedShellComputerRoute: typeof AuthedShellComputerRoute;
+  AuthedShellInboxRoute: typeof AuthedShellInboxRoute;
+  AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
 }
 
-const ShellRouteChildren: ShellRouteChildren = {
-  ShellAutomationsRoute: ShellAutomationsRoute,
-  ShellComputerRoute: ShellComputerRoute,
-  ShellInboxRoute: ShellInboxRoute,
-  ShellThreadsIdRoute: ShellThreadsIdRoute,
+const AuthedShellRouteChildren: AuthedShellRouteChildren = {
+  AuthedShellAutomationsRoute: AuthedShellAutomationsRoute,
+  AuthedShellComputerRoute: AuthedShellComputerRoute,
+  AuthedShellInboxRoute: AuthedShellInboxRoute,
+  AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
 };
 
-const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren);
+const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
+  AuthedShellRouteChildren,
+);
+
+interface AuthedRouteChildren {
+  AuthedShellRoute: typeof AuthedShellRouteWithChildren;
+}
+
+const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedShellRoute: AuthedShellRouteWithChildren,
+};
+
+const AuthedRouteWithChildren =
+  AuthedRoute._addFileChildren(AuthedRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
-  ShellRoute: ShellRouteWithChildren,
+  AuthedRoute: AuthedRouteWithChildren,
+  SignInRoute: SignInRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
