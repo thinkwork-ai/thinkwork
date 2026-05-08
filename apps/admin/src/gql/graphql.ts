@@ -769,6 +769,35 @@ export enum ComplianceEventType {
   WorkspaceGovernanceFileEdited = 'WORKSPACE_GOVERNANCE_FILE_EDITED'
 }
 
+export type ComplianceExport = {
+  __typename?: 'ComplianceExport';
+  completedAt?: Maybe<Scalars['String']['output']>;
+  filter: Scalars['AWSJSON']['output'];
+  format: ComplianceExportFormat;
+  jobError?: Maybe<Scalars['String']['output']>;
+  jobId: Scalars['ID']['output'];
+  presignedUrl?: Maybe<Scalars['String']['output']>;
+  presignedUrlExpiresAt?: Maybe<Scalars['String']['output']>;
+  requestedAt: Scalars['String']['output'];
+  requestedByActorId: Scalars['ID']['output'];
+  s3Key?: Maybe<Scalars['String']['output']>;
+  startedAt?: Maybe<Scalars['String']['output']>;
+  status: ComplianceExportStatus;
+  tenantId: Scalars['ID']['output'];
+};
+
+export enum ComplianceExportFormat {
+  Csv = 'CSV',
+  Json = 'JSON'
+}
+
+export enum ComplianceExportStatus {
+  Complete = 'COMPLETE',
+  Failed = 'FAILED',
+  Queued = 'QUEUED',
+  Running = 'RUNNING'
+}
+
 export type ComplianceOperatorCheckResult = {
   __typename?: 'ComplianceOperatorCheckResult';
   /**
@@ -1964,6 +1993,20 @@ export type Mutation = {
   createAgentFromTemplate: Agent;
   createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
+  /**
+   * Queue an async export of audit events matching the filter. Validates:
+   *   - 90-day cap on (until - since)
+   *   - 4 KB serialized filter byte cap
+   *   - 10 exports / hour rate limit per actor
+   * Throws typed errors with extensions.code in
+   *   {RATE_LIMIT_EXCEEDED, FILTER_RANGE_TOO_WIDE, FILTER_TOO_LARGE,
+   *    FORBIDDEN, UNAUTHENTICATED, INTERNAL_SERVER_ERROR}.
+   * Inserts the job row + emits data.export_initiated audit event in a
+   * single transaction; SQS dispatch happens after commit (queue write
+   * cannot be rolled back). If SQS send fails, the job is marked FAILED
+   * with jobError set.
+   */
+  createComplianceExport: ComplianceExport;
   createComputer: Computer;
   createConnector: Connector;
   createEvalTestCase: EvalTestCase;
@@ -2267,6 +2310,12 @@ export type MutationCreateAgentTemplateArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateComplianceExportArgs = {
+  filter: ComplianceEventFilter;
+  format: ComplianceExportFormat;
 };
 
 
@@ -3129,6 +3178,12 @@ export type Query = {
    * Page size capped at 200 server-side; client-recommended default 50.
    */
   complianceEvents: ComplianceEventConnection;
+  /**
+   * Caller's recent export jobs, sorted requested_at DESC, LIMIT 50.
+   * Operators see all tenants; non-operators are tenant-scoped via the
+   * same auth model as complianceEvents.
+   */
+  complianceExports: Array<ComplianceExport>;
   /**
    * Caller's compliance-operator status + dev-environment configuration
    * signal. Mirrors the adminRoleCheck pattern (top-level Query field,
@@ -5624,6 +5679,19 @@ export type RemoveThreadLabelMutationVariables = Exact<{
 
 export type RemoveThreadLabelMutation = { __typename?: 'Mutation', removeThreadLabel: boolean };
 
+export type CreateComplianceExportMutationVariables = Exact<{
+  filter: ComplianceEventFilter;
+  format: ComplianceExportFormat;
+}>;
+
+
+export type CreateComplianceExportMutation = { __typename?: 'Mutation', createComplianceExport: { __typename?: 'ComplianceExport', jobId: string, tenantId: string, requestedByActorId: string, requestedAt: string, status: ComplianceExportStatus, format: ComplianceExportFormat, filter: any, s3Key?: string | null, presignedUrl?: string | null, presignedUrlExpiresAt?: string | null, jobError?: string | null, startedAt?: string | null, completedAt?: string | null } };
+
+export type ComplianceExportsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ComplianceExportsQuery = { __typename?: 'Query', complianceExports: Array<{ __typename?: 'ComplianceExport', jobId: string, tenantId: string, requestedByActorId: string, requestedAt: string, status: ComplianceExportStatus, format: ComplianceExportFormat, filter: any, s3Key?: string | null, presignedUrl?: string | null, presignedUrlExpiresAt?: string | null, jobError?: string | null, startedAt?: string | null, completedAt?: string | null }> };
+
 export type ComplianceEventsListQueryVariables = Exact<{
   filter?: InputMaybe<ComplianceEventFilter>;
   after?: InputMaybe<Scalars['String']['input']>;
@@ -6807,6 +6875,8 @@ export const TenantLabelsDocument = {"kind":"Document","definitions":[{"kind":"O
 export const CreateThreadLabelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateThreadLabel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateThreadLabelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}}]}}]}}]} as unknown as DocumentNode<CreateThreadLabelMutation, CreateThreadLabelMutationVariables>;
 export const AssignThreadLabelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AssignThreadLabel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"labelId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"labelId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"labelId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"labelId"}}]}}]}}]} as unknown as DocumentNode<AssignThreadLabelMutation, AssignThreadLabelMutationVariables>;
 export const RemoveThreadLabelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveThreadLabel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"labelId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"labelId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"labelId"}}}]}]}}]} as unknown as DocumentNode<RemoveThreadLabelMutation, RemoveThreadLabelMutationVariables>;
+export const CreateComplianceExportDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateComplianceExport"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ComplianceEventFilter"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"format"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ComplianceExportFormat"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createComplianceExport"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"format"},"value":{"kind":"Variable","name":{"kind":"Name","value":"format"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"jobId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"requestedByActorId"}},{"kind":"Field","name":{"kind":"Name","value":"requestedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"format"}},{"kind":"Field","name":{"kind":"Name","value":"filter"}},{"kind":"Field","name":{"kind":"Name","value":"s3Key"}},{"kind":"Field","name":{"kind":"Name","value":"presignedUrl"}},{"kind":"Field","name":{"kind":"Name","value":"presignedUrlExpiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"jobError"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<CreateComplianceExportMutation, CreateComplianceExportMutationVariables>;
+export const ComplianceExportsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComplianceExports"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"complianceExports"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"jobId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"requestedByActorId"}},{"kind":"Field","name":{"kind":"Name","value":"requestedAt"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"format"}},{"kind":"Field","name":{"kind":"Name","value":"filter"}},{"kind":"Field","name":{"kind":"Name","value":"s3Key"}},{"kind":"Field","name":{"kind":"Name","value":"presignedUrl"}},{"kind":"Field","name":{"kind":"Name","value":"presignedUrlExpiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"jobError"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<ComplianceExportsQuery, ComplianceExportsQueryVariables>;
 export const ComplianceEventsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComplianceEventsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ComplianceEventFilter"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"complianceEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"occurredAt"}},{"kind":"Field","name":{"kind":"Name","value":"recordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"actor"}},{"kind":"Field","name":{"kind":"Name","value":"actorType"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"eventHash"}},{"kind":"Field","name":{"kind":"Name","value":"prevHash"}},{"kind":"Field","name":{"kind":"Name","value":"anchorStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"cadenceId"}},{"kind":"Field","name":{"kind":"Name","value":"anchoredRecordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextCadenceWithinMinutes"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"cursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]} as unknown as DocumentNode<ComplianceEventsListQuery, ComplianceEventsListQueryVariables>;
 export const ComplianceEventDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComplianceEventDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"eventId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"complianceEvent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"eventId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"eventId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"occurredAt"}},{"kind":"Field","name":{"kind":"Name","value":"recordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"actor"}},{"kind":"Field","name":{"kind":"Name","value":"actorType"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"eventHash"}},{"kind":"Field","name":{"kind":"Name","value":"prevHash"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"anchorStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"cadenceId"}},{"kind":"Field","name":{"kind":"Name","value":"anchoredRecordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextCadenceWithinMinutes"}}]}}]}}]}}]} as unknown as DocumentNode<ComplianceEventDetailQuery, ComplianceEventDetailQueryVariables>;
 export const ComplianceEventByHashDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComplianceEventByHash"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"eventHash"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"complianceEventByHash"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"eventHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"eventHash"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"eventId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"occurredAt"}},{"kind":"Field","name":{"kind":"Name","value":"recordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"actor"}},{"kind":"Field","name":{"kind":"Name","value":"actorType"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"eventHash"}},{"kind":"Field","name":{"kind":"Name","value":"prevHash"}},{"kind":"Field","name":{"kind":"Name","value":"anchorStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"cadenceId"}},{"kind":"Field","name":{"kind":"Name","value":"anchoredRecordedAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextCadenceWithinMinutes"}}]}}]}}]}}]} as unknown as DocumentNode<ComplianceEventByHashQuery, ComplianceEventByHashQueryVariables>;
