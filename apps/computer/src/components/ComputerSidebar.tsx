@@ -20,6 +20,7 @@ import {
 } from "@thinkwork/ui";
 import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
+import { COMPUTER_WORKBENCH_ROUTE } from "@/lib/computer-routes";
 import {
   ComputerThreadsQuery,
   MyComputerQuery,
@@ -33,7 +34,7 @@ interface NavItem {
 }
 
 const PERMANENT_NAV: NavItem[] = [
-  { to: "/computer", icon: Monitor, label: "Computer" },
+  { to: COMPUTER_WORKBENCH_ROUTE, icon: Monitor, label: "Computer" },
   { to: "/automations", icon: Repeat, label: "Automations" },
   { to: "/inbox", icon: Inbox, label: "Inbox" },
 ];
@@ -92,7 +93,7 @@ export function ComputerSidebar() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
-                <Link to="/computer">
+                <Link to={COMPUTER_WORKBENCH_ROUTE}>
                   <img
                     src="/logo.png"
                     alt="ThinkWork"
