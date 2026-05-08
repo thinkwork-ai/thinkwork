@@ -1,0 +1,138 @@
+---
+title: Developer guide
+description: "How to add a new event type, the audit-event tier semantics, the cross-runtime emit path (Strands), and where the compliance tests live."
+---
+
+How to extend the compliance module. For background read [overview](/compliance/overview/). For architectural shape read [architecture](/compliance/architecture/).
+
+## Procedures
+
+- [Adding a new event type](#adding-a-new-event-type)
+- [Audit-event tier semantics](#audit-event-tier-semantics)
+- [Cross-runtime emit path (Strands Python)](#cross-runtime-emit-path-strands-python)
+- [Adding a new compliance Lambda](#adding-a-new-compliance-lambda)
+- [Where the tests live](#where-the-tests-live)
+
+---
+
+### Adding a new event type
+
+**When to use this:** A new platform action needs auditing — adding to the SOC2 starter slate, or wiring a Phase 6 policy event.
+
+1. **Append the dotted-lowercase name to `COMPLIANCE_EVENT_TYPES`** in [`packages/database-pg/src/schema/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/src/schema/compliance.ts). Convention: `<domain>.<action>` (e.g., `agent.created`, `auth.signin.success`). Keep the array order stable; append rather than insert.
+
+2. **Add a redaction allow-list entry** in [`packages/api/src/lib/compliance/redaction.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/redaction.ts). The allow-list says which payload fields persist into the audit row verbatim; everything else is redacted to `<REDACTED>` at write time. Reviewer guidance: be conservative — fields you don't list never reach the audit log.
+
+3. **Identify call sites that should emit.** Each call site picks a tier:
+   - Inside the originating `db.transaction`: control-evidence (audit failure rolls back the originating action).
+   - Wrapped in `try { void emitAuditEvent(...) } catch { logger.warn(...) }`: telemetry (audit failure does not block the action).
+
+   See [audit-event tier semantics](#audit-event-tier-semantics) below for the decision rule.
+
+4. **Add an integration test.** The cross-cutting tests live in [`packages/api/test/integration/compliance-event-writers/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/test/integration/) (e.g., `cross-cutting.integration.test.ts`). Each test fires the originating mutation, asserts the outbox row landed with the right `event_type`, and asserts the drainer wrote it to `audit_events` with a valid hash chain link.
+
+5. **Regenerate GraphQL codegen** if the new type appears in the GraphQL `ComplianceEventType` enum (mirror in [`packages/database-pg/graphql/types/compliance.graphql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/graphql/types/compliance.graphql)):
+
+   ```bash
+   pnpm --filter @thinkwork/api codegen
+   pnpm --filter @thinkwork/admin codegen
+   ```
+
+6. **Verify the drift snapshot test still passes.** [`packages/api/src/__tests__/compliance-event-type-drift.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-event-type-drift.test.ts) asserts the GraphQL enum values match the runtime `COMPLIANCE_EVENT_TYPES` slate exactly. Adding a new type without updating the GraphQL schema fails here.
+
+PR template: see [#903](https://github.com/thinkwork-ai/thinkwork/pull/903) (U5) for an example of wiring `emitAuditEvent` at multiple call sites.
+
+---
+
+### Audit-event tier semantics
+
+The `emitAuditEvent` helper is tier-agnostic; the call site picks how to handle a write failure.
+
+| Tier | Pattern | Failure mode | Use for |
+|------|---------|--------------|---------|
+| **Control-evidence** | `await emitAuditEvent(tx, {...})` inside an existing `db.transaction(async tx => {...})` | Audit write failure throws; the transaction rolls back; originating mutation fails with a user-visible error | Security-relevant events (auth, data export, agent CRUD, MCP CRUD, governance file edits) |
+| **Telemetry** | `try { await emitAuditEvent(db, {...}) } catch (err) { logger.warn({err}, "audit-emit-failed") }` | Audit write failure logs + fires an operator alert; originating action proceeds | High-volume informational events that must not block production traffic |
+
+**Default to control-evidence** for any event whose absence from the audit log would mean an auditor can't reconstruct what happened. Drop to telemetry only when the action's value to the user clearly outweighs the audit gap (e.g., a high-throughput read-only operation that would degrade UX if audit DB pressure causes the action to fail).
+
+Master plan reference: R6 in [`docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/plans/2026-05-06-011-feat-compliance-audit-event-log-plan.md).
+
+Helper signature + behavior: [`packages/api/src/lib/compliance/emit.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/emit.ts).
+
+---
+
+### Cross-runtime emit path (Strands Python)
+
+The Python Strands runtime can't share TypeScript code, so it emits via a REST round-trip into the graphql-http API. The path is wired so retries are idempotent.
+
+**Strands side:**
+
+1. The container constructs a `ComplianceClient` at boot from `THINKWORK_API_URL` + `API_AUTH_SECRET` (resolved from Secrets Manager). Source: [`packages/agentcore-strands/agent-container/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/agentcore-strands/agent-container/) (`compliance_client.py`).
+2. On a relevant runtime event, the client generates a fresh **UUIDv7** `event_id` locally (deterministic-prefix timestamp + random suffix; see [`packages/agentcore-strands/agent-container/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/agentcore-strands/agent-container/) helper).
+3. The client POSTs `/api/compliance/events` with bearer `API_AUTH_SECRET`, body `{event_id, tenant_id, actor_id, event_type, payload, ...}`.
+4. **Snapshot env at coroutine entry — never re-read `os.environ` mid-handler.** This is a load-bearing rule per [`feedback_completion_callback_snapshot_pattern`](`memory/feedback_completion_callback_snapshot_pattern.md`) — env vars can be re-injected mid-process by Lambda's warm-container update path, and a re-read mid-handler can pick up stale values.
+
+**API side:**
+
+5. The `compliance-events` REST handler ([`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts)) validates the bearer, validates the body schema, and INSERTs into `audit_outbox`.
+6. The outbox table has `uq_audit_outbox_event_id` (unique on `event_id`). A retry with the same `event_id` is a no-op at the DB layer — the second INSERT raises a unique-constraint violation that the handler catches and treats as success. This is the idempotency guarantee.
+
+**Drainer side:**
+
+7. The single-writer drainer Lambda picks up the row in the next 5-second poll cycle, computes the chain hash, INSERTs into `audit_events`. Strands events are indistinguishable from Yoga events at this point — they share the same chain.
+
+Strands runtime emit shipped in U6 ([#911](https://github.com/thinkwork-ai/thinkwork/pull/911)).
+
+---
+
+### Adding a new compliance Lambda
+
+**When to use this:** A new background process is needed — e.g., a daily verifier scheduled run, an aggregation job, a Phase 6 policy evaluator.
+
+1. **Lambda body** at `packages/lambda/compliance-<name>.ts`:
+   - Module-load env snapshot via `getXxxEnv()` helper (mirror [`packages/lambda/compliance-anchor.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-anchor.ts) `getAnchorEnv`).
+   - Lazy clients (S3 / Secrets Manager / pg) cached at module scope; reset on connection error.
+   - For SQS-triggered Lambdas: implement the `ReportBatchItemFailures` partial-failure protocol; CAS-guard on the row state to make re-deliveries no-ops.
+   - For scheduled Lambdas: use `ReservedConcurrentExecutions=1` if the work is single-writer-sensitive (drainer, anchor).
+
+2. **Build entry** in [`scripts/build-lambdas.sh`](https://github.com/thinkwork-ai/thinkwork/blob/main/scripts/build-lambdas.sh):
+   ```bash
+   build_handler "compliance-<name>" \
+     "$REPO_ROOT/packages/lambda/compliance-<name>.ts"
+   ```
+   If the Lambda imports `@aws-sdk/lib-storage`, `@aws-sdk/s3-request-presigner`, `@aws-sdk/client-bedrock-agentcore`, or other clients not in the Lambda runtime SDK, add the handler name to the conditional that flips the build to `BUNDLED_AGENTCORE_ESBUILD_FLAGS` — otherwise the import will fail at cold start.
+
+3. **Terraform handler resource** in [`terraform/modules/app/lambda-api/handlers.tf`](https://github.com/thinkwork-ai/thinkwork/blob/main/terraform/modules/app/lambda-api/handlers.tf):
+   - **Standalone resource** (NOT in the `for_each` pool) when the Lambda needs a per-key IAM role / env / source_code_hash. The compliance-anchor and compliance-export-runner Lambdas use this pattern — isolates blast radius from the 60+ shared handlers.
+   - **for_each pool** when the Lambda fits the shared `aws_iam_role.lambda` permissions and needs no special env. The drainer used this pattern in U4.
+
+4. **Post-deploy smoke** at `packages/api/src/__smoke__/compliance-<name>-smoke.ts` + `scripts/post-deploy-smoke-compliance-<name>.sh`. Pin on **dispatch status in the response payload**, not on log filtering ([`feedback_smoke_pin_dispatch_status_in_response`](`memory/feedback_smoke_pin_dispatch_status_in_response.md`)). CloudWatch log grep is fragile; downstream-state pinning balloons smoke runtime.
+
+5. **GHA workflow gate** in [`.github/workflows/deploy.yml`](https://github.com/thinkwork-ai/thinkwork/blob/main/.github/workflows/deploy.yml) — add a new job after `terraform-apply` that runs the smoke. Mirror the `compliance-anchor-smoke` and `compliance-export-runner-smoke` jobs in shape.
+
+The U11.U2 + U11.U3 PRs ([#948](https://github.com/thinkwork-ai/thinkwork/pull/948), [#950](https://github.com/thinkwork-ai/thinkwork/pull/950)) are a recent end-to-end example of all five steps for the export runner.
+
+---
+
+### Where the tests live
+
+| Layer | Location |
+|-------|----------|
+| Compliance schema + drift | [`packages/api/src/__tests__/compliance-event-type-drift.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-event-type-drift.test.ts) |
+| `emitAuditEvent` helper | [`packages/api/src/lib/compliance/__tests__/emit.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/__tests__/emit.test.ts) |
+| Redaction allow-list | [`packages/api/src/lib/compliance/__tests__/redaction.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/__tests__/redaction.test.ts) |
+| Hash chain | [`packages/api/src/lib/compliance/__tests__/hash-chain.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/__tests__/hash-chain.test.ts) |
+| Resolver auth | [`packages/api/src/__tests__/compliance-authz.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-authz.test.ts) |
+| Cursor pagination | [`packages/api/src/__tests__/compliance-cursor.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-cursor.test.ts) |
+| Tenants + operator-check resolvers | [`packages/api/src/__tests__/compliance-tenants-and-operator-check.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-tenants-and-operator-check.test.ts) |
+| Exports mutation + query | [`packages/api/src/__tests__/compliance-exports.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-exports.test.ts) |
+| Cross-cutting integration | [`packages/api/test/integration/compliance-event-writers/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/test/integration/) |
+| Anchor Lambda unit | [`packages/lambda/__tests__/compliance-anchor.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/compliance-anchor.test.ts) |
+| Anchor Lambda S3 spy | [`packages/lambda/__tests__/compliance-anchor-s3-spy.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/compliance-anchor-s3-spy.test.ts) |
+| Drainer Lambda unit | [`packages/lambda/__tests__/compliance-outbox-drainer.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/compliance-outbox-drainer.test.ts) |
+| Anchor + drainer integration | [`packages/lambda/__tests__/integration/compliance-anchor.integration.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/integration/) + `compliance-drainer.integration.test.ts` |
+| Export runner unit | [`packages/lambda/__tests__/compliance-export-runner.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/compliance-export-runner.test.ts) |
+| Verifier CLI | [`packages/audit-verifier/src/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/) (`*.test.ts`) |
+| Admin SPA | [`apps/admin/src/`](https://github.com/thinkwork-ai/thinkwork/blob/main/apps/admin/) — TanStack route components don't have unit tests; verification happens via the U11.U5 SOC2 walkthrough rehearsal |
+
+When adding a new emit site, the integration test in `packages/api/test/integration/compliance-event-writers/` is the gate that proves the cross-cutting path works (originating mutation → outbox row → drainer → audit_events row). Unit tests of the emit helper alone don't catch wiring regressions.

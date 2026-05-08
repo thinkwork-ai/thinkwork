@@ -1,16 +1,19 @@
-# SOC2 Type 1 walkthrough
+---
+title: SOC2 Type 1 walkthrough
+description: "10-step narrative for an auditor sitting next to an operator: sign-in → events list → walk-back → export → CLI verifier → S3 retention check."
+---
 
 The auditor sits next to an operator and walks through the compliance module's evidence layer-by-layer. This doc is the script — read it top-to-bottom alongside the live admin SPA + a terminal session running the verifier CLI.
 
-For the architecture this walkthrough exercises, see [architecture.md](./architecture.md). For the operator-side procedures referenced inline, see [operator-runbook.md](./operator-runbook.md).
+For the architecture this walkthrough exercises, see [architecture](/compliance/architecture/). For the operator-side procedures referenced inline, see [operator-runbook](/compliance/operator-runbook/).
 
 ## Pre-engagement
 
 Before the walkthrough begins:
 
 - The operator's email is in `THINKWORK_PLATFORM_OPERATOR_EMAILS` on the graphql-http Lambda. (Confirm via `aws lambda get-function-configuration --function-name thinkwork-{stage}-api-graphql-http --query 'Environment.Variables.THINKWORK_PLATFORM_OPERATOR_EMAILS'`.)
-- For a production engagement, the anchor bucket's Object Lock mode is COMPLIANCE (irreversible). For a non-prod rehearsal, GOVERNANCE is acceptable. See [operator-runbook.md → GOVERNANCE → COMPLIANCE flip](./operator-runbook.md#flip-s3-object-lock-governance--compliance-for-an-audit-engagement).
-- The `audit-verifier` CLI is installed locally on the auditor's laptop or a shared workstation. Install: `npm install -g @thinkwork/audit-verifier`. CLI README: [`packages/audit-verifier/README.md`](../../packages/audit-verifier/README.md).
+- For a production engagement, the anchor bucket's Object Lock mode is COMPLIANCE (irreversible). For a non-prod rehearsal, GOVERNANCE is acceptable. See [operator-runbook.md → GOVERNANCE → COMPLIANCE flip](/compliance/operator-runbook/#flip-s3-object-lock-governance--compliance-for-an-audit-engagement).
+- The `audit-verifier` CLI is installed locally on the auditor's laptop or a shared workstation. Install: `npm install -g @thinkwork/audit-verifier`. CLI README: [`packages/audit-verifier/README.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/README.md).
 - Both auditor and operator can see the admin SPA (operator drives; auditor follows on a second monitor or shared screen).
 
 ## Walkthrough script
@@ -21,13 +24,13 @@ Each step has a "what the auditor sees" line + a "why it proves something" line.
 
 **See:** Admin SPA loaded; sidebar shows **Compliance** between Settings and Billing.
 
-**Why it matters:** The Compliance entry is operator-tier only; non-operators do not see it. Permission gating is enforced server-side by `requireComplianceReader` ([`packages/api/src/lib/compliance/resolver-auth.ts`](../../packages/api/src/lib/compliance/resolver-auth.ts)) — the sidebar is the visible signal.
+**Why it matters:** The Compliance entry is operator-tier only; non-operators do not see it. Permission gating is enforced server-side by `requireComplianceReader` ([`packages/api/src/lib/compliance/resolver-auth.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/resolver-auth.ts)) — the sidebar is the visible signal.
 
 ### 2. Open `/compliance`
 
 **See:** The events list with a default 7-day window and the 14-event filter dropdown.
 
-**Why it matters:** The 14 event types are the SOC2 starter slate the platform commits to recording. Source: [`packages/database-pg/src/schema/compliance.ts`](../../packages/database-pg/src/schema/compliance.ts) `COMPLIANCE_EVENT_TYPES`. The list of types is in [architecture.md](./architecture.md#event-type-slate); reference it during the explanation.
+**Why it matters:** The 14 event types are the SOC2 starter slate the platform commits to recording. Source: [`packages/database-pg/src/schema/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/src/schema/compliance.ts) `COMPLIANCE_EVENT_TYPES`. The list of types is in [architecture](/compliance/architecture/#event-type-slate); reference it during the explanation.
 
 ### 3. Filter to a specific event type
 
@@ -49,7 +52,7 @@ Each step has a "what the auditor sees" line + a "why it proves something" line.
 
 **See:** Click the `prev_hash` value in the chain-position panel. The page navigates to the previous event. Click **Walk back 10 events** to see a vertical strip of the prior 10 events (event-type + recorded-at + hash prefix). Stops at GENESIS (the first event in the tenant chain) or 10 hops, whichever comes first.
 
-**Why it matters:** Visual proof of append-only history. Each backward step uses `complianceEventByHash` ([`packages/api/src/graphql/resolvers/compliance/query.ts`](../../packages/api/src/graphql/resolvers/compliance/query.ts)) which is hash-keyed — no way to "skip" an event without changing its hash.
+**Why it matters:** Visual proof of append-only history. Each backward step uses `complianceEventByHash` ([`packages/api/src/graphql/resolvers/compliance/query.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/graphql/resolvers/compliance/query.ts)) which is hash-keyed — no way to "skip" an event without changing its hash.
 
 ### 6. Request an export
 
@@ -92,7 +95,7 @@ audit-verifier verify \
 3. Walks each per-tenant chain in `compliance.audit_events` and recomputes per-event hashes; rejects on chain breaks (`--check-chain`).
 4. Recomputes the global Merkle root from the per-tenant chain heads using RFC 6962 domain-separated hashing and confirms byte-exact agreement with the anchor objects.
 
-CLI source + README: [`packages/audit-verifier/`](../../packages/audit-verifier/).
+CLI source + README: [`packages/audit-verifier/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/).
 
 ### 10. (Optional, prod) Show Object Lock retention in the S3 console
 
@@ -115,15 +118,15 @@ The Merkle anchor uses RFC 6962 domain separation:
 - Leaf: `sha256(0x00 || tenant_id_bytes || event_hash_bytes)`
 - Inner node: `sha256(0x01 || left_child_hash || right_child_hash)`
 
-The leading byte (`0x00` for leaves, `0x01` for inner nodes) prevents second-preimage forgery on the Merkle proof path. Reference: RFC 6962 §2.1. Implementation: [`packages/lambda/compliance-anchor.ts`](../../packages/lambda/compliance-anchor.ts) (`computeLeafHash`, `combineNodes`, `buildMerkleTree`).
+The leading byte (`0x00` for leaves, `0x01` for inner nodes) prevents second-preimage forgery on the Merkle proof path. Reference: RFC 6962 §2.1. Implementation: [`packages/lambda/compliance-anchor.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-anchor.ts) (`computeLeafHash`, `combineNodes`, `buildMerkleTree`).
 
 ## Event-type slate
 
-The 14 Phase 3 events the platform commits to recording are listed in [architecture.md → Event-type slate](./architecture.md#event-type-slate). 5 Phase 6 reservations exist for future policy events.
+The 14 Phase 3 events the platform commits to recording are listed in [architecture.md → Event-type slate](/compliance/architecture/#event-type-slate). 5 Phase 6 reservations exist for future policy events.
 
 ## Redaction allow-list
 
-Each event type has an explicit allow-list of payload fields that survive into the audit row; everything else is redacted at write time by the `emitAuditEvent` helper before the INSERT into `audit_outbox`. A new event type cannot land without a corresponding redaction rule — the allow-list registry is the gate. Source: [`packages/api/src/lib/compliance/redaction.ts`](../../packages/api/src/lib/compliance/redaction.ts).
+Each event type has an explicit allow-list of payload fields that survive into the audit row; everything else is redacted at write time by the `emitAuditEvent` helper before the INSERT into `audit_outbox`. A new event type cannot land without a corresponding redaction rule — the allow-list registry is the gate. Source: [`packages/api/src/lib/compliance/redaction.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/redaction.ts).
 
 The auditor doesn't need this most days; it matters when an auditor asks "could a sensitive field accidentally end up in the audit log?" — the answer is no, because every persisted field is on a per-event-type allow-list reviewed at PR time.
 
@@ -131,9 +134,9 @@ The auditor doesn't need this most days; it matters when an auditor asks "could 
 
 Audit events flow from two runtimes through the same outbox:
 
-1. **Yoga TypeScript resolvers** — call `emitAuditEvent(tx, ...)` inside their existing `db.transaction` block. Audit failure rolls back the originating mutation (control-evidence tier). Source: [`packages/api/src/lib/compliance/emit.ts`](../../packages/api/src/lib/compliance/emit.ts).
+1. **Yoga TypeScript resolvers** — call `emitAuditEvent(tx, ...)` inside their existing `db.transaction` block. Audit failure rolls back the originating mutation (control-evidence tier). Source: [`packages/api/src/lib/compliance/emit.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/emit.ts).
 
-2. **Strands Python runtime** — uses `ComplianceClient` to POST `/api/compliance/events` with bearer `API_AUTH_SECRET` and a UUIDv7 `event_id` generated client-side. The REST handler ([`packages/api/src/handlers/compliance.ts`](../../packages/api/src/handlers/compliance.ts)) validates and inserts into the outbox. The `audit_outbox.uq_audit_outbox_event_id` unique constraint makes retries idempotent — if the network drops mid-call, the Strands client retries with the same `event_id` and the second insert is a no-op.
+2. **Strands Python runtime** — uses `ComplianceClient` to POST `/api/compliance/events` with bearer `API_AUTH_SECRET` and a UUIDv7 `event_id` generated client-side. The REST handler ([`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts)) validates and inserts into the outbox. The `audit_outbox.uq_audit_outbox_event_id` unique constraint makes retries idempotent — if the network drops mid-call, the Strands client retries with the same `event_id` and the second insert is a no-op.
 
 Both paths land in the same `audit_outbox` table and are drained by the same single-writer Lambda into the same per-tenant chain. The auditor sees one audit log, regardless of which runtime emitted.
 
@@ -154,7 +157,7 @@ These captures populate the engagement-deliverable evidence ZIP. None are inline
 
 ## Verifier CLI usage
 
-The verifier CLI is the auditor's independent verification tool — it does not read from the platform's GraphQL API; it reads from S3 (anchor bucket) + Aurora (chain) directly using read-only credentials. Full CLI reference: [`packages/audit-verifier/README.md`](../../packages/audit-verifier/README.md).
+The verifier CLI is the auditor's independent verification tool — it does not read from the platform's GraphQL API; it reads from S3 (anchor bucket) + Aurora (chain) directly using read-only credentials. Full CLI reference: [`packages/audit-verifier/README.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/README.md).
 
 ## Open questions
 
