@@ -49,7 +49,10 @@ import {
   computerMutations,
   computerTypeResolvers,
 } from "./computers/index.js";
-import { complianceQueries } from "./compliance/index.js";
+import {
+  complianceQueries,
+  complianceMutations,
+} from "./compliance/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -109,6 +112,7 @@ export const mutationResolvers: Record<string, any> = {
   ...quickActionMutations,
   ...connectorMutations,
   ...computerMutations,
+  ...complianceMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
