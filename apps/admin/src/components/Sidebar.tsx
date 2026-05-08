@@ -287,7 +287,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupLabel>Managed Agents</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={agentsItems} />
           </SidebarGroupContent>
