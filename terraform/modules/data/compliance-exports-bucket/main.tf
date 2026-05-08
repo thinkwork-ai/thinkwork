@@ -142,23 +142,27 @@ resource "aws_s3_bucket_policy" "exports" {
 resource "aws_iam_role" "runner_lambda" {
   name = "thinkwork-${var.stage}-compliance-export-runner-role"
 
-  # `aws:SourceArn` pin via string-construction. Avoids the circular
-  # dependency between this trust policy and the runner Lambda function
-  # (defined in lambda-api/handlers.tf, which depends on this role's
-  # ARN). The function name follows the predictable pattern
-  # `thinkwork-${stage}-api-compliance-export-runner`.
+  # Trust policy: Lambda service principal + account-pin only.
   #
-  # `StringEqualsIfExists` (NOT `StringEquals`) on `aws:SourceArn`
-  # because `aws_lambda_event_source_mapping` triggers an internal
-  # `sts:AssumeRole` validation at CreateEventSourceMapping time WITHOUT
-  # a SourceArn context — `StringEquals` rejects that call and the
-  # event-source mapping creation fails with "Please add Lambda as a
-  # Trusted Entity for ...". `aws:SourceAccount` stays as a strict
-  # equals — that key IS present in every AssumeRole call from Lambda,
-  # and pinning the account is the substantive confused-deputy guard.
-  # The anchor Lambda role can use strict StringEquals on SourceArn
-  # because EventBridge Scheduler always passes SourceArn; SQS event
-  # source mapping does not.
+  # We do NOT pin `aws:SourceArn` to the function ARN. The runner is
+  # invoked via `aws_lambda_event_source_mapping` (SQS → Lambda); when
+  # AWS Lambda calls `sts:AssumeRole` to validate the mapping at
+  # CreateEventSourceMapping time, the `aws:SourceArn` context key is
+  # the SQS queue ARN, not the Lambda function ARN. Pinning to the
+  # function ARN — even with `StringEqualsIfExists` — caused "Please
+  # add Lambda as a Trusted Entity for ..." failures
+  # (deploy runs 25557118131 and 25560679065).
+  #
+  # `aws:SourceAccount` strict-equals is the substantive confused-deputy
+  # guard — even if the role ARN leaks, only this account can use it.
+  # The Lambda service principal restriction in `Principal` keeps
+  # non-Lambda services from assuming.
+  #
+  # The anchor Lambda role (compliance-audit-bucket) keeps a strict
+  # SourceArn pin to the function ARN because it's scheduler-triggered;
+  # EventBridge Scheduler always passes the function ARN as SourceArn.
+  # SQS event source mapping does not — that's what makes this role
+  # different.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -168,9 +172,6 @@ resource "aws_iam_role" "runner_lambda" {
       Condition = {
         StringEquals = {
           "aws:SourceAccount" = var.account_id
-        }
-        StringEqualsIfExists = {
-          "aws:SourceArn" = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-compliance-export-runner"
         }
       }
     }]
