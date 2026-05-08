@@ -187,3 +187,81 @@ type ComplianceOperatorCheckResult {
   """
   allowlistConfigured: Boolean!
 }
+
+# ---------------------------------------------------------------------------
+# Async export — Phase 3 U11
+# ---------------------------------------------------------------------------
+#
+# Operators submit a filter via createComplianceExport. The mutation
+# inserts a queued row into compliance.export_jobs, sends an SQS message
+# to the U11 runner Lambda (shipped in a follow-up PR), emits a
+# data.export_initiated audit event, and returns the job. The runner
+# streams matching audit_events rows to a 7-day-lifecycle S3 bucket as
+# CSV or JSON, then publishes a 15-minute presigned URL.
+#
+# Hard caps enforced at the resolver:
+#   - 90-day max range (until - since)
+#   - 4 KB serialized filter byte cap (payload-balloon defense)
+#   - 10 exports / hour per actor (DB-counter rate limit)
+
+# Lowercase mirrors the DB constraint:
+#   format text CHECK (format IN ('csv', 'json'))
+# The schema permits 'json'; the runner emits NDJSON for that format.
+enum ComplianceExportFormat {
+  CSV
+  JSON
+}
+
+# Lowercase mirrors the DB constraint:
+#   status text CHECK (status IN ('queued', 'running', 'complete', 'failed'))
+enum ComplianceExportStatus {
+  QUEUED
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+type ComplianceExport {
+  jobId: ID!
+  tenantId: ID!
+  requestedByActorId: ID!
+  requestedAt: String!
+  status: ComplianceExportStatus!
+  format: ComplianceExportFormat!
+  filter: AWSJSON!
+  s3Key: String
+  presignedUrl: String
+  presignedUrlExpiresAt: String
+  jobError: String
+  startedAt: String
+  completedAt: String
+}
+
+extend type Mutation {
+  """
+  Queue an async export of audit events matching the filter. Validates:
+    - 90-day cap on (until - since)
+    - 4 KB serialized filter byte cap
+    - 10 exports / hour rate limit per actor
+  Throws typed errors with extensions.code in
+    {RATE_LIMIT_EXCEEDED, FILTER_RANGE_TOO_WIDE, FILTER_TOO_LARGE,
+     FORBIDDEN, UNAUTHENTICATED, INTERNAL_SERVER_ERROR}.
+  Inserts the job row + emits data.export_initiated audit event in a
+  single transaction; SQS dispatch happens after commit (queue write
+  cannot be rolled back). If SQS send fails, the job is marked FAILED
+  with jobError set.
+  """
+  createComplianceExport(
+    filter: ComplianceEventFilter!
+    format: ComplianceExportFormat!
+  ): ComplianceExport!
+}
+
+extend type Query {
+  """
+  Caller's recent export jobs, sorted requested_at DESC, LIMIT 50.
+  Operators see all tenants; non-operators are tenant-scoped via the
+  same auth model as complianceEvents.
+  """
+  complianceExports: [ComplianceExport!]!
+}

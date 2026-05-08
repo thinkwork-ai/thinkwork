@@ -5,6 +5,10 @@ import {
 	complianceOperatorCheck,
 	complianceTenants,
 } from "./query.js";
+import {
+	complianceExports,
+	createComplianceExport,
+} from "./exports.js";
 
 export const complianceQueries = {
 	complianceEvents,
@@ -12,4 +16,9 @@ export const complianceQueries = {
 	complianceEventByHash,
 	complianceTenants,
 	complianceOperatorCheck,
+	complianceExports,
+};
+
+export const complianceMutations = {
+	createComplianceExport,
 };
