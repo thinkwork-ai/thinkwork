@@ -78,9 +78,11 @@ import {
   ResumeConnectorMutation,
   RoutinesListQuery,
   RunConnectorNowMutation,
+  TenantCredentialsQuery,
   UpdateConnectorMutation,
 } from "@/lib/graphql-queries";
 import {
+  connectorGitHubCredentialStatus,
   connectorFormValues,
   connectorExecutionCleanupDisplay,
   connectorExecutionLinearIdentifier,
@@ -96,6 +98,7 @@ import {
   shouldUseManualTargetInput,
   updateConnectorInput,
   validateConnectorFormValues,
+  type ConnectorCredentialOption,
   type ConnectorComputerTarget,
   type ConnectorExecutionWritebackDisplay,
   type ConnectorFormValues,
@@ -104,6 +107,7 @@ import {
   ConnectorStatus,
   ConnectorExecutionState,
   DispatchTargetType,
+  TenantCredentialStatus,
   type ConnectorRunLifecyclesQuery as ConnectorRunLifecyclesQueryResult,
   type ConnectorFilter,
 } from "@/gql/graphql";
@@ -179,6 +183,15 @@ function SymphonyPage() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [credentialsResult] = useQuery({
+    query: TenantCredentialsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      status: TenantCredentialStatus.Active,
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
   const [, createConnector] = useMutation(CreateConnectorMutation);
   const [, updateConnector] = useMutation(UpdateConnectorMutation);
   const [, pauseConnector] = useMutation(PauseConnectorMutation);
@@ -187,6 +200,14 @@ function SymphonyPage() {
   const [, runConnectorNow] = useMutation(RunConnectorNowMutation);
 
   const connectors = (result.data?.connectors ?? []) as ConnectorRow[];
+  const credentialOptions = useMemo(
+    () => credentialOptionsFromQuery(credentialsResult.data?.tenantCredentials),
+    [credentialsResult.data?.tenantCredentials],
+  );
+  const activeCredentialSlugs = useMemo(
+    () => credentialOptions.map((credential) => credential.slug),
+    [credentialOptions],
+  );
   const runs = (runsResult.data?.connectorRunLifecycles ??
     []) as ConnectorRunLifecycleRow[];
   const visibleRuns = useMemo(() => {
@@ -419,6 +440,9 @@ function SymphonyPage() {
                 onArchive: handleArchive,
                 onRunNow: handleRunNow,
                 runningConnectorId,
+                activeCredentialSlugs: credentialsResult.data
+                  ? activeCredentialSlugs
+                  : null,
               })}
               data={rows}
               pageSize={20}
@@ -496,6 +520,9 @@ function SymphonyPage() {
         open={creating}
         onOpenChange={setCreating}
         onSubmit={handleCreate}
+        credentialOptions={credentialOptions}
+        activeCredentialSlugs={activeCredentialSlugs}
+        credentialsLoading={credentialsResult.fetching}
       />
       <ConnectorFormDialog
         mode="edit"
@@ -503,6 +530,9 @@ function SymphonyPage() {
         onOpenChange={(open) => !open && setEditing(null)}
         connector={editing}
         onSubmit={handleUpdate}
+        credentialOptions={credentialOptions}
+        activeCredentialSlugs={activeCredentialSlugs}
+        credentialsLoading={credentialsResult.fetching}
       />
     </PageLayout>
   );
@@ -829,23 +859,46 @@ function connectorColumns(actions: {
   onArchive: ConnectorAction;
   onRunNow: ConnectorAction;
   runningConnectorId: string | null;
+  activeCredentialSlugs: readonly string[] | null;
 }): ColumnDef<ConnectorRow>[] {
   return [
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <Badge
-          variant="secondary"
-          className={cn(
-            "text-xs font-medium",
-            connectorStatusTone(row.original.status),
-          )}
-        >
-          {statusLabel(row.original.status)}
-        </Badge>
-      ),
-      size: 95,
+      cell: ({ row }) => {
+        const connector = row.original;
+        const archived = connector.status === ConnectorStatus.Archived;
+        const githubStatus = actions.activeCredentialSlugs
+          ? connectorGitHubCredentialStatus(
+              connector.config,
+              actions.activeCredentialSlugs,
+            )
+          : null;
+
+        return (
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+            <Badge
+              variant="secondary"
+              className={cn(
+                "text-xs font-medium",
+                connectorStatusTone(connector.status),
+              )}
+            >
+              {statusLabel(connector.status)}
+            </Badge>
+            {connector.enabled && !archived && githubStatus?.missing && (
+              <Badge
+                variant="destructive"
+                className="min-w-0 truncate text-xs"
+                title={githubStatus.title}
+              >
+                GitHub setup required
+              </Badge>
+            )}
+          </div>
+        );
+      },
+      size: 140,
     },
     {
       accessorKey: "name",
@@ -1002,12 +1055,18 @@ function ConnectorFormDialog({
   onOpenChange,
   connector,
   onSubmit,
+  credentialOptions = [],
+  activeCredentialSlugs = [],
+  credentialsLoading = false,
 }: {
   mode: "create" | "edit";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   connector?: ConnectorRow | null;
   onSubmit: (values: ConnectorFormValues) => Promise<void>;
+  credentialOptions?: ConnectorCredentialOption[];
+  activeCredentialSlugs?: readonly string[];
+  credentialsLoading?: boolean;
 }) {
   const { tenantId } = useTenant();
   const formId = useId();
@@ -1107,6 +1166,13 @@ function ConnectorFormDialog({
     values.dispatchTargetType === DispatchTargetType.Computer &&
     canUseTargetPicker &&
     !showManualTargetId;
+  const selectedGithubCredential = credentialOptions.find(
+    (credential) => credential.slug === values.githubCredentialSlug,
+  );
+  const githubCredentialMissing =
+    values.githubCredentialSlug.trim().length > 0 &&
+    !credentialsLoading &&
+    !activeCredentialSlugs.includes(values.githubCredentialSlug.trim());
 
   const patch = <K extends keyof ConnectorFormValues>(
     key: K,
@@ -1117,7 +1183,11 @@ function ConnectorFormDialog({
     event.preventDefault();
     setError(null);
 
-    const validationError = validateConnectorFormValues(values);
+    const validationError = validateConnectorFormValues(values, {
+      activeCredentialSlugs: credentialsLoading
+        ? undefined
+        : activeCredentialSlugs,
+    });
     if (validationError) {
       setError(validationError);
       return;
@@ -1217,6 +1287,119 @@ function ConnectorFormDialog({
                   placeholder="In Progress"
                 />
               </Field>
+            </div>
+
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-medium">
+                  GitHub PR setup
+                </h3>
+                <p className="truncate text-xs text-muted-foreground">
+                  Required for branch, commit, and draft PR creation.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  id={`${formId}-github-credential`}
+                  label="GitHub credential"
+                >
+                  {credentialOptions.length > 0 ? (
+                    <Select
+                      value={values.githubCredentialSlug || undefined}
+                      onValueChange={(value) =>
+                        patch("githubCredentialSlug", value)
+                      }
+                    >
+                      <SelectTrigger id={`${formId}-github-credential`}>
+                        <SelectValue placeholder="Select GitHub credential..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {!selectedGithubCredential &&
+                          values.githubCredentialSlug.trim() && (
+                            <SelectItem
+                              value={values.githubCredentialSlug.trim()}
+                            >
+                              Missing: {values.githubCredentialSlug.trim()}
+                            </SelectItem>
+                          )}
+                        {credentialOptions.map((credential) => (
+                          <SelectItem
+                            key={credential.id}
+                            value={credential.slug}
+                          >
+                            <span className="flex min-w-0 flex-col items-start gap-0">
+                              <span className="truncate">
+                                {credential.displayName}
+                              </span>
+                              <span className="truncate font-mono text-xs text-muted-foreground">
+                                {credential.slug}
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id={`${formId}-github-credential`}
+                      value={values.githubCredentialSlug}
+                      onChange={(event) =>
+                        patch("githubCredentialSlug", event.target.value)
+                      }
+                      placeholder="github"
+                    />
+                  )}
+                  {credentialsLoading ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Loading active tenant credentials...
+                    </p>
+                  ) : githubCredentialMissing ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      {`Active GitHub credential "${values.githubCredentialSlug.trim()}" is missing.`}
+                    </p>
+                  ) : null}
+                </Field>
+                <Field id={`${formId}-github-owner`} label="GitHub owner">
+                  <Input
+                    id={`${formId}-github-owner`}
+                    value={values.githubOwner}
+                    onChange={(event) =>
+                      patch("githubOwner", event.target.value)
+                    }
+                    placeholder="thinkwork-ai"
+                  />
+                </Field>
+                <Field id={`${formId}-github-repo`} label="Repository">
+                  <Input
+                    id={`${formId}-github-repo`}
+                    value={values.githubRepoName}
+                    onChange={(event) =>
+                      patch("githubRepoName", event.target.value)
+                    }
+                    placeholder="thinkwork"
+                  />
+                </Field>
+                <Field id={`${formId}-github-base`} label="Base branch">
+                  <Input
+                    id={`${formId}-github-base`}
+                    value={values.githubBaseBranch}
+                    onChange={(event) =>
+                      patch("githubBaseBranch", event.target.value)
+                    }
+                    placeholder="main"
+                  />
+                </Field>
+                <Field id={`${formId}-github-file`} label="Checkpoint file">
+                  <Input
+                    id={`${formId}-github-file`}
+                    value={values.githubFilePath}
+                    onChange={(event) =>
+                      patch("githubFilePath", event.target.value)
+                    }
+                    placeholder="README.md"
+                  />
+                </Field>
+              </div>
             </div>
 
             <Field
@@ -1509,6 +1692,19 @@ function Field({
       {children}
     </div>
   );
+}
+
+function credentialOptionsFromQuery(
+  credentials?: readonly ConnectorCredentialOption[] | null,
+): ConnectorCredentialOption[] {
+  return (credentials ?? [])
+    .filter((credential) => credential.status === TenantCredentialStatus.Active)
+    .map((credential) => ({
+      id: credential.id,
+      displayName: credential.displayName,
+      slug: credential.slug,
+      status: credential.status,
+    }));
 }
 
 function statusLabel(status: string): string {
