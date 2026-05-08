@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
 import { SidebarInset, SidebarProvider } from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
 import { ComputerSidebar } from "@/components/ComputerSidebar";
@@ -11,6 +11,8 @@ export const Route = createFileRoute("/_authed/_shell")({
 
 function ShellLayout() {
   const { noTenantAssigned, isLoading } = useTenant();
+  const location = useLocation();
+  const isGeneratedAppRoute = /^\/apps\/[^/]+/.test(location.pathname);
 
   if (noTenantAssigned) {
     return <NoTenantAssigned />;
@@ -22,6 +24,10 @@ function ShellLayout() {
         Loading…
       </div>
     );
+  }
+
+  if (isGeneratedAppRoute) {
+    return <Outlet />;
   }
 
   return (

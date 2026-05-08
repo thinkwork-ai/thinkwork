@@ -22,6 +22,7 @@ import { Route as AuthedShellTasksIndexRouteImport } from "./routes/_authed/_she
 import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellTasksIdRouteImport } from "./routes/_authed/_shell/tasks.$id";
+import { Route as AuthedShellAppsIdRouteImport } from "./routes/_authed/_shell/apps.$id";
 
 const SignInRoute = SignInRouteImport.update({
   id: "/sign-in",
@@ -86,6 +87,11 @@ const AuthedShellTasksIdRoute = AuthedShellTasksIdRouteImport.update({
   path: "/tasks/$id",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellAppsIdRoute = AuthedShellAppsIdRouteImport.update({
+  id: "/apps/$id",
+  path: "/apps/$id",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
   "/inbox": typeof AuthedShellInboxRoute;
+  "/apps/$id": typeof AuthedShellAppsIdRoute;
   "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
   "/inbox": typeof AuthedShellInboxRoute;
+  "/apps/$id": typeof AuthedShellAppsIdRoute;
   "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRoute;
   "/_authed/_shell/computer": typeof AuthedShellComputerRoute;
   "/_authed/_shell/inbox": typeof AuthedShellInboxRoute;
+  "/_authed/_shell/apps/$id": typeof AuthedShellAppsIdRoute;
   "/_authed/_shell/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | "/automations"
     | "/computer"
     | "/inbox"
+    | "/apps/$id"
     | "/tasks/$id"
     | "/threads/$id"
     | "/apps/"
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | "/automations"
     | "/computer"
     | "/inbox"
+    | "/apps/$id"
     | "/tasks/$id"
     | "/threads/$id"
     | "/apps"
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/automations"
     | "/_authed/_shell/computer"
     | "/_authed/_shell/inbox"
+    | "/_authed/_shell/apps/$id"
     | "/_authed/_shell/tasks/$id"
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/apps/"
@@ -274,6 +286,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellTasksIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/apps/$id": {
+      id: "/_authed/_shell/apps/$id";
+      path: "/apps/$id";
+      fullPath: "/apps/$id";
+      preLoaderRoute: typeof AuthedShellAppsIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
   }
 }
 
@@ -281,6 +300,7 @@ interface AuthedShellRouteChildren {
   AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRoute;
   AuthedShellComputerRoute: typeof AuthedShellComputerRoute;
   AuthedShellInboxRoute: typeof AuthedShellInboxRoute;
+  AuthedShellAppsIdRoute: typeof AuthedShellAppsIdRoute;
   AuthedShellTasksIdRoute: typeof AuthedShellTasksIdRoute;
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
   AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
@@ -291,6 +311,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellAutomationsRoute: AuthedShellAutomationsRoute,
   AuthedShellComputerRoute: AuthedShellComputerRoute,
   AuthedShellInboxRoute: AuthedShellInboxRoute,
+  AuthedShellAppsIdRoute: AuthedShellAppsIdRoute,
   AuthedShellTasksIdRoute: AuthedShellTasksIdRoute,
   AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
   AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
