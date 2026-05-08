@@ -92,6 +92,17 @@ resource "cloudflare_record" "acm_validation" {
   ttl     = 60
   proxied = false
   comment = "ACM DNS validation for ${each.key}"
+
+  # When the cert SAN list changes (adding admin/computer/api/etc.), ACM may
+  # reissue with new validation tokens. With create_before_destroy on the cert,
+  # Terraform creates the new cert + validation records before destroying the
+  # old ones — and the Cloudflare provider rejects with "expected DNS record to
+  # not already be present but already exists" when names collide. allow_overwrite
+  # tells the provider to take ownership of an existing record by name instead
+  # of failing. Safe here because the validation records are fully managed by
+  # this resource — anything else writing _acm-challenge records on this zone
+  # would already be a conflict we'd want to overwrite.
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "www" {
