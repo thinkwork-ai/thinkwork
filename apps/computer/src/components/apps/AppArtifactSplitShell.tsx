@@ -9,9 +9,15 @@ interface AppArtifactSplitShellProps {
 
 export function AppArtifactSplitShell({ manifest }: AppArtifactSplitShellProps) {
   return (
-    <div className="flex h-svh min-h-0 flex-col bg-background text-foreground">
+    <div
+      data-testid="app-artifact-split-shell"
+      className="flex h-svh min-h-0 flex-col bg-background text-foreground"
+    >
       <AppTopBar title={manifest.snapshot.title} />
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]">
+      <div
+        data-testid="app-artifact-panels"
+        className="grid min-h-0 flex-1 lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]"
+      >
         <AppTranscriptPanel manifest={manifest} />
         <AppCanvasPanel manifest={manifest} />
       </div>

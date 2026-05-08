@@ -36,7 +36,11 @@ export function CrmPipelineStageCharts({ manifest }: CrmPipelineStageChartsProps
           Pipeline amount and opportunity count by CRM stage.
         </p>
       </div>
-      <ChartContainer config={stageChartConfig} className="aspect-auto h-64 w-full">
+      <ChartContainer
+        config={stageChartConfig}
+        data-testid="stage-exposure-chart"
+        className="aspect-auto h-64 w-full"
+      >
         <BarChart data={data} margin={{ left: 8, right: 8 }}>
           <CartesianGrid vertical={false} />
           <XAxis

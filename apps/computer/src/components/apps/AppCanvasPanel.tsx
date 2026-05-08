@@ -7,7 +7,10 @@ interface AppCanvasPanelProps {
 
 export function AppCanvasPanel({ manifest }: AppCanvasPanelProps) {
   return (
-    <section className="min-h-0 overflow-auto bg-muted/20 p-4 sm:p-5">
+    <section
+      data-testid="app-canvas-panel"
+      className="min-h-0 overflow-auto bg-muted/20 p-4 sm:p-5"
+    >
       {manifest.dashboardKind === "pipeline_risk" ? (
         <CrmPipelineRiskApp manifest={manifest} />
       ) : (
