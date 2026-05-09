@@ -14,6 +14,25 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U14:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u14-smoke-gate` on branch
+  `codex/computer-applets-u14-smoke-gate` from fresh `origin/main` after U13
+  merged.
+- **Progress:** Extended the existing `scripts/smoke-computer.sh` deploy gate
+  with an applet pipeline smoke covering applet save pins, `/apps/$appId`,
+  deterministic refresh invocation, applet state persistence, and canonical CRM
+  applet cutover. Updated the Computer README and plan 014 M5 exit criteria to
+  name these scenarios.
+- **Verification note:** `pnpm install --frozen-lockfile`, `node --check
+scripts/smoke/computer-applet-pipeline-smoke.mjs`, `bash -n
+scripts/smoke-computer.sh`, `pnpm lint`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present test`, targeted Prettier check for touched non-shell
+  files, and `git diff --check` passed locally. Root `pnpm format:check` remains
+  blocked by the repo's existing missing root `prettier` binary.
+- **Merged U13:** PR #1068 (`feat(computer): add admin applet observability`)
+  was squash-merged to `main` at
+  `cd8c788f443523fd6e07998c606a438eb02c0529`; remote/local branches and the
+  U13 worktree were deleted. CI passed: CLA, lint, test, typecheck, verify.
 - **Started U13:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u13-admin-observability` on branch
   `codex/computer-applets-u13-admin-observability` from `origin/main` after

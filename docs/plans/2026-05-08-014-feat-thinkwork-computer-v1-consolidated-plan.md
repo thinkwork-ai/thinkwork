@@ -760,7 +760,7 @@ Single-agent execution skips the gate (no coordination needed) but still benefit
 
 **Goal:** Ship the deterministic refresh path end-to-end, lock the golden-workflow demo behind a smoke gate, and close the M5-deferred plan 001 leftovers.
 
-**Demo target:** One scripted end-to-end demo runs reliably on dev: provision-user → sign-in → starter-card → Computer thread → dashboard generated → refresh → memory retained → cross-tenant denial confirmed. Smoke script gates regressions on every deploy.
+**Demo target:** One scripted end-to-end demo runs reliably on dev: provision-user → sign-in → starter-card → Computer thread → applet generated → applet open path → deterministic refresh → applet state persistence → memory retained → cross-tenant denial confirmed. Smoke script gates regressions on every deploy.
 
 **Source-plan units pulled in:**
 - Plan 009 U7 (apps/computer dashboard artifact viewer — final polish on top of M1).
@@ -776,6 +776,7 @@ Single-agent execution skips the gate (no coordination needed) but still benefit
 - AE7, AE8, all earlier AEs pass.
 - `scripts/smoke-computer.sh dev` returns 0 against `https://computer.thinkwork.ai`.
 - Smoke gate live in `deploy.yml` (5-scenario gate from plan 010-runtime U4 plus the streaming + approval + memory + browser scenarios).
+- Applet smoke scenarios pass inside `scripts/smoke-computer.sh dev`: A1 writer path returns `ok`/`validated`/`persisted`; A2 `/apps/$appId` serves the SPA shell; A3 deterministic `refresh()` returns per-source statuses; A4 applet state write/read round-trips; A5 the canonical LastMile CRM applet fixture is seeded and opens through the applet route.
 - Plan 001 U12 + U14 unit verifications pass.
 - Plan 009 U7 + U8 + U9 unit verifications pass.
 - Plan 010-runtime U16 unit verification passes.
