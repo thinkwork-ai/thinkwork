@@ -90,6 +90,43 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
   });
 
+  it("renders a completed turn response when the assistant message has not refetched yet", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "What is my name?",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-08T20:00:00Z",
+              resultJson: {
+                response: "Your name is Eric.",
+              },
+            },
+          ],
+        }}
+        streamingChunks={[
+          { seq: 1, text: "Your" },
+          { seq: 2, text: " name" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Your name is Eric.")).toBeTruthy();
+    expect(screen.queryByLabelText("Computer is typing")).toBeNull();
+  });
+
   it("renders thread turn thinking and tool details", () => {
     render(
       <TaskThreadView

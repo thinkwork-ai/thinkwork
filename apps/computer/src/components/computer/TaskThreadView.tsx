@@ -78,6 +78,9 @@ export function TaskThreadView({
     return <TaskThreadState label={error ?? "Thread not found"} tone="error" />;
   }
 
+  const visibleMessages = withTurnResponseFallback(thread);
+  const showStreamingBuffer =
+    streamingChunks.length > 0 && !hasAssistantAfterLatestUser(visibleMessages);
   const artifactCount = thread.messages.filter(
     (message) => message.durableArtifact,
   ).length;
@@ -110,19 +113,21 @@ export function TaskThreadView({
 
       <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col gap-8 px-4 pb-6 pt-10 sm:px-6">
         <section className="grid gap-8" aria-label="Thread transcript">
-          {thread.messages.length === 0 ? (
+          {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
               detail="Computer is preparing this thread."
               isActive={isThreadRunning(thread)}
             />
           ) : (
-            thread.messages.map((message) => (
+            visibleMessages.map((message) => (
               <TranscriptMessage key={message.id} message={message} />
             ))
           )}
           <ThreadTurnActivity turns={thread.turns ?? []} />
-          <StreamingMessageBuffer chunks={streamingChunks} />
+          {showStreamingBuffer ? (
+            <StreamingMessageBuffer chunks={streamingChunks} />
+          ) : null}
         </section>
 
         <FollowUpComposer
@@ -167,6 +172,41 @@ function ThreadTurnActivity({ turns }: { turns: TaskThreadTurn[] }) {
       ) : null}
     </article>
   );
+}
+
+function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
+  if (hasAssistantAfterLatestUser(thread.messages)) return thread.messages;
+
+  const latestCompletedTurn = (thread.turns ?? []).find((turn) =>
+    ["completed", "succeeded"].includes(String(turn.status ?? "").toLowerCase()),
+  );
+  const response = stringValue(parseRecord(latestCompletedTurn?.resultJson).response);
+  if (!latestCompletedTurn || !response) return thread.messages;
+
+  return [
+    ...thread.messages,
+    {
+      id: `turn-${latestCompletedTurn.id}-response`,
+      role: "ASSISTANT",
+      content: response,
+      createdAt: latestCompletedTurn.finishedAt,
+      metadata: {
+        source: "thread_turn_result",
+        turnId: latestCompletedTurn.id,
+      },
+    },
+  ];
+}
+
+function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
+  const latestUserIndex = findLastIndex(
+    messages,
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (latestUserIndex < 0) return false;
+  return messages
+    .slice(latestUserIndex + 1)
+    .some((message) => message.role.toUpperCase() === "ASSISTANT");
 }
 
 function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
@@ -552,6 +592,13 @@ function parseArray(value: unknown): unknown[] {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index])) return index;
+  }
+  return -1;
 }
 
 function TaskThreadState({
