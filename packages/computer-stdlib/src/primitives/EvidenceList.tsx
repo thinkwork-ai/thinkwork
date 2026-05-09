@@ -8,13 +8,15 @@ export interface EvidenceItem {
   snippet?: string;
   sourceId?: string;
   fetchedAt?: string | Date;
+  observedAt?: string | Date;
   url?: string;
 }
 
 export interface EvidenceListProps {
   title?: string;
   description?: string;
-  items: EvidenceItem[];
+  items?: EvidenceItem[];
+  evidence?: EvidenceItem[];
   emptyState?: string;
 }
 
@@ -22,8 +24,10 @@ export function EvidenceList({
   title = "Evidence",
   description = "Signals used to support this applet.",
   items,
+  evidence,
   emptyState = "No evidence attached yet.",
 }: EvidenceListProps) {
+  const resolvedItems = items ?? evidence ?? [];
   return (
     <section className="rounded-lg border border-border/70 bg-background p-4">
       <div className="mb-4 flex items-center gap-2">
@@ -33,13 +37,13 @@ export function EvidenceList({
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
       </div>
-      {items.length === 0 ? (
+      {resolvedItems.length === 0 ? (
         <div className="rounded-md border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
           {emptyState}
         </div>
       ) : (
         <div className="grid gap-3">
-          {items.map((item) => (
+          {resolvedItems.map((item) => (
             <article
               key={item.id}
               className="rounded-md border border-border/60 bg-muted/20 p-3"
@@ -59,10 +63,12 @@ export function EvidenceList({
                   {item.snippet}
                 </p>
               ) : null}
-              {item.fetchedAt || item.url ? (
+              {item.fetchedAt || item.observedAt || item.url ? (
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  {item.fetchedAt ? (
-                    <span>{formatDateTime(item.fetchedAt)}</span>
+                  {item.fetchedAt || item.observedAt ? (
+                    <span>
+                      {formatDateTime(item.fetchedAt ?? item.observedAt!)}
+                    </span>
                   ) : null}
                   {item.url ? (
                     <a

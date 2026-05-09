@@ -104,6 +104,14 @@ Required sections:
 
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `RefreshBar`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, `SourceStatusList`, `EvidenceList`, and formatters such as `formatCurrency`.
 
+Use the stdlib prop names directly:
+
+- `KpiStrip` receives `cards={data.kpis}`.
+- `SourceStatusList` receives `sources={data.sourceStatuses}`.
+- `EvidenceList` receives `items={data.evidence}`.
+- `DataTable` receives `columns={...}` and `rows={data.opportunities}`.
+- `BarChart` receives `data={data.stageExposure}` or `data={data.staleActivity}`.
+
 ## Empty And Partial States
 
 If no CRM opportunities are available, still save a runnable applet. Show empty KPI values, an empty table, and a source status explaining which source is missing.

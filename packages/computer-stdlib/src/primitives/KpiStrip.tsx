@@ -9,15 +9,17 @@ export interface KpiCard {
 }
 
 export interface KpiStripProps {
-  cards: KpiCard[];
+  cards?: KpiCard[];
+  kpis?: KpiCard[];
 }
 
-export function KpiStrip({ cards }: KpiStripProps) {
-  if (cards.length === 0) return null;
+export function KpiStrip({ cards, kpis }: KpiStripProps) {
+  const resolvedCards = cards ?? kpis ?? [];
+  if (resolvedCards.length === 0) return null;
 
   return (
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => (
+      {resolvedCards.map((card) => (
         <article
           key={card.label}
           className="rounded-lg border border-border/70 bg-background p-4"

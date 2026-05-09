@@ -46,6 +46,24 @@ describe("@thinkwork/computer-stdlib primitives", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("accepts generated dashboard KPI aliases", () => {
+    render(
+      <KpiStrip
+        kpis={[
+          {
+            label: "High-Risk Exposure",
+            value: formatCurrency(1_258_000),
+            detail: "4 high-risk deals",
+            tone: "risk",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("High-Risk Exposure")).toBeTruthy();
+    expect(screen.getByText("$1.3M")).toBeTruthy();
+  });
+
   it("renders header provenance and badges", () => {
     render(
       <AppHeader
@@ -151,6 +169,26 @@ describe("@thinkwork/computer-stdlib primitives", () => {
     expect(screen.getByText("Email signal")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Source" })).toBeTruthy();
     expect(screen.getByText("Internal note")).toBeTruthy();
+  });
+
+  it("accepts generated dashboard evidence aliases", () => {
+    render(
+      <EvidenceList
+        evidence={[
+          {
+            id: "crm-stale",
+            title: "CRM stale signal",
+            snippet: "No contact in 65 days",
+            sourceId: "crm",
+            observedAt: "2026-05-09T12:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("CRM stale signal")).toBeTruthy();
+    expect(screen.getByText("No contact in 65 days")).toBeTruthy();
+    expect(screen.getByText("crm")).toBeTruthy();
   });
 
   it("renders source status and chart empty states", () => {
