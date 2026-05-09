@@ -14,7 +14,9 @@ interface GeneratedArtifactCardProps {
   artifact: GeneratedArtifact;
 }
 
-export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) {
+export function GeneratedArtifactCard({
+  artifact,
+}: GeneratedArtifactCardProps) {
   const isAppArtifact =
     artifact.type === "DATA_VIEW" ||
     artifact.metadata?.kind === "research_dashboard" ||
@@ -30,7 +32,7 @@ export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) 
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-semibold">{artifact.title}</h3>
             <Badge variant="outline" className="rounded-md">
-              {isAppArtifact ? "App" : artifact.type ?? "Artifact"}
+              {isAppArtifact ? "App" : (artifact.type ?? "Artifact")}
             </Badge>
           </div>
           {artifact.summary ? (
@@ -48,8 +50,8 @@ export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) 
           size="sm"
           className="gap-2 justify-self-start"
         >
-          <Link to="/apps/$id" params={{ id: artifact.id }}>
-            Open app
+          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+            Open artifact
             <ExternalLink className="size-4" />
           </Link>
         </Button>

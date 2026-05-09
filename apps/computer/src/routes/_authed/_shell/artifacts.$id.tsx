@@ -20,7 +20,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import type { AppletPayload } from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
 
-export const Route = createFileRoute("/_authed/_shell/apps/$id")({
+export const Route = createFileRoute("/_authed/_shell/artifacts/$id")({
   component: AppArtifactPage,
 });
 
@@ -63,7 +63,7 @@ export function AppletRouteContent({
       requestPolicy: "cache-and-network",
     });
   const applet = data?.applet ?? null;
-  const title = applet?.applet?.name?.trim() || "App";
+  const title = applet?.applet?.name?.trim() || "Artifact";
   const source = useMemo(() => appletSource(applet), [applet]);
   const latestVersion = applet?.applet?.version ?? null;
   const instanceId = useAppletInstanceId(appId);
@@ -75,7 +75,7 @@ export function AppletRouteContent({
   } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
 
-  usePageHeaderActions({ title, backHref: "/apps" });
+  usePageHeaderActions({ title, backHref: "/artifacts" });
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -101,7 +101,9 @@ export function AppletRouteContent({
     return (
       <main className="flex h-svh items-center justify-center p-6">
         <p className="text-sm text-muted-foreground">
-          {fetching ? "Loading app..." : error?.message || "App not found."}
+          {fetching
+            ? "Loading artifact..."
+            : error?.message || "Artifact not found."}
         </p>
       </main>
     );
@@ -111,7 +113,7 @@ export function AppletRouteContent({
     return (
       <AppArtifactSplitShell title={title}>
         <AppletFailure>
-          This app does not include a source file that can be mounted.
+          This artifact does not include a source file that can be mounted.
         </AppletFailure>
       </AppArtifactSplitShell>
     );
@@ -128,7 +130,7 @@ export function AppletRouteContent({
         {hasNewerVersion ? (
           <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-primary">
-              A newer version of this app is available.
+              A newer version of this artifact is available.
             </p>
             <Button
               type="button"
@@ -271,7 +273,9 @@ export function AppletMount({
 }
 
 function useAppletInstanceId(appId: string) {
-  const [instanceId, setInstanceId] = useState(() => storedAppletInstanceId(appId));
+  const [instanceId, setInstanceId] = useState(() =>
+    storedAppletInstanceId(appId),
+  );
 
   useEffect(() => {
     setInstanceId(storedAppletInstanceId(appId));
@@ -295,7 +299,7 @@ function storedAppletInstanceId(appId: string) {
 function AppletLoading() {
   return (
     <div className="rounded-lg border border-border/70 bg-background p-6 text-sm text-muted-foreground">
-      Loading app...
+      Loading artifact...
     </div>
   );
 }

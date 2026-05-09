@@ -1,4 +1,4 @@
-import { computerAppArtifactRoute } from "@/lib/computer-routes";
+import { computerArtifactRoute } from "@/lib/computer-routes";
 
 export interface AppArtifactPreview {
   id: string;
@@ -42,7 +42,7 @@ export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
     title,
     kind: "applet",
     summary: prompt || `Version ${applet.version ?? 1} generated applet.`,
-    href: computerAppArtifactRoute(applet.appId),
+    href: computerArtifactRoute(applet.appId),
     generatedAt: applet.generatedAt ?? "",
     version: applet.version ?? null,
     prompt: applet.prompt ?? null,
