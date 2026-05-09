@@ -34,3 +34,4 @@ recipe plan in autopilot mode.
   tests passed. Broader `pnpm lint`, `pnpm -r --if-present typecheck`,
   `pnpm -r --if-present test`, touched-file Prettier check, and `git diff
 --check` passed locally before opening the U1/U2 PR.
+- **Current PR:** #1077 (`feat(computer): add Artifact Builder CRM recipe`).
