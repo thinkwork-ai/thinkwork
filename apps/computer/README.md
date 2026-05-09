@@ -27,3 +27,11 @@ scripts/smoke-computer.sh dev
 ```
 
 It creates a real deployed Computer thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed Computer surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.
+
+To run the browser-backed evidence path manually:
+
+```bash
+SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 scripts/smoke-computer.sh dev
+```
+
+That mode temporarily enables the backing agent's `browser_automation` capability for the smoke turn, waits for durable `browser_automation_*` Computer events, then restores the prior capability state.
