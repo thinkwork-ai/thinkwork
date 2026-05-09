@@ -8,7 +8,7 @@ import os
 import threading
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, wait
 
 logger = logging.getLogger(__name__)
@@ -123,12 +123,94 @@ def build_appsync_chunk_callback(
         post_fn=post_fn,
     )
 
-    def callback_handler(**kwargs) -> None:
-        data = kwargs.get("data")
-        if isinstance(data, str):
-            publisher.publish(data)
+    def callback_handler(*args, **kwargs) -> None:
+        for text in extract_stream_text_deltas(*args, **kwargs):
+            publisher.publish(text)
 
     return callback_handler, publisher
+
+
+def extract_stream_text_deltas(*args, **kwargs) -> list[str]:
+    """Extract textual deltas from Strands and Bedrock stream callback payloads."""
+    payloads = list(args)
+    for key in ("data", "delta", "chunk", "event"):
+        if key in kwargs:
+            payloads.append(kwargs[key])
+    if not payloads and kwargs:
+        payloads.append(kwargs)
+
+    text_parts: list[str] = []
+    for payload in payloads:
+        text_parts.extend(_extract_text_parts(payload))
+    return text_parts
+
+
+def _extract_text_parts(value) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, bytes):
+        decoded = value.decode("utf-8", errors="replace")
+        return [decoded] if decoded else []
+    if isinstance(value, dict):
+        return _extract_text_parts_from_dict(value)
+    if isinstance(value, Iterable):
+        text_parts: list[str] = []
+        for item in value:
+            text_parts.extend(_extract_text_parts(item))
+        return text_parts
+    return []
+
+
+def _extract_text_parts_from_dict(value: dict) -> list[str]:
+    if "contentBlockDelta" in value:
+        return _extract_bedrock_delta(value["contentBlockDelta"])
+    if value.get("type") == "content_block_delta":
+        return _extract_bedrock_delta(value)
+    if value.get("type") in {"text_delta", "output_text_delta"}:
+        return _extract_known_text_delta(value)
+
+    for key in ("data", "delta", "chunk", "event"):
+        if key in value:
+            parts = _extract_text_parts(value[key])
+            if parts:
+                return parts
+
+    if value.get("type") == "text" and isinstance(value.get("text"), str):
+        text = value["text"]
+        return [text] if text else []
+    if set(value.keys()) <= {"text"} and isinstance(value.get("text"), str):
+        text = value["text"]
+        return [text] if text else []
+
+    return []
+
+
+def _extract_bedrock_delta(value) -> list[str]:
+    if not isinstance(value, dict):
+        return _extract_text_parts(value)
+
+    delta = value.get("delta", value)
+    if not isinstance(delta, dict):
+        return _extract_text_parts(delta)
+
+    text = delta.get("text")
+    if isinstance(text, str) and text:
+        return [text]
+
+    reasoning = delta.get("reasoningContent")
+    if isinstance(reasoning, dict):
+        reasoning_text = reasoning.get("text") or reasoning.get("reasoningText")
+        if isinstance(reasoning_text, str) and reasoning_text:
+            return [reasoning_text]
+
+    return []
+
+
+def _extract_known_text_delta(value: dict) -> list[str]:
+    text = value.get("text") or value.get("delta")
+    if isinstance(text, str) and text:
+        return [text]
+    return []
 
 
 def _post(
