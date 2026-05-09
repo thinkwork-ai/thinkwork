@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { crmDashboardVisualFixtures } from "./crm-dashboard.fixture";
-import CrmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
+import PipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
 
 afterEach(cleanup);
 
@@ -33,7 +33,7 @@ describe("app artifact visual contract", () => {
 
   it("uses stable chart dimensions and safe table truncation for dense fixtures", () => {
     render(
-      <CrmPipelineRiskApplet
+      <PipelineRiskApplet
         refreshData={crmDashboardVisualFixtures.denseProducts}
       />,
     );
@@ -51,9 +51,7 @@ describe("app artifact visual contract", () => {
 
   it("keeps partial and failed source coverage visible beside usable charts", () => {
     render(
-      <CrmPipelineRiskApplet
-        refreshData={crmDashboardVisualFixtures.failedCrm}
-      />,
+      <PipelineRiskApplet refreshData={crmDashboardVisualFixtures.failedCrm} />,
     );
 
     expect(screen.getAllByText("failed").length).toBeGreaterThan(0);

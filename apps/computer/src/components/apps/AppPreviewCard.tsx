@@ -8,7 +8,6 @@ interface AppPreviewCardProps {
 }
 
 export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
-  const sourceStatuses = artifact.sourceStatuses ?? [];
   return (
     <article className="overflow-hidden rounded-lg border border-border/70 bg-background/70 transition-colors hover:bg-accent/30">
       <Link
@@ -23,7 +22,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
                 <Boxes className="size-4 text-primary" />
               </span>
               <span className="text-xs font-medium text-muted-foreground">
-                {artifact.kind === "applet" ? "Applet" : "Pipeline risk"}
+                Applet
               </span>
             </div>
             <Badge variant="outline" className="rounded-md">
@@ -32,28 +31,13 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
           </div>
           <div className="mt-auto grid grid-cols-3 gap-2">
             <PreviewMetric
-              label={artifact.kind === "applet" ? "Generated" : "High risk"}
-              value={
-                artifact.kind === "applet"
-                  ? formatDate(artifact.generatedAt)
-                  : String(artifact.riskCount ?? 0)
-              }
+              label="Generated"
+              value={formatDate(artifact.generatedAt)}
             />
+            <PreviewMetric label="Model" value={shortModel(artifact.modelId)} />
             <PreviewMetric
-              label={artifact.kind === "applet" ? "Model" : "Exposure"}
-              value={
-                artifact.kind === "applet"
-                  ? shortModel(artifact.modelId)
-                  : formatMoney(artifact.atRiskAmount ?? 0)
-              }
-            />
-            <PreviewMetric
-              label={artifact.kind === "applet" ? "Stdlib" : "Sources"}
-              value={
-                artifact.kind === "applet"
-                  ? artifact.stdlibVersionAtGeneration || "-"
-                  : `${sourceStatuses.length}`
-              }
+              label="Stdlib"
+              value={artifact.stdlibVersionAtGeneration || "-"}
             />
           </div>
         </div>
@@ -64,22 +48,10 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
             {artifact.summary}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {sourceStatuses.length ? (
-              sourceStatuses.map((source) => (
-                <Badge
-                  key={source.provider}
-                  variant="secondary"
-                  className="rounded-md"
-                >
-                  {source.provider}: {source.status}
-                </Badge>
-              ))
-            ) : (
-              <Badge variant="secondary" className="rounded-md">
-                <Sparkles className="mr-1 size-3" />
-                Private artifact
-              </Badge>
-            )}
+            <Badge variant="secondary" className="rounded-md">
+              <Sparkles className="mr-1 size-3" />
+              Private artifact
+            </Badge>
           </div>
         </div>
 
@@ -99,12 +71,6 @@ function PreviewMetric({ label, value }: { label: string; value: string }) {
       <p className="truncate text-sm font-semibold">{value}</p>
     </div>
   );
-}
-
-function formatMoney(value: number) {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
-  return `$${value}`;
 }
 
 function formatDate(value: string) {

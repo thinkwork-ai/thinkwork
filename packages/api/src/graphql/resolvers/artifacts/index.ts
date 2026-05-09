@@ -1,15 +1,12 @@
 import { artifacts_ as artifacts } from "./artifacts.query.js";
 import { artifact } from "./artifact.query.js";
-import { dashboardArtifact } from "./dashboardArtifact.query.js";
 import { createArtifact } from "./createArtifact.mutation.js";
 import { updateArtifact } from "./updateArtifact.mutation.js";
 import { deleteArtifact } from "./deleteArtifact.mutation.js";
-import { refreshDashboardArtifact } from "./refreshDashboardArtifact.mutation.js";
 
-export const artifactQueries = { artifacts, artifact, dashboardArtifact };
+export const artifactQueries = { artifacts, artifact };
 export const artifactMutations = {
   createArtifact,
   updateArtifact,
   deleteArtifact,
-  refreshDashboardArtifact,
 };
