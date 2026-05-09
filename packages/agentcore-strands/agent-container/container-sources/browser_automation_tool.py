@@ -111,6 +111,7 @@ def build_browser_automation_tool(
     region: str,
     browser_session_factory: Callable[..., Any] | None = None,
     nova_act_cls: type | None = None,
+    event_sink: Callable[[str, str, dict[str, Any]], None] | None = None,
 ) -> Any:
     """Return the `browser_automation` Strands tool.
 
@@ -143,11 +144,27 @@ def build_browser_automation_tool(
         """
 
         if dependency_error:
+            _emit_event(
+                event_sink,
+                "browser_automation_unavailable",
+                "warn",
+                {"url": url, "task": task[:200], "reason": dependency_error[:500]},
+            )
             return (
                 "Browser Automation is enabled for this agent, but the runtime "
                 f"is missing required dependencies: {dependency_error}"
             )
         if not nova_act_api_key:
+            _emit_event(
+                event_sink,
+                "browser_automation_unavailable",
+                "warn",
+                {
+                    "url": url,
+                    "task": task[:200],
+                    "reason": "nova_act_api_key_missing",
+                },
+            )
             return (
                 "Browser Automation is enabled for this agent, but the Nova Act "
                 "API key is not configured for this deployment yet."
@@ -155,6 +172,12 @@ def build_browser_automation_tool(
 
         start_time = time.time()
         logger.info("browser_automation called: url=%s task=%s", url, task[:100])
+        _emit_event(
+            event_sink,
+            "browser_automation_started",
+            "info",
+            {"url": url, "task": task[:200]},
+        )
         try:
             with browser_session_factory(region) as client:
                 ws_url, headers = client.generate_ws_headers()
@@ -174,6 +197,17 @@ def build_browser_automation_tool(
                         url=url,
                         task=task,
                         response_len=len(response),
+                    )
+                    _emit_event(
+                        event_sink,
+                        "browser_automation_completed",
+                        "info",
+                        {
+                            "url": url,
+                            "task": task[:200],
+                            "responseLen": len(response),
+                            "durationMs": int(duration_sec * 1000),
+                        },
                     )
                     logger.info(
                         "browser_automation completed: response_len=%d duration=%.1fs",
@@ -195,6 +229,17 @@ def build_browser_automation_tool(
                 task=task,
                 error=str(err),
             )
+            _emit_event(
+                event_sink,
+                "browser_automation_failed",
+                "error",
+                {
+                    "url": url,
+                    "task": task[:200],
+                    "error": str(err)[:500],
+                    "durationMs": int(duration_sec * 1000),
+                },
+            )
             logger.error(
                 "browser_automation error: %s: %s",
                 type(err).__name__,
@@ -204,3 +249,17 @@ def build_browser_automation_tool(
             return f"Browser Automation error: {err}"
 
     return browser_automation
+
+
+def _emit_event(
+    event_sink: Callable[[str, str, dict[str, Any]], None] | None,
+    event_type: str,
+    level: str,
+    payload: dict[str, Any],
+) -> None:
+    if not event_sink:
+        return
+    try:
+        event_sink(event_type, level, payload)
+    except Exception as err:  # noqa: BLE001
+        logger.warning("browser_automation event append failed: %s", err)

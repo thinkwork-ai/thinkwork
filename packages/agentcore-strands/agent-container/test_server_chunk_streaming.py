@@ -107,11 +107,11 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
     monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
     monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        server,
-        "_call_strands_agent",
-        lambda *args, **kwargs: ("Final answer", {"input_tokens": 3}),
-    )
+    def fake_call_strands_agent(*args, **kwargs):
+        captured.update(kwargs)
+        return "Final answer", {"input_tokens": 3}
+
+    monkeypatch.setattr(server, "_call_strands_agent", fake_call_strands_agent)
 
     result = server._execute_agent_turn(
         {
@@ -141,6 +141,13 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
         "content": "Final answer",
         "model": server.DEFAULT_MODEL,
         "usage": {"input_tokens": 3},
+        "api_url": "https://api.example.test",
+        "api_secret": "service-secret",
+    }
+    assert captured["computer_event_context"] == {
+        "tenant_id": "tenant-1",
+        "computer_id": "computer-1",
+        "task_id": "task-1",
         "api_url": "https://api.example.test",
         "api_secret": "service-secret",
     }

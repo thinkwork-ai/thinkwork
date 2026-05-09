@@ -609,6 +609,27 @@ def _build_mcp_clients(mcp_configs: list | None) -> list:
     return mcp_clients
 
 
+def _build_computer_event_sink(context: dict | None):
+    if not context:
+        return None
+
+    def append_event(event_type: str, level: str, payload: dict) -> None:
+        from computer_task_events import append_computer_task_event
+
+        append_computer_task_event(
+            tenant_id=str(context.get("tenant_id") or ""),
+            computer_id=str(context.get("computer_id") or ""),
+            task_id=str(context.get("task_id") or ""),
+            event_type=event_type,
+            level=level,
+            payload=payload,
+            api_url=str(context.get("api_url") or ""),
+            api_secret=str(context.get("api_secret") or ""),
+        )
+
+    return append_event
+
+
 def _call_strands_agent(system_prompt: str, messages: list,
                         model: str = "",
                         skills_config: list | None = None,
@@ -621,7 +642,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         context_engine_enabled: bool = False,
                         context_engine_config: dict | None = None,
                         browser_automation_enabled: bool = False,
-                        stream_thread_id: str | None = None) -> tuple[str, dict]:
+                        stream_thread_id: str | None = None,
+                        computer_event_context: dict | None = None) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
     ``disabled_builtin_tools`` / ``template_blocked_tools`` implement the
@@ -1178,12 +1200,14 @@ def _call_strands_agent(system_prompt: str, messages: list,
             from strands import tool as _browser_tool_decorator
             from browser_automation_tool import build_browser_automation_tool
 
+            browser_event_sink = _build_computer_event_sink(computer_event_context)
             tools.append(
                 build_browser_automation_tool(
                     strands_tool_decorator=_browser_tool_decorator,
                     nova_act_api_key=_nova_act_api_key,
                     cost_sink=_tool_costs,
                     region=AWS_REGION,
+                    event_sink=browser_event_sink,
                 )
             )
             logger.info("Browser Automation tool registered (total tools: %d)", len(tools))
@@ -2119,6 +2143,17 @@ def _execute_agent_turn(payload: dict) -> dict:
             context_engine_config=context_engine_config,
             browser_automation_enabled=browser_automation_enabled,
             stream_thread_id=ticket_id or None,
+            computer_event_context=(
+                {
+                    "tenant_id": workspace_tenant_id or tenant_id_for_audit,
+                    "computer_id": computer_id,
+                    "task_id": computer_task_id,
+                    "api_url": thinkwork_api_url,
+                    "api_secret": thinkwork_api_secret,
+                }
+                if computer_id and computer_task_id
+                else None
+            ),
         )
         duration_ms = int(time.time() * 1000) - start_ms
         computer_thread_response = None
