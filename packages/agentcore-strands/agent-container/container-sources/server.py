@@ -2429,6 +2429,13 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "Pass metadata with threadId and prompt so the artifact remains attached",
         "to this thread. After save_app returns ok, answer concisely with what",
         "was created and the /artifacts/{appId} route.",
+        "",
+        "save_app, load_app, and list_apps are direct Computer tools. Do not",
+        "delegate applet saving to delegate or delegate_to_workspace, and do not",
+        "claim an applet was saved unless your own successful save_app tool call",
+        "returned ok=true and persisted=true. If save_app is unavailable or",
+        "fails, say that the applet could not be saved and include the tool",
+        "failure.",
     ]
     if thread_id:
         lines.append(f"- Current threadId: {thread_id}")

@@ -14,6 +14,37 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started prompt-generation follow-up fix:** Created isolated worktree
+  `.Codex/worktrees/computer-smoke-api-key-auth` on branch
+  `codex/computer-smoke-api-key-auth` from fresh `origin/main` after PR #1072
+  merged and main advanced to `392b9da7`.
+- **CI failure:** Deploy run `25607781272` for PR #1072 reached the
+  post-deploy Computer smoke and failed after the streaming portion passed
+  because `scripts/smoke-computer.sh` still required local-only
+  `API_AUTH_SECRET` before running the applet pipeline smoke.
+- **Live E2E failure:** The exact prompt
+  `Build a CRM pipeline risk dashboard for LastMile opportunities, including
+  stale activity, stage exposure, and the top risks to review.` completed in
+  dev thread `b6a68fee-28ef-43be-998d-6ceef83cc8c4`, but no new `applet`
+  artifact was attached to the thread. The runtime tool trace showed the model
+  delegated applet saving instead of making a direct `save_app` call, and
+  Computer-only runtimes did not have `AGENT_ID`, which prevented direct applet
+  tool registration.
+- **Progress:** Updated the applet smoke to use AppSync API-key auth when the
+  service bearer is unavailable, sanitized fixture `threadId` metadata before
+  DB persistence, allowed applet tools to register for Computer-only runtimes
+  without `AGENT_ID`, omitted invalid `x-agent-id` headers, and hardened the
+  Computer-thread contract so applet saving must be done by a direct successful
+  `save_app` call.
+- **Verification note:** Focused applet/runtime Python tests passed locally, and
+  the previously failing applet pipeline smoke now saves, loads, opens,
+  refreshes, persists state, and seeds the CRM fixture using API-key auth.
+  `node --check scripts/smoke/computer-applet-pipeline-smoke.mjs`, `bash -n
+  scripts/smoke-computer.sh`, and `git diff --check` passed. A full local
+  `scripts/smoke-computer.sh --stage dev --region us-east-1` rerun reached the
+  deterministic streaming turn but the deployed task remained `running` after
+  persisting duplicate assistant messages, so the applet-pipeline fix was
+  verified directly and the full post-deploy gate will be rechecked in CI.
 - **Started prompt-generation fix:** Created isolated worktree
   `.Codex/worktrees/computer-prompt-applet-generation` on branch
   `codex/computer-prompt-applet-generation` from fresh `origin/main`.
