@@ -89,6 +89,7 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
             detach_eval_context=lambda _token: None,
         ),
     )
+
     def fake_record_thread_turn_response(**kwargs):
         captured["response"] = kwargs
         return {
@@ -107,6 +108,7 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
     monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
     monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
+
     def fake_call_strands_agent(*args, **kwargs):
         captured.update(kwargs)
         return "Final answer", {"input_tokens": 3}
@@ -131,9 +133,7 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
         }
     )
 
-    assert result["computer_thread_response"]["responseMessageId"] == (
-        "assistant-message-1"
-    )
+    assert result["computer_thread_response"]["responseMessageId"] == ("assistant-message-1")
     assert captured["response"] == {
         "tenant_id": "tenant-1",
         "computer_id": "computer-1",
@@ -151,3 +151,65 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
         "api_url": "https://api.example.test",
         "api_secret": "service-secret",
     }
+
+
+def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
+    captured = {}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "eval_span_attrs",
+        SimpleNamespace(
+            attach_eval_context=lambda **_kwargs: object(),
+            detach_eval_context=lambda _token: None,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "computer_thread_response",
+        SimpleNamespace(
+            record_thread_turn_response=lambda **_kwargs: {"responded": True},
+        ),
+    )
+    monkeypatch.setattr(server, "_ensure_workspace_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
+    monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
+
+    def fake_call_strands_agent(system_prompt, messages, **kwargs):
+        captured["system_prompt"] = system_prompt
+        captured["messages"] = messages
+        captured.update(kwargs)
+        assert server.os.environ["COMPUTER_THREAD_ID"] == "thread-1"
+        assert server.os.environ["COMPUTER_TURN_PROMPT"].startswith("Build a CRM")
+        return "Saved the applet.", {}
+
+    monkeypatch.setattr(server, "_call_strands_agent", fake_call_strands_agent)
+
+    server._execute_agent_turn(
+        {
+            "workspace_tenant_id": "tenant-1",
+            "assistant_id": "agent-1",
+            "tenant_slug": "tenant",
+            "instance_id": "agent-1",
+            "agent_name": "Marco",
+            "human_name": "Eric",
+            "message": (
+                "Build a CRM pipeline risk dashboard for LastMile opportunities, "
+                "including stale activity, stage exposure, and the top risks to review."
+            ),
+            "thread_id": "thread-1",
+            "computer_id": "computer-1",
+            "computer_task_id": "task-1",
+            "thinkwork_api_url": "https://api.example.test",
+            "thinkwork_api_secret": "service-secret",
+            "messages_history": [],
+        }
+    )
+
+    assert "## Computer Thread Contract" in captured["system_prompt"]
+    assert "use the artifact-builder skill if it is available" in captured["system_prompt"]
+    assert "expected result is a saved Computer applet" in captured["system_prompt"]
+    assert "Current threadId: thread-1" in captured["system_prompt"]
+    assert "COMPUTER_THREAD_ID" not in server.os.environ
+    assert "COMPUTER_TURN_PROMPT" not in server.os.environ

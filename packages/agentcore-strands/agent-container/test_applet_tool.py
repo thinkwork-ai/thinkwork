@@ -71,6 +71,47 @@ def test_save_app_happy_path_calls_save_applet(monkeypatch):
     assert calls[0]["runtime"].tenant_id == "tenant-A"
 
 
+def test_save_app_adds_current_thread_metadata(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    async def graphql(_runtime, _query, variables):
+        calls.append({"variables": variables})
+        return {
+            "ok": True,
+            "data": {
+                "saveApplet": {
+                    "ok": True,
+                    "appId": "33333333-3333-4333-8333-333333333333",
+                    "version": 1,
+                    "validated": True,
+                    "persisted": True,
+                    "errors": [],
+                }
+            },
+        }
+
+    monkeypatch.setattr(applet_tool, "_graphql", graphql)
+    save_app = applet_tool.make_save_app_fn(
+        **RUNTIME,
+        thread_id="thread-1",
+        prompt="Build a CRM pipeline risk dashboard.",
+    )
+
+    result = run(
+        save_app(
+            name="Pipeline Risk",
+            files={"App.tsx": "export default function App() { return null; }"},
+            metadata={},
+        )
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["variables"]["input"]["metadata"] == {
+        "threadId": "thread-1",
+        "prompt": "Build a CRM pipeline risk dashboard.",
+    }
+
+
 def test_save_app_with_app_id_calls_regenerate_applet(monkeypatch):
     calls: list[dict[str, Any]] = []
 
@@ -105,9 +146,7 @@ def test_save_app_with_app_id_calls_regenerate_applet(monkeypatch):
     assert result["ok"] is True
     assert result["version"] == 2
     assert "regenerateApplet" in calls[0]["query"]
-    assert calls[0]["variables"]["input"]["appId"] == (
-        "33333333-3333-4333-8333-333333333333"
-    )
+    assert calls[0]["variables"]["input"]["appId"] == ("33333333-3333-4333-8333-333333333333")
 
 
 def test_save_app_returns_api_validation_errors_verbatim(monkeypatch):

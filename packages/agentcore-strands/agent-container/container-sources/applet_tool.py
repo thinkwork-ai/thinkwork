@@ -31,6 +31,8 @@ class AppletToolRuntime:
     computer_id: str
     api_url: str
     api_secret: str
+    thread_id: str = ""
+    prompt: str = ""
 
 
 SAVE_APP_MUTATION = """
@@ -112,10 +114,15 @@ async def _live_save_app(
 ) -> dict[str, Any]:
     mutation_name = "regenerateApplet" if app_id else "saveApplet"
     query = REGENERATE_APPLET_MUTATION if app_id else SAVE_APP_MUTATION
+    metadata_payload = dict(metadata) if isinstance(metadata, dict) else {}
+    if runtime.thread_id and not metadata_payload.get("threadId"):
+        metadata_payload["threadId"] = runtime.thread_id
+    if runtime.prompt and not metadata_payload.get("prompt"):
+        metadata_payload["prompt"] = runtime.prompt
     input_payload: dict[str, Any] = {
         "name": name,
         "files": files,
-        "metadata": metadata,
+        "metadata": metadata_payload,
     }
     if app_id:
         input_payload["appId"] = app_id
@@ -191,6 +198,8 @@ def make_save_app_fn(
     computer_id: str,
     api_url: str,
     api_secret: str,
+    thread_id: str = "",
+    prompt: str = "",
     seam_fn: Callable[..., Any] | None = None,
 ):
     runtime = _runtime_from_values(
@@ -199,6 +208,8 @@ def make_save_app_fn(
         computer_id=computer_id,
         api_url=api_url,
         api_secret=api_secret,
+        thread_id=thread_id,
+        prompt=prompt,
     )
     seam = seam_fn or get_save_app_for_test()
 
@@ -211,9 +222,14 @@ def make_save_app_fn(
     ) -> dict[str, Any]:
         """Save or regenerate a Computer applet.
 
-        Use this after generating TSX applet source. Pass one or more source
-        files, structured metadata, and an optional app_id. Omitting app_id
-        creates a new applet; providing app_id regenerates that stable applet.
+        Use this after generating TSX applet source. For Computer requests to
+        build or create an app, applet, dashboard, briefing, report, or other
+        interactive work surface, do not stop at a prose answer: generate a
+        runnable applet and call save_app before responding. Pass one or more
+        source files, structured metadata, and an optional app_id. Omitting
+        app_id creates a new applet; providing app_id regenerates that stable
+        applet. Include a deterministic refresh() export in the TSX source
+        whenever the result should be refreshable.
         """
 
         return await _call_seam(
@@ -235,6 +251,8 @@ def make_load_app_fn(
     computer_id: str,
     api_url: str,
     api_secret: str,
+    thread_id: str = "",
+    prompt: str = "",
     seam_fn: Callable[..., Any] | None = None,
 ):
     runtime = _runtime_from_values(
@@ -243,6 +261,8 @@ def make_load_app_fn(
         computer_id=computer_id,
         api_url=api_url,
         api_secret=api_secret,
+        thread_id=thread_id,
+        prompt=prompt,
     )
     seam = seam_fn or get_load_app_for_test()
 
@@ -262,6 +282,8 @@ def make_list_apps_fn(
     computer_id: str,
     api_url: str,
     api_secret: str,
+    thread_id: str = "",
+    prompt: str = "",
     seam_fn: Callable[..., Any] | None = None,
 ):
     runtime = _runtime_from_values(
@@ -270,6 +292,8 @@ def make_list_apps_fn(
         computer_id=computer_id,
         api_url=api_url,
         api_secret=api_secret,
+        thread_id=thread_id,
+        prompt=prompt,
     )
     seam = seam_fn or get_list_apps_for_test()
 
@@ -402,6 +426,8 @@ def _runtime_env() -> dict[str, str]:
         "api_secret": os.environ.get("API_AUTH_SECRET")
         or os.environ.get("THINKWORK_API_SECRET")
         or "",
+        "thread_id": os.environ.get("COMPUTER_THREAD_ID") or "",
+        "prompt": os.environ.get("COMPUTER_TURN_PROMPT") or "",
     }
 
 
@@ -412,6 +438,8 @@ def _runtime_from_values(
     computer_id: str,
     api_url: str,
     api_secret: str,
+    thread_id: str = "",
+    prompt: str = "",
 ) -> AppletToolRuntime:
     values = {
         "tenant_id": tenant_id,
@@ -422,13 +450,13 @@ def _runtime_from_values(
     }
     missing = sorted(name for name, value in values.items() if not value)
     if missing:
-        raise ValueError(
-            "applet tool runtime is missing required config: " + ", ".join(missing)
-        )
+        raise ValueError("applet tool runtime is missing required config: " + ", ".join(missing))
     return AppletToolRuntime(
         tenant_id=tenant_id,
         agent_id=agent_id,
         computer_id=computer_id,
         api_url=api_url.rstrip("/"),
         api_secret=api_secret,
+        thread_id=thread_id,
+        prompt=prompt,
     )
