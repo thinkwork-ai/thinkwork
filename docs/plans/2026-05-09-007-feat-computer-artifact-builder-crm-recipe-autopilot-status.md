@@ -87,3 +87,5 @@ scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs`, `bash -n
 scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
   locally. `git diff --check` passed.
+- **Current PR:** #1080
+  (`test(computer): add CRM dashboard prompt smoke`).
