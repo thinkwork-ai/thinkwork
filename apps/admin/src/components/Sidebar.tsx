@@ -44,6 +44,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuBadge,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -101,6 +102,8 @@ function NavItems({ items }: { items: NavItem[] }) {
 
 export function AppSidebar() {
   const { tenantId } = useTenant();
+  const { state, setOpen } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const [inboxResult] = useQuery({
     query: InboxItemsListQuery,
     variables: { tenantId: tenantId!, status: InboxItemStatus.Pending },
@@ -260,51 +263,62 @@ export function AppSidebar() {
   return (
     <ShadcnSidebar collapsible="icon">
       <SidebarHeader className="pb-0">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/dashboard">
-                <img
-                  src="/logo.png"
-                  alt="ThinkWork"
-                  className="h-9 w-9 shrink-0 object-contain"
-                />
-                <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
-                  <span className="text-base font-semibold tracking-tight leading-none truncate">
-                    ThinkWork
-                  </span>
-                  <span className="text-xs text-muted-foreground leading-none truncate mt-0.5">
-                    Administration
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-1">
+          <SidebarMenu className="flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <Link
+                  to="/dashboard"
+                  onClick={(event) => {
+                    if (isCollapsed) {
+                      event.preventDefault();
+                      setOpen(true);
+                    }
+                  }}
+                >
+                  <img
+                    src="/logo.png"
+                    alt="ThinkWork"
+                    className="h-9 w-9 shrink-0 object-contain"
+                  />
+                  <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
+                    <span className="text-base font-semibold tracking-tight leading-none truncate">
+                      ThinkWork
+                    </span>
+                    <span className="text-xs text-muted-foreground leading-none truncate mt-0.5">
+                      Administration
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarTrigger className="mt-0.5 self-start group-data-[collapsible=icon]:hidden" />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupContent>
             <NavItems items={workItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel>Managed Agents</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={agentsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel>Automations</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel>Manage</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={manageItems} />

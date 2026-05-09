@@ -35,8 +35,7 @@ export function MemoryPanel({
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-8">
-        <header className="grid gap-1">
-          <h1 className="text-2xl font-medium tracking-normal">Memory</h1>
+        <header>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             Things your Computer can carry across threads.
           </p>

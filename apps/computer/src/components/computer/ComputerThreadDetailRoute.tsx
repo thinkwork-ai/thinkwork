@@ -4,6 +4,7 @@ import {
   TaskThreadView,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerEventsQuery,
@@ -88,6 +89,8 @@ export function ComputerThreadDetailRoute({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
   });
+  const threadTitle = data?.thread?.title?.trim() || "Thread";
+  usePageHeaderActions({ backHref: "/threads", title: threadTitle });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({

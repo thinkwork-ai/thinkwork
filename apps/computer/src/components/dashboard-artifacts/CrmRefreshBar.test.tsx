@@ -53,7 +53,7 @@ describe("CrmRefreshBar", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Ask Computer" }).getAttribute("href"),
-    ).toBe("/computer?artifact=artifact-crm-pipeline-risk-fixture");
+    ).toBe("/new?artifact=artifact-crm-pipeline-risk-fixture");
     expect(screen.getByText(/does not reinterpret the business question/i)).toBeTruthy();
   });
 

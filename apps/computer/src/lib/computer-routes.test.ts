@@ -3,7 +3,7 @@ import {
   COMPUTER_ROUTE_LABELS,
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
-  COMPUTER_WORKBENCH_ROUTE,
+  COMPUTER_THREADS_ROUTE,
   InvalidComputerRouteParamError,
   computerAppArtifactRoute,
   computerThreadRoute,
@@ -24,11 +24,11 @@ describe("computer route helpers", () => {
     );
   });
 
-  it("keeps labels aligned with the workbench route", () => {
-    expect(COMPUTER_WORKBENCH_ROUTE).toBe("/computer");
-    expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/threads");
+  it("keeps labels aligned with the threads route", () => {
+    expect(COMPUTER_THREADS_ROUTE).toBe("/threads");
+    expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/new");
     expect(COMPUTER_MEMORY_ROUTE).toBe("/memory");
-    expect(COMPUTER_ROUTE_LABELS.computer).toBe("Computer");
+    expect(COMPUTER_ROUTE_LABELS.threads).toBe("Threads");
     expect(COMPUTER_ROUTE_LABELS.newThread).toBe("New");
     expect(COMPUTER_ROUTE_LABELS.memory).toBe("Memory");
   });

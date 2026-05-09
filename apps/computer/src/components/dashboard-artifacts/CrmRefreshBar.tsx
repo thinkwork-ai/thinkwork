@@ -97,7 +97,7 @@ export function CrmRefreshBar({
           </Button>
           <Button asChild size="sm" className="gap-2">
             <Link
-              to="/computer"
+              to="/new"
               search={{ artifact: manifest.snapshot.artifactId }}
             >
               <Brain className="size-4" />

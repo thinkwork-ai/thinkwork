@@ -21,7 +21,7 @@ describe("MemoryPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Memory")).toBeTruthy();
+    // Page title now lives in AppTopBar via PageHeaderContext.
     expect(screen.getByText("Preferences")).toBeTruthy();
     expect(
       screen.getByText("Eric prefers concise status updates."),

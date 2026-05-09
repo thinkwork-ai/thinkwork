@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@thinkwork/ui";
 import {
   COMPUTER_APPS_ROUTE,
-  COMPUTER_WORKBENCH_ROUTE,
+  COMPUTER_NEW_THREAD_ROUTE,
 } from "@/lib/computer-routes";
 
 interface AppTopBarProps {
@@ -30,7 +30,7 @@ export function AppTopBar({ title }: AppTopBarProps) {
           size="sm"
           className="hidden gap-2 sm:inline-flex"
         >
-          <Link to={COMPUTER_WORKBENCH_ROUTE}>
+          <Link to={COMPUTER_NEW_THREAD_ROUTE}>
             <Plus className="size-4" />
             New thread
           </Link>

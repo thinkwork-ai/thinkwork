@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { Provider as UrqlProvider } from "urql";
 import { ThemeProvider, TooltipProvider } from "@thinkwork/ui";
 import { AuthProvider } from "@/context/AuthContext";
+import { PageHeaderProvider } from "@/context/PageHeaderContext";
 import { TenantProvider } from "@/context/TenantContext";
 import { graphqlClient } from "@/lib/graphql-client";
 import { router } from "./router";
@@ -21,9 +22,11 @@ createRoot(document.getElementById("root")!).render(
       <UrqlProvider value={graphqlClient}>
         <AuthProvider>
           <TenantProvider>
-            <TooltipProvider>
-              <RouterProvider router={router} />
-            </TooltipProvider>
+            <PageHeaderProvider>
+              <TooltipProvider>
+                <RouterProvider router={router} />
+              </TooltipProvider>
+            </PageHeaderProvider>
           </TenantProvider>
         </AuthProvider>
       </UrqlProvider>

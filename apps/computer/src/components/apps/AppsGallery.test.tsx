@@ -8,7 +8,7 @@ describe("AppsGallery", () => {
   it("renders fixture app cards", () => {
     render(<AppsGallery />);
 
-    expect(screen.getByRole("heading", { name: "Apps" })).toBeTruthy();
+    // Page title now lives in AppTopBar via PageHeaderContext.
     expect(screen.getByText("LastMile CRM pipeline risk")).toBeTruthy();
   });
 

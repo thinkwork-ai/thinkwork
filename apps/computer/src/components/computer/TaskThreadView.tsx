@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   ArrowUp,
   Bot,
   ChevronRight,
@@ -10,16 +9,13 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button, Textarea } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
   type GeneratedArtifact,
 } from "@/components/computer/GeneratedArtifactCard";
-import { SourceCountButton } from "@/components/computer/SourceCountButton";
 import { StreamingMessageBuffer } from "@/components/computer/StreamingMessageBuffer";
-import { UsageButton } from "@/components/computer/UsageButton";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const SHIMMER_TEXT = "Processing...";
@@ -97,40 +93,18 @@ export function TaskThreadView({
   const showProcessingShimmer =
     !showStreamingBuffer &&
     isAwaitingAssistantResponse(thread, visibleMessages);
-  const sourceCount = countThreadSources(visibleMessages, thread.turns);
   const latestUserIndex = findLastIndex(
     visibleMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
 
   return (
-    <main className="flex w-full flex-1 flex-col bg-background">
-      <header className="sticky top-0 z-10 border-b border-border/70 bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button asChild variant="ghost" size="icon" className="shrink-0">
-              <Link to="/computer">
-                <ArrowLeft className="size-4" />
-                <span className="sr-only">Computer</span>
-              </Link>
-            </Button>
-            <h1 className="truncate text-base font-medium text-muted-foreground">
-              {thread.title?.trim() || "Untitled thread"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" disabled>
-              <span className="text-lg leading-none">...</span>
-              <span className="sr-only">More</span>
-            </Button>
-            <SourceCountButton count={sourceCount} />
-            <UsageButton costSummary={thread.costSummary} />
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col gap-8 px-4 pb-6 pt-10 sm:px-6">
-        <section className="grid gap-8" aria-label="Thread transcript">
+    <main className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <section
+        className="flex-1 overflow-y-auto overscroll-contain"
+        aria-label="Thread transcript"
+      >
+        <div className="mx-auto grid w-full max-w-[750px] gap-8 px-4 pt-10 pb-6 sm:px-6">
           {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
@@ -149,13 +123,17 @@ export function TaskThreadView({
               />
             ))
           )}
-        </section>
+        </div>
+      </section>
 
-        <FollowUpComposer
-          disabled={!onSendFollowUp || isSending}
-          isSending={isSending}
-          onSubmit={onSendFollowUp}
-        />
+      <div className="shrink-0 px-4 pb-4 sm:px-6">
+        <div className="mx-auto w-full max-w-[750px]">
+          <FollowUpComposer
+            disabled={!onSendFollowUp || isSending}
+            isSending={isSending}
+            onSubmit={onSendFollowUp}
+          />
+        </div>
       </div>
     </main>
   );
@@ -366,26 +344,34 @@ function FollowUpComposer({
     textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 32), 160)}px`;
   }, [value]);
 
+  async function handleSubmit(event?: FormEvent) {
+    event?.preventDefault();
+    if (!canSubmit || !onSubmit) return;
+    setError(null);
+    try {
+      await onSubmit(value.trim());
+      setValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send");
+    }
+  }
+
   return (
     <form
-      className="sticky bottom-4 mt-auto grid gap-3 rounded-2xl border border-border/80 bg-background/40 p-3 shadow-sm dark:bg-input/30"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (!canSubmit || !onSubmit) return;
-        setError(null);
-        try {
-          await onSubmit(value.trim());
-          setValue("");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to send");
-        }
-      }}
+      className="grid gap-3 rounded-2xl border border-border/80 bg-background p-3 shadow-lg transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 dark:bg-input/95"
+      onSubmit={handleSubmit}
     >
       <Textarea
         ref={textareaRef}
         aria-label="Follow up"
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void handleSubmit();
+          }
+        }}
         placeholder="Type a command..."
         rows={1}
         className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
