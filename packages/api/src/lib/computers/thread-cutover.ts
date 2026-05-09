@@ -9,6 +9,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyThreadUpdate } from "../../graphql/notify.js";
+import { ensureArtifactBuilderDefaults } from "./artifact-builder-defaults.js";
 import { normalizeTaskInput } from "./tasks.js";
 
 const db = getDb();
@@ -178,6 +179,46 @@ async function dispatchComputerThreadTurn(input: {
     return false;
   }
 
+  try {
+    const recipeDefaults = await ensureArtifactBuilderDefaults({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+    });
+    if (!recipeDefaults.ensured) {
+      await markDispatchFailed(input, {
+        message: `Artifact Builder defaults could not be prepared: ${recipeDefaults.reason}`,
+        code: "artifact_builder_defaults_missing",
+      });
+      return false;
+    }
+    if (
+      recipeDefaults.written.length > 0 ||
+      recipeDefaults.updated.length > 0
+    ) {
+      await db.insert(computerEvents).values({
+        tenant_id: input.tenantId,
+        computer_id: input.computerId,
+        task_id: input.taskId,
+        event_type: "artifact_builder_defaults_seeded",
+        level: "info",
+        payload: {
+          agentSlug: recipeDefaults.agentSlug,
+          written: recipeDefaults.written,
+          updated: recipeDefaults.updated,
+          skipped: recipeDefaults.skipped,
+        },
+      });
+    }
+  } catch (err) {
+    await markDispatchFailed(input, {
+      message: `Artifact Builder defaults could not be prepared: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      code: "artifact_builder_defaults_failed",
+    });
+    return false;
+  }
+
   await db
     .update(computerTasks)
     .set({
@@ -270,7 +311,10 @@ async function markDispatchFailed(
     .select({ status: threads.status, title: threads.title })
     .from(threads)
     .where(
-      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, input.threadId)),
+      and(
+        eq(threads.tenant_id, input.tenantId),
+        eq(threads.id, input.threadId),
+      ),
     )
     .limit(1);
 
