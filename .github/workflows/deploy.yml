@@ -741,6 +741,46 @@ jobs:
       - name: Run Flue smoke
         run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
 
+  # ── Computer thread streaming smoke ─────────────────────────────
+  # Exercises the deployed Python Strands Computer path end-to-end:
+  # blank thread creation → AppSync chunk subscription → sendMessage →
+  # durable assistant persistence → completed computer_tasks row. This
+  # is the deploy gate for the "actual streaming results" contract in
+  # the Computer v1 plan.
+  computer-thread-streaming-smoke:
+    name: Computer Thread Streaming Smoke
+    needs: [update-agentcore-runtimes, build-computer, bootstrap]
+    if: always() && needs.update-agentcore-runtimes.result == 'success' && needs.build-computer.result == 'success' && needs.bootstrap.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install psql + jq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client jq
+
+      - name: Run Computer thread streaming smoke
+        run: bash scripts/post-deploy-smoke-computer-thread-streaming.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
   # ── Compliance Anchor smoke (Phase 3 U8a) ───────────────────────
   # Invokes both the anchor Lambda and the watchdog Lambda after
   # terraform-apply has provisioned them, asserting the dispatch-pin
@@ -1137,6 +1177,7 @@ jobs:
         migration-drift-check,
         build-admin,
         build-computer,
+        computer-thread-streaming-smoke,
         build-docs,
         bootstrap,
       ]
