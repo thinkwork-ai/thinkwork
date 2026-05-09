@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(cleanup);
@@ -23,6 +23,10 @@ describe("TaskThreadView", () => {
               id: "message-2",
               role: "ASSISTANT",
               content: "I created a dashboard app.",
+              metadata: {
+                summary: "Built a dashboard from CRM opportunity data.",
+              },
+              toolCalls: [{ name: "data_visualization" }],
               durableArtifact: {
                 id: "artifact_123",
                 title: "CRM pipeline risk app",
@@ -39,11 +43,13 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
     expect(screen.getByText("Build a CRM pipeline dashboard")).toBeTruthy();
     expect(screen.getByText("I created a dashboard app.")).toBeTruthy();
+    expect(screen.getByText("Thinking")).toBeTruthy();
+    expect(screen.getByText("Using data_visualization")).toBeTruthy();
     expect(screen.getByText("CRM pipeline risk app")).toBeTruthy();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
   });
 
-  it("renders a thread-created event when the thread has no messages", () => {
+  it("renders a thinking row when the thread has no messages", () => {
     render(
       <TaskThreadView
         thread={{
@@ -55,7 +61,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByText("Thread created")).toBeTruthy();
+    expect(screen.getByText("Thinking")).toBeTruthy();
   });
 
   it("renders streaming assistant chunks below persisted messages", () => {
@@ -82,5 +88,33 @@ describe("TaskThreadView", () => {
 
     expect(screen.getByText("Working on it")).toBeTruthy();
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
+  });
+
+  it("sends follow-up messages from the composer", () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Follow-up thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Start",
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "Add detail" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(onSendFollowUp).toHaveBeenCalledWith("Add detail");
   });
 });

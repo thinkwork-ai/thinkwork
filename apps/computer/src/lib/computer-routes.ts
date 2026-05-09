@@ -6,12 +6,13 @@ export class InvalidComputerRouteParamError extends Error {
 }
 
 export const COMPUTER_WORKBENCH_ROUTE = "/computer" as const;
+export const COMPUTER_NEW_THREAD_ROUTE = "/tasks" as const;
 export const COMPUTER_TASKS_ROUTE = "/tasks" as const;
 export const COMPUTER_APPS_ROUTE = "/apps" as const;
 
 export const COMPUTER_ROUTE_LABELS = {
   computer: "Computer",
-  tasks: "Threads",
+  tasks: "New",
   apps: "Apps",
 } as const;
 

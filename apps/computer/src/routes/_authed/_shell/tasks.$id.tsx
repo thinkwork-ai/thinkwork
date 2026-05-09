@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { useQuery, useSubscription } from "urql";
+import { useMutation, useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
   type TaskThread,
@@ -8,6 +8,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerThreadQuery,
+  SendMessageMutation,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
@@ -30,6 +31,9 @@ interface ThreadResult {
           role: string;
           content?: string | null;
           createdAt?: string | null;
+          metadata?: unknown;
+          toolCalls?: unknown;
+          toolResults?: unknown;
           durableArtifact?: {
             id: string;
             title: string;
@@ -50,6 +54,7 @@ function TaskDetailPage() {
     query: ComputerThreadQuery,
     variables: { id, messageLimit: 100 },
   });
+  const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const chunks = useComputerThreadChunks(id);
   const [{ data: turnUpdate }] = useSubscription<{
     onThreadTurnUpdated?: { threadId?: string | null } | null;
@@ -71,6 +76,18 @@ function TaskDetailPage() {
       isLoading={fetching && !data}
       error={error?.message ?? null}
       streamingChunks={chunks}
+      isSending={sending}
+      onSendFollowUp={async (content) => {
+        const result = await sendMessage({
+          input: {
+            threadId: id,
+            role: "USER",
+            content,
+          },
+        });
+        if (result.error) throw result.error;
+        reexecuteQuery({ requestPolicy: "network-only" });
+      }}
     />
   );
 }
@@ -87,6 +104,9 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       role: node.role,
       content: node.content,
       createdAt: node.createdAt,
+      metadata: node.metadata,
+      toolCalls: node.toolCalls,
+      toolResults: node.toolResults,
       durableArtifact: node.durableArtifact
         ? {
             id: node.durableArtifact.id,
