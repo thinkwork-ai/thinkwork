@@ -14,6 +14,38 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U7:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u7-strands-live` on branch
+  `codex/computer-applets-u7-strands-live` from `origin/main` after U6 merged.
+- **Progress:** Replaced the Strands applet tool default seams with live
+  GraphQL callers. `save_app` dispatches to `saveApplet` or
+  `regenerateApplet` based on `app_id`, `load_app` calls `applet(appId)`, and
+  `list_apps` calls `applets`. Calls use a fresh `httpx.AsyncClient`, service
+  bearer auth, and tenant/agent/computer headers.
+- **Verification note:** `uv run pytest
+  packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
+  pytest packages/agentcore-strands/agent-container/test_applet_tool.py
+  packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
+  ruff check ...`, and `uv run --no-project --with pytest --with
+  pytest-asyncio --with pyyaml --with mistune --with anyio --with boto3 --with
+  strands-agents pytest
+  packages/agentcore-strands/agent-container/test_server_registration.py`
+  passed locally. `git diff --check` passed. `docker build -f
+  packages/agentcore-strands/agent-container/Dockerfile -t
+  thinkwork-agentcore-strands-applet-u7:local .` passed, including the
+  container boot assert.
+- **Verification note:** A broad `uv run pytest
+  packages/agentcore-strands/agent-container` collection attempt failed before
+  tests ran because this local invocation does not install optional broad-suite
+  dependencies (`botocore`, `pytest_asyncio`, and
+  `workspace_composer_client`). The targeted supported invocations above cover
+  the changed applet tool and runtime registration paths.
+- **Current PR:** #1057 (`feat(computer): activate Strands applet tools`).
+- **CI:** PR #1057 checks passed: CLA, lint, test, typecheck, verify.
+- **Merged U6:** PR #1056 (`feat(computer): activate applet API resolvers`)
+  was squash-merged to `main` at
+  `ecf82f879e5646b733de0c6b9314682f1e658c5d`; remote/local branches and the
+  U6 worktree were deleted.
 - **Started U6:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u6-live-api` on branch
   `codex/computer-applets-u6-live-api` from `origin/main` after U5 merged.
