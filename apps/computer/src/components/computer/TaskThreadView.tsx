@@ -13,6 +13,7 @@ import {
 import {
   Children,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -91,14 +92,26 @@ export function TaskThreadView({
   onSendFollowUp,
 }: TaskThreadViewProps) {
   // Stick-to-bottom autoscroll. The user's "follow along" gesture is implicit:
-  // when they're already near the bottom, new streamed text should keep them
-  // pinned there. When they've scrolled up to read prior context, we leave
-  // them alone (no surprise jumps mid-read). The threshold is 80px — close
-  // enough that "almost at the bottom" still counts as stuck. We could
-  // graduate to Vercel's <Conversation> from ai-elements later if the UX
-  // wants a sticky scroll-to-bottom button, but the inline pattern is enough
+  // when they're already near the bottom, new streamed text + action rows +
+  // ProcessingShimmer growth should keep them pinned there. When they've
+  // scrolled up to read prior context, we leave them alone (no surprise jumps
+  // mid-read).
+  //
+  // We use a ResizeObserver on the inner content rather than dep-based
+  // scrolling because turn activity (Thinking detail, action rows, Processing
+  // shimmer text) grows the page height between renders without any prop
+  // change the parent passes us — only the inner DOM's size changes. A
+  // ResizeObserver fires on every height change regardless of source.
+  //
+  // We *also* force-scroll when the latest user message id changes — the user
+  // expects to see their own question land at the bottom, even if they were
+  // scrolled up reading older context when they hit Send.
+  //
+  // Could graduate to Vercel's <Conversation> from ai-elements later if we
+  // want a sticky scroll-to-bottom button, but the inline pattern is enough
   // for this PR.
   const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const innerContentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
 
   const handleScroll = useCallback(() => {
@@ -108,17 +121,36 @@ export function TaskThreadView({
     stickToBottomRef.current = distanceFromBottom < 80;
   }, []);
 
-  const messageCount = thread?.messages.length ?? 0;
-  const streamingChunkCount = streamingChunks.length;
-  const lastChunkLength =
-    streamingChunks[streamingChunks.length - 1]?.text.length ?? 0;
-
+  // Re-arm stick-to-bottom and force a scroll when the user sends a new
+  // message — they always want to see what they just typed, regardless of
+  // where they were scrolled before.
+  const messages = thread?.messages ?? [];
+  let latestUserMessageId: string | undefined;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role.toUpperCase() === "USER") {
+      latestUserMessageId = messages[i].id;
+      break;
+    }
+  }
   useLayoutEffect(() => {
-    if (!stickToBottomRef.current) return;
+    if (!latestUserMessageId) return;
+    stickToBottomRef.current = true;
     const el = scrollContainerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messageCount, streamingChunkCount, lastChunkLength]);
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [latestUserMessageId]);
+
+  // Continuously follow growing content while stuck-to-bottom.
+  useEffect(() => {
+    const inner = innerContentRef.current;
+    const container = scrollContainerRef.current;
+    if (!inner || !container) return;
+    const observer = new ResizeObserver(() => {
+      if (!stickToBottomRef.current) return;
+      container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
@@ -150,7 +182,10 @@ export function TaskThreadView({
         className="flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
-        <div className="mx-auto grid w-full max-w-[750px] gap-5 px-4 pt-10 pb-6 sm:px-6">
+        <div
+          ref={innerContentRef}
+          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-6 sm:px-6"
+        >
           {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"

@@ -694,8 +694,10 @@ describe("TaskThreadView", () => {
     expect(cls).not.toContain("prose-p:my-0");
   });
 
-  it("renders the transcript segment grid with tightened gap-5 spacing", () => {
-    // U1 regression guard: gap-8 wastes ~12px between every transcript segment.
+  it("renders the transcript segment grid with tightened gap-3 spacing", () => {
+    // U1 regression guard: gap-8 (and the interim gap-5) waste vertical
+    // space between transcript segments — Thinking should sit close to the
+    // assistant answer it precedes, like one continuous thought.
     const { container } = render(
       <TaskThreadView
         thread={{
@@ -709,9 +711,10 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const grid = container.querySelector("div.gap-5");
+    const grid = container.querySelector("div.gap-3");
     expect(grid).not.toBeNull();
     expect(container.querySelector("div.gap-8")).toBeNull();
+    expect(container.querySelector("div.gap-5")).toBeNull();
   });
 
   it("renders Thinking row collapsed when a turn completes cleanly", () => {
