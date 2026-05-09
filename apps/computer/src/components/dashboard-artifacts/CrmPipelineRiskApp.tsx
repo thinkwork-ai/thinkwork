@@ -1,4 +1,7 @@
-import type { DashboardArtifactManifest } from "@/lib/app-artifacts";
+import type {
+  DashboardArtifactManifest,
+  DashboardArtifactRefreshTask,
+} from "@/lib/app-artifacts";
 import { CrmEvidenceDrawer } from "@/components/dashboard-artifacts/CrmEvidenceDrawer";
 import { CrmOpportunityRiskTable } from "@/components/dashboard-artifacts/CrmOpportunityRiskTable";
 import { CrmPipelineHeader } from "@/components/dashboard-artifacts/CrmPipelineHeader";
@@ -10,13 +13,31 @@ import { CrmSourceCoverage } from "@/components/dashboard-artifacts/CrmSourceCov
 
 interface CrmPipelineRiskAppProps {
   manifest: DashboardArtifactManifest;
+  latestRefreshTask?: DashboardArtifactRefreshTask | null;
+  canRefresh?: boolean;
+  onRefreshDashboardArtifact?: () => Promise<
+    DashboardArtifactRefreshTask | null | undefined
+  >;
+  onRefreshSettled?: () => void;
 }
 
-export function CrmPipelineRiskApp({ manifest }: CrmPipelineRiskAppProps) {
+export function CrmPipelineRiskApp({
+  manifest,
+  latestRefreshTask,
+  canRefresh,
+  onRefreshDashboardArtifact,
+  onRefreshSettled,
+}: CrmPipelineRiskAppProps) {
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <CrmPipelineHeader manifest={manifest} />
-      <CrmRefreshBar manifest={manifest} />
+      <CrmRefreshBar
+        manifest={manifest}
+        latestRefreshTask={latestRefreshTask}
+        canRefresh={canRefresh}
+        onRefresh={onRefreshDashboardArtifact}
+        onRefreshSettled={onRefreshSettled}
+      />
       <CrmPipelineKpiStrip manifest={manifest} />
       <div className="grid gap-4 xl:grid-cols-2">
         <CrmPipelineStageCharts manifest={manifest} />

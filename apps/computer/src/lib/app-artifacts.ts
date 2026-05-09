@@ -3,6 +3,19 @@ import { computerAppArtifactRoute } from "@/lib/computer-routes";
 
 export type DashboardArtifactManifest = typeof crmPipelineRiskManifest;
 
+export interface DashboardArtifactRefreshTask {
+  id: string;
+  status?: string | null;
+  taskType?: string | null;
+  error?: unknown;
+  output?: unknown;
+  idempotencyKey?: string | null;
+  claimedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface AppArtifactPreview {
   id: string;
   title: string;
