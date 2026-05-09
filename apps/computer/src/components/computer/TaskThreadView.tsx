@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   Children,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
@@ -89,6 +90,36 @@ export function TaskThreadView({
   isSending = false,
   onSendFollowUp,
 }: TaskThreadViewProps) {
+  // Stick-to-bottom autoscroll. The user's "follow along" gesture is implicit:
+  // when they're already near the bottom, new streamed text should keep them
+  // pinned there. When they've scrolled up to read prior context, we leave
+  // them alone (no surprise jumps mid-read). The threshold is 80px — close
+  // enough that "almost at the bottom" still counts as stuck. We could
+  // graduate to Vercel's <Conversation> from ai-elements later if the UX
+  // wants a sticky scroll-to-bottom button, but the inline pattern is enough
+  // for this PR.
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 80;
+  }, []);
+
+  const messageCount = thread?.messages.length ?? 0;
+  const streamingChunkCount = streamingChunks.length;
+  const lastChunkLength =
+    streamingChunks[streamingChunks.length - 1]?.text.length ?? 0;
+
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messageCount, streamingChunkCount, lastChunkLength]);
+
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
   }
@@ -114,6 +145,8 @@ export function TaskThreadView({
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
       <section
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
@@ -561,14 +594,7 @@ function ThinkingRow({
       aria-label={ariaLabel}
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
-        <Brain
-          aria-hidden="true"
-          className={
-            isActive
-              ? "size-4 text-sky-400 animate-pulse"
-              : "size-4 text-sky-400"
-          }
-        />
+        <Brain aria-hidden="true" className="size-4 text-sky-400" />
         {title}
         <ChevronRight
           aria-hidden="true"

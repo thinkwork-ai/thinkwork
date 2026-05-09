@@ -775,11 +775,13 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Browser session timed out")).toBeTruthy();
   });
 
-  it("renders Thinking row expanded with active spinner for queued and pending turns", () => {
-    // U2 / DL-001 regression guard: pre-running statuses must communicate that
-    // work is starting up rather than render an empty closed disclosure.
+  it("renders Thinking row expanded for queued and pending turns", () => {
+    // U2 / DL-001 regression guard: pre-running statuses must default the
+    // disclosure open so users see the activity rows stream in (the
+    // ProcessingShimmer carries the in-flight signal — no spinner needed
+    // on the brain icon itself).
     for (const status of ["pending", "queued", "claimed"] as const) {
-      const { container, unmount } = render(
+      const { unmount } = render(
         <TaskThreadView
           thread={{
             id: `thread-${status}`,
@@ -798,10 +800,10 @@ describe("TaskThreadView", () => {
       );
       const details = getThinkingDetails();
       expect(details.open).toBe(true);
-      // Active state pulses the brain icon (text-sky-400 + animate-pulse);
-      // the static (terminal-clean) variant has the brain without the
-      // animation class.
-      expect(container.querySelector(".animate-pulse")).not.toBeNull();
+      // The brain icon stays static; the in-flight signal is carried by
+      // ProcessingShimmer / streaming buffer, so this test only asserts the
+      // disclosure is open. The dedicated brain-icon assertion lives in the
+      // hover/visual tests above.
       unmount();
     }
   });
