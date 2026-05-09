@@ -6,6 +6,7 @@ import {
 } from "@/components/computer/TaskThreadView";
 import { useTenant } from "@/context/TenantContext";
 import {
+  ComputerEventsQuery,
   ComputerThreadQuery,
   ComputerThreadTasksQuery,
   NewMessageSubscription,
@@ -65,6 +66,17 @@ interface ThreadTasksResult {
   }> | null;
 }
 
+interface ThreadEventsResult {
+  computerEvents?: Array<{
+    id: string;
+    taskId?: string | null;
+    eventType?: string | null;
+    level?: string | null;
+    payload?: unknown;
+    createdAt?: string | null;
+  }> | null;
+}
+
 export function ComputerThreadDetailRoute({
   threadId,
 }: ComputerThreadDetailRouteProps) {
@@ -81,6 +93,12 @@ export function ComputerThreadDetailRoute({
     useQuery<ThreadTasksResult>({
       query: ComputerThreadTasksQuery,
       variables: { computerId, threadId, limit: 6 },
+      pause: !computerId,
+    });
+  const [{ data: eventsData }, reexecuteEventsQuery] =
+    useQuery<ThreadEventsResult>({
+      query: ComputerEventsQuery,
+      variables: { computerId, limit: 100 },
       pause: !computerId,
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
@@ -115,8 +133,10 @@ export function ComputerThreadDetailRoute({
     if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
     }
   }, [
+    reexecuteEventsQuery,
     reexecuteQuery,
     reexecuteTasksQuery,
     threadId,
@@ -127,8 +147,10 @@ export function ComputerThreadDetailRoute({
     if (threadUpdate?.onThreadUpdated?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
     }
   }, [
+    reexecuteEventsQuery,
     reexecuteQuery,
     reexecuteTasksQuery,
     threadId,
@@ -139,10 +161,12 @@ export function ComputerThreadDetailRoute({
     if (messageUpdate?.onNewMessage?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
+    reexecuteEventsQuery,
     reexecuteQuery,
     reexecuteTasksQuery,
     threadId,
@@ -159,7 +183,10 @@ export function ComputerThreadDetailRoute({
 
   const thread = data?.thread ? toTaskThread(data.thread) : null;
   if (thread) {
-    thread.turns = toTaskThreadTurns(tasksData?.computerTasks);
+    thread.turns = toTaskThreadTurns(
+      tasksData?.computerTasks,
+      eventsData?.computerEvents,
+    );
   }
   const visibleThread = optimisticMessage
     ? withOptimisticUserTurn(thread, optimisticMessage)
@@ -195,6 +222,7 @@ export function ComputerThreadDetailRoute({
         }
         reexecuteQuery({ requestPolicy: "network-only" });
         reexecuteTasksQuery({ requestPolicy: "network-only" });
+        reexecuteEventsQuery({ requestPolicy: "network-only" });
       }}
     />
   );
@@ -280,7 +308,21 @@ function metadataObject(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function toTaskThreadTurns(tasks: ThreadTasksResult["computerTasks"]) {
+function toTaskThreadTurns(
+  tasks: ThreadTasksResult["computerTasks"],
+  events: ThreadEventsResult["computerEvents"],
+) {
+  const eventsByTaskId = new Map<
+    string,
+    NonNullable<ThreadEventsResult["computerEvents"]>
+  >();
+  for (const event of events ?? []) {
+    if (!event.taskId) continue;
+    const taskEvents = eventsByTaskId.get(event.taskId) ?? [];
+    taskEvents.push(event);
+    eventsByTaskId.set(event.taskId, taskEvents);
+  }
+
   return (tasks ?? []).map((task) => {
     const input = metadataObject(task.input) ?? {};
     const output = metadataObject(task.output) ?? {};
@@ -294,6 +336,13 @@ function toTaskThreadTurns(tasks: ThreadTasksResult["computerTasks"]) {
       usageJson: output.usage,
       resultJson: output,
       error: taskErrorMessage(task.error),
+      events: (eventsByTaskId.get(task.id) ?? []).map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        level: event.level,
+        payload: event.payload,
+        createdAt: event.createdAt,
+      })),
     };
   });
 }

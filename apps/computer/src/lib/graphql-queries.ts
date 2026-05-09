@@ -143,6 +143,19 @@ export const ComputerThreadTasksQuery = gql`
   }
 `;
 
+export const ComputerEventsQuery = gql`
+  query ComputerEvents($computerId: ID!, $limit: Int) {
+    computerEvents(computerId: $computerId, limit: $limit) {
+      id
+      taskId
+      eventType
+      level
+      payload
+      createdAt
+    }
+  }
+`;
+
 export const ComputerThreadChunkSubscription = gql`
   subscription ComputerThreadChunk($threadId: ID!) {
     onComputerThreadChunk(threadId: $threadId) {
