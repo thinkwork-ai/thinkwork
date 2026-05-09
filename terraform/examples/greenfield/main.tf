@@ -205,6 +205,21 @@ variable "google_places_api_key" {
   sensitive   = true
 }
 
+variable "nova_act_api_key" {
+  description = <<-EOT
+    Nova Act API key used by the Strands Browser Automation tool. When empty,
+    Terraform creates /thinkwork/<stage>/agentcore/nova-act-api-key with a
+    placeholder value; populate or rotate the real key with:
+      aws ssm put-parameter --overwrite --name /thinkwork/<stage>/agentcore/nova-act-api-key --type SecureString --value <KEY>
+
+    The parameter's value has lifecycle.ignore_changes set, so operator
+    rotation sticks across applies.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "wiki_deterministic_linking_enabled" {
   description = <<-EOT
     Feature flag for deterministic compile-time link emission:
@@ -306,6 +321,7 @@ module "thinkwork" {
   wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
   google_places_api_key               = var.google_places_api_key
+  nova_act_api_key                    = var.nova_act_api_key
   agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).

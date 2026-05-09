@@ -35,3 +35,15 @@ SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 scripts/smoke-computer
 ```
 
 That mode temporarily enables the backing agent's `browser_automation` capability for the smoke turn, waits for durable `browser_automation_*` Computer events, then restores the prior capability state.
+
+To require a successful Nova Act browser run rather than any durable browser event:
+
+```bash
+SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 SMOKE_REQUIRE_BROWSER_COMPLETED=1 scripts/smoke-computer.sh dev
+```
+
+The Python Strands runtime reads the Nova Act key from `/thinkwork/<stage>/agentcore/nova-act-api-key`. Terraform creates that SecureString with a placeholder; populate the real value out of band:
+
+```bash
+aws ssm put-parameter --overwrite --name /thinkwork/dev/agentcore/nova-act-api-key --type SecureString --value "$NOVA_ACT_API_KEY"
+```

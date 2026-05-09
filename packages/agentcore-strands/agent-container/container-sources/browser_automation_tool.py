@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 NOVA_ACT_AGENT_HOUR_USD = 4.75
 AGENTCORE_BROWSER_VCPU_HOUR_USD = 0.0895
 AGENTCORE_BROWSER_GB_HOUR_USD = 0.00945
+PLACEHOLDER_SECRET_VALUES = {"", "PLACEHOLDER_SET_VIA_CLI"}
 
 
 def load_nova_act_key(*, region: str, stage_names: list[str] | None = None) -> str:
     """Load Nova Act API key from env or SSM."""
 
     key = os.environ.get("NOVA_ACT_API_KEY", "")
-    if key:
+    if key and key not in PLACEHOLDER_SECRET_VALUES:
         logger.info("Nova Act API key loaded from env var")
         return key
 
@@ -33,20 +34,33 @@ def load_nova_act_key(*, region: str, stage_names: list[str] | None = None) -> s
 
     ssm = boto3.client("ssm", region_name=region)
     stages = stage_names or [os.environ.get("STACK_NAME", "dev"), "ericodom", "main"]
-    for stage in stages:
-        if not stage:
-            continue
-        param = f"/thinkwork/{stage}/nova-act-api-key"
+    for param in _nova_act_key_parameter_candidates(stages):
         try:
             resp = ssm.get_parameter(Name=param, WithDecryption=True)
             key = resp.get("Parameter", {}).get("Value", "")
-            if key:
+            if key and key not in PLACEHOLDER_SECRET_VALUES:
                 logger.info("Nova Act API key loaded from SSM: %s", param)
                 return key
         except Exception:
             continue
     logger.warning("Nova Act API key not found in env or SSM")
     return ""
+
+
+def _nova_act_key_parameter_candidates(stage_names: list[str]) -> list[str]:
+    explicit = os.environ.get("NOVA_ACT_SSM_PARAM_NAME", "")
+    candidates = [explicit] if explicit else []
+    for stage in stage_names:
+        if not stage:
+            continue
+        candidates.extend(
+            [
+                f"/thinkwork/{stage}/agentcore/nova-act-api-key",
+                f"/thinkwork/{stage}/nova-act-api-key",
+            ],
+        )
+    seen: set[str] = set()
+    return [name for name in candidates if name and not (name in seen or seen.add(name))]
 
 
 def _append_costs(

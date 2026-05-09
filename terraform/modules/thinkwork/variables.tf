@@ -399,6 +399,13 @@ variable "google_places_api_key" {
   sensitive   = true
 }
 
+variable "nova_act_api_key" {
+  description = "Nova Act API key used by the Strands Browser Automation tool. Stored as SSM SecureString at /thinkwork/<stage>/agentcore/nova-act-api-key. Empty string = parameter created with a placeholder; operator populates via `aws ssm put-parameter --overwrite`."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "agentcore_code_interpreter_id" {
   description = "AgentCore Code Interpreter id used by routine-task-python for SFN python recipe states. Leave empty to fail closed until the stage has a routines-capable interpreter."
   type        = string
