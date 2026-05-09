@@ -43,6 +43,11 @@ class FakeNovaAct:
         return FakeActResult()
 
 
+class FailingNovaAct(FakeNovaAct):
+    def act_get(self, task, schema):
+        raise RuntimeError("browser exploded")
+
+
 def test_browser_automation_returns_unavailable_when_key_missing():
     costs: list[dict] = []
     tool = bat.build_browser_automation_tool(
@@ -62,6 +67,7 @@ def test_browser_automation_returns_unavailable_when_key_missing():
 
 def test_browser_automation_records_split_nova_and_browser_costs(monkeypatch):
     costs: list[dict] = []
+    events: list[tuple[str, str, dict]] = []
     ticks = iter([100.0, 110.0])
     monkeypatch.setattr(bat.time, "time", lambda: next(ticks))
 
@@ -72,6 +78,9 @@ def test_browser_automation_records_split_nova_and_browser_costs(monkeypatch):
         region="us-east-1",
         browser_session_factory=FakeBrowserSession,
         nova_act_cls=FakeNovaAct,
+        event_sink=lambda event_type, level, payload: events.append(
+            (event_type, level, payload)
+        ),
     )
 
     result = tool("https://example.test", "Find the thing")
@@ -85,3 +94,38 @@ def test_browser_automation_records_split_nova_and_browser_costs(monkeypatch):
     assert costs[0]["amount_usd"] == round((10 / 3600) * 4.75, 6)
     assert costs[1]["metadata"]["estimated"] is True
     assert costs[0]["metadata"]["response_len"] == len("found the thing")
+    assert [event[0] for event in events] == [
+        "browser_automation_started",
+        "browser_automation_completed",
+    ]
+    assert events[1][2]["responseLen"] == len("found the thing")
+    assert events[1][2]["durationMs"] == 10000
+
+
+def test_browser_automation_records_failure_event(monkeypatch):
+    costs: list[dict] = []
+    events: list[tuple[str, str, dict]] = []
+    ticks = iter([100.0, 103.0, 103.0, 103.0])
+    monkeypatch.setattr(bat.time, "time", lambda: next(ticks))
+
+    tool = bat.build_browser_automation_tool(
+        strands_tool_decorator=_tool,
+        nova_act_api_key="secret",
+        cost_sink=costs,
+        region="us-east-1",
+        browser_session_factory=FakeBrowserSession,
+        nova_act_cls=FailingNovaAct,
+        event_sink=lambda event_type, level, payload: events.append(
+            (event_type, level, payload)
+        ),
+    )
+
+    result = tool("https://example.test", "Find the thing")
+
+    assert result == "Browser Automation error: browser exploded"
+    assert [event[0] for event in events] == [
+        "browser_automation_started",
+        "browser_automation_failed",
+    ]
+    assert events[1][1] == "error"
+    assert events[1][2]["error"] == "browser exploded"
