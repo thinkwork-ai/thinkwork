@@ -8,7 +8,10 @@ const crmRecipe =
 
 describe("Artifact Builder defaults", () => {
   it("routes CRM dashboard prompts to the CRM dashboard recipe", () => {
-    expect(skill).toContain("references/crm-dashboard.md");
+    expect(skill).toContain(
+      "skills/artifact-builder/references/crm-dashboard.md",
+    );
+    expect(skill).toContain("Do not use `delegate` or `delegate_to_workspace`");
     expect(skill).toContain("CRM pipeline");
     expect(skill).toContain("save_app");
     expect(skill).toContain("/artifacts/{appId}");

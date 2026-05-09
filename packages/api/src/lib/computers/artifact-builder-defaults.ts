@@ -25,6 +25,8 @@ const ARTIFACT_BUILDER_SKILL_PATH = "skills/artifact-builder/SKILL.md";
 const UPGRADABLE_ARTIFACT_BUILDER_SKILL_SHA256 = new Set([
   // PR #1072 default before the CRM dashboard recipe reference was added.
   "dafec59b0b2befe4ac6ff96899575e01c9c610a0a440b21722e9bb4a0b845584",
+  // PR #1077 default with a relative CRM recipe path and weaker save guidance.
+  "b01af0a1754d0b78a3a96b8627b4c871037f73cbd9a7c3bc4271a4b40a4e29ad",
 ]);
 
 export type ArtifactBuilderDefaultsResult =

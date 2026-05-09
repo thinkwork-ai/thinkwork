@@ -596,12 +596,13 @@ Use this skill when the user wants Computer to produce an interactive, reusable 
 
 1. Research with the available tools and thread context.
 2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Show missing or partial source status inside the applet.
-3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts, load and follow \`references/crm-dashboard.md\` before writing TSX.
-4. Generate TSX using \`@thinkwork/computer-stdlib\` primitives and \`@thinkwork/ui\`.
-5. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
-6. Call \`save_app\` before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
-7. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
-8. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
+3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path.
+4. Keep applet generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the applet.
+5. Generate TSX using \`@thinkwork/computer-stdlib\` primitives and \`@thinkwork/ui\`.
+6. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
+7. Call \`save_app\` directly before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
+8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
+9. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
 
 ## Applet Shape
 
@@ -803,7 +804,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 9;
+export const DEFAULTS_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Aggregator
