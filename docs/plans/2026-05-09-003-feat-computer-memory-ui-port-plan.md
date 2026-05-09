@@ -1,7 +1,7 @@
 ---
 title: "feat(computer): port admin Memory UI (Brain + Pages + KBs) for the logged-in user"
 type: feat
-status: active
+status: completed
 created: 2026-05-09
 plan_id: 2026-05-09-003
 related_plans:
