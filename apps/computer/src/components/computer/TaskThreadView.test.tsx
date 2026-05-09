@@ -90,6 +90,42 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
   });
 
+  it("renders thread turn thinking and tool details", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Tool trace thread",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Find account risk",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+              usageJson: {
+                tools_called: ["crm_search"],
+                input_tokens: 1200,
+                output_tokens: 300,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Thread activity")).toBeTruthy();
+    expect(screen.getByText("Using crm_search")).toBeTruthy();
+    expect(screen.getByText(/Manual chat/)).toBeTruthy();
+    expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
+  });
+
   it("sends follow-up messages from the composer", () => {
     const onSendFollowUp = vi.fn();
     render(

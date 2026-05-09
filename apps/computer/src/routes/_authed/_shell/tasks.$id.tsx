@@ -8,6 +8,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerThreadQuery,
+  ComputerThreadTurnsQuery,
   NewMessageSubscription,
   SendMessageMutation,
   ThreadUpdatedSubscription,
@@ -49,6 +50,19 @@ interface ThreadResult {
   } | null;
 }
 
+interface ThreadTurnsResult {
+  threadTurns?: Array<{
+    id: string;
+    status?: string | null;
+    invocationSource?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    usageJson?: unknown;
+    resultJson?: unknown;
+    error?: string | null;
+  }> | null;
+}
+
 function TaskDetailPage() {
   const { id } = Route.useParams();
   const { tenantId } = useTenant();
@@ -56,6 +70,12 @@ function TaskDetailPage() {
     query: ComputerThreadQuery,
     variables: { id, messageLimit: 100 },
   });
+  const [{ data: turnsData }, reexecuteTurnsQuery] =
+    useQuery<ThreadTurnsResult>({
+      query: ComputerThreadTurnsQuery,
+      variables: { tenantId, threadId: id, limit: 6 },
+      pause: !tenantId,
+    });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const chunks = useComputerThreadChunks(id);
   const [{ data: turnUpdate }] = useSubscription<{
@@ -86,27 +106,44 @@ function TaskDetailPage() {
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === id) {
       reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteTurnsQuery({ requestPolicy: "network-only" });
     }
-  }, [id, reexecuteQuery, turnUpdate?.onThreadTurnUpdated?.threadId]);
+  }, [
+    id,
+    reexecuteQuery,
+    reexecuteTurnsQuery,
+    turnUpdate?.onThreadTurnUpdated?.threadId,
+  ]);
 
   useEffect(() => {
     if (threadUpdate?.onThreadUpdated?.threadId === id) {
       reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteTurnsQuery({ requestPolicy: "network-only" });
     }
-  }, [id, reexecuteQuery, threadUpdate?.onThreadUpdated?.threadId]);
+  }, [
+    id,
+    reexecuteQuery,
+    reexecuteTurnsQuery,
+    threadUpdate?.onThreadUpdated?.threadId,
+  ]);
 
   useEffect(() => {
     if (messageUpdate?.onNewMessage?.threadId === id) {
       reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteTurnsQuery({ requestPolicy: "network-only" });
     }
   }, [
     id,
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
     reexecuteQuery,
+    reexecuteTurnsQuery,
   ]);
 
   const thread = data?.thread ? toTaskThread(data.thread) : null;
+  if (thread) {
+    thread.turns = toTaskThreadTurns(turnsData?.threadTurns);
+  }
 
   return (
     <TaskThreadView
@@ -174,6 +211,19 @@ function metadataObject(value: unknown): Record<string, unknown> | null {
     }
   }
   return null;
+}
+
+function toTaskThreadTurns(turns: ThreadTurnsResult["threadTurns"]) {
+  return (turns ?? []).map((turn) => ({
+    id: turn.id,
+    status: turn.status,
+    invocationSource: turn.invocationSource,
+    startedAt: turn.startedAt,
+    finishedAt: turn.finishedAt,
+    usageJson: turn.usageJson,
+    resultJson: turn.resultJson,
+    error: turn.error,
+  }));
 }
 
 function hasDurableAssistantAfterLatestUser(thread: TaskThread | null) {
