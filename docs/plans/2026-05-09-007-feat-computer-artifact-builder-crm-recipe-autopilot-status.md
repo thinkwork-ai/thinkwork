@@ -188,5 +188,27 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   Computer turns and restore them afterward. Focused regression coverage now
   asserts the IDs are present while the Strands agent is constructed and
   removed after the invocation.
-- **Current PR:** Pending for the Computer env registration fix before
-  rerunning the deployed CRM dashboard proof.
+- **Merged U8 save-app env fix:** PR #1088
+  (`fix(computer): expose applet save env during turns`) was squash-merged
+  to `main` at
+  `e531ae87295eba626ea58a0ff7e1ca7cef1813c5`; CI passed: CLA, lint,
+  test, typecheck, verify. The deployed `main` pipeline
+  `25612668174` passed, including AgentCore runtime update and Computer
+  deploy.
+- **Live save proof succeeded, render proof failed:** Reran the deployed CRM
+  dashboard smoke after PR #1088 deployed. Thread
+  `3d7837a1-6393-40db-86e3-f1fb6df2c113`, task
+  `493c1ab9-c4fe-4b59-8c89-51d77b688f72`, applet
+  `ac71f0e9-13fd-48af-87d8-763878950b95` were created successfully. The
+  applet route returned HTTP 200 at
+  `https://computer.thinkwork.ai/artifacts/ac71f0e9-13fd-48af-87d8-763878950b95`.
+  Manual browser verification on `localhost:5174` then found the host import
+  rewriter rejected the generated source because it imports `react`, even
+  though backend validation allows `react` and the host registry already
+  exposes it.
+- **Progress:** Started branch `codex/artifact-builder-react-import` from
+  latest `origin/main` to align the applet host import rewriter with backend
+  validation by allowing and rewriting `react` imports. Focused import-shim
+  coverage now includes `import React, { useMemo } from "react"`.
+- **Current PR:** Pending for the applet render fix before rerunning the
+  browser/render proof.
