@@ -27,20 +27,28 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull, ne, or } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   agentSkills,
   agentKnowledgeBases,
+  computers,
+  connectors,
   knowledgeBases,
+  routines,
+  tenantConnectorCatalog,
+  tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
+import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
 
-const BUCKET = process.env.WORKSPACE_BUCKET || "";
+function getBucket(): string {
+  return process.env.WORKSPACE_BUCKET || "";
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +73,20 @@ interface KBInfo {
   description: string;
   /** Workspace slugs that reference this KB */
   usedIn: string[];
+}
+
+interface ConnectorInfo {
+  catalogSlug: string;
+  name: string;
+  description: string;
+  category: string | null;
+}
+
+interface WorkflowInfo {
+  catalogSlug: string;
+  name: string;
+  description: string;
+  schedule: string | null;
 }
 
 interface WorkspaceSummary {
@@ -242,15 +264,25 @@ function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary 
  * Regenerate AGENTS.md and CONTEXT.md for an agent.
  *
  * Reads:
- *   - agent_skills table → skill catalog
+ *   - agent_skills table → skill catalog (built-in tool slugs filtered out)
  *   - agent_knowledge_bases + knowledge_bases tables → KB catalog
+ *   - connectors + tenant_connector_catalog → Connectors catalog (Computer-keyed)
+ *   - routines + tenant_workflow_catalog → Workflows catalog (agent-keyed)
  *   - S3 workspace folders → workspace discovery + CONTEXT.md parsing
  *
  * Writes:
- *   - AGENTS.md to S3 workspace
- *   - CONTEXT.md to S3 workspace
+ *   - AGENTS.md to S3 workspace (skipped when content unchanged)
+ *   - CONTEXT.md to S3 workspace (skipped when content unchanged)
+ *
+ * When `computerId` is omitted, the renderer auto-resolves a Computer via
+ * `computers.primary_agent_id` / `migrated_from_agent_id` so non-Customize
+ * callers (setAgentSkills, template flows) don't have to know about it.
+ * Plan: docs/plans/2026-05-09-011-feat-customize-workspace-renderer-plan.md U7-1.
  */
-export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
+export async function regenerateWorkspaceMap(
+  agentId: string,
+  computerId?: string,
+): Promise<void> {
   const db = getDb();
 
   // 1. Look up agent
@@ -275,7 +307,8 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
     .from(tenants)
     .where(eq(tenants.id, agent.tenant_id));
   const tenantSlug = tenant?.slug || "";
-  if (!tenantSlug || !BUCKET) {
+  const bucket = getBucket();
+  if (!tenantSlug || !bucket) {
     console.warn(`[workspace-map] Missing tenant slug or bucket`);
     return;
   }
@@ -283,8 +316,42 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
   const agentSlug = agent.slug;
   const prefix = workspacePrefix(tenantSlug, agentSlug);
 
-  // 2. Query skills
-  const skillRows = await db
+  // 2a. Resolve Computer (explicit param wins; otherwise look up by primary
+  //     agent). Connectors are Computer-keyed; Skills + Workflows are
+  //     agent-keyed, so a missing Computer only suppresses the Connectors
+  //     section.
+  let computerRow: { id: string; tenant_id: string } | null = null;
+  if (computerId) {
+    const [row] = await db
+      .select({ id: computers.id, tenant_id: computers.tenant_id })
+      .from(computers)
+      .where(
+        and(
+          eq(computers.id, computerId),
+          ne(computers.status, "archived"),
+        ),
+      );
+    computerRow = row ?? null;
+  } else {
+    const [row] = await db
+      .select({ id: computers.id, tenant_id: computers.tenant_id })
+      .from(computers)
+      .where(
+        and(
+          or(
+            eq(computers.primary_agent_id, agentId),
+            eq(computers.migrated_from_agent_id, agentId),
+          ),
+          ne(computers.status, "archived"),
+        ),
+      );
+    computerRow = row ?? null;
+  }
+
+  // 2. Query skills (filter built-in tool slugs — they're template/runtime
+  //    config, not workspace skills, per
+  //    docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md).
+  const skillRowsRaw = await db
     .select({
       skill_id: agentSkills.skill_id,
       config: agentSkills.config,
@@ -292,6 +359,7 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
     })
     .from(agentSkills)
     .where(and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)));
+  const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
 
   // 3. Query knowledge bases
   const kbRows = await db
@@ -306,12 +374,101 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
       and(eq(agentKnowledgeBases.agent_id, agentId), eq(agentKnowledgeBases.enabled, true)),
     );
 
+  // 3b. Query active Customize connectors (Computer-keyed). Joined to the
+  //     tenant_connector_catalog for display_name + description + category.
+  //     Empty when no Computer was resolved — the section still renders in
+  //     "no connectors configured" form.
+  const connectorRows: Array<{
+    catalog_slug: string;
+    display_name: string;
+    description: string | null;
+    category: string | null;
+  }> = computerRow
+    ? await db
+        .select({
+          catalog_slug: connectors.catalog_slug,
+          display_name: tenantConnectorCatalog.display_name,
+          description: tenantConnectorCatalog.description,
+          category: tenantConnectorCatalog.category,
+        })
+        .from(connectors)
+        .innerJoin(
+          tenantConnectorCatalog,
+          and(
+            eq(tenantConnectorCatalog.tenant_id, connectors.tenant_id),
+            eq(tenantConnectorCatalog.slug, connectors.catalog_slug),
+          ),
+        )
+        .where(
+          and(
+            eq(connectors.tenant_id, computerRow.tenant_id),
+            eq(connectors.dispatch_target_type, "computer"),
+            eq(connectors.dispatch_target_id, computerRow.id),
+            eq(connectors.enabled, true),
+            eq(connectors.status, "active"),
+            isNotNull(connectors.catalog_slug),
+          ),
+        )
+        // Drizzle's join row typing leaves catalog_slug as nullable since
+        // the source column allows null; the WHERE filter guarantees it.
+        .then((rows) =>
+          rows
+            .filter(
+              (r): r is typeof r & { catalog_slug: string } =>
+                r.catalog_slug !== null,
+            )
+            .map((r) => ({
+              catalog_slug: r.catalog_slug,
+              display_name: r.display_name,
+              description: r.description,
+              category: r.category,
+            })),
+        )
+    : [];
+
+  // 3c. Query active Customize workflows (agent-keyed). Joined to
+  //     tenant_workflow_catalog for display_name + description; schedule
+  //     prefers the catalog default_schedule, falls back to the routine row.
+  const workflowRowsRaw = await db
+    .select({
+      catalog_slug: routines.catalog_slug,
+      routine_schedule: routines.schedule,
+      display_name: tenantWorkflowCatalog.display_name,
+      description: tenantWorkflowCatalog.description,
+      default_schedule: tenantWorkflowCatalog.default_schedule,
+    })
+    .from(routines)
+    .innerJoin(
+      tenantWorkflowCatalog,
+      and(
+        eq(tenantWorkflowCatalog.tenant_id, routines.tenant_id),
+        eq(tenantWorkflowCatalog.slug, routines.catalog_slug),
+      ),
+    )
+    .where(
+      and(
+        eq(routines.agent_id, agentId),
+        eq(routines.status, "active"),
+        isNotNull(routines.catalog_slug),
+      ),
+    );
+  const workflowRows = workflowRowsRaw
+    .filter(
+      (r): r is typeof r & { catalog_slug: string } => r.catalog_slug !== null,
+    )
+    .map((r) => ({
+      catalog_slug: r.catalog_slug,
+      display_name: r.display_name,
+      description: r.description,
+      schedule: r.default_schedule ?? r.routine_schedule ?? null,
+    }));
+
   // 4. Discover workspace folders from S3
-  const workspaceSlugs = await discoverWorkspaceFolders(BUCKET, prefix);
+  const workspaceSlugs = await discoverWorkspaceFolders(bucket, prefix);
   const workspaces: WorkspaceSummary[] = [];
 
   for (const ws of workspaceSlugs) {
-    const contextContent = await readS3Text(BUCKET, `${prefix}${ws}/CONTEXT.md`);
+    const contextContent = await readS3Text(bucket, `${prefix}${ws}/CONTEXT.md`);
     if (contextContent) {
       workspaces.push(parseWorkspaceContext(contextContent, ws));
     }
@@ -374,24 +531,69 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
     usedIn: [], // TODO: parse from workspace CONTEXT.md "Knowledge Bases" section
   }));
 
+  // 6b. Build Connectors catalog
+  const connectorInfos: ConnectorInfo[] = connectorRows.map((c) => ({
+    catalogSlug: c.catalog_slug,
+    name: c.display_name,
+    description: c.description ?? "",
+    category: c.category,
+  }));
+
+  // 6c. Build Workflows catalog
+  const workflowInfos: WorkflowInfo[] = workflowRows.map((w) => ({
+    catalogSlug: w.catalog_slug,
+    name: w.display_name,
+    description: w.description ?? "",
+    schedule: w.schedule,
+  }));
+
   // 7. Render AGENTS.md
-  const agentsMap = renderAgentsMap(agent.name, agentSlug, skillInfos, kbInfos, workspaces);
+  const agentsMap = renderAgentsMap(
+    agent.name,
+    agentSlug,
+    skillInfos,
+    kbInfos,
+    connectorInfos,
+    workflowInfos,
+    workspaces,
+  );
 
   // 8. Render CONTEXT.md
   const contextRouter = renderContextRouter(agent.name, workspaces);
 
-  // 9. Write to S3
-  await writeS3Text(BUCKET, `${prefix}AGENTS.md`, agentsMap);
-  await writeS3Text(BUCKET, `${prefix}CONTEXT.md`, contextRouter);
+  // 9. Idempotent write — skip the S3 PutObject when the rendered content
+  //    matches what's already on S3. Saves writes on no-op toggles
+  //    (re-clicking Connect on already-active row) and avoids manifest
+  //    regen churn.
+  const [existingAgentsMap, existingContextRouter] = await Promise.all([
+    readS3Text(bucket, `${prefix}AGENTS.md`),
+    readS3Text(bucket, `${prefix}CONTEXT.md`),
+  ]);
+  const agentsMapChanged = existingAgentsMap !== agentsMap;
+  const contextRouterChanged = existingContextRouter !== contextRouter;
+
+  if (agentsMapChanged) {
+    await writeS3Text(bucket, `${prefix}AGENTS.md`, agentsMap);
+  }
+  if (contextRouterChanged) {
+    await writeS3Text(bucket, `${prefix}CONTEXT.md`, contextRouter);
+  }
+
+  if (!agentsMapChanged && !contextRouterChanged) {
+    console.log(
+      `[workspace-map] Skipped write for ${agentSlug}: content unchanged`,
+    );
+    return;
+  }
 
   console.log(
-    `[workspace-map] Regenerated AGENTS.md + CONTEXT.md for ${agentSlug}: ${workspaces.length} workspace(s), ${skillInfos.length} skill(s), ${kbInfos.length} KB(s)`,
+    `[workspace-map] Regenerated for ${agentSlug}: ${workspaces.length} workspace(s), ${skillInfos.length} skill(s), ${kbInfos.length} KB(s), ${connectorInfos.length} connector(s), ${workflowInfos.length} workflow(s)`,
   );
 
   // 10. Regenerate manifest so runtime picks up changes on next sync
   try {
     const { regenerateManifest } = await import("./workspace-manifest.js");
-    await regenerateManifest(BUCKET, tenantSlug, agentSlug);
+    await regenerateManifest(bucket, tenantSlug, agentSlug);
   } catch {
     // Manifest regeneration is also available in workspace-files.ts Lambda
     // If import fails (different bundle), it will be regenerated on next workspace write
@@ -408,6 +610,8 @@ function renderAgentsMap(
   agentSlug: string,
   skills: SkillInfo[],
   kbs: KBInfo[],
+  connectorList: ConnectorInfo[],
+  workflowList: WorkflowInfo[],
   workspaces: WorkspaceSummary[],
 ): string {
   const lines: string[] = [];
@@ -465,6 +669,38 @@ function renderAgentsMap(
     }
     lines.push("");
   }
+
+  // Connectors (Customize-page-driven; Computer-keyed)
+  lines.push("## Connectors");
+  lines.push("");
+  if (connectorList.length > 0) {
+    lines.push("| Connector | Description | Category |");
+    lines.push("|-----------|-------------|----------|");
+    for (const c of connectorList) {
+      const desc = c.description ? c.description.slice(0, 80) : "—";
+      const category = c.category ?? "—";
+      lines.push(`| ${c.name} | ${desc} | ${category} |`);
+    }
+  } else {
+    lines.push("No connectors configured.");
+  }
+  lines.push("");
+
+  // Workflows (Customize-page-driven; agent-keyed)
+  lines.push("## Workflows");
+  lines.push("");
+  if (workflowList.length > 0) {
+    lines.push("| Workflow | Description | Schedule |");
+    lines.push("|----------|-------------|----------|");
+    for (const w of workflowList) {
+      const desc = w.description ? w.description.slice(0, 80) : "—";
+      const schedule = w.schedule ?? "on-demand";
+      lines.push(`| ${w.name} | ${desc} | ${schedule} |`);
+    }
+  } else {
+    lines.push("No workflows configured.");
+  }
+  lines.push("");
 
   return lines.join("\n");
 }

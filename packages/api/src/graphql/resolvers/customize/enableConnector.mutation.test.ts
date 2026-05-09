@@ -20,6 +20,8 @@ const {
     slug: "fleet-caterpillar-1",
     tenant_id: "tenant-1",
     owner_user_id: "user-1",
+    primary_agent_id: "agent-primary",
+    migrated_from_agent_id: null,
   },
   catalogRow: {
     id: "cat-1",
@@ -86,11 +88,16 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCaller: mockResolveCaller,
 }));
 
+vi.mock("./render-workspace-after-customize.js", () => ({
+  renderWorkspaceAfterCustomize: vi.fn(),
+}));
+
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mockRequireTenantMember,
 }));
 
 import { enableConnector } from "./enableConnector.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as any;
 
@@ -122,6 +129,22 @@ describe("enableConnector", () => {
     expect(lastInsertValues.value?.dispatch_target_type).toBe("computer");
     expect(lastInsertValues.value?.dispatch_target_id).toBe("computer-1");
     expect(lastInsertValues.value?.catalog_slug).toBe("slack");
+  });
+
+  it("fires the workspace renderer after the binding write commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await enableConnector(
+      null,
+      { input: { computerId: "computer-1", slug: "slack" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(renderSpy).toHaveBeenCalledWith(
+      "enableConnector",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("rejects when caller is unauthenticated", async () => {

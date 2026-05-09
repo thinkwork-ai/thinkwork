@@ -84,6 +84,10 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCaller: mockResolveCaller,
 }));
 
+vi.mock("./render-workspace-after-customize.js", () => ({
+  renderWorkspaceAfterCustomize: vi.fn(),
+}));
+
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mockRequireTenantMember,
 }));
