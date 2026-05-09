@@ -146,5 +146,23 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   `uv run ruff check packages/agentcore-strands/agent-container/container-sources/server.py
   packages/agentcore-strands/agent-container/test_server_chunk_streaming.py
   --ignore E402,I001,UP017`, and `git diff --check` passed locally.
-- **Current PR:** Pending for U6 delegate suppression before rerunning the
+- **Merged U6 delegate suppression:** PR #1085
+  (`fix(computer): suppress delegates for applet builds`) was squash-merged
+  to `main` at
+  `7cda19f988c4f5d144cbfd693730dd7daf920d1e`; CI passed: CLA, lint,
+  test, typecheck, verify. The deployed `main` pipeline
+  `25611595263` passed, including AgentCore runtime update and Computer
+  deploy.
+- **Third live proof failure:** Reran the same deployed CRM dashboard smoke
+  after PR #1085 deployed. Thread
+  `d01d0c39-4408-46fd-95cc-415563d4ac19`, task
+  `ad70dfe3-9a3d-42f6-9382-1f9b51d71421` still completed without a linked
+  applet. Diagnostics confirmed `delegate` and `delegate_to_workspace` were
+  gone from the tool trace, but the model used `execute_code` as a scratchpad
+  and still omitted the direct `save_app` call.
+- **Progress:** Started a follow-up runtime enforcement change to suppress
+  `execute_code` together with delegation tools for Computer applet-build
+  prompts. The parent agent should now have to call the persistent `save_app`
+  tool directly with generated TSX.
+- **Current PR:** Pending for U7 execute-code suppression before rerunning the
   deployed CRM dashboard proof.

@@ -241,6 +241,6 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     assert "delegate applet saving" in captured["system_prompt"]
     assert "unless your own successful save_app tool call" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
-    assert captured["suppress_delegate_tools"] is True
+    assert captured["suppress_app_build_helper_tools"] is True
     assert "COMPUTER_THREAD_ID" not in server.os.environ
     assert "COMPUTER_TURN_PROMPT" not in server.os.environ
