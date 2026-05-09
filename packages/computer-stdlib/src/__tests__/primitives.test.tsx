@@ -63,7 +63,7 @@ describe("@thinkwork/computer-stdlib primitives", () => {
   });
 
   it("renders table rows and an empty-state slot", () => {
-    render(
+    const { container } = render(
       <DataTable
         title="Opportunity risk"
         columns={[
@@ -82,6 +82,10 @@ describe("@thinkwork/computer-stdlib primitives", () => {
     expect(screen.getByText("Opportunity risk")).toBeTruthy();
     expect(screen.getByText("Renewal")).toBeTruthy();
     expect(screen.getByText("$500,000")).toBeTruthy();
+    expect(
+      container.querySelector(".overflow-hidden.rounded-md.border"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Amount" })).toBeTruthy();
 
     cleanup();
 
@@ -94,6 +98,33 @@ describe("@thinkwork/computer-stdlib primitives", () => {
     );
 
     expect(screen.getByText("No opportunities")).toBeTruthy();
+  });
+
+  it("sorts table rows from applet column headers", () => {
+    render(
+      <DataTable
+        columns={[
+          { key: "name", header: "Name" },
+          {
+            key: "amount",
+            header: "Amount",
+            align: "right",
+            render: (value) => formatCurrency(Number(value)),
+          },
+        ]}
+        rows={[
+          { name: "Small", amount: 100 },
+          { name: "Large", amount: 900 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Amount" }));
+    fireEvent.click(screen.getByRole("button", { name: /Amount/ }));
+
+    const rows = screen.getAllByRole("row");
+    expect(rows[1].textContent).toContain("Small");
+    expect(rows[2].textContent).toContain("Large");
   });
 
   it("renders evidence links and text-only evidence", () => {

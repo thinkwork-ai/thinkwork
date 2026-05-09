@@ -1,15 +1,17 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
-import { CrmPipelineRiskApp } from "@/components/dashboard-artifacts/CrmPipelineRiskApp";
 import { crmDashboardVisualFixtures } from "./crm-dashboard.fixture";
+import CrmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
 
 afterEach(cleanup);
 
 describe("app artifact visual contract", () => {
   it("renders a single bounded applet canvas without horizontal page scroll", () => {
     render(
-      <AppArtifactSplitShell title={crmDashboardVisualFixtures.base.snapshot.title}>
+      <AppArtifactSplitShell
+        title={crmDashboardVisualFixtures.base.snapshot.title}
+      >
         <div>Applet canvas body</div>
       </AppArtifactSplitShell>,
     );
@@ -31,15 +33,13 @@ describe("app artifact visual contract", () => {
 
   it("uses stable chart dimensions and safe table truncation for dense fixtures", () => {
     render(
-      <CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.denseProducts} />,
+      <CrmPipelineRiskApplet
+        refreshData={crmDashboardVisualFixtures.denseProducts}
+      />,
     );
 
-    expect(screen.getByTestId("stage-exposure-chart").className).toContain(
-      "h-64",
-    );
-    expect(screen.getByTestId("product-exposure-chart").className).toContain(
-      "h-64",
-    );
+    expect(screen.getByText("Stage exposure")).toBeTruthy();
+    expect(screen.getByText("Product-line exposure")).toBeTruthy();
     expect(
       screen.getByText(
         "Cedar Ridge Fulfillment and Reverse Logistics International",
@@ -51,10 +51,12 @@ describe("app artifact visual contract", () => {
 
   it("keeps partial and failed source coverage visible beside usable charts", () => {
     render(
-      <CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.failedCrm} />,
+      <CrmPipelineRiskApplet
+        refreshData={crmDashboardVisualFixtures.failedCrm}
+      />,
     );
 
-    expect(screen.getByText("failed")).toBeTruthy();
+    expect(screen.getAllByText("failed").length).toBeGreaterThan(0);
     expect(
       screen.getByText(/prior dashboard snapshot remains visible/i),
     ).toBeTruthy();

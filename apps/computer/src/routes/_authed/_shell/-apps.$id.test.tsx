@@ -3,12 +3,14 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
 import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
+import * as crmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
 import { AppletMount, AppletRouteContent } from "./apps.$id";
 
 vi.mock("urql", () => ({
@@ -190,6 +192,47 @@ describe("AppletRouteContent", () => {
 });
 
 describe("AppletMount", () => {
+  it("mounts the migrated CRM pipeline-risk applet through the applet path", async () => {
+    render(
+      <AppletMount
+        appId="33333333-3333-4333-8333-333333333333"
+        instanceId="instance-1"
+        source="export default function App() { return null; }"
+        version={1}
+        loadModule={async () => crmPipelineRiskApplet}
+      />,
+    );
+
+    expect(await screen.findByText("LastMile CRM pipeline risk")).toBeTruthy();
+    expect(screen.getByText("Refresh recipe")).toBeTruthy();
+    expect(screen.getByText("Open pipeline")).toBeTruthy();
+    expect(screen.getByText("Stage exposure")).toBeTruthy();
+    expect(screen.getByText("Product-line exposure")).toBeTruthy();
+    expect(screen.getByText("Opportunity risk")).toBeTruthy();
+    expect(screen.getByText("Source coverage")).toBeTruthy();
+    expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(
+      await screen.findByText(/Refresh completed from saved CRM/i),
+    ).toBeTruthy();
+
+    const evidenceSummary = screen.getAllByText("Evidence")[0];
+    const details = evidenceSummary.closest("details");
+    expect(details?.hasAttribute("open")).toBe(false);
+    fireEvent.click(evidenceSummary);
+    expect(details?.hasAttribute("open")).toBe(true);
+    fireEvent.click(evidenceSummary);
+    expect(details?.hasAttribute("open")).toBe(false);
+
+    expect(firstOpportunityRow()).toContain("Regional carrier rollout");
+    fireEvent.click(screen.getByRole("button", { name: "Amount" }));
+    if (firstOpportunityRow().includes("Regional carrier rollout")) {
+      fireEvent.click(screen.getByRole("button", { name: /Amount/ }));
+    }
+    expect(firstOpportunityRow()).toContain("Cross-dock analytics");
+  });
+
   it("shows refresh only when the applet exports it and passes refreshed data", async () => {
     const refresh = vi.fn().mockResolvedValue({
       data: { count: 2 },
@@ -286,3 +329,9 @@ describe("AppletMount", () => {
     }
   });
 });
+
+function firstOpportunityRow() {
+  const table = screen.getByRole("table");
+  const rows = within(table).getAllByRole("row");
+  return rows[1]?.textContent ?? "";
+}

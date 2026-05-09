@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "computer_applet",
+  "appId": "33333333-3333-4333-8333-333333333333",
+  "name": "LastMile CRM pipeline risk",
+  "version": 1,
+  "tenantId": "tenant-crm-pipeline-risk-fixture",
+  "threadId": "thread-crm-pipeline-risk-fixture",
+  "prompt": "Find CRM pipeline risk for LastMile opportunities and produce an app-like dashboard.",
+  "agentVersion": "computer-applet-fixture-u11",
+  "modelId": "fixture",
+  "generatedAt": "2026-05-08T16:00:00.000Z",
+  "stdlibVersionAtGeneration": "0.1.0"
+}
