@@ -87,5 +87,40 @@ scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs`, `bash -n
 scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
   locally. `git diff --check` passed.
-- **Current PR:** #1080
-  (`test(computer): add CRM dashboard prompt smoke`).
+- **Merged U4:** PR #1080
+  (`test(computer): add CRM dashboard prompt smoke`) was squash-merged to
+  `main` at
+  `2e9a463e182eddb21439fafad5deb67ae009d880`; CI passed: CLA, lint,
+  test, typecheck, verify. The remote branch was deleted by GitHub; the
+  local worktree and branch were removed manually.
+- **Started U5/E2E proof:** Created isolated worktree
+  `.Codex/worktrees/artifact-builder-crm-e2e-u5` on branch
+  `codex/artifact-builder-crm-e2e-u5` from latest `origin/main` at
+  `6ca632ef` after PR #1082 merged.
+- **Live proof failure:** Ran the deployed live smoke with
+  `SMOKE_ENABLE_AGENT_APPLET_PROMPT=1`, prompt
+  `Build a CRM pipeline risk dashboard for LastMile opportunities, including
+  stale activity, stage exposure, and the top risks to review.`, and thread
+  `eead7438-6945-4b16-9d05-207f3da88f4b`. Task
+  `134f2d50-34d0-434d-8d4a-92d636078f95` completed without a linked applet.
+  Diagnostics showed the model failed to read
+  `references/crm-dashboard.md` by relative path, delegated TSX generation,
+  and attempted delegated saving through `delegate_to_workspace(path=".")`.
+  The Artifact-save-missing guard correctly replaced the response with the
+  honest no-artifact message.
+- **Progress:** Tightened the Artifact Builder skill to load the CRM recipe by
+  full workspace path
+  `skills/artifact-builder/references/crm-dashboard.md`, keep applet
+  generation/saving in the parent turn, and call `save_app` directly. Added
+  the PR #1077 skill SHA to the targeted upgrade set so existing seeded
+  Computer workspaces receive the corrected skill while custom skill edits
+  remain preserved. Tightened the Strands Computer thread contract to forbid
+  `delegate`/`delegate_to_workspace` for applet implementation and saving.
+- **Verification note:** Focused workspace-defaults, API, and Strands tests
+  passed; `pnpm lint`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present test`, `uv run ruff check --ignore
+  E402,I001,UP017` on touched Python files, and `git diff --check` passed
+  locally. The repo-local Prettier binary was not installed in this worktree,
+  so no touched-file Prettier command was available.
+- **Current PR:** Pending for U5 direct-save reliability before rerunning the
+  deployed CRM dashboard proof.
