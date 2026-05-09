@@ -620,3 +620,21 @@ export const DisableConnectorMutation = gql`
     disableConnector(input: $input)
   }
 `;
+
+export const EnableSkillMutation = gql`
+  mutation EnableSkill($input: EnableSkillInput!) {
+    enableSkill(input: $input) {
+      id
+      tenantId
+      agentId
+      skillId
+      enabled
+    }
+  }
+`;
+
+export const DisableSkillMutation = gql`
+  mutation DisableSkill($input: DisableSkillInput!) {
+    disableSkill(input: $input)
+  }
+`;

@@ -62,6 +62,14 @@ type ConnectorBinding {
   updatedAt: AWSDateTime!
 }
 
+type SkillBinding {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  skillId: String!
+  enabled: Boolean!
+}
+
 input EnableConnectorInput {
   computerId: ID!
   slug: String!
@@ -70,6 +78,16 @@ input EnableConnectorInput {
 input DisableConnectorInput {
   computerId: ID!
   slug: String!
+}
+
+input EnableSkillInput {
+  computerId: ID!
+  skillId: String!
+}
+
+input DisableSkillInput {
+  computerId: ID!
+  skillId: String!
 }
 
 extend type Query {
@@ -82,4 +100,6 @@ extend type Query {
 extend type Mutation {
   enableConnector(input: EnableConnectorInput!): ConnectorBinding!
   disableConnector(input: DisableConnectorInput!): Boolean!
+  enableSkill(input: EnableSkillInput!): SkillBinding!
+  disableSkill(input: DisableSkillInput!): Boolean!
 }
