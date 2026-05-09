@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 
-from appsync_publisher import AppSyncChunkPublisher, build_appsync_chunk_callback
+from appsync_publisher import (
+    AppSyncChunkPublisher,
+    build_appsync_chunk_callback,
+    extract_stream_text_deltas,
+)
 
 
 def test_build_callback_returns_noop_when_not_configured():
@@ -54,6 +58,61 @@ def test_callback_publishes_strands_data_events_as_ordered_chunks():
         "chunk": json.dumps({"text": " world"}),
         "seq": 2,
     }
+
+
+def test_callback_publishes_bedrock_content_block_delta_events():
+    calls = []
+
+    def post(_endpoint, _headers, body, _timeout):
+        calls.append(json.loads(body.decode("utf-8")))
+        return 200, "{}"
+
+    callback, publisher = build_appsync_chunk_callback(
+        "thread-1",
+        env={
+            "APPSYNC_ENDPOINT": "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+            "APPSYNC_API_KEY": "test-key",
+        },
+        post_fn=post,
+    )
+
+    assert callback is not None
+    assert publisher is not None
+    callback(event={"contentBlockDelta": {"delta": {"text": "streamed"}}})
+    callback({"contentBlockDelta": {"delta": {"text": " text"}}})
+    publisher.drain()
+
+    assert [json.loads(call["variables"]["chunk"]) for call in calls] == [
+        {"text": "streamed"},
+        {"text": " text"},
+    ]
+    assert [call["variables"]["seq"] for call in calls] == [1, 2]
+
+
+def test_extract_stream_text_deltas_ignores_non_text_events():
+    assert extract_stream_text_deltas(current_tool_use={"name": "search"}) == []
+    assert extract_stream_text_deltas(event={"messageStop": {"stopReason": "end_turn"}}) == []
+
+
+def test_extract_stream_text_deltas_accepts_common_delta_shapes():
+    assert extract_stream_text_deltas(delta={"text": "hello"}) == ["hello"]
+    assert extract_stream_text_deltas(
+        event={
+            "type": "content_block_delta",
+            "delta": {"text": "world"},
+        }
+    ) == ["world"]
+    assert extract_stream_text_deltas(
+        event={
+            "contentBlockDelta": {
+                "delta": {
+                    "reasoningContent": {
+                        "text": "thinking",
+                    }
+                }
+            }
+        }
+    ) == ["thinking"]
 
 
 def test_publisher_retries_retryable_failures_once():
