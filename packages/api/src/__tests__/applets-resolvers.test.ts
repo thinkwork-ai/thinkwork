@@ -1,10 +1,15 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppletMetadataV1 } from "../lib/applets/metadata.js";
 
 const {
   mockDb,
+  mockRequireTenantAdmin,
   selectRows,
   insertedRows,
   updatedRows,
@@ -12,9 +17,11 @@ const {
   const selectRows: any[] = [];
   const insertedRows: any[] = [];
   const updatedRows: any[] = [];
+  const mockRequireTenantAdmin = vi.fn();
 
   const selectBuilder = {
     from: vi.fn(() => selectBuilder),
+    innerJoin: vi.fn(() => selectBuilder),
     where: vi.fn(() => selectBuilder),
     orderBy: vi.fn(() => selectBuilder),
     limit: vi.fn(() => Promise.resolve(selectRows)),
@@ -45,6 +52,7 @@ const {
       insert: vi.fn(() => insertBuilder),
       update: vi.fn(() => updateBuilder),
     },
+    mockRequireTenantAdmin,
   };
 });
 
@@ -53,6 +61,10 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
     tenantId: ctx.auth.tenantId,
     userId: ctx.auth.principalId,
   })),
+}));
+
+vi.mock("../graphql/resolvers/core/authz.js", () => ({
+  requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
 vi.mock("../graphql/utils.js", async (importOriginal) => {
@@ -72,76 +84,73 @@ describe("applet GraphQL resolvers", () => {
     insertedRows.length = 0;
     updatedRows.length = 0;
     vi.clearAllMocks();
+    mockRequireTenantAdmin.mockResolvedValue("admin");
     process.env.WORKSPACE_BUCKET = "workspace-bucket";
   });
 
-  it(
-    "saves a valid applet source and metadata before inserting the artifact row",
-    async () => {
-      const { mutationResolvers } = await import("../graphql/resolvers/index.js");
-      s3Mock.on(PutObjectCommand).resolves({});
+  it("saves a valid applet source and metadata before inserting the artifact row", async () => {
+    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+    s3Mock.on(PutObjectCommand).resolves({});
 
-      const result = await mutationResolvers.saveApplet(
-        null,
-        {
-          input: validSaveInput({
-            files: {
-              "App.tsx":
-                'import { AppHeader } from "@thinkwork/computer-stdlib"; export default function Applet() { return <AppHeader title="Risk" />; }',
-            },
-            metadata: {
-              threadId: "11111111-1111-4111-8111-111111111111",
-              prompt: "Show risk",
-              stdlibVersionAtGeneration: "0.1.0",
-            },
-          }),
-        },
-        serviceCtx(),
-      );
+    const result = await mutationResolvers.saveApplet(
+      null,
+      {
+        input: validSaveInput({
+          files: {
+            "App.tsx":
+              'import { AppHeader } from "@thinkwork/computer-stdlib"; export default function Applet() { return <AppHeader title="Risk" />; }',
+          },
+          metadata: {
+            threadId: "11111111-1111-4111-8111-111111111111",
+            prompt: "Show risk",
+            stdlibVersionAtGeneration: "0.1.0",
+          },
+        }),
+      },
+      serviceCtx(),
+    );
 
-      expect(result).toMatchObject({
-        ok: true,
-        version: 1,
-        validated: true,
-        persisted: true,
-        errors: [],
-      });
-      expect(result.appId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
+    expect(result).toMatchObject({
+      ok: true,
+      version: 1,
+      validated: true,
+      persisted: true,
+      errors: [],
+    });
+    expect(result.appId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
 
-      const puts = s3Mock.commandCalls(PutObjectCommand);
-      expect(puts).toHaveLength(2);
-      expect(puts[0].args[0].input).toMatchObject({
-        Bucket: "workspace-bucket",
-        Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
-        ContentType: "text/plain; charset=utf-8",
-      });
-      expect(puts[1].args[0].input).toMatchObject({
-        Bucket: "workspace-bucket",
-        Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/metadata.json`,
-        ContentType: "application/json",
-      });
-      expect(insertedRows[0]).toMatchObject({
-        id: result.appId,
-        tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        agent_id: "22222222-2222-4222-8222-222222222222",
-        thread_id: "11111111-1111-4111-8111-111111111111",
-        title: "Pipeline Risk",
-        type: "applet",
-        status: "final",
-        s3_key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
-      });
-      expect(insertedRows[0].metadata).toMatchObject({
-        appId: result.appId,
-        name: "Pipeline Risk",
-        version: 1,
-        tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        prompt: "Show risk",
-      });
-    },
-    15000,
-  );
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    expect(puts).toHaveLength(2);
+    expect(puts[0].args[0].input).toMatchObject({
+      Bucket: "workspace-bucket",
+      Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
+      ContentType: "text/plain; charset=utf-8",
+    });
+    expect(puts[1].args[0].input).toMatchObject({
+      Bucket: "workspace-bucket",
+      Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/metadata.json`,
+      ContentType: "application/json",
+    });
+    expect(insertedRows[0]).toMatchObject({
+      id: result.appId,
+      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      agent_id: "22222222-2222-4222-8222-222222222222",
+      thread_id: "11111111-1111-4111-8111-111111111111",
+      title: "Pipeline Risk",
+      type: "applet",
+      status: "final",
+      s3_key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
+    });
+    expect(insertedRows[0].metadata).toMatchObject({
+      appId: result.appId,
+      name: "Pipeline Risk",
+      version: 1,
+      tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      prompt: "Show risk",
+    });
+  }, 15000);
 
   it("returns structured validation errors and does not persist invalid imports", async () => {
     const { mutationResolvers } = await import("../graphql/resolvers/index.js");
@@ -193,7 +202,9 @@ describe("applet GraphQL resolvers", () => {
   it("regenerates an existing applet by incrementing version and preserving appId", async () => {
     const { mutationResolvers } = await import("../graphql/resolvers/index.js");
     const appId = "33333333-3333-4333-8333-333333333333";
-    selectRows.push(appletRow({ id: appId, metadata: metadata({ appId, version: 2 }) }));
+    selectRows.push(
+      appletRow({ id: appId, metadata: metadata({ appId, version: 2 }) }),
+    );
     s3Mock.on(PutObjectCommand).resolves({});
 
     const result = await mutationResolvers.regenerateApplet(
@@ -256,11 +267,7 @@ describe("applet GraphQL resolvers", () => {
       Body: { transformToString: async () => source } as any,
     });
 
-    const result = await queryResolvers.applet(
-      null,
-      { appId },
-      userCtx(),
-    );
+    const result = await queryResolvers.applet(null, { appId }, userCtx());
 
     expect(result).toMatchObject({
       applet: {
@@ -299,10 +306,69 @@ describe("applet GraphQL resolvers", () => {
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
   });
 
-  it("saves and loads applet state by appId, instanceId, and key", async () => {
-    const { mutationResolvers, queryResolvers } = await import(
-      "../graphql/resolvers/index.js"
+  it("lets tenant admins inspect an applet payload with source and metadata", async () => {
+    const { queryResolvers } = await import("../graphql/resolvers/index.js");
+    const appId = "33333333-3333-4333-8333-333333333333";
+    const source = "export default function Applet() { return null; }";
+    selectRows.push(appletRow({ id: appId, metadata: metadata({ appId }) }));
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: { transformToString: async () => source } as any,
+    });
+
+    const result = await queryResolvers.adminApplet(null, { appId }, userCtx());
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+      expect.anything(),
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     );
+    expect(result).toMatchObject({
+      applet: {
+        appId,
+        name: "Pipeline Risk",
+        tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+      source,
+      metadata: expect.objectContaining({ appId }),
+    });
+  });
+
+  it("lets tenant admins list applets and filter by thread user", async () => {
+    const { queryResolvers } = await import("../graphql/resolvers/index.js");
+    const appId = "33333333-3333-4333-8333-333333333333";
+    selectRows.push({
+      artifact: appletRow({ id: appId, metadata: metadata({ appId }) }),
+    });
+
+    const result = await queryResolvers.adminApplets(
+      null,
+      {
+        tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        userId: "user-1",
+        limit: 10,
+      },
+      userCtx(),
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+      expect.anything(),
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+    expect(result).toMatchObject({
+      nodes: [
+        {
+          appId,
+          name: "Pipeline Risk",
+          version: 1,
+        },
+      ],
+      nextCursor: null,
+    });
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("saves and loads applet state by appId, instanceId, and key", async () => {
+    const { mutationResolvers, queryResolvers } =
+      await import("../graphql/resolvers/index.js");
     const appId = "33333333-3333-4333-8333-333333333333";
     selectRows.push(appletRow({ id: appId, metadata: metadata({ appId }) }));
 
@@ -434,9 +500,7 @@ function userCtx() {
 }
 
 function appletRow(overrides: Record<string, unknown> = {}) {
-  const appId = String(
-    overrides.id ?? "33333333-3333-4333-8333-333333333333",
-  );
+  const appId = String(overrides.id ?? "33333333-3333-4333-8333-333333333333");
   return {
     id: appId,
     tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -492,9 +556,7 @@ function appletStateRow({
   };
 }
 
-function metadata(
-  overrides: Partial<AppletMetadataV1> = {},
-): AppletMetadataV1 {
+function metadata(overrides: Partial<AppletMetadataV1> = {}): AppletMetadataV1 {
   return {
     schemaVersion: 1,
     kind: "computer_applet",

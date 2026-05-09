@@ -10,7 +10,9 @@ import {
   lt,
   randomUUID,
   sql,
+  threads,
 } from "../../utils.js";
+import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import {
   assertAppletArtifactAccess,
@@ -164,6 +166,89 @@ export async function listApplets(args: {
   };
 }
 
+export async function loadAdminApplet(args: {
+  appId: string;
+  ctx: GraphQLContext;
+}): Promise<{
+  artifact: AppletArtifactRow & Record<string, unknown>;
+  metadata: AppletMetadataV1;
+  source: string;
+}> {
+  const [row] = await db
+    .select()
+    .from(artifacts)
+    .where(eq(artifacts.id, args.appId));
+  if (!row) {
+    throw new GraphQLError("Applet artifact not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+
+  await requireTenantAdmin(args.ctx, row.tenant_id);
+  const metadata = assertAppletArtifactAccess(row, {
+    tenantId: row.tenant_id,
+    userId: null,
+  });
+  const source = await readSource(row);
+  return { artifact: row, metadata, source };
+}
+
+export async function listAdminApplets(args: {
+  ctx: GraphQLContext;
+  tenantId: string;
+  userId?: string | null;
+  cursor?: string | null;
+  limit?: number | null;
+}) {
+  await requireTenantAdmin(args.ctx, args.tenantId);
+
+  const limit = normalizeListLimit(args.limit);
+  const conditions = [
+    eq(artifacts.tenant_id, args.tenantId),
+    eq(artifacts.type, "applet"),
+  ];
+  if (args.cursor) {
+    const cursorDate = new Date(args.cursor);
+    if (Number.isNaN(cursorDate.getTime())) {
+      throw new GraphQLError("Applet cursor is invalid", {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    conditions.push(lt(artifacts.created_at, cursorDate));
+  }
+
+  const rows = args.userId
+    ? (
+        await db
+          .select({ artifact: artifacts })
+          .from(artifacts)
+          .innerJoin(threads, eq(artifacts.thread_id, threads.id))
+          .where(and(...conditions, eq(threads.user_id, args.userId)))
+          .orderBy(desc(artifacts.created_at))
+          .limit(limit + 1)
+      ).map((row) => row.artifact)
+    : await db
+        .select()
+        .from(artifacts)
+        .where(and(...conditions))
+        .orderBy(desc(artifacts.created_at))
+        .limit(limit + 1);
+
+  const page = rows.slice(0, limit);
+  const nextRow = rows[limit];
+
+  return {
+    nodes: page.map((row) => {
+      const metadata = assertAppletArtifactAccess(row, {
+        tenantId: args.tenantId,
+        userId: args.userId ?? null,
+      });
+      return toAppletPreview(row, metadata);
+    }),
+    nextCursor: nextRow ? serializeCursor(nextRow.created_at) : null,
+  };
+}
+
 export async function saveAppletInner(args: {
   ctx: GraphQLContext;
   input: SaveAppletInput;
@@ -196,7 +281,9 @@ export async function saveAppletInner(args: {
   }
 
   const requestedAppId = normalizeAppId(args.input.appId);
-  const appId = args.regenerate ? requestedAppId : requestedAppId ?? randomUUID();
+  const appId = args.regenerate
+    ? requestedAppId
+    : (requestedAppId ?? randomUUID());
   if (!appId || !isUuid(appId)) {
     return failurePayload({
       appId: appId ?? null,
@@ -210,12 +297,10 @@ export async function saveAppletInner(args: {
     });
   }
 
-  let previous:
-    | {
-        artifact: AppletArtifactRow & Record<string, unknown>;
-        metadata: AppletMetadataV1;
-      }
-    | null = null;
+  let previous: {
+    artifact: AppletArtifactRow & Record<string, unknown>;
+    metadata: AppletMetadataV1;
+  } | null = null;
   if (args.regenerate) {
     previous = await loadExistingForWrite({ appId, ctx: args.ctx, tenantId });
     if (!previous) {
@@ -503,9 +588,7 @@ function toAppletState(row: AppletStateArtifactRow) {
   };
 }
 
-function parseAppletStateMetadata(
-  input: unknown,
-): AppletStateMetadata | null {
+function parseAppletStateMetadata(input: unknown): AppletStateMetadata | null {
   const metadata = parseJsonObject(input);
   if (!metadata) return null;
   if (metadata.kind !== "computer_applet_state") return null;
@@ -529,7 +612,9 @@ function assertStateIdentity(value: string, field: string) {
 }
 
 function serializeDate(value: Date | string) {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }
 
 async function loadExistingForWrite(args: {
@@ -570,7 +655,9 @@ function toAppletPreview(
 
 function parseAppletFiles(
   input: unknown,
-): { ok: true; source: string } | { ok: false; error: Record<string, unknown> } {
+):
+  | { ok: true; source: string }
+  | { ok: false; error: Record<string, unknown> } {
   const files = parseJsonObject(input);
   if (!files || Array.isArray(files)) {
     return {

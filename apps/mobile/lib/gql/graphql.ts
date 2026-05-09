@@ -3053,6 +3053,8 @@ export type Query = {
   __typename?: "Query";
   _empty?: Maybe<Scalars["String"]["output"]>;
   activityLog: Array<ActivityLogEntry>;
+  adminApplet?: Maybe<AppletPayload>;
+  adminApplets: AppletConnection;
   /**
    * Returns the caller's own role on the caller's own tenant.
    *
@@ -3290,6 +3292,17 @@ export type QueryActivityLogArgs = {
   entityType?: InputMaybe<Scalars["String"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryAdminAppletArgs = {
+  appId: Scalars["ID"]["input"];
+};
+
+export type QueryAdminAppletsArgs = {
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryAgentArgs = {

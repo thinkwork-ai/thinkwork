@@ -1,0 +1,42 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+function readSource(path: string) {
+  return readFileSync(new URL(path, import.meta.url), "utf8");
+}
+
+describe("Applets admin routes", () => {
+  const sidebarSource = readSource("../../../../components/Sidebar.tsx");
+  const commandPaletteSource = readSource(
+    "../../../../components/CommandPalette.tsx",
+  );
+  const queriesSource = readSource("../../../../lib/graphql-queries.ts");
+  const listRouteSource = readSource("./index.tsx");
+  const detailRouteSource = readSource("./$appId.tsx");
+
+  it("exposes Applets as a read-only admin surface", () => {
+    expect(sidebarSource).toContain('label: "Applets"');
+    expect(sidebarSource).toContain('to: "/applets"');
+    expect(commandPaletteSource).toContain('label: "Applets"');
+    expect(commandPaletteSource).toContain('to: "/applets"');
+  });
+
+  it("uses the admin-only applet queries", () => {
+    expect(queriesSource).toContain("query AdminApplets");
+    expect(queriesSource).toContain("adminApplets");
+    expect(queriesSource).toContain("query AdminApplet");
+    expect(queriesSource).toContain("adminApplet");
+    expect(listRouteSource).toContain("AdminAppletsQuery");
+    expect(detailRouteSource).toContain("AdminAppletQuery");
+  });
+
+  it("keeps the route read-only and source/metadata focused", () => {
+    expect(listRouteSource).toContain("Filter by user ID");
+    expect(listRouteSource).toContain('to: "/applets/$appId"');
+    expect(detailRouteSource).toContain("payload.source");
+    expect(detailRouteSource).toContain("formatJson(payload.metadata)");
+    expect(detailRouteSource).not.toContain("useMutation");
+    expect(detailRouteSource).not.toContain("saveApplet");
+    expect(detailRouteSource).not.toContain("regenerateApplet");
+  });
+});

@@ -129,6 +129,13 @@ extend type Query {
   applet(appId: ID!): AppletPayload
   applets(cursor: String, limit: Int): AppletConnection!
   appletState(appId: ID!, instanceId: ID!, key: String!): AppletState
+  adminApplet(appId: ID!): AppletPayload
+  adminApplets(
+    tenantId: ID!
+    userId: ID
+    cursor: String
+    limit: Int
+  ): AppletConnection!
 }
 
 extend type Mutation {
