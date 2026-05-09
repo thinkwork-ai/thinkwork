@@ -1,3 +1,10 @@
-import { inertAppletResolver } from "./inert.js";
+import type { GraphQLContext } from "../../context.js";
+import { loadAppletState } from "./applet.shared.js";
 
-export const appletState = async () => inertAppletResolver();
+export async function appletState(
+  _parent: any,
+  args: { appId: string; instanceId: string; key: string },
+  ctx: GraphQLContext,
+) {
+  return loadAppletState({ ctx, ...args });
+}

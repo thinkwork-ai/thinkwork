@@ -14,6 +14,32 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U9:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u9-host-api` on branch
+  `codex/computer-applets-u9-host-api` from `origin/main` after U8 merged.
+- **Progress:** Activated `appletState` and `saveAppletState` over
+  `artifacts` rows of `type = 'applet_state'`, with same-tenant applet access
+  checks. Replaced the browser host registry placeholder with a live
+  `useAppletAPI` implementation that restores state, debounces saves, scopes
+  state by `(appId, instanceId, key)`, surfaces save errors without losing
+  in-memory state, and keeps applet queries/mutations behind curated catalogs.
+  The applet mount now passes stable per-route `appId` and `instanceId` props
+  to generated components.
+- **Verification note:** `pnpm install --frozen-lockfile`, U9-focused
+  computer host/route tests, applet API resolver tests, `pnpm --filter
+  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/computer test`, `pnpm --filter
+  @thinkwork/computer build`, `pnpm --filter @thinkwork/api test -- applets`,
+  `git diff --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and
+  `pnpm -r --if-present test` passed locally. Build warnings remain the
+  existing shared UI sourcemap/chunk-size and host-registry dynamic-import
+  warnings.
+- **Current PR:** #1061 (`feat(computer): activate applet host api`).
+- **CI:** PR #1061 checks passed: CLA, lint, test, typecheck, verify.
+- **Merged U8:** PR #1060 (`feat(computer): mount live applets`) was
+  squash-merged to `main` at
+  `b72de07a44558d4ae22f47caffdf15c94b7ed8d7`; remote/local branches and the
+  U8 worktree were deleted.
 - **Started U8:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u8-live-route` on branch
   `codex/computer-applets-u8-live-route` from `origin/main` after U7 merged.

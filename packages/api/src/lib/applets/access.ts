@@ -8,6 +8,7 @@ import {
 export interface AppletArtifactRow {
   id: string;
   tenant_id: string;
+  agent_id?: string | null;
   thread_id?: string | null;
   type: string;
   s3_key?: string | null;

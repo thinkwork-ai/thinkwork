@@ -26,10 +26,15 @@ interface AppletResult {
 }
 
 type AppletModule = {
-  default?: ComponentType;
+  default?: ComponentType<AppletComponentProps>;
 };
 
 type AppletModuleLoader = (moduleUrl: string) => Promise<AppletModule>;
+
+interface AppletComponentProps {
+  appId: string;
+  instanceId: string;
+}
 
 const defaultAppletModuleLoader: AppletModuleLoader = (moduleUrl) =>
   import(/* @vite-ignore */ moduleUrl) as Promise<AppletModule>;
@@ -56,8 +61,10 @@ export function AppletRouteContent({
   const title = applet?.applet?.name?.trim() || "App";
   const source = useMemo(() => appletSource(applet), [applet]);
   const latestVersion = applet?.applet?.version ?? null;
+  const instanceId = useAppletInstanceId(appId);
   const [mountedSnapshot, setMountedSnapshot] = useState<{
     appId: string;
+    instanceId: string;
     source: string;
     version: number;
   } | null>(null);
@@ -78,11 +85,12 @@ export function AppletRouteContent({
       if (current?.appId === appId) return current;
       return {
         appId,
+        instanceId,
         source,
         version: latestVersion ?? 1,
       };
     });
-  }, [appId, latestVersion, source]);
+  }, [appId, instanceId, latestVersion, source]);
 
   if (!applet) {
     return (
@@ -126,6 +134,7 @@ export function AppletRouteContent({
                 if (source) {
                   setMountedSnapshot({
                     appId,
+                    instanceId,
                     source,
                     version: latestVersion ?? 1,
                   });
@@ -142,6 +151,7 @@ export function AppletRouteContent({
           <AppletMount
             key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
             appId={mountedSnapshot.appId}
+            instanceId={mountedSnapshot.instanceId}
             source={mountedSnapshot.source}
             version={mountedSnapshot.version}
             loadModule={loadModule}
@@ -156,18 +166,24 @@ export function AppletRouteContent({
 
 export function AppletMount({
   appId,
+  instanceId,
   source,
   version,
   loadModule = defaultAppletModuleLoader,
 }: {
   appId: string;
+  instanceId: string;
   source: string;
   version: number;
   loadModule?: AppletModuleLoader;
 }) {
   const [state, setState] = useState<
     | { status: "loading" }
-    | { status: "ready"; Component: ComponentType; resetKey: string }
+    | {
+        status: "ready";
+        Component: ComponentType<AppletComponentProps>;
+        resetKey: string;
+      }
     | { status: "error"; message: string }
   >({ status: "loading" });
 
@@ -227,10 +243,32 @@ export function AppletMount({
   return (
     <AppletErrorBoundary resetKey={state.resetKey}>
       <div className="min-w-0 overflow-x-hidden">
-        <MountedApplet />
+        <MountedApplet appId={appId} instanceId={instanceId} />
       </div>
     </AppletErrorBoundary>
   );
+}
+
+function useAppletInstanceId(appId: string) {
+  const [instanceId, setInstanceId] = useState(() => storedAppletInstanceId(appId));
+
+  useEffect(() => {
+    setInstanceId(storedAppletInstanceId(appId));
+  }, [appId]);
+
+  return instanceId;
+}
+
+function storedAppletInstanceId(appId: string) {
+  const key = `thinkwork:applet-instance:${appId}`;
+  const existing = window.sessionStorage.getItem(key);
+  if (existing) return existing;
+  const next =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  window.sessionStorage.setItem(key, next);
+  return next;
 }
 
 function AppletLoading() {
