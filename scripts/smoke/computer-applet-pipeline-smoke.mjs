@@ -14,7 +14,7 @@
  *
  * Required env:
  *   DATABASE_URL
- *   API_AUTH_SECRET
+ *   API_AUTH_SECRET or VITE_GRAPHQL_API_KEY
  *   SMOKE_COMPUTER_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
  */
@@ -37,6 +37,11 @@ const apiUrl = first(
   env.API_GRAPHQL_URL,
 );
 const apiSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
+const apiKey = first(
+  env.VITE_GRAPHQL_API_KEY,
+  env.APPSYNC_API_KEY,
+  env.GRAPHQL_API_KEY,
+);
 const computerUrl = first(env.SMOKE_COMPUTER_URL, env.COMPUTER_URL);
 const smokeAppletId =
   env.SMOKE_APPLET_ID || "44444444-4444-4444-8444-444444444444";
@@ -44,8 +49,8 @@ const crmAppletId =
   env.SMOKE_CRM_APPLET_ID || "33333333-3333-4333-8333-333333333333";
 
 if (!databaseUrl) fail("Missing DATABASE_URL.");
-if (!apiUrl || !apiSecret) {
-  fail("Missing GraphQL HTTP config or API_AUTH_SECRET.");
+if (!apiUrl || (!apiSecret && !apiKey)) {
+  fail("Missing GraphQL HTTP config or API_AUTH_SECRET/VITE_GRAPHQL_API_KEY.");
 }
 if (!computerUrl) fail("Missing SMOKE_COMPUTER_URL.");
 
@@ -150,7 +155,7 @@ async function saveOrRegenerateApplet({ appId, name, source, metadata }) {
           appId,
           name,
           tenantId: identity.tenantId,
-          threadId: metadata.threadId,
+          threadId: uuidOrUndefined(metadata.threadId),
         },
       },
     },
@@ -344,16 +349,22 @@ async function verifyCrmAppletCutover() {
 }
 
 async function gql(query, variables) {
+  const headers = {
+    "content-type": "application/json",
+    "x-tenant-id": identity.tenantId,
+    "x-principal-id": identity.userId,
+    "x-computer-id": identity.computerId,
+  };
+  if (identity.agentId) headers["x-agent-id"] = identity.agentId;
+  if (apiSecret) {
+    headers.authorization = `Bearer ${apiSecret}`;
+  } else {
+    headers["x-api-key"] = apiKey;
+  }
+
   const response = await fetch(apiUrl, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiSecret}`,
-      "x-tenant-id": identity.tenantId,
-      "x-principal-id": identity.userId,
-      "x-agent-id": identity.agentId || identity.computerId,
-      "x-computer-id": identity.computerId,
-    },
+    headers,
     body: JSON.stringify({ query, variables }),
   });
   if (!response.ok) {
@@ -438,6 +449,15 @@ function unquote(value) {
 
 function first(...values) {
   return values.find((value) => typeof value === "string" && value.length > 0);
+}
+
+function uuidOrUndefined(value) {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+    ? value
+    : undefined;
 }
 
 function fail(message) {

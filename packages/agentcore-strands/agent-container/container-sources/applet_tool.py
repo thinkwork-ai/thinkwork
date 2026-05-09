@@ -343,6 +343,14 @@ async def _graphql(
 ) -> dict[str, Any]:
     endpoint = _graphql_endpoint(runtime.api_url)
     last_err: Exception | None = None
+    headers = {
+        "content-type": "application/json",
+        "authorization": f"Bearer {runtime.api_secret}",
+        "x-tenant-id": runtime.tenant_id,
+        "x-computer-id": runtime.computer_id,
+    }
+    if runtime.agent_id:
+        headers["x-agent-id"] = runtime.agent_id
 
     for attempt in range(3):
         try:
@@ -350,13 +358,7 @@ async def _graphql(
                 response = await client.post(
                     endpoint,
                     json={"query": query, "variables": variables},
-                    headers={
-                        "content-type": "application/json",
-                        "authorization": f"Bearer {runtime.api_secret}",
-                        "x-tenant-id": runtime.tenant_id,
-                        "x-agent-id": runtime.agent_id,
-                        "x-computer-id": runtime.computer_id,
-                    },
+                    headers=headers,
                 )
             if response.status_code >= 500:
                 last_err = RuntimeError(
@@ -443,7 +445,6 @@ def _runtime_from_values(
 ) -> AppletToolRuntime:
     values = {
         "tenant_id": tenant_id,
-        "agent_id": agent_id,
         "computer_id": computer_id,
         "api_url": api_url,
         "api_secret": api_secret,

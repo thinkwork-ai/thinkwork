@@ -280,6 +280,46 @@ def test_graphql_posts_service_headers(monkeypatch):
     }
 
 
+def test_graphql_omits_agent_header_for_computer_only_runtime(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    class FakeResponse:
+        status_code = 200
+        text = '{"data": {"saveApplet": {"ok": true}}}'
+
+        def json(self):
+            return {"data": {"saveApplet": {"ok": True}}}
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _url, *, json, headers):
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeResponse()
+
+    monkeypatch.setattr(applet_tool.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = run(
+        applet_tool._graphql(
+            applet_tool.AppletToolRuntime(**{**RUNTIME, "agent_id": ""}),
+            "query Test { _empty }",
+            {"x": 1},
+        )
+    )
+
+    assert result["ok"] is True
+    assert "x-agent-id" not in captured["headers"]
+    assert captured["headers"]["x-computer-id"] == "computer-1"
+
+
 def test_graphql_maps_timeout_to_api_unavailable(monkeypatch):
     class TimeoutAsyncClient:
         def __init__(self, *, timeout):
@@ -364,6 +404,11 @@ def test_factory_raises_when_required_env_is_missing():
         assert "computer_id" in str(exc)
     else:
         raise AssertionError("expected missing config to raise")
+
+
+def test_factory_allows_computer_runtime_without_agent_id():
+    save_app = applet_tool.make_save_app_fn(**{**RUNTIME, "agent_id": ""})
+    assert callable(save_app)
 
 
 def test_factories_snapshot_env_independently(monkeypatch):

@@ -51,7 +51,7 @@ APPSYNC_API_URL="$(cd "$TF_DIR" && tf_output_raw appsync_api_url)"
 APPSYNC_API_KEY="$(cd "$TF_DIR" && tf_output_raw appsync_api_key)"
 COMPUTER_URL="$(cd "$TF_DIR" && tf_output_raw computer_url)"
 
-if [[ -z "${API_URL:-}" || -z "${API_AUTH_SECRET:-}" || -z "${DATABASE_URL:-}" || -z "$APPSYNC_API_URL" || -z "$APPSYNC_API_KEY" || -z "$COMPUTER_URL" ]]; then
+if [[ -z "${API_URL:-}" || -z "${DATABASE_URL:-}" || -z "$APPSYNC_API_URL" || -z "$APPSYNC_API_KEY" || -z "$COMPUTER_URL" ]]; then
   echo "smoke-computer: failed to resolve deployed GraphQL/AppSync/database config" >&2
   exit 3
 fi
