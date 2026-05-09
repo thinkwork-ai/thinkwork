@@ -30,6 +30,7 @@ import {
 	threadTurnEvents,
 	agentWakeupRequests,
 	agents,
+	computers,
 	evalRuns,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
@@ -258,6 +259,7 @@ async function listScheduledJobs(
 
 	const params = event.queryStringParameters || {};
 	if (params.agent_id) conditions.push(eq(scheduledJobs.agent_id, params.agent_id));
+	if (params.computer_id) conditions.push(eq(scheduledJobs.computer_id, params.computer_id));
 	if (params.routine_id) conditions.push(eq(scheduledJobs.routine_id, params.routine_id));
 	if (params.trigger_type) conditions.push(eq(scheduledJobs.trigger_type, params.trigger_type));
 	if (params.enabled !== undefined) conditions.push(eq(scheduledJobs.enabled, params.enabled === "true"));
@@ -295,12 +297,33 @@ async function createScheduledJob(
 		return error("name and trigger_type are required");
 	}
 
+	const computerId = (body.computer_id as string) || null;
+	if (computerId) {
+		// Verify the named Computer belongs to the caller's tenant before
+		// persisting the FK reference. The DB FK only enforces referential
+		// integrity against `computers(id)`; without this check a tenant
+		// admin could create a scheduled job referencing a foreign-tenant
+		// Computer UUID. The tenant filter on later GETs would scope it
+		// out, but the FK row would still belong to someone else.
+		const [computerRow] = await db
+			.select({ tenant_id: computers.tenant_id })
+			.from(computers)
+			.where(eq(computers.id, computerId));
+		if (!computerRow) {
+			return error(`Computer ${computerId} not found`, 400);
+		}
+		if (computerRow.tenant_id !== tenantId) {
+			return error("Computer does not belong to this tenant", 403);
+		}
+	}
+
 	const [row] = await db
 		.insert(scheduledJobs)
 		.values({
 			tenant_id: tenantId,
 			trigger_type: body.trigger_type as string,
 			agent_id: (body.agent_id as string) || null,
+			computer_id: computerId,
 			routine_id: (body.routine_id as string) || null,
 			team_id: (body.team_id as string) || null,
 			name: body.name as string,
@@ -358,6 +381,9 @@ async function updateScheduledJob(
 	let body: Record<string, unknown> = {};
 	try { body = event.body ? JSON.parse(event.body) : {}; } catch { return error("Invalid JSON body"); }
 
+	// Note: computer_id is intentionally read-only on update for v1 — re-parenting
+	// a scheduled job to a different Computer isn't a supported flow. agent_id is
+	// also unset here because the runtime-firing key is fixed at create-time.
 	const updates: Record<string, unknown> = { updated_at: new Date() };
 	if (body.name !== undefined) updates.name = body.name;
 	if (body.description !== undefined) updates.description = body.description;

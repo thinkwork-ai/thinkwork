@@ -2,17 +2,36 @@ import type { GraphQLContext } from "../../context.js";
 import {
 	db,
 	scheduledJobs,
+	computers,
 	snakeToCamel, invokeJobScheduleManager, eq,
 } from "../../utils.js";
 
 export const createScheduledJob = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
+
+	// Validate that any computer_id in the input belongs to the named tenant
+	// before inserting the FK. Mirrors the REST handler — see U3 / U4 of
+	// the scheduled-jobs-and-automations plan.
+	if (i.computerId) {
+		const [computerRow] = await db
+			.select({ tenant_id: computers.tenant_id })
+			.from(computers)
+			.where(eq(computers.id, i.computerId));
+		if (!computerRow) {
+			throw new Error(`Computer ${i.computerId} not found`);
+		}
+		if (computerRow.tenant_id !== i.tenantId) {
+			throw new Error("Computer does not belong to this tenant");
+		}
+	}
+
 	const [row] = await db
 		.insert(scheduledJobs)
 		.values({
 			tenant_id: i.tenantId,
 			trigger_type: i.jobType,
 			agent_id: i.agentId || null,
+			computer_id: i.computerId || null,
 			routine_id: i.routineId || null,
 			team_id: i.teamId || null,
 			name: i.name,

@@ -14,6 +14,10 @@ export const MyComputerQuery = gql`
       name
       tenantId
       ownerUserId
+      sourceAgent {
+        id
+        name
+      }
     }
   }
 `;
