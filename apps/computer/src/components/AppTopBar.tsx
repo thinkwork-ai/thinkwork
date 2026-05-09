@@ -66,6 +66,9 @@ export function AppTopBar() {
       ) : null}
 
       <div className="ml-auto flex items-center gap-1">
+        {actions?.action ? (
+          <div className="flex shrink-0 items-center">{actions.action}</div>
+        ) : null}
         <Button
           variant="ghost"
           size="icon-xs"

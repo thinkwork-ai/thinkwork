@@ -6,6 +6,7 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
 import { loadAppletHostExternals } from "@/applets/host-registry";
@@ -212,10 +213,7 @@ describe("AppletMount", () => {
     expect(screen.getByText("Source coverage")).toBeTruthy();
     expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(
-      await screen.findByText(/Refresh completed from saved CRM/i),
-    ).toBeTruthy();
+    expect(screen.queryByText("Refresh app")).toBeNull();
 
     const evidenceSummary = screen.getAllByText("Evidence")[0];
     const details = evidenceSummary.closest("details");
@@ -248,18 +246,19 @@ describe("AppletMount", () => {
     );
 
     render(
-      <AppletMount
-        appId="app-1"
-        instanceId="instance-1"
-        source="export default function App() { return null; }"
-        version={1}
+      <AppletMountWithHeaderAction
         loadModule={async () => ({ default: MountedApplet, refresh })}
       />,
     );
 
     await screen.findByText("Count 1");
+    expect(screen.queryByText("Refresh app")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: "Artifact actions" }),
+      { key: "Enter", code: "Enter" },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Refresh" }));
 
     await screen.findByText("Count 2");
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -269,11 +268,7 @@ describe("AppletMount", () => {
     const MountedApplet = () => <div>No refresh app</div>;
 
     render(
-      <AppletMount
-        appId="app-1"
-        instanceId="instance-1"
-        source="export default function App() { return null; }"
-        version={1}
+      <AppletMountWithHeaderAction
         loadModule={async () => ({ default: MountedApplet })}
       />,
     );
@@ -281,6 +276,9 @@ describe("AppletMount", () => {
     await screen.findByText("No refresh app");
 
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Artifact actions" }),
+    ).toBeNull();
   });
 
   it("renders transform failures as recoverable app errors", async () => {
@@ -329,6 +327,28 @@ describe("AppletMount", () => {
     }
   });
 });
+
+function AppletMountWithHeaderAction({
+  loadModule,
+}: {
+  loadModule: ComponentProps<typeof AppletMount>["loadModule"];
+}) {
+  const [headerAction, setHeaderAction] = useState<ReactNode>(null);
+
+  return (
+    <>
+      <div>{headerAction}</div>
+      <AppletMount
+        appId="app-1"
+        instanceId="instance-1"
+        source="export default function App() { return null; }"
+        version={1}
+        loadModule={loadModule}
+        onHeaderActionChange={setHeaderAction}
+      />
+    </>
+  );
+}
 
 function firstOpportunityRow() {
   const table = screen.getByRole("table");

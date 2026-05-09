@@ -21,15 +21,15 @@ describe("AppRefreshControl", () => {
 
     render(<AppRefreshControl onRefresh={onRefresh} onData={onData} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await clickRefresh();
 
     await waitFor(() => {
       expect(onRefresh).toHaveBeenCalledTimes(1);
       expect(onData).toHaveBeenCalledWith({ refreshed: true });
     });
     expect(agentInvoke).not.toHaveBeenCalled();
-    expect(screen.getByText("Succeeded")).toBeTruthy();
-    expect(screen.getByText("crm")).toBeTruthy();
+    await openActionsMenu();
+    expect(screen.getByText("Refresh completed.")).toBeTruthy();
   });
 
   it("shows partial source coverage while still applying refreshed data", async () => {
@@ -44,9 +44,9 @@ describe("AppRefreshControl", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await clickRefresh();
 
-    await screen.findByText("Partial success");
+    await openActionsMenu();
     expect(screen.getByText(/Partial refresh: email/)).toBeTruthy();
     expect(onData).toHaveBeenCalledWith({ rows: [1] });
   });
@@ -62,10 +62,10 @@ describe("AppRefreshControl", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await clickRefresh();
 
-    await screen.findByText("CRM unavailable");
-    expect(screen.getByText("Failed")).toBeTruthy();
+    await openActionsMenu();
+    expect(screen.getByText("CRM unavailable")).toBeTruthy();
     expect(onData).not.toHaveBeenCalled();
   });
 
@@ -82,10 +82,22 @@ describe("AppRefreshControl", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await clickRefresh();
 
-    await screen.findByText("No sources refreshed");
-    expect(screen.getByText("Failed")).toBeTruthy();
+    await openActionsMenu();
+    expect(screen.getByText("No sources refreshed")).toBeTruthy();
     expect(onData).not.toHaveBeenCalled();
   });
 });
+
+async function clickRefresh() {
+  await openActionsMenu();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Refresh" }));
+}
+
+async function openActionsMenu() {
+  fireEvent.keyDown(
+    await screen.findByRole("button", { name: "Artifact actions" }),
+    { key: "Enter", code: "Enter" },
+  );
+}

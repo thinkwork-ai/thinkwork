@@ -728,7 +728,6 @@ Build one responsive applet that fits the available horizontal space with \`w-fu
 Required sections:
 
 - Header: title, summary, generated time, and source badges.
-- Refresh status: \`RefreshBar\` when \`refresh()\` is exported.
 - KPIs: total pipeline, high-risk exposure, stale opportunity count, and next-meeting or source-health count when available.
 - Stage exposure: a bar chart from \`stageExposure\`.
 - Stale activity: a chart or compact table from \`staleActivity\`.
@@ -736,7 +735,7 @@ Required sections:
 - Source coverage: \`SourceStatusList\` using \`sourceStatuses\`.
 - Evidence: \`EvidenceList\` with CRM/email/calendar/web signals.
 
-Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`RefreshBar\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`SourceStatusList\`, \`EvidenceList\`, and formatters such as \`formatCurrency\`.
+Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`SourceStatusList\`, \`EvidenceList\`, and formatters such as \`formatCurrency\`.
 
 Use the stdlib prop names directly:
 
@@ -771,6 +770,8 @@ Export \`refresh()\` when the dashboard can be refreshed. It must return determi
     }
 
 Refresh should rerun saved source queries or deterministic transforms. It must not reinterpret the whole prompt or create a different applet.
+
+The artifact host renders refresh actions in its top-bar actions menu. Do not render a refresh control, refresh timeline, or \`RefreshBar\` inside the applet unless the user explicitly asks for a custom in-artifact refresh experience.
 
 ## Save Contract
 
