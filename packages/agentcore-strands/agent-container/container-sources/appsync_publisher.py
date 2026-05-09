@@ -142,7 +142,19 @@ def extract_stream_text_deltas(*args, **kwargs) -> list[str]:
     text_parts: list[str] = []
     for payload in payloads:
         text_parts.extend(_extract_text_parts(payload))
-    return text_parts
+    return _dedupe_text_parts(text_parts)
+
+
+def _dedupe_text_parts(text_parts: list[str]) -> list[str]:
+    """Collapse duplicate aliases from a single Strands callback invocation."""
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for text in text_parts:
+        if text in seen:
+            continue
+        seen.add(text)
+        deduped.append(text)
+    return deduped
 
 
 def _extract_text_parts(value) -> list[str]:
