@@ -29,6 +29,7 @@ import { Route as AuthedShellMemoryKbsRouteImport } from "./routes/_authed/_shel
 import { Route as AuthedShellMemoryBrainRouteImport } from "./routes/_authed/_shell/memory.brain";
 import { Route as AuthedShellAppsIdRouteImport } from "./routes/_authed/_shell/apps.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
+import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
 
 const SignInRoute = SignInRouteImport.update({
   id: "/sign-in",
@@ -130,6 +131,12 @@ const AuthedShellApprovalsApprovalIdRoute =
     path: "/approvals/$approvalId",
     getParentRoute: () => AuthedShellRoute,
   } as any);
+const AuthedShellMemoryKbsKbIdRoute =
+  AuthedShellMemoryKbsKbIdRouteImport.update({
+    id: "/$kbId",
+    path: "/$kbId",
+    getParentRoute: () => AuthedShellMemoryKbsRoute,
+  } as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -143,13 +150,14 @@ export interface FileRoutesByFullPath {
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/memory/kbs": typeof AuthedShellMemoryKbsRoute;
+  "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -162,13 +170,14 @@ export interface FileRoutesByTo {
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/memory/kbs": typeof AuthedShellMemoryKbsRoute;
+  "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -185,13 +194,14 @@ export interface FileRoutesById {
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/apps/$id": typeof AuthedShellAppsIdRoute;
   "/_authed/_shell/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/_authed/_shell/memory/kbs": typeof AuthedShellMemoryKbsRoute;
+  "/_authed/_shell/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
   "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -213,7 +223,8 @@ export interface FileRouteTypes {
     | "/approvals/"
     | "/apps/"
     | "/memory/"
-    | "/threads/";
+    | "/threads/"
+    | "/memory/kbs/$kbId";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -232,7 +243,8 @@ export interface FileRouteTypes {
     | "/approvals"
     | "/apps"
     | "/memory"
-    | "/threads";
+    | "/threads"
+    | "/memory/kbs/$kbId";
   id:
     | "__root__"
     | "/"
@@ -254,7 +266,8 @@ export interface FileRouteTypes {
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/apps/"
     | "/_authed/_shell/memory/"
-    | "/_authed/_shell/threads/";
+    | "/_authed/_shell/threads/"
+    | "/_authed/_shell/memory/kbs/$kbId";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -407,19 +420,37 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellApprovalsApprovalIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/memory/kbs/$kbId": {
+      id: "/_authed/_shell/memory/kbs/$kbId";
+      path: "/$kbId";
+      fullPath: "/memory/kbs/$kbId";
+      preLoaderRoute: typeof AuthedShellMemoryKbsKbIdRouteImport;
+      parentRoute: typeof AuthedShellMemoryKbsRoute;
+    };
   }
 }
 
+interface AuthedShellMemoryKbsRouteChildren {
+  AuthedShellMemoryKbsKbIdRoute: typeof AuthedShellMemoryKbsKbIdRoute;
+}
+
+const AuthedShellMemoryKbsRouteChildren: AuthedShellMemoryKbsRouteChildren = {
+  AuthedShellMemoryKbsKbIdRoute: AuthedShellMemoryKbsKbIdRoute,
+};
+
+const AuthedShellMemoryKbsRouteWithChildren =
+  AuthedShellMemoryKbsRoute._addFileChildren(AuthedShellMemoryKbsRouteChildren);
+
 interface AuthedShellMemoryRouteChildren {
   AuthedShellMemoryBrainRoute: typeof AuthedShellMemoryBrainRoute;
-  AuthedShellMemoryKbsRoute: typeof AuthedShellMemoryKbsRoute;
+  AuthedShellMemoryKbsRoute: typeof AuthedShellMemoryKbsRouteWithChildren;
   AuthedShellMemoryPagesRoute: typeof AuthedShellMemoryPagesRoute;
   AuthedShellMemoryIndexRoute: typeof AuthedShellMemoryIndexRoute;
 }
 
 const AuthedShellMemoryRouteChildren: AuthedShellMemoryRouteChildren = {
   AuthedShellMemoryBrainRoute: AuthedShellMemoryBrainRoute,
-  AuthedShellMemoryKbsRoute: AuthedShellMemoryKbsRoute,
+  AuthedShellMemoryKbsRoute: AuthedShellMemoryKbsRouteWithChildren,
   AuthedShellMemoryPagesRoute: AuthedShellMemoryPagesRoute,
   AuthedShellMemoryIndexRoute: AuthedShellMemoryIndexRoute,
 };
