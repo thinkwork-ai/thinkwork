@@ -23,6 +23,7 @@ import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_s
 import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
+import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./routes/_authed/_shell/automations.$scheduledJobId";
 import { Route as AuthedShellAppsIdRouteImport } from "./routes/_authed/_shell/apps.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 
@@ -95,6 +96,12 @@ const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   path: "/threads/$id",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellAutomationsScheduledJobIdRoute =
+  AuthedShellAutomationsScheduledJobIdRouteImport.update({
+    id: "/$scheduledJobId",
+    path: "/$scheduledJobId",
+    getParentRoute: () => AuthedShellAutomationsRoute,
+  } as any);
 const AuthedShellAppsIdRoute = AuthedShellAppsIdRouteImport.update({
   id: "/apps/$id",
   path: "/apps/$id",
@@ -112,12 +119,13 @@ export interface FileRoutesByFullPath {
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/automations": typeof AuthedShellAutomationsRoute;
+  "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRoute;
   "/memory": typeof AuthedShellMemoryRoute;
   "/new": typeof AuthedShellNewRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
+  "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
@@ -128,12 +136,13 @@ export interface FileRoutesByTo {
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/automations": typeof AuthedShellAutomationsRoute;
+  "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRoute;
   "/memory": typeof AuthedShellMemoryRoute;
   "/new": typeof AuthedShellNewRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
+  "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
@@ -147,12 +156,13 @@ export interface FileRoutesById {
   "/sign-in": typeof SignInRoute;
   "/_authed/_shell": typeof AuthedShellRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/_authed/_shell/automations": typeof AuthedShellAutomationsRoute;
+  "/_authed/_shell/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRoute;
   "/_authed/_shell/memory": typeof AuthedShellMemoryRoute;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/apps/$id": typeof AuthedShellAppsIdRoute;
+  "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | "/new"
     | "/approvals/$approvalId"
     | "/apps/$id"
+    | "/automations/$scheduledJobId"
     | "/threads/$id"
     | "/approvals/"
     | "/apps/"
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | "/new"
     | "/approvals/$approvalId"
     | "/apps/$id"
+    | "/automations/$scheduledJobId"
     | "/threads/$id"
     | "/approvals"
     | "/apps"
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/new"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/apps/$id"
+    | "/_authed/_shell/automations/$scheduledJobId"
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/apps/"
@@ -319,6 +332,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellThreadsIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/automations/$scheduledJobId": {
+      id: "/_authed/_shell/automations/$scheduledJobId";
+      path: "/$scheduledJobId";
+      fullPath: "/automations/$scheduledJobId";
+      preLoaderRoute: typeof AuthedShellAutomationsScheduledJobIdRouteImport;
+      parentRoute: typeof AuthedShellAutomationsRoute;
+    };
     "/_authed/_shell/apps/$id": {
       id: "/_authed/_shell/apps/$id";
       path: "/apps/$id";
@@ -336,8 +356,23 @@ declare module "@tanstack/react-router" {
   }
 }
 
+interface AuthedShellAutomationsRouteChildren {
+  AuthedShellAutomationsScheduledJobIdRoute: typeof AuthedShellAutomationsScheduledJobIdRoute;
+}
+
+const AuthedShellAutomationsRouteChildren: AuthedShellAutomationsRouteChildren =
+  {
+    AuthedShellAutomationsScheduledJobIdRoute:
+      AuthedShellAutomationsScheduledJobIdRoute,
+  };
+
+const AuthedShellAutomationsRouteWithChildren =
+  AuthedShellAutomationsRoute._addFileChildren(
+    AuthedShellAutomationsRouteChildren,
+  );
+
 interface AuthedShellRouteChildren {
-  AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRoute;
+  AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRouteWithChildren;
   AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRoute;
   AuthedShellMemoryRoute: typeof AuthedShellMemoryRoute;
   AuthedShellNewRoute: typeof AuthedShellNewRoute;
@@ -350,7 +385,7 @@ interface AuthedShellRouteChildren {
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
-  AuthedShellAutomationsRoute: AuthedShellAutomationsRoute,
+  AuthedShellAutomationsRoute: AuthedShellAutomationsRouteWithChildren,
   AuthedShellCustomizeRoute: AuthedShellCustomizeRoute,
   AuthedShellMemoryRoute: AuthedShellMemoryRoute,
   AuthedShellNewRoute: AuthedShellNewRoute,
