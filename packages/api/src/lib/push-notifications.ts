@@ -32,6 +32,34 @@ interface SendExternalTaskPushParams {
 	eventKind: string;
 }
 
+interface SendComputerApprovalPushParams {
+	userId: string;
+	tenantId: string;
+	approvalId: string;
+	question: string;
+	computerBaseUrl?: string;
+}
+
+export function buildComputerApprovalPushMessage(input: {
+	token: string;
+	approvalId: string;
+	question: string;
+	computerBaseUrl?: string;
+}) {
+	const baseUrl = (input.computerBaseUrl || "https://computer.thinkwork.ai").replace(/\/+$/, "");
+	return {
+		to: input.token,
+		sound: "default",
+		title: "Approval needed",
+		body: input.question.length > 100 ? input.question.slice(0, 97) + "..." : input.question,
+		data: {
+			type: "computer_approval",
+			approvalId: input.approvalId,
+			deepLinkUrl: `${baseUrl}/approvals/${input.approvalId}`,
+		},
+	};
+}
+
 /**
  * Send a push to a specific ThinkWork user (no agent hop). Used by the
  * external-task webhook pipeline: when an external task provider delivers
@@ -100,6 +128,65 @@ export async function sendExternalTaskPush({
 	} catch (err) {
 		// Never let push failures break the ingest pipeline.
 		console.error("[push-notifications] sendExternalTaskPush error:", err);
+	}
+}
+
+export async function sendComputerApprovalPush({
+	userId,
+	tenantId: _tenantId,
+	approvalId,
+	question,
+	computerBaseUrl = process.env.COMPUTER_APP_URL,
+}: SendComputerApprovalPushParams) {
+	try {
+		const db = getDb();
+
+		const rows = await db
+			.select({ id: users.id, email: users.email, token: users.expo_push_token })
+			.from(users)
+			.where(eq(users.id, userId));
+
+		if (rows.length === 0) {
+			console.log(`[push-notifications] User ${userId}: not found, skipping computer approval push`);
+			return;
+		}
+
+		const row = rows[0];
+		if (!row.token) {
+			console.log(`[push-notifications] User ${row.email}: no Expo push token, skipping`);
+			return;
+		}
+		if (!isExpoPushToken(row.token)) {
+			console.warn(`[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`);
+			return;
+		}
+
+		try {
+			const res = await fetch(EXPO_PUSH_URL, {
+				method: "POST",
+				headers: {
+					"Accept": "application/json",
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify([
+					buildComputerApprovalPushMessage({
+						token: row.token,
+						approvalId,
+						question,
+						computerBaseUrl,
+					}),
+				]),
+			});
+			const result = await res.json();
+			console.log(
+				`[push-notifications] computer_approval push (${res.status}) to ${row.email}:`,
+				JSON.stringify(result),
+			);
+		} catch (err) {
+			console.error("[push-notifications] Computer approval push failed:", err);
+		}
+	} catch (err) {
+		console.error("[push-notifications] sendComputerApprovalPush error:", err);
 	}
 }
 

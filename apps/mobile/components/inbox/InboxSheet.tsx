@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "urql";
 import { InboxItemsQuery } from "@/lib/graphql-queries";
 import { useDecideInboxItem, useInboxStatusSubscription } from "@/lib/hooks/use-inbox";
+import { visibleMobileInboxItems } from "@/lib/mobile-inbox";
 import { InboxItemCard } from "./InboxItemCard";
 
 interface InboxSheetProps {
@@ -35,7 +36,7 @@ export function InboxSheet({ visible, onClose, onThreadPress }: InboxSheetProps)
     pause: !tenantId || !visible,
   });
   const [, executeDecide] = useDecideInboxItem();
-  const items = data?.inboxItems ?? [];
+  const items = visibleMobileInboxItems(data?.inboxItems ?? []);
 
   // Re-fetch on subscription event
   const [{ data: subEvent }] = useInboxStatusSubscription(tenantId);

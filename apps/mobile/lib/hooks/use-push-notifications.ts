@@ -6,13 +6,14 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Platform, Alert } from "react-native";
+import { Linking, Platform } from "react-native";
 import { router } from "expo-router";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { useMutation } from "urql";
 import { RegisterPushTokenMutation, UnregisterPushTokenMutation } from "@/lib/graphql-queries";
+import { pushNavigationTarget } from "@/lib/push-navigation";
 
 // Show notifications even when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -64,10 +65,16 @@ export function usePushNotifications(isAuthenticated: boolean) {
       const content = response.notification.request.content;
       const trigger = response.notification.request.trigger as any;
 
-      // content.data for Expo push, trigger.payload for raw APNs/simctl
-      const threadId = content.data?.threadId ?? trigger?.payload?.threadId;
-      if (threadId) {
-        setTimeout(() => router.push(`/thread/${threadId}`), 500);
+      // content.data for Expo push, trigger.payload for raw APNs/simctl.
+      const target = pushNavigationTarget(content.data, trigger?.payload);
+      if (target?.kind === "computer_approval") {
+        setTimeout(() => {
+          Linking.openURL(target.url).catch((err) => {
+            console.error("[push-notifications] Failed to open approval URL:", err);
+          });
+        }, 500);
+      } else if (target?.kind === "thread") {
+        setTimeout(() => router.push(`/thread/${target.threadId}`), 500);
       }
     };
 
