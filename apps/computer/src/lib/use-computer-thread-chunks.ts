@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSubscription } from "urql";
 import { ComputerThreadChunkSubscription } from "@/lib/graphql-queries";
 
@@ -17,29 +17,32 @@ interface ChunkSubscriptionResult {
   } | null;
 }
 
-export function useComputerThreadChunks(
-  threadId: string | null | undefined,
-  resetKey?: string | null,
-) {
+export function useComputerThreadChunks(threadId: string | null | undefined) {
   const [chunks, setChunks] = useState<ComputerThreadChunk[]>([]);
+  const reset = useCallback(() => {
+    setChunks([]);
+  }, []);
 
   useEffect(() => {
     setChunks([]);
-  }, [threadId, resetKey]);
+  }, [threadId]);
 
-  useSubscription<ChunkSubscriptionResult>({
-    query: ComputerThreadChunkSubscription,
-    variables: { threadId },
-    pause: !threadId,
-  }, (_previous, event) => {
-    const next = toComputerThreadChunk(event.onComputerThreadChunk);
-    if (next) {
-      setChunks((current) => mergeComputerThreadChunk(current, next));
-    }
-    return event;
-  });
+  useSubscription<ChunkSubscriptionResult>(
+    {
+      query: ComputerThreadChunkSubscription,
+      variables: { threadId },
+      pause: !threadId,
+    },
+    (_previous, event) => {
+      const next = toComputerThreadChunk(event.onComputerThreadChunk);
+      if (next) {
+        setChunks((current) => mergeComputerThreadChunk(current, next));
+      }
+      return event;
+    },
+  );
 
-  return useMemo(() => chunks, [chunks]);
+  return useMemo(() => ({ chunks, reset }), [chunks, reset]);
 }
 
 export function mergeComputerThreadChunk(

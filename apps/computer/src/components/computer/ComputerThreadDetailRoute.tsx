@@ -84,10 +84,8 @@ export function ComputerThreadDetailRoute({
       pause: !computerId,
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
-  const latestUserMessageId = latestUserMessageIdFromEdges(
-    data?.thread?.messages?.edges,
-  );
-  const chunks = useComputerThreadChunks(threadId, latestUserMessageId);
+  const { chunks, reset: resetStreamingChunks } =
+    useComputerThreadChunks(threadId);
   const [{ data: turnUpdate }] = useSubscription<{
     onThreadTurnUpdated?: { threadId?: string | null } | null;
   }>({
@@ -166,18 +164,24 @@ export function ComputerThreadDetailRoute({
   const visibleThread = optimisticMessage
     ? withOptimisticUserTurn(thread, optimisticMessage)
     : thread;
+  const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
+
+  useEffect(() => {
+    if (hasDurableAssistant) {
+      resetStreamingChunks();
+    }
+  }, [hasDurableAssistant, resetStreamingChunks]);
 
   return (
     <TaskThreadView
       thread={visibleThread}
       isLoading={fetching && !data}
       error={error?.message ?? null}
-      streamingChunks={
-        hasDurableAssistantAfterLatestUser(visibleThread) ? [] : chunks
-      }
+      streamingChunks={hasDurableAssistant ? [] : chunks}
       isSending={sending}
       onSendFollowUp={async (content) => {
         setOptimisticMessage(content);
+        resetStreamingChunks();
         const result = await sendMessage({
           input: {
             threadId,
@@ -302,17 +306,6 @@ function taskErrorMessage(value: unknown): string | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function latestUserMessageIdFromEdges(
-  edges: Array<{ node: { id: string; role: string } }> | undefined | null,
-) {
-  const messages = edges ?? [];
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const node = messages[index]?.node;
-    if (node?.role?.toUpperCase() === "USER") return node.id;
-  }
-  return null;
 }
 
 function hasPersistedUserMessage(
