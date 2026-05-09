@@ -122,5 +122,29 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   E402,I001,UP017` on touched Python files, and `git diff --check` passed
   locally. The repo-local Prettier binary was not installed in this worktree,
   so no touched-file Prettier command was available.
-- **Current PR:** Pending for U5 direct-save reliability before rerunning the
+- **Merged U5 reliability:** PR #1083
+  (`fix(computer): keep artifact builder save in parent turn`) was
+  squash-merged to `main` at
+  `6b31f0f44e7de4b45dc6c0cbf80686c13cd8b67c`; CI passed: CLA, lint,
+  test, typecheck, verify. The deployed `main` pipeline
+  `25610876005` passed, including AgentCore runtime update, Computer deploy,
+  bootstrap reseed, and Computer thread streaming smoke.
+- **Second live proof failure:** Reran the same deployed CRM dashboard smoke
+  after PR #1083 deployed. Thread
+  `9e7927b6-c9a0-4109-b2e8-3ce4c4626588`, task
+  `b01112be-803c-4cc7-a534-da3c3fa5456c` still completed without a linked
+  applet. Diagnostics confirmed the upgraded skill and full recipe path were
+  loaded, but the model still invoked `delegate_to_workspace` and then
+  `delegate` instead of calling the direct `save_app` tool.
+- **Progress:** Started branch `codex/artifact-builder-block-delegation-u6`
+  from merged `main` to enforce the direct-save contract in runtime. Computer
+  applet-build prompts now suppress `delegate` and `delegate_to_workspace`
+  from the Strands tool surface so the parent agent must either call
+  `save_app` directly or trip the Artifact-save-missing guard honestly.
+- **Verification note:** `uv run pytest
+  packages/agentcore-strands/agent-container/test_server_chunk_streaming.py`,
+  `uv run ruff check packages/agentcore-strands/agent-container/container-sources/server.py
+  packages/agentcore-strands/agent-container/test_server_chunk_streaming.py
+  --ignore E402,I001,UP017`, and `git diff --check` passed locally.
+- **Current PR:** Pending for U6 delegate suppression before rerunning the
   deployed CRM dashboard proof.

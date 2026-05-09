@@ -715,6 +715,7 @@ def _call_strands_agent(
     browser_automation_enabled: bool = False,
     stream_thread_id: str | None = None,
     computer_event_context: dict | None = None,
+    suppress_delegate_tools: bool = False,
 ) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -1582,26 +1583,29 @@ def _call_strands_agent(
 
         return delegate
 
-    _delegate_fn = _make_delegate_fn(effective_model, sub_agent_usage)
     from strands import tool as _tool_dec
 
-    tools.append(_tool_dec(_delegate_fn))
-    logger.info("Delegate tool registered (model=%s)", effective_model)
+    if suppress_delegate_tools:
+        logger.info("Delegate tools suppressed for Computer applet-build turn")
+    else:
+        _delegate_fn = _make_delegate_fn(effective_model, sub_agent_usage)
+        tools.append(_tool_dec(_delegate_fn))
+        logger.info("Delegate tool registered (model=%s)", effective_model)
 
-    # Plan §008 U9 (live since plan 2026-04-25-004 U5): path-addressed
-    # delegation. Spawns a Bedrock sub-agent rooted at a workspace folder
-    # (e.g. "expenses", "support/escalation") with the parent's composed
-    # overlay + the folder's local skills. Coexists with the generic
-    # `delegate` above — different purposes. The factory's `spawn_fn=None`
-    # default resolves to the live Bedrock spawn; tests inject explicit
-    # spawn_fn= to keep the seam stub-able.
-    _register_delegate_to_workspace_tool(
-        tools=tools,
-        tool_decorator=_tool_dec,
-        skill_meta=skill_meta,
-        effective_model=effective_model,
-        sub_agent_usage=sub_agent_usage,
-    )
+        # Plan §008 U9 (live since plan 2026-04-25-004 U5): path-addressed
+        # delegation. Spawns a Bedrock sub-agent rooted at a workspace folder
+        # (e.g. "expenses", "support/escalation") with the parent's composed
+        # overlay + the folder's local skills. Coexists with the generic
+        # `delegate` above — different purposes. The factory's `spawn_fn=None`
+        # default resolves to the live Bedrock spawn; tests inject explicit
+        # spawn_fn= to keep the seam stub-able.
+        _register_delegate_to_workspace_tool(
+            tools=tools,
+            tool_decorator=_tool_dec,
+            skill_meta=skill_meta,
+            effective_model=effective_model,
+            sub_agent_usage=sub_agent_usage,
+        )
 
     # PRD-31: AgentSkills plugin for progressive skill disclosure.
     # Discovery: injects <available_skills> XML into system prompt
@@ -2351,6 +2355,11 @@ def _execute_agent_turn(payload: dict) -> dict:
             context_engine_config=context_engine_config,
             browser_automation_enabled=browser_automation_enabled,
             stream_thread_id=ticket_id or None,
+            suppress_delegate_tools=bool(
+                computer_id
+                and computer_task_id
+                and _is_computer_applet_build_request(message)
+            ),
             computer_event_context=(
                 {
                     "tenant_id": workspace_tenant_id or tenant_id_for_audit,
@@ -2420,6 +2429,35 @@ def _restore_env_snapshot(snapshot: dict[str, str | None]) -> None:
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
+
+
+def _is_computer_applet_build_request(prompt: str) -> bool:
+    lowered = (prompt or "").lower()
+    if not any(
+        verb in lowered
+        for verb in (
+            "build",
+            "create",
+            "generate",
+            "make",
+            "draft",
+            "produce",
+        )
+    ):
+        return False
+    return any(
+        noun in lowered
+        for noun in (
+            "app",
+            "applet",
+            "artifact",
+            "dashboard",
+            "report",
+            "briefing",
+            "interactive",
+            "workspace",
+        )
+    )
 
 
 def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
