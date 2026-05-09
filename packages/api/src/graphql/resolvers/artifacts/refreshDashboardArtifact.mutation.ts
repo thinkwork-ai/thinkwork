@@ -6,6 +6,11 @@ import {
   enqueueComputerTask,
 } from "../../../lib/computers/tasks.js";
 import {
+  completeComputerTask,
+  failComputerTask,
+} from "../../../lib/computers/runtime-api.js";
+import { executeDashboardArtifactRefresh } from "../../../lib/dashboard-artifacts/refresh-executor.js";
+import {
   assertReadOnlyDashboardRecipe,
   dashboardRefreshIdempotencyKey,
   loadDashboardArtifact,
@@ -62,11 +67,46 @@ export async function refreshDashboardArtifact(
       createdByUserId: caller.userId,
     });
 
-    return {
-      artifact: artifactToCamel(artifact),
-      task,
-      idempotencyKey,
-    };
+    if (String(task.status ?? "").toLowerCase() !== "pending") {
+      return {
+        artifact: artifactToCamel(artifact),
+        task,
+        idempotencyKey,
+      };
+    }
+
+    try {
+      const refresh = await executeDashboardArtifactRefresh({
+        tenantId: artifact.tenant_id,
+        manifestKey: artifact.s3_key ?? "",
+        manifest,
+      });
+      const completedTask = await completeComputerTask({
+        tenantId: artifact.tenant_id,
+        computerId: metadata.computerId,
+        taskId: task.id,
+        output: refresh.output,
+      });
+
+      return {
+        artifact: artifactToCamel(artifact),
+        task: completedTask,
+        idempotencyKey,
+      };
+    } catch (refreshErr) {
+      await failComputerTask({
+        tenantId: artifact.tenant_id,
+        computerId: metadata.computerId,
+        taskId: task.id,
+        error: {
+          message:
+            refreshErr instanceof Error
+              ? refreshErr.message
+              : String(refreshErr),
+        },
+      });
+      throw refreshErr;
+    }
   } catch (err) {
     if (err instanceof ComputerTaskInputError) {
       throw new GraphQLError(err.message, {

@@ -5,13 +5,19 @@ const {
   selectRowsQueue,
   mockResolveCaller,
   mockReadDashboardManifestFromS3,
+  mockWriteDashboardManifestToS3,
   mockEnqueueComputerTask,
+  mockCompleteComputerTask,
+  mockFailComputerTask,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   mockResolveCaller: vi.fn(),
   mockReadDashboardManifestFromS3: vi.fn(),
+  mockWriteDashboardManifestToS3: vi.fn(),
   mockEnqueueComputerTask: vi.fn(),
+  mockCompleteComputerTask: vi.fn(),
+  mockFailComputerTask: vi.fn(),
 }));
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
@@ -20,6 +26,7 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 
 vi.mock("../lib/dashboard-artifacts/storage.js", () => ({
   readDashboardManifestFromS3: mockReadDashboardManifestFromS3,
+  writeDashboardManifestToS3: mockWriteDashboardManifestToS3,
 }));
 
 vi.mock("../lib/computers/tasks.js", () => {
@@ -40,6 +47,11 @@ vi.mock("../lib/computers/tasks.js", () => {
     }),
   };
 });
+
+vi.mock("../lib/computers/runtime-api.js", () => ({
+  completeComputerTask: mockCompleteComputerTask,
+  failComputerTask: mockFailComputerTask,
+}));
 
 vi.mock("../graphql/utils.js", () => ({
   artifacts: {
@@ -86,7 +98,10 @@ beforeEach(() => {
   mockSelect.mockReset();
   mockResolveCaller.mockReset();
   mockReadDashboardManifestFromS3.mockReset();
+  mockWriteDashboardManifestToS3.mockReset();
   mockEnqueueComputerTask.mockReset();
+  mockCompleteComputerTask.mockReset();
+  mockFailComputerTask.mockReset();
   mockSelect.mockReturnValue({
     from: () => ({
       where: () => queryResult(selectRowsQueue.shift() ?? []),
@@ -102,6 +117,21 @@ beforeEach(() => {
     taskType: "DASHBOARD_ARTIFACT_REFRESH",
     status: "PENDING",
     idempotencyKey: "dashboard-artifact-refresh:artifact-1:1",
+  });
+  mockCompleteComputerTask.mockResolvedValue({
+    id: "task-1",
+    tenantId: "tenant-A",
+    computerId: "computer-1",
+    taskType: "DASHBOARD_ARTIFACT_REFRESH",
+    status: "COMPLETED",
+    output: { refreshed: true },
+    idempotencyKey: "dashboard-artifact-refresh:artifact-1:1",
+    createdAt: new Date("2026-05-08T16:00:00.000Z"),
+    updatedAt: new Date("2026-05-08T16:01:00.000Z"),
+  });
+  mockFailComputerTask.mockResolvedValue({
+    id: "task-1",
+    status: "FAILED",
   });
 });
 
@@ -197,6 +227,60 @@ describe("dashboard artifact resolvers", () => {
       expect.objectContaining({
         taskType: "dashboard_artifact_refresh",
         idempotencyKey: "dashboard-artifact-refresh:artifact-1:1",
+      }),
+    );
+  });
+
+  it("writes a deterministic refreshed manifest and completes the task", async () => {
+    selectRowsQueue.push([dashboardRow()]);
+
+    const result = await refreshDashboardArtifact(
+      null,
+      { id: "artifact-1" },
+      ctx,
+    );
+
+    expect(mockWriteDashboardManifestToS3).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        key: "tenants/tenant-A/dashboard-artifacts/artifact-1/manifest.json",
+        manifest: expect.objectContaining({
+          refresh: expect.objectContaining({
+            lastRefreshAt: expect.any(String),
+            nextAllowedAt: expect.any(String),
+          }),
+        }),
+      }),
+    );
+    expect(mockCompleteComputerTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        computerId: "computer-1",
+        taskId: "task-1",
+        output: expect.objectContaining({
+          refreshed: true,
+          deterministic: true,
+          artifactId: "artifact-1",
+          recipeVersion: 1,
+        }),
+      }),
+    );
+    expect(result.task).toMatchObject({ id: "task-1", status: "COMPLETED" });
+  });
+
+  it("marks the refresh task failed when manifest writing fails", async () => {
+    mockWriteDashboardManifestToS3.mockRejectedValueOnce(new Error("s3 down"));
+    selectRowsQueue.push([dashboardRow()]);
+
+    await expect(
+      refreshDashboardArtifact(null, { id: "artifact-1" }, ctx),
+    ).rejects.toThrow("s3 down");
+    expect(mockFailComputerTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        computerId: "computer-1",
+        taskId: "task-1",
+        error: { message: "s3 down" },
       }),
     );
   });
