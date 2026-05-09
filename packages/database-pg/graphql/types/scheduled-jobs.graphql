@@ -5,6 +5,7 @@ type ScheduledJob {
   tenantId: ID!
   triggerType: String!
   agentId: ID
+  computerId: ID
   routineId: ID
   teamId: ID
   name: String!
@@ -28,6 +29,7 @@ input CreateScheduledJobInput {
   tenantId: ID!
   triggerType: String!
   agentId: ID
+  computerId: ID
   routineId: ID
   teamId: ID
   name: String!
@@ -42,7 +44,7 @@ input CreateScheduledJobInput {
 }
 
 extend type Query {
-  scheduledJobs(tenantId: ID!, agentId: ID, routineId: ID, triggerType: String, enabled: Boolean, limit: Int): [ScheduledJob!]!
+  scheduledJobs(tenantId: ID!, agentId: ID, computerId: ID, routineId: ID, triggerType: String, enabled: Boolean, limit: Int): [ScheduledJob!]!
   scheduledJob(id: ID!): ScheduledJob
 }
 

@@ -8,6 +8,7 @@ import {
 export const scheduledJobs_ = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions = [eq(scheduledJobs.tenant_id, args.tenantId)];
 	if (args.agentId) conditions.push(eq(scheduledJobs.agent_id, args.agentId));
+	if (args.computerId) conditions.push(eq(scheduledJobs.computer_id, args.computerId));
 	if (args.routineId) conditions.push(eq(scheduledJobs.routine_id, args.routineId));
 	if (args.jobType) conditions.push(eq(scheduledJobs.trigger_type, args.jobType));
 	if (args.enabled !== undefined) conditions.push(eq(scheduledJobs.enabled, args.enabled));
