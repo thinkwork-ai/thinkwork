@@ -14,6 +14,31 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U5:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u5-transform` on branch
+  `codex/computer-applets-u5-transform` from `origin/main` after U4 merged.
+- **Progress:** Added the inert apps/computer applet transform substrate:
+  Sucrase compile path, acorn-based import shim, in-memory Blob URL cache,
+  worker entry, and `globalThis.__THINKWORK_APPLET_HOST__` registration before
+  app render. The applet transform path remains unreachable from user routes
+  until U8.
+- **Decision:** U5 keeps the `useAppletAPI` surface from U2 (`useAppletState`,
+  `useAppletQuery`, `useAppletMutation`, `refresh`) and registers an inert
+  host placeholder that throws `INERT_NOT_WIRED`; U9 will body-swap it live.
+- **Verification note:** `pnpm --filter @thinkwork/computer test -- applets`,
+  `pnpm --filter @thinkwork/computer typecheck`, `pnpm --filter
+  @thinkwork/computer build`, `git diff --check`, `pnpm lint`, `pnpm -r
+  --if-present typecheck`, and `pnpm -r --if-present test` passed locally.
+  Build still emits the existing package sourcemap and chunk-size warnings.
+- **Bundle note:** The U5 transform substrate is lazy from app routes until U8.
+  Baseline `origin/main` app JS gzip was 351,859 bytes; U5 app JS gzip was
+  352,031 bytes (+172 bytes), within the plan's +50KB main-bundle budget. The
+  Sucrase worker chunk is not emitted yet because no route imports the
+  transform path before U8.
+- **Smoke note:** The apps/computer dev server started on port 5176 and
+  returned HTTP 200 for `/`.
+- **Current PR:** #1054 (`feat(computer): add inert applet transform path`).
+- **CI:** PR #1054 checks passed: CLA, lint, test, typecheck, verify.
 - **Started U4:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u4-strands-tools` on branch
   `codex/computer-applets-u4-strands-tools` from `origin/main` after U3
