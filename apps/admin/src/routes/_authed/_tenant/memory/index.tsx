@@ -18,7 +18,7 @@ import {
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
 } from "@/lib/graphql-queries";
-import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@/components/MemoryGraph";
+import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@thinkwork/graph";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";

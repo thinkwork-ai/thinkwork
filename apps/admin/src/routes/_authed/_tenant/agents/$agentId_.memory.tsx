@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@/components/MemoryGraph";
+import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@thinkwork/graph";
 import {
   Sheet,
   SheetContent,

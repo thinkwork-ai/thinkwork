@@ -15,6 +15,10 @@
  * muted when both are unmatched. The whole graph remains visible;
  * nothing is hidden. Opacities are applied in-place via stashed
  * material refs so a filter change doesn't restart the force sim.
+ *
+ * Ported from apps/admin/src/components/WikiGraph.tsx in U2 of the
+ * apps/computer Memory port (plan
+ * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md).
  */
 import {
   useCallback,
@@ -28,16 +32,15 @@ import {
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 import { useQuery, useClient } from "urql";
-import { Loader2, Sparkles } from "lucide-react";
 import * as d3 from "d3-force";
-import { WikiGraphQuery } from "@/lib/graphql-queries";
+import { WikiGraphQuery } from "./queries.js";
 import {
   PAGE_TYPES,
   PAGE_TYPE_FORCE_COLORS,
   PAGE_TYPE_DEFAULT_FORCE_COLOR,
   PAGE_TYPE_LABELS,
   type WikiPageType,
-} from "@/lib/wiki-palette";
+} from "./palettes/wiki-palette.js";
 
 export type { WikiPageType };
 
@@ -48,10 +51,7 @@ type GraphClassification = {
   neighborIds: Set<string>;
 };
 
-function classifyNode(
-  id: string,
-  c: GraphClassification | null,
-): NodeVisualState {
+function classifyNode(id: string, c: GraphClassification | null): NodeVisualState {
   if (!c) return "matched";
   if (c.matchedIds.has(id)) return "matched";
   if (c.neighborIds.has(id)) return "neighbor";
@@ -106,11 +106,27 @@ interface WikiGraphProps {
   onTypesLoaded?: (types: string[]) => void;
   typeFilter?: string[];
   searchQuery?: string;
+  /** Optional render slot for the loading state. */
+  loadingFallback?: React.ReactNode;
+  /** Optional render slot for the empty state. */
+  emptyFallback?: React.ReactNode;
 }
 
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
   function WikiGraph(
-    { tenantId, userId, userIds, agentId, agentIds, onNodeClick, onTypesLoaded, typeFilter, searchQuery },
+    {
+      tenantId,
+      userId,
+      userIds,
+      agentId,
+      agentIds,
+      onNodeClick,
+      onTypesLoaded,
+      typeFilter,
+      searchQuery,
+      loadingFallback,
+      emptyFallback,
+    },
     ref,
   ) {
     // Callback ref: re-measures whenever the mounted DOM element changes.
@@ -123,7 +139,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
     const effectiveUserIds = userIds ?? agentIds;
-    const effectiveUserId = userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
+    const effectiveUserId =
+      userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
     const isMultiAgent = !!effectiveUserIds && effectiveUserIds.length > 1;
     const client = useClient();
 
@@ -151,9 +168,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         await Promise.all(
           effectiveUserIds.map(async (id) => {
             try {
-              const res = await client
-                .query(WikiGraphQuery, { tenantId, userId: id })
-                .toPromise();
+              const res = await client.query(WikiGraphQuery, { tenantId, userId: id }).toPromise();
               if (res.error) {
                 console.warn(`[WikiGraph] wikiGraph failed for user ${id}:`, res.error.message);
               }
@@ -174,17 +189,14 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (isMultiAgent) fetchAllAgents();
     }, [isMultiAgent, fetchAllAgents]);
 
-    const getNodeWithEdgesRef = useRef<WikiGraphHandle["getNodeWithEdges"]>(
-      () => null,
-    );
+    const getNodeWithEdgesRef = useRef<WikiGraphHandle["getNodeWithEdges"]>(() => null);
 
     useImperativeHandle(ref, () => ({
       refetch: () => {
         if (isMultiAgent) fetchAllAgents();
         else singleReexecute({ requestPolicy: "network-only" });
       },
-      getNodeWithEdges: (nodeId: string) =>
-        getNodeWithEdgesRef.current(nodeId),
+      getNodeWithEdges: (nodeId: string) => getNodeWithEdgesRef.current(nodeId),
     }));
 
     useEffect(() => {
@@ -279,12 +291,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // prevents simulation + camera reset on every keystroke.
     const graphData = useMemo(() => {
       const nodeIds = new Set(allNodes.map((n) => n.id));
-      const links: {
-        source: string;
-        target: string;
-        label: string;
-        weight: number;
-      }[] = [];
+      const links: { source: string; target: string; label: string; weight: number }[] = [];
       if (isMultiAgent) {
         for (const [aid, graph] of Object.entries(multiResults)) {
           if (!graph) continue;
@@ -383,8 +390,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // title from the tooltip (nodeLabel callback below passes the raw
       // title to ForceGraph3D).
       const rawLabel = node.label ?? "";
-      const label =
-        rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
+      const label = rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
       // Size by degree. Pages with more links render bigger.
       const degree = node.edgeCount || 1;
       const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
@@ -520,9 +526,11 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       : singleResult.fetching && !singleResult.data;
     if (anyFetching) {
       return (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading graph...
-        </div>
+        loadingFallback ?? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+            Loading graph...
+          </div>
+        )
       );
     }
 
@@ -532,21 +540,20 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
 
     if (graphData.nodes.length === 0) {
       return (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <Sparkles className="h-12 w-12 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground max-w-sm">
-            No compiled memory pages yet — ask an agent a few questions
-            and come back in a few minutes.
-          </p>
-        </div>
+        emptyFallback ?? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-sm text-muted-foreground max-w-sm">
+              No compiled memory pages yet — ask an agent a few questions and come back in a few
+              minutes.
+            </p>
+          </div>
+        )
       );
     }
 
     const typeCounts = PAGE_TYPES.map((t) => ({
       type: t,
-      count: graphData.nodes.filter(
-        (n: any) => (n.entityType as WikiPageType) === t,
-      ).length,
+      count: graphData.nodes.filter((n: any) => (n.entityType as WikiPageType) === t).length,
     }));
 
     return (
@@ -606,9 +613,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
                 const sId = typeof l.source === "object" ? l.source.id : l.source;
                 const tId = typeof l.target === "object" ? l.target.id : l.target;
                 const otherId = sId === node.id ? tId : sId;
-                const otherNode = graphData.nodes.find(
-                  (n: any) => n.id === otherId,
-                );
+                const otherNode = graphData.nodes.find((n: any) => n.id === otherId);
                 return {
                   label: l.label || "references",
                   targetLabel: otherNode?.label ?? otherId,

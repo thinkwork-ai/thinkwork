@@ -14,13 +14,15 @@ import {
   RecentWikiPagesQuery,
   WikiSearchQuery,
 } from "@/lib/graphql-queries";
-import { WikiGraph, type WikiGraphHandle, type WikiGraphNode } from "@/components/WikiGraph";
-import { WikiPageSheet, type WikiPageSheetEdge } from "@/components/WikiPageSheet";
 import {
+  WikiGraph,
+  type WikiGraphHandle,
+  type WikiGraphNode,
   PAGE_TYPE_BADGE_CLASSES,
   pageTypeLabel,
   type WikiPageType,
-} from "@/lib/wiki-palette";
+} from "@thinkwork/graph";
+import { WikiPageSheet, type WikiPageSheetEdge } from "@/components/WikiPageSheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";

@@ -6,7 +6,7 @@ import {
 	PAGE_TYPE_BORDER_CLASSES,
 	pageTypeLabel,
 	type WikiPageType,
-} from "@/lib/wiki-palette";
+} from "@thinkwork/graph";
 import { Badge } from "@/components/ui/badge";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 

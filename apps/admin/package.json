@@ -31,6 +31,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
+    "@thinkwork/graph": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@uiw/codemirror-theme-vscode": "^4.25.9",
