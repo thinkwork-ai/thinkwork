@@ -638,3 +638,24 @@ export const DisableSkillMutation = gql`
     disableSkill(input: $input)
   }
 `;
+
+export const EnableWorkflowMutation = gql`
+  mutation EnableWorkflow($input: EnableWorkflowInput!) {
+    enableWorkflow(input: $input) {
+      id
+      tenantId
+      agentId
+      computerId
+      catalogSlug
+      status
+      enabled
+      updatedAt
+    }
+  }
+`;
+
+export const DisableWorkflowMutation = gql`
+  mutation DisableWorkflow($input: DisableWorkflowInput!) {
+    disableWorkflow(input: $input)
+  }
+`;

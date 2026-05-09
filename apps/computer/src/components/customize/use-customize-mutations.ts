@@ -1,11 +1,13 @@
 import { useCallback, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useMutation, useQuery, type AnyVariables, type TypedDocumentNode } from "urql";
 import { toast } from "sonner";
 import {
   DisableConnectorMutation,
   DisableSkillMutation,
+  DisableWorkflowMutation,
   EnableConnectorMutation,
   EnableSkillMutation,
+  EnableWorkflowMutation,
   MyComputerQuery,
 } from "@/lib/graphql-queries";
 
@@ -14,11 +16,11 @@ interface MyComputerResult {
 }
 
 export interface UseToggleMutationResult {
-  toggle: (slug: string, nextConnected: boolean) => Promise<void>;
+  toggle: (key: string, nextConnected: boolean) => Promise<void>;
   pendingSlugs: ReadonlySet<string>;
 }
 
-/** Back-compat alias retained from U4 wiring. */
+/** Back-compat aliases retained from U4 / U5 wiring. */
 export type UseConnectorMutationResult = UseToggleMutationResult;
 
 const CONNECTOR_TYPENAMES = [
@@ -29,6 +31,12 @@ const CONNECTOR_TYPENAMES = [
 
 const SKILL_TYPENAMES = ["AgentSkill", "CustomizeBindings"] as const;
 
+const WORKFLOW_TYPENAMES = [
+  "Routine",
+  "WorkflowBinding",
+  "CustomizeBindings",
+] as const;
+
 /** Surfaced when a user clicks Connect on an MCP-kind card. */
 export const MCP_VIA_MOBILE_HINT =
   "Connect this MCP server from the mobile app's per-user OAuth flow.";
@@ -37,132 +45,150 @@ export const MCP_VIA_MOBILE_HINT =
 export const BUILTIN_TOOL_HINT =
   "Built-in skills are managed by your tenant template, not the Customize page.";
 
+interface ToggleMutationOptions {
+  enableMutation: TypedDocumentNode<unknown, AnyVariables>;
+  disableMutation: TypedDocumentNode<unknown, AnyVariables>;
+  typenames: readonly string[];
+  buildVariables: (
+    computerId: string,
+    key: string,
+  ) => AnyVariables;
+  /** Map a server `extensions.code` to a sonner `toast.message` hint. */
+  errorCodeHints?: Readonly<Record<string, string>>;
+}
+
+// Per-wrapper option bags hoisted to module scope so each wrapper hook
+// passes a stable reference into useToggleMutation. Inline object
+// literals would invalidate `toggle`'s useCallback deps every render
+// and bust referential identity for downstream consumers.
+const CONNECTOR_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableConnectorMutation,
+  disableMutation: DisableConnectorMutation,
+  typenames: CONNECTOR_TYPENAMES,
+  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
+  errorCodeHints: {
+    CUSTOMIZE_MCP_NOT_SUPPORTED: MCP_VIA_MOBILE_HINT,
+  },
+};
+
+const SKILL_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableSkillMutation,
+  disableMutation: DisableSkillMutation,
+  typenames: SKILL_TYPENAMES,
+  buildVariables: (computerId, skillId) => ({
+    input: { computerId, skillId },
+  }),
+  errorCodeHints: {
+    CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
+  },
+};
+
+const WORKFLOW_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableWorkflowMutation,
+  disableMutation: DisableWorkflowMutation,
+  typenames: WORKFLOW_TYPENAMES,
+  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
+};
+
 /**
- * urql wrapper for the Connectors-tab Connect / Disable button. Resolves
- * the caller's Computer id once via MyComputerQuery, then routes the
- * Sheet's `(slug, nextConnected)` action to enableConnector or
- * disableConnector. Cache invalidation rides on the mutation's
- * `additionalTypenames` so the catalog + bindings queries refetch
- * automatically — no manual setState in the page.
+ * Shared core for the Customize tab Connect / Disable buttons. Resolves
+ * the caller's Computer id once via MyComputerQuery, owns the
+ * pending-key Set so overlapping toggles don't clobber, and routes
+ * server `extensions.code` errors to per-mutation hint messages when
+ * present (otherwise falls back to `toast.error(message)`).
  *
- * MCP-kind catalog rows must NOT be passed to this hook; the per-tab
- * page short-circuits to MCP_VIA_MOBILE_HINT instead.
+ * The connector / skill / workflow hooks are now thin wrappers around
+ * this helper. Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-4.
  */
-export function useConnectorMutation(): UseConnectorMutationResult {
+export function useToggleMutation(
+  opts: ToggleMutationOptions,
+): UseToggleMutationResult {
   const [{ data: computerData }] = useQuery<MyComputerResult>({
     query: MyComputerQuery,
   });
   const computerId = computerData?.myComputer?.id ?? null;
 
-  const [, enable] = useMutation(EnableConnectorMutation);
-  const [, disable] = useMutation(DisableConnectorMutation);
+  const [, enable] = useMutation(opts.enableMutation);
+  const [, disable] = useMutation(opts.disableMutation);
   // Set so overlapping toggles don't clobber each other's pending state.
   const [pendingSlugs, setPendingSlugs] = useState<Set<string>>(
     () => new Set(),
   );
 
   const toggle = useCallback(
-    async (slug: string, nextConnected: boolean) => {
+    async (key: string, nextConnected: boolean) => {
       if (!computerId) {
         toast.error("Couldn't resolve your Computer — please reload.");
         return;
       }
       setPendingSlugs((prev) => {
         const next = new Set(prev);
-        next.add(slug);
+        next.add(key);
         return next;
       });
       try {
+        const variables = opts.buildVariables(computerId, key);
+        const additionalTypenames = [...opts.typenames];
         const result = nextConnected
-          ? await enable(
-              { input: { computerId, slug } },
-              { additionalTypenames: [...CONNECTOR_TYPENAMES] },
-            )
-          : await disable(
-              { input: { computerId, slug } },
-              { additionalTypenames: [...CONNECTOR_TYPENAMES] },
-            );
+          ? await enable(variables, { additionalTypenames })
+          : await disable(variables, { additionalTypenames });
         if (result.error) {
-          const code = result.error.graphQLErrors[0]?.extensions?.code;
-          if (code === "CUSTOMIZE_MCP_NOT_SUPPORTED") {
-            toast.message(MCP_VIA_MOBILE_HINT);
+          const codeRaw =
+            result.error.graphQLErrors[0]?.extensions?.code;
+          const code =
+            typeof codeRaw === "string" ? codeRaw : undefined;
+          const hint = code ? opts.errorCodeHints?.[code] : undefined;
+          if (hint) {
+            toast.message(hint);
           } else {
             toast.error(result.error.message);
           }
         }
       } finally {
         setPendingSlugs((prev) => {
-          if (!prev.has(slug)) return prev;
+          if (!prev.has(key)) return prev;
           const next = new Set(prev);
-          next.delete(slug);
+          next.delete(key);
           return next;
         });
       }
     },
-    [computerId, enable, disable],
+    [computerId, enable, disable, opts],
   );
 
   return { toggle, pendingSlugs };
 }
 
 /**
- * urql wrapper for the Skills-tab Connect / Disable button. Mirrors
- * useConnectorMutation: resolves Computer id once, holds a pendingSlugs
- * Set so overlapping toggles don't clobber, surfaces the typed
- * built-in-tool error code as BUILTIN_TOOL_HINT.
+ * urql wrapper for the Connectors-tab Connect / Disable button. Composes
+ * useToggleMutation with the connector mutation pair, the
+ * `CONNECTOR_TYPENAMES` invalidation set, and routes
+ * `CUSTOMIZE_MCP_NOT_SUPPORTED` to MCP_VIA_MOBILE_HINT.
+ *
+ * MCP-kind catalog rows must NOT be passed to this hook; the per-tab
+ * page short-circuits to MCP_VIA_MOBILE_HINT instead.
+ */
+export function useConnectorMutation(): UseConnectorMutationResult {
+  return useToggleMutation(CONNECTOR_OPTS);
+}
+
+/**
+ * urql wrapper for the Skills-tab Connect / Disable button. Composes
+ * useToggleMutation with the skill mutation pair, the `SKILL_TYPENAMES`
+ * invalidation set, and routes `CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE`
+ * to BUILTIN_TOOL_HINT.
  */
 export function useSkillMutation(): UseToggleMutationResult {
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const computerId = computerData?.myComputer?.id ?? null;
+  return useToggleMutation(SKILL_OPTS);
+}
 
-  const [, enable] = useMutation(EnableSkillMutation);
-  const [, disable] = useMutation(DisableSkillMutation);
-  const [pendingSlugs, setPendingSlugs] = useState<Set<string>>(
-    () => new Set(),
-  );
-
-  const toggle = useCallback(
-    async (skillId: string, nextConnected: boolean) => {
-      if (!computerId) {
-        toast.error("Couldn't resolve your Computer — please reload.");
-        return;
-      }
-      setPendingSlugs((prev) => {
-        const next = new Set(prev);
-        next.add(skillId);
-        return next;
-      });
-      try {
-        const result = nextConnected
-          ? await enable(
-              { input: { computerId, skillId } },
-              { additionalTypenames: [...SKILL_TYPENAMES] },
-            )
-          : await disable(
-              { input: { computerId, skillId } },
-              { additionalTypenames: [...SKILL_TYPENAMES] },
-            );
-        if (result.error) {
-          const code = result.error.graphQLErrors[0]?.extensions?.code;
-          if (code === "CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE") {
-            toast.message(BUILTIN_TOOL_HINT);
-          } else {
-            toast.error(result.error.message);
-          }
-        }
-      } finally {
-        setPendingSlugs((prev) => {
-          if (!prev.has(skillId)) return prev;
-          const next = new Set(prev);
-          next.delete(skillId);
-          return next;
-        });
-      }
-    },
-    [computerId, enable, disable],
-  );
-
-  return { toggle, pendingSlugs };
+/**
+ * urql wrapper for the Workflows-tab Connect / Disable button. Composes
+ * useToggleMutation with the workflow mutation pair and the
+ * `WORKFLOW_TYPENAMES` invalidation set. No special-case error code
+ * routing — `CUSTOMIZE_CATALOG_NOT_FOUND` and
+ * `CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND` fall through to `toast.error`.
+ */
+export function useWorkflowMutation(): UseToggleMutationResult {
+  return useToggleMutation(WORKFLOW_OPTS);
 }
