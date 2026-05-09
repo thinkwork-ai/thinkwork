@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
+  Brain,
   Monitor,
   PenSquare,
   Repeat,
@@ -23,6 +24,7 @@ import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
 import {
   COMPUTER_APPS_ROUTE,
+  COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_WORKBENCH_ROUTE,
 } from "@/lib/computer-routes";
@@ -61,6 +63,7 @@ export function ComputerSidebar() {
       },
       { href: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
       { href: "/automations", icon: Repeat, label: "Automations" },
+      { href: COMPUTER_MEMORY_ROUTE, icon: Brain, label: "Memory" },
       { href: "/customize", icon: SlidersHorizontal, label: "Customize" },
     ],
     [pendingApprovalCount],

@@ -13,6 +13,7 @@ export const MyComputerQuery = gql`
       id
       name
       tenantId
+      ownerUserId
     }
   }
 `;
@@ -265,4 +266,41 @@ export const RejectComputerApprovalMutation = gql`
     }
   }
   ${ComputerApprovalFields}
+`;
+
+export const ComputerMemoryRecordsQuery = gql`
+  query ComputerMemoryRecords(
+    $tenantId: ID!
+    $userId: ID!
+    $namespace: String!
+  ) {
+    memoryRecords(tenantId: $tenantId, userId: $userId, namespace: $namespace) {
+      memoryRecordId
+      content {
+        text
+      }
+      createdAt
+      updatedAt
+      namespace
+      factType
+      confidence
+      tags
+      context
+      threadId
+    }
+  }
+`;
+
+export const DeleteComputerMemoryRecordMutation = gql`
+  mutation DeleteComputerMemoryRecord(
+    $tenantId: ID!
+    $userId: ID!
+    $memoryRecordId: ID!
+  ) {
+    deleteMemoryRecord(
+      tenantId: $tenantId
+      userId: $userId
+      memoryRecordId: $memoryRecordId
+    )
+  }
 `;
