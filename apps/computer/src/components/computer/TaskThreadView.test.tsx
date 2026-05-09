@@ -190,8 +190,8 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Thread activity")).toBeTruthy();
-    expect(screen.getByText("Using crm_search")).toBeTruthy();
+    expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+    expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
   });

@@ -290,6 +290,7 @@ function toTaskThreadTurns(tasks: ThreadTasksResult["computerTasks"]) {
       invocationSource: stringValue(input.source) ?? "chat_message",
       startedAt: task.claimedAt ?? task.createdAt,
       finishedAt: task.completedAt,
+      model: stringValue(output.model),
       usageJson: output.usage,
       resultJson: output,
       error: taskErrorMessage(task.error),
