@@ -1,7 +1,8 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
+  artifacts,
   computerDelegations,
   computers,
   computerEvents,
@@ -639,6 +640,27 @@ export async function recordThreadTurnResponse(input: {
     );
   }
 
+  const turnStartedAt =
+    task.claimed_at instanceof Date
+      ? task.claimed_at
+      : task.created_at instanceof Date
+        ? task.created_at
+        : new Date(0);
+  await db
+    .update(artifacts)
+    .set({
+      source_message_id: assistantMessage.id,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(artifacts.tenant_id, input.tenantId),
+        eq(artifacts.thread_id, thread.id),
+        isNull(artifacts.source_message_id),
+        gte(artifacts.created_at, turnStartedAt),
+      ),
+    );
+
   await db
     .update(threads)
     .set({
@@ -830,6 +852,8 @@ async function loadTask(tenantId: string, computerId: string, taskId: string) {
       id: computerTasks.id,
       task_type: computerTasks.task_type,
       input: computerTasks.input,
+      claimed_at: computerTasks.claimed_at,
+      created_at: computerTasks.created_at,
     })
     .from(computerTasks)
     .where(

@@ -1,7 +1,7 @@
 /**
  * Parity tests for workspace-defaults.
  *
- * The 14 canonical files are exported as inline TypeScript string constants
+ * The canonical files are exported as inline TypeScript string constants
  * from `src/index.ts` (so the Lambda bundle is self-contained). The
  * authoritative content lives as source-controlled `.md` files under this
  * package's own `files/` subdirectory. Plan §008 U2 consolidated the old split
@@ -26,42 +26,48 @@ const LOCAL_FILES_DIR = join(PACKAGE_ROOT, "files");
 
 // Map canonical name → absolute path of its authoritative .md source.
 const AUTHORITATIVE_SOURCES: Record<string, string> = {
-	"SOUL.md": join(LOCAL_FILES_DIR, "SOUL.md"),
-	"IDENTITY.md": join(LOCAL_FILES_DIR, "IDENTITY.md"),
-	"USER.md": join(LOCAL_FILES_DIR, "USER.md"),
-	"AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
-	"CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
-	"GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
-	"MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
-	"CAPABILITIES.md": join(LOCAL_FILES_DIR, "CAPABILITIES.md"),
-	"PLATFORM.md": join(LOCAL_FILES_DIR, "PLATFORM.md"),
-	"ROUTER.md": join(LOCAL_FILES_DIR, "ROUTER.md"),
-	"memory/lessons.md": join(LOCAL_FILES_DIR, "memory", "lessons.md"),
-	"memory/preferences.md": join(LOCAL_FILES_DIR, "memory", "preferences.md"),
-	"memory/contacts.md": join(LOCAL_FILES_DIR, "memory", "contacts.md"),
-	"skills/.gitkeep": join(LOCAL_FILES_DIR, "skills", ".gitkeep"),
+  "SOUL.md": join(LOCAL_FILES_DIR, "SOUL.md"),
+  "IDENTITY.md": join(LOCAL_FILES_DIR, "IDENTITY.md"),
+  "USER.md": join(LOCAL_FILES_DIR, "USER.md"),
+  "AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
+  "CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
+  "GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
+  "MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
+  "CAPABILITIES.md": join(LOCAL_FILES_DIR, "CAPABILITIES.md"),
+  "PLATFORM.md": join(LOCAL_FILES_DIR, "PLATFORM.md"),
+  "ROUTER.md": join(LOCAL_FILES_DIR, "ROUTER.md"),
+  "memory/lessons.md": join(LOCAL_FILES_DIR, "memory", "lessons.md"),
+  "memory/preferences.md": join(LOCAL_FILES_DIR, "memory", "preferences.md"),
+  "memory/contacts.md": join(LOCAL_FILES_DIR, "memory", "contacts.md"),
+  "skills/.gitkeep": join(LOCAL_FILES_DIR, "skills", ".gitkeep"),
+  "skills/artifact-builder/SKILL.md": join(
+    LOCAL_FILES_DIR,
+    "skills",
+    "artifact-builder",
+    "SKILL.md",
+  ),
 };
 
 describe("workspace-defaults parity", () => {
-	it("exports exactly the 14 canonical file names", () => {
-		expect([...CANONICAL_FILE_NAMES].sort()).toEqual(
-			Object.keys(AUTHORITATIVE_SOURCES).sort(),
-		);
-	});
+  it("exports exactly the canonical file names", () => {
+    expect([...CANONICAL_FILE_NAMES].sort()).toEqual(
+      Object.keys(AUTHORITATIVE_SOURCES).sort(),
+    );
+  });
 
-	it("loadDefaults() returns all 14 canonical files", () => {
-		const loaded = loadDefaults();
-		expect(Object.keys(loaded).sort()).toEqual(
-			[...CANONICAL_FILE_NAMES].sort(),
-		);
-	});
+  it("loadDefaults() returns all canonical files", () => {
+    const loaded = loadDefaults();
+    expect(Object.keys(loaded).sort()).toEqual(
+      [...CANONICAL_FILE_NAMES].sort(),
+    );
+  });
 
-	it.each(CANONICAL_FILE_NAMES)(
-		"content for %s matches its authoritative .md source byte-for-byte",
-		(name) => {
-			const inline = loadDefaults()[name];
-			const authoritative = readFileSync(AUTHORITATIVE_SOURCES[name], "utf8");
-			expect(inline).toEqual(authoritative);
-		},
-	);
+  it.each(CANONICAL_FILE_NAMES)(
+    "content for %s matches its authoritative .md source byte-for-byte",
+    (name) => {
+      const inline = loadDefaults()[name];
+      const authoritative = readFileSync(AUTHORITATIVE_SOURCES[name], "utf8");
+      expect(inline).toEqual(authoritative);
+    },
+  );
 });

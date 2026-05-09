@@ -594,6 +594,8 @@ describe("Computer runtime API thread turn execution", () => {
             messageId: "message-1",
             source: "chat_message",
           },
+          claimed_at: new Date("2026-05-09T12:00:00.000Z"),
+          created_at: new Date("2026-05-09T11:59:00.000Z"),
         },
       ],
     ];
@@ -633,6 +635,11 @@ describe("Computer runtime API thread turn execution", () => {
       expect.objectContaining({
         event_type: "thread_turn_response_recorded",
         task_id: "task-1",
+      }),
+    );
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        source_message_id: "assistant-message-1",
       }),
     );
     expect(mocks.updates).toContainEqual(

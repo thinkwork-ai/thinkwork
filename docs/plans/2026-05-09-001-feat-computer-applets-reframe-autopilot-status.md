@@ -14,6 +14,20 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started prompt-generation fix:** Created isolated worktree
+  `.Codex/worktrees/computer-prompt-applet-generation` on branch
+  `codex/computer-prompt-applet-generation` from fresh `origin/main`.
+- **Progress:** Moved the applet-building playbook into a default workspace
+  Agent Skill at `skills/artifact-builder/SKILL.md`, kept only the
+  Computer-thread invariant in the runtime prompt, auto-populated `save_app`
+  metadata with the current thread id and prompt, and linked applets saved
+  during a Computer turn back to the final assistant message so they can render
+  as durable artifacts in the thread.
+- **Verification note:** Focused Python applet/runtime tests, focused API
+  Computer runtime tests, workspace-defaults parity tests, and API plus
+  workspace-defaults typechecks passed locally. The exact live prompt E2E must
+  be rerun after this branch is merged and deployed because dev is still on the
+  previous runtime image/API until the normal pipeline ships the change.
 - **Started follow-up rename:** Created isolated worktree
   `.Codex/worktrees/computer-artifacts-rename` on branch
   `codex/computer-artifacts-rename` from fresh `origin/main` after U14 merged,

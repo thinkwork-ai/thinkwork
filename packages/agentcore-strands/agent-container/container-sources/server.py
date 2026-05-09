@@ -8,6 +8,7 @@ Pure Python — no Node.js dependency.
 
 Build revision: 2026-04-13 — include PR #24 (hindsight async tools).
 """
+
 import asyncio
 import json
 import logging
@@ -31,13 +32,24 @@ _boot_assert_check(os.path.dirname(os.path.abspath(__file__)))
 from permissions import read_permission_profile
 from observability import log_agent_invocation, log_permission_denied
 from safety import validate_message
+
 try:
-    from bedrock_request_tracker import install_on_session, get_captured_request_ids, reset_captured_request_ids
+    from bedrock_request_tracker import (
+        install_on_session,
+        get_captured_request_ids,
+        reset_captured_request_ids,
+    )
+
     _tracker_available = True
 except ImportError:
     _tracker_available = False
-    def get_captured_request_ids(): return []
-    def reset_captured_request_ids(): pass
+
+    def get_captured_request_ids():
+        return []
+
+    def reset_captured_request_ids():
+        pass
+
 
 _tracker_installed = False
 from install_skills import install_skills
@@ -49,6 +61,7 @@ logger = logging.getLogger(__name__)
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
+
 
 def _apply_workspace_bucket_env(bucket: str) -> None:
     if not bucket:
@@ -135,7 +148,9 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
                     uri = loc.get("s3Location", {}).get("uri", "")
                     source = uri.split("/")[-1] if uri else ""
                 if text:
-                    all_chunks.append({"text": text, "score": score, "source": source, "kb": kb.get("name", "")})
+                    all_chunks.append(
+                        {"text": text, "score": score, "source": source, "kb": kb.get("name", "")}
+                    )
         except Exception as e:
             logger.warning("KB retrieval failed for %s: %s", kb_id, e)
 
@@ -145,9 +160,13 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
     all_chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
     all_chunks = all_chunks[:max_results]
 
-    lines = ["## Retrieved Knowledge Base Context", "",
-             "The following excerpts were retrieved from your knowledge bases based on the user's message. "
-             "Use this information to inform your response.", ""]
+    lines = [
+        "## Retrieved Knowledge Base Context",
+        "",
+        "The following excerpts were retrieved from your knowledge bases based on the user's message. "
+        "Use this information to inform your response.",
+        "",
+    ]
     for i, chunk in enumerate(all_chunks, 1):
         source_info = f" (source: {chunk['source']})" if chunk.get("source") else ""
         kb_info = f" [KB: {chunk['kb']}]" if len(kb_config) > 1 else ""
@@ -156,7 +175,12 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
         lines.append("")
 
     context = "\n".join(lines)
-    logger.info("KB retrieval: %d chunks, %d chars for query: %s", len(all_chunks), len(context), query[:100])
+    logger.info(
+        "KB retrieval: %d chunks, %d chars for query: %s",
+        len(all_chunks),
+        len(context),
+        query[:100],
+    )
     return context
 
 
@@ -164,8 +188,9 @@ from external_task_context import format_external_task_context
 from workflow_skill_context import format_workflow_skill_context
 
 
-def _build_system_prompt(skills_config: list | None = None, kb_config: list | None = None,
-                         profile=None) -> str:
+def _build_system_prompt(
+    skills_config: list | None = None, kb_config: list | None = None, profile=None
+) -> str:
     """Build system prompt from workspace files + installed skills + KB info.
 
     If a ContextProfile is provided, only load files listed in the profile.
@@ -176,6 +201,7 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     if profile:
         # Profile-aware: load only files specified by the resolved profile
         from router_parser import expand_file_list
+
         file_paths = expand_file_list(WORKSPACE_DIR, profile.load)
         for rel_path in file_paths:
             filepath = os.path.join(WORKSPACE_DIR, rel_path)
@@ -191,7 +217,14 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
         # Legacy: load all known workspace files.
         # AGENTS.md (the map) and CONTEXT.md (the router) are always loaded when present.
         # They replace SKILL.md injection by providing a catalog of available skills/tools.
-        for filename in ["SOUL.md", "IDENTITY.md", "USER.md", "AGENTS.md", "CONTEXT.md", "TOOLS.md"]:
+        for filename in [
+            "SOUL.md",
+            "IDENTITY.md",
+            "USER.md",
+            "AGENTS.md",
+            "CONTEXT.md",
+            "TOOLS.md",
+        ]:
             filepath = os.path.join(WORKSPACE_DIR, filename)
             if os.path.isfile(filepath):
                 try:
@@ -208,10 +241,14 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
 
     if skills_config and not has_workspace_map:
-        logger.info("AgentSkills plugin handles %d skills via progressive disclosure", len(skills_config))
+        logger.info(
+            "AgentSkills plugin handles %d skills via progressive disclosure", len(skills_config)
+        )
     elif has_workspace_map:
-        logger.info("AGENTS.md found — skipping skill injection (%d skills in map)",
-                     len(skills_config) if skills_config else 0)
+        logger.info(
+            "AGENTS.md found — skipping skill injection (%d skills in map)",
+            len(skills_config) if skills_config else 0,
+        )
 
     # U6: the PRD-40 execution-type context-body loop that inlined every
     # execution: context skill's SKILL.md body into the system prompt is
@@ -220,10 +257,14 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
 
     # Add knowledge base information to system prompt
     if kb_config:
-        kb_lines = ["## Knowledge Bases", "",
-                     "You have access to the following knowledge bases via the `knowledge_base_search` tool. "
-                     "Use this tool to find relevant information from uploaded documents before answering questions "
-                     "about company policies, procedures, or reference material.", ""]
+        kb_lines = [
+            "## Knowledge Bases",
+            "",
+            "You have access to the following knowledge bases via the `knowledge_base_search` tool. "
+            "Use this tool to find relevant information from uploaded documents before answering questions "
+            "about company policies, procedures, or reference material.",
+            "",
+        ]
         for kb in kb_config:
             name = kb.get("name", "Unknown")
             desc = kb.get("description", "")
@@ -233,11 +274,13 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     # Inject current date so the agent knows "today" and "tomorrow"
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     now = datetime.now(ZoneInfo("America/Chicago"))
     parts.insert(0, f"Current date: {now.strftime('%A, %B %d, %Y')} ({now.strftime('%Z')})")
 
     # Prepend system workspace files (after date, before org workspace)
     from install_skills import SYSTEM_WORKSPACE_DIR
+
     system_parts = []
     for filename in ["PLATFORM.md", "CAPABILITIES.md", "GUARDRAILS.md", "MEMORY_GUIDE.md"]:
         filepath = os.path.join(SYSTEM_WORKSPACE_DIR, filename)
@@ -258,18 +301,11 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     if _PACK_CACHE and _PACK_CACHE.body.strip():
         insert_at = 1 + len(system_parts)
         parts.insert(insert_at, _PACK_CACHE.body.strip())
-        user_id = (
-            os.environ.get("USER_ID", "")
-            or os.environ.get("CURRENT_USER_ID", "")
-        )
-        tenant_id = (
-            os.environ.get("TENANT_ID", "")
-            or os.environ.get("_MCP_TENANT_ID", "")
-        )
+        user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
+        tenant_id = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
         token_count = max(1, len(_PACK_CACHE.body) // 4)
         logger.info(
-            "pack_injected tenant_id=%s user_id=%s scope=user "
-            "token_count=%d chars=%d etag=%s",
+            "pack_injected tenant_id=%s user_id=%s scope=user token_count=%d chars=%d etag=%s",
             tenant_id,
             user_id,
             token_count,
@@ -292,15 +328,10 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
                     last_modified = last_modified.replace(tzinfo=timezone.utc)
                 age_seconds = max(
                     0,
-                    int(
-                        (
-                            datetime.now(timezone.utc) - last_modified
-                        ).total_seconds()
-                    ),
+                    int((datetime.now(timezone.utc) - last_modified).total_seconds()),
                 )
                 logger.info(
-                    "pack_age_at_load_seconds tenant_id=%s user_id=%s "
-                    "scope=user age_seconds=%d",
+                    "pack_age_at_load_seconds tenant_id=%s user_id=%s scope=user age_seconds=%d",
                     tenant_id,
                     user_id,
                     age_seconds,
@@ -316,17 +347,26 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
                 logger.debug("pack age calculation skipped: %s", exc)
 
     if len(parts) > 0:
-        logger.info("System prompt built from %d parts, total chars=%d", len(parts), sum(len(p) for p in parts))
+        logger.info(
+            "System prompt built from %d parts, total chars=%d",
+            len(parts),
+            sum(len(p) for p in parts),
+        )
         return "\n\n---\n\n".join(parts)
     else:
         logger.warning("No workspace files found in %s", WORKSPACE_DIR)
         return "You are a helpful assistant."
 
 
-def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
-                            skills_config: list | None = None,
-                            tenant_slug: str = "", instance_id: str = "",
-                            agent_name: str = "", human_name: str = ""):
+def _ensure_workspace_ready(
+    workspace_tenant_id: str,
+    assistant_id: str,
+    skills_config: list | None = None,
+    tenant_slug: str = "",
+    instance_id: str = "",
+    agent_name: str = "",
+    human_name: str = "",
+):
     """Sync the agent's S3 prefix to /tmp/workspace.
 
     Per docs/plans/2026-04-27-003 (materialize-at-write-time): the agent's
@@ -346,11 +386,7 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
         return
 
-    bucket = (
-        os.environ.get("WORKSPACE_BUCKET")
-        or os.environ.get("AGENTCORE_FILES_BUCKET")
-        or ""
-    )
+    bucket = os.environ.get("WORKSPACE_BUCKET") or os.environ.get("AGENTCORE_FILES_BUCKET") or ""
     ws_tenant = tenant_slug or workspace_tenant_id
     ws_instance = instance_id or assistant_id
 
@@ -359,7 +395,9 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
     if not bucket or not ws_tenant or not ws_instance:
         logger.warning(
             "workspace_sync action=skip reason=missing_config bucket=%r tenant=%r instance=%r",
-            bool(bucket), bool(ws_tenant), bool(ws_instance),
+            bool(bucket),
+            bool(ws_tenant),
+            bool(ws_instance),
         )
         return
 
@@ -380,7 +418,10 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
     sync_ms = round((time.time() - t_sync) * 1000)
     logger.info(
         "workspace_sync action=bootstrap sync_ms=%d synced=%d deleted=%d total=%d",
-        sync_ms, result.synced, result.deleted, result.total,
+        sync_ms,
+        result.synced,
+        result.deleted,
+        result.total,
     )
 
     # User knowledge pack — separate per-user prompt injection. Refreshed
@@ -458,15 +499,9 @@ def _register_delegate_to_workspace_tool(
         )
         return
 
-    _dw_api_url = (
-        os.environ.get("THINKWORK_API_URL")
-        or os.environ.get("API_URL")
-        or ""
-    )
+    _dw_api_url = os.environ.get("THINKWORK_API_URL") or os.environ.get("API_URL") or ""
     _dw_api_secret = (
-        os.environ.get("API_AUTH_SECRET")
-        or os.environ.get("INTERNAL_API_SECRET")
-        or ""
+        os.environ.get("API_AUTH_SECRET") or os.environ.get("INTERNAL_API_SECRET") or ""
     )
     _dw_tenant = os.environ.get("TENANT_ID", "")
     _dw_agent = os.environ.get("AGENT_ID", "") or os.environ.get("_ASSISTANT_ID", "")
@@ -572,11 +607,18 @@ def _build_mcp_clients(mcp_configs: list | None) -> list:
     constructing a Bedrock-backed Agent.
     """
     mcp_clients = []
-    logger.info("MCP configs received: %d servers, raw=%s",
-                len(mcp_configs or []),
-                json.dumps([{k: ("***" if k == "auth" else v)
-                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
-    for cfg in (mcp_configs or []):
+    logger.info(
+        "MCP configs received: %d servers, raw=%s",
+        len(mcp_configs or []),
+        json.dumps(
+            [
+                {k: ("***" if k == "auth" else v) for k, v in cfg.items()}
+                for cfg in (mcp_configs or [])
+            ],
+            default=str,
+        ),
+    )
+    for cfg in mcp_configs or []:
         url = cfg.get("url", "")
         if not url:
             logger.warning("MCP config has no url, skipping: %s", cfg)
@@ -585,8 +627,13 @@ def _build_mcp_clients(mcp_configs: list | None) -> list:
         headers = {}
         auth = cfg.get("auth") or {}
         has_token = bool(auth.get("token"))
-        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
-                    server_name, url, has_token, auth.get("type", "none"))
+        logger.info(
+            "MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
+            server_name,
+            url,
+            has_token,
+            auth.get("type", "none"),
+        )
         if auth.get("token"):
             auth_type = auth.get("type", "bearer")
             if auth_type == "bearer":
@@ -596,15 +643,27 @@ def _build_mcp_clients(mcp_configs: list | None) -> list:
         try:
             from strands.tools.mcp import MCPClient
             from mcp.client.streamable_http import streamablehttp_client
+
             logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
             client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
             # Don't call start() — the Agent will start the client and load tools automatically.
             # Just register the client as a tool provider.
             mcp_clients.append(client)
-            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
+            logger.info(
+                "MCP client registered: %s url=%s (tools will be discovered by Agent)",
+                server_name,
+                url,
+            )
         except Exception as e:
             import traceback
-            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
+
+            logger.error(
+                "MCP connection FAILED for %s (%s): %s\n%s",
+                server_name,
+                url,
+                e,
+                traceback.format_exc(),
+            )
 
     return mcp_clients
 
@@ -630,20 +689,23 @@ def _build_computer_event_sink(context: dict | None):
     return append_event
 
 
-def _call_strands_agent(system_prompt: str, messages: list,
-                        model: str = "",
-                        skills_config: list | None = None,
-                        guardrail_config: dict | None = None,
-                        mcp_configs: list | None = None,
-                        disabled_builtin_tools: list | None = None,
-                        template_blocked_tools: list | None = None,
-                        web_search_config: dict | None = None,
-                        send_email_config: dict | None = None,
-                        context_engine_enabled: bool = False,
-                        context_engine_config: dict | None = None,
-                        browser_automation_enabled: bool = False,
-                        stream_thread_id: str | None = None,
-                        computer_event_context: dict | None = None) -> tuple[str, dict]:
+def _call_strands_agent(
+    system_prompt: str,
+    messages: list,
+    model: str = "",
+    skills_config: list | None = None,
+    guardrail_config: dict | None = None,
+    mcp_configs: list | None = None,
+    disabled_builtin_tools: list | None = None,
+    template_blocked_tools: list | None = None,
+    web_search_config: dict | None = None,
+    send_email_config: dict | None = None,
+    context_engine_enabled: bool = False,
+    context_engine_config: dict | None = None,
+    browser_automation_enabled: bool = False,
+    stream_thread_id: str | None = None,
+    computer_event_context: dict | None = None,
+) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
     ``disabled_builtin_tools`` / ``template_blocked_tools`` implement the
@@ -660,6 +722,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     effective_model = model or DEFAULT_MODEL
     try:
         from strands.models.bedrock import CacheConfig
+
         cache_cfg = CacheConfig(strategy="auto")
     except ImportError:
         cache_cfg = None
@@ -671,9 +734,11 @@ def _call_strands_agent(system_prompt: str, messages: list,
         bedrock_kwargs["guardrail_id"] = guardrail_config["guardrailIdentifier"]
         bedrock_kwargs["guardrail_version"] = guardrail_config["guardrailVersion"]
         bedrock_kwargs["guardrail_trace"] = "enabled"
-        logger.info("Bedrock guardrail enabled: id=%s version=%s",
-                     guardrail_config["guardrailIdentifier"],
-                     guardrail_config["guardrailVersion"])
+        logger.info(
+            "Bedrock guardrail enabled: id=%s version=%s",
+            guardrail_config["guardrailIdentifier"],
+            guardrail_config["guardrailVersion"],
+        )
 
     bedrock_model = BedrockModel(
         model_id=effective_model,
@@ -700,13 +765,19 @@ def _call_strands_agent(system_prompt: str, messages: list,
     if isinstance(current_msg, list):
         current_msg = " ".join(b.get("text", "") for b in current_msg if isinstance(b, dict))
 
-    logger.info("Invoking Strands agent: model=%s, history=%d msgs, prompt_len=%d, system_len=%d",
-                effective_model, len(history), len(current_msg), len(system_prompt))
+    logger.info(
+        "Invoking Strands agent: model=%s, history=%d msgs, prompt_len=%d, system_len=%d",
+        effective_model,
+        len(history),
+        len(current_msg),
+        len(system_prompt),
+    )
     stream_callback_handler = None
     stream_publisher = None
     if stream_thread_id:
         try:
             from appsync_publisher import build_appsync_chunk_callback
+
             # Wire the same computer-event sink the browser tool uses so
             # tool_invocation_started events surface live (otherwise the UI
             # only sees tool calls when the turn finishes and
@@ -731,6 +802,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # HINDSIGHT_ENDPOINT is set in the environment.
     try:
         from memory_tools import remember, recall, forget
+
         tools.extend([remember, recall, forget])
         logger.info("Managed memory tools registered: remember, recall, forget")
     except Exception as e:
@@ -742,6 +814,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # `_validate_memory_path` (NFKC + regex + reserved-segment + depth-5).
     try:
         from write_memory_tool import write_memory
+
         tools.append(write_memory)
         logger.info("workspace tool registered: write_memory")
     except Exception as e:
@@ -749,6 +822,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
     try:
         from wake_workspace_tool import make_wake_workspace_from_env
+
         tools.append(make_wake_workspace_from_env())
         logger.info("workspace tool registered: wake_workspace")
     except Exception as e:
@@ -778,6 +852,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     #   - update_user_profile: agent edits the paired human's structured profile
     try:
         from update_agent_name_tool import update_agent_name
+
         tools.append(update_agent_name)
         logger.info("workspace tool registered: update_agent_name")
     except Exception as e:
@@ -785,6 +860,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
     try:
         from update_identity_tool import update_identity
+
         tools.append(update_identity)
         logger.info("workspace tool registered: update_identity")
     except Exception as e:
@@ -792,6 +868,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
     try:
         from update_user_profile_tool import update_user_profile
+
         tools.append(update_user_profile)
         logger.info("workspace tool registered: update_user_profile")
     except Exception as e:
@@ -912,6 +989,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
             async def _start_session(ipi: str, timeout: int) -> str:
                 import asyncio as _a
+
                 loop = _a.get_event_loop()
 
                 def _start():
@@ -940,6 +1018,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
             async def _stop_session(ipi: str, sess: str) -> None:
                 import asyncio as _a
+
                 loop = _a.get_event_loop()
 
                 def _stop():
@@ -955,6 +1034,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
             async def _run_code(ipi: str, sess: str, code: str) -> dict:
                 import asyncio as _a
+
                 loop = _a.get_event_loop()
 
                 def _run():
@@ -975,14 +1055,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
             # without touching the interpreter — fail-closed discipline
             # per plan R-Q8.
             _sb_api_url = (
-                os.environ.get("THINKWORK_API_URL")
-                or os.environ.get("MCP_BASE_URL")
-                or ""
+                os.environ.get("THINKWORK_API_URL") or os.environ.get("MCP_BASE_URL") or ""
             )
             _sb_api_secret = (
-                os.environ.get("API_AUTH_SECRET")
-                or os.environ.get("THINKWORK_API_SECRET")
-                or ""
+                os.environ.get("API_AUTH_SECRET") or os.environ.get("THINKWORK_API_SECRET") or ""
             )
             _sb_tenant = os.environ.get("TENANT_ID", "")
             _sb_agent = os.environ.get("AGENT_ID", "")
@@ -996,13 +1072,16 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 import asyncio as _a
                 import json as _j
                 from urllib.request import Request, urlopen
+
                 loop = _a.get_event_loop()
 
                 def _post() -> dict:
-                    body = _j.dumps({
-                        "tenant_id": _sb_tenant,
-                        "agent_id": _sb_agent,
-                    }).encode("utf-8")
+                    body = _j.dumps(
+                        {
+                            "tenant_id": _sb_tenant,
+                            "agent_id": _sb_agent,
+                        }
+                    ).encode("utf-8")
                     req = Request(
                         f"{_sb_api_url.rstrip('/')}/api/sandbox/quota/check-and-increment",
                         data=body,
@@ -1042,6 +1121,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 import asyncio as _a
                 import json as _j
                 from urllib.request import Request, urlopen
+
                 loop = _a.get_event_loop()
 
                 def _post() -> None:
@@ -1141,12 +1221,14 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         tools.append(search_wiki)
                         tools.append(read_wiki_page)
                         logger.info(
-                            "Wiki tools registered: search_wiki + read_wiki_page "
-                            "tenant=%s user=%s", hs_tenant, hs_user,
+                            "Wiki tools registered: search_wiki + read_wiki_page tenant=%s user=%s",
+                            hs_tenant,
+                            hs_user,
                         )
                     except Exception as _wiki_err:
                         logger.warning(
-                            "Wiki tools registration failed: %s", _wiki_err,
+                            "Wiki tools registration failed: %s",
+                            _wiki_err,
                         )
             else:
                 logger.warning(
@@ -1177,6 +1259,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # Add file_read tool for skill resource access
     try:
         from strands_tools import file_read as _strands_file_read
+
         tools.append(_strands_file_read)
         logger.info("strands_tools.file_read added for skill resource access")
     except Exception:
@@ -1242,6 +1325,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # mode: tool  → scripts registered as direct tools on parent
     # mode: agent → skill invocation spins up a sub-agent with its own reasoning loop
     from skill_runner import register_skill_tools
+
     tool_mode_tools, agent_mode_tools, skill_meta = register_skill_tools(
         skills_config or [],
         workspace_dir=WORKSPACE_DIR,
@@ -1263,11 +1347,13 @@ def _call_strands_agent(system_prompt: str, messages: list,
         # Inject current date
         from datetime import datetime
         from zoneinfo import ZoneInfo
+
         now = datetime.now(ZoneInfo("America/Chicago"))
         prompt_parts.append(f"Current date: {now.strftime('%A, %B %d, %Y')} ({now.strftime('%Z')})")
 
         # System guardrails (same as parent)
         from install_skills import SYSTEM_WORKSPACE_DIR
+
         for sysfile in ["PLATFORM.md", "GUARDRAILS.md"]:
             syspath = os.path.join(SYSTEM_WORKSPACE_DIR, sysfile)
             if os.path.isfile(syspath):
@@ -1304,6 +1390,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     def _extract_genui(agent_instance) -> list:
         """Extract GenUI data from a sub-agent's tool result messages."""
         import json as _json
+
         genui_items = []
         try:
             _msgs = agent_instance.messages or []
@@ -1314,7 +1401,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     if not isinstance(block, dict) or "toolResult" not in block:
                         continue
                     tr_content = block["toolResult"].get("content", [])
-                    for c in (tr_content if isinstance(tr_content, list) else []):
+                    for c in tr_content if isinstance(tr_content, list) else []:
                         if isinstance(c, dict) and "text" in c:
                             try:
                                 parsed = _json.loads(c["text"])
@@ -1330,6 +1417,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     _file_read_tool = None
     try:
         from strands_tools import file_read as _fr
+
         _file_read_tool = _fr
     except Exception:
         pass
@@ -1348,36 +1436,53 @@ def _call_strands_agent(system_prompt: str, messages: list,
             def make_skill_agent_fn(cfg_model, cfg_prompt, cfg_tools, usage_acc):
                 def skill_agent_fn(query: str) -> str:
                     from strands.models import BedrockModel as SubBM
+
                     try:
                         from strands.models.bedrock import CacheConfig as _CC
+
                         _sub_cache = _CC(strategy="auto")
                     except ImportError:
                         _sub_cache = None
-                    m = SubBM(model_id=cfg_model, region_name=AWS_REGION, streaming=True,
-                              **({"cache_config": _sub_cache} if _sub_cache else {}))
-                    a = Agent(model=m, system_prompt=cfg_prompt, tools=cfg_tools, callback_handler=None)
+                    m = SubBM(
+                        model_id=cfg_model,
+                        region_name=AWS_REGION,
+                        streaming=True,
+                        **({"cache_config": _sub_cache} if _sub_cache else {}),
+                    )
+                    a = Agent(
+                        model=m, system_prompt=cfg_prompt, tools=cfg_tools, callback_handler=None
+                    )
                     result = a(query)
                     # Capture sub-agent token usage
                     if result.metrics and result.metrics.accumulated_usage:
                         u = result.metrics.accumulated_usage
-                        usage_acc.append({
-                            "input_tokens": u.get("inputTokens", 0),
-                            "output_tokens": u.get("outputTokens", 0),
-                        })
+                        usage_acc.append(
+                            {
+                                "input_tokens": u.get("inputTokens", 0),
+                                "output_tokens": u.get("outputTokens", 0),
+                            }
+                        )
 
                     # Extract GenUI data from sub-agent's tool results
                     import json as _json
+
                     genui_items = _extract_genui(a)
                     text_response = str(result)
-                    logger.info("Skill sub-agent result: genui=%d items, text_len=%d",
-                                len(genui_items), len(text_response))
+                    logger.info(
+                        "Skill sub-agent result: genui=%d items, text_len=%d",
+                        len(genui_items),
+                        len(text_response),
+                    )
                     if genui_items:
-                        return _json.dumps({
-                            "_genui_response": True,
-                            "text": text_response,
-                            "genui_data": genui_items,
-                        })
+                        return _json.dumps(
+                            {
+                                "_genui_response": True,
+                                "text": text_response,
+                                "genui_data": genui_items,
+                            }
+                        )
                     return text_response
+
                 return skill_agent_fn
 
             _invoke_sub = make_skill_agent_fn(sa_model_id, sa_prompt, sa_tools, sub_agent_usage)
@@ -1388,20 +1493,30 @@ def _call_strands_agent(system_prompt: str, messages: list,
             _invoke_sub.__doc__ = meta.get("description", f"Sub-agent: {skill_id}")
 
             from strands import tool as _tool_dec
+
             tool_fn = _tool_dec(_invoke_sub)
             tools.append(tool_fn)
-            logger.info("Skill sub-agent registered: %s (mode=agent, model=%s, tools=%d, prompt=%d chars)",
-                        tool_name, sa_model_id, len(sa_tools), len(sa_prompt))
+            logger.info(
+                "Skill sub-agent registered: %s (mode=agent, model=%s, tools=%d, prompt=%d chars)",
+                tool_name,
+                sa_model_id,
+                len(sa_tools),
+                len(sa_prompt),
+            )
         except Exception as e:
             logger.error("Failed to register skill sub-agent %s: %s", skill_id, e)
 
     if agent_mode_tools:
-        logger.info("Total tools: %d (including %d mode:agent skill sub-agents with %d total tools)",
-                     len(tools), len(agent_mode_tools),
-                     sum(len(t) for t in agent_mode_tools.values()))
+        logger.info(
+            "Total tools: %d (including %d mode:agent skill sub-agents with %d total tools)",
+            len(tools),
+            len(agent_mode_tools),
+            sum(len(t) for t in agent_mode_tools.values()),
+        )
 
     # 6. Load workspace knowledge into parent prompt (PRD-38: workspaces are context, not agents)
     from context_parser import discover_workspaces
+
     workspace_configs = discover_workspaces(WORKSPACE_DIR)
     if workspace_configs:
         knowledge_sections = []
@@ -1409,8 +1524,13 @@ def _call_strands_agent(system_prompt: str, messages: list,
             if ws.raw_content.strip():
                 knowledge_sections.append(f"## {ws.name}\n\n{ws.raw_content}")
         if knowledge_sections:
-            system_prompt += "\n\n---\n\n# Workspace Knowledge\n\n" + "\n\n---\n\n".join(knowledge_sections)
-            logger.info("Injected %d workspace knowledge sections into parent prompt", len(knowledge_sections))
+            system_prompt += "\n\n---\n\n# Workspace Knowledge\n\n" + "\n\n---\n\n".join(
+                knowledge_sections
+            )
+            logger.info(
+                "Injected %d workspace knowledge sections into parent prompt",
+                len(knowledge_sections),
+            )
 
     # 7. Built-in delegate tool for ad-hoc reasoning (PRD-38)
     # Allows the orchestrator to spawn a focused sub-agent for complex analysis
@@ -1422,27 +1542,39 @@ def _call_strands_agent(system_prompt: str, messages: list,
             that doesn't fit a specific skill. Provide context to set the
             sub-agent's focus."""
             from strands.models import BedrockModel as SubBM
+
             try:
                 from strands.models.bedrock import CacheConfig as _CC
+
                 _sub_cache = _CC(strategy="auto")
             except ImportError:
                 _sub_cache = None
-            m = SubBM(model_id=cfg_model, region_name=AWS_REGION, streaming=True,
-                      **({"cache_config": _sub_cache} if _sub_cache else {}))
-            prompt = context if context else "You are a focused reasoning assistant. Think step by step."
+            m = SubBM(
+                model_id=cfg_model,
+                region_name=AWS_REGION,
+                streaming=True,
+                **({"cache_config": _sub_cache} if _sub_cache else {}),
+            )
+            prompt = (
+                context if context else "You are a focused reasoning assistant. Think step by step."
+            )
             a = Agent(model=m, system_prompt=prompt, tools=[], callback_handler=None)
             result = a(task)
             if result.metrics and result.metrics.accumulated_usage:
                 u = result.metrics.accumulated_usage
-                usage_acc.append({
-                    "input_tokens": u.get("inputTokens", 0),
-                    "output_tokens": u.get("outputTokens", 0),
-                })
+                usage_acc.append(
+                    {
+                        "input_tokens": u.get("inputTokens", 0),
+                        "output_tokens": u.get("outputTokens", 0),
+                    }
+                )
             return str(result)
+
         return delegate
 
     _delegate_fn = _make_delegate_fn(effective_model, sub_agent_usage)
     from strands import tool as _tool_dec
+
     tools.append(_tool_dec(_delegate_fn))
     logger.info("Delegate tool registered (model=%s)", effective_model)
 
@@ -1468,6 +1600,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     plugins = []
     try:
         from strands import AgentSkills
+
         skill_dirs = []
         for meta in skill_meta.values():
             skill_path = meta.get("skill_dir")
@@ -1498,6 +1631,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # misbehaving MCP tool via the same kill-switch list. Tenant wins the
     # intersection; unknown slugs are runtime no-ops with a WARN log.
     from builtin_tool_filter import filter_builtin_tools, log_filter_result
+
     _filter_result = filter_builtin_tools(
         tools,
         disabled_builtin_tools=disabled_builtin_tools or (),
@@ -1523,6 +1657,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
             is_enforcement_enabled,
             log_shadow_compare,
         )
+
         _rcm_registered_slugs = []
         for _t in tools:
             _tname = getattr(_t, "tool_name", None) or getattr(_t, "__name__", None)
@@ -1538,7 +1673,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
         )
         if _rcm_enforce and _rcm_catalog.ok:
             _rcm_filtered = filter_by_catalog(
-                tools, allowed_slugs=_rcm_catalog.slugs,
+                tools,
+                allowed_slugs=_rcm_catalog.slugs,
             )
             if _rcm_filtered.dropped_slugs:
                 logger.warning(
@@ -1568,6 +1704,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # infra can never block a session.
     try:
         from capability_manifest import build_and_log as _rcm_build_and_log
+
         _rcm_skills = [
             {"slug": s.get("slug") or s.get("skillId") or "", "source": s.get("source", "builtin")}
             for s in (skills_config or [])
@@ -1620,7 +1757,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
         # Clean up MCP client connections (must happen even on error)
         for _mcp_c in mcp_clients:
             try:
-                if hasattr(_mcp_c, '_session') and _mcp_c._session:
+                if hasattr(_mcp_c, "_session") and _mcp_c._session:
                     _mcp_c.stop()
             except Exception as _mcp_err:
                 logger.warning("MCP client cleanup error: %s", _mcp_err)
@@ -1633,6 +1770,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
         if _sandbox_cleanup_fn is not None:
             try:
                 import asyncio as _a
+
                 _a.get_event_loop().run_until_complete(_sandbox_cleanup_fn())
             except Exception as _sb_err:
                 logger.warning("sandbox cleanup failed: %s", _sb_err)
@@ -1652,8 +1790,12 @@ def _call_strands_agent(system_prompt: str, messages: list,
     if sub_agent_usage:
         sa_total_in = sum(u.get("input_tokens", 0) for u in sub_agent_usage)
         sa_total_out = sum(u.get("output_tokens", 0) for u in sub_agent_usage)
-        logger.info("Sub-agent token usage: %d entries, input=%d output=%d (tracked separately)",
-                     len(sub_agent_usage), sa_total_in, sa_total_out)
+        logger.info(
+            "Sub-agent token usage: %d entries, input=%d output=%d (tracked separately)",
+            len(sub_agent_usage),
+            sa_total_in,
+            sa_total_out,
+        )
 
     # 6. Extract tool calls from conversation history (with per-tool input/output)
     tools_called = []
@@ -1664,10 +1806,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
     try:
         pending_tools = {}  # tool_use_id → invocation dict
         seq = 0
-        for msg in (agent.messages or []):
+        for msg in agent.messages or []:
             if not isinstance(msg, dict):
                 continue
-            for block in (msg.get("content") or []):
+            for block in msg.get("content") or []:
                 if not isinstance(block, dict):
                     continue
                 if "toolUse" in block:
@@ -1688,6 +1830,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                             input_preview = str(tool_input["query"])[:5000]
                         else:
                             import json as _json
+
                             input_preview = _json.dumps(tool_input, default=str)[:5000]
                     else:
                         input_preview = str(tool_input)[:5000]
@@ -1736,6 +1879,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                             # Inject _source so GenUI cards can be refreshed without re-invoking the LLM
                             try:
                                 import json as _json
+
                                 parsed = _json.loads(full_output)
                                 if isinstance(parsed, dict):
                                     # Inject _source for MCP tool calls (not sub-agents)
@@ -1744,7 +1888,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                                         preview = inv.get("input_preview", "")
                                         _source = {
                                             "tool": inv.get("tool_name", ""),
-                                            "params": _json.loads(preview) if preview.startswith("{") else {},
+                                            "params": _json.loads(preview)
+                                            if preview.startswith("{")
+                                            else {},
                                         }
                                     if "_type" in parsed:
                                         if _source:
@@ -1753,7 +1899,11 @@ def _call_strands_agent(system_prompt: str, messages: list,
                                     elif parsed.get("_genui_response") and parsed.get("genui_data"):
                                         genui_items = parsed["genui_data"]
                                         if _source:
-                                            for gi in (genui_items if isinstance(genui_items, list) else [genui_items]):
+                                            for gi in (
+                                                genui_items
+                                                if isinstance(genui_items, list)
+                                                else [genui_items]
+                                            ):
                                                 if isinstance(gi, dict):
                                                     gi["_source"] = _source
                                         inv["genui_data"] = genui_items
@@ -1772,31 +1922,44 @@ def _call_strands_agent(system_prompt: str, messages: list,
         # text directly with 0 tokens when a guardrail fires
         if response_text.strip() == blocked_msg and input_tokens == 0 and output_tokens == 0:
             guardrail_block = {
-                "blocked": True, "type": "INPUT", "action": "BLOCKED",
-                "topics": [], "filters": {}, "raw": {},
+                "blocked": True,
+                "type": "INPUT",
+                "action": "BLOCKED",
+                "topics": [],
+                "filters": {},
+                "raw": {},
             }
             logger.warning("Guardrail block detected via blocked message text (input filter)")
 
         # Method 2: Check conversation history for guardrail stop reason
         if not guardrail_block:
             try:
-                for msg in (agent.messages or []):
+                for msg in agent.messages or []:
                     if not isinstance(msg, dict):
                         continue
                     stop_reason = msg.get("stopReason") or msg.get("stop_reason")
                     if stop_reason and str(stop_reason).lower() == "guardrail":
                         guardrail_block = {
-                            "blocked": True, "type": "OUTPUT", "action": "BLOCKED",
-                            "topics": [], "filters": {}, "raw": {},
+                            "blocked": True,
+                            "type": "OUTPUT",
+                            "action": "BLOCKED",
+                            "topics": [],
+                            "filters": {},
+                            "raw": {},
                         }
                         logger.warning("Guardrail block detected in message stop reason")
                         break
-                    for block in (msg.get("content") or []):
-                        if isinstance(block, dict) and "guard" in str(block.get("type", "")).lower():
+                    for block in msg.get("content") or []:
+                        if (
+                            isinstance(block, dict)
+                            and "guard" in str(block.get("type", "")).lower()
+                        ):
                             guardrail_block = {
-                                "blocked": True, "type": block.get("direction", "OUTPUT").upper(),
+                                "blocked": True,
+                                "type": block.get("direction", "OUTPUT").upper(),
                                 "action": block.get("action", "BLOCKED"),
-                                "topics": block.get("topics", []), "filters": block.get("filters", {}),
+                                "topics": block.get("topics", []),
+                                "filters": block.get("filters", {}),
                                 "raw": block,
                             }
                             logger.warning("Guardrail block detected in content block")
@@ -1813,13 +1976,21 @@ def _call_strands_agent(system_prompt: str, messages: list,
     hindsight_usage: list = []
     try:
         import hindsight_usage_capture
+
         hindsight_usage = hindsight_usage_capture.drain()
     except Exception as hu_err:
         logger.warning("hindsight_usage_capture drain failed: %s", hu_err)
 
-    logger.info("Strands agent complete: response_len=%d, input_tokens=%d, output_tokens=%d, bedrock_requests=%d, tools=%s guardrail_blocked=%s hindsight_usage=%d",
-                len(response_text), input_tokens, output_tokens, len(bedrock_request_ids), tools_called,
-                bool(guardrail_block), len(hindsight_usage))
+    logger.info(
+        "Strands agent complete: response_len=%d, input_tokens=%d, output_tokens=%d, bedrock_requests=%d, tools=%s guardrail_blocked=%s hindsight_usage=%d",
+        len(response_text),
+        input_tokens,
+        output_tokens,
+        len(bedrock_request_ids),
+        tools_called,
+        bool(guardrail_block),
+        len(hindsight_usage),
+    )
 
     usage_dict = {
         "input_tokens": input_tokens,
@@ -1841,18 +2012,18 @@ def _error_response(message: str) -> dict:
         "object": "chat.completion",
         "created": int(time.time()),
         "model": "strands-agent",
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": message},
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": message},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
     }
 
 
-def _build_full_thread_transcript(
-    history_payload, message: str, response_text: str
-) -> list:
+def _build_full_thread_transcript(history_payload, message: str, response_text: str) -> list:
     """Construct the per-turn transcript for retain_full_thread.
 
     Mirrors the history filtering used in ``_execute_agent_turn`` so the
@@ -1867,11 +2038,7 @@ def _build_full_thread_transcript(
                 continue
             role = hmsg.get("role")
             content = hmsg.get("content")
-            if (
-                role in ("user", "assistant")
-                and isinstance(content, str)
-                and content
-            ):
+            if role in ("user", "assistant") and isinstance(content, str) and content:
                 transcript.append({"role": role, "content": content})
     if message:
         transcript.append({"role": "user", "content": message})
@@ -1900,10 +2067,7 @@ def _fire_retain_full_thread(
     if not transcript:
         return
     resolved_user_id = (
-        user_id
-        or os.environ.get("USER_ID")
-        or os.environ.get("CURRENT_USER_ID")
-        or ""
+        user_id or os.environ.get("USER_ID") or os.environ.get("CURRENT_USER_ID") or ""
     )
     client_module.retain_full_thread(
         thread_id=ticket_id,
@@ -1915,7 +2079,9 @@ def _fire_retain_full_thread(
 
 def _audit_response(tenant_id: str, response_text: str, allowed_tools: list) -> None:
     """Scan response for tool usage and log any violations."""
-    tool_pattern = r'\b(shell|browser|file_write|code_execution|install_skill|load_extension|eval)\b'
+    tool_pattern = (
+        r"\b(shell|browser|file_write|code_execution|install_skill|load_extension|eval)\b"
+    )
     matches = __import__("re").findall(tool_pattern, response_text, __import__("re").IGNORECASE)
     if not matches:
         return
@@ -1957,7 +2123,11 @@ def _inject_skill_env(skills_config: list) -> list:
             for k, v in env_overrides.items():
                 os.environ[k] = str(v)
                 injected.append(k)
-            logger.info("Injected %d envOverrides for skill %s", len(env_overrides), skill.get("skillId", "?"))
+            logger.info(
+                "Injected %d envOverrides for skill %s",
+                len(env_overrides),
+                skill.get("skillId", "?"),
+            )
     return injected
 
 
@@ -2035,9 +2205,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
     template_blocked_tools = payload.get("blocked_tools") or []
     browser_automation_enabled = bool(payload.get("browser_automation_enabled"))
-    tenant_id_for_audit = (
-        payload.get("sessionId") or payload.get("tenant_id") or "unknown"
-    )
+    tenant_id_for_audit = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
     ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
 
     # Set per-payload env (caller already ran apply_invocation_env for
@@ -2066,11 +2234,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     if assistant_id:
         os.environ["_ASSISTANT_ID"] = assistant_id
     computer_id = payload.get("computer_id") or payload.get("computerId") or ""
-    computer_task_id = (
-        payload.get("computer_task_id")
-        or payload.get("computerTaskId")
-        or ""
-    )
+    computer_task_id = payload.get("computer_task_id") or payload.get("computerTaskId") or ""
 
     # Sync workspace from S3.
     _ensure_workspace_ready(
@@ -2086,11 +2250,17 @@ def _execute_agent_turn(payload: dict) -> dict:
     injected_env_keys = _inject_skill_env(skills_config) if skills_config else []
 
     from eval_span_attrs import attach_eval_context, detach_eval_context
+
     eval_ctx_token = attach_eval_context(
         session_id=tenant_id_for_audit,
         tenant_id=workspace_tenant_id,
         agent_id=assistant_id,
         thread_id=ticket_id,
+    )
+
+    computer_env_snapshot = _set_computer_turn_env(
+        thread_id=ticket_id,
+        prompt=message,
     )
 
     try:
@@ -2103,11 +2273,7 @@ def _execute_agent_turn(payload: dict) -> dict:
                     continue
                 role = hmsg.get("role")
                 content = hmsg.get("content")
-                if (
-                    role in ("user", "assistant")
-                    and isinstance(content, str)
-                    and content
-                ):
+                if role in ("user", "assistant") and isinstance(content, str) and content:
                     messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": message})
 
@@ -2117,9 +2283,11 @@ def _execute_agent_turn(payload: dict) -> dict:
         effective_skills = skills_config
         if harness_files and isinstance(harness_files, list):
             from router_parser import ContextProfile
+
             profile = ContextProfile(load=harness_files)
         else:
             from router_parser import resolve_profile
+
             router_path = os.path.join(WORKSPACE_DIR, "ROUTER.md")
             profile = resolve_profile(
                 router_path,
@@ -2128,12 +2296,8 @@ def _execute_agent_turn(payload: dict) -> dict:
             )
 
         has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
-        parent_kb_config = (
-            None if has_workspace_map else knowledge_bases_config
-        )
-        system_prompt = _build_system_prompt(
-            effective_skills, parent_kb_config, profile=profile
-        )
+        parent_kb_config = None if has_workspace_map else knowledge_bases_config
+        system_prompt = _build_system_prompt(effective_skills, parent_kb_config, profile=profile)
 
         external_block = format_external_task_context(thread_metadata)
         if external_block:
@@ -2150,6 +2314,12 @@ def _execute_agent_turn(payload: dict) -> dict:
                     system_prompt += "\n\n---\n\n" + kb_context
             except Exception as e:
                 logger.warning("KB retrieval failed: %s", e)
+
+        if computer_id and computer_task_id:
+            system_prompt += "\n\n---\n\n" + _computer_thread_contract(
+                thread_id=ticket_id,
+                prompt=message,
+            )
 
         start_ms = int(time.time() * 1000)
         response_text, strands_usage = _call_strands_agent(
@@ -2211,6 +2381,60 @@ def _execute_agent_turn(payload: dict) -> dict:
     finally:
         detach_eval_context(eval_ctx_token)
         _cleanup_skill_env(injected_env_keys)
+        _restore_env_snapshot(computer_env_snapshot)
+
+
+def _set_computer_turn_env(*, thread_id: str, prompt: str) -> dict[str, str | None]:
+    snapshot = {
+        "COMPUTER_THREAD_ID": os.environ.get("COMPUTER_THREAD_ID"),
+        "COMPUTER_TURN_PROMPT": os.environ.get("COMPUTER_TURN_PROMPT"),
+    }
+    if thread_id:
+        os.environ["COMPUTER_THREAD_ID"] = thread_id
+    else:
+        os.environ.pop("COMPUTER_THREAD_ID", None)
+    if prompt:
+        os.environ["COMPUTER_TURN_PROMPT"] = prompt
+    else:
+        os.environ.pop("COMPUTER_TURN_PROMPT", None)
+    return snapshot
+
+
+def _restore_env_snapshot(snapshot: dict[str, str | None]) -> None:
+    for key, value in snapshot.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
+def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
+    lines = [
+        "## Computer Thread Contract",
+        "",
+        "You are operating inside ThinkWork Computer, an end-user workspace for",
+        "deep agent research that produces durable, reusable artifacts.",
+        "",
+        "When the user asks you to build, create, generate, or make an app,",
+        "applet, dashboard, report, briefing, workspace, or other interactive",
+        "surface, use the artifact-builder skill if it is available. The",
+        "expected result is a saved Computer applet, not only a prose answer.",
+        "",
+        "If a requested live source is unavailable, do not stop only to ask for",
+        "data. Use the available workspace, memory, context, web, or source-tool",
+        "results; make missing/partial sources visible in the applet; and save a",
+        "runnable artifact with clear source status. Ask for setup only after the",
+        "artifact exists, unless a tool requires explicit human approval.",
+        "",
+        "Pass metadata with threadId and prompt so the artifact remains attached",
+        "to this thread. After save_app returns ok, answer concisely with what",
+        "was created and the /artifacts/{appId} route.",
+    ]
+    if thread_id:
+        lines.append(f"- Current threadId: {thread_id}")
+    if prompt:
+        lines.append(f"- Current prompt: {prompt}")
+    return "\n".join(lines)
 
 
 class AgentCoreHandler(BaseHTTPRequestHandler):
@@ -2245,6 +2469,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         # complete before we respond to the caller.
         if payload.get("kind") == "run_skill":
             from run_skill_dispatch import dispatch_run_skill
+
             # Set the per-invocation env aliases (TENANT_ID / AGENT_ID /
             # USER_ID / CURRENT_USER_ID / CURRENT_THREAD_ID) so the
             # dispatcher sees the same identity the normal path would.
@@ -2252,20 +2477,14 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             # applying. Cleared in `finally` so the warm container does
             # not leak identity into the next invocation.
             scope = payload.get("scope") or {}
-            invocation_env_keys = invocation_env.apply_invocation_env({
-                "workspace_tenant_id": payload.get("tenantId")
-                    or scope.get("tenantId")
-                    or "",
-                "assistant_id": payload.get("agentId")
-                    or scope.get("agentId")
-                    or "",
-                "user_id": payload.get("invokerUserId")
-                    or scope.get("invokerUserId")
-                    or "",
-                "thread_id": payload.get("threadId")
-                    or scope.get("threadId")
-                    or "",
-            })
+            invocation_env_keys = invocation_env.apply_invocation_env(
+                {
+                    "workspace_tenant_id": payload.get("tenantId") or scope.get("tenantId") or "",
+                    "assistant_id": payload.get("agentId") or scope.get("agentId") or "",
+                    "user_id": payload.get("invokerUserId") or scope.get("invokerUserId") or "",
+                    "thread_id": payload.get("threadId") or scope.get("threadId") or "",
+                }
+            )
             try:
                 result = asyncio.run(dispatch_run_skill(payload))
                 self._respond(200, result)
@@ -2283,8 +2502,13 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         workspace_tenant_id = payload.get("workspace_tenant_id") or ""
         tenant_slug = payload.get("tenant_slug") or ""
         instance_id = payload.get("instance_id") or ""
-        logger.info("Workspace params: tenant_slug=%s instance_id=%s workspace_tenant_id=%s assistant_id=%s",
-                    tenant_slug, instance_id, workspace_tenant_id, assistant_id)
+        logger.info(
+            "Workspace params: tenant_slug=%s instance_id=%s workspace_tenant_id=%s assistant_id=%s",
+            tenant_slug,
+            instance_id,
+            workspace_tenant_id,
+            assistant_id,
+        )
         message = validate_message(payload.get("message", ""))
         use_memory = payload.get("use_memory", False) and bool(ticket_id)
         logger.info("use_memory=%s", use_memory)
@@ -2292,9 +2516,11 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         guardrail_config = payload.get("guardrail_config")
         mcp_configs = payload.get("mcp_configs") or []
         if mcp_configs:
-            logger.info("MCP configs received: %d servers (%s)",
-                        len(mcp_configs),
-                        ", ".join(c.get("name", c.get("url", "?")) for c in mcp_configs))
+            logger.info(
+                "MCP configs received: %d servers (%s)",
+                len(mcp_configs),
+                ", ".join(c.get("name", c.get("url", "?")) for c in mcp_configs),
+            )
 
         # Per-invocation identity env. Sandbox fields ride the chat payload
         # when the caller's pre-flight returned status=ready; they would be
@@ -2303,14 +2529,16 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         # invocations. CURRENT_USER_ID is only set when user_id is truthy —
         # a missing invoker must be distinguishable from an empty-string
         # one so the admin skill's R15 "no invoker" refusal triggers.
-        invocation_env_keys = invocation_env.apply_invocation_env({
-            "workspace_tenant_id": workspace_tenant_id,
-            "assistant_id": assistant_id,
-            "user_id": user_id,
-            "thread_id": ticket_id,
-            "sandbox_interpreter_id": payload.get("sandbox_interpreter_id") or "",
-            "sandbox_environment": payload.get("sandbox_environment") or "",
-        })
+        invocation_env_keys = invocation_env.apply_invocation_env(
+            {
+                "workspace_tenant_id": workspace_tenant_id,
+                "assistant_id": assistant_id,
+                "user_id": user_id,
+                "thread_id": ticket_id,
+                "sandbox_interpreter_id": payload.get("sandbox_interpreter_id") or "",
+                "sandbox_environment": payload.get("sandbox_environment") or "",
+            }
+        )
 
         try:
             start_ms = int(time.time() * 1000)
@@ -2329,11 +2557,13 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     "object": "chat.completion",
                     "created": int(time.time()),
                     "model": request_model or DEFAULT_MODEL,
-                    "choices": [{
-                        "index": 0,
-                        "message": {"role": "assistant", "content": response_text},
-                        "finish_reason": "stop",
-                    }],
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": response_text},
+                            "finish_reason": "stop",
+                        }
+                    ],
                     "usage": {
                         "prompt_tokens": input_tokens,
                         "completion_tokens": output_tokens,
@@ -2350,9 +2580,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     "hindsight_usage": strands_usage.get("hindsight_usage", []),
                 }
                 if turn_result.get("computer_thread_response") is not None:
-                    result["computer_thread_response"] = turn_result[
-                        "computer_thread_response"
-                    ]
+                    result["computer_thread_response"] = turn_result["computer_thread_response"]
 
                 # Attach guardrail block info if present
                 if strands_usage.get("guardrail_block"):
@@ -2382,6 +2610,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 # _execute_agent_turn do not see this code path.
                 try:
                     import api_memory_client
+
                     _fire_retain_full_thread(
                         api_memory_client,
                         ticket_id=ticket_id,
@@ -2392,11 +2621,14 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                         user_id=user_id,
                     )
                 except Exception as retain_err:
-                    logger.warning("auto-retain failed thread=%s: %s",
-                                   ticket_id, retain_err)
+                    logger.warning("auto-retain failed thread=%s: %s", ticket_id, retain_err)
 
-                log_agent_invocation(tenant_id=tenant_id, tools_used=["strands_agent"],
-                                    duration_ms=duration_ms, status="success")
+                log_agent_invocation(
+                    tenant_id=tenant_id,
+                    tools_used=["strands_agent"],
+                    duration_ms=duration_ms,
+                    status="success",
+                )
                 self._respond(200, result)
 
             except Exception as e:
@@ -2411,15 +2643,40 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                         "object": "chat.completion",
                         "created": int(time.time()),
                         "model": request_model or DEFAULT_MODEL,
-                        "choices": [{"index": 0, "message": {"role": "assistant", "content": "This request was blocked by a content policy."}, "finish_reason": "stop"}],
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "This request was blocked by a content policy.",
+                                },
+                                "finish_reason": "stop",
+                            }
+                        ],
                         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-                        "guardrail_block": {"blocked": True, "type": "INPUT", "action": "BLOCKED", "topics": [], "filters": {}, "raw": {"exception": str(e)}},
+                        "guardrail_block": {
+                            "blocked": True,
+                            "type": "INPUT",
+                            "action": "BLOCKED",
+                            "topics": [],
+                            "filters": {},
+                            "raw": {"exception": str(e)},
+                        },
                     }
-                    log_agent_invocation(tenant_id=tenant_id, tools_used=[], duration_ms=duration_ms, status="guardrail_blocked")
+                    log_agent_invocation(
+                        tenant_id=tenant_id,
+                        tools_used=[],
+                        duration_ms=duration_ms,
+                        status="guardrail_blocked",
+                    )
                     self._respond(200, block_result)
                 else:
-                    log_agent_invocation(tenant_id=tenant_id, tools_used=[], duration_ms=duration_ms, status="error")
-                    logger.error("Strands agent invocation failed tenant_id=%s error=%s", tenant_id, e)
+                    log_agent_invocation(
+                        tenant_id=tenant_id, tools_used=[], duration_ms=duration_ms, status="error"
+                    )
+                    logger.error(
+                        "Strands agent invocation failed tenant_id=%s error=%s", tenant_id, e
+                    )
                     self._respond(500, _error_response(str(e)))
         finally:
             invocation_env.cleanup_invocation_env(invocation_env_keys)
@@ -2452,10 +2709,13 @@ def main():
     # ID correlation).
     try:
         from eval_span_attrs import register_processor
+
         if register_processor():
             logger.info("Registered EvalAttrSpanProcessor on TracerProvider")
         else:
-            logger.warning("EvalAttrSpanProcessor not registered — TracerProvider lacks add_span_processor")
+            logger.warning(
+                "EvalAttrSpanProcessor not registered — TracerProvider lacks add_span_processor"
+            )
     except Exception as e:
         logger.warning("Failed to register EvalAttrSpanProcessor: %s", e)
 
@@ -2464,6 +2724,7 @@ def main():
     global _nova_act_api_key
     try:
         from browser_automation_tool import load_nova_act_key
+
         _nova_act_api_key = load_nova_act_key(region=AWS_REGION)
     except Exception as e:
         logger.warning("Failed to load Nova Act API key: %s", e)
@@ -2474,6 +2735,7 @@ def main():
 
     # Download system workspace files (platform rules, guardrails) — once per container
     from install_skills import install_system_workspace
+
     install_system_workspace()
 
     # Phase 3 U6 of the Compliance audit-event log
@@ -2494,6 +2756,7 @@ def main():
     global _compliance_client
     try:
         from compliance_client import ComplianceClient
+
         _compliance_client = ComplianceClient()
     except Exception as e:
         logger.warning("Failed to initialize ComplianceClient: %s", e)
