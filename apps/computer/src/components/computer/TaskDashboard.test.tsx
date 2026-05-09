@@ -32,9 +32,9 @@ describe("TaskDashboard", () => {
     ).toBe("/tasks/task-1");
   });
 
-  it("renders an empty state when there are no tasks", () => {
+  it("renders an empty state when there are no threads", () => {
     render(<TaskDashboard tasks={[]} />);
 
-    expect(screen.getByText("No tasks yet")).toBeTruthy();
+    expect(screen.getByText("No threads yet")).toBeTruthy();
   });
 });

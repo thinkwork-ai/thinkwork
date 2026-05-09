@@ -20,6 +20,7 @@ interface CreateThreadVars {
     computerId: string;
     title: string;
     channel: "CHAT";
+    firstMessage: string;
   };
 }
 
@@ -53,6 +54,7 @@ export function ComputerWorkbench() {
         computerId,
         title: titleFromPrompt(trimmed),
         channel: "CHAT",
+        firstMessage: trimmed,
       },
     });
 
@@ -94,6 +96,6 @@ export function ComputerWorkbench() {
 }
 
 function titleFromPrompt(prompt: string): string {
-  const firstLine = prompt.split(/\n/)[0]?.trim() || "New Computer task";
+  const firstLine = prompt.split(/\n/)[0]?.trim() || "New Computer thread";
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }

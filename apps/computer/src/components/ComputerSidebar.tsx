@@ -44,7 +44,7 @@ interface NavItem {
 
 const PERMANENT_NAV: NavItem[] = [
   { to: COMPUTER_WORKBENCH_ROUTE, icon: Monitor, label: "Computer" },
-  { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Tasks" },
+  { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Threads" },
   { to: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
   { to: "/automations", icon: Repeat, label: "Automations" },
   { to: "/approvals", icon: CheckSquare, label: "Approvals" },

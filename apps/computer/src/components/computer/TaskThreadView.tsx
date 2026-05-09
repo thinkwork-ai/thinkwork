@@ -41,10 +41,10 @@ export function TaskThreadView({
   streamingChunks = [],
 }: TaskThreadViewProps) {
   if (isLoading) {
-    return <TaskThreadState label="Loading task" />;
+    return <TaskThreadState label="Loading thread" />;
   }
   if (error || !thread) {
-    return <TaskThreadState label={error ?? "Task not found"} tone="error" />;
+    return <TaskThreadState label={error ?? "Thread not found"} tone="error" />;
   }
 
   const artifactCount = thread.messages.filter(
@@ -59,7 +59,7 @@ export function TaskThreadView({
             <Button asChild variant="ghost" size="sm" className="gap-2">
               <a href="/tasks">
                 <ArrowLeft className="size-4" />
-                Tasks
+                Threads
               </a>
             </Button>
             <div className="flex flex-wrap items-center gap-1">
@@ -70,7 +70,7 @@ export function TaskThreadView({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold tracking-tight">
-                {thread.title?.trim() || "Untitled task"}
+                {thread.title?.trim() || "Untitled thread"}
               </h1>
               <Badge variant="outline" className="rounded-md">
                 {thread.lifecycleStatus ?? thread.status ?? "IDLE"}
@@ -79,10 +79,10 @@ export function TaskThreadView({
           </div>
         </header>
 
-        <section className="grid gap-4" aria-label="Task transcript">
+        <section className="grid gap-4" aria-label="Thread transcript">
           {thread.messages.length === 0 ? (
             <TaskEventRow
-              title="Task created"
+              title="Thread created"
               detail="Computer is ready for follow-up instructions."
               status={thread.lifecycleStatus ?? "idle"}
             />

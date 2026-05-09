@@ -61,6 +61,7 @@ describe("ComputerWorkbench", () => {
           computerId: "computer-1",
           title: "Build a board summary",
           channel: "CHAT",
+          firstMessage: "Build a board summary",
         },
       });
     });

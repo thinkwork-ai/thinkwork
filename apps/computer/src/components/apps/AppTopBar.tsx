@@ -31,7 +31,7 @@ export function AppTopBar({ title }: AppTopBarProps) {
         >
           <a href={COMPUTER_WORKBENCH_ROUTE}>
             <Plus className="size-4" />
-            New task
+            New thread
           </a>
         </Button>
         <Button

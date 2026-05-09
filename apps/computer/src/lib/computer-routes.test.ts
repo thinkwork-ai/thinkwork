@@ -25,5 +25,6 @@ describe("computer route helpers", () => {
   it("keeps labels aligned with the workbench route", () => {
     expect(COMPUTER_WORKBENCH_ROUTE).toBe("/computer");
     expect(COMPUTER_ROUTE_LABELS.computer).toBe("Computer");
+    expect(COMPUTER_ROUTE_LABELS.tasks).toBe("Threads");
   });
 });
