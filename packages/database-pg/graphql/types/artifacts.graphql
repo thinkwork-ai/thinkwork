@@ -30,8 +30,30 @@ type DashboardRefreshResult {
   idempotencyKey: String!
 }
 
+type Applet {
+  artifact: Artifact!
+  appId: ID!
+  name: String!
+  version: Int!
+  source: String!
+  sourceKey: String!
+  metadata: AWSJSON!
+}
+
+type AppletPayload {
+  applet: Applet!
+}
+
+type AppletState {
+  appId: ID!
+  state: AWSJSON
+  updatedAt: AWSDateTime!
+}
+
 enum ArtifactType {
   DATA_VIEW
+  APPLET
+  APPLET_STATE
   NOTE
   REPORT
   PLAN
@@ -69,10 +91,29 @@ input UpdateArtifactInput {
   metadata: AWSJSON
 }
 
+input SaveAppletInput {
+  tenantId: ID!
+  appId: ID!
+  name: String!
+  version: Int!
+  threadId: ID
+  agentId: ID
+  source: String!
+  metadata: AWSJSON
+}
+
+input SaveAppletStateInput {
+  tenantId: ID!
+  appId: ID!
+  state: AWSJSON
+}
+
 extend type Query {
   artifacts(tenantId: ID!, threadId: ID, agentId: ID, type: ArtifactType, status: ArtifactStatus, limit: Int, cursor: String): [Artifact!]!
   artifact(id: ID!): Artifact
   dashboardArtifact(id: ID!): DashboardArtifact
+  applet(id: ID!): AppletPayload
+  appletState(tenantId: ID!, appId: ID!): AppletState
 }
 
 extend type Mutation {
@@ -80,4 +121,6 @@ extend type Mutation {
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   refreshDashboardArtifact(id: ID!): DashboardRefreshResult!
+  saveApplet(input: SaveAppletInput!): AppletPayload!
+  saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

@@ -14,6 +14,22 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U3:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u3-api` on branch
+  `codex/computer-applets-u3-api` from `origin/main` after U2 merged.
+- **Progress:** Added the applet GraphQL contract, server-side S3 storage,
+  metadata/access helpers, source validation, inert resolvers that expose the
+  schema without wiring runtime behavior before U6, and regenerated GraphQL
+  client types for CLI/admin/mobile.
+- **Verification note:** `pnpm install --no-frozen-lockfile`, `pnpm install
+  --frozen-lockfile`, applet-focused API tests, full API tests, codegen for
+  `thinkwork-cli`, `@thinkwork/admin`, and `@thinkwork/mobile`, `git diff
+  --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm -r
+  --if-present test`, and `pnpm --filter @thinkwork/api build` all passed.
+  `pnpm format:check` is still blocked by the existing missing `prettier`
+  binary in the root workspace.
+- **Current PR:** #1051 (`feat(computer): add inert applet API`).
+- **CI:** PR #1051 checks passed: CLA, lint, test, typecheck, verify.
 - **Started U2:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u2-stdlib` on branch
   `codex/computer-applets-u2-stdlib` from `origin/main` after U1 merged.
