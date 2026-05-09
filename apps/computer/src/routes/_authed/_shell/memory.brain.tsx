@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { Brain, Loader2, Search, X } from "lucide-react";
@@ -9,9 +9,13 @@ import {
   DataTable,
   Input,
   Sheet,
+  Tabs,
+  TabsList,
+  TabsTrigger,
   ToggleGroup,
   ToggleGroupItem,
 } from "@thinkwork/ui";
+import { MEMORY_TABS } from "./memory";
 import {
   MemoryGraph,
   type MemoryGraphHandle,
@@ -78,6 +82,11 @@ function BrainPage() {
   const { tenantId } = useTenant();
   const { view: viewParam } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeTab =
+    [...MEMORY_TABS]
+      .reverse()
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
   const view: BrainView = viewParam ?? "table";
   const setView = useCallback(
     (next: BrainView) => {
@@ -223,8 +232,8 @@ function BrainPage() {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div className="relative w-80 max-w-full">
+      <div className="relative z-10 flex shrink-0 items-center gap-3 px-4 py-3">
+        <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search memories..."
@@ -246,11 +255,30 @@ function BrainPage() {
             </button>
           )}
         </div>
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="pointer-events-auto">
+            <Tabs value={activeTab}>
+              <TabsList>
+                {MEMORY_TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.to}
+                    value={tab.to}
+                    asChild
+                    className="px-3 text-xs"
+                  >
+                    <Link to={tab.to}>{tab.label}</Link>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
         <ToggleGroup
           type="single"
           value={view}
           onValueChange={(v) => v && setView(v as BrainView)}
           variant="outline"
+          className="ml-auto"
         >
           <ToggleGroupItem value="table" className="px-3 text-xs">
             Table

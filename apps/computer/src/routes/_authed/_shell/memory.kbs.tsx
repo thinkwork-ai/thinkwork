@@ -1,11 +1,12 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { BookOpen } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Badge, DataTable, Input, Spinner } from "@thinkwork/ui";
+import { Badge, DataTable, Input, Spinner, Tabs, TabsList, TabsTrigger } from "@thinkwork/ui";
 import { ComputerKnowledgeBasesQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
+import { MEMORY_TABS } from "./memory";
 
 type KbRow = {
   id: string;
@@ -54,6 +55,11 @@ function StatusBadge({ status }: { status: string }) {
 function KbsIndexPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeTab =
+    [...MEMORY_TABS]
+      .reverse()
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
   const [search, setSearch] = useState("");
 
   const [result] = useQuery<KnowledgeBasesResult>({
@@ -129,16 +135,31 @@ function KbsIndexPage() {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
+      <div className="relative flex shrink-0 items-center gap-3 px-4 py-3">
         <Input
           placeholder="Search knowledge bases..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-80 max-w-full"
+          className="w-fit min-w-56 max-w-full"
         />
-        <p className="text-xs text-muted-foreground hidden md:block">
-          Knowledge bases are managed by your operator.
-        </p>
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="pointer-events-auto">
+            <Tabs value={activeTab}>
+              <TabsList>
+                {MEMORY_TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.to}
+                    value={tab.to}
+                    asChild
+                    className="px-3 text-xs"
+                  >
+                    <Link to={tab.to}>{tab.label}</Link>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 px-4">

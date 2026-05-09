@@ -31,20 +31,14 @@ describe("Memory layout (U4)", () => {
     expect(getByTestId("outlet")).toBeDefined();
   });
 
-  it("publishes Brain/Pages/KBs tabs to PageHeaderActions", () => {
+  it("pushes only { title: 'Memory' } to PageHeaderActions — tabs render in-page, not in AppTopBar", () => {
     const Component = MemoryLayoutRoute.options.component!;
     render(<Component />);
     expect(usePageHeaderActions).toHaveBeenCalledTimes(1);
-    const arg = usePageHeaderActions.mock.calls[0]![0] as {
-      title: string;
-      tabs: { to: string; label: string }[];
-    };
-    expect(arg.title).toBe("Memory");
-    expect(arg.tabs).toEqual([
-      { to: "/memory/brain", label: "Brain" },
-      { to: "/memory/pages", label: "Pages" },
-      { to: "/memory/kbs", label: "KBs" },
-    ]);
+    const arg = usePageHeaderActions.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg).toEqual({ title: "Memory" });
+    // Hard guard against re-introducing a global-header tab push.
+    expect(Object.prototype.hasOwnProperty.call(arg, "tabs")).toBe(false);
   });
 
   it("memory index route redirects (throws Redirect) so /memory lands on /memory/brain", () => {
