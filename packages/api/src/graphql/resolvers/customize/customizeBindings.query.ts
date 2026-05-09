@@ -6,20 +6,19 @@ import {
   connectors,
   db,
   eq,
+  isNotNull,
   ne,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 
 /**
  * Returns the slug / id sets that the apps/computer Customize page uses
- * to mark catalog rows as `connected`. Read-only — mutations come in U4-U6.
+ * to mark catalog rows as `connected`.
  *
- * Matching is best-effort while connector/routine schemas don't carry a
- * dedicated `catalog_slug` column:
- *
- *   - **Connectors:** `connectors.type` is treated as the catalog slug.
- *     Most catalog slugs already match the connector type (slack →
- *     "slack", github → "github"). U4 will add an explicit link column.
+ *   - **Connectors:** `connectors.catalog_slug` is the canonical pointer
+ *     to the catalog row (added by plan 008 U4-1). Rows with a NULL
+ *     `catalog_slug` (legacy or pre-backfill) are excluded so they don't
+ *     appear bound to anything on the Customize surface.
  *   - **Skills:** `agent_skills.skill_id` is the same shape as
  *     `tenant_skills.skill_id`. Direct equality.
  *   - **Workflows:** returned empty for v1 — the routines table has no
@@ -52,7 +51,10 @@ export async function customizeBindings(
 
   const [connectorRows, skillRows] = await Promise.all([
     db
-      .select({ type: connectors.type, status: connectors.status })
+      .select({
+        catalog_slug: connectors.catalog_slug,
+        status: connectors.status,
+      })
       .from(connectors)
       .where(
         and(
@@ -60,6 +62,7 @@ export async function customizeBindings(
           eq(connectors.dispatch_target_type, "computer"),
           eq(connectors.dispatch_target_id, computer.id),
           eq(connectors.enabled, true),
+          isNotNull(connectors.catalog_slug),
         ),
       ),
     bindingAgentId(computer.primary_agent_id, computer.migrated_from_agent_id)
@@ -84,8 +87,11 @@ export async function customizeBindings(
   const connectedConnectorSlugs = Array.from(
     new Set(
       connectorRows
-        .filter((row) => row.status === "active")
-        .map((row) => row.type),
+        .filter(
+          (row): row is { catalog_slug: string; status: string } =>
+            row.status === "active" && row.catalog_slug !== null,
+        )
+        .map((row) => row.catalog_slug),
     ),
   );
   const connectedSkillIds = Array.from(

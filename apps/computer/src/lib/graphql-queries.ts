@@ -600,3 +600,23 @@ export const CustomizeBindingsQuery = gql`
     }
   }
 `;
+
+export const EnableConnectorMutation = gql`
+  mutation EnableConnector($input: EnableConnectorInput!) {
+    enableConnector(input: $input) {
+      id
+      tenantId
+      computerId
+      catalogSlug
+      status
+      enabled
+      updatedAt
+    }
+  }
+`;
+
+export const DisableConnectorMutation = gql`
+  mutation DisableConnector($input: DisableConnectorInput!) {
+    disableConnector(input: $input)
+  }
+`;

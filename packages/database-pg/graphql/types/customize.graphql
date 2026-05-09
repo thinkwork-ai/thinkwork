@@ -52,9 +52,34 @@ type CustomizeBindings {
   connectedWorkflowSlugs: [String!]!
 }
 
+type ConnectorBinding {
+  id: ID!
+  tenantId: ID!
+  computerId: ID!
+  catalogSlug: String!
+  status: String!
+  enabled: Boolean!
+  updatedAt: AWSDateTime!
+}
+
+input EnableConnectorInput {
+  computerId: ID!
+  slug: String!
+}
+
+input DisableConnectorInput {
+  computerId: ID!
+  slug: String!
+}
+
 extend type Query {
   connectorCatalog: [ConnectorCatalogItem!]!
   skillCatalog: [SkillCatalogItem!]!
   workflowCatalog: [WorkflowCatalogItem!]!
   customizeBindings: CustomizeBindings
+}
+
+extend type Mutation {
+  enableConnector(input: EnableConnectorInput!): ConnectorBinding!
+  disableConnector(input: DisableConnectorInput!): Boolean!
 }
