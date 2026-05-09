@@ -5,6 +5,7 @@ import { Archive, Lock, Search } from "lucide-react";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { COMPUTER_NEW_THREAD_ROUTE } from "@/lib/computer-routes";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 
 export interface TaskSummary {
   id: string;
@@ -100,7 +101,9 @@ export function TaskDashboard({
         {error ? (
           <TaskDashboardState label={error} tone="error" />
         ) : isLoading ? (
-          <TaskDashboardState label="Loading threads" />
+          <div className="flex flex-1 items-center justify-center">
+            <LoadingShimmer />
+          </div>
         ) : threads.length === 0 ? (
           <TaskDashboardState label="No threads match the current search" />
         ) : (

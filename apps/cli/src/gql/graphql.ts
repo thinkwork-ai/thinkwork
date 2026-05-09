@@ -1372,6 +1372,7 @@ export type CreateRoutineInput = {
 
 export type CreateScheduledJobInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
@@ -3973,6 +3974,7 @@ export type QueryScheduledJobArgs = {
 
 export type QueryScheduledJobsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   routineId?: InputMaybe<Scalars['ID']['input']>;
@@ -4580,6 +4582,7 @@ export type SaveAppletStateInput = {
 export type ScheduledJob = {
   __typename?: 'ScheduledJob';
   agentId?: Maybe<Scalars['ID']['output']>;
+  computerId?: Maybe<Scalars['ID']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
