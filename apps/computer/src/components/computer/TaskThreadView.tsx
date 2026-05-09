@@ -40,6 +40,18 @@ export interface TaskThread {
   lifecycleStatus?: string | null;
   costSummary?: number | null;
   messages: TaskThreadMessage[];
+  turns?: TaskThreadTurn[];
+}
+
+export interface TaskThreadTurn {
+  id: string;
+  status?: string | null;
+  invocationSource?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  usageJson?: unknown;
+  resultJson?: unknown;
+  error?: string | null;
 }
 
 interface TaskThreadViewProps {
@@ -109,6 +121,7 @@ export function TaskThreadView({
               <TranscriptMessage key={message.id} message={message} />
             ))
           )}
+          <ThreadTurnActivity turns={thread.turns ?? []} />
           <StreamingMessageBuffer chunks={streamingChunks} />
         </section>
 
@@ -119,6 +132,40 @@ export function TaskThreadView({
         />
       </div>
     </main>
+  );
+}
+
+function ThreadTurnActivity({ turns }: { turns: TaskThreadTurn[] }) {
+  const latest = turns[0];
+  if (!latest) return null;
+
+  const status = String(latest.status ?? "").toLowerCase();
+  const usage = parseRecord(latest.usageJson);
+  const rows = actionRowsForTurn(usage);
+
+  return (
+    <article className="grid gap-3" aria-label="Thread activity">
+      <ThinkingRow
+        title="Thinking"
+        detail={turnSummary(latest, usage)}
+        isActive={status === "running"}
+      />
+      {rows.map((row) => (
+        <ActionRow
+          key={`${latest.id}-${row.title}`}
+          title={row.title}
+          detail={row.detail}
+          kind={row.kind}
+        />
+      ))}
+      {latest.error ? (
+        <ActionRow
+          title="Run failed"
+          detail={latest.error}
+          kind="tool"
+        />
+      ) : null}
+    </article>
   );
 }
 
@@ -352,6 +399,117 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   }
 
   return rows;
+}
+
+function actionRowsForTurn(usage: Record<string, unknown>) {
+  const rows: Array<{
+    title: string;
+    detail?: string;
+    kind: "thinking" | "tool" | "source" | "code";
+  }> = [];
+
+  const toolsCalled = parseArray(usage.tools_called)
+    .map((tool) => (typeof tool === "string" ? tool : null))
+    .filter(Boolean) as string[];
+  const toolInvocations = parseArray(usage.tool_invocations);
+  const seen = new Set<string>();
+
+  for (const name of toolsCalled) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      title: `Using ${name}`,
+      kind: toolKind(name),
+    });
+  }
+
+  for (const invocation of toolInvocations) {
+    const record = parseRecord(invocation);
+    const name =
+      stringValue(record.tool_name) ||
+      stringValue(record.toolName) ||
+      stringValue(record.name) ||
+      "tool";
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      title: `Using ${name}`,
+      detail: JSON.stringify(record, null, 2),
+      kind: toolKind(name),
+    });
+  }
+
+  return rows;
+}
+
+function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
+  const parts = [
+    formatInvocationSource(turn.invocationSource),
+    formatTurnStatus(turn.status),
+    formatTurnDuration(turn),
+    formatTokenUsage(usage),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Computer is working.";
+}
+
+function formatInvocationSource(source: unknown) {
+  const raw = stringValue(source);
+  if (!raw) return null;
+  const labels: Record<string, string> = {
+    chat: "Manual chat",
+    chat_message: "Manual chat",
+    manual: "Manual chat",
+    schedule: "Schedule",
+    webhook: "Webhook",
+    email: "Email",
+  };
+  return labels[raw.toLowerCase()] ?? raw.replace(/_/g, " ");
+}
+
+function formatTurnStatus(status: unknown) {
+  const raw = stringValue(status);
+  return raw ? raw.toLowerCase() : null;
+}
+
+function formatTurnDuration(turn: TaskThreadTurn) {
+  if (!turn.startedAt || !turn.finishedAt) return null;
+  const start = Date.parse(turn.startedAt);
+  const finish = Date.parse(turn.finishedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || finish < start) {
+    return null;
+  }
+  const ms = finish - start;
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatTokenUsage(usage: Record<string, unknown>) {
+  const input = Number(usage.input_tokens ?? usage.inputTokens ?? 0);
+  const output = Number(usage.output_tokens ?? usage.outputTokens ?? 0);
+  if (!input && !output) return null;
+  return `${formatCount(input)} in / ${formatCount(output)} out`;
+}
+
+function formatCount(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(value);
+}
+
+function toolKind(name: string): "tool" | "source" | "code" {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("code") || normalized.includes("patch")) {
+    return "code";
+  }
+  if (
+    normalized.includes("search") ||
+    normalized.includes("source") ||
+    normalized.includes("crm")
+  ) {
+    return "source";
+  }
+  return "tool";
 }
 
 function isThreadRunning(thread: TaskThread) {

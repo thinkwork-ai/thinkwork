@@ -124,6 +124,21 @@ export const ComputerThreadQuery = gql`
   }
 `;
 
+export const ComputerThreadTurnsQuery = gql`
+  query ComputerThreadTurns($tenantId: ID!, $threadId: ID!, $limit: Int) {
+    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: $limit) {
+      id
+      status
+      invocationSource
+      startedAt
+      finishedAt
+      usageJson
+      resultJson
+      error
+    }
+  }
+`;
+
 export const ComputerThreadChunkSubscription = gql`
   subscription ComputerThreadChunk($threadId: ID!) {
     onComputerThreadChunk(threadId: $threadId) {
