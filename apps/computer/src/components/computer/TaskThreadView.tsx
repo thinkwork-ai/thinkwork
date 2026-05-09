@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  Children,
   useLayoutEffect,
   useRef,
   useState,
@@ -181,34 +182,35 @@ const EXPANDED_TURN_STATUSES = new Set([
   "queued",
   "claimed",
 ]);
+const RENDERED_TURN_STATUSES = new Set([
+  ...EXPANDED_TURN_STATUSES,
+  "completed",
+  "succeeded",
+  "failed",
+]);
+
+function normalizeStatus(status: unknown) {
+  return String(status ?? "")
+    .toLowerCase()
+    .trim();
+}
 
 function isExpandedStatus(status: string) {
   return EXPANDED_TURN_STATUSES.has(status);
 }
 
 function shouldDefaultOpen(turn: TaskThreadTurn) {
-  return (
-    isExpandedStatus(String(turn.status ?? "").toLowerCase()) ||
-    Boolean(turn.error)
-  );
+  return isExpandedStatus(normalizeStatus(turn.status)) || Boolean(turn.error);
 }
 
 function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   if (!turn) return null;
 
-  const status = String(turn.status ?? "").toLowerCase();
+  const status = normalizeStatus(turn.status);
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage);
   const shouldRender =
-    [
-      "pending",
-      "queued",
-      "claimed",
-      "running",
-      "completed",
-      "succeeded",
-      "failed",
-    ].includes(status) ||
+    RENDERED_TURN_STATUSES.has(status) ||
     rows.length > 0 ||
     Boolean(turn.error);
   if (!shouldRender) return null;
@@ -467,9 +469,10 @@ function ThinkingRow({
   ariaLabel?: string;
   children?: ReactNode;
 }) {
-  const hasChildren = Array.isArray(children)
-    ? children.some(Boolean)
-    : Boolean(children);
+  // React.Children.toArray + filter Boolean handles arrays containing empty
+  // arrays (truthy in plain JS) and falsy nodes correctly; a bare children.some
+  // would render an empty container when rows=[] because Boolean([]) is true.
+  const hasChildren = Children.toArray(children).some(Boolean);
   return (
     <details
       className="group w-fit text-muted-foreground"

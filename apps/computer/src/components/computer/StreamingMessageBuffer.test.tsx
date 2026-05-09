@@ -46,6 +46,7 @@ describe("StreamingMessageBuffer", () => {
     for (const token of [
       "prose-p:my-2",
       "prose-ul:my-2",
+      "prose-ol:my-2",
       "prose-li:my-0",
       "prose-headings:mt-4",
       "prose-headings:mb-2",

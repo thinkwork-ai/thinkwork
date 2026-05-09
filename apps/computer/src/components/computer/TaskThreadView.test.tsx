@@ -4,6 +4,16 @@ import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(cleanup);
 
+// Asserts the labelled element is actually a <details> before narrowing to
+// HTMLDetailsElement. Without this guard, `as HTMLDetailsElement` would cast
+// any HTMLElement and surface confusing "expected undefined" failures if the
+// label ever migrates to a non-details element.
+function getThinkingDetails(): HTMLDetailsElement {
+  const el = screen.getByLabelText("Thinking and tool activity");
+  expect(el.tagName.toLowerCase()).toBe("details");
+  return el as HTMLDetailsElement;
+}
+
 describe("TaskThreadView", () => {
   it("renders transcript messages, generated artifact cards, and command composer", () => {
     render(
@@ -733,9 +743,7 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const details = screen.getByLabelText(
-      "Thinking and tool activity",
-    ) as HTMLDetailsElement;
+    const details = getThinkingDetails();
     expect(details.open).toBe(false);
   });
 
@@ -761,9 +769,7 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const details = screen.getByLabelText(
-      "Thinking and tool activity",
-    ) as HTMLDetailsElement;
+    const details = getThinkingDetails();
     expect(details.open).toBe(true);
     expect(screen.getByText("Run failed")).toBeTruthy();
     expect(screen.getByText("Browser session timed out")).toBeTruthy();
@@ -790,9 +796,7 @@ describe("TaskThreadView", () => {
           }}
         />,
       );
-      const details = screen.getByLabelText(
-        "Thinking and tool activity",
-      ) as HTMLDetailsElement;
+      const details = getThinkingDetails();
       expect(details.open).toBe(true);
       // Spinner uses `animate-spin`; the static dot variant does not.
       expect(container.querySelector(".animate-spin")).not.toBeNull();
@@ -818,9 +822,7 @@ describe("TaskThreadView", () => {
     };
 
     const { rerender } = render(<TaskThreadView thread={baseThread} />);
-    const runningDetails = screen.getByLabelText(
-      "Thinking and tool activity",
-    ) as HTMLDetailsElement;
+    const runningDetails = getThinkingDetails();
     expect(runningDetails.open).toBe(true);
 
     rerender(
@@ -831,9 +833,7 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const finishedDetails = screen.getByLabelText(
-      "Thinking and tool activity",
-    ) as HTMLDetailsElement;
+    const finishedDetails = getThinkingDetails();
     expect(finishedDetails.open).toBe(false);
   });
 
