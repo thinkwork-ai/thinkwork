@@ -164,5 +164,29 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   `execute_code` together with delegation tools for Computer applet-build
   prompts. The parent agent should now have to call the persistent `save_app`
   tool directly with generated TSX.
-- **Current PR:** Pending for U7 execute-code suppression before rerunning the
-  deployed CRM dashboard proof.
+- **Merged U7 execute-code suppression:** PR #1087
+  (`fix(computer): suppress code scratchpad for applet builds`) was
+  squash-merged to `main` at
+  `38287dd4344fa8acf24ac76c8468d4a4bc93d625`; CI passed: CLA, lint,
+  test, typecheck, verify. The deployed `main` pipeline
+  `25612160280` passed, including AgentCore runtime update and Computer
+  deploy.
+- **Fourth live proof failure:** Reran the same deployed CRM dashboard smoke
+  after PR #1087 deployed. Thread
+  `8e875b4b-7f8b-454b-aa3a-ae5bed356e44`, task
+  `1740b072-fa46-46eb-b56e-a8282ffa3969` still completed without a linked
+  applet. Diagnostics confirmed `delegate`, `delegate_to_workspace`, and
+  `execute_code` were gone from the tool trace. The agent loaded the Artifact
+  Builder skill and CRM recipe but attempted `wake_workspace(target:
+  "save_app")`, then hit the Artifact-save-missing guard. Root cause:
+  `_execute_agent_turn` read `computer_id` from the AgentCore payload but did
+  not expose it as `COMPUTER_ID` before `make_save_app_from_env()` ran, so
+  applet tool registration failed with missing Computer runtime config and
+  `save_app` never appeared in the agent's callable tool surface.
+- **Progress:** Started branch `codex/artifact-builder-save-app-env` from
+  latest `origin/main` to expose `COMPUTER_ID` and `COMPUTER_TASK_ID` during
+  Computer turns and restore them afterward. Focused regression coverage now
+  asserts the IDs are present while the Strands agent is constructed and
+  removed after the invocation.
+- **Current PR:** Pending for the Computer env registration fix before
+  rerunning the deployed CRM dashboard proof.

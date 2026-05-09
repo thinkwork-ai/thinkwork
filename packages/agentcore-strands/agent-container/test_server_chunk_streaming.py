@@ -206,6 +206,8 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
         captured["system_prompt"] = system_prompt
         captured["messages"] = messages
         captured.update(kwargs)
+        assert server.os.environ["COMPUTER_ID"] == "computer-1"
+        assert server.os.environ["COMPUTER_TASK_ID"] == "task-1"
         assert server.os.environ["COMPUTER_THREAD_ID"] == "thread-1"
         assert server.os.environ["COMPUTER_TURN_PROMPT"].startswith("Build a CRM")
         return "Saved the applet.", {}
@@ -242,5 +244,7 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     assert "unless your own successful save_app tool call" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
     assert captured["suppress_app_build_helper_tools"] is True
+    assert "COMPUTER_ID" not in server.os.environ
+    assert "COMPUTER_TASK_ID" not in server.os.environ
     assert "COMPUTER_THREAD_ID" not in server.os.environ
     assert "COMPUTER_TURN_PROMPT" not in server.os.environ
