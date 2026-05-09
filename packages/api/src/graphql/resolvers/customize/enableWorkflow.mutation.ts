@@ -17,10 +17,6 @@ export interface EnableWorkflowArgs {
   input: { computerId: string; slug: string };
 }
 
-interface CatalogConfig {
-  schedule?: unknown;
-}
-
 /**
  * Enable a workflow for the caller's Computer. Looks up the catalog row
  * by `(tenant_id, slug)` in `tenant_workflow_catalog`, resolves the
@@ -35,6 +31,11 @@ interface CatalogConfig {
  *
  * Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-2.
  */
+function readScheduleFromConfig(config: unknown): string | null {
+  if (typeof config !== "object" || config === null) return null;
+  const candidate = (config as { schedule?: unknown }).schedule;
+  return typeof candidate === "string" ? candidate : null;
+}
 export async function enableWorkflow(
   _parent: unknown,
   args: EnableWorkflowArgs,
@@ -97,9 +98,12 @@ export async function enableWorkflow(
     );
   }
 
-  const config = (catalog.default_config ?? {}) as CatalogConfig;
+  // Schedule precedence: the typed `default_schedule` column wins.
+  // Some legacy seed rows historically embedded the cron string under
+  // `default_config.schedule`, so fall back to that path when the typed
+  // column is null.
   const schedule =
-    typeof config.schedule === "string" ? config.schedule : null;
+    catalog.default_schedule ?? readScheduleFromConfig(catalog.default_config);
 
   // Upsert keyed by the partial unique index on
   // (agent_id, catalog_slug) WHERE both non-null. ON CONFLICT flips the
@@ -138,8 +142,10 @@ export async function enableWorkflow(
     id: row.id,
     tenantId: row.tenant_id,
     agentId: row.agent_id ?? agentId,
+    computerId: computer.id,
     catalogSlug: row.catalog_slug ?? slug,
     status: row.status,
+    enabled: row.status === "active",
     updatedAt: row.updated_at,
   };
 }

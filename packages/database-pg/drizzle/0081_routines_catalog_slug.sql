@@ -23,24 +23,18 @@ SET LOCAL statement_timeout = '120s';
 ALTER TABLE public.routines
   ADD COLUMN IF NOT EXISTS catalog_slug text;
 
--- Best-effort backfill where an existing routine's `name` already
--- matches a catalog row's display_name for the same tenant. Most
--- user-authored routines won't align (routines are typically named
--- by humans, not the catalog), so this is mostly a no-op — those rows
--- stay with catalog_slug=NULL and remain invisible to the Customize
--- bindings query, which filters `catalog_slug IS NOT NULL`.
-UPDATE public.routines r
-   SET catalog_slug = twc.slug
-  FROM public.tenant_workflow_catalog twc
- WHERE r.tenant_id = twc.tenant_id
-   AND r.name = twc.display_name
-   AND r.catalog_slug IS NULL;
+-- No backfill: unlike `connectors.type`, `routines.name` is free-form
+-- user-authored text with no structural alignment to any catalog
+-- display_name. Existing routines stay with catalog_slug=NULL and
+-- remain invisible to the Customize bindings query (which filters
+-- `catalog_slug IS NOT NULL`); they're still functional via their
+-- existing schedule/triggers, just not surfaced on the Workflows tab.
+-- New Customize-driven enables get catalog_slug populated by the
+-- enableWorkflow resolver.
 
 -- Partial unique index: at most one routines row per
 -- (agent, catalog slug). Excludes legacy / user-authored rows where
--- agent_id IS NULL or catalog_slug IS NULL. Created after the backfill
--- so any pre-existing duplicates surface as a clear index-build failure
--- instead of silently masking real data.
+-- agent_id IS NULL or catalog_slug IS NULL.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_routines_catalog_slug_per_agent
   ON public.routines (agent_id, catalog_slug)
   WHERE agent_id IS NOT NULL AND catalog_slug IS NOT NULL;

@@ -29,7 +29,8 @@ const {
     description: "Summarizes yesterday's activity",
     category: "operations",
     icon: null,
-    default_config: { schedule: "cron(0 13 * * ? *)", template: "summary" },
+    default_config: { template: "summary" } as Record<string, unknown> | null,
+    default_schedule: "cron(0 13 * * ? *)" as string | null,
     status: "active",
     enabled: true,
   },
@@ -112,6 +113,8 @@ describe("enableWorkflow", () => {
       primary_agent_id: "agent-primary",
       migrated_from_agent_id: null,
     });
+    catalogRow.default_config = { template: "summary" };
+    catalogRow.default_schedule = "cron(0 13 * * ? *)";
   });
 
   it("enables a workflow and returns the WorkflowBinding projection keyed on primary_agent_id", async () => {
@@ -122,26 +125,57 @@ describe("enableWorkflow", () => {
     );
     expect(result.catalogSlug).toBe("daily-digest");
     expect(result.agentId).toBe("agent-primary");
+    expect(result.computerId).toBe("computer-1");
     expect(result.status).toBe("active");
+    expect(result.enabled).toBe(true);
     expect(result.updatedAt).toBe("2026-05-09T00:00:00Z");
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
     expect(lastInsertValues.value?.agent_id).toBe("agent-primary");
     expect(lastInsertValues.value?.catalog_slug).toBe("daily-digest");
     expect(lastInsertValues.value?.status).toBe("active");
     expect(lastInsertValues.value?.name).toBe("Daily Digest");
-    // schedule pulled from catalog default_config.
+    // Schedule sourced from typed default_schedule column (preferred over default_config.schedule).
     expect(lastInsertValues.value?.schedule).toBe("cron(0 13 * * ? *)");
   });
 
-  it("copies catalog default_config into the new routines row", async () => {
+  it("falls back to default_config.schedule when default_schedule is null", async () => {
+    catalogRow.default_schedule = null;
+    catalogRow.default_config = {
+      schedule: "cron(0 9 * * MON *)",
+      template: "summary",
+    };
+    await enableWorkflow(
+      null,
+      { input: { computerId: "computer-1", slug: "daily-digest" } },
+      ctx,
+    );
+    expect(lastInsertValues.value?.schedule).toBe("cron(0 9 * * MON *)");
+  });
+
+  it("uses default_schedule even when default_config is null", async () => {
+    catalogRow.default_config = null;
+    catalogRow.default_schedule = "cron(0 13 * * ? *)";
+    await enableWorkflow(
+      null,
+      { input: { computerId: "computer-1", slug: "daily-digest" } },
+      ctx,
+    );
+    expect(lastInsertValues.value?.schedule).toBe("cron(0 13 * * ? *)");
+  });
+
+  it("copies catalog default_config verbatim into the new routines row", async () => {
+    catalogRow.default_config = {
+      template: "summary",
+      retention_days: 30,
+    };
     await enableWorkflow(
       null,
       { input: { computerId: "computer-1", slug: "daily-digest" } },
       ctx,
     );
     expect(lastInsertValues.value?.config).toEqual({
-      schedule: "cron(0 13 * * ? *)",
       template: "summary",
+      retention_days: 30,
     });
   });
 
@@ -174,19 +208,15 @@ describe("enableWorkflow", () => {
     expect(lastInsertValues.value?.agent_id).toBe("agent-migrated");
   });
 
-  it("tolerates a null schedule when the catalog default_config has none", async () => {
-    catalogRow.default_config = { template: "summary" } as unknown as typeof catalogRow.default_config;
+  it("tolerates a null schedule when neither default_schedule nor default_config.schedule is set", async () => {
+    catalogRow.default_schedule = null;
+    catalogRow.default_config = { template: "summary" };
     await enableWorkflow(
       null,
       { input: { computerId: "computer-1", slug: "daily-digest" } },
       ctx,
     );
     expect(lastInsertValues.value?.schedule).toBeNull();
-    // Restore for subsequent tests.
-    catalogRow.default_config = {
-      schedule: "cron(0 13 * * ? *)",
-      template: "summary",
-    };
   });
 
   it("rejects when caller is unauthenticated", async () => {
@@ -225,6 +255,19 @@ describe("enableWorkflow", () => {
         ctx,
       ),
     ).rejects.toThrow(/CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND|primary agent/i);
+  });
+
+  it("rejects when the caller is not a tenant member of the Computer's tenant", async () => {
+    mockRequireTenantMember.mockRejectedValue(
+      new Error("Tenant membership required"),
+    );
+    await expect(
+      enableWorkflow(
+        null,
+        { input: { computerId: "computer-1", slug: "daily-digest" } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Tenant membership required/);
   });
 
   it("rejects when the catalog row is missing", async () => {

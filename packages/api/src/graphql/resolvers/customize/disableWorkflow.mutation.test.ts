@@ -7,6 +7,7 @@ const {
   mockUpdate,
   computerRow,
   lastUpdateSet,
+  lastUpdateWhere,
 } = vi.hoisted(() => ({
   mockResolveCaller: vi.fn(),
   mockRequireTenantMember: vi.fn(),
@@ -20,6 +21,7 @@ const {
     migrated_from_agent_id: null,
   },
   lastUpdateSet: { value: null as Record<string, unknown> | null },
+  lastUpdateWhere: { value: null as unknown },
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -36,18 +38,22 @@ vi.mock("../../utils.js", () => ({
       set: (vals: Record<string, unknown>) => {
         lastUpdateSet.value = vals;
         return {
-          where: (...args: unknown[]) => mockUpdate(args),
+          where: (...args: unknown[]) => {
+            lastUpdateWhere.value = args[0];
+            return mockUpdate(args);
+          },
         };
       },
     }),
   },
-  and: (...args: unknown[]) => args,
-  eq: (...args: unknown[]) => args,
-  ne: (...args: unknown[]) => args,
+  and: (...args: unknown[]) => ({ kind: "and", parts: args }),
+  eq: (col: unknown, val: unknown) => ({ kind: "eq", col, val }),
+  ne: (col: unknown, val: unknown) => ({ kind: "ne", col, val }),
   sql: (s: TemplateStringsArray) => s.join(""),
   computers: { __name: "computers" },
   routines: {
     __name: "routines",
+    tenant_id: "tenant_id",
     agent_id: "agent_id",
     catalog_slug: "catalog_slug",
   },
@@ -95,6 +101,45 @@ describe("disableWorkflow", () => {
     expect(lastUpdateSet.value?.status).toBe("inactive");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
+  });
+
+  it("scopes the UPDATE to (tenant_id, agent_id, catalog_slug)", async () => {
+    await disableWorkflow(
+      null,
+      { input: { computerId: "computer-1", slug: "daily-digest" } },
+      ctx,
+    );
+    // Mocked `and(...)` returns `{ kind: 'and', parts: [...] }` and each
+    // `eq(col, val)` returns `{ kind: 'eq', col, val }`. Verify the WHERE
+    // clause carries explicit predicates for tenant_id, agent_id, and
+    // catalog_slug — a regression dropping any of them would silently
+    // disable the wrong scope.
+    const where = lastUpdateWhere.value as {
+      kind: string;
+      parts: Array<{ kind: string; col: string; val: unknown }>;
+    } | null;
+    expect(where?.kind).toBe("and");
+    const cols = (where?.parts ?? []).map((p) => p.col);
+    expect(cols).toContain("tenant_id");
+    expect(cols).toContain("agent_id");
+    expect(cols).toContain("catalog_slug");
+    const slugPredicate = (where?.parts ?? []).find(
+      (p) => p.col === "catalog_slug",
+    );
+    expect(slugPredicate?.val).toBe("daily-digest");
+  });
+
+  it("rejects when the caller is not a tenant member of the Computer's tenant", async () => {
+    mockRequireTenantMember.mockRejectedValue(
+      new Error("Tenant membership required"),
+    );
+    await expect(
+      disableWorkflow(
+        null,
+        { input: { computerId: "computer-1", slug: "daily-digest" } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Tenant membership required/);
   });
 
   it("is idempotent — calling disable twice still flips status both times without error", async () => {

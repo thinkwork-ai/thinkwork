@@ -57,6 +57,39 @@ interface ToggleMutationOptions {
   errorCodeHints?: Readonly<Record<string, string>>;
 }
 
+// Per-wrapper option bags hoisted to module scope so each wrapper hook
+// passes a stable reference into useToggleMutation. Inline object
+// literals would invalidate `toggle`'s useCallback deps every render
+// and bust referential identity for downstream consumers.
+const CONNECTOR_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableConnectorMutation,
+  disableMutation: DisableConnectorMutation,
+  typenames: CONNECTOR_TYPENAMES,
+  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
+  errorCodeHints: {
+    CUSTOMIZE_MCP_NOT_SUPPORTED: MCP_VIA_MOBILE_HINT,
+  },
+};
+
+const SKILL_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableSkillMutation,
+  disableMutation: DisableSkillMutation,
+  typenames: SKILL_TYPENAMES,
+  buildVariables: (computerId, skillId) => ({
+    input: { computerId, skillId },
+  }),
+  errorCodeHints: {
+    CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
+  },
+};
+
+const WORKFLOW_OPTS: ToggleMutationOptions = {
+  enableMutation: EnableWorkflowMutation,
+  disableMutation: DisableWorkflowMutation,
+  typenames: WORKFLOW_TYPENAMES,
+  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
+};
+
 /**
  * Shared core for the Customize tab Connect / Disable buttons. Resolves
  * the caller's Computer id once via MyComputerQuery, owns the
@@ -100,9 +133,10 @@ export function useToggleMutation(
           ? await enable(variables, { additionalTypenames })
           : await disable(variables, { additionalTypenames });
         if (result.error) {
-          const code = result.error.graphQLErrors[0]?.extensions?.code as
-            | string
-            | undefined;
+          const codeRaw =
+            result.error.graphQLErrors[0]?.extensions?.code;
+          const code =
+            typeof codeRaw === "string" ? codeRaw : undefined;
           const hint = code ? opts.errorCodeHints?.[code] : undefined;
           if (hint) {
             toast.message(hint);
@@ -135,15 +169,7 @@ export function useToggleMutation(
  * page short-circuits to MCP_VIA_MOBILE_HINT instead.
  */
 export function useConnectorMutation(): UseConnectorMutationResult {
-  return useToggleMutation({
-    enableMutation: EnableConnectorMutation,
-    disableMutation: DisableConnectorMutation,
-    typenames: CONNECTOR_TYPENAMES,
-    buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
-    errorCodeHints: {
-      CUSTOMIZE_MCP_NOT_SUPPORTED: MCP_VIA_MOBILE_HINT,
-    },
-  });
+  return useToggleMutation(CONNECTOR_OPTS);
 }
 
 /**
@@ -153,17 +179,7 @@ export function useConnectorMutation(): UseConnectorMutationResult {
  * to BUILTIN_TOOL_HINT.
  */
 export function useSkillMutation(): UseToggleMutationResult {
-  return useToggleMutation({
-    enableMutation: EnableSkillMutation,
-    disableMutation: DisableSkillMutation,
-    typenames: SKILL_TYPENAMES,
-    buildVariables: (computerId, skillId) => ({
-      input: { computerId, skillId },
-    }),
-    errorCodeHints: {
-      CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
-    },
-  });
+  return useToggleMutation(SKILL_OPTS);
 }
 
 /**
@@ -174,10 +190,5 @@ export function useSkillMutation(): UseToggleMutationResult {
  * `CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND` fall through to `toast.error`.
  */
 export function useWorkflowMutation(): UseToggleMutationResult {
-  return useToggleMutation({
-    enableMutation: EnableWorkflowMutation,
-    disableMutation: DisableWorkflowMutation,
-    typenames: WORKFLOW_TYPENAMES,
-    buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
-  });
+  return useToggleMutation(WORKFLOW_OPTS);
 }

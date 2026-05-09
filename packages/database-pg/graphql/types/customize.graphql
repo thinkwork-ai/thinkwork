@@ -62,12 +62,18 @@ type ConnectorBinding {
   updatedAt: AWSDateTime!
 }
 
+# Mirrors ConnectorBinding shape for parity. Distinct from the heavier
+# Routine type (which carries ASL versions, executions, triggers) — this
+# is the binding-toggle projection only, sufficient for the Customize
+# Sheet's status flip.
 type WorkflowBinding {
   id: ID!
   tenantId: ID!
   agentId: ID!
+  computerId: ID!
   catalogSlug: String!
   status: String!
+  enabled: Boolean!
   updatedAt: AWSDateTime!
 }
 

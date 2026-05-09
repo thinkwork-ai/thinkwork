@@ -69,11 +69,15 @@ export async function disableWorkflow(
     return true;
   }
 
+  // tenant_id predicate is defense-in-depth — agents.tenant_id is FK-bound
+  // to the agent's tenant today, but a future schema bug shouldn't be able
+  // to flip a routine in the wrong tenant.
   await db
     .update(routines)
     .set({ status: "inactive", updated_at: sql`now()` })
     .where(
       and(
+        eq(routines.tenant_id, computer.tenant_id),
         eq(routines.agent_id, agentId),
         eq(routines.catalog_slug, slug),
       ),

@@ -645,8 +645,10 @@ export const EnableWorkflowMutation = gql`
       id
       tenantId
       agentId
+      computerId
       catalogSlug
       status
+      enabled
       updatedAt
     }
   }
