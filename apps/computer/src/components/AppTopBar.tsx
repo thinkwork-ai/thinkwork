@@ -1,5 +1,5 @@
 import { Moon, Sun } from "lucide-react";
-import { Button, SidebarTrigger, useTheme } from "@thinkwork/ui";
+import { Button, useTheme } from "@thinkwork/ui";
 
 export function AppTopBar() {
   const { theme, toggleTheme } = useTheme();
@@ -7,7 +7,6 @@ export function AppTopBar() {
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-      <SidebarTrigger className="-ml-1" />
       <div className="ml-auto flex items-center gap-1">
         <Button
           variant="ghost"
