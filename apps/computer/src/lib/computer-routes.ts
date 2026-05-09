@@ -11,7 +11,7 @@ export const COMPUTER_APPS_ROUTE = "/apps" as const;
 
 export const COMPUTER_ROUTE_LABELS = {
   computer: "Computer",
-  tasks: "Tasks",
+  tasks: "Threads",
   apps: "Apps",
 } as const;
 

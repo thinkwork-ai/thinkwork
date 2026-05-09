@@ -43,19 +43,19 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
   });
 
-  it("renders a task-created event when the thread has no messages", () => {
+  it("renders a thread-created event when the thread has no messages", () => {
     render(
       <TaskThreadView
         thread={{
           id: "thread-1",
-          title: "Blank task",
+          title: "Blank thread",
           lifecycleStatus: "IDLE",
           messages: [],
         }}
       />,
     );
 
-    expect(screen.getByText("Task created")).toBeTruthy();
+    expect(screen.getByText("Thread created")).toBeTruthy();
   });
 
   it("renders streaming assistant chunks below persisted messages", () => {
@@ -63,7 +63,7 @@ describe("TaskThreadView", () => {
       <TaskThreadView
         thread={{
           id: "thread-1",
-          title: "Streaming task",
+          title: "Streaming thread",
           lifecycleStatus: "RUNNING",
           messages: [
             {

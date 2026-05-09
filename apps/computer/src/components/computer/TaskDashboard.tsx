@@ -28,24 +28,24 @@ export function TaskDashboard({
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Threads</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Follow Computer work from prompt to generated artifacts.
             </p>
           </div>
           <Button asChild>
-            <a href="/computer">New task</a>
+            <a href="/computer">New thread</a>
           </Button>
         </header>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <label className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search tasks" />
+            <Input className="pl-9" placeholder="Search threads" />
           </label>
           <div className="flex rounded-lg border border-border/70 p-1">
             <Button type="button" size="sm" variant="secondary">
-              Tasks
+              Threads
             </Button>
             <Button type="button" size="sm" variant="ghost" disabled>
               Archived
@@ -54,13 +54,13 @@ export function TaskDashboard({
         </div>
 
         {isLoading ? (
-          <TaskDashboardState label="Loading tasks" />
+          <TaskDashboardState label="Loading threads" />
         ) : error ? (
-          <TaskDashboardState label="Failed to load tasks" tone="error" />
+          <TaskDashboardState label="Failed to load threads" tone="error" />
         ) : tasks.length === 0 ? (
-          <TaskDashboardState label="No tasks yet" />
+          <TaskDashboardState label="No threads yet" />
         ) : (
-          <section className="grid gap-3" aria-label="Computer tasks">
+          <section className="grid gap-3" aria-label="Computer threads">
             {tasks.map((task) => (
               <TaskRow key={task.id} task={task} />
             ))}
@@ -72,7 +72,7 @@ export function TaskDashboard({
 }
 
 function TaskRow({ task }: { task: TaskSummary }) {
-  const title = task.title?.trim() || "Untitled task";
+  const title = task.title?.trim() || "Untitled thread";
   const href = computerTaskRoute(task.id);
 
   return (
