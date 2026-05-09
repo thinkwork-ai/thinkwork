@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppletTransformCache } from "../cache";
 import { compileAppletSource, transformApplet } from "../transform";
@@ -49,7 +51,10 @@ describe("transformApplet", () => {
     const source = "export default function App() { return null; }";
 
     const first = await transformApplet(source, 1, { cache, useWorker: false });
-    const second = await transformApplet(source, 1, { cache, useWorker: false });
+    const second = await transformApplet(source, 1, {
+      cache,
+      useWorker: false,
+    });
 
     expect(first).toMatchObject({ ok: true, cached: false });
     expect(second).toMatchObject({ ok: true, cached: true });
@@ -74,5 +79,19 @@ describe("transformApplet", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected transform failure");
     expect(result.error.message).toContain("lodash");
+  });
+
+  it("compiles the migrated CRM pipeline-risk applet source", () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        "src/test/fixtures/crm-pipeline-risk-applet/source.tsx",
+      ),
+      "utf8",
+    );
+    const result = compileAppletSource(source);
+
+    expect(source).not.toMatch(/\bfetch\w*/);
+    expect(result.ok).toBe(true);
   });
 });

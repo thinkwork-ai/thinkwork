@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { Badge, DataTable as UiDataTable } from "@thinkwork/ui";
 
 export interface AppletTableColumn<TRow extends Record<string, unknown>> {
@@ -7,6 +8,7 @@ export interface AppletTableColumn<TRow extends Record<string, unknown>> {
   header: ReactNode;
   align?: "left" | "right";
   width?: number;
+  sortable?: boolean;
   render?: (value: TRow[keyof TRow], row: TRow) => ReactNode;
 }
 
@@ -60,7 +62,8 @@ export function DataTable<TRow extends Record<string, unknown>>({
             columns={toColumnDefs(columns)}
             data={rows}
             pageSize={0}
-            tableClassName="min-w-[720px]"
+            tableClassName="w-full table-fixed"
+            allowHorizontalScroll={false}
           />
         </div>
       )}
@@ -73,11 +76,35 @@ function toColumnDefs<TRow extends Record<string, unknown>>(
 ): Array<ColumnDef<TRow, unknown>> {
   return columns.map((column) => ({
     accessorKey: column.key,
-    header: () => (
-      <span className={column.align === "right" ? "block text-right" : ""}>
-        {column.header}
-      </span>
-    ),
+    enableSorting: column.sortable ?? true,
+    header: ({ column: tableColumn }) => {
+      const className =
+        column.align === "right"
+          ? "flex w-full items-center justify-end gap-1 text-right"
+          : "flex w-full items-center gap-1 text-left";
+      const sortDirection = tableColumn.getIsSorted();
+      const sortIcon =
+        sortDirection === "desc" ? (
+          <ArrowDown className="size-3" aria-hidden="true" />
+        ) : sortDirection === "asc" ? (
+          <ArrowUp className="size-3" aria-hidden="true" />
+        ) : null;
+
+      if (column.sortable === false) {
+        return <span className={className}>{column.header}</span>;
+      }
+
+      return (
+        <button
+          type="button"
+          className={className}
+          onClick={tableColumn.getToggleSortingHandler()}
+        >
+          {column.header}
+          {sortIcon}
+        </button>
+      );
+    },
     size: column.width,
     cell: ({ row, getValue }) => {
       const value = getValue();

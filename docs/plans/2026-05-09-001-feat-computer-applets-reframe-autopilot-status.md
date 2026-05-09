@@ -14,20 +14,63 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U11:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u11-crm-cutover` on branch
+  `codex/computer-applets-u11-crm-cutover` from `origin/main` after U10
+  merged.
+- **Progress:** Migrated the CRM pipeline-risk fixture into a canonical
+  agent-style applet source and metadata fixture under
+  `apps/computer/src/test/fixtures/crm-pipeline-risk-applet/`. The applet
+  imports the generic stdlib primitives (`AppHeader`, `RefreshBar`, `KpiStrip`,
+  `BarChart`, `StackedBarChart`, `DataTable`, `SourceStatusList`,
+  `EvidenceList`), exports deterministic `refresh()`, and is bounded to a
+  `max-w-[1280px]` canvas with no horizontal table scrolling. Added an
+  idempotent `scripts/seed-crm-pipeline-risk-applet.ts` dry-run/seed path and
+  taught workspace defaults about `save_app`, `load_app`, and `list_apps`.
+- **Decision:** The legacy JSON dashboard manifest remains parseable until U12
+  deletes the legacy CRM orchestrator and manifest path. It was not marked
+  inside the JSON because `parseDashboardManifestV1` forbids additional
+  properties and the remaining legacy tests still validate that fixture.
+- **Verification note:** `pnpm install --frozen-lockfile`, U11-focused applet
+  route/transform/visual tests, package tests/typechecks for `computer`,
+  `computer-stdlib`, and `workspace-defaults`, the Computer build, API
+  applet-source validation, seed-script dry-run, lint, recursive typecheck,
+  and diff whitespace checks passed locally. `pnpm format:check` is still
+  blocked by the existing missing root `prettier` binary; a one-off Prettier
+  check against the touched files passed.
+- **Verification note:** A broad `pnpm -r --if-present test` run had one
+  unrelated timeout in
+  `packages/api/src/lib/__tests__/plugin-zip-safety.test.ts` during the
+  oversized-zip case while the full monorepo test run was under load. The
+  failing file passed immediately on focused rerun (`10` tests in under one
+  second), and the changed Computer package test suite passed afterward (`38`
+  files, `146` tests).
+- **Smoke note:** Started the apps/computer dev server from the U11 worktree on
+  `http://localhost:5174` using `localhost` for OAuth routing. The logged-in
+  browser reached the authenticated app route, but the deployed backend does
+  not yet contain the new canonical CRM applet ID, so the canonical CRM applet
+  route returned `[GraphQL] Applet artifact not found`. The seed script was
+  only dry-run locally because the autopilot contract forbids manual backend
+  mutation outside the normal pipeline.
+- **Current PR:** #1064 (`feat(computer): migrate CRM applet fixture`).
+- **Merged U10:** PR #1062 (`feat(computer): activate applet refresh`) was
+  squash-merged to `main` at
+  `540ad2bad14461c242939137befa956a8d25d014`; remote/local branches and the
+  U10 worktree were deleted.
 - **Started U10:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u10-refresh` on branch
   `codex/computer-applets-u10-refresh` from `origin/main` after U9 merged.
 - **Progress:** Activated the live applet refresh contract. Applet modules can
   export `refresh()`, the app detail canvas registers it per `(appId,
-  instanceId)`, the host `useAppletAPI().refresh()` routes to that registered
+instanceId)`, the host `useAppletAPI().refresh()` routes to that registered
   handler, and the UI only shows refresh controls when an applet provides the
   export. Refresh results surface per-source success/partial/failed status and
   preserve prior rendered data for thrown refreshes, null data, or all-source
   failures.
 - **Verification note:** `pnpm install --frozen-lockfile`, U10-focused
   computer refresh/host/route tests, `pnpm --filter @thinkwork/computer-stdlib
-  test`, `pnpm --filter @thinkwork/computer-stdlib typecheck`, `pnpm --filter
-  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer test`,
+test`, `pnpm --filter @thinkwork/computer-stdlib typecheck`, `pnpm --filter
+@thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer test`,
   `pnpm --filter @thinkwork/computer build`, `git diff --check`, `pnpm lint`,
   `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
   locally. Build warnings remain the existing shared UI sourcemap/chunk-size
@@ -56,9 +99,9 @@ autopilot mode.
   to generated components.
 - **Verification note:** `pnpm install --frozen-lockfile`, U9-focused
   computer host/route tests, applet API resolver tests, `pnpm --filter
-  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/api typecheck`,
+@thinkwork/computer typecheck`, `pnpm --filter @thinkwork/api typecheck`,
   `pnpm --filter @thinkwork/computer test`, `pnpm --filter
-  @thinkwork/computer build`, `pnpm --filter @thinkwork/api test -- applets`,
+@thinkwork/computer build`, `pnpm --filter @thinkwork/api test -- applets`,
   `git diff --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and
   `pnpm -r --if-present test` passed locally. Build warnings remain the
   existing shared UI sourcemap/chunk-size and host-registry dynamic-import
@@ -83,7 +126,7 @@ autopilot mode.
   applet.
 - **Verification note:** `pnpm install --frozen-lockfile`, focused app route
   and shell tests, `pnpm --filter @thinkwork/computer test`, `pnpm --filter
-  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer build`,
+@thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer build`,
   `git diff --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and
   `pnpm -r --if-present test` passed locally. Build still emits the existing
   shared UI sourcemap/chunk-size warnings and expected host-registry
@@ -97,7 +140,7 @@ autopilot mode.
   dependencies with `pnpm install --frozen-lockfile`, then reran the applet
   route test, `pnpm --filter @thinkwork/computer test` (34 files, 109 tests),
   `pnpm --filter @thinkwork/computer typecheck`, `pnpm --filter
-  @thinkwork/computer build`, `pnpm lint`, `pnpm -r --if-present typecheck`,
+@thinkwork/computer build`, `pnpm lint`, `pnpm -r --if-present typecheck`,
   and `git diff --check`; all passed. Build warnings remain the existing
   sourcemap/chunk-size and host-registry dynamic-import warnings.
 - **Rebase note:** Main moved again after PR #1060 opened. Resolved the
@@ -120,19 +163,19 @@ autopilot mode.
   `list_apps` calls `applets`. Calls use a fresh `httpx.AsyncClient`, service
   bearer auth, and tenant/agent/computer headers.
 - **Verification note:** `uv run pytest
-  packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
-  pytest packages/agentcore-strands/agent-container/test_applet_tool.py
-  packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
-  ruff check ...`, and `uv run --no-project --with pytest --with
-  pytest-asyncio --with pyyaml --with mistune --with anyio --with boto3 --with
-  strands-agents pytest
-  packages/agentcore-strands/agent-container/test_server_registration.py`
+packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
+pytest packages/agentcore-strands/agent-container/test_applet_tool.py
+packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
+ruff check ...`, and `uv run --no-project --with pytest --with
+pytest-asyncio --with pyyaml --with mistune --with anyio --with boto3 --with
+strands-agents pytest
+packages/agentcore-strands/agent-container/test_server_registration.py`
   passed locally. `git diff --check` passed. `docker build -f
-  packages/agentcore-strands/agent-container/Dockerfile -t
-  thinkwork-agentcore-strands-applet-u7:local .` passed, including the
+packages/agentcore-strands/agent-container/Dockerfile -t
+thinkwork-agentcore-strands-applet-u7:local .` passed, including the
   container boot assert.
 - **Verification note:** A broad `uv run pytest
-  packages/agentcore-strands/agent-container` collection attempt failed before
+packages/agentcore-strands/agent-container` collection attempt failed before
   tests ran because this local invocation does not install optional broad-suite
   dependencies (`botocore`, `pytest_asyncio`, and
   `workspace_composer_client`). The targeted supported invocations above cover
@@ -158,9 +201,9 @@ autopilot mode.
   for U9.
 - **Verification note:** `pnpm install --frozen-lockfile`, codegen for
   `thinkwork-cli`, `@thinkwork/admin`, and `@thinkwork/mobile`, `pnpm --filter
-  @thinkwork/api test -- applets`, `pnpm --filter @thinkwork/api typecheck`,
+@thinkwork/api test -- applets`, `pnpm --filter @thinkwork/api typecheck`,
   `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm --filter @thinkwork/api
-  test`, `pnpm -r --if-present test`, `pnpm --filter @thinkwork/api build`,
+test`, `pnpm -r --if-present test`, `pnpm --filter @thinkwork/api build`,
   and `git diff --check` passed locally.
 - **Current PR:** #1056 (`feat(computer): activate applet API resolvers`).
 - **CI:** PR #1056 checks passed: CLA, lint, test, typecheck, verify.
@@ -181,8 +224,8 @@ autopilot mode.
   host placeholder that throws `INERT_NOT_WIRED`; U9 will body-swap it live.
 - **Verification note:** `pnpm --filter @thinkwork/computer test -- applets`,
   `pnpm --filter @thinkwork/computer typecheck`, `pnpm --filter
-  @thinkwork/computer build`, `git diff --check`, `pnpm lint`, `pnpm -r
-  --if-present typecheck`, and `pnpm -r --if-present test` passed locally.
+@thinkwork/computer build`, `git diff --check`, `pnpm lint`, `pnpm -r
+--if-present typecheck`, and `pnpm -r --if-present test` passed locally.
   Build still emits the existing package sourcemap and chunk-size warnings.
 - **Bundle note:** The U5 transform substrate is lazy from app routes until U8.
   Baseline `origin/main` app JS gzip was 351,859 bytes; U5 app JS gzip was
@@ -202,19 +245,19 @@ autopilot mode.
   boot-assert coverage. The Dockerfile already wildcard-copies
   `container-sources/`; `_boot_assert.py` is the effective COPY drift guard.
 - **Verification note:** `uv run pytest
-  packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
-  pytest packages/agentcore-strands/agent-container/test_applet_tool.py
-  packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
-  ruff check ...`, `uv run --no-project --with pytest --with pytest-asyncio
-  --with pyyaml --with mistune --with anyio --with boto3 --with
-  strands-agents pytest
-  packages/agentcore-strands/agent-container/test_server_registration.py`,
+packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
+pytest packages/agentcore-strands/agent-container/test_applet_tool.py
+packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
+ruff check ...`, `uv run --no-project --with pytest --with pytest-asyncio
+--with pyyaml --with mistune --with anyio --with boto3 --with
+strands-agents pytest
+packages/agentcore-strands/agent-container/test_server_registration.py`,
   and `docker build -f
-  packages/agentcore-strands/agent-container/Dockerfile -t
-  thinkwork-agentcore-strands-applet-u4:local .` all passed. After installing
+packages/agentcore-strands/agent-container/Dockerfile -t
+thinkwork-agentcore-strands-applet-u4:local .` all passed. After installing
   worktree dependencies with `pnpm install --frozen-lockfile`, `git diff
-  --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and `pnpm -r
-  --if-present test` also passed.
+--check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and `pnpm -r
+--if-present test` also passed.
 - **Current PR:** #1053 (`feat(computer): add inert applet tools`).
 - **CI:** PR #1053 checks passed: CLA, lint, test, typecheck, verify.
 - **Interruption handled:** PR #1052
@@ -229,10 +272,10 @@ autopilot mode.
   schema without wiring runtime behavior before U6, and regenerated GraphQL
   client types for CLI/admin/mobile.
 - **Verification note:** `pnpm install --no-frozen-lockfile`, `pnpm install
-  --frozen-lockfile`, applet-focused API tests, full API tests, codegen for
+--frozen-lockfile`, applet-focused API tests, full API tests, codegen for
   `thinkwork-cli`, `@thinkwork/admin`, and `@thinkwork/mobile`, `git diff
-  --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm -r
-  --if-present test`, and `pnpm --filter @thinkwork/api build` all passed.
+--check`, `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm -r
+--if-present test`, and `pnpm --filter @thinkwork/api build` all passed.
   `pnpm format:check` is still blocked by the existing missing `prettier`
   binary in the root workspace.
 - **Current PR:** #1051 (`feat(computer): add inert applet API`).
@@ -248,8 +291,8 @@ autopilot mode.
 - **Verification note:** `pnpm install --no-frozen-lockfile` updated the
   lockfile for the new workspace package, and `pnpm install --frozen-lockfile`
   then passed. `pnpm --filter @thinkwork/computer-stdlib test`, `pnpm
-  --filter @thinkwork/computer-stdlib build`, `pnpm -r --if-present
-  typecheck`, `pnpm lint`, `pnpm -r --if-present test`, and `git diff --check`
+--filter @thinkwork/computer-stdlib build`, `pnpm -r --if-present
+typecheck`, `pnpm lint`, `pnpm -r --if-present test`, and `git diff --check`
   all passed locally.
 - **Started U1:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u1-contract` on branch
@@ -263,7 +306,7 @@ autopilot mode.
   the plan 014 M1 contract-freeze gate with the applet-package shape.
 - **Verification note:** `git diff --check` passed and a frontmatter sanity
   check passed for the new spec and status docs. `pnpm install
-  --frozen-lockfile` succeeded, but `pnpm format:check` still cannot run
+--frozen-lockfile` succeeded, but `pnpm format:check` still cannot run
   because the root script references `prettier` and the repo does not expose a
   Prettier binary in `node_modules/.bin`.
 - **Verification note:** `pnpm lint` passed locally.
