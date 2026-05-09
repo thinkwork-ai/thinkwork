@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
+  CheckSquare,
   Inbox,
   ListTodo,
   Monitor,
@@ -29,6 +30,7 @@ import {
   computerTaskRoute,
 } from "@/lib/computer-routes";
 import {
+  ComputerApprovalsQuery,
   ComputerThreadsQuery,
   MyComputerQuery,
 } from "@/lib/graphql-queries";
@@ -45,6 +47,7 @@ const PERMANENT_NAV: NavItem[] = [
   { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Tasks" },
   { to: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
   { to: "/automations", icon: Repeat, label: "Automations" },
+  { to: "/approvals", icon: CheckSquare, label: "Approvals" },
   { to: "/inbox", icon: Inbox, label: "Inbox" },
 ];
 
@@ -62,6 +65,10 @@ interface Thread {
 
 interface ThreadsResult {
   threads: Thread[];
+}
+
+interface ApprovalsResult {
+  inboxItems: Array<{ id: string; type: string }>;
 }
 
 export function ComputerSidebar() {
@@ -92,8 +99,16 @@ export function ComputerSidebar() {
       pause: !tenantId || !computerId,
       context: threadsContext,
     });
+  const [{ data: approvalsData }] = useQuery<ApprovalsResult>({
+    query: ComputerApprovalsQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const threads = threadsData?.threads ?? [];
+  const pendingApprovalCount = (approvalsData?.inboxItems ?? []).filter(
+    (item) => item.type === "computer_approval",
+  ).length;
 
   return (
     <>
@@ -144,6 +159,12 @@ export function ComputerSidebar() {
                         <Link to={item.to}>
                           <item.icon />
                           <span>{item.label}</span>
+                          {item.to === "/approvals" &&
+                          pendingApprovalCount > 0 ? (
+                            <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+                              {pendingApprovalCount}
+                            </span>
+                          ) : null}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

@@ -109,3 +109,59 @@ export const CreateThreadMutation = gql`
     }
   }
 `;
+
+const ComputerApprovalFields = gql`
+  fragment ComputerApprovalFields on InboxItem {
+    id
+    tenantId
+    type
+    status
+    title
+    description
+    entityType
+    entityId
+    config
+    expiresAt
+    createdAt
+    updatedAt
+  }
+`;
+
+export const ComputerApprovalsQuery = gql`
+  query ComputerApprovals($tenantId: ID!) {
+    inboxItems(tenantId: $tenantId, status: PENDING) {
+      ...ComputerApprovalFields
+    }
+  }
+  ${ComputerApprovalFields}
+`;
+
+export const ComputerApprovalQuery = gql`
+  query ComputerApproval($id: ID!) {
+    inboxItem(id: $id) {
+      ...ComputerApprovalFields
+    }
+  }
+  ${ComputerApprovalFields}
+`;
+
+export const ApproveComputerApprovalMutation = gql`
+  mutation ApproveComputerApproval(
+    $id: ID!
+    $input: ApproveInboxItemInput
+  ) {
+    approveInboxItem(id: $id, input: $input) {
+      ...ComputerApprovalFields
+    }
+  }
+  ${ComputerApprovalFields}
+`;
+
+export const RejectComputerApprovalMutation = gql`
+  mutation RejectComputerApproval($id: ID!, $input: RejectInboxItemInput) {
+    rejectInboxItem(id: $id, input: $input) {
+      ...ComputerApprovalFields
+    }
+  }
+  ${ComputerApprovalFields}
+`;
