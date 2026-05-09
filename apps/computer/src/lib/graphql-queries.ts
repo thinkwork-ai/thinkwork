@@ -188,6 +188,73 @@ export const ThreadUpdatedSubscription = gql`
   }
 `;
 
+const ComputerTaskFields = gql`
+  fragment ComputerTaskFields on ComputerTask {
+    id
+    tenantId
+    computerId
+    taskType
+    status
+    input
+    output
+    error
+    idempotencyKey
+    claimedAt
+    completedAt
+    createdAt
+    updatedAt
+  }
+`;
+
+const ArtifactFields = gql`
+  fragment ArtifactFields on Artifact {
+    id
+    tenantId
+    agentId
+    threadId
+    title
+    type
+    status
+    summary
+    metadata
+    createdAt
+    updatedAt
+  }
+`;
+
+export const DashboardArtifactQuery = gql`
+  query DashboardArtifact($id: ID!) {
+    dashboardArtifact(id: $id) {
+      artifact {
+        ...ArtifactFields
+      }
+      manifest
+      latestRefreshTask {
+        ...ComputerTaskFields
+      }
+      canRefresh
+    }
+  }
+  ${ArtifactFields}
+  ${ComputerTaskFields}
+`;
+
+export const RefreshDashboardArtifactMutation = gql`
+  mutation RefreshDashboardArtifact($id: ID!) {
+    refreshDashboardArtifact(id: $id) {
+      artifact {
+        ...ArtifactFields
+      }
+      task {
+        ...ComputerTaskFields
+      }
+      idempotencyKey
+    }
+  }
+  ${ArtifactFields}
+  ${ComputerTaskFields}
+`;
+
 export const CreateThreadMutation = gql`
   mutation CreateThread($input: CreateThreadInput!) {
     createThread(input: $input) {

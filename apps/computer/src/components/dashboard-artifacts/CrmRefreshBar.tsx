@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Brain, RefreshCcw } from "lucide-react";
+import { AlertCircle, Brain, RefreshCcw } from "lucide-react";
 import { Badge, Button } from "@thinkwork/ui";
-import type { DashboardArtifactManifest } from "@/lib/app-artifacts";
+import type {
+  DashboardArtifactManifest,
+  DashboardArtifactRefreshTask,
+} from "@/lib/app-artifacts";
 import { formatDateTime } from "@/components/dashboard-artifacts/dashboard-data";
 import {
   RefreshStateTimeline,
@@ -11,21 +14,52 @@ import {
 
 interface CrmRefreshBarProps {
   manifest: DashboardArtifactManifest;
+  latestRefreshTask?: DashboardArtifactRefreshTask | null;
+  canRefresh?: boolean;
   initialState?: RefreshState;
+  onRefresh?: () => Promise<DashboardArtifactRefreshTask | null | undefined>;
+  onRefreshSettled?: () => void;
 }
 
 export function CrmRefreshBar({
   manifest,
+  latestRefreshTask,
+  canRefresh = true,
   initialState = "available",
+  onRefresh,
+  onRefreshSettled,
 }: CrmRefreshBarProps) {
-  const [refreshState, setRefreshState] = useState<RefreshState>(initialState);
+  const [refreshState, setRefreshState] = useState<RefreshState>(
+    refreshStateFromTask(latestRefreshTask) ?? initialState,
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const isActive = refreshState === "queued" || refreshState === "running";
+  const refreshDisabled = isActive || !canRefresh || !onRefresh;
 
-  function startRefresh() {
-    if (isActive) return;
+  useEffect(() => {
+    const taskState = refreshStateFromTask(latestRefreshTask);
+    if (taskState) setRefreshState(taskState);
+  }, [
+    latestRefreshTask?.id,
+    latestRefreshTask?.status,
+    latestRefreshTask?.updatedAt,
+  ]);
+
+  async function startRefresh() {
+    if (refreshDisabled || !onRefresh) return;
+    setSubmitError(null);
     setRefreshState("queued");
-    window.setTimeout(() => setRefreshState("running"), 250);
-    window.setTimeout(() => setRefreshState("succeeded"), 750);
+    try {
+      const task = await onRefresh();
+      setRefreshState(refreshStateFromTask(task) ?? "queued");
+    } catch (err) {
+      setRefreshState("failed");
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to start refresh",
+      );
+    } finally {
+      onRefreshSettled?.();
+    }
   }
 
   return (
@@ -55,7 +89,7 @@ export function CrmRefreshBar({
             variant="outline"
             size="sm"
             className="gap-2"
-            disabled={isActive}
+            disabled={refreshDisabled}
             onClick={startRefresh}
           >
             <RefreshCcw className={isActive ? "size-4 animate-spin" : "size-4"} />
@@ -72,9 +106,27 @@ export function CrmRefreshBar({
           </Button>
         </div>
       </div>
+      {submitError ? (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <AlertCircle className="size-4" />
+          {submitError}
+        </div>
+      ) : null}
       <RefreshStateTimeline state={refreshState} />
     </section>
   );
+}
+
+export function refreshStateFromTask(
+  task?: DashboardArtifactRefreshTask | null,
+): RefreshState | null {
+  const status = String(task?.status ?? "").toLowerCase();
+  if (!status) return null;
+  if (status === "pending") return "queued";
+  if (status === "running") return "running";
+  if (status === "completed") return "succeeded";
+  if (status === "failed" || status === "cancelled") return "failed";
+  return null;
 }
 
 function RefreshStateBadge({ state }: { state: RefreshState }) {
