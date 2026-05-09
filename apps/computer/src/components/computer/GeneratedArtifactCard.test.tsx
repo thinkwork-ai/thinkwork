@@ -1,11 +1,18 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/components/apps/InlineAppletEmbed", () => ({
+  InlineAppletEmbed: ({ appId }: { appId: string }) => (
+    <div data-testid="inline-applet-embed-stub" data-app-id={appId} />
+  ),
+}));
+
 import { GeneratedArtifactCard } from "./GeneratedArtifactCard";
 
 afterEach(cleanup);
 
 describe("GeneratedArtifactCard", () => {
-  it("routes app artifacts to the artifact route", () => {
+  it("renders an inline applet embed for app artifacts and routes the full-screen link", () => {
     render(
       <GeneratedArtifactCard
         artifact={{
@@ -19,8 +26,30 @@ describe("GeneratedArtifactCard", () => {
     );
 
     expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /open artifact/i }).getAttribute("href"),
-    ).toBe("/artifacts/artifact_123");
+    const stub = screen.getByTestId("inline-applet-embed-stub");
+    expect(stub.getAttribute("data-app-id")).toBe("artifact_123");
+
+    const fullScreenLink = screen.getByRole("link", {
+      name: /open artifact full screen/i,
+    });
+    expect(fullScreenLink.getAttribute("href")).toBe("/artifacts/artifact_123");
+  });
+
+  it("shows Preview unavailable for non-app artifacts", () => {
+    render(
+      <GeneratedArtifactCard
+        artifact={{
+          id: "artifact_456",
+          title: "Plain note",
+          type: "NOTE",
+          summary: null,
+          metadata: null,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Plain note")).toBeTruthy();
+    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
+    expect(screen.getByText(/preview unavailable/i)).toBeTruthy();
   });
 });

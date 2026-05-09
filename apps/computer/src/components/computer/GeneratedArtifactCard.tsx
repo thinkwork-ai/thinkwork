@@ -1,6 +1,7 @@
 import { ExternalLink, LayoutDashboard } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
+import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
 
 export interface GeneratedArtifact {
   id: string;
@@ -41,20 +42,24 @@ export function GeneratedArtifactCard({
             </p>
           ) : null}
         </div>
+        {isAppArtifact ? (
+          <Button
+            asChild
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1"
+            aria-label="Open artifact full screen"
+          >
+            <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+              <ExternalLink className="size-4" />
+              <span className="hidden sm:inline">Open full</span>
+            </Link>
+          </Button>
+        ) : null}
       </div>
       {isAppArtifact ? (
-        <Button
-          asChild
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2 justify-self-start"
-        >
-          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
-            Open artifact
-            <ExternalLink className="size-4" />
-          </Link>
-        </Button>
+        <InlineAppletEmbed appId={artifact.id} />
       ) : (
         <Button
           type="button"

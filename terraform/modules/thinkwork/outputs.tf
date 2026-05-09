@@ -97,6 +97,12 @@ output "auth_domain" {
   value       = module.cognito.auth_domain
 }
 
+output "mapbox_public_token" {
+  description = "Mapbox public token used by apps/computer MapView. Surfaced for scripts/build-computer.sh to inline as VITE_MAPBOX_PUBLIC_TOKEN at build time. MapView falls back to OSM tiles when this is empty."
+  value       = var.mapbox_public_token
+  sensitive   = true
+}
+
 output "ecr_repository_url" {
   value = module.agentcore.ecr_repository_url
 }

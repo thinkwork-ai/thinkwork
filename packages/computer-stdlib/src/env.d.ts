@@ -5,6 +5,7 @@ declare global {
     readonly DEV: boolean;
     readonly PROD: boolean;
     readonly MODE: string;
+    readonly VITE_MAPBOX_PUBLIC_TOKEN?: string;
   }
 
   interface ImportMeta {

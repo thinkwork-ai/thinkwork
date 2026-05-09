@@ -205,6 +205,26 @@ variable "google_places_api_key" {
   sensitive   = true
 }
 
+variable "mapbox_public_token" {
+  description = <<-EOT
+    Mapbox public pk.* token consumed by apps/computer's MapView primitive
+    (in @thinkwork/computer-stdlib) for inline map tile rendering inside
+    generated applets. Flows through to scripts/build-computer.sh →
+    apps/computer/.env.production as VITE_MAPBOX_PUBLIC_TOKEN.
+
+    Mapbox tokens are designed to ship in public bundles; URL allowlist
+    on the Mapbox dashboard is the security boundary. Restrict the token
+    to the deployed `computer.<apex>` host (and any dev hosts).
+
+    Empty string is acceptable: MapView falls back to OpenStreetMap tiles
+    when the build-time env var is unset, so dev environments without an
+    operator-provisioned token still render maps.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "nova_act_api_key" {
   description = <<-EOT
     Nova Act API key used by the Strands Browser Automation tool. When empty,
@@ -323,6 +343,10 @@ module "thinkwork" {
   google_places_api_key               = var.google_places_api_key
   nova_act_api_key                    = var.nova_act_api_key
   agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
+
+  # Mapbox public token for apps/computer MapView primitive. Flows through
+  # to scripts/build-computer.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+  mapbox_public_token = var.mapbox_public_token
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
   stripe_price_ids_json = var.stripe_price_ids_json

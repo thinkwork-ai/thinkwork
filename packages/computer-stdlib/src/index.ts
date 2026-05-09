@@ -6,6 +6,7 @@ export * from "./primitives/BarChart.js";
 export * from "./primitives/DataTable.js";
 export * from "./primitives/EvidenceList.js";
 export * from "./primitives/KpiStrip.js";
+export * from "./primitives/MapView.js";
 export * from "./primitives/RefreshBar.js";
 export * from "./primitives/RefreshStateTimeline.js";
 export * from "./primitives/SourceStatusList.js";

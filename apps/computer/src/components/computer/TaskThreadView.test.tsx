@@ -1,5 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/components/apps/InlineAppletEmbed", () => ({
+  InlineAppletEmbed: ({ appId }: { appId: string }) => (
+    <div data-testid="inline-applet-embed-stub" data-app-id={appId} />
+  ),
+}));
+
 import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(cleanup);

@@ -38,6 +38,7 @@ ADMIN_CLIENT_ID="$(tf_output_raw admin_client_id)"
 AUTH_DOMAIN="$(tf_output_raw auth_domain)"
 COMPUTER_BUCKET="$(tf_output_raw computer_bucket_name)"
 COMPUTER_CF_ID="$(tf_output_raw computer_distribution_id)"
+MAPBOX_PUBLIC_TOKEN="$(tf_output_raw mapbox_public_token)"
 
 # Construct full Cognito domain URL from the short domain prefix
 COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
@@ -63,6 +64,7 @@ VITE_COGNITO_USER_POOL_ID=${USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${ADMIN_CLIENT_ID}
 VITE_COGNITO_DOMAIN=${COGNITO_DOMAIN}
 VITE_API_URL=${API_ENDPOINT}
+VITE_MAPBOX_PUBLIC_TOKEN=${MAPBOX_PUBLIC_TOKEN}
 EOF
 
 pnpm --filter computer build

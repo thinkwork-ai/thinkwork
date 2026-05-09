@@ -616,6 +616,12 @@ Good applets include:
 - Evidence or source-status sections so users can inspect what drove the result.
 - Empty, partial, and failed-source states.
 
+## Maps
+
+When the user asks for a map (locations, regions, routes, geographic comparisons), use \`MapView\` from \`@thinkwork/computer-stdlib\`. **Do NOT embed an OpenStreetMap.org iframe, do NOT roll your own \`react-leaflet\` \`<MapContainer>\`, and do NOT enable \`scrollWheelZoom\` — \`MapView\` handles the tile provider, theming, default-icon bundler fix, and scroll-trap defaults correctly.** It uses Mapbox tiles when \`VITE_MAPBOX_PUBLIC_TOKEN\` is set (light/dark style swap from \`useTheme\`) and falls back to OpenStreetMap tiles when unset.
+
+Pass \`fit\` (one of \`{type: "country", code: "<ISO-3166-1-alpha-2>"}\`, \`{type: "bbox", bounds: [[lat,lng],[lat,lng]]}\`, or \`{type: "auto"}\`) plus optional \`markers\`, \`polylines\`, and \`geojson\` arrays. See \`@thinkwork/computer-stdlib/MapView\` for the full prop shape.
+
 ## Missing Data
 
 Missing data is not a reason to stop before creating the artifact. Create a runnable applet that makes source gaps explicit, then ask for source setup or approval as a follow-up when needed.

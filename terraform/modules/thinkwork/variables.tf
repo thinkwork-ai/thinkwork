@@ -399,6 +399,13 @@ variable "google_places_api_key" {
   sensitive   = true
 }
 
+variable "mapbox_public_token" {
+  description = "Mapbox public pk.* token consumed by apps/computer's MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-computer.sh → apps/computer/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "nova_act_api_key" {
   description = "Nova Act API key used by the Strands Browser Automation tool. Stored as SSM SecureString at /thinkwork/<stage>/agentcore/nova-act-api-key. Empty string = parameter created with a placeholder; operator populates via `aws ssm put-parameter --overwrite`."
   type        = string

@@ -12,6 +12,8 @@ interface AppletHostRegistryModules {
   "@thinkwork/computer-stdlib"?: typeof import("@thinkwork/computer-stdlib");
   recharts?: typeof import("recharts");
   "lucide-react"?: typeof import("lucide-react");
+  leaflet?: typeof import("leaflet");
+  "react-leaflet"?: typeof import("react-leaflet");
   [REGISTRY_OWNER]?: true;
 }
 
@@ -36,7 +38,9 @@ type AppletHostModuleKey =
   | "@thinkwork/ui"
   | "@thinkwork/computer-stdlib"
   | "recharts"
-  | "lucide-react";
+  | "lucide-react"
+  | "leaflet"
+  | "react-leaflet";
 
 type RequiredAppletHostModules = {
   [K in AppletHostModuleKey]-?: NonNullable<AppletHostRegistryModules[K]>;
@@ -80,6 +84,8 @@ export async function loadAppletHostExternals(
     computerStdlib,
     recharts,
     lucideReact,
+    leaflet,
+    reactLeaflet,
   ] = await Promise.all([
     loadModule("react"),
     loadModule("react-dom"),
@@ -89,6 +95,8 @@ export async function loadAppletHostExternals(
     loadModule("@thinkwork/computer-stdlib"),
     loadModule("recharts"),
     loadModule("lucide-react"),
+    loadModule("leaflet"),
+    loadModule("react-leaflet"),
   ]);
 
   Object.assign(registry, {
@@ -100,6 +108,8 @@ export async function loadAppletHostExternals(
     "@thinkwork/computer-stdlib": computerStdlib,
     recharts,
     "lucide-react": lucideReact,
+    leaflet,
+    "react-leaflet": reactLeaflet,
   });
   return registry as LoadedAppletHostRegistry;
 }
@@ -124,5 +134,9 @@ async function defaultLoadAppletHostModule(
       return import("recharts") as unknown as Promise<AppletHostModule>;
     case "lucide-react":
       return import("lucide-react") as unknown as Promise<AppletHostModule>;
+    case "leaflet":
+      return import("leaflet") as unknown as Promise<AppletHostModule>;
+    case "react-leaflet":
+      return import("react-leaflet") as unknown as Promise<AppletHostModule>;
   }
 }
