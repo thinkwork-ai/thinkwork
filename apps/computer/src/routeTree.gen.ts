@@ -20,6 +20,7 @@ import { Route as AuthedShellInboxRouteImport } from "./routes/_authed/_shell/in
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellComputerRouteImport } from "./routes/_authed/_shell/computer";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
+import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellTasksIndexRouteImport } from "./routes/_authed/_shell/tasks.index";
 import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
@@ -81,6 +82,11 @@ const AuthedShellAutomationsRoute = AuthedShellAutomationsRouteImport.update({
   path: "/automations",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
+  id: "/threads/",
+  path: "/threads/",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 const AuthedShellTasksIndexRoute = AuthedShellTasksIndexRouteImport.update({
   id: "/tasks/",
   path: "/tasks/",
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
   "/tasks/": typeof AuthedShellTasksIndexRoute;
+  "/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
   "/tasks": typeof AuthedShellTasksIndexRoute;
+  "/threads": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
   "/_authed/_shell/tasks/": typeof AuthedShellTasksIndexRoute;
+  "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -194,7 +203,8 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/approvals/"
     | "/apps/"
-    | "/tasks/";
+    | "/tasks/"
+    | "/threads/";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -212,7 +222,8 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/approvals"
     | "/apps"
-    | "/tasks";
+    | "/tasks"
+    | "/threads";
   id:
     | "__root__"
     | "/"
@@ -232,7 +243,8 @@ export interface FileRouteTypes {
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/apps/"
-    | "/_authed/_shell/tasks/";
+    | "/_authed/_shell/tasks/"
+    | "/_authed/_shell/threads/";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -322,6 +334,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellAutomationsRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/threads/": {
+      id: "/_authed/_shell/threads/";
+      path: "/threads";
+      fullPath: "/threads/";
+      preLoaderRoute: typeof AuthedShellThreadsIndexRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/tasks/": {
       id: "/_authed/_shell/tasks/";
       path: "/tasks";
@@ -387,6 +406,7 @@ interface AuthedShellRouteChildren {
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
   AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
   AuthedShellTasksIndexRoute: typeof AuthedShellTasksIndexRoute;
+  AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -402,6 +422,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
   AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
   AuthedShellTasksIndexRoute: AuthedShellTasksIndexRoute,
+  AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(

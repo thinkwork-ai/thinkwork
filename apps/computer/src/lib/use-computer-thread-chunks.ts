@@ -17,12 +17,15 @@ interface ChunkSubscriptionResult {
   } | null;
 }
 
-export function useComputerThreadChunks(threadId: string | null | undefined) {
+export function useComputerThreadChunks(
+  threadId: string | null | undefined,
+  resetKey?: string | null,
+) {
   const [chunks, setChunks] = useState<ComputerThreadChunk[]>([]);
 
   useEffect(() => {
     setChunks([]);
-  }, [threadId]);
+  }, [threadId, resetKey]);
 
   useSubscription<ChunkSubscriptionResult>({
     query: ComputerThreadChunkSubscription,

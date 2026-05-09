@@ -15,7 +15,7 @@ describe("computer route helpers", () => {
   });
 
   it("builds task detail URLs", () => {
-    expect(computerTaskRoute("task-abc")).toBe("/tasks/task-abc");
+    expect(computerTaskRoute("thread-abc")).toBe("/threads/thread-abc");
   });
 
   it("throws a typed client error for unsafe artifact ids", () => {
@@ -26,7 +26,7 @@ describe("computer route helpers", () => {
 
   it("keeps labels aligned with the workbench route", () => {
     expect(COMPUTER_WORKBENCH_ROUTE).toBe("/computer");
-    expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/tasks");
+    expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/threads");
     expect(COMPUTER_MEMORY_ROUTE).toBe("/memory");
     expect(COMPUTER_ROUTE_LABELS.computer).toBe("Computer");
     expect(COMPUTER_ROUTE_LABELS.tasks).toBe("New");

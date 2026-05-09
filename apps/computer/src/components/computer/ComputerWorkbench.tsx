@@ -69,7 +69,7 @@ export function ComputerWorkbench() {
       return;
     }
 
-    navigate({ to: "/tasks/$id", params: { id: threadId } });
+    navigate({ to: "/threads/$id", params: { id: threadId } });
   }
 
   return (

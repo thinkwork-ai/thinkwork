@@ -89,7 +89,7 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
 
     onOpenChange(false);
     setTitle("New thread");
-    navigate({ to: "/tasks/$id", params: { id: newId } });
+    navigate({ to: "/threads/$id", params: { id: newId } });
   }
 
   return (

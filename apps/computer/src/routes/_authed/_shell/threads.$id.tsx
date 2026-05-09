@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { ComputerThreadDetailRoute } from "@/components/computer/ComputerThreadDetailRoute";
 
 export const Route = createFileRoute("/_authed/_shell/threads/$id")({
   component: ThreadDetailPage,
@@ -7,10 +7,5 @@ export const Route = createFileRoute("/_authed/_shell/threads/$id")({
 
 function ThreadDetailPage() {
   const { id } = Route.useParams();
-  return (
-    <PlaceholderPage
-      title={`Thread ${id}`}
-      subtitle="The chat UI lands in the next phase. For now this is a placeholder — clicking a thread row in the sidebar lands you here."
-    />
-  );
+  return <ComputerThreadDetailRoute threadId={id} />;
 }
