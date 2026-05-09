@@ -22,6 +22,13 @@ import { toGraphqlComputerTask } from "./tasks.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
+const ARTIFACT_SAVE_MISSING_MESSAGE =
+  "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.";
+
+const BUILD_INTENT_ACTION_RE =
+  /\b(build|create|generate|make|produce|assemble|compose)\b/i;
+const ARTIFACT_INTENT_NOUN_RE =
+  /\b(applet|app|artifact|dashboard|report|briefing|interactive\s+(surface|view|tool|dashboard)|surface)\b/i;
 
 export class ComputerNotFoundError extends Error {
   constructor(readonly computerId: string) {
@@ -610,27 +617,33 @@ export async function recordThreadTurnResponse(input: {
     threadId: payload.threadId,
     messageId: payload.messageId,
   });
-  const content = input.content;
-
-  const preview =
-    content.length > 240 ? `${content.slice(0, 237)}...` : content;
+  const requestedContent = input.content;
+  const buildStylePrompt = isBuildStyleArtifactPrompt(message.content ?? "");
+  const directSaveAppSucceeded = hasSuccessfulDirectSaveAppEvidence(
+    input.usage,
+  );
+  const initialContent =
+    buildStylePrompt && !directSaveAppSucceeded
+      ? ARTIFACT_SAVE_MISSING_MESSAGE
+      : requestedContent;
+  const assistantMetadata = {
+    computerId: input.computerId,
+    taskId: input.taskId,
+    sourceMessageId: message.id,
+    source: payload.source,
+    model: input.model ?? null,
+    usage: input.usage ?? null,
+  };
   const [assistantMessage] = await db
     .insert(messages)
     .values({
       tenant_id: input.tenantId,
       thread_id: thread.id,
       role: "assistant",
-      content,
+      content: initialContent,
       sender_type: "computer",
       sender_id: input.computerId,
-      metadata: {
-        computerId: input.computerId,
-        taskId: input.taskId,
-        sourceMessageId: message.id,
-        source: payload.source,
-        model: input.model ?? null,
-        usage: input.usage ?? null,
-      },
+      metadata: assistantMetadata,
     })
     .returning({ id: messages.id });
   if (!assistantMessage) {
@@ -646,7 +659,7 @@ export async function recordThreadTurnResponse(input: {
       : task.created_at instanceof Date
         ? task.created_at
         : new Date(0);
-  await db
+  const linkedArtifacts = await db
     .update(artifacts)
     .set({
       source_message_id: assistantMessage.id,
@@ -656,10 +669,47 @@ export async function recordThreadTurnResponse(input: {
       and(
         eq(artifacts.tenant_id, input.tenantId),
         eq(artifacts.thread_id, thread.id),
+        eq(artifacts.type, "applet"),
         isNull(artifacts.source_message_id),
         gte(artifacts.created_at, turnStartedAt),
       ),
-    );
+    )
+    .returning({ id: artifacts.id });
+  const linkedArtifactIds = linkedArtifacts.map((row) => row.id);
+  const artifactSaveMissing =
+    buildStylePrompt &&
+    !directSaveAppSucceeded &&
+    linkedArtifactIds.length === 0
+      ? {
+          reason: "missing_direct_save_app" as const,
+          buildStylePrompt: true,
+          directSaveAppSucceeded: false,
+          linkedArtifactIds,
+        }
+      : null;
+  const content = artifactSaveMissing
+    ? ARTIFACT_SAVE_MISSING_MESSAGE
+    : requestedContent;
+  if (artifactSaveMissing || content !== initialContent) {
+    await db
+      .update(messages)
+      .set({
+        content,
+        metadata: {
+          ...assistantMetadata,
+          artifactSaveMissing,
+        },
+      })
+      .where(
+        and(
+          eq(messages.tenant_id, input.tenantId),
+          eq(messages.id, assistantMessage.id),
+        ),
+      );
+  }
+
+  const preview =
+    content.length > 240 ? `${content.slice(0, 237)}...` : content;
 
   await db
     .update(threads)
@@ -684,6 +734,9 @@ export async function recordThreadTurnResponse(input: {
       responseMessageId: assistantMessage.id,
       source: payload.source,
       model: input.model ?? null,
+      linkedArtifactIds,
+      linkedArtifactCount: linkedArtifactIds.length,
+      artifactSaveMissing,
     },
   });
 
@@ -698,6 +751,9 @@ export async function recordThreadTurnResponse(input: {
         response: content,
         model: input.model ?? null,
         usage: input.usage ?? null,
+        linkedArtifactIds,
+        linkedArtifactCount: linkedArtifactIds.length,
+        artifactSaveMissing,
       },
       completed_at: new Date(),
       updated_at: new Date(),
@@ -747,7 +803,60 @@ export async function recordThreadTurnResponse(input: {
     source: payload.source,
     status: "completed",
     model: input.model ?? null,
+    linkedArtifactIds,
+    linkedArtifactCount: linkedArtifactIds.length,
+    artifactSaveMissing,
   };
+}
+
+export function isBuildStyleArtifactPrompt(prompt: string) {
+  return (
+    BUILD_INTENT_ACTION_RE.test(prompt) && ARTIFACT_INTENT_NOUN_RE.test(prompt)
+  );
+}
+
+function hasSuccessfulDirectSaveAppEvidence(usage: unknown) {
+  const invocations = toolInvocationsFromUsage(usage);
+  return invocations.some((invocation) => {
+    if (invocation.tool_name !== "save_app") return false;
+    if (invocation.type === "sub_agent") return false;
+    if (!toolInvocationSucceeded(invocation.status)) return false;
+
+    const output = saveAppOutputPayload(invocation);
+    return (
+      output?.ok === true &&
+      output.persisted === true &&
+      typeof output.appId === "string" &&
+      output.appId.trim().length > 0
+    );
+  });
+}
+
+function toolInvocationsFromUsage(usage: unknown) {
+  if (!isRecord(usage)) return [];
+  const invocations = usage.tool_invocations;
+  return Array.isArray(invocations) ? invocations.filter(isRecord) : [];
+}
+
+function toolInvocationSucceeded(status: unknown) {
+  if (status === undefined || status === null) return true;
+  if (typeof status !== "string") return false;
+  return ["success", "completed", "ok"].includes(status.toLowerCase());
+}
+
+function saveAppOutputPayload(invocation: Record<string, unknown>) {
+  if (isRecord(invocation.output_json)) return invocation.output_json;
+  if (typeof invocation.output_preview !== "string") return null;
+  try {
+    const parsed = JSON.parse(invocation.output_preview);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 export async function completeComputerTask(input: {

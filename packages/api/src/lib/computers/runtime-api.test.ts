@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   insertRows: [{ id: "delegation-1", agent_id: "agent-1" }] as Array<
     Record<string, unknown>
   >,
+  updateRows: [] as Array<Array<Record<string, unknown>>>,
   inserts: [] as Array<Record<string, unknown>>,
   updates: [] as Array<Record<string, unknown>>,
   resolveConnectionForUser: vi.fn(),
@@ -57,8 +58,15 @@ vi.mock("@thinkwork/database-pg", () => ({
     update: () => ({
       set: (value: Record<string, unknown>) => {
         mocks.updates.push(value);
+        const rows = () => Promise.resolve(mocks.updateRows.shift() ?? []);
         return {
-          where: async () => [],
+          where: () => ({
+            returning: async () => rows(),
+            then: (
+              resolve: (value: unknown[] | undefined) => unknown,
+              reject?: (reason: unknown) => unknown,
+            ) => rows().then(resolve, reject),
+          }),
         };
       },
     }),
@@ -107,6 +115,7 @@ describe("Computer runtime API Google Workspace status", () => {
     ];
     mocks.selectQueue = [];
     mocks.insertRows = [{ id: "delegation-1", agent_id: "agent-1" }];
+    mocks.updateRows = [];
     mocks.inserts = [];
     mocks.updates = [];
     mocks.invokeChatAgent.mockResolvedValue(true);
@@ -718,6 +727,189 @@ describe("Computer runtime API thread turn execution", () => {
     );
   });
 
+  it("returns linked applet ids when a build turn saves directly with save_app", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[{ id: "applet-1" }]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Saved the CRM dashboard.",
+      usage: {
+        tool_invocations: [
+          {
+            tool_name: "save_app",
+            type: "mcp_tool",
+            status: "success",
+            output_json: {
+              ok: true,
+              persisted: true,
+              appId: "applet-1",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      linkedArtifactIds: ["applet-1"],
+      linkedArtifactCount: 1,
+      artifactSaveMissing: null,
+    });
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        output: expect.objectContaining({
+          response: "Saved the CRM dashboard.",
+          linkedArtifactIds: ["applet-1"],
+          linkedArtifactCount: 1,
+          artifactSaveMissing: null,
+        }),
+      }),
+    );
+  });
+
+  it("allows a build turn when a new applet was linked even without save_app usage evidence", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[{ id: "applet-1" }]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Saved the CRM dashboard.",
+      usage: { tool_invocations: [] },
+    });
+
+    expect(result).toMatchObject({
+      linkedArtifactIds: ["applet-1"],
+      linkedArtifactCount: 1,
+      artifactSaveMissing: null,
+    });
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        content: "Saved the CRM dashboard.",
+        metadata: expect.objectContaining({
+          artifactSaveMissing: null,
+        }),
+      }),
+    );
+  });
+
+  it("records an honest failure when a build turn has no direct save_app or linked applet", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "I created the CRM dashboard.",
+      usage: { tool_invocations: [] },
+    });
+
+    expect(result).toMatchObject({
+      linkedArtifactIds: [],
+      linkedArtifactCount: 0,
+      artifactSaveMissing: {
+        reason: "missing_direct_save_app",
+        buildStylePrompt: true,
+        directSaveAppSucceeded: false,
+        linkedArtifactIds: [],
+      },
+    });
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        content:
+          "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.",
+        metadata: expect.objectContaining({
+          artifactSaveMissing: expect.objectContaining({
+            reason: "missing_direct_save_app",
+          }),
+        }),
+      }),
+    );
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        status: "completed",
+        output: expect.objectContaining({
+          response:
+            "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.",
+          artifactSaveMissing: expect.objectContaining({
+            reason: "missing_direct_save_app",
+          }),
+        }),
+      }),
+    );
+    expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content:
+          "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.",
+      }),
+    );
+  });
+
+  it("leaves non-build turns alone when no applet is linked", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Summarize the current CRM risks.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Here are the CRM risks.",
+    });
+
+    expect(result).toMatchObject({
+      linkedArtifactIds: [],
+      linkedArtifactCount: 0,
+      artifactSaveMissing: null,
+    });
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        output: expect.objectContaining({
+          response: "Here are the CRM risks.",
+          artifactSaveMissing: null,
+        }),
+      }),
+    );
+  });
+
+  it("does not count delegated save_app-looking output as direct save_app evidence", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Create an applet for CRM pipeline risk.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "A helper saved the applet.",
+      usage: {
+        tool_invocations: [
+          {
+            tool_name: "save_app",
+            type: "sub_agent",
+            status: "success",
+            output_json: {
+              ok: true,
+              persisted: true,
+              appId: "applet-1",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.artifactSaveMissing).toMatchObject({
+      reason: "missing_direct_save_app",
+    });
+  });
+
   it("rejects legacy managed-agent Thread turn execution", async () => {
     mocks.selectQueue = [
       [
@@ -742,3 +934,23 @@ describe("Computer runtime API thread turn execution", () => {
     expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 });
+
+function queueThreadTurnRecord(prompt: string) {
+  mocks.selectQueue = [
+    [
+      {
+        id: "task-1",
+        task_type: "thread_turn",
+        input: {
+          threadId: "thread-1",
+          messageId: "message-1",
+          source: "chat_message",
+        },
+        claimed_at: new Date("2026-05-09T12:00:00.000Z"),
+        created_at: new Date("2026-05-09T11:59:00.000Z"),
+      },
+    ],
+    [{ id: "thread-1", title: "Hello", status: "in_progress" }],
+    [{ id: "message-1", role: "user", content: prompt }],
+  ];
+}
