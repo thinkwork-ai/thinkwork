@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Streamdown } from "streamdown";
 import { Button, Textarea } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
@@ -293,26 +294,25 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
   const actions = actionRowsForMessage(message);
+  const body = message.content?.trim() ?? "";
 
   return (
     <article className={isUser ? "ml-auto max-w-[78%]" : "grid gap-5"}>
       {isUser ? (
         <div className="rounded-2xl bg-muted/70 px-5 py-3 text-base leading-7 text-foreground">
-          {message.content?.trim() || "(No message content)"}
+          {body || "(No message content)"}
         </div>
       ) : (
         <>
-          <div className="grid gap-2">
-            {actions.length > 0 ? (
-              actions.map((action) => (
+          {actions.length > 0 ? (
+            <div className="grid gap-2">
+              {actions.map((action) => (
                 <ActionRow key={`${message.id}-${action.title}`} {...action} />
-              ))
-            ) : (
-              <ThinkingRow title="Thinking" detail="Reasoning complete." />
-            )}
-          </div>
+              ))}
+            </div>
+          ) : null}
           <div className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0">
-            {message.content?.trim() || "(No message content)"}
+            {body ? <Streamdown>{body}</Streamdown> : <p>(No message content)</p>}
           </div>
           {message.durableArtifact ? (
             <GeneratedArtifactCard artifact={message.durableArtifact} />
@@ -485,16 +485,6 @@ function actionRowsForMessage(message: TaskThreadMessage) {
     detail?: string;
     kind: "thinking" | "tool" | "source" | "code";
   }> = [];
-  const metadata = parseRecord(message.metadata);
-  const thinking =
-    stringValue(metadata.reasoning) ||
-    stringValue(metadata.thinking) ||
-    stringValue(metadata.summary);
-  rows.push({
-    title: "Thinking",
-    detail: thinking || "Computer planned the response.",
-    kind: "thinking",
-  });
 
   const toolCalls = parseArray(message.toolCalls);
   for (const call of toolCalls) {
@@ -572,7 +562,13 @@ function actionRowsForTurn(
     });
   }
 
-  for (const event of turn.events ?? []) {
+  const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {
+    const ta = parseEventTimestamp(a.createdAt);
+    const tb = parseEventTimestamp(b.createdAt);
+    if (ta !== tb) return ta - tb;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+  for (const event of sortedEvents) {
     const row = actionRowForEvent(event);
     if (!row) continue;
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
@@ -868,6 +864,12 @@ function parseArray(value: unknown): unknown[] {
     }
   }
   return [];
+}
+
+function parseEventTimestamp(value: string | null | undefined): number {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 function stringValue(value: unknown): string | null {

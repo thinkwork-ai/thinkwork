@@ -14,7 +14,7 @@
   },
   "author": "thinkwork-ai",
   "engines": {
-    "node": ">=20",
+    "node": ">=22",
     "pnpm": ">=9"
   },
   "packageManager": "pnpm@9.12.0",

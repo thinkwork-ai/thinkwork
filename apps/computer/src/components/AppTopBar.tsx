@@ -13,7 +13,7 @@ export function AppTopBar() {
   if (actions?.hideTopBar) return null;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-3 pr-4">
       {actions ? (
         <div className="flex min-w-0 items-center gap-2">
           {actions.backHref ? (
