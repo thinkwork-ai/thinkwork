@@ -715,7 +715,7 @@ def _call_strands_agent(
     browser_automation_enabled: bool = False,
     stream_thread_id: str | None = None,
     computer_event_context: dict | None = None,
-    suppress_delegate_tools: bool = False,
+    suppress_app_build_helper_tools: bool = False,
 ) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -892,7 +892,9 @@ def _call_strands_agent(
     # policy + interpreter-ready state. Held outside tool_cleanups so the
     # per-turn session can be torn down in the finally block below.
     _sandbox_cleanup_fn = None
-    if os.environ.get("SANDBOX_INTERPRETER_ID"):
+    if suppress_app_build_helper_tools:
+        logger.info("Sandbox execute_code suppressed for Computer applet-build turn")
+    elif os.environ.get("SANDBOX_INTERPRETER_ID"):
         try:
             from strands import tool as _sb_tool_decorator
             from sandbox_tool import build_execute_code_tool, new_session_state
@@ -1585,7 +1587,7 @@ def _call_strands_agent(
 
     from strands import tool as _tool_dec
 
-    if suppress_delegate_tools:
+    if suppress_app_build_helper_tools:
         logger.info("Delegate tools suppressed for Computer applet-build turn")
     else:
         _delegate_fn = _make_delegate_fn(effective_model, sub_agent_usage)
@@ -2355,7 +2357,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             context_engine_config=context_engine_config,
             browser_automation_enabled=browser_automation_enabled,
             stream_thread_id=ticket_id or None,
-            suppress_delegate_tools=bool(
+            suppress_app_build_helper_tools=bool(
                 computer_id
                 and computer_task_id
                 and _is_computer_applet_build_request(message)
