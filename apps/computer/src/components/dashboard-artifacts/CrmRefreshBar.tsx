@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Brain, RefreshCcw } from "lucide-react";
 import { Badge, Button } from "@thinkwork/ui";
 import type { DashboardArtifactManifest } from "@/lib/app-artifacts";
@@ -61,10 +62,13 @@ export function CrmRefreshBar({
             {isActive ? "Refreshing" : "Refresh"}
           </Button>
           <Button asChild size="sm" className="gap-2">
-            <a href={`/computer?artifact=${manifest.snapshot.artifactId}`}>
+            <Link
+              to="/computer"
+              search={{ artifact: manifest.snapshot.artifactId }}
+            >
               <Brain className="size-4" />
               Ask Computer
-            </a>
+            </Link>
           </Button>
         </div>
       </div>

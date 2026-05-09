@@ -1,40 +1,83 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskDashboard } from "./TaskDashboard";
 
 afterEach(cleanup);
 
 describe("TaskDashboard", () => {
-  it("renders tasks with status, previews, and artifact chips", () => {
+  it("renders threads in the Computer table", () => {
     render(
       <TaskDashboard
-        tasks={[
+        threads={[
           {
-            id: "task-1",
+            id: "thread-1",
+            number: 318,
+            identifier: "CHAT-318",
             title: "Build CRM dashboard",
-            lifecycleStatus: "COMPLETED",
-            lastResponsePreview: "Created a pipeline risk app.",
-            artifactCount: 1,
+            status: "IN_PROGRESS",
+            computerId: "computer-1",
+            channel: "CHAT",
             updatedAt: "2026-05-08T16:00:00.000Z",
           },
         ]}
+        totalCount={1}
+        pageIndex={0}
+        pageSize={50}
+        search=""
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+        onSearchChange={vi.fn()}
       />,
     );
 
+    expect(screen.getByText("Computer")).toBeTruthy();
+    expect(screen.getByText("1 thread")).toBeTruthy();
+    expect(screen.getByText("CHAT-318")).toBeTruthy();
     expect(screen.getByText("Build CRM dashboard")).toBeTruthy();
-    expect(screen.getByText("Created a pipeline risk app.")).toBeTruthy();
-    expect(screen.getByText("COMPLETED")).toBeTruthy();
-    expect(screen.getByText("1 artifact")).toBeTruthy();
+    expect(screen.getByText("Computer-owned")).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /build crm dashboard/i })
+        .getByRole("link", { name: /chat-318 build crm dashboard/i })
         .getAttribute("href"),
-    ).toBe("/tasks/task-1");
+    ).toBe("/tasks/thread-1");
   });
 
-  it("renders an empty state when there are no threads", () => {
-    render(<TaskDashboard tasks={[]} />);
+  it("updates the search filter", () => {
+    const onSearchChange = vi.fn();
+    render(
+      <TaskDashboard
+        threads={[]}
+        totalCount={0}
+        pageIndex={0}
+        pageSize={50}
+        search=""
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+        onSearchChange={onSearchChange}
+      />,
+    );
 
-    expect(screen.getByText("No threads yet")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search threads"), {
+      target: { value: "gas prices" },
+    });
+
+    expect(onSearchChange).toHaveBeenCalledWith("gas prices");
+  });
+
+  it("renders an empty state when there are no matching threads", () => {
+    render(
+      <TaskDashboard
+        threads={[]}
+        totalCount={0}
+        pageIndex={0}
+        pageSize={50}
+        search=""
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+        onSearchChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No threads match the current search")).toBeTruthy();
   });
 });

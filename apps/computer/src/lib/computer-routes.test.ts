@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPUTER_ROUTE_LABELS,
+  COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_WORKBENCH_ROUTE,
   InvalidComputerRouteParamError,
   computerAppArtifactRoute,
@@ -24,7 +25,8 @@ describe("computer route helpers", () => {
 
   it("keeps labels aligned with the workbench route", () => {
     expect(COMPUTER_WORKBENCH_ROUTE).toBe("/computer");
+    expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/tasks");
     expect(COMPUTER_ROUTE_LABELS.computer).toBe("Computer");
-    expect(COMPUTER_ROUTE_LABELS.tasks).toBe("Threads");
+    expect(COMPUTER_ROUTE_LABELS.tasks).toBe("New");
   });
 });

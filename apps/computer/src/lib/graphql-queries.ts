@@ -34,6 +34,55 @@ export const ComputerThreadsQuery = gql`
   }
 `;
 
+export const ThreadsPagedQuery = gql`
+  query ThreadsPaged(
+    $tenantId: ID!
+    $search: String
+    $showArchived: Boolean
+    $sortField: String
+    $sortDir: String
+    $limit: Int
+    $offset: Int
+  ) {
+    threadsPaged(
+      tenantId: $tenantId
+      search: $search
+      showArchived: $showArchived
+      sortField: $sortField
+      sortDir: $sortDir
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        number
+        identifier
+        title
+        status
+        assigneeType
+        assigneeId
+        agentId
+        computerId
+        agent {
+          id
+          name
+          avatarUrl
+        }
+        checkoutRunId
+        channel
+        costSummary
+        lastActivityAt
+        lastTurnCompletedAt
+        lastReadAt
+        archivedAt
+        createdAt
+        updatedAt
+      }
+      totalCount
+    }
+  }
+`;
+
 export const ComputerThreadQuery = gql`
   query ComputerThread($id: ID!, $messageLimit: Int) {
     thread(id: $id) {
@@ -96,6 +145,18 @@ export const ThreadTurnUpdatedSubscription = gql`
   }
 `;
 
+export const ThreadUpdatedSubscription = gql`
+  subscription ThreadUpdated($tenantId: ID!) {
+    onThreadUpdated(tenantId: $tenantId) {
+      threadId
+      tenantId
+      status
+      title
+      updatedAt
+    }
+  }
+`;
+
 export const CreateThreadMutation = gql`
   mutation CreateThread($input: CreateThreadInput!) {
     createThread(input: $input) {
@@ -105,6 +166,19 @@ export const CreateThreadMutation = gql`
       title
       status
       channel
+      createdAt
+    }
+  }
+`;
+
+export const SendMessageMutation = gql`
+  mutation SendMessage($input: SendMessageInput!) {
+    sendMessage(input: $input) {
+      id
+      threadId
+      tenantId
+      role
+      content
       createdAt
     }
   }

@@ -1,6 +1,6 @@
 import { ExternalLink, LayoutDashboard } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
-import { computerAppArtifactRoute } from "@/lib/computer-routes";
 
 export interface GeneratedArtifact {
   id: string;
@@ -19,7 +19,6 @@ export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) 
     artifact.type === "DATA_VIEW" ||
     artifact.metadata?.kind === "research_dashboard" ||
     artifact.metadata?.uiSurface === "app";
-  const href = isAppArtifact ? computerAppArtifactRoute(artifact.id) : undefined;
 
   return (
     <article className="grid gap-3 rounded-lg border border-border/70 bg-background/70 p-4">
@@ -41,7 +40,7 @@ export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) 
           ) : null}
         </div>
       </div>
-      {href ? (
+      {isAppArtifact ? (
         <Button
           asChild
           type="button"
@@ -49,10 +48,10 @@ export function GeneratedArtifactCard({ artifact }: GeneratedArtifactCardProps) 
           size="sm"
           className="gap-2 justify-self-start"
         >
-          <a href={href}>
+          <Link to="/apps/$id" params={{ id: artifact.id }}>
             Open app
             <ExternalLink className="size-4" />
-          </a>
+          </Link>
         </Button>
       ) : (
         <Button

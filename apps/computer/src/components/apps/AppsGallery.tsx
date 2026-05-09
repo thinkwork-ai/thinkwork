@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Button, Input } from "@thinkwork/ui";
 import {
   FIXTURE_APP_ARTIFACTS,
@@ -24,7 +25,7 @@ export function AppsGallery({
             </p>
           </div>
           <Button asChild>
-            <a href="/computer">Build an app</a>
+            <Link to="/computer">Build an app</Link>
           </Button>
         </header>
 

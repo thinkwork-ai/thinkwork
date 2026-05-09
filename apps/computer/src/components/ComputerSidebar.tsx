@@ -1,21 +1,19 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
-  CheckSquare,
-  Inbox,
-  ListTodo,
   Monitor,
   PenSquare,
   Repeat,
+  SlidersHorizontal,
   Shapes,
 } from "lucide-react";
 import {
+  Badge,
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -25,46 +23,16 @@ import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
 import {
   COMPUTER_APPS_ROUTE,
-  COMPUTER_TASKS_ROUTE,
+  COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_WORKBENCH_ROUTE,
-  computerTaskRoute,
 } from "@/lib/computer-routes";
-import {
-  ComputerApprovalsQuery,
-  ComputerThreadsQuery,
-  MyComputerQuery,
-} from "@/lib/graphql-queries";
-import { NewThreadDialog } from "@/components/NewThreadDialog";
+import { ComputerApprovalsQuery } from "@/lib/graphql-queries";
 
 interface NavItem {
-  to: FileRouteTypes["to"];
+  href: FileRouteTypes["to"];
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-}
-
-const PERMANENT_NAV: NavItem[] = [
-  { to: COMPUTER_WORKBENCH_ROUTE, icon: Monitor, label: "Computer" },
-  { to: COMPUTER_TASKS_ROUTE, icon: ListTodo, label: "Threads" },
-  { to: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
-  { to: "/automations", icon: Repeat, label: "Automations" },
-  { to: "/approvals", icon: CheckSquare, label: "Approvals" },
-  { to: "/inbox", icon: Inbox, label: "Inbox" },
-];
-
-const THREAD_LIMIT = 50;
-
-interface MyComputerResult {
-  myComputer: { id: string; name?: string | null } | null;
-}
-
-interface Thread {
-  id: string;
-  title: string | null;
-  createdAt?: string;
-}
-
-interface ThreadsResult {
-  threads: Thread[];
+  badge?: number;
 }
 
 interface ApprovalsResult {
@@ -74,167 +42,105 @@ interface ApprovalsResult {
 export function ComputerSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { tenantId } = useTenant();
-  const [newThreadOpen, setNewThreadOpen] = useState(false);
-
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const computerId = computerData?.myComputer?.id ?? null;
-
-  // urql's document cache only invalidates queries that previously returned
-  // the mutation's typename. When the threads list is empty, the cache has
-  // no Thread typenames — so a freshly-created thread won't refresh the
-  // sidebar. `additionalTypenames: ["Thread"]` registers the dependency so
-  // any `Thread`-touching mutation (createThread) invalidates this query.
-  const threadsContext = useMemo(() => ({ additionalTypenames: ["Thread"] }), []);
-
-  const [{ data: threadsData, fetching: threadsFetching, error: threadsError }] =
-    useQuery<ThreadsResult>({
-      query: ComputerThreadsQuery,
-      variables: {
-        tenantId: tenantId ?? "",
-        computerId: computerId ?? "",
-        limit: THREAD_LIMIT,
-      },
-      pause: !tenantId || !computerId,
-      context: threadsContext,
-    });
   const [{ data: approvalsData }] = useQuery<ApprovalsResult>({
     query: ComputerApprovalsQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
 
-  const threads = threadsData?.threads ?? [];
   const pendingApprovalCount = (approvalsData?.inboxItems ?? []).filter(
     (item) => item.type === "computer_approval",
   ).length;
+  const navItems = useMemo<NavItem[]>(
+    () => [
+      {
+        href: COMPUTER_WORKBENCH_ROUTE,
+        icon: Monitor,
+        label: "Computer",
+        badge: pendingApprovalCount,
+      },
+      { href: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
+      { href: "/automations", icon: Repeat, label: "Automations" },
+      { href: "/customize", icon: SlidersHorizontal, label: "Customize" },
+    ],
+    [pendingApprovalCount],
+  );
 
   return (
-    <>
-      <Sidebar collapsible="icon">
-        <SidebarHeader className="pb-0">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild>
-                <Link to={COMPUTER_WORKBENCH_ROUTE}>
-                  <img
-                    src="/logo.png"
-                    alt="ThinkWork"
-                    className="h-9 w-9 shrink-0 object-contain"
-                  />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-base font-semibold tracking-tight leading-none truncate">
-                      ThinkWork
-                    </span>
-                    <span className="text-xs text-muted-foreground leading-none truncate mt-0.5">
-                      Cloud Computer
-                    </span>
-                  </div>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="pb-0">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link to={COMPUTER_WORKBENCH_ROUTE}>
+                <img
+                  src="/logo.png"
+                  alt="ThinkWork"
+                  className="h-9 w-9 shrink-0 object-contain"
+                />
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate text-base font-semibold leading-none tracking-tight">
+                    ThinkWork
+                  </span>
+                  <span className="mt-0.5 truncate text-xs leading-none text-muted-foreground">
+                    Cloud Computer
+                  </span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => setNewThreadOpen(true)}
-                    tooltip="New"
-                  >
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-0.5">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === COMPUTER_NEW_THREAD_ROUTE}
+                  tooltip="New"
+                >
+                  <Link to={COMPUTER_NEW_THREAD_ROUTE}>
                     <PenSquare />
                     <span>New</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                {PERMANENT_NAV.map((item) => {
-                  const isActive =
-                    pathname === item.to || pathname.startsWith(`${item.to}/`);
-                  return (
-                    <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                        <Link to={item.to}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                          {item.to === "/approvals" &&
-                          pendingApprovalCount > 0 ? (
-                            <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
-                              {pendingApprovalCount}
-                            </span>
-                          ) : null}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-            <SidebarGroupLabel>Threads</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {threadsFetching && threads.length === 0 ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton disabled className="opacity-60">
-                      <span>Loading…</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {navItems.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`) ||
+                  (item.href === COMPUTER_WORKBENCH_ROUTE &&
+                    pathname.startsWith(`${COMPUTER_NEW_THREAD_ROUTE}/`));
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.label}
+                    >
+                      <Link to={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                        {item.badge ? (
+                          <Badge
+                            variant="outline"
+                            className="ml-auto h-5 min-w-5 rounded-full px-1.5 text-[10px]"
+                          >
+                            {item.badge}
+                          </Badge>
+                        ) : null}
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                ) : threadsError ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton disabled className="opacity-60">
-                      <span className="text-destructive">Failed to load threads</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : threads.length === 0 ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton disabled className="opacity-60">
-                      <span>No threads yet — click New</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : (
-                  threads.map((thread) => {
-                    const threadPath = computerTaskRoute(thread.id);
-                    const isActive =
-                      pathname === threadPath ||
-                      pathname.startsWith(`${threadPath}/`);
-                    return (
-                      <SidebarMenuItem key={thread.id}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive}
-                          tooltip={thread.title ?? "(Untitled)"}
-                        >
-                          <a href={threadPath}>
-                            <span className="truncate">
-                              {thread.title?.trim() ? thread.title : "(Untitled)"}
-                            </span>
-                          </a>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })
-                )}
-                {threads.length >= THREAD_LIMIT ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton disabled className="opacity-60">
-                      <span className="text-xs">
-                        Showing {THREAD_LIMIT} most recent — older threads coming soon
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : null}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
-
-      <NewThreadDialog open={newThreadOpen} onOpenChange={setNewThreadOpen} />
-    </>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
   );
 }

@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedShellInboxRouteImport } from "./routes/_authed/_shell/inbox";
+import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellComputerRouteImport } from "./routes/_authed/_shell/computer";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
 import { Route as AuthedShellTasksIndexRouteImport } from "./routes/_authed/_shell/tasks.index";
@@ -57,6 +58,11 @@ const AuthedShellRoute = AuthedShellRouteImport.update({
 const AuthedShellInboxRoute = AuthedShellInboxRouteImport.update({
   id: "/inbox",
   path: "/inbox",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
+const AuthedShellCustomizeRoute = AuthedShellCustomizeRouteImport.update({
+  id: "/customize",
+  path: "/customize",
   getParentRoute: () => AuthedShellRoute,
 } as any);
 const AuthedShellComputerRoute = AuthedShellComputerRouteImport.update({
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   "/auth/callback": typeof AuthCallbackRoute;
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
+  "/customize": typeof AuthedShellCustomizeRoute;
   "/inbox": typeof AuthedShellInboxRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   "/auth/callback": typeof AuthCallbackRoute;
   "/automations": typeof AuthedShellAutomationsRoute;
   "/computer": typeof AuthedShellComputerRoute;
+  "/customize": typeof AuthedShellCustomizeRoute;
   "/inbox": typeof AuthedShellInboxRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   "/auth/callback": typeof AuthCallbackRoute;
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRoute;
   "/_authed/_shell/computer": typeof AuthedShellComputerRoute;
+  "/_authed/_shell/customize": typeof AuthedShellCustomizeRoute;
   "/_authed/_shell/inbox": typeof AuthedShellInboxRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/apps/$id": typeof AuthedShellAppsIdRoute;
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | "/auth/callback"
     | "/automations"
     | "/computer"
+    | "/customize"
     | "/inbox"
     | "/approvals/$approvalId"
     | "/apps/$id"
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | "/auth/callback"
     | "/automations"
     | "/computer"
+    | "/customize"
     | "/inbox"
     | "/approvals/$approvalId"
     | "/apps/$id"
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | "/auth/callback"
     | "/_authed/_shell/automations"
     | "/_authed/_shell/computer"
+    | "/_authed/_shell/customize"
     | "/_authed/_shell/inbox"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/apps/$id"
@@ -268,6 +280,13 @@ declare module "@tanstack/react-router" {
       path: "/inbox";
       fullPath: "/inbox";
       preLoaderRoute: typeof AuthedShellInboxRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
+    "/_authed/_shell/customize": {
+      id: "/_authed/_shell/customize";
+      path: "/customize";
+      fullPath: "/customize";
+      preLoaderRoute: typeof AuthedShellCustomizeRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
     "/_authed/_shell/computer": {
@@ -339,6 +358,7 @@ declare module "@tanstack/react-router" {
 interface AuthedShellRouteChildren {
   AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRoute;
   AuthedShellComputerRoute: typeof AuthedShellComputerRoute;
+  AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRoute;
   AuthedShellInboxRoute: typeof AuthedShellInboxRoute;
   AuthedShellApprovalsApprovalIdRoute: typeof AuthedShellApprovalsApprovalIdRoute;
   AuthedShellAppsIdRoute: typeof AuthedShellAppsIdRoute;
@@ -352,6 +372,7 @@ interface AuthedShellRouteChildren {
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellAutomationsRoute: AuthedShellAutomationsRoute,
   AuthedShellComputerRoute: AuthedShellComputerRoute,
+  AuthedShellCustomizeRoute: AuthedShellCustomizeRoute,
   AuthedShellInboxRoute: AuthedShellInboxRoute,
   AuthedShellApprovalsApprovalIdRoute: AuthedShellApprovalsApprovalIdRoute,
   AuthedShellAppsIdRoute: AuthedShellAppsIdRoute,

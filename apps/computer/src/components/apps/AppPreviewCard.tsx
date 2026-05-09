@@ -1,4 +1,5 @@
 import { ArrowRight, BarChart3 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Badge } from "@thinkwork/ui";
 import type { AppArtifactPreview } from "@/lib/app-artifacts";
 
@@ -9,7 +10,11 @@ interface AppPreviewCardProps {
 export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
   return (
     <article className="overflow-hidden rounded-lg border border-border/70 bg-background/70 transition-colors hover:bg-accent/30">
-      <a href={artifact.href} className="grid gap-4 p-4">
+      <Link
+        to="/apps/$id"
+        params={{ id: artifact.id }}
+        className="grid gap-4 p-4"
+      >
         <div className="grid aspect-[16/9] gap-2 rounded-md border border-border/60 bg-muted/30 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -52,7 +57,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
           Open app
           <ArrowRight className="size-4" />
         </span>
-      </a>
+      </Link>
     </article>
   );
 }

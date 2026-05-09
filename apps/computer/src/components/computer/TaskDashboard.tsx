@@ -1,69 +1,133 @@
-import { Search, Sparkles } from "lucide-react";
-import { Badge, Button, Input } from "@thinkwork/ui";
-import { computerTaskRoute } from "@/lib/computer-routes";
+import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
+import { type ColumnDef } from "@tanstack/react-table";
+import { Archive, Lock, Search } from "lucide-react";
+import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 
 export interface TaskSummary {
   id: string;
+  number?: number | null;
+  identifier?: string | null;
   title?: string | null;
   status?: string | null;
-  lifecycleStatus?: string | null;
-  lastResponsePreview?: string | null;
+  assigneeType?: string | null;
+  assigneeId?: string | null;
+  agentId?: string | null;
+  computerId?: string | null;
+  agent?: { id: string; name: string; avatarUrl?: string | null } | null;
+  checkoutRunId?: string | null;
+  channel?: string | null;
+  costSummary?: number | null;
+  lastActivityAt?: string | null;
+  lastTurnCompletedAt?: string | null;
+  lastReadAt?: string | null;
+  archivedAt?: string | null;
+  createdAt?: string | null;
   updatedAt?: string | null;
-  artifactCount?: number | null;
 }
 
 interface TaskDashboardProps {
-  tasks: TaskSummary[];
+  threads: TaskSummary[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  search: string;
   isLoading?: boolean;
   error?: string | null;
+  onPageChange: (pageIndex: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onSearchChange: (search: string) => void;
 }
 
 export function TaskDashboard({
-  tasks,
+  threads,
+  totalCount,
+  pageIndex,
+  pageSize,
+  search,
   isLoading = false,
   error,
+  onPageChange,
+  onPageSizeChange,
+  onSearchChange,
 }: TaskDashboardProps) {
+  const columns = useMemo<ColumnDef<TaskSummary>[]>(
+    () => [
+      {
+        id: "thread",
+        cell: ({ row }) => <ThreadTableRow thread={row.original} />,
+      },
+    ],
+    [],
+  );
+
   return (
-    <main className="flex w-full flex-1 flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Threads</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Follow Computer work from prompt to generated artifacts.
-            </p>
+    <main className="flex w-full flex-1 flex-col bg-background">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+        <header className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Computer
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {isLoading ? "Loading..." : `${totalCount} thread${totalCount === 1 ? "" : "s"}`}
+              </p>
           </div>
-          <Button asChild>
-            <a href="/computer">New thread</a>
-          </Button>
+            <Button asChild>
+              <Link to="/tasks">New</Link>
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => onSearchChange(event.target.value)}
+                className="pl-9"
+                placeholder="Search threads..."
+                aria-label="Search threads"
+              />
+            </label>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Button type="button" variant="ghost" size="sm" disabled>
+                Filter
+              </Button>
+              <Button type="button" variant="ghost" size="sm" disabled>
+                Sort
+              </Button>
+              <Button type="button" variant="ghost" size="sm" disabled>
+                Group
+              </Button>
+            </div>
+          </div>
         </header>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search threads" />
-          </label>
-          <div className="flex rounded-lg border border-border/70 p-1">
-            <Button type="button" size="sm" variant="secondary">
-              Threads
-            </Button>
-            <Button type="button" size="sm" variant="ghost" disabled>
-              Archived
-            </Button>
-          </div>
-        </div>
-
-        {isLoading ? (
+        {error ? (
+          <TaskDashboardState label={error} tone="error" />
+        ) : isLoading ? (
           <TaskDashboardState label="Loading threads" />
-        ) : error ? (
-          <TaskDashboardState label="Failed to load threads" tone="error" />
-        ) : tasks.length === 0 ? (
-          <TaskDashboardState label="No threads yet" />
+        ) : threads.length === 0 ? (
+          <TaskDashboardState label="No threads match the current search" />
         ) : (
-          <section className="grid gap-3" aria-label="Computer threads">
-            {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} />
-            ))}
+          <section
+            className="min-h-0 flex-1"
+            aria-label="Computer threads table"
+          >
+            <DataTable
+              columns={columns}
+              data={threads}
+              hideHeader
+              compact
+              scrollable
+              pageSize={pageSize}
+              totalCount={totalCount}
+              pageIndex={pageIndex}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+              tableClassName="table-fixed"
+            />
           </section>
         )}
       </div>
@@ -71,43 +135,99 @@ export function TaskDashboard({
   );
 }
 
-function TaskRow({ task }: { task: TaskSummary }) {
-  const title = task.title?.trim() || "Untitled thread";
-  const href = computerTaskRoute(task.id);
+function ThreadTableRow({ thread }: { thread: TaskSummary }) {
+  const title = thread.title?.trim() || "Untitled thread";
+  const identifier = thread.identifier ?? `#${thread.number ?? "?"}`;
+  const owner = ownerLabel(thread);
+  const updated = thread.lastActivityAt ?? thread.updatedAt ?? thread.createdAt;
 
   return (
-    <article className="rounded-lg border border-border/70 bg-background/70 p-4 transition-colors hover:bg-accent/30">
-      <a href={href} className="grid gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">{title}</h2>
-            {task.lastResponsePreview ? (
-              <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                {task.lastResponsePreview}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="rounded-md">
-              {task.lifecycleStatus ?? task.status ?? "IDLE"}
-            </Badge>
-            {task.artifactCount ? (
-              <Badge variant="secondary" className="gap-1 rounded-md">
-                <Sparkles className="size-3.5" />
-                {task.artifactCount} artifact
-                {task.artifactCount === 1 ? "" : "s"}
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-        {task.updatedAt ? (
-          <p className="text-xs text-muted-foreground">
-            Updated {formatDate(task.updatedAt)}
-          </p>
+    <Link
+      to="/tasks/$id"
+      params={{ id: thread.id }}
+      className="flex h-11 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+        <StatusDot status={thread.status} />
+        <span className="w-[82px] shrink-0 truncate font-mono text-xs text-muted-foreground">
+          {identifier}
+        </span>
+        <span className="min-w-0 truncate text-[0.95rem] font-medium">
+          {title}
+        </span>
+        {thread.checkoutRunId ? (
+          <Lock className="size-3.5 shrink-0 text-yellow-500" />
         ) : null}
-      </a>
-    </article>
+        {thread.archivedAt ? (
+          <Archive className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : null}
+      </span>
+      <span className="hidden shrink-0 items-center gap-2 md:flex">
+        <Badge variant="outline" className="rounded-full text-xs">
+          {owner}
+        </Badge>
+        {thread.channel ? (
+          <span className="w-20 text-xs text-muted-foreground">
+            {formatChannel(thread.channel)}
+          </span>
+        ) : null}
+        <span className="w-20 text-right text-xs text-muted-foreground">
+          {updated ? relativeTime(updated) : ""}
+        </span>
+      </span>
+    </Link>
   );
+}
+
+function StatusDot({ status }: { status?: string | null }) {
+  const normalized = String(status ?? "").toLowerCase();
+  const color =
+    normalized === "done"
+      ? "border-emerald-500"
+      : normalized === "blocked" || normalized === "cancelled"
+        ? "border-destructive"
+        : normalized === "in_progress" || normalized === "in review"
+          ? "border-blue-500"
+          : "border-yellow-500";
+  return <span className={`size-3.5 shrink-0 rounded-full border-2 ${color}`} />;
+}
+
+function ownerLabel(thread: TaskSummary) {
+  if (thread.computerId) return "Computer-owned";
+  if (thread.agent?.name) return thread.agent.name;
+  if (thread.assigneeType) return formatChannel(thread.assigneeType);
+  return "Unassigned";
+}
+
+function formatChannel(value: string) {
+  return value
+    .toLowerCase()
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function relativeTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const diffMs = date.getTime() - Date.now();
+  const absMs = Math.abs(diffMs);
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ];
+  const formatter = new Intl.RelativeTimeFormat(undefined, {
+    numeric: "auto",
+  });
+  for (const [unit, ms] of units) {
+    if (absMs >= ms) {
+      return formatter.format(Math.round(diffMs / ms), unit);
+    }
+  }
+  return "just now";
 }
 
 function TaskDashboardState({
@@ -128,15 +248,4 @@ function TaskDashboardState({
       </p>
     </div>
   );
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
