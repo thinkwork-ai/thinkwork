@@ -89,6 +89,38 @@ def test_callback_publishes_bedrock_content_block_delta_events():
     assert [call["variables"]["seq"] for call in calls] == [1, 2]
 
 
+def test_callback_dedupes_same_delta_when_strands_passes_aliases():
+    calls = []
+
+    def post(_endpoint, _headers, body, _timeout):
+        calls.append(json.loads(body.decode("utf-8")))
+        return 200, "{}"
+
+    callback, publisher = build_appsync_chunk_callback(
+        "thread-1",
+        env={
+            "APPSYNC_ENDPOINT": "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+            "APPSYNC_API_KEY": "test-key",
+        },
+        post_fn=post,
+    )
+
+    assert callback is not None
+    assert publisher is not None
+    callback(
+        "Full",
+        data="Full",
+        delta={"text": "Full"},
+        event={"contentBlockDelta": {"delta": {"text": "Full"}}},
+    )
+    publisher.drain()
+
+    assert [json.loads(call["variables"]["chunk"]) for call in calls] == [
+        {"text": "Full"},
+    ]
+    assert [call["variables"]["seq"] for call in calls] == [1]
+
+
 def test_extract_stream_text_deltas_ignores_non_text_events():
     assert extract_stream_text_deltas(current_tool_use={"name": "search"}) == []
     assert extract_stream_text_deltas(event={"messageStop": {"stopReason": "end_turn"}}) == []
@@ -113,6 +145,15 @@ def test_extract_stream_text_deltas_accepts_common_delta_shapes():
             }
         }
     ) == ["thinking"]
+
+
+def test_extract_stream_text_deltas_dedupes_aliases_within_one_callback():
+    assert extract_stream_text_deltas(
+        "hello",
+        data="hello",
+        delta={"text": "hello"},
+        event={"contentBlockDelta": {"delta": {"text": "hello"}}},
+    ) == ["hello"]
 
 
 def test_publisher_retries_retryable_failures_once():
