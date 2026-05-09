@@ -240,6 +240,47 @@ const ArtifactFields = gql`
   }
 `;
 
+const AppletPreviewFields = gql`
+  fragment AppletPreviewFields on Applet {
+    appId
+    name
+    version
+    tenantId
+    threadId
+    prompt
+    agentVersion
+    modelId
+    generatedAt
+    stdlibVersionAtGeneration
+  }
+`;
+
+export const AppletQuery = gql`
+  query Applet($appId: ID!) {
+    applet(appId: $appId) {
+      source
+      files
+      metadata
+      applet {
+        ...AppletPreviewFields
+      }
+    }
+  }
+  ${AppletPreviewFields}
+`;
+
+export const AppletsQuery = gql`
+  query Applets {
+    applets {
+      nodes {
+        ...AppletPreviewFields
+      }
+      nextCursor
+    }
+  }
+  ${AppletPreviewFields}
+`;
+
 export const DashboardArtifactQuery = gql`
   query DashboardArtifact($id: ID!) {
     dashboardArtifact(id: $id) {

@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3 } from "lucide-react";
+import { ArrowRight, Boxes, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@thinkwork/ui";
 import type { AppArtifactPreview } from "@/lib/app-artifacts";
@@ -8,6 +8,7 @@ interface AppPreviewCardProps {
 }
 
 export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
+  const sourceStatuses = artifact.sourceStatuses ?? [];
   return (
     <article className="overflow-hidden rounded-lg border border-border/70 bg-background/70 transition-colors hover:bg-accent/30">
       <Link
@@ -19,22 +20,40 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-md bg-background/80">
-                <BarChart3 className="size-4 text-primary" />
+                <Boxes className="size-4 text-primary" />
               </span>
               <span className="text-xs font-medium text-muted-foreground">
-                Pipeline risk
+                {artifact.kind === "applet" ? "Applet" : "Pipeline risk"}
               </span>
             </div>
             <Badge variant="outline" className="rounded-md">
-              App
+              {artifact.version ? `v${artifact.version}` : "App"}
             </Badge>
           </div>
           <div className="mt-auto grid grid-cols-3 gap-2">
-            <PreviewMetric label="High risk" value={String(artifact.riskCount)} />
-            <PreviewMetric label="Exposure" value={formatMoney(artifact.atRiskAmount)} />
             <PreviewMetric
-              label="Sources"
-              value={`${artifact.sourceStatuses.length}`}
+              label={artifact.kind === "applet" ? "Generated" : "High risk"}
+              value={
+                artifact.kind === "applet"
+                  ? formatDate(artifact.generatedAt)
+                  : String(artifact.riskCount ?? 0)
+              }
+            />
+            <PreviewMetric
+              label={artifact.kind === "applet" ? "Model" : "Exposure"}
+              value={
+                artifact.kind === "applet"
+                  ? shortModel(artifact.modelId)
+                  : formatMoney(artifact.atRiskAmount ?? 0)
+              }
+            />
+            <PreviewMetric
+              label={artifact.kind === "applet" ? "Stdlib" : "Sources"}
+              value={
+                artifact.kind === "applet"
+                  ? artifact.stdlibVersionAtGeneration || "-"
+                  : `${sourceStatuses.length}`
+              }
             />
           </div>
         </div>
@@ -45,11 +64,22 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
             {artifact.summary}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {artifact.sourceStatuses.map((source) => (
-              <Badge key={source.provider} variant="secondary" className="rounded-md">
-                {source.provider}: {source.status}
+            {sourceStatuses.length ? (
+              sourceStatuses.map((source) => (
+                <Badge
+                  key={source.provider}
+                  variant="secondary"
+                  className="rounded-md"
+                >
+                  {source.provider}: {source.status}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="secondary" className="rounded-md">
+                <Sparkles className="mr-1 size-3" />
+                Private artifact
               </Badge>
-            ))}
+            )}
           </div>
         </div>
 
@@ -75,4 +105,20 @@ function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
   return `$${value}`;
+}
+
+function formatDate(value: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function shortModel(value?: string | null) {
+  if (!value) return "-";
+  const parts = value.split(/[/:.]/).filter(Boolean);
+  return parts.at(-1) ?? value;
 }

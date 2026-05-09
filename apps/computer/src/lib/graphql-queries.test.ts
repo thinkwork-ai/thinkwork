@@ -1,6 +1,8 @@
 import { print } from "graphql";
 import { describe, expect, it } from "vitest";
 import {
+  AppletQuery,
+  AppletsQuery,
   ComputerKnowledgeBaseDetailQuery,
   ComputerKnowledgeBasesQuery,
   ComputerMemoryRecordsQuery,
@@ -71,5 +73,24 @@ describe("computer GraphQL queries", () => {
     expect(print(ComputerKnowledgeBasesQuery)).toContain("knowledgeBases");
     expect(print(ComputerKnowledgeBaseDetailQuery)).toContain("knowledgeBase");
     expect(print(ComputerKnowledgeBaseDetailQuery)).toContain("embeddingModel");
+  });
+
+  it("requests live applet source and preview fields for app mounting", () => {
+    const query = print(AppletQuery);
+
+    expect(query).toContain("applet(appId: $appId)");
+    expect(query).toContain("source");
+    expect(query).toContain("files");
+    expect(query).toContain("metadata");
+    expect(query).toContain("stdlibVersionAtGeneration");
+  });
+
+  it("requests applet previews for the apps gallery", () => {
+    const query = print(AppletsQuery);
+
+    expect(query).toContain("applets");
+    expect(query).toContain("nodes");
+    expect(query).toContain("nextCursor");
+    expect(query).toContain("prompt");
   });
 });

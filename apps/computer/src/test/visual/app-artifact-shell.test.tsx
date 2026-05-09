@@ -8,7 +8,11 @@ afterEach(cleanup);
 
 describe("app artifact visual contract", () => {
   it("renders a single bounded applet canvas without horizontal page scroll", () => {
-    render(<AppArtifactSplitShell manifest={crmDashboardVisualFixtures.base} />);
+    render(
+      <AppArtifactSplitShell title={crmDashboardVisualFixtures.base.snapshot.title}>
+        <div>Applet canvas body</div>
+      </AppArtifactSplitShell>,
+    );
 
     expect(screen.getByTestId("app-artifact-split-shell").className).toContain(
       "h-svh",
@@ -26,24 +30,34 @@ describe("app artifact visual contract", () => {
   });
 
   it("uses stable chart dimensions and safe table truncation for dense fixtures", () => {
-    render(<CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.denseProducts} />);
+    render(
+      <CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.denseProducts} />,
+    );
 
-    expect(screen.getByTestId("stage-exposure-chart").className).toContain("h-64");
+    expect(screen.getByTestId("stage-exposure-chart").className).toContain(
+      "h-64",
+    );
     expect(screen.getByTestId("product-exposure-chart").className).toContain(
       "h-64",
     );
-    expect(screen.getByText("Cedar Ridge Fulfillment and Reverse Logistics International").className).toContain(
-      "truncate",
-    );
+    expect(
+      screen.getByText(
+        "Cedar Ridge Fulfillment and Reverse Logistics International",
+      ).className,
+    ).toContain("truncate");
     expect(screen.getByText("<script>alert(1)</script> renewal")).toBeTruthy();
     expect(document.querySelector("script")).toBeNull();
   });
 
   it("keeps partial and failed source coverage visible beside usable charts", () => {
-    render(<CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.failedCrm} />);
+    render(
+      <CrmPipelineRiskApp manifest={crmDashboardVisualFixtures.failedCrm} />,
+    );
 
     expect(screen.getByText("failed")).toBeTruthy();
-    expect(screen.getByText(/prior dashboard snapshot remains visible/i)).toBeTruthy();
+    expect(
+      screen.getByText(/prior dashboard snapshot remains visible/i),
+    ).toBeTruthy();
     expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getByText("Opportunity risk")).toBeTruthy();
   });
