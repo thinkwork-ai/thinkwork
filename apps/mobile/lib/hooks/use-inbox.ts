@@ -6,6 +6,7 @@ import {
   AddInboxItemCommentMutation,
   OnInboxItemStatusChangedSubscription,
 } from "@/lib/graphql-queries";
+import { visibleMobileInboxItems } from "@/lib/mobile-inbox";
 
 export function useInboxItems(
   tenantId: string | undefined,
@@ -37,7 +38,7 @@ export function useInboxCount(tenantId: string | undefined) {
     pause: !tenantId,
     requestPolicy: "cache-first",
   });
-  return result.data?.inboxItems?.length ?? 0;
+  return visibleMobileInboxItems(result.data?.inboxItems ?? []).length;
 }
 
 export function useInboxStatusSubscription(tenantId: string | undefined) {
