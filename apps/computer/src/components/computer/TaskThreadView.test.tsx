@@ -798,8 +798,10 @@ describe("TaskThreadView", () => {
       );
       const details = getThinkingDetails();
       expect(details.open).toBe(true);
-      // Spinner uses `animate-spin`; the static dot variant does not.
-      expect(container.querySelector(".animate-spin")).not.toBeNull();
+      // Active state pulses the brain icon (text-sky-400 + animate-pulse);
+      // the static (terminal-clean) variant has the brain without the
+      // animation class.
+      expect(container.querySelector(".animate-pulse")).not.toBeNull();
       unmount();
     }
   });

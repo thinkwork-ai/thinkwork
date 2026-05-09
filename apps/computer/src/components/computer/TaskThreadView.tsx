@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   Bot,
+  Brain,
   ChevronRight,
   Code2,
   Database,
@@ -532,12 +533,12 @@ function ThinkingRow({
       aria-label={ariaLabel}
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
-        <span
+        <Brain
           aria-hidden="true"
           className={
             isActive
-              ? "size-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin"
-              : "flex size-4 items-center justify-center rounded-full border border-muted-foreground/80"
+              ? "size-4 text-sky-400 animate-pulse"
+              : "size-4 text-sky-400"
           }
         />
         {title}
