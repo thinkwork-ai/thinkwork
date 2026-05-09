@@ -60,3 +60,5 @@ recipe plan in autopilot mode.
   pre-existing import-order/E402/UTC findings, so the U3 Python sanity pass
   used `uv run ruff check --ignore E402,I001,UP017` plus
   `uv run ruff format --check` on the touched Python files.
+- **Current PR:** #1079
+  (`fix(computer): require saved applet evidence for build turns`).
