@@ -15,6 +15,7 @@ WORKDIR /app
 # Install Python dependencies (includes strands-agents + hindsight-strands)
 COPY packages/agentcore-strands/agent-container/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --no-deps nova-act==3.4.187.0 && \
     command -v opentelemetry-instrument >/dev/null && \
     (find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true)
 
