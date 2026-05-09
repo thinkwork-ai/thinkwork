@@ -14,6 +14,31 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U6:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u6-live-api` on branch
+  `codex/computer-applets-u6-live-api` from `origin/main` after U5 merged.
+- **Progress:** Activated applet GraphQL reads/writes: `saveApplet` now
+  validates source, writes source and metadata to S3, inserts the applet
+  artifact row, and returns the contract `SaveAppletPayload`; `regenerateApplet`
+  increments the metadata version and overwrites source for the stable appId;
+  `applet` loads source + metadata and `applets` lists metadata previews.
+- **Decision:** Corrected the temporary U3 GraphQL shape to match the frozen
+  U1 contract before U7 consumes it: `applet(appId)`, `applets`, nullable
+  `SaveAppletInput.appId`, `SaveAppletPayload`, `regenerateApplet`, and
+  instance/key-shaped applet-state signatures. Applet-state bodies remain inert
+  for U9.
+- **Verification note:** `pnpm install --frozen-lockfile`, codegen for
+  `thinkwork-cli`, `@thinkwork/admin`, and `@thinkwork/mobile`, `pnpm --filter
+  @thinkwork/api test -- applets`, `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm --filter @thinkwork/api
+  test`, `pnpm -r --if-present test`, `pnpm --filter @thinkwork/api build`,
+  and `git diff --check` passed locally.
+- **Current PR:** #1056 (`feat(computer): activate applet API resolvers`).
+- **CI:** PR #1056 checks passed: CLA, lint, test, typecheck, verify.
+- **Merged U5:** PR #1054 (`feat(computer): add inert applet transform path`)
+  was squash-merged to `main` at
+  `e4ff628bf5f7b9dce0498ab243ec4aae75e4dc9a`; remote/local branches and the
+  U5 worktree were deleted.
 - **Started U5:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u5-transform` on branch
   `codex/computer-applets-u5-transform` from `origin/main` after U4 merged.
