@@ -14,6 +14,34 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U4:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u4-strands-tools` on branch
+  `codex/computer-applets-u4-strands-tools` from `origin/main` after U3
+  merged.
+- **Progress:** Added inert Strands `save_app`, `load_app`, and `list_apps`
+  factory closures with env snapshot tests, server registration, and
+  boot-assert coverage. The Dockerfile already wildcard-copies
+  `container-sources/`; `_boot_assert.py` is the effective COPY drift guard.
+- **Verification note:** `uv run pytest
+  packages/agentcore-strands/agent-container/test_applet_tool.py`, `uv run
+  pytest packages/agentcore-strands/agent-container/test_applet_tool.py
+  packages/agentcore-strands/agent-container/test_boot_assert.py`, `uv run
+  ruff check ...`, `uv run --no-project --with pytest --with pytest-asyncio
+  --with pyyaml --with mistune --with anyio --with boto3 --with
+  strands-agents pytest
+  packages/agentcore-strands/agent-container/test_server_registration.py`,
+  and `docker build -f
+  packages/agentcore-strands/agent-container/Dockerfile -t
+  thinkwork-agentcore-strands-applet-u4:local .` all passed. After installing
+  worktree dependencies with `pnpm install --frozen-lockfile`, `git diff
+  --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and `pnpm -r
+  --if-present test` also passed.
+- **Current PR:** #1053 (`feat(computer): add inert applet tools`).
+- **CI:** PR #1053 checks passed: CLA, lint, test, typecheck, verify.
+- **Interruption handled:** PR #1052
+  (`fix(computer): simplify applet canvas layout`) was opened, verified, and
+  merged for the requested Apps single-canvas/no-horizontal-scroll correction
+  before resuming U4.
 - **Started U3:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u3-api` on branch
   `codex/computer-applets-u3-api` from `origin/main` after U2 merged.

@@ -748,6 +748,24 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception as e:
         logger.warning("wake_workspace registration failed: %s", e)
 
+    try:
+        from applet_tool import (
+            make_list_apps_from_env,
+            make_load_app_from_env,
+            make_save_app_from_env,
+        )
+
+        tools.extend(
+            [
+                make_save_app_from_env(),
+                make_load_app_from_env(),
+                make_list_apps_from_env(),
+            ]
+        )
+        logger.info("workspace tools registered: save_app, load_app, list_apps")
+    except Exception as e:
+        logger.warning("applet tools registration failed: %s", e)
+
     # Self-serve agent tools (docs/plans/2026-04-22-003-...-plan.md):
     #   - update_agent_name: agent renames itself
     #   - update_identity: agent edits its own IDENTITY.md personality fields
