@@ -92,6 +92,9 @@ importers:
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
+      '@thinkwork/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@uiw/codemirror-theme-vscode':
         specifier: ^4.25.9
         version: 4.25.9(@codemirror/language@6.12.3)(@codemirror/state@6.6.0)(@codemirror/view@6.41.0)

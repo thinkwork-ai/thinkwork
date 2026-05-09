@@ -178,7 +178,7 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={onRowClick ? "cursor-pointer" : undefined}
+            className={`max-h-10 [&>td]:max-h-10 [&>td]:overflow-hidden ${onRowClick ? "cursor-pointer" : ""}`.trim()}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
