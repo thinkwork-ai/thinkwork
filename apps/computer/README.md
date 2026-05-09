@@ -35,6 +35,15 @@ The same command also runs the applet pipeline smoke:
 - invokes the saved applet's deterministic `refresh()` export and checks per-source statuses
 - round-trips `saveAppletState` / `appletState`
 - seeds the canonical LastMile CRM pipeline-risk applet and opens it through the applet route
+- runs the CRM dashboard prompt smoke in dry-run mode; set `SMOKE_ENABLE_AGENT_APPLET_PROMPT=1` to exercise the live AgentCore/model path and require a newly linked applet
+
+To run the optional live CRM dashboard prompt smoke:
+
+```bash
+SMOKE_ENABLE_AGENT_APPLET_PROMPT=1 scripts/smoke-computer.sh dev
+```
+
+The default prompt is `Build a simple CRM pipeline dashboard from the available CRM data.` Override it with `SMOKE_CRM_DASHBOARD_PROMPT` when running post-deploy acceptance prompts.
 
 To run the browser-backed evidence path manually:
 

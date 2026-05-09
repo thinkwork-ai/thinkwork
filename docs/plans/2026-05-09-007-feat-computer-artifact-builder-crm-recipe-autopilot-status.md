@@ -60,5 +60,32 @@ recipe plan in autopilot mode.
   pre-existing import-order/E402/UTC findings, so the U3 Python sanity pass
   used `uv run ruff check --ignore E402,I001,UP017` plus
   `uv run ruff format --check` on the touched Python files.
-- **Current PR:** #1079
-  (`fix(computer): require saved applet evidence for build turns`).
+- **Merged U3:** PR #1079
+  (`fix(computer): require saved applet evidence for build turns`) was
+  squash-merged to `main` at
+  `2bbfe879f48b30b73f611a5ef07b44a2b8b36b4e`; CI passed: CLA, lint, test,
+  typecheck, verify. The remote branch was deleted by GitHub; the local
+  worktree and branch were removed manually because `gh pr merge` could not
+  check out local `main` while another worktree owned it.
+- **Started U4:** Created isolated worktree
+  `.Codex/worktrees/artifact-builder-crm-smoke-u4` on branch
+  `codex/artifact-builder-crm-smoke-u4` from fresh `origin/main` at
+  `2bbfe879`.
+- **Progress:** Added `scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs`
+  for the optional deployed CRM dashboard prompt acceptance path. The script
+  dry-runs by default, requires `SMOKE_ENABLE_AGENT_APPLET_PROMPT=1` for live
+  AgentCore/model execution, creates a fresh Computer thread in live mode,
+  sends the CRM dashboard prompt, waits for the task, asserts a linked applet
+  artifact exists, validates applet source shape, opens `/artifacts/{appId}`,
+  and prints thread/task/applet diagnostics on failure. Wired it into
+  `scripts/smoke-computer.sh` and documented the flag/prompt override in
+  `apps/computer/README.md`.
+- **Verification note:** `node --check
+scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs`,
+  `COMPUTER_ENV_FILE=none node
+scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs`, `bash -n
+scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
+  `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
+  locally. `git diff --check` passed.
+- **Current PR:** #1080
+  (`test(computer): add CRM dashboard prompt smoke`).
