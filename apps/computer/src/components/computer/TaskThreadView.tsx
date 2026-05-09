@@ -200,7 +200,6 @@ export function TaskThreadView({
             <ThinkingRow
               title="Thinking"
               detail="Computer is preparing this thread."
-              isActive={isThreadRunning(thread)}
             />
           ) : (
             visibleMessages.map((message, index) => (
@@ -265,14 +264,11 @@ function TranscriptSegment({
   );
 }
 
-const EXPANDED_TURN_STATUSES = new Set([
+const RENDERED_TURN_STATUSES = new Set([
   "running",
   "pending",
   "queued",
   "claimed",
-]);
-const RENDERED_TURN_STATUSES = new Set([
-  ...EXPANDED_TURN_STATUSES,
   "completed",
   "succeeded",
   "failed",
@@ -282,14 +278,6 @@ function normalizeStatus(status: unknown) {
   return String(status ?? "")
     .toLowerCase()
     .trim();
-}
-
-function isExpandedStatus(status: string) {
-  return EXPANDED_TURN_STATUSES.has(status);
-}
-
-function shouldDefaultOpen(turn: TaskThreadTurn) {
-  return isExpandedStatus(normalizeStatus(turn.status)) || Boolean(turn.error);
 }
 
 function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
@@ -304,16 +292,16 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
     Boolean(turn.error);
   if (!shouldRender) return null;
 
-  const expanded = isExpandedStatus(status);
-  const defaultOpen = shouldDefaultOpen(turn);
-
+  // Thinking always defaults closed — opening it on running turns caused
+  // visible content shift as action rows streamed in (the user is reading
+  // the previous answer or composing a follow-up; the page jumping is
+  // disruptive). Failed turns also default closed; the Run failed row is
+  // available on click. Manual user toggle persists across re-renders
+  // because we no longer key the disclosure on status.
   return (
     <ThinkingRow
-      key={defaultOpen ? "open" : "closed"}
       title="Thinking"
       detail={turnSummary(turn, usage)}
-      isActive={expanded}
-      defaultOpen={defaultOpen}
       ariaLabel="Thinking and tool activity"
     >
       {rows.map((row) => (
@@ -496,7 +484,7 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
               ))}
             </div>
           ) : null}
-          <div className="prose prose-invert max-w-none text-[1.05rem] text-foreground prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-4">
+          <div className="prose prose-sm prose-invert max-w-none text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
             {body ? (
               <Streamdown>{body}</Streamdown>
             ) : (
@@ -616,15 +604,11 @@ function FollowUpComposer({
 function ThinkingRow({
   title,
   detail,
-  isActive = false,
-  defaultOpen = false,
   ariaLabel,
   children,
 }: {
   title: string;
   detail?: string;
-  isActive?: boolean;
-  defaultOpen?: boolean;
   ariaLabel?: string;
   children?: ReactNode;
 }) {
@@ -632,10 +616,14 @@ function ThinkingRow({
   // arrays (truthy in plain JS) and falsy nodes correctly; a bare children.some
   // would render an empty container when rows=[] because Boolean([]) is true.
   const hasChildren = Children.toArray(children).some(Boolean);
+  // Always defaults closed — preventing the content-shift the user
+  // explicitly called out (action rows streaming in pushed the rest of the
+  // page mid-read). The native `<details>` element starts closed, and React
+  // does not control the `open` attribute after the user toggles it (since
+  // we no longer pass `open`), so manual expansion sticks across re-renders.
   return (
     <details
       className="group/thinking w-fit text-muted-foreground"
-      open={defaultOpen}
       aria-label={ariaLabel}
     >
       <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
@@ -1066,12 +1054,6 @@ function toolInvocationDetail(record: Record<string, unknown>) {
     status ? `Status: ${status}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join("\n\n") : JSON.stringify(record, null, 2);
-}
-
-function isThreadRunning(thread: TaskThread) {
-  return String(thread.lifecycleStatus ?? thread.status ?? "")
-    .toLowerCase()
-    .includes("running");
 }
 
 function parseRecord(value: unknown): Record<string, unknown> {

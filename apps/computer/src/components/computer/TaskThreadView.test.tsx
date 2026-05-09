@@ -656,9 +656,12 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("(No message content)")).toBeTruthy();
   });
 
-  it("renders assistant Markdown wrapper with tightened prose density modifiers", () => {
-    // U1 regression guard: dropping `prose-p:my-2 prose-li:my-0 …` reverts the
-    // page to the loose default vertical rhythm that pre-merge content used.
+  it("renders assistant Markdown wrapper with Codex-transcript prose density", () => {
+    // Regression guard: matches the tightened token set targeted by the
+    // "make Computer match the Codex CLI transcript density" iteration —
+    // text-sm + leading-5 + my-1.5 paragraph/list margins, prose-sm modifier
+    // shrinks the inline element rhythm. Reverting any one token sends the
+    // page back toward the looser pre-merge rhythm.
     const { container } = render(
       <TaskThreadView
         thread={{
@@ -680,18 +683,25 @@ describe("TaskThreadView", () => {
     expect(proseWrapper).not.toBeNull();
     const cls = proseWrapper!.className;
     for (const token of [
-      "prose-p:my-2",
-      "prose-ul:my-2",
-      "prose-ol:my-2",
+      "prose-sm",
+      "text-sm",
+      "leading-5",
+      "prose-p:leading-5",
+      "prose-li:leading-5",
+      "prose-p:my-1.5",
+      "prose-ul:my-1.5",
+      "prose-ol:my-1.5",
       "prose-li:my-0",
-      "prose-headings:mt-4",
-      "prose-headings:mb-2",
+      "prose-headings:mt-3",
+      "prose-headings:mb-1.5",
     ]) {
       expect(cls).toContain(token);
     }
-    // Pre-existing loose tokens must not survive the refactor.
+    // Loose tokens from earlier iterations must not survive.
     expect(cls).not.toContain("leading-8");
+    expect(cls).not.toContain("text-[1.05rem]");
     expect(cls).not.toContain("prose-p:my-0");
+    expect(cls).not.toContain("prose-p:my-2");
   });
 
   it("renders the transcript segment grid with tightened gap-3 spacing", () => {
@@ -750,8 +760,9 @@ describe("TaskThreadView", () => {
     expect(details.open).toBe(false);
   });
 
-  it("renders Thinking row expanded with the Run failed row visible when a turn errors", () => {
-    // U2 / DL-002 regression guard: a failed turn must surface its error
+  it("nests the Run failed row inside the Thinking disclosure when a turn errors", () => {
+    // The Run failed row lives inside Thinking now. Thinking is collapsed
+    // by default to avoid content shift, so the error is one click away.
     // without forcing the user to expand a closed disclosure.
     render(
       <TaskThreadView
@@ -773,17 +784,29 @@ describe("TaskThreadView", () => {
       />,
     );
     const details = getThinkingDetails();
-    expect(details.open).toBe(true);
-    expect(screen.getByText("Run failed")).toBeTruthy();
-    expect(screen.getByText("Browser session timed out")).toBeTruthy();
+    expect(details.open).toBe(false);
+    // Run failed row is mounted inside the closed disclosure (revealed on
+    // expand). Asserting via queryByText to confirm presence regardless of
+    // visibility — JSDOM renders <details closed> children but they're not
+    // visible to the user without expansion.
+    expect(screen.queryByText("Run failed")).toBeTruthy();
+    expect(screen.queryByText("Browser session timed out")).toBeTruthy();
   });
 
-  it("renders Thinking row expanded for queued and pending turns", () => {
-    // U2 / DL-001 regression guard: pre-running statuses must default the
-    // disclosure open so users see the activity rows stream in (the
-    // ProcessingShimmer carries the in-flight signal — no spinner needed
-    // on the brain icon itself).
-    for (const status of ["pending", "queued", "claimed"] as const) {
+  it("defaults Thinking closed for every turn status to prevent content shift", () => {
+    // The user explicitly does not want streaming action rows pushing the
+    // page taller as a turn runs. Closing Thinking by default keeps the
+    // viewport stable; ProcessingShimmer is the only in-flight signal that
+    // grows the height (and only by one line). User can click to expand.
+    for (const status of [
+      "running",
+      "pending",
+      "queued",
+      "claimed",
+      "completed",
+      "succeeded",
+      "failed",
+    ] as const) {
       const { unmount } = render(
         <TaskThreadView
           thread={{
@@ -802,21 +825,18 @@ describe("TaskThreadView", () => {
         />,
       );
       const details = getThinkingDetails();
-      expect(details.open).toBe(true);
-      // The brain icon stays static; the in-flight signal is carried by
-      // ProcessingShimmer / streaming buffer, so this test only asserts the
-      // disclosure is open. The dedicated brain-icon assertion lives in the
-      // hover/visual tests above.
+      expect(details.open).toBe(false);
       unmount();
     }
   });
 
-  it("collapses the Thinking disclosure when a running turn transitions to a clean terminal status", () => {
-    // U2: rerender with a status flip across the open-state boundary forces a
-    // remount via the `key` strategy, applying defaultOpen=false.
+  it("preserves user-toggled Thinking state across passive re-renders within the same status", () => {
+    // No more key-based remount on status flip — the user's manual expand
+    // sticks even when the parent re-renders for unrelated reasons (chunk
+    // arrival, polling, etc).
     const baseThread = {
       id: "thread-1",
-      title: "Collapse on finish",
+      title: "Toggle persistence",
       lifecycleStatus: "RUNNING",
       messages: [{ id: "m1", role: "USER", content: "Run" }],
       turns: [
@@ -829,19 +849,17 @@ describe("TaskThreadView", () => {
     };
 
     const { rerender } = render(<TaskThreadView thread={baseThread} />);
-    const runningDetails = getThinkingDetails();
-    expect(runningDetails.open).toBe(true);
+    const details = getThinkingDetails();
+    expect(details.open).toBe(false);
 
-    rerender(
-      <TaskThreadView
-        thread={{
-          ...baseThread,
-          turns: [{ ...baseThread.turns[0], status: "completed" }],
-        }}
-      />,
-    );
-    const finishedDetails = getThinkingDetails();
-    expect(finishedDetails.open).toBe(false);
+    // Manually expand (JSDOM doesn't propagate summary clicks; toggle
+    // imperatively via the open property + a synthetic toggle event).
+    details.open = true;
+    details.dispatchEvent(new Event("toggle", { bubbles: true }));
+
+    rerender(<TaskThreadView thread={{ ...baseThread }} />);
+    const reRendered = getThinkingDetails();
+    expect(reRendered.open).toBe(true);
   });
 
   it("does not synthesize a fallback response when a new turn is in flight after a previous completed turn", () => {
