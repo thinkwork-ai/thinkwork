@@ -298,11 +298,34 @@ function mapTurnsToUserMessages(
 function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
   if (hasAssistantAfterLatestUser(thread.messages)) return thread.messages;
 
-  const latestCompletedTurn = (thread.turns ?? []).find((turn) =>
-    ["completed", "succeeded"].includes(
-      String(turn.status ?? "").toLowerCase(),
-    ),
+  // The fallback exists for the brief window between a turn finishing and the
+  // assistant message being persisted/refetched. Only synthesize when the
+  // latest completed turn actually corresponds to the latest user message —
+  // i.e. it finished AT OR AFTER the latest user message was sent. Otherwise
+  // a previous question's response gets re-rendered below the new question's
+  // running Thinking row, producing a phantom duplicate.
+  const latestUserMessage = findLastIndex(
+    thread.messages,
+    (message) => message.role.toUpperCase() === "USER",
   );
+  if (latestUserMessage < 0) return thread.messages;
+  const latestUserTime = parseEventTimestamp(
+    thread.messages[latestUserMessage].createdAt ?? null,
+  );
+
+  const latestCompletedTurn = (thread.turns ?? []).find((turn) => {
+    if (
+      !["completed", "succeeded"].includes(
+        String(turn.status ?? "").toLowerCase(),
+      )
+    ) {
+      return false;
+    }
+    const finishedTime = parseEventTimestamp(turn.finishedAt ?? null);
+    // Allow when timestamps are unavailable (treat as 0) so older threads
+    // without timestamps still render their fallback once.
+    return finishedTime === 0 || finishedTime >= latestUserTime;
+  });
   const response = stringValue(
     parseRecord(latestCompletedTurn?.resultJson).response,
   );
@@ -466,8 +489,13 @@ function FollowUpComposer({
         }}
         placeholder="Type a command..."
         rows={1}
-        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
-        disabled={disabled || isSending}
+        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 disabled:bg-transparent disabled:opacity-100 dark:bg-transparent dark:disabled:bg-transparent"
+        // Don't disable the textarea while a send is in flight — the shared
+        // Textarea applies a muted disabled-bg + reduced opacity that flashes
+        // visibly on every Enter. The send button is already gated on
+        // canSubmit, so the user can't double-fire. They can keep typing the
+        // next message while the previous one streams.
+        disabled={disabled}
       />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">

@@ -839,6 +839,70 @@ describe("TaskThreadView", () => {
     expect(finishedDetails.open).toBe(false);
   });
 
+  it("does not synthesize a fallback response when a new turn is in flight after a previous completed turn", () => {
+    // Regression: withTurnResponseFallback used to append the latest *completed*
+    // turn's response after the latest user message, even when the latest user
+    // message was a brand-new question whose own turn was still running. The
+    // result was the previous answer rendered as a phantom duplicate below the
+    // new question's running Thinking row.
+    const previousResponse =
+      "Two great options at the same location — Springdale General.";
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-flight",
+          title: "Mid-flight follow-up",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Find the farmer's market",
+              createdAt: "2026-05-09T10:00:00Z",
+            },
+            {
+              id: "a1",
+              role: "ASSISTANT",
+              content: previousResponse,
+              createdAt: "2026-05-09T10:00:30Z",
+            },
+            {
+              id: "u2",
+              role: "USER",
+              content: "What is its address?",
+              createdAt: "2026-05-09T10:01:00Z",
+            },
+          ],
+          turns: [
+            // Newest first (resolver emits DESC). The new turn for u2 is still
+            // running; the previous turn for u1 is completed but its response
+            // is already represented by message a1.
+            {
+              id: "turn-2",
+              status: "running",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:01:01Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:00:00Z",
+              finishedAt: "2026-05-09T10:00:30Z",
+              resultJson: { response: previousResponse },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // The previous response should appear exactly once (as the persisted
+    // assistant message a1), not twice (no synthesized duplicate below u2).
+    expect(
+      screen.getAllByText(previousResponse, { exact: false }),
+    ).toHaveLength(1);
+  });
+
   it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {
     // U3 regression guard: prior behavior attached only the latest turn's
     // activity to the latest user message, leaving earlier turns invisible.
