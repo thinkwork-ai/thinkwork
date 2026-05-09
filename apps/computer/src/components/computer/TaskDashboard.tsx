@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Archive, Lock, Search } from "lucide-react";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
+import { COMPUTER_NEW_THREAD_ROUTE } from "@/lib/computer-routes";
 
 export interface TaskSummary {
   id: string;
@@ -73,9 +74,9 @@ export function TaskDashboard({
               <p className="mt-1 text-sm text-muted-foreground">
                 {isLoading ? "Loading..." : `${totalCount} thread${totalCount === 1 ? "" : "s"}`}
               </p>
-          </div>
+            </div>
             <Button asChild>
-              <Link to="/tasks">New</Link>
+              <Link to={COMPUTER_NEW_THREAD_ROUTE}>New</Link>
             </Button>
           </div>
 
@@ -143,7 +144,7 @@ function ThreadTableRow({ thread }: { thread: TaskSummary }) {
 
   return (
     <Link
-      to="/tasks/$id"
+      to="/threads/$id"
       params={{ id: thread.id }}
       className="flex h-11 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm"
       onClick={(event) => event.stopPropagation()}

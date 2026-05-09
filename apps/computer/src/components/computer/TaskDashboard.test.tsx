@@ -39,7 +39,7 @@ describe("TaskDashboard", () => {
       screen
         .getByRole("link", { name: /chat-318 build crm dashboard/i })
         .getAttribute("href"),
-    ).toBe("/tasks/thread-1");
+    ).toBe("/threads/thread-1");
   });
 
   it("updates the search filter", () => {

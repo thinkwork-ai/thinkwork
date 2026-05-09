@@ -66,7 +66,7 @@ describe("ComputerWorkbench", () => {
       });
     });
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/tasks/$id",
+      to: "/threads/$id",
       params: { id: "thread-1" },
     });
   });
