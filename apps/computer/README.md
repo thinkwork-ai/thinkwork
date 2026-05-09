@@ -28,6 +28,14 @@ scripts/smoke-computer.sh dev
 
 It creates a real deployed Computer thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed Computer surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.
 
+The same command also runs the applet pipeline smoke:
+
+- saves or regenerates a stable smoke applet through the deployed API and asserts the `ok`, `validated`, and `persisted` pins
+- verifies `/apps/$appId` serves the deployed Computer SPA shell
+- invokes the saved applet's deterministic `refresh()` export and checks per-source statuses
+- round-trips `saveAppletState` / `appletState`
+- seeds the canonical LastMile CRM pipeline-risk applet and opens it through the applet route
+
 To run the browser-backed evidence path manually:
 
 ```bash
