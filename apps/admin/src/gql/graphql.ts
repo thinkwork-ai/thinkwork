@@ -508,25 +508,40 @@ export type AgentWorkspaceWait = {
 
 export type Applet = {
   __typename?: 'Applet';
+  agentVersion?: Maybe<Scalars['String']['output']>;
   appId: Scalars['ID']['output'];
   artifact: Artifact;
-  metadata: Scalars['AWSJSON']['output'];
+  generatedAt: Scalars['AWSDateTime']['output'];
+  modelId?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  sourceKey: Scalars['String']['output'];
+  prompt?: Maybe<Scalars['String']['output']>;
+  stdlibVersionAtGeneration: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
   version: Scalars['Int']['output'];
+};
+
+export type AppletConnection = {
+  __typename?: 'AppletConnection';
+  nextCursor?: Maybe<Scalars['String']['output']>;
+  nodes: Array<Applet>;
 };
 
 export type AppletPayload = {
   __typename?: 'AppletPayload';
   applet: Applet;
+  files: Scalars['AWSJSON']['output'];
+  metadata: Scalars['AWSJSON']['output'];
+  source: Scalars['String']['output'];
 };
 
 export type AppletState = {
   __typename?: 'AppletState';
   appId: Scalars['ID']['output'];
-  state?: Maybe<Scalars['AWSJSON']['output']>;
+  instanceId: Scalars['ID']['output'];
+  key: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+  value?: Maybe<Scalars['AWSJSON']['output']>;
 };
 
 export type ApproveInboxItemInput = {
@@ -2117,6 +2132,7 @@ export type Mutation = {
   rebuildRoutineVersion: RoutineAslVersion;
   refreshDashboardArtifact: DashboardRefreshResult;
   refreshGenUI?: Maybe<Message>;
+  regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
   rejectInboxItem: InboxItem;
@@ -2146,7 +2162,7 @@ export type Mutation = {
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
   runConnectorNow: ConnectorRunNowResult;
-  saveApplet: AppletPayload;
+  saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
@@ -2730,6 +2746,11 @@ export type MutationRefreshGenUiArgs = {
 };
 
 
+export type MutationRegenerateAppletArgs = {
+  input: SaveAppletInput;
+};
+
+
 export type MutationRegenerateWebhookTokenArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3228,6 +3249,7 @@ export type Query = {
   allTenantAgents: Array<Agent>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
+  applets: AppletConnection;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
@@ -3546,13 +3568,20 @@ export type QueryAllTenantAgentsArgs = {
 
 
 export type QueryAppletArgs = {
-  id: Scalars['ID']['input'];
+  appId: Scalars['ID']['input'];
 };
 
 
 export type QueryAppletStateArgs = {
   appId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
+  instanceId: Scalars['ID']['input'];
+  key: Scalars['String']['input'];
+};
+
+
+export type QueryAppletsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -4525,20 +4554,27 @@ export type RuntimeManifest = {
 };
 
 export type SaveAppletInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  appId: Scalars['ID']['input'];
+  appId?: InputMaybe<Scalars['ID']['input']>;
+  files: Scalars['AWSJSON']['input'];
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
-  source: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  version: Scalars['Int']['input'];
+};
+
+export type SaveAppletPayload = {
+  __typename?: 'SaveAppletPayload';
+  appId?: Maybe<Scalars['ID']['output']>;
+  errors: Array<Scalars['AWSJSON']['output']>;
+  ok: Scalars['Boolean']['output'];
+  persisted: Scalars['Boolean']['output'];
+  validated: Scalars['Boolean']['output'];
+  version?: Maybe<Scalars['Int']['output']>;
 };
 
 export type SaveAppletStateInput = {
   appId: Scalars['ID']['input'];
-  state?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId: Scalars['ID']['input'];
+  instanceId: Scalars['ID']['input'];
+  key: Scalars['String']['input'];
+  value?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type ScheduledJob = {

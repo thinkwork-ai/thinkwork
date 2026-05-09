@@ -35,18 +35,41 @@ type Applet {
   appId: ID!
   name: String!
   version: Int!
-  source: String!
-  sourceKey: String!
-  metadata: AWSJSON!
+  tenantId: ID!
+  threadId: ID
+  prompt: String
+  agentVersion: String
+  modelId: String
+  generatedAt: AWSDateTime!
+  stdlibVersionAtGeneration: String!
 }
 
 type AppletPayload {
   applet: Applet!
+  files: AWSJSON!
+  source: String!
+  metadata: AWSJSON!
+}
+
+type AppletConnection {
+  nodes: [Applet!]!
+  nextCursor: String
+}
+
+type SaveAppletPayload {
+  ok: Boolean!
+  appId: ID
+  version: Int
+  validated: Boolean!
+  persisted: Boolean!
+  errors: [AWSJSON!]!
 }
 
 type AppletState {
   appId: ID!
-  state: AWSJSON
+  instanceId: ID!
+  key: String!
+  value: AWSJSON
   updatedAt: AWSDateTime!
 }
 
@@ -92,28 +115,26 @@ input UpdateArtifactInput {
 }
 
 input SaveAppletInput {
-  tenantId: ID!
-  appId: ID!
+  appId: ID
   name: String!
-  version: Int!
-  threadId: ID
-  agentId: ID
-  source: String!
+  files: AWSJSON!
   metadata: AWSJSON
 }
 
 input SaveAppletStateInput {
-  tenantId: ID!
   appId: ID!
-  state: AWSJSON
+  instanceId: ID!
+  key: String!
+  value: AWSJSON
 }
 
 extend type Query {
   artifacts(tenantId: ID!, threadId: ID, agentId: ID, type: ArtifactType, status: ArtifactStatus, limit: Int, cursor: String): [Artifact!]!
   artifact(id: ID!): Artifact
   dashboardArtifact(id: ID!): DashboardArtifact
-  applet(id: ID!): AppletPayload
-  appletState(tenantId: ID!, appId: ID!): AppletState
+  applet(appId: ID!): AppletPayload
+  applets(cursor: String, limit: Int): AppletConnection!
+  appletState(appId: ID!, instanceId: ID!, key: String!): AppletState
 }
 
 extend type Mutation {
@@ -121,6 +142,7 @@ extend type Mutation {
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   refreshDashboardArtifact(id: ID!): DashboardRefreshResult!
-  saveApplet(input: SaveAppletInput!): AppletPayload!
+  saveApplet(input: SaveAppletInput!): SaveAppletPayload!
+  regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

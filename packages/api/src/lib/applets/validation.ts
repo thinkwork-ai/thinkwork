@@ -34,13 +34,19 @@ const ALLOWED_IMPORTS = new Set([
   "react",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
+  "@thinkwork/ui",
   "@thinkwork/computer-stdlib",
+  "useAppletAPI",
 ]);
 
 const FORBIDDEN_RUNTIME_PATTERNS = [
   { label: "\\bfetch\\b", regex: /\bfetch\w*/ },
   { label: "\\bXMLHttpRequest\\b", regex: /\bXMLHttpRequest\b/ },
   { label: "\\bWebSocket\\b", regex: /\bWebSocket\b/ },
+  { label: "\\bglobalThis\\b", regex: /\bglobalThis\b/ },
+  { label: "\\bReflect\\b", regex: /\bReflect\b/ },
+  { label: "\\bFunction\\s*\\(", regex: /\bFunction\s*\(/ },
+  { label: "\\bimport\\s*\\(", regex: /\bimport\s*\(/ },
   { label: "\\blocalStorage\\b", regex: /\blocalStorage\b/ },
   { label: "\\bsessionStorage\\b", regex: /\bsessionStorage\b/ },
   { label: "\\bdocument\\.cookie\\b", regex: /\bdocument\.cookie\b/ },
