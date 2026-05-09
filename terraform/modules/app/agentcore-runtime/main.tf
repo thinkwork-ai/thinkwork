@@ -214,6 +214,22 @@ resource "aws_iam_role_policy" "agentcore" {
         Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:code-interpreter-custom/*"
       },
       {
+        # Browser Automation (browser_automation tool). The Strands runtime
+        # starts a managed AgentCore Browser session, then hands its CDP
+        # endpoint to Nova Act. The AWS-managed browser resource uses the
+        # literal account segment `aws`, as surfaced in AccessDeniedException
+        # messages from StartBrowserSession.
+        Sid    = "AgentCoreBrowser"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartBrowserSession",
+          "bedrock-agentcore:StopBrowserSession",
+          "bedrock-agentcore:GetBrowserSession",
+          "bedrock-agentcore:ListBrowserSessions",
+        ]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:aws:browser/aws.browser.v1"
+      },
+      {
         Sid    = "CloudWatchLogs"
         Effect = "Allow"
         Action = [
