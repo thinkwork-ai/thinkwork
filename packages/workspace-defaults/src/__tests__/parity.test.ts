@@ -46,6 +46,13 @@ const AUTHORITATIVE_SOURCES: Record<string, string> = {
     "artifact-builder",
     "SKILL.md",
   ),
+  "skills/artifact-builder/references/crm-dashboard.md": join(
+    LOCAL_FILES_DIR,
+    "skills",
+    "artifact-builder",
+    "references",
+    "crm-dashboard.md",
+  ),
 };
 
 describe("workspace-defaults parity", () => {

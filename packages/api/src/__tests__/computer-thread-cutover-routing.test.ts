@@ -34,8 +34,10 @@ describe("Computer-owned thread turn routing", () => {
     const chatInvokeSource = source("../handlers/chat-agent-invoke.ts");
 
     expect(threadCutoverSource).toContain("invokeChatAgent");
+    expect(threadCutoverSource).toContain("ensureArtifactBuilderDefaults");
     expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
     expect(threadCutoverSource).toContain('runtime: "strands"');
+    expect(threadCutoverSource).toContain("artifact_builder_defaults_seeded");
     expect(threadCutoverSource).toContain("thread_turn_dispatched");
     expect(chatInvokeSource).toMatch(
       /event\.computerId && event\.computerTaskId\s+\? "strands"/,
