@@ -17,6 +17,7 @@ const {
   mockInsert: vi.fn(),
   computerRow: {
     id: "computer-1",
+    slug: "fleet-caterpillar-1",
     tenant_id: "tenant-1",
     owner_user_id: "user-1",
   },
@@ -161,20 +162,27 @@ describe("enableConnector", () => {
   });
 
   it("rejects MCP-kind catalog rows with a typed error code", async () => {
-    mockSelect.mockImplementation((name: string) => {
-      if (name === "computers") return true;
-      // Inject an MCP-kind catalog row
-      Object.assign(catalogRow, { kind: "mcp" });
-      return true;
-    });
-    await expect(
-      enableConnector(
-        null,
-        { input: { computerId: "computer-1", slug: "slack" } },
-        ctx,
-      ),
-    ).rejects.toThrow(/CUSTOMIZE_MCP_NOT_SUPPORTED|mobile app/i);
-    // Reset for subsequent tests
-    Object.assign(catalogRow, { kind: "native" });
+    const originalKind = catalogRow.kind;
+    Object.assign(catalogRow, { kind: "mcp" });
+    try {
+      await expect(
+        enableConnector(
+          null,
+          { input: { computerId: "computer-1", slug: "slack" } },
+          ctx,
+        ),
+      ).rejects.toThrow(/CUSTOMIZE_MCP_NOT_SUPPORTED|mobile app/i);
+    } finally {
+      Object.assign(catalogRow, { kind: originalKind });
+    }
+  });
+
+  it("disambiguates connector name per Computer using computer.slug", async () => {
+    await enableConnector(
+      null,
+      { input: { computerId: "computer-1", slug: "slack" } },
+      ctx,
+    );
+    expect(lastInsertValues.value?.name).toBe("Slack (fleet-caterpillar-1)");
   });
 });

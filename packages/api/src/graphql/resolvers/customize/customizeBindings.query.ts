@@ -49,6 +49,11 @@ export async function customizeBindings(
     );
   if (!computer) return null;
 
+  const agentId = bindingAgentId(
+    computer.primary_agent_id,
+    computer.migrated_from_agent_id,
+  );
+
   const [connectorRows, skillRows] = await Promise.all([
     db
       .select({
@@ -65,19 +70,13 @@ export async function customizeBindings(
           isNotNull(connectors.catalog_slug),
         ),
       ),
-    bindingAgentId(computer.primary_agent_id, computer.migrated_from_agent_id)
+    agentId
       ? db
           .select({ skill_id: agentSkills.skill_id })
           .from(agentSkills)
           .where(
             and(
-              eq(
-                agentSkills.agent_id,
-                bindingAgentId(
-                  computer.primary_agent_id,
-                  computer.migrated_from_agent_id,
-                )!,
-              ),
+              eq(agentSkills.agent_id, agentId),
               eq(agentSkills.enabled, true),
             ),
           )

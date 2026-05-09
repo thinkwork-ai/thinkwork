@@ -3,7 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { CustomizeTabBody } from "@/components/customize/CustomizeTabBody";
 import { useConnectorItems } from "@/components/customize/use-customize-data";
-import { useConnectorMutation } from "@/components/customize/use-customize-mutations";
+import {
+  MCP_VIA_MOBILE_HINT,
+  useConnectorMutation,
+} from "@/components/customize/use-customize-mutations";
 
 export const Route = createFileRoute("/_authed/_shell/customize/connectors")({
   component: ConnectorsTab,
@@ -17,9 +20,7 @@ function ConnectorsTab() {
     (slug: string, nextConnected: boolean) => {
       const item = items.find((i) => i.id === slug);
       if (item?.typeBadge === "MCP") {
-        toast.message(
-          "Connect this MCP server from the mobile app's per-user OAuth flow.",
-        );
+        toast.message(MCP_VIA_MOBILE_HINT);
         return;
       }
       void toggle(slug, nextConnected);

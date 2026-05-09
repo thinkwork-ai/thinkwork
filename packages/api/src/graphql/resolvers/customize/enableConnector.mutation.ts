@@ -44,6 +44,7 @@ export async function enableConnector(
   const [computer] = await db
     .select({
       id: computers.id,
+      slug: computers.slug,
       tenant_id: computers.tenant_id,
       owner_user_id: computers.owner_user_id,
     })
@@ -87,6 +88,13 @@ export async function enableConnector(
 
   const description = catalog.description ?? null;
   const config = catalog.default_config ?? {};
+  // Per-Computer name disambiguates the pre-existing
+  // uq_connectors_tenant_name (tenant_id, name) constraint when two
+  // Computers in the same tenant enable the same catalog slug.
+  // computer.slug is unique per tenant via uq_computers_tenant_slug, so
+  // appending it gives a per-tenant-unique connector name without
+  // touching the legacy uniqueness invariant.
+  const name = `${catalog.display_name} (${computer.slug})`;
 
   // Upsert keyed by the partial unique index on
   // (tenant_id, dispatch_target_id, catalog_slug) where
@@ -96,7 +104,7 @@ export async function enableConnector(
     .values({
       tenant_id: computer.tenant_id,
       type: catalog.slug,
-      name: catalog.display_name,
+      name,
       description,
       catalog_slug: catalog.slug,
       status: "active",
