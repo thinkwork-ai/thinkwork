@@ -12,6 +12,7 @@ import {
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface EnableWorkflowArgs {
   input: { computerId: string; slug: string };
@@ -137,6 +138,8 @@ export async function enableWorkflow(
       extensions: { code: "INTERNAL_ERROR" },
     });
   }
+
+  await renderWorkspaceAfterCustomize("enableWorkflow", agentId, computer.id);
 
   return {
     id: row.id,

@@ -12,6 +12,7 @@ import {
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface EnableConnectorArgs {
   input: { computerId: string; slug: string };
@@ -47,6 +48,8 @@ export async function enableConnector(
       slug: computers.slug,
       tenant_id: computers.tenant_id,
       owner_user_id: computers.owner_user_id,
+      primary_agent_id: computers.primary_agent_id,
+      migrated_from_agent_id: computers.migrated_from_agent_id,
     })
     .from(computers)
     .where(
@@ -135,6 +138,10 @@ export async function enableConnector(
       extensions: { code: "INTERNAL_ERROR" },
     });
   }
+
+  const agentId =
+    computer.primary_agent_id ?? computer.migrated_from_agent_id ?? null;
+  await renderWorkspaceAfterCustomize("enableConnector", agentId, computer.id);
 
   return {
     id: row.id,

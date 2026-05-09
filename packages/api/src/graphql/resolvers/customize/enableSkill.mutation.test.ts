@@ -84,11 +84,16 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCaller: mockResolveCaller,
 }));
 
+vi.mock("./render-workspace-after-customize.js", () => ({
+  renderWorkspaceAfterCustomize: vi.fn(),
+}));
+
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mockRequireTenantMember,
 }));
 
 import { enableSkill } from "./enableSkill.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as unknown as Parameters<typeof enableSkill>[2];
 
@@ -126,6 +131,21 @@ describe("enableSkill", () => {
     expect(lastInsertValues.value?.agent_id).toBe("agent-primary");
     expect(lastInsertValues.value?.skill_id).toBe("sales-prep");
     expect(lastInsertValues.value?.enabled).toBe(true);
+  });
+
+  it("fires the workspace renderer after the binding write commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await enableSkill(
+      null,
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledWith(
+      "enableSkill",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("is idempotent — re-enabling the same skill calls the upsert path again with identical values", async () => {

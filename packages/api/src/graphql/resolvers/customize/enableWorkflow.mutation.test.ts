@@ -87,11 +87,16 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCaller: mockResolveCaller,
 }));
 
+vi.mock("./render-workspace-after-customize.js", () => ({
+  renderWorkspaceAfterCustomize: vi.fn(),
+}));
+
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mockRequireTenantMember,
 }));
 
 import { enableWorkflow } from "./enableWorkflow.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as unknown as Parameters<typeof enableWorkflow>[2];
 
@@ -136,6 +141,21 @@ describe("enableWorkflow", () => {
     expect(lastInsertValues.value?.name).toBe("Daily Digest");
     // Schedule sourced from typed default_schedule column (preferred over default_config.schedule).
     expect(lastInsertValues.value?.schedule).toBe("cron(0 13 * * ? *)");
+  });
+
+  it("fires the workspace renderer after the binding write commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await enableWorkflow(
+      null,
+      { input: { computerId: "computer-1", slug: "daily-digest" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledWith(
+      "enableWorkflow",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("falls back to default_config.schedule when default_schedule is null", async () => {

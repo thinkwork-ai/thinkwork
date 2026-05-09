@@ -13,6 +13,7 @@ import {
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface EnableSkillArgs {
   input: { computerId: string; skillId: string };
@@ -123,6 +124,8 @@ export async function enableSkill(
       extensions: { code: "INTERNAL_ERROR" },
     });
   }
+
+  await renderWorkspaceAfterCustomize("enableSkill", agentId, computer.id);
 
   // Return the AgentSkill projection (matches the existing GraphQL type
   // exposed by setAgentSkills + agents.graphql — no duplicate projection).

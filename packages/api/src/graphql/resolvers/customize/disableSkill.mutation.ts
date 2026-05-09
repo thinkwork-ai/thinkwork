@@ -11,6 +11,7 @@ import {
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface DisableSkillArgs {
   input: { computerId: string; skillId: string };
@@ -86,6 +87,8 @@ export async function disableSkill(
         eq(agentSkills.skill_id, skillId),
       ),
     );
+
+  await renderWorkspaceAfterCustomize("disableSkill", agentId, computer.id);
 
   return true;
 }

@@ -11,6 +11,7 @@ import {
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface DisableWorkflowArgs {
   input: { computerId: string; slug: string };
@@ -82,6 +83,8 @@ export async function disableWorkflow(
         eq(routines.catalog_slug, slug),
       ),
     );
+
+  await renderWorkspaceAfterCustomize("disableWorkflow", agentId, computer.id);
 
   return true;
 }

@@ -11,6 +11,7 @@ import {
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 export interface DisableConnectorArgs {
   input: { computerId: string; slug: string };
@@ -40,6 +41,8 @@ export async function disableConnector(
       id: computers.id,
       tenant_id: computers.tenant_id,
       owner_user_id: computers.owner_user_id,
+      primary_agent_id: computers.primary_agent_id,
+      migrated_from_agent_id: computers.migrated_from_agent_id,
     })
     .from(computers)
     .where(
@@ -72,6 +75,10 @@ export async function disableConnector(
         eq(connectors.catalog_slug, slug),
       ),
     );
+
+  const agentId =
+    computer.primary_agent_id ?? computer.migrated_from_agent_id ?? null;
+  await renderWorkspaceAfterCustomize("disableConnector", agentId, computer.id);
 
   return true;
 }
