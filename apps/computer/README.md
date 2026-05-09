@@ -26,4 +26,4 @@ The plan-facing Computer v1 smoke command is:
 scripts/smoke-computer.sh dev
 ```
 
-It creates a real deployed Computer thread, subscribes to AppSync before sending a prompt, and verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row.
+It creates a real deployed Computer thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed Computer surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.

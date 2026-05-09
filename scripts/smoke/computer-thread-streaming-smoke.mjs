@@ -33,7 +33,7 @@ import process from "node:process";
 
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 180_000);
 const SUBSCRIPTION_READY_DELAY_MS = Number(
-  process.env.SMOKE_SUBSCRIPTION_READY_DELAY_MS || 1_000,
+  process.env.SMOKE_SUBSCRIPTION_READY_DELAY_MS || 3_000,
 );
 const EXPECTED_TEXT =
   process.env.SMOKE_EXPECTED_TEXT || "Streaming chunks are visible now.";
