@@ -4,6 +4,7 @@ import {
   fetchExchange,
   subscriptionExchange,
 } from "@urql/core";
+import { print, type DocumentNode } from "graphql";
 
 // HTTP endpoint for queries/mutations (API Gateway). apps/computer Phase 1
 // AppSync carries the subscription-only realtime schema.
@@ -296,7 +297,7 @@ export const graphqlClient = new Client({
       ? [
           subscriptionExchange({
             forwardSubscription(request) {
-              const query = request.query || "";
+              const query = serializeGraphqlQuery(request.query);
               const variables = (request.variables || {}) as Record<
                 string,
                 unknown
@@ -322,3 +323,10 @@ export const graphqlClient = new Client({
   }),
   preferGetMethod: false,
 });
+
+export function serializeGraphqlQuery(
+  query: string | DocumentNode | undefined,
+): string {
+  if (!query) return "";
+  return typeof query === "string" ? query : print(query);
+}

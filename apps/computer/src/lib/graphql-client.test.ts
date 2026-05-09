@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { parse } from "graphql";
 import {
   buildAppSyncAuthHost,
   buildAppSyncRealtimeUrl,
+  serializeGraphqlQuery,
 } from "./graphql-client";
 
 function decodedHeader(url: string) {
@@ -43,5 +45,20 @@ describe("AppSync realtime URL wiring", () => {
     expect(buildAppSyncAuthHost("", realtimeUrl)).toBe(
       "abc123.appsync-api.us-east-1.amazonaws.com",
     );
+  });
+
+  it("serializes subscription DocumentNodes before sending them over AppSync", () => {
+    const query = serializeGraphqlQuery(
+      parse(`
+        subscription ComputerThreadChunk($threadId: ID!) {
+          onComputerThreadChunk(threadId: $threadId) {
+            seq
+          }
+        }
+      `),
+    );
+
+    expect(query).toContain("subscription ComputerThreadChunk");
+    expect(query).toContain("onComputerThreadChunk");
   });
 });
