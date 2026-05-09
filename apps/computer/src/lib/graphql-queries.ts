@@ -145,6 +145,18 @@ export const ThreadTurnUpdatedSubscription = gql`
   }
 `;
 
+export const NewMessageSubscription = gql`
+  subscription NewMessage($threadId: ID!) {
+    onNewMessage(threadId: $threadId) {
+      messageId
+      threadId
+      role
+      content
+      createdAt
+    }
+  }
+`;
+
 export const ThreadUpdatedSubscription = gql`
   subscription ThreadUpdated($tenantId: ID!) {
     onThreadUpdated(tenantId: $tenantId) {
