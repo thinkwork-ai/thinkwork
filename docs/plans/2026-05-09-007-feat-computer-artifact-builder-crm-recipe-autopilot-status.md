@@ -32,6 +32,31 @@ recipe plan in autopilot mode.
   content so user edits are preserved.
 - **Verification note:** Focused workspace-defaults and API helper/routing
   tests passed. Broader `pnpm lint`, `pnpm -r --if-present typecheck`,
-  `pnpm -r --if-present test`, touched-file Prettier check, and `git diff
---check` passed locally before opening the U1/U2 PR.
-- **Current PR:** #1077 (`feat(computer): add Artifact Builder CRM recipe`).
+  `pnpm -r --if-present test`, touched-file Prettier check, and
+  `git diff --check` passed locally before opening the U1/U2 PR.
+- **Merged U1/U2:** PR #1077
+  (`feat(computer): add Artifact Builder CRM recipe`) was squash-merged to
+  `main` at
+  `16332758b386db475e544803d39fa58886a5c06d`; CI passed: CLA, lint, test,
+  typecheck, verify. The remote branch was deleted by GitHub; the local
+  worktree and branch were removed manually because `gh pr merge` could not
+  check out local `main` while another worktree owned it.
+- **Started U3:** Created isolated worktree
+  `.Codex/worktrees/artifact-builder-save-invariant-u3` on branch
+  `codex/artifact-builder-save-invariant-u3` from fresh `origin/main` at
+  `40d498bc` after PR #1078 merged.
+- **Progress:** Implemented the direct `save_app` invariant for Computer
+  build-style prompts. The Strands runtime now preserves successful
+  `save_app` result fields in tool invocation usage metadata; the API now
+  links orphan applet artifacts with returned IDs, records linked artifact
+  counts/IDs, and replaces unverified build-success claims with the safe
+  Artifact-save-missing response when no direct successful `save_app` evidence
+  and no linked applet exist.
+- **Verification note:** Focused API runtime tests, API typecheck, and
+  Strands streaming tests passed. Broader `pnpm lint`,
+  `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
+  locally. Touched-file Prettier check and `git diff --check` passed. A raw
+  `uv run ruff check` over the whole Strands `server.py` still reports
+  pre-existing import-order/E402/UTC findings, so the U3 Python sanity pass
+  used `uv run ruff check --ignore E402,I001,UP017` plus
+  `uv run ruff format --check` on the touched Python files.

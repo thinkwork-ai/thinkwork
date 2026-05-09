@@ -153,6 +153,23 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
     }
 
 
+def test_save_app_tool_summary_preserves_artifact_persistence_evidence():
+    assert server._save_app_tool_summary(
+        {
+            "ok": True,
+            "persisted": True,
+            "appId": "applet-1",
+            "validated": True,
+            "files": {"ignored": "large payload"},
+        }
+    ) == {
+        "ok": True,
+        "persisted": True,
+        "appId": "applet-1",
+        "validated": True,
+    }
+
+
 def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     captured = {}
 

@@ -689,6 +689,16 @@ def _build_computer_event_sink(context: dict | None):
     return append_event
 
 
+def _save_app_tool_summary(payload: object) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    summary = {}
+    for key in ("ok", "persisted", "appId", "validated", "reason", "errors"):
+        if key in payload:
+            summary[key] = payload.get(key)
+    return summary or None
+
+
 def _call_strands_agent(
     system_prompt: str,
     messages: list,
@@ -1882,6 +1892,10 @@ def _call_strands_agent(
 
                                 parsed = _json.loads(full_output)
                                 if isinstance(parsed, dict):
+                                    if inv.get("tool_name") == "save_app":
+                                        save_app_summary = _save_app_tool_summary(parsed)
+                                        if save_app_summary:
+                                            inv["output_json"] = save_app_summary
                                     # Inject _source for MCP tool calls (not sub-agents)
                                     _source = None
                                     if inv.get("type") in ("mcp_tool", "mcp_server"):
