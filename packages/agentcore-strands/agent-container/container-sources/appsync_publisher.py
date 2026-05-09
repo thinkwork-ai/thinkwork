@@ -131,6 +131,7 @@ def build_appsync_chunk_callback(
     *,
     env: dict[str, str] | os._Environ[str] = os.environ,
     post_fn: PostFn | None = None,
+    tool_event_sink: Callable[[str, str, dict], None] | None = None,
 ) -> tuple[Callable[..., None] | None, AppSyncChunkPublisher | None]:
     endpoint = env.get("APPSYNC_ENDPOINT") or env.get("APPSYNC_ENDPOINT_URL") or ""
     api_key = env.get("APPSYNC_API_KEY") or env.get("GRAPHQL_API_KEY") or ""
@@ -144,11 +145,150 @@ def build_appsync_chunk_callback(
         post_fn=post_fn,
     )
 
+    # Live tool-call telemetry. Strands fires the streaming callback for every
+    # event Bedrock emits during a turn, including `contentBlockStart` blocks
+    # whose `start.toolUse` carries the tool name + invocation id. We emit a
+    # `tool_invocation_started` computer event the first time we see each
+    # toolUseId so the UI can render the row immediately, instead of waiting
+    # for end-of-turn reconstruction in server.py:1659-1710 (which only fires
+    # after agent.messages is fully populated, hence the user-visible "all
+    # tools appear at once when the turn ends" behavior).
+    seen_tool_uses: set[str] = set()
+
     def callback_handler(*args, **kwargs) -> None:
         for text in extract_stream_text_deltas(*args, **kwargs):
             publisher.publish(text)
+        if tool_event_sink is not None:
+            for tool_use in extract_tool_use_starts(
+                *args, seen=seen_tool_uses, **kwargs
+            ):
+                try:
+                    tool_event_sink(
+                        "tool_invocation_started",
+                        "info",
+                        tool_use,
+                    )
+                except Exception as exc:  # noqa: BLE001 - never fail the turn
+                    logger.warning(
+                        "tool_invocation_started emit failed: %s", exc
+                    )
 
     return callback_handler, publisher
+
+
+def extract_tool_use_starts(
+    *args,
+    seen: set[str] | None = None,
+    **kwargs,
+) -> list[dict]:
+    """Yield tool-invocation start payloads from a Strands callback.
+
+    Strands routes Bedrock event-stream frames through the same callback that
+    delivers text deltas. We pick up two shapes:
+
+    - Bedrock `contentBlockStart` frames with `start.toolUse: {toolUseId,
+      name, input?}`. These have a stable id and are emitted exactly once per
+      tool call.
+    - Strands' `current_tool_use={"name": "..."}` convenience kwarg, which
+      appears without an id. We synthesize a positional id (`tool::<index>`)
+      to dedup repeats.
+
+    The optional `seen` set lets the caller dedup across many callback fires
+    over the lifetime of one turn — pass the same set in each call.
+    """
+    if seen is None:
+        seen = set()
+    payloads: list = list(args)
+    for key in ("event", "data", "delta", "chunk"):
+        if key in kwargs:
+            payloads.append(kwargs[key])
+    # `current_tool_use` is a Strands convenience kwarg whose value is the
+    # tool_use dict itself (e.g. {"name": "search"}), not an envelope. Handle
+    # it directly so a bare {"name": ...} dict is recognized as a tool_use
+    # rather than an opaque payload (the generic walk only matches known
+    # envelope shapes like contentBlockStart / toolUse / current_tool_use).
+    direct_tool_uses: list[dict] = []
+    if "current_tool_use" in kwargs and isinstance(
+        kwargs["current_tool_use"], dict
+    ):
+        direct_tool_uses.append(_normalize_tool_use(kwargs["current_tool_use"]))
+    if not payloads and not direct_tool_uses and kwargs:
+        payloads.append(kwargs)
+
+    starts: list[dict] = []
+    for payload in payloads:
+        direct_tool_uses.extend(_walk_for_tool_use_starts(payload))
+    for tool_use in direct_tool_uses:
+        tool_use_id = tool_use.get("tool_use_id") or ""
+        tool_name = tool_use.get("tool_name") or ""
+        if not tool_use_id and not tool_name:
+            continue
+        dedup_key = tool_use_id or f"name::{tool_name}::{len(seen)}"
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        starts.append(tool_use)
+    return starts
+
+
+def _walk_for_tool_use_starts(value) -> list[dict]:
+    """Recursively scan a Strands/Bedrock callback payload for tool-use starts."""
+    if isinstance(value, dict):
+        # Bedrock `contentBlockStart`
+        if "contentBlockStart" in value:
+            inner = value["contentBlockStart"]
+            if isinstance(inner, dict):
+                start = inner.get("start")
+                if isinstance(start, dict) and isinstance(
+                    start.get("toolUse"), dict
+                ):
+                    return [_normalize_tool_use(start["toolUse"])]
+        # Direct `toolUse` block (mid-stream Anthropic shape)
+        if isinstance(value.get("toolUse"), dict):
+            return [_normalize_tool_use(value["toolUse"])]
+        # Strands convenience kwarg
+        if isinstance(value.get("current_tool_use"), dict):
+            return [_normalize_tool_use(value["current_tool_use"])]
+        # Recurse into common envelope keys
+        results: list[dict] = []
+        for key in ("event", "data", "delta", "chunk", "message"):
+            if key in value:
+                results.extend(_walk_for_tool_use_starts(value[key]))
+        return results
+    if isinstance(value, list):
+        results: list[dict] = []
+        for item in value:
+            results.extend(_walk_for_tool_use_starts(item))
+        return results
+    return []
+
+
+def _normalize_tool_use(tool_use: dict) -> dict:
+    """Project a Bedrock/Strands toolUse dict into our event payload shape."""
+    name = tool_use.get("name") or tool_use.get("toolName") or ""
+    tool_use_id = (
+        tool_use.get("toolUseId")
+        or tool_use.get("tool_use_id")
+        or tool_use.get("id")
+        or ""
+    )
+    raw_input = tool_use.get("input") or tool_use.get("arguments") or {}
+    input_preview = ""
+    if isinstance(raw_input, str):
+        input_preview = raw_input[:500]
+    elif isinstance(raw_input, dict):
+        if "query" in raw_input and isinstance(raw_input["query"], str):
+            input_preview = raw_input["query"][:500]
+        else:
+            try:
+                input_preview = json.dumps(raw_input, default=str)[:500]
+            except Exception:  # noqa: BLE001
+                input_preview = str(raw_input)[:500]
+    return {
+        "tool_name": name,
+        "tool_use_id": tool_use_id,
+        "input_preview": input_preview,
+    }
 
 
 def extract_stream_text_deltas(*args, **kwargs) -> list[str]:

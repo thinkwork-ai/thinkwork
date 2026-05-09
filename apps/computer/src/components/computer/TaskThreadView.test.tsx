@@ -908,6 +908,99 @@ describe("TaskThreadView", () => {
     ).toHaveLength(1);
   });
 
+  it("renders live tool_invocation_started events with toolActionTitle formatting", () => {
+    // U4 regression guard: the Strands runtime emits tool_invocation_started
+    // events as tools begin (instead of waiting for end-of-turn). The UI
+    // must format them with the same toolActionTitle helper used for
+    // post-turn usage.tool_invocations so the live row's title matches what
+    // the row will look like once the turn finishes.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-live",
+          title: "Live tools",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "u1", role: "USER", content: "Find sources" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+              events: [
+                {
+                  id: "e1",
+                  eventType: "tool_invocation_started",
+                  payload: {
+                    tool_name: "web_search",
+                    tool_use_id: "tool-1",
+                    input_preview: "best brunch east austin",
+                  },
+                  createdAt: "2026-05-09T11:30:00Z",
+                },
+                {
+                  id: "e2",
+                  eventType: "tool_invocation_started",
+                  payload: { tool_name: "recall", tool_use_id: "tool-2" },
+                  createdAt: "2026-05-09T11:30:01Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    // toolActionTitle maps "web_search" → "Finding sources" and "recall" →
+    // "Checking memory" — verifying the live event uses that formatter.
+    expect(screen.getByText("Finding sources")).toBeTruthy();
+    expect(screen.getByText("Checking memory")).toBeTruthy();
+  });
+
+  it("dedupes live tool_invocation_started events against post-turn usage.tool_invocations", () => {
+    // U4 regression guard: when a turn finishes, the same tool appears in
+    // both `usage.tool_invocations` (post-turn reconstruction) and the
+    // streaming events list. Without dedup, the row renders twice.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-dedup",
+          title: "Dedup",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "u1", role: "USER", content: "Find sources" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              usageJson: {
+                tool_invocations: [
+                  {
+                    tool_name: "web_search",
+                    input_preview: "best brunch east austin",
+                    output_preview: "...",
+                    status: "success",
+                  },
+                ],
+              },
+              events: [
+                {
+                  id: "e1",
+                  eventType: "tool_invocation_started",
+                  payload: {
+                    tool_name: "web_search",
+                    tool_use_id: "tool-1",
+                  },
+                  createdAt: "2026-05-09T11:30:00Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    // Exactly one "Finding sources" row, not two.
+    expect(screen.getAllByText("Finding sources")).toHaveLength(1);
+  });
+
   it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {
     // U3 regression guard: prior behavior attached only the latest turn's
     // activity to the latest user message, leaving earlier turns invisible.

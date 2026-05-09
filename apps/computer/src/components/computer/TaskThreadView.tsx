@@ -783,6 +783,22 @@ function actionRowsForTurn(
   for (const event of sortedEvents) {
     const row = actionRowForEvent(event);
     if (!row) continue;
+    // Live tool_invocation_started events emitted by the Strands runtime
+    // dedup against the post-turn `usage.tool_invocations` row. Once the
+    // turn finishes and the invocation is in `seen` by tool-name, the live
+    // event for the same tool would otherwise re-render as a duplicate.
+    if (stringValue(event.eventType) === "tool_invocation_started") {
+      const payload = parseRecord(event.payload);
+      const toolName =
+        stringValue(payload.tool_name) ||
+        stringValue(payload.toolName) ||
+        stringValue(payload.name);
+      if (toolName) {
+        const toolKey = toolName.toLowerCase();
+        if (seen.has(toolKey)) continue;
+        seen.add(toolKey);
+      }
+    }
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -798,6 +814,18 @@ function actionRowForEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
+  if (eventType === "tool_invocation_started") {
+    const toolName =
+      stringValue(payload.tool_name) ||
+      stringValue(payload.toolName) ||
+      stringValue(payload.name) ||
+      "tool";
+    return {
+      title: toolActionTitle(toolName),
+      detail,
+      kind: toolKind(toolName),
+    };
+  }
   if (eventType === "browser_automation_started") {
     return { title: "Opening browser", detail, kind: "source" as const };
   }
