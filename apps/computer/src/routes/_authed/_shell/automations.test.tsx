@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   cleanup,
   fireEvent,
@@ -101,7 +102,7 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const AutomationsPage = (Route as unknown as { component: () => JSX.Element })
+const AutomationsPage = (Route as unknown as { component: () => React.ReactElement })
   .component;
 
 describe("apps/computer Automations route", () => {
