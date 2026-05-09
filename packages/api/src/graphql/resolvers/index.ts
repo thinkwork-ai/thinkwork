@@ -7,6 +7,7 @@ import { triggerQueries } from "./triggers/index.js";
 import { costQueries } from "./costs/index.js";
 import { knowledgeQueries } from "./knowledge/index.js";
 import { artifactQueries } from "./artifacts/index.js";
+import { appletQueries, appletMutations } from "./applets/index.js";
 import { orchestrationQueries } from "./orchestration/index.js";
 import { messageQueries } from "./messages/index.js";
 import { webhookQueries } from "./webhooks/index.js";
@@ -65,6 +66,7 @@ export const queryResolvers: Record<string, any> = {
   ...costQueries,
   ...knowledgeQueries,
   ...artifactQueries,
+  ...appletQueries,
   ...orchestrationQueries,
   ...messageQueries,
   ...webhookQueries,
@@ -97,6 +99,7 @@ export const mutationResolvers: Record<string, any> = {
   ...costMutations,
   ...knowledgeMutations,
   ...artifactMutations,
+  ...appletMutations,
   ...orchestrationMutations,
   ...webhookMutations,
   ...memoryMutations,

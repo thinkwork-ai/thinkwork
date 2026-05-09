@@ -506,6 +506,29 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars['ID']['output'];
 };
 
+export type Applet = {
+  __typename?: 'Applet';
+  appId: Scalars['ID']['output'];
+  artifact: Artifact;
+  metadata: Scalars['AWSJSON']['output'];
+  name: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+  sourceKey: Scalars['String']['output'];
+  version: Scalars['Int']['output'];
+};
+
+export type AppletPayload = {
+  __typename?: 'AppletPayload';
+  applet: Applet;
+};
+
+export type AppletState = {
+  __typename?: 'AppletState';
+  appId: Scalars['ID']['output'];
+  state?: Maybe<Scalars['AWSJSON']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type ApproveInboxItemInput = {
   decisionValues?: InputMaybe<Scalars['AWSJSON']['input']>;
   reviewNotes?: InputMaybe<Scalars['String']['input']>;
@@ -536,6 +559,8 @@ export enum ArtifactStatus {
 }
 
 export enum ArtifactType {
+  Applet = 'APPLET',
+  AppletState = 'APPLET_STATE',
   DataView = 'DATA_VIEW',
   Digest = 'DIGEST',
   Draft = 'DRAFT',
@@ -2121,6 +2146,8 @@ export type Mutation = {
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
   runConnectorNow: ConnectorRunNowResult;
+  saveApplet: AppletPayload;
+  saveAppletState: AppletState;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
@@ -2833,6 +2860,16 @@ export type MutationRunConnectorNowArgs = {
 };
 
 
+export type MutationSaveAppletArgs = {
+  input: SaveAppletInput;
+};
+
+
+export type MutationSaveAppletStateArgs = {
+  input: SaveAppletStateInput;
+};
+
+
 export type MutationSeedEvalTestCasesArgs = {
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
@@ -3189,6 +3226,8 @@ export type Query = {
   agentWorkspaces: Array<AgentWorkspace>;
   agents: Array<Agent>;
   allTenantAgents: Array<Agent>;
+  applet?: Maybe<AppletPayload>;
+  appletState?: Maybe<AppletState>;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
@@ -3506,6 +3545,17 @@ export type QueryAllTenantAgentsArgs = {
 };
 
 
+export type QueryAppletArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryAppletStateArgs = {
+  appId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryArtifactArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3577,6 +3627,7 @@ export type QueryComputerTasksArgs = {
   computerId: Scalars['ID']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ComputerTaskStatus>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -4471,6 +4522,23 @@ export type RuntimeManifest = {
   templateId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
   userId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type SaveAppletInput = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  appId: Scalars['ID']['input'];
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  name: Scalars['String']['input'];
+  source: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+  version: Scalars['Int']['input'];
+};
+
+export type SaveAppletStateInput = {
+  appId: Scalars['ID']['input'];
+  state?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type ScheduledJob = {

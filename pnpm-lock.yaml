@@ -815,6 +815,9 @@ importers:
       stripe:
         specifier: ^17.5.0
         version: 17.7.0
+      sucrase:
+        specifier: ^3.35.1
+        version: 3.35.1
       uuidv7:
         specifier: ^1.2.1
         version: 1.2.1
