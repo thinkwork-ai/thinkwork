@@ -11,7 +11,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
   return (
     <article className="overflow-hidden rounded-lg border border-border/70 bg-background/70 transition-colors hover:bg-accent/30">
       <Link
-        to="/apps/$id"
+        to="/artifacts/$id"
         params={{ id: artifact.id }}
         className="grid gap-4 p-4"
       >
@@ -26,7 +26,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
               </span>
             </div>
             <Badge variant="outline" className="rounded-md">
-              {artifact.version ? `v${artifact.version}` : "App"}
+              {artifact.version ? `v${artifact.version}` : "Artifact"}
             </Badge>
           </div>
           <div className="mt-auto grid grid-cols-3 gap-2">
@@ -56,7 +56,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
         </div>
 
         <span className="inline-flex items-center gap-2 justify-self-start text-sm font-medium text-primary">
-          Open app
+          Open artifact
           <ArrowRight className="size-4" />
         </span>
       </Link>

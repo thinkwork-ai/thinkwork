@@ -5,7 +5,7 @@
  * Scenarios:
  *   A1. Service writer path persists source + metadata and returns
  *       validated/persisted pins.
- *   A2. Deployed apps/computer can serve /apps/:id for a saved applet.
+ *   A2. Deployed apps/computer can serve /artifacts/:id for a saved applet.
  *   A3. A returned applet source's deterministic refresh() export can be
  *       invoked and returns per-source statuses.
  *   A4. Applet state writes and reads back through the host API GraphQL path.
@@ -204,18 +204,20 @@ async function loadApplet(appId) {
 }
 
 async function verifyOpenPath(appId) {
-  const url = `${computerUrl.replace(/\/+$/, "")}/apps/${appId}`;
+  const url = `${computerUrl.replace(/\/+$/, "")}/artifacts/${appId}`;
   const response = await fetch(url, { redirect: "manual" });
   const body = await response.text();
   const contentType = response.headers.get("content-type") || "";
   if (response.status !== 200) {
-    throw new Error(`/apps/${appId} returned HTTP ${response.status}.`);
+    throw new Error(`/artifacts/${appId} returned HTTP ${response.status}.`);
   }
   if (
     !contentType.includes("text/html") ||
     !body.includes("<title>ThinkWork</title>")
   ) {
-    throw new Error(`/apps/${appId} did not return the Computer SPA shell.`);
+    throw new Error(
+      `/artifacts/${appId} did not return the Computer SPA shell.`,
+    );
   }
   return { url, status: response.status, contentType };
 }

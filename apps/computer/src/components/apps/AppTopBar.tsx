@@ -2,7 +2,7 @@ import { ArrowLeft, Copy, Plus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@thinkwork/ui";
 import {
-  COMPUTER_APPS_ROUTE,
+  COMPUTER_ARTIFACTS_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
 } from "@/lib/computer-routes";
 
@@ -14,9 +14,9 @@ export function AppTopBar({ title }: AppTopBarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-3 sm:px-4">
       <Button asChild variant="ghost" size="sm" className="gap-2">
-        <Link to={COMPUTER_APPS_ROUTE}>
+        <Link to={COMPUTER_ARTIFACTS_ROUTE}>
           <ArrowLeft className="size-4" />
-          Apps
+          Artifacts
         </Link>
       </Button>
       <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">

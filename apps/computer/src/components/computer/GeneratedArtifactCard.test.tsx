@@ -5,7 +5,7 @@ import { GeneratedArtifactCard } from "./GeneratedArtifactCard";
 afterEach(cleanup);
 
 describe("GeneratedArtifactCard", () => {
-  it("routes dashboard app artifacts to the generated app route", () => {
+  it("routes app artifacts to the artifact route", () => {
     render(
       <GeneratedArtifactCard
         artifact={{
@@ -20,7 +20,7 @@ describe("GeneratedArtifactCard", () => {
 
     expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /open app/i }).getAttribute("href"),
-    ).toBe("/apps/artifact_123");
+      screen.getByRole("link", { name: /open artifact/i }).getAttribute("href"),
+    ).toBe("/artifacts/artifact_123");
   });
 });

@@ -11,7 +11,7 @@ import { useQuery } from "urql";
 import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
 import * as crmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
-import { AppletMount, AppletRouteContent } from "./apps.$id";
+import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
 vi.mock("urql", () => ({
   gql: (strings: TemplateStringsArray) => strings.join(""),
@@ -158,7 +158,7 @@ describe("AppletRouteContent", () => {
     );
 
     expect(
-      await screen.findByText("A newer version of this app is available."),
+      await screen.findByText("A newer version of this artifact is available."),
     ).toBeTruthy();
     expect(transformApplet).toHaveBeenCalledTimes(1);
 
@@ -187,7 +187,7 @@ describe("AppletRouteContent", () => {
 
     render(<AppletRouteContent appId="missing" />);
 
-    expect(screen.getByText("App not found.")).toBeTruthy();
+    expect(screen.getByText("Artifact not found.")).toBeTruthy();
   });
 });
 

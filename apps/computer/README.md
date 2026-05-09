@@ -31,7 +31,7 @@ It creates a real deployed Computer thread, subscribes to AppSync before sending
 The same command also runs the applet pipeline smoke:
 
 - saves or regenerates a stable smoke applet through the deployed API and asserts the `ok`, `validated`, and `persisted` pins
-- verifies `/apps/$appId` serves the deployed Computer SPA shell
+- verifies `/artifacts/$appId` serves the deployed Computer SPA shell
 - invokes the saved applet's deterministic `refresh()` export and checks per-source statuses
 - round-trips `saveAppletState` / `appletState`
 - seeds the canonical LastMile CRM pipeline-risk applet and opens it through the applet route

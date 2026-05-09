@@ -14,6 +14,29 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started follow-up rename:** Created isolated worktree
+  `.Codex/worktrees/computer-artifacts-rename` on branch
+  `codex/computer-artifacts-rename` from fresh `origin/main` after U14 merged,
+  per user request to rename Apps to Artifacts in UI and routes.
+- **Progress:** Renamed the Computer collection route from `/apps` to
+  `/artifacts`, updated sidebar/page/gallery/detail copy from Apps to
+  Artifacts, moved generated artifact links to `/artifacts/$id`, and updated the
+  deployed applet smoke to probe `/artifacts/$appId`.
+- **Verification note:** Focused Artifacts route/card/gallery tests,
+  `pnpm --filter @thinkwork/computer typecheck`,
+  `pnpm --filter @thinkwork/computer test`,
+  `pnpm --filter @thinkwork/computer build`,
+  `node --check scripts/smoke/computer-applet-pipeline-smoke.mjs`, and
+  `bash -n scripts/smoke-computer.sh` passed locally. Build warnings remain the
+  existing shared UI sourcemap, dynamic import, and chunk-size warnings.
+- **Sync note:** Pulled latest `origin/main` at
+  `7eb7de3f9f75af85089cddbcaaec0df370ef9a05` with autostash after PR #1070
+  merged nearby Computer shell changes, then reran Computer typecheck, tests,
+  and build successfully.
+- **Merged U14:** PR #1069 (`test(computer): extend applet smoke gate`) was
+  squash-merged to `main` at `eb543d1948cfa49844a07c4e599a83525ad65a40`;
+  remote/local branches and the U14 worktree were deleted. CI passed: CLA,
+  lint, test, typecheck, verify.
 - **Started U14:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u14-smoke-gate` on branch
   `codex/computer-applets-u14-smoke-gate` from fresh `origin/main` after U13
