@@ -196,6 +196,55 @@ describe("TaskThreadView", () => {
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
   });
 
+  it("renders durable Computer event detail rows for a thread turn", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Browser trace thread",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Use the browser",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+              events: [
+                {
+                  id: "event-1",
+                  eventType: "browser_automation_started",
+                  level: "INFO",
+                  payload: {
+                    url: "https://example.com",
+                    task: "Read the page title",
+                  },
+                  createdAt: "2026-05-09T08:01:00Z",
+                },
+                {
+                  id: "event-2",
+                  eventType: "browser_automation_completed",
+                  level: "INFO",
+                  payload: { responseLen: 12 },
+                  createdAt: "2026-05-09T08:01:05Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Opening browser")).toBeTruthy();
+    expect(screen.getByText("Browser task completed")).toBeTruthy();
+    expect(screen.getByText(/https:\/\/example.com/)).toBeTruthy();
+  });
+
   it("derives the source count from message and turn evidence", () => {
     render(
       <TaskThreadView

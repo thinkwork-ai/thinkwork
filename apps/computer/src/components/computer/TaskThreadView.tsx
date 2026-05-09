@@ -56,6 +56,15 @@ export interface TaskThreadTurn {
   usageJson?: unknown;
   resultJson?: unknown;
   error?: string | null;
+  events?: TaskThreadEvent[];
+}
+
+export interface TaskThreadEvent {
+  id: string;
+  eventType?: string | null;
+  level?: string | null;
+  payload?: unknown;
+  createdAt?: string | null;
 }
 
 interface TaskThreadViewProps {
@@ -186,7 +195,7 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
 
   const status = String(turn.status ?? "").toLowerCase();
   const usage = parseRecord(turn.usageJson);
-  const rows = actionRowsForTurn(usage);
+  const rows = actionRowsForTurn(turn, usage);
   const shouldRender =
     [
       "pending",
@@ -534,7 +543,10 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   return rows;
 }
 
-function actionRowsForTurn(usage: Record<string, unknown>) {
+function actionRowsForTurn(
+  turn: TaskThreadTurn,
+  usage: Record<string, unknown>,
+) {
   const rows: Array<{
     title: string;
     detail?: string;
@@ -574,7 +586,61 @@ function actionRowsForTurn(usage: Record<string, unknown>) {
     });
   }
 
+  for (const event of turn.events ?? []) {
+    const row = actionRowForEvent(event);
+    if (!row) continue;
+    const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
+  }
+
   return rows;
+}
+
+function actionRowForEvent(event: TaskThreadEvent) {
+  const eventType = stringValue(event.eventType);
+  if (!eventType) return null;
+  const payload = parseRecord(event.payload);
+  const detail = eventDetail(event, payload);
+
+  if (eventType === "browser_automation_started") {
+    return { title: "Opening browser", detail, kind: "source" as const };
+  }
+  if (eventType === "browser_automation_completed") {
+    return { title: "Browser task completed", detail, kind: "source" as const };
+  }
+  if (eventType === "browser_automation_failed") {
+    return { title: "Browser task failed", detail, kind: "tool" as const };
+  }
+  if (eventType === "browser_automation_unavailable") {
+    return { title: "Browser unavailable", detail, kind: "tool" as const };
+  }
+  if (eventType.startsWith("computer_task_")) {
+    return {
+      title: eventType
+        .replace(/^computer_task_/, "Computer run ")
+        .replace(/_/g, " "),
+      detail,
+      kind: "thinking" as const,
+    };
+  }
+  return {
+    title: eventType.replace(/_/g, " "),
+    detail,
+    kind: "tool" as const,
+  };
+}
+
+function eventDetail(event: TaskThreadEvent, payload: Record<string, unknown>) {
+  const detail = {
+    ...(event.createdAt ? { createdAt: event.createdAt } : {}),
+    ...(event.level ? { level: event.level } : {}),
+    ...payload,
+  };
+  return Object.keys(detail).length
+    ? JSON.stringify(detail, null, 2)
+    : undefined;
 }
 
 function countThreadSources(

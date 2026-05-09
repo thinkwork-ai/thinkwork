@@ -25,6 +25,7 @@ const resetStreamingChunks = vi.fn();
 
 let threadData: unknown;
 let taskData: unknown;
+let eventData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -66,6 +67,7 @@ beforeEach(() => {
       },
     ],
   };
+  eventData = { computerEvents: [] };
 
   vi.mocked(useMutation).mockReturnValue([
     { fetching: false, stale: false, hasNext: false },
@@ -81,14 +83,15 @@ beforeEach(() => {
   }));
   vi.mocked(useQuery).mockImplementation((options) => {
     const variables = options.variables as
-      | { messageLimit?: number; limit?: number }
+      | { messageLimit?: number; threadId?: string; limit?: number }
       | undefined;
     if (variables?.messageLimit) {
       return [queryState(threadData), reexecuteThreadQuery];
     }
-    if (variables?.limit) {
+    if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
     }
+    if (variables?.limit) return [queryState(eventData), vi.fn()];
     return [queryState(null), vi.fn()];
   });
 });
@@ -98,10 +101,23 @@ afterEach(cleanup);
 describe("ComputerThreadDetailRoute", () => {
   it("passes live AppSync chunks into the thread detail while a turn is running", () => {
     streamingChunks = [{ seq: 1, text: "Streaming through the route" }];
+    eventData = {
+      computerEvents: [
+        {
+          id: "event-1",
+          taskId: "task-1",
+          eventType: "browser_automation_unavailable",
+          level: "WARN",
+          payload: { reason: "nova_act_api_key_missing" },
+          createdAt: "2026-05-09T08:01:00Z",
+        },
+      ],
+    };
 
     render(<ComputerThreadDetailRoute threadId="thread-1" />);
 
     expect(screen.getByText("Streaming through the route")).toBeTruthy();
+    expect(screen.getByText("Browser unavailable")).toBeTruthy();
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
     expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
