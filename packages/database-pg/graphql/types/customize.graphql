@@ -72,6 +72,16 @@ input DisableConnectorInput {
   slug: String!
 }
 
+input EnableSkillInput {
+  computerId: ID!
+  skillId: String!
+}
+
+input DisableSkillInput {
+  computerId: ID!
+  skillId: String!
+}
+
 extend type Query {
   connectorCatalog: [ConnectorCatalogItem!]!
   skillCatalog: [SkillCatalogItem!]!
@@ -82,4 +92,6 @@ extend type Query {
 extend type Mutation {
   enableConnector(input: EnableConnectorInput!): ConnectorBinding!
   disableConnector(input: DisableConnectorInput!): Boolean!
+  enableSkill(input: EnableSkillInput!): AgentSkill!
+  disableSkill(input: DisableSkillInput!): Boolean!
 }
