@@ -14,6 +14,34 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U12:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u12-legacy-delete` on branch
+  `codex/computer-applets-u12-legacy-delete` from `origin/main` after U11
+  merged.
+- **Progress:** Deleted the legacy CRM dashboard orchestrator, dashboard
+  artifact GraphQL/query/mutation surface, dashboard fixture, dashboard-kind
+  task plumbing, split provenance panel, and old dashboard-specific Computer
+  UI/tests. The app gallery now treats artifacts as applet previews only, and
+  regenerated GraphQL outputs no longer expose the dashboard artifact contract.
+- **Verification note:** `pnpm install --frozen-lockfile`, `pnpm
+schema:build`, codegen for admin/mobile/CLI, focused Computer/API
+  typechecks and tests, `pnpm lint`, recursive typecheck, recursive tests,
+  Computer build, targeted Prettier check, legacy symbol grep, and `git diff
+--check` passed locally. `pnpm format:check` is still blocked by the existing
+  missing root `prettier` binary, so the touched files were checked with
+  one-off `pnpm dlx prettier --check`.
+- **Rebase note:** Rebased U12 cleanly onto fresh `origin/main` at
+  `60cc2f2e` after PR #1065 merged, then reran `pnpm lint`, `pnpm -r
+--if-present typecheck`, `pnpm -r --if-present test`, `pnpm --filter
+@thinkwork/computer build`, the legacy-symbol grep, and diff whitespace
+  checks; all passed. Build warnings remain the existing shared UI sourcemap,
+  dynamic import, and chunk-size warnings.
+- **Current PR:** #1067 (`refactor(computer): delete legacy CRM dashboard
+path`).
+- **Merged U11:** PR #1064 (`feat(computer): migrate CRM applet fixture`) was
+  squash-merged to `main` at
+  `ba02bbcd2c8d3b684e7c851b69d87ffc11056732`; remote/local branches and the
+  U11 worktree were deleted. CI passed: CLA, lint, test, typecheck, verify.
 - **Started U11:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u11-crm-cutover` on branch
   `codex/computer-applets-u11-crm-cutover` from `origin/main` after U10

@@ -25,7 +25,6 @@ export const COMPUTER_TASK_TYPES = [
   "google_cli_smoke",
   "google_workspace_auth_check",
   "google_calendar_upcoming",
-  "dashboard_artifact_refresh",
 ] as const;
 
 export type ComputerTaskType = (typeof COMPUTER_TASK_TYPES)[number];
@@ -132,7 +131,9 @@ export async function listComputerTasks(input: {
     conditions.push(eq(computerTasks.status, input.status));
   }
   if (input.threadId) {
-    conditions.push(sql`${computerTasks.input}->>'threadId' = ${input.threadId}`);
+    conditions.push(
+      sql`${computerTasks.input}->>'threadId' = ${input.threadId}`,
+    );
   }
   const rows = await db
     .select()
@@ -185,10 +186,6 @@ export function normalizeTaskInput(
 
   if (taskType === "google_calendar_upcoming") {
     return normalizeGoogleCalendarUpcomingInput(input);
-  }
-
-  if (taskType === "dashboard_artifact_refresh") {
-    return normalizeDashboardArtifactRefreshInput(input);
   }
 
   if (taskType === "connector_work") {
@@ -307,29 +304,6 @@ function normalizeGoogleCalendarUpcomingInput(
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
     maxResults,
-  };
-}
-
-function normalizeDashboardArtifactRefreshInput(
-  input: unknown,
-): Record<string, unknown> {
-  const payload = coerceObject(input);
-  const recipeVersion = clampInteger(payload.recipeVersion, 1, 1, 100_000);
-  return {
-    artifactId: requiredString(payload.artifactId, "artifactId"),
-    requestedByUserId: requiredString(
-      payload.requestedByUserId,
-      "requestedByUserId",
-    ),
-    recipeId:
-      typeof payload.recipeId === "string" && payload.recipeId.trim()
-        ? payload.recipeId.trim()
-        : null,
-    recipeVersion,
-    dashboardKind:
-      typeof payload.dashboardKind === "string" && payload.dashboardKind.trim()
-        ? payload.dashboardKind.trim()
-        : "pipeline_risk",
   };
 }
 

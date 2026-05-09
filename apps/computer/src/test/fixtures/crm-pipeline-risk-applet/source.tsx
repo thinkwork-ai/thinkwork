@@ -273,7 +273,7 @@ const RISK_ORDER: Record<Risk, number> = {
   low: 2,
 };
 
-export default function LastMileCrmPipelineRiskApplet({
+export default function LastMilePipelineRiskApplet({
   refreshData,
 }: {
   refreshData?: unknown;

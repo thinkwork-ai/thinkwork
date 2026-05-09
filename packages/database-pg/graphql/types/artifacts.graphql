@@ -17,19 +17,6 @@ type Artifact {
   updatedAt: AWSDateTime!
 }
 
-type DashboardArtifact {
-  artifact: Artifact!
-  manifest: AWSJSON!
-  latestRefreshTask: ComputerTask
-  canRefresh: Boolean!
-}
-
-type DashboardRefreshResult {
-  artifact: Artifact!
-  task: ComputerTask!
-  idempotencyKey: String!
-}
-
 type Applet {
   artifact: Artifact!
   appId: ID!
@@ -129,9 +116,16 @@ input SaveAppletStateInput {
 }
 
 extend type Query {
-  artifacts(tenantId: ID!, threadId: ID, agentId: ID, type: ArtifactType, status: ArtifactStatus, limit: Int, cursor: String): [Artifact!]!
+  artifacts(
+    tenantId: ID!
+    threadId: ID
+    agentId: ID
+    type: ArtifactType
+    status: ArtifactStatus
+    limit: Int
+    cursor: String
+  ): [Artifact!]!
   artifact(id: ID!): Artifact
-  dashboardArtifact(id: ID!): DashboardArtifact
   applet(appId: ID!): AppletPayload
   applets(cursor: String, limit: Int): AppletConnection!
   appletState(appId: ID!, instanceId: ID!, key: String!): AppletState
@@ -141,7 +135,6 @@ extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
-  refreshDashboardArtifact(id: ID!): DashboardRefreshResult!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
