@@ -350,6 +350,13 @@ Layer 1 (chunks) and Layer 2 (turn-complete row) are independent channels. A pag
 - AppSync publish-mutation signature (`publishComputerThreadChunk(threadId: ID!, chunk: AWSJSON)`).
 - Memory query/mutation signatures from D4 (`computerMemory(...)`, `forgetComputerMemoryItem(...)`).
 - Computer task-input/output JSON for the new task types added in plan 010-runtime U2.
+- Applet-package shape for the M3 applets reframe:
+  `save_app` / `load_app` / `list_apps` tool signatures, `Applet` /
+  `AppletPayload` / applet-state GraphQL shapes, allowed applet imports,
+  metadata schema, tenant-scoped S3 key layout, browser transform contract,
+  `useAppletAPI(appId, instanceId)` hook surface, and deterministic
+  `refresh()` return shape. The frozen v1 contract is
+  `docs/specs/computer-applet-contract-v1.md`.
 
 Single-agent execution skips the gate (no coordination needed) but still benefits from the contract-fix moment as a self-review pause.
 
