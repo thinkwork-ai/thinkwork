@@ -52,6 +52,7 @@ export interface TaskThreadTurn {
   invocationSource?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
+  model?: string | null;
   usageJson?: unknown;
   resultJson?: unknown;
   error?: string | null;
@@ -90,6 +91,10 @@ export function TaskThreadView({
   const artifactCount = thread.messages.filter(
     (message) => message.durableArtifact,
   ).length;
+  const latestUserIndex = findLastIndex(
+    visibleMessages,
+    (message) => message.role.toUpperCase() === "USER",
+  );
 
   return (
     <main className="flex w-full flex-1 flex-col bg-background">
@@ -117,7 +122,7 @@ export function TaskThreadView({
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col gap-8 px-4 pb-6 pt-10 sm:px-6">
+      <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col gap-8 px-4 pb-6 pt-10 sm:px-6">
         <section className="grid gap-8" aria-label="Thread transcript">
           {visibleMessages.length === 0 ? (
             <ThinkingRow
@@ -126,15 +131,17 @@ export function TaskThreadView({
               isActive={isThreadRunning(thread)}
             />
           ) : (
-            visibleMessages.map((message) => (
-              <TranscriptMessage key={message.id} message={message} />
+            visibleMessages.map((message, index) => (
+              <TranscriptSegment
+                key={message.id}
+                message={message}
+                showLatestActivity={index === latestUserIndex}
+                latestTurn={thread.turns?.[0]}
+                streamingChunks={showStreamingBuffer ? streamingChunks : []}
+                showProcessingShimmer={showProcessingShimmer}
+              />
             ))
           )}
-          <ThreadTurnActivity turns={thread.turns ?? []} />
-          {showStreamingBuffer ? (
-            <StreamingMessageBuffer chunks={streamingChunks} />
-          ) : null}
-          {showProcessingShimmer ? <ProcessingShimmer /> : null}
         </section>
 
         <FollowUpComposer
@@ -147,35 +154,72 @@ export function TaskThreadView({
   );
 }
 
-function ThreadTurnActivity({ turns }: { turns: TaskThreadTurn[] }) {
-  const latest = turns[0];
-  if (!latest) return null;
+function TranscriptSegment({
+  message,
+  showLatestActivity,
+  latestTurn,
+  streamingChunks,
+  showProcessingShimmer,
+}: {
+  message: TaskThreadMessage;
+  showLatestActivity: boolean;
+  latestTurn?: TaskThreadTurn;
+  streamingChunks: ComputerThreadChunk[];
+  showProcessingShimmer: boolean;
+}) {
+  return (
+    <>
+      <TranscriptMessage message={message} />
+      {showLatestActivity ? (
+        <>
+          <ThreadTurnActivity turn={latestTurn} />
+          {streamingChunks.length > 0 ? (
+            <StreamingMessageBuffer chunks={streamingChunks} />
+          ) : null}
+          {showProcessingShimmer ? <ProcessingShimmer /> : null}
+        </>
+      ) : null}
+    </>
+  );
+}
 
-  const status = String(latest.status ?? "").toLowerCase();
-  const usage = parseRecord(latest.usageJson);
+function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
+  if (!turn) return null;
+
+  const status = String(turn.status ?? "").toLowerCase();
+  const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(usage);
+  const shouldRender =
+    [
+      "pending",
+      "queued",
+      "claimed",
+      "running",
+      "completed",
+      "succeeded",
+      "failed",
+    ].includes(status) ||
+    rows.length > 0 ||
+    Boolean(turn.error);
+  if (!shouldRender) return null;
 
   return (
-    <article className="grid gap-3" aria-label="Thread activity">
+    <article className="grid gap-3" aria-label="Thinking and tool activity">
       <ThinkingRow
         title="Thinking"
-        detail={turnSummary(latest, usage)}
+        detail={turnSummary(turn, usage)}
         isActive={status === "running"}
       />
       {rows.map((row) => (
         <ActionRow
-          key={`${latest.id}-${row.title}`}
+          key={`${turn.id}-${row.title}`}
           title={row.title}
           detail={row.detail}
           kind={row.kind}
         />
       ))}
-      {latest.error ? (
-        <ActionRow
-          title="Run failed"
-          detail={latest.error}
-          kind="tool"
-        />
+      {turn.error ? (
+        <ActionRow title="Run failed" detail={turn.error} kind="tool" />
       ) : null}
     </article>
   );
@@ -185,9 +229,13 @@ function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
   if (hasAssistantAfterLatestUser(thread.messages)) return thread.messages;
 
   const latestCompletedTurn = (thread.turns ?? []).find((turn) =>
-    ["completed", "succeeded"].includes(String(turn.status ?? "").toLowerCase()),
+    ["completed", "succeeded"].includes(
+      String(turn.status ?? "").toLowerCase(),
+    ),
   );
-  const response = stringValue(parseRecord(latestCompletedTurn?.resultJson).response);
+  const response = stringValue(
+    parseRecord(latestCompletedTurn?.resultJson).response,
+  );
   if (!latestCompletedTurn || !response) return thread.messages;
 
   return [
@@ -501,16 +549,6 @@ function actionRowsForTurn(usage: Record<string, unknown>) {
   const toolInvocations = parseArray(usage.tool_invocations);
   const seen = new Set<string>();
 
-  for (const name of toolsCalled) {
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push({
-      title: `Using ${name}`,
-      kind: toolKind(name),
-    });
-  }
-
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
     const name =
@@ -522,8 +560,18 @@ function actionRowsForTurn(usage: Record<string, unknown>) {
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push({
-      title: `Using ${name}`,
-      detail: JSON.stringify(record, null, 2),
+      title: toolActionTitle(name),
+      detail: toolInvocationDetail(record),
+      kind: toolKind(name),
+    });
+  }
+
+  for (const name of toolsCalled) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      title: toolActionTitle(name),
       kind: toolKind(name),
     });
   }
@@ -534,6 +582,7 @@ function actionRowsForTurn(usage: Record<string, unknown>) {
 function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
   const parts = [
     formatInvocationSource(turn.invocationSource),
+    stringValue(turn.model),
     formatTurnStatus(turn.status),
     formatTurnDuration(turn),
     formatTokenUsage(usage),
@@ -599,6 +648,35 @@ function toolKind(name: string): "tool" | "source" | "code" {
   return "tool";
 }
 
+function toolActionTitle(name: string) {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("web_search") || normalized.includes("search")) {
+    return "Finding sources";
+  }
+  if (normalized.includes("recall") || normalized.includes("memory")) {
+    return "Checking memory";
+  }
+  if (normalized.includes("file_read") || normalized.includes("read")) {
+    return "Reading files";
+  }
+  if (normalized.includes("patch") || normalized.includes("code")) {
+    return "Applying code changes";
+  }
+  return `Using ${name.replace(/_/g, " ")}`;
+}
+
+function toolInvocationDetail(record: Record<string, unknown>) {
+  const inputPreview = stringValue(record.input_preview);
+  const outputPreview = stringValue(record.output_preview);
+  const status = stringValue(record.status);
+  const parts = [
+    inputPreview ? `Input: ${inputPreview}` : null,
+    outputPreview ? `Output: ${outputPreview}` : null,
+    status ? `Status: ${status}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join("\n\n") : JSON.stringify(record, null, 2);
+}
+
 function isThreadRunning(thread: TaskThread) {
   return String(thread.lifecycleStatus ?? thread.status ?? "")
     .toLowerCase()
@@ -648,13 +726,7 @@ function findLastIndex<T>(items: T[], predicate: (item: T) => boolean) {
   return -1;
 }
 
-function TaskThreadState({
-  label,
-  tone,
-}: {
-  label: string;
-  tone?: "error";
-}) {
+function TaskThreadState({ label, tone }: { label: string; tone?: "error" }) {
   return (
     <main className="flex w-full flex-1 items-center justify-center p-6">
       <p
