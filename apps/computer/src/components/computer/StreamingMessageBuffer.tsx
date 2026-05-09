@@ -1,3 +1,4 @@
+import { Streamdown } from "streamdown";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 interface StreamingMessageBufferProps {
@@ -13,13 +14,11 @@ export function StreamingMessageBuffer({ chunks }: StreamingMessageBufferProps) 
       className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0"
       aria-label="Streaming assistant response"
     >
-      <p>
-        <span>{text}</span>
-        <span
-          aria-label="Computer is typing"
-          className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground align-middle"
-        />
-      </p>
+      <Streamdown>{text}</Streamdown>
+      <span
+        aria-label="Computer is typing"
+        className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground align-middle"
+      />
     </article>
   );
 }
