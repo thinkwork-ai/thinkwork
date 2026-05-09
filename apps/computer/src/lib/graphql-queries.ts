@@ -158,6 +158,7 @@ export const ThreadTurnUpdatedSubscription = gql`
   subscription ThreadTurnUpdated($tenantId: ID!) {
     onThreadTurnUpdated(tenantId: $tenantId) {
       threadId
+      tenantId
       status
       updatedAt
     }
@@ -318,10 +319,7 @@ export const ComputerApprovalQuery = gql`
 `;
 
 export const ApproveComputerApprovalMutation = gql`
-  mutation ApproveComputerApproval(
-    $id: ID!
-    $input: ApproveInboxItemInput
-  ) {
+  mutation ApproveComputerApproval($id: ID!, $input: ApproveInboxItemInput) {
     approveInboxItem(id: $id, input: $input) {
       ...ComputerApprovalFields
     }
