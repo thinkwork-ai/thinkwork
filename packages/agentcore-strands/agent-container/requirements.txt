@@ -10,22 +10,7 @@ aws-opentelemetry-distro>=0.10.0
 PyYAML>=6.0
 pydantic>=2.0
 
-# Nova Act 3.x currently declares strands-agents<=1.29, while this runtime
-# intentionally runs newer Strands. The Dockerfile installs nova-act itself
-# with --no-deps after these compatible runtime dependencies are present.
-Deprecated
-boto3-stubs
-cryptography
-fire
-injector
-install-playwright>=0.1.0,<1.0.0
-jsonschema
-mypy-boto3-s3
-numpy
-pandas
-pillow
+# Browser Automation uses the Playwright client package to connect to the
+# managed AgentCore Browser over CDP. The image must not install browser
+# binaries.
 playwright>=1.54.0,<=1.56.0
-pytz
-requests
-retry
-tenacity
