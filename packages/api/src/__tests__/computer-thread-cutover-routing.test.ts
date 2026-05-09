@@ -31,9 +31,17 @@ describe("Computer-owned thread turn routing", () => {
 
   it("dispatches Computer thread_turn tasks into the Strands invoke path", () => {
     const threadCutoverSource = source("../lib/computers/thread-cutover.ts");
+    const chatInvokeSource = source("../handlers/chat-agent-invoke.ts");
+
     expect(threadCutoverSource).toContain("invokeChatAgent");
     expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
     expect(threadCutoverSource).toContain('runtime: "strands"');
     expect(threadCutoverSource).toContain("thread_turn_dispatched");
+    expect(chatInvokeSource).toMatch(
+      /event\.computerId && event\.computerTaskId\s+\? "strands"/,
+    );
+    expect(chatInvokeSource).toContain(
+      "resolveRuntimeFunctionName(runtimeType)",
+    );
   });
 });

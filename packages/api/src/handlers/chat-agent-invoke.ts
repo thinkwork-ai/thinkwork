@@ -39,7 +39,10 @@ import {
   AgentTemplateNotFoundError,
   resolveAgentRuntimeConfig,
 } from "../lib/resolve-agent-runtime-config.js";
-import { resolveRuntimeFunctionName } from "../lib/resolve-runtime-function-name.js";
+import {
+  resolveRuntimeFunctionName,
+  type AgentRuntimeType,
+} from "../lib/resolve-runtime-function-name.js";
 import {
   markConnectorDelegationTurnCompleted,
   markConnectorDelegationTurnFailed,
@@ -354,7 +357,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
       throw err;
     }
 
-    const runtimeType = runtimeConfig.runtimeType;
+    const runtimeType: AgentRuntimeType =
+      event.computerId && event.computerTaskId
+        ? "strands"
+        : runtimeConfig.runtimeType;
     const agentModel = runtimeConfig.templateModel;
     const tenantSlug = runtimeConfig.tenantSlug;
     const agentSlug = runtimeConfig.agentSlug;
