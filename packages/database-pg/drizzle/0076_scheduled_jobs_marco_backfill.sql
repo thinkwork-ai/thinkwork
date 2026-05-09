@@ -38,12 +38,20 @@ SET LOCAL statement_timeout = '120s';
 -- A wrong-stage apply (staging/prod where the Marco Computer row
 -- doesn't exist) raises here rather than silently affecting nothing or
 -- corrupting tenant scoping on the two job rows.
+--
+-- psql -v variables don't expand inside dollar-quoted DO blocks, so we
+-- pass the target id through a server-side custom GUC and read it back
+-- with current_setting() inside the block.
+SET LOCAL thinkwork.backfill_computer_id = :'computer_id';
+
 DO $$
+DECLARE
+  target_id uuid := current_setting('thinkwork.backfill_computer_id')::uuid;
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM public.computers WHERE id = :'computer_id'::uuid
+    SELECT 1 FROM public.computers WHERE id = target_id
   ) THEN
-    RAISE EXCEPTION 'Computer % not found — wrong stage or wrong UUID', :'computer_id';
+    RAISE EXCEPTION 'Computer % not found — wrong stage or wrong UUID', target_id;
   END IF;
 END $$;
 
