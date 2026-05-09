@@ -202,7 +202,7 @@ def build_browser_automation_tool(
                     nova_act_api_key=nova_act_api_key,
                     starting_page=url,
                 ) as nova:
-                    result = nova.act_get(task, schema={"type": "string"})
+                    result = nova.act(task, schema={"type": "string"})
                     response = str(result.response) if result.response else ""
                     duration_sec = time.time() - start_time
                     _append_costs(
