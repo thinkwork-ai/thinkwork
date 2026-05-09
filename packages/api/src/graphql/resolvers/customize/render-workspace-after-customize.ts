@@ -27,8 +27,11 @@ export async function renderWorkspaceAfterCustomize(
     );
     await regenerateWorkspaceMap(agentId, computerId);
   } catch (err) {
+    // Match the existing setAgentSkills log shape so CloudWatch filters
+    // keyed on "regenerateWorkspaceMap failed" continue to surface these.
+    // Trailing context note documents the binding-state invariant.
     console.error(
-      `[${resolverName}] workspace renderer failed (binding write committed; stale AGENTS.md until next render):`,
+      `[${resolverName}] regenerateWorkspaceMap failed (binding write committed; stale AGENTS.md until next render):`,
       err,
     );
   }

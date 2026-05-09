@@ -72,6 +72,7 @@ vi.mock("../core/authz.js", () => ({
 }));
 
 import { disableWorkflow } from "./disableWorkflow.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as unknown as Parameters<typeof disableWorkflow>[2];
 
@@ -105,6 +106,21 @@ describe("disableWorkflow", () => {
     expect(lastUpdateSet.value?.status).toBe("inactive");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
+  });
+
+  it("fires the workspace renderer after the disable update commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await disableWorkflow(
+      null,
+      { input: { computerId: "computer-1", slug: "daily-digest" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledWith(
+      "disableWorkflow",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("scopes the UPDATE to (tenant_id, agent_id, catalog_slug)", async () => {

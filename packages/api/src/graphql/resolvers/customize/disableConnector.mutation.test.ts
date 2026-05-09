@@ -16,6 +16,8 @@ const {
     id: "computer-1",
     tenant_id: "tenant-1",
     owner_user_id: "user-1",
+    primary_agent_id: "agent-primary",
+    migrated_from_agent_id: null,
   },
   lastUpdateSet: { value: null as Record<string, unknown> | null },
 }));
@@ -62,6 +64,7 @@ vi.mock("../core/authz.js", () => ({
 }));
 
 import { disableConnector } from "./disableConnector.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as any;
 
@@ -91,6 +94,21 @@ describe("disableConnector", () => {
     expect(lastUpdateSet.value?.enabled).toBe(false);
     expect(lastUpdateSet.value?.status).toBe("paused");
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
+  });
+
+  it("fires the workspace renderer after the disable update commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await disableConnector(
+      null,
+      { input: { computerId: "computer-1", slug: "slack" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledWith(
+      "disableConnector",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("is idempotent — returns true when no row matches", async () => {

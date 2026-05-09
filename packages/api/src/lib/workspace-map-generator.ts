@@ -27,7 +27,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { eq, and, isNotNull, ne, or } from "drizzle-orm";
+import { eq, and, asc, isNotNull, ne, or } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
@@ -110,6 +110,23 @@ export interface RoutingRowInsert {
 
 function workspacePrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+}
+
+/**
+ * Escape Markdown table-cell content so admin-controlled catalog text
+ * (display_name / description / category, and any future user-facing
+ * field that lands in AGENTS.md) cannot break out of the cell. Without
+ * this, a `|` in the description would break the table layout, and a
+ * newline would inject arbitrary markdown — including `## EVIL` headers
+ * the LLM would read as instructions.
+ *
+ * Plan: docs/plans/2026-05-09-011-feat-customize-workspace-renderer-plan.md U7-1.
+ */
+function escTableCell(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const trimmed = value.trim();
+  if (trimmed === "") return "—";
+  return trimmed.replace(/\|/g, "\\|").replace(/[\r\n]+/g, " ");
 }
 
 export function appendRoutingRowIfMissing(
@@ -333,24 +350,36 @@ export async function regenerateWorkspaceMap(
       );
     computerRow = row ?? null;
   } else {
+    // Auto-resolve must scope by tenant — primary_agent_id / migrated_from_agent_id
+    // are not unique-per-tenant in the schema, so without this predicate a
+    // Computer in tenant B that points at an agent in tenant A would be
+    // selected when rendering tenant A's agent. LIMIT 1 + deterministic
+    // ORDER BY pin which row wins when multiple match within a tenant.
     const [row] = await db
       .select({ id: computers.id, tenant_id: computers.tenant_id })
       .from(computers)
       .where(
         and(
+          eq(computers.tenant_id, agent.tenant_id),
           or(
             eq(computers.primary_agent_id, agentId),
             eq(computers.migrated_from_agent_id, agentId),
           ),
           ne(computers.status, "archived"),
         ),
-      );
+      )
+      .orderBy(asc(computers.id))
+      .limit(1);
     computerRow = row ?? null;
   }
 
   // 2. Query skills (filter built-in tool slugs — they're template/runtime
   //    config, not workspace skills, per
   //    docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md).
+  // Deterministic ORDER BY so the rendered Markdown is byte-stable across
+  // calls — required for the idempotent-write byte-equal compare to detect
+  // no-op renders. Postgres heap order is unspecified and shifts after
+  // UPDATEs.
   const skillRowsRaw = await db
     .select({
       skill_id: agentSkills.skill_id,
@@ -358,7 +387,8 @@ export async function regenerateWorkspaceMap(
       enabled: agentSkills.enabled,
     })
     .from(agentSkills)
-    .where(and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)));
+    .where(and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)))
+    .orderBy(asc(agentSkills.skill_id));
   const skillRows = skillRowsRaw.filter((s) => !isBuiltinToolSlug(s.skill_id));
 
   // 3. Query knowledge bases
@@ -372,7 +402,8 @@ export async function regenerateWorkspaceMap(
     .innerJoin(knowledgeBases, eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id))
     .where(
       and(eq(agentKnowledgeBases.agent_id, agentId), eq(agentKnowledgeBases.enabled, true)),
-    );
+    )
+    .orderBy(asc(knowledgeBases.id));
 
   // 3b. Query active Customize connectors (Computer-keyed). Joined to the
   //     tenant_connector_catalog for display_name + description + category.
@@ -409,6 +440,7 @@ export async function regenerateWorkspaceMap(
             isNotNull(connectors.catalog_slug),
           ),
         )
+        .orderBy(asc(connectors.catalog_slug))
         // Drizzle's join row typing leaves catalog_slug as nullable since
         // the source column allows null; the WHERE filter guarantees it.
         .then((rows) =>
@@ -451,7 +483,8 @@ export async function regenerateWorkspaceMap(
         eq(routines.status, "active"),
         isNotNull(routines.catalog_slug),
       ),
-    );
+    )
+    .orderBy(asc(routines.catalog_slug));
   const workflowRows = workflowRowsRaw
     .filter(
       (r): r is typeof r & { catalog_slug: string } => r.catalog_slug !== null,
@@ -648,9 +681,11 @@ function renderAgentsMap(
     lines.push("| Skill | Description | Triggers |");
     lines.push("|-------|-------------|----------|");
     for (const skill of skills) {
-      const desc = skill.description ? skill.description.slice(0, 80) : "—";
-      const triggers = skill.triggers?.slice(0, 3).join(", ") || "—";
-      lines.push(`| ${skill.name} | ${desc} | ${triggers} |`);
+      const desc = escTableCell(skill.description?.slice(0, 80) ?? null);
+      const triggers = escTableCell(
+        skill.triggers?.slice(0, 3).join(", ") ?? null,
+      );
+      lines.push(`| ${escTableCell(skill.name)} | ${desc} | ${triggers} |`);
     }
   } else {
     lines.push("No skills assigned.");
@@ -664,8 +699,12 @@ function renderAgentsMap(
     lines.push("| KB | Description | Used In |");
     lines.push("|----|-------------|---------|");
     for (const kb of kbs) {
-      const usedIn = kb.usedIn.length > 0 ? kb.usedIn.join(", ") : "(all workspaces)";
-      lines.push(`| ${kb.name} | ${kb.description} | ${usedIn} |`);
+      const usedIn = escTableCell(
+        kb.usedIn.length > 0 ? kb.usedIn.join(", ") : "(all workspaces)",
+      );
+      lines.push(
+        `| ${escTableCell(kb.name)} | ${escTableCell(kb.description)} | ${usedIn} |`,
+      );
     }
     lines.push("");
   }
@@ -677,9 +716,9 @@ function renderAgentsMap(
     lines.push("| Connector | Description | Category |");
     lines.push("|-----------|-------------|----------|");
     for (const c of connectorList) {
-      const desc = c.description ? c.description.slice(0, 80) : "—";
-      const category = c.category ?? "—";
-      lines.push(`| ${c.name} | ${desc} | ${category} |`);
+      const desc = escTableCell(c.description?.slice(0, 80) ?? null);
+      const category = escTableCell(c.category);
+      lines.push(`| ${escTableCell(c.name)} | ${desc} | ${category} |`);
     }
   } else {
     lines.push("No connectors configured.");
@@ -693,9 +732,9 @@ function renderAgentsMap(
     lines.push("| Workflow | Description | Schedule |");
     lines.push("|----------|-------------|----------|");
     for (const w of workflowList) {
-      const desc = w.description ? w.description.slice(0, 80) : "—";
-      const schedule = w.schedule ?? "on-demand";
-      lines.push(`| ${w.name} | ${desc} | ${schedule} |`);
+      const desc = escTableCell(w.description?.slice(0, 80) ?? null);
+      const schedule = escTableCell(w.schedule ?? "on-demand");
+      lines.push(`| ${escTableCell(w.name)} | ${desc} | ${schedule} |`);
     }
   } else {
     lines.push("No workflows configured.");

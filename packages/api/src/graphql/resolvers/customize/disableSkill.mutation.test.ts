@@ -62,6 +62,7 @@ vi.mock("../core/authz.js", () => ({
 }));
 
 import { disableSkill } from "./disableSkill.mutation.js";
+import { renderWorkspaceAfterCustomize } from "./render-workspace-after-customize.js";
 
 const ctx = {} as unknown as Parameters<typeof disableSkill>[2];
 
@@ -94,6 +95,21 @@ describe("disableSkill", () => {
     expect(result).toBe(true);
     expect(lastUpdateSet.value?.enabled).toBe(false);
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
+  });
+
+  it("fires the workspace renderer after the disable update commits", async () => {
+    const renderSpy = vi.mocked(renderWorkspaceAfterCustomize);
+    renderSpy.mockClear();
+    await disableSkill(
+      null,
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
+      ctx,
+    );
+    expect(renderSpy).toHaveBeenCalledWith(
+      "disableSkill",
+      "agent-primary",
+      "computer-1",
+    );
   });
 
   it("is idempotent — returns true when no row matches", async () => {

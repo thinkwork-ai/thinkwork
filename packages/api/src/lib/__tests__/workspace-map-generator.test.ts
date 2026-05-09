@@ -141,19 +141,25 @@ vi.mock("@thinkwork/database-pg", () => {
     return [];
   }
 
+  function chainable(rows: unknown[]): Record<string, unknown> {
+    const promise = Promise.resolve(rows);
+    const chain: Record<string, unknown> = {
+      then: promise.then.bind(promise),
+      catch: promise.catch.bind(promise),
+      finally: promise.finally.bind(promise),
+      orderBy: () => chain,
+      limit: () => chain,
+      where: () => chain,
+      innerJoin: () => chain,
+      execute: async () => rows,
+    };
+    return chain;
+  }
+
   return {
     getDb: () => ({
       select: () => ({
-        from: (table: { __name?: string }) => {
-          const rows = makeQuery(table);
-          return {
-            where: () => Promise.resolve(rows),
-            innerJoin: () => ({
-              where: () => Promise.resolve(rows),
-            }),
-            execute: async () => rows,
-          };
-        },
+        from: (table: { __name?: string }) => chainable(makeQuery(table)),
       }),
     }),
   };
@@ -183,6 +189,7 @@ vi.mock("drizzle-orm", () => ({
   and: () => ({}),
   or: () => ({}),
   ne: () => ({}),
+  asc: () => ({}),
   isNotNull: () => ({}),
 }));
 
@@ -311,6 +318,35 @@ describe("regenerateWorkspaceMap — Workflows projection", () => {
 });
 
 describe("regenerateWorkspaceMap — built-in tool filter", () => {
+  it("excludes EVERY BUILTIN_TOOL_SLUGS entry from the Skills table (list-coupled)", async () => {
+    // Iterate the canonical list to defend against future expansions —
+    // hardcoding subsets means new built-in slugs slip through silently.
+    const { BUILTIN_TOOL_SLUGS } = await import("../builtin-tool-slugs.js");
+    state.skills = [
+      ...BUILTIN_TOOL_SLUGS.map((slug) => ({
+        skill_id: slug,
+        config: null,
+        enabled: true,
+      })),
+      { skill_id: "sales-prep", config: null, enabled: true },
+    ];
+    state.skillCatalog = [
+      {
+        slug: "sales-prep",
+        name: "Sales Prep",
+        description: "Prep notes",
+        mcp_server: null,
+        triggers: null,
+      },
+    ];
+    await regenerateWorkspaceMap("agent-1", "computer-1");
+    const md = lastWrittenAgentsMd() ?? "";
+    expect(md).toContain("Sales Prep");
+    for (const builtin of BUILTIN_TOOL_SLUGS) {
+      expect(md).not.toContain(builtin);
+    }
+  });
+
   it("excludes built-in tool slugs from the Skills table", async () => {
     state.skills = [
       { skill_id: "web-search", config: null, enabled: true },
