@@ -34,6 +34,8 @@ class AppSyncChunkPublisher:
         self.post_fn = post_fn or _post
         self.timeout_seconds = timeout_seconds
         self._seq = 0
+        self._emitted_text = ""
+        self._last_raw_text: str | None = None
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(
             max_workers=1,
@@ -45,9 +47,28 @@ class AppSyncChunkPublisher:
         if not text:
             return
         with self._lock:
+            text = self._normalize_chunk_locked(text)
+            if not text:
+                return
             self._seq += 1
             seq = self._seq
         self._futures.append(self._executor.submit(self._publish_sync, text, seq))
+
+    def _normalize_chunk_locked(self, text: str) -> str | None:
+        """Convert Strands full-buffer repeats into append-only deltas."""
+        if text == self._last_raw_text:
+            return None
+        self._last_raw_text = text
+
+        if self._emitted_text and text.startswith(self._emitted_text):
+            suffix = text[len(self._emitted_text) :]
+            if not suffix:
+                return None
+            self._emitted_text = text
+            return suffix
+
+        self._emitted_text += text
+        return text
 
     def drain(self, timeout_seconds: float = 2.0) -> None:
         if self._futures:
