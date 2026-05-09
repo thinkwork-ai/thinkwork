@@ -7,18 +7,22 @@ import { crmDashboardVisualFixtures } from "./crm-dashboard.fixture";
 afterEach(cleanup);
 
 describe("app artifact visual contract", () => {
-  it("keeps split-view panels bounded with independent canvas scrolling", () => {
+  it("renders a single bounded applet canvas without horizontal page scroll", () => {
     render(<AppArtifactSplitShell manifest={crmDashboardVisualFixtures.base} />);
 
     expect(screen.getByTestId("app-artifact-split-shell").className).toContain(
       "h-svh",
     );
-    expect(screen.getByTestId("app-artifact-panels").className).toContain(
-      "lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]",
+    expect(screen.getByTestId("app-artifact-panels").className).not.toContain(
+      "grid-cols",
     );
     expect(screen.getByTestId("app-canvas-panel").className).toContain(
-      "overflow-auto",
+      "overflow-x-hidden",
     );
+    expect(screen.getByTestId("app-canvas-panel").className).toContain(
+      "overflow-y-auto",
+    );
+    expect(screen.queryByLabelText("Computer provenance")).toBeNull();
   });
 
   it("uses stable chart dimensions and safe table truncation for dense fixtures", () => {

@@ -1,6 +1,5 @@
 import { AppCanvasPanel } from "@/components/apps/AppCanvasPanel";
 import { AppTopBar } from "@/components/apps/AppTopBar";
-import { AppTranscriptPanel } from "@/components/apps/AppTranscriptPanel";
 import type {
   DashboardArtifactManifest,
   DashboardArtifactRefreshTask,
@@ -31,9 +30,8 @@ export function AppArtifactSplitShell({
       <AppTopBar title={manifest.snapshot.title} />
       <div
         data-testid="app-artifact-panels"
-        className="grid min-h-0 flex-1 lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]"
+        className="min-h-0 min-w-0 flex-1"
       >
-        <AppTranscriptPanel manifest={manifest} />
         <AppCanvasPanel
           manifest={manifest}
           latestRefreshTask={latestRefreshTask}
