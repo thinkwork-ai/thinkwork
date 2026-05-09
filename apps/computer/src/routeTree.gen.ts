@@ -20,6 +20,7 @@ import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/m
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
+import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
@@ -80,6 +81,12 @@ const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   path: "/threads/",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellAutomationsIndexRoute =
+  AuthedShellAutomationsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthedShellAutomationsRoute,
+  } as any);
 const AuthedShellAppsIndexRoute = AuthedShellAppsIndexRouteImport.update({
   id: "/apps/",
   path: "/apps/",
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
+  "/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesByTo {
@@ -136,7 +144,6 @@ export interface FileRoutesByTo {
   "/$": typeof SplatRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRoute;
   "/memory": typeof AuthedShellMemoryRoute;
   "/new": typeof AuthedShellNewRoute;
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
+  "/automations": typeof AuthedShellAutomationsIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesById {
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
+  "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRouteTypes {
@@ -185,6 +194,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/approvals/"
     | "/apps/"
+    | "/automations/"
     | "/threads/";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -192,7 +202,6 @@ export interface FileRouteTypes {
     | "/$"
     | "/sign-in"
     | "/auth/callback"
-    | "/automations"
     | "/customize"
     | "/memory"
     | "/new"
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/approvals"
     | "/apps"
+    | "/automations"
     | "/threads";
   id:
     | "__root__"
@@ -221,6 +231,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/apps/"
+    | "/_authed/_shell/automations/"
     | "/_authed/_shell/threads/";
   fileRoutesById: FileRoutesById;
 }
@@ -311,6 +322,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellThreadsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/automations/": {
+      id: "/_authed/_shell/automations/";
+      path: "/";
+      fullPath: "/automations/";
+      preLoaderRoute: typeof AuthedShellAutomationsIndexRouteImport;
+      parentRoute: typeof AuthedShellAutomationsRoute;
+    };
     "/_authed/_shell/apps/": {
       id: "/_authed/_shell/apps/";
       path: "/apps";
@@ -358,12 +376,14 @@ declare module "@tanstack/react-router" {
 
 interface AuthedShellAutomationsRouteChildren {
   AuthedShellAutomationsScheduledJobIdRoute: typeof AuthedShellAutomationsScheduledJobIdRoute;
+  AuthedShellAutomationsIndexRoute: typeof AuthedShellAutomationsIndexRoute;
 }
 
 const AuthedShellAutomationsRouteChildren: AuthedShellAutomationsRouteChildren =
   {
     AuthedShellAutomationsScheduledJobIdRoute:
       AuthedShellAutomationsScheduledJobIdRoute,
+    AuthedShellAutomationsIndexRoute: AuthedShellAutomationsIndexRoute,
   };
 
 const AuthedShellAutomationsRouteWithChildren =

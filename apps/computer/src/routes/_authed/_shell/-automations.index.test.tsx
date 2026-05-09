@@ -12,6 +12,7 @@ const navigateMock = vi.fn();
 const apiFetchMock = vi.fn();
 const useQueryMock = vi.fn();
 const useSubscriptionMock = vi.fn();
+const pageHeaderActionsMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async () => {
   const actual =
@@ -34,11 +35,15 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-A" }),
 }));
 
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: (actions: unknown) => pageHeaderActionsMock(actions),
+}));
+
 vi.mock("@/lib/api-fetch", () => ({
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }));
 
-import { Route } from "./automations";
+import { Route } from "./automations.index";
 
 const SAMPLE_COMPUTER = {
   id: "computer-marco",
@@ -90,6 +95,7 @@ beforeEach(() => {
   apiFetchMock.mockReset();
   useQueryMock.mockReset();
   useSubscriptionMock.mockReset();
+  pageHeaderActionsMock.mockReset();
 
   useQueryMock.mockReturnValue([{ data: { myComputer: SAMPLE_COMPUTER } }]);
   useSubscriptionMock.mockReturnValue([{ data: undefined }]);
@@ -113,9 +119,15 @@ describe("apps/computer Automations route", () => {
     );
     expect(screen.getByText("Austin Events")).toBeTruthy();
     // Both backfill rows are enabled=false in the fixture, matching the
-    // current dev-tenant screenshot. The PageHeader description shows the
-    // active/disabled tally.
-    expect(screen.getByText(/0 active, 2 disabled/)).toBeTruthy();
+    // current dev-tenant screenshot. The active/disabled tally is published
+    // to the AppTopBar via usePageHeaderActions.
+    const calls = pageHeaderActionsMock.mock.calls.map((c) => c[0]);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        title: "Automations",
+        subtitle: "0 active, 2 disabled",
+      }),
+    );
   });
 
   it("filters in-memory by job name when the search input changes", async () => {

@@ -12,6 +12,7 @@ const navigateMock = vi.fn();
 const apiFetchMock = vi.fn();
 const useQueryMock = vi.fn();
 const useSubscriptionMock = vi.fn();
+const pageHeaderActionsMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async () => {
   const actual =
@@ -35,6 +36,10 @@ vi.mock("urql", () => ({
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-A" }),
+}));
+
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: (actions: unknown) => pageHeaderActionsMock(actions),
 }));
 
 vi.mock("@/lib/api-fetch", () => ({
@@ -66,6 +71,7 @@ beforeEach(() => {
   apiFetchMock.mockReset();
   useQueryMock.mockReset();
   useSubscriptionMock.mockReset();
+  pageHeaderActionsMock.mockReset();
 
   useQueryMock.mockReturnValue([
     {
@@ -100,7 +106,7 @@ describe("apps/computer scheduled-job detail route", () => {
     render(<ScheduledJobDetailPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("Things to do with Kids")).toBeTruthy(),
+      expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
     expect(screen.getByText("No runs yet.")).toBeTruthy();
     expect(
@@ -134,7 +140,7 @@ describe("apps/computer scheduled-job detail route", () => {
     render(<ScheduledJobDetailPage />);
 
     await waitFor(() =>
-      expect(screen.getByText("Things to do with Kids")).toBeTruthy(),
+      expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
     expect(
       screen.getByText(/Failed to load run history: runs boom/),
@@ -156,7 +162,7 @@ describe("apps/computer scheduled-job detail route", () => {
 
     render(<ScheduledJobDetailPage />);
     await waitFor(() =>
-      expect(screen.getByText("Things to do with Kids")).toBeTruthy(),
+      expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
 
     const before = apiFetchMock.mock.calls.length;
@@ -189,7 +195,7 @@ describe("apps/computer scheduled-job detail route", () => {
 
     render(<ScheduledJobDetailPage />);
     await waitFor(() =>
-      expect(screen.getByText("Things to do with Kids")).toBeTruthy(),
+      expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Fire Now/ }));
@@ -202,7 +208,7 @@ describe("apps/computer scheduled-job detail route", () => {
       );
       expect(fireCall).toBeTruthy();
     });
-    expect(screen.getByText("Things to do with Kids")).toBeTruthy();
+    expect(screen.getByText(/Find weekend things/)).toBeTruthy();
   });
 
   it("subscription delivery refetches run history (not the job header)", async () => {
@@ -217,7 +223,7 @@ describe("apps/computer scheduled-job detail route", () => {
 
     const { rerender } = render(<ScheduledJobDetailPage />);
     await waitFor(() =>
-      expect(screen.getByText("Things to do with Kids")).toBeTruthy(),
+      expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
     const initialRunsCalls = apiFetchMock.mock.calls.filter((c) =>
       typeof c[0] === "string" && c[0].startsWith("/api/thread-turns"),

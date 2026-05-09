@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
-  ArrowLeft,
   Pause,
   Pencil,
   Play,
@@ -33,7 +32,7 @@ import {
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
-import { PageHeader } from "@/components/PageHeader";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import {
   ScheduledJobFormDialog,
@@ -238,93 +237,83 @@ function ScheduledJobDetailPage() {
     await fetchJob();
   }
 
+  const headerSubtitle = job
+    ? job.description
+      ? job.description
+      : `${formatSchedule(job.schedule_expression)} · ${job.timezone}`
+    : undefined;
+
+  usePageHeaderActions({
+    title: job?.name ?? "Scheduled Job",
+    subtitle: headerSubtitle,
+    backHref: "/automations",
+  });
+
   if (jobLoading || !tenantId) {
     return <PageSkeleton />;
   }
 
   if (jobError || !job) {
     return (
-      <div className="flex flex-col gap-4 p-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start text-muted-foreground"
-          onClick={() => navigate({ to: "/automations" })}
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Automations
-        </Button>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-destructive">
-              {jobError ?? "Scheduled job not found."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <main className="flex h-full w-full flex-col overflow-hidden bg-background">
+        <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-sm text-destructive">
+                {jobError ?? "Scheduled job not found."}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     );
   }
 
   const sourceAgent = computer?.sourceAgent ?? null;
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="self-start text-muted-foreground"
-        onClick={() => navigate({ to: "/automations" })}
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Automations
-      </Button>
-
-      <PageHeader
-        title={job.name}
-        description={
-          job.description
-            ? job.description
-            : `${formatSchedule(job.schedule_expression)} · ${job.timezone}`
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={pendingAction !== null}
-              onClick={handleToggle}
-            >
-              {pendingAction === "toggle" ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : job.enabled ? (
-                <Pause className="h-4 w-4 mr-1" />
-              ) : (
-                <Play className="h-4 w-4 mr-1" />
-              )}
-              {job.enabled ? "Disable" : "Enable"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={pendingAction !== null || !sourceAgent}
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="h-4 w-4 mr-1" /> Edit
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={pendingAction !== null || !job.enabled}
-              onClick={handleFire}
-            >
-              {pendingAction === "fire" ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Zap className="h-4 w-4 mr-1" />
-              )}
-              Fire Now
-            </Button>
+    <main className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
+        <header className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={pendingAction !== null}
+            onClick={handleToggle}
+          >
+            {pendingAction === "toggle" ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : job.enabled ? (
+              <Pause className="h-4 w-4 mr-1" />
+            ) : (
+              <Play className="h-4 w-4 mr-1" />
+            )}
+            {job.enabled ? "Disable" : "Enable"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={pendingAction !== null || !sourceAgent}
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="h-4 w-4 mr-1" /> Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            disabled={pendingAction !== null || !job.enabled}
+            onClick={handleFire}
+          >
+            {pendingAction === "fire" ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-1" />
+            )}
+            Fire Now
+          </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
@@ -355,15 +344,12 @@ function ScheduledJobDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </div>
-        }
-      >
+        </header>
         {actionError && (
-          <p className="text-sm text-destructive">{actionError}</p>
+          <p className="shrink-0 text-sm text-destructive">{actionError}</p>
         )}
-      </PageHeader>
 
-      <Card>
+        <Card>
         <CardHeader>
           <CardTitle className="text-base">Details</CardTitle>
         </CardHeader>
@@ -433,6 +419,7 @@ function ScheduledJobDetailPage() {
           onSubmit={handleEditSubmit}
         />
       )}
-    </div>
+      </div>
+    </main>
   );
 }
