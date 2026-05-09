@@ -30,6 +30,6 @@ autopilot mode.
   because the root script references `prettier` and the repo does not expose a
   Prettier binary in `node_modules/.bin`.
 - **Verification note:** `pnpm lint` passed locally.
-- **Current PR:** Not opened yet.
-- **CI:** Not run yet.
+- **Current PR:** #1047 (`docs(computer): lock applet contract`).
+- **CI:** Pending on PR #1047.
 - **Blockers:** None.
