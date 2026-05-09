@@ -9,15 +9,20 @@ afterEach(() => {
 });
 
 describe("registerAppletHost", () => {
-  it("registers the host externals and inert applet API placeholder once", () => {
+  it("registers the host externals and live applet API factory once", () => {
     const registry = registerAppletHost();
 
     expect(globalThis.__THINKWORK_APPLET_HOST__).toBe(registry);
     expect(registry["@thinkwork/ui"]).toBeUndefined();
     expect(registry["@thinkwork/computer-stdlib"]).toBeUndefined();
     expect(registry["react/jsx-runtime"]).toBeUndefined();
-    expect(() => registry.useAppletAPI("app-1", "instance-1")).toThrow(
-      /INERT_NOT_WIRED/,
+    expect(registry.useAppletAPI("app-1", "instance-1")).toEqual(
+      expect.objectContaining({
+        useAppletState: expect.any(Function),
+        useAppletQuery: expect.any(Function),
+        useAppletMutation: expect.any(Function),
+        refresh: expect.any(Function),
+      }),
     );
   });
 

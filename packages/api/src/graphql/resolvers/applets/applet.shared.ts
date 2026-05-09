@@ -9,6 +9,7 @@ import {
   eq,
   lt,
   randomUUID,
+  sql,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import {
@@ -52,6 +53,31 @@ export interface SaveAppletPayload {
   validated: boolean;
   persisted: boolean;
   errors: Array<Record<string, unknown>>;
+}
+
+export interface SaveAppletStateInput {
+  appId: string;
+  instanceId: string;
+  key: string;
+  value: unknown;
+}
+
+interface AppletStateMetadata {
+  schemaVersion: 1;
+  kind: "computer_applet_state";
+  appId: string;
+  instanceId: string;
+  key: string;
+  value: unknown;
+}
+
+interface AppletStateArtifactRow {
+  id: string;
+  tenant_id: string;
+  thread_id?: string | null;
+  type: string;
+  metadata?: unknown;
+  updated_at: Date | string;
 }
 
 export async function loadApplet(args: {
@@ -323,6 +349,187 @@ async function readSource(artifact: AppletArtifactRow): Promise<string> {
       },
     });
   }
+}
+
+export async function loadAppletState(args: {
+  ctx: GraphQLContext;
+  appId: string;
+  instanceId: string;
+  key: string;
+}) {
+  const caller = await resolveCaller(args.ctx);
+  const applet = await loadAppletArtifactForState({
+    appId: args.appId,
+    caller,
+  });
+  const row = await findAppletStateArtifact({
+    tenantId: applet.tenant_id,
+    appId: args.appId,
+    instanceId: args.instanceId,
+    key: args.key,
+  });
+
+  return row ? toAppletState(row) : null;
+}
+
+export async function saveAppletStateInner(args: {
+  ctx: GraphQLContext;
+  input: SaveAppletStateInput;
+}) {
+  const caller = await resolveCaller(args.ctx);
+  const applet = await loadAppletArtifactForState({
+    appId: args.input.appId,
+    caller,
+  });
+  const existing = await findAppletStateArtifact({
+    tenantId: applet.tenant_id,
+    appId: args.input.appId,
+    instanceId: args.input.instanceId,
+    key: args.input.key,
+  });
+  const metadata: AppletStateMetadata = {
+    schemaVersion: 1,
+    kind: "computer_applet_state",
+    appId: args.input.appId,
+    instanceId: args.input.instanceId,
+    key: args.input.key,
+    value: args.input.value,
+  };
+  const now = new Date();
+
+  if (existing) {
+    const [updated] = await db
+      .update(artifacts)
+      .set({
+        title: appletStateTitle(args.input.key),
+        metadata,
+        updated_at: now,
+      })
+      .where(eq(artifacts.id, existing.id))
+      .returning();
+    return toAppletState(updated ?? { ...existing, metadata, updated_at: now });
+  }
+
+  const [inserted] = await db
+    .insert(artifacts)
+    .values({
+      tenant_id: applet.tenant_id,
+      agent_id: applet.agent_id ?? null,
+      thread_id: applet.thread_id ?? null,
+      title: appletStateTitle(args.input.key),
+      type: "applet_state",
+      status: "final",
+      content: null,
+      s3_key: null,
+      summary: null,
+      source_message_id: null,
+      metadata,
+      updated_at: now,
+    })
+    .returning();
+
+  return toAppletState(inserted);
+}
+
+async function loadAppletArtifactForState(args: {
+  appId: string;
+  caller: { tenantId: string | null; userId: string | null };
+}) {
+  assertStateIdentity(args.appId, "appId");
+  const [row] = await db
+    .select()
+    .from(artifacts)
+    .where(eq(artifacts.id, args.appId));
+  if (!row) {
+    throw new GraphQLError("Applet artifact not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  assertAppletArtifactAccess(row, args.caller);
+  return row;
+}
+
+async function findAppletStateArtifact(args: {
+  tenantId: string;
+  appId: string;
+  instanceId: string;
+  key: string;
+}): Promise<AppletStateArtifactRow | null> {
+  assertStateIdentity(args.instanceId, "instanceId");
+  assertStateIdentity(args.key, "key");
+
+  const identity = {
+    appId: args.appId,
+    instanceId: args.instanceId,
+    key: args.key,
+  };
+  const rows = await db
+    .select()
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.tenant_id, args.tenantId),
+        eq(artifacts.type, "applet_state"),
+        sql`${artifacts.metadata} @> ${JSON.stringify(identity)}::jsonb`,
+      ),
+    )
+    .limit(1);
+
+  return (
+    rows.find((row) => {
+      const metadata = parseAppletStateMetadata(row.metadata);
+      return (
+        metadata?.appId === args.appId &&
+        metadata.instanceId === args.instanceId &&
+        metadata.key === args.key
+      );
+    }) ?? null
+  );
+}
+
+function toAppletState(row: AppletStateArtifactRow) {
+  const metadata = parseAppletStateMetadata(row.metadata);
+  if (!metadata) {
+    throw new GraphQLError("Applet state artifact metadata is invalid", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return {
+    appId: metadata.appId,
+    instanceId: metadata.instanceId,
+    key: metadata.key,
+    value: metadata.value,
+    updatedAt: serializeDate(row.updated_at),
+  };
+}
+
+function parseAppletStateMetadata(
+  input: unknown,
+): AppletStateMetadata | null {
+  const metadata = parseJsonObject(input);
+  if (!metadata) return null;
+  if (metadata.kind !== "computer_applet_state") return null;
+  if (metadata.schemaVersion !== 1) return null;
+  if (typeof metadata.appId !== "string") return null;
+  if (typeof metadata.instanceId !== "string") return null;
+  if (typeof metadata.key !== "string") return null;
+  return metadata as unknown as AppletStateMetadata;
+}
+
+function appletStateTitle(key: string) {
+  return `Applet state: ${key}`;
+}
+
+function assertStateIdentity(value: string, field: string) {
+  if (!value || typeof value !== "string" || !value.trim()) {
+    throw new GraphQLError(`Applet state ${field} is required`, {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+}
+
+function serializeDate(value: Date | string) {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 async function loadExistingForWrite(args: {

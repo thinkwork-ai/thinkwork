@@ -299,36 +299,106 @@ describe("applet GraphQL resolvers", () => {
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
   });
 
-  it("keeps applet state resolvers inert for U9", async () => {
+  it("saves and loads applet state by appId, instanceId, and key", async () => {
     const { mutationResolvers, queryResolvers } = await import(
       "../graphql/resolvers/index.js"
     );
+    const appId = "33333333-3333-4333-8333-333333333333";
+    selectRows.push(appletRow({ id: appId, metadata: metadata({ appId }) }));
+
+    const saved = await mutationResolvers.saveAppletState(
+      null,
+      {
+        input: {
+          appId,
+          instanceId: "route-1",
+          key: "form",
+          value: { agenda: ["renewal"] },
+        },
+      },
+      userCtx(),
+    );
+
+    expect(saved).toMatchObject({
+      appId,
+      instanceId: "route-1",
+      key: "form",
+      value: { agenda: ["renewal"] },
+    });
+    expect(insertedRows[0]).toMatchObject({
+      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      thread_id: "11111111-1111-4111-8111-111111111111",
+      type: "applet_state",
+      status: "final",
+      metadata: expect.objectContaining({
+        kind: "computer_applet_state",
+        appId,
+        instanceId: "route-1",
+        key: "form",
+        value: { agenda: ["renewal"] },
+      }),
+    });
+
+    selectRows.push(insertedRows[0]);
 
     await expect(
       queryResolvers.appletState(
         null,
-        {
-          appId: "33333333-3333-4333-8333-333333333333",
+        { appId, instanceId: "route-1", key: "form" },
+        userCtx(),
+      ),
+    ).resolves.toMatchObject({
+      appId,
+      instanceId: "route-1",
+      key: "form",
+      value: { agenda: ["renewal"] },
+    });
+  });
+
+  it("updates existing applet state without colliding across instances", async () => {
+    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+    const appId = "33333333-3333-4333-8333-333333333333";
+    selectRows.push(
+      appletRow({ id: appId, metadata: metadata({ appId }) }),
+      appletStateRow({
+        appId,
+        instanceId: "route-1",
+        key: "form",
+        value: { agenda: ["old"] },
+      }),
+      appletStateRow({
+        appId,
+        instanceId: "route-2",
+        key: "form",
+        value: { agenda: ["other"] },
+      }),
+    );
+
+    const saved = await mutationResolvers.saveAppletState(
+      null,
+      {
+        input: {
+          appId,
           instanceId: "route-1",
           key: "form",
+          value: { agenda: ["new"] },
         },
-        userCtx(),
-      ),
-    ).rejects.toThrow("INERT_NOT_WIRED");
-    await expect(
-      mutationResolvers.saveAppletState(
-        null,
-        {
-          input: {
-            appId: "33333333-3333-4333-8333-333333333333",
-            instanceId: "route-1",
-            key: "form",
-            value: {},
-          },
-        },
-        userCtx(),
-      ),
-    ).rejects.toThrow("INERT_NOT_WIRED");
+      },
+      userCtx(),
+    );
+
+    expect(saved).toMatchObject({
+      appId,
+      instanceId: "route-1",
+      key: "form",
+      value: { agenda: ["new"] },
+    });
+    expect(updatedRows[0]).toMatchObject({
+      metadata: expect.objectContaining({
+        instanceId: "route-1",
+        value: { agenda: ["new"] },
+      }),
+    });
   });
 });
 
@@ -383,6 +453,42 @@ function appletRow(overrides: Record<string, unknown> = {}) {
     created_at: new Date("2026-05-09T12:00:00.000Z"),
     updated_at: new Date("2026-05-09T12:00:00.000Z"),
     ...overrides,
+  };
+}
+
+function appletStateRow({
+  appId,
+  instanceId,
+  key,
+  value,
+}: {
+  appId: string;
+  instanceId: string;
+  key: string;
+  value: unknown;
+}) {
+  return {
+    id: `${appId}-${instanceId}-${key}`,
+    tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    agent_id: "22222222-2222-4222-8222-222222222222",
+    thread_id: "11111111-1111-4111-8111-111111111111",
+    title: `Applet state: ${key}`,
+    type: "applet_state",
+    status: "final",
+    content: null,
+    s3_key: null,
+    summary: null,
+    source_message_id: null,
+    metadata: {
+      schemaVersion: 1,
+      kind: "computer_applet_state",
+      appId,
+      instanceId,
+      key,
+      value,
+    },
+    created_at: new Date("2026-05-09T12:00:00.000Z"),
+    updated_at: new Date("2026-05-09T12:00:00.000Z"),
   };
 }
 

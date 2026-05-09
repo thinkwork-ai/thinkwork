@@ -1,4 +1,5 @@
 import type { AppletAPI, ThinkworkAppletHost } from "@thinkwork/computer-stdlib";
+import { createHostAppletAPI } from "./host-applet-api";
 
 const REGISTRY_OWNER = Symbol.for("thinkwork.appletHostRegistry.owner");
 
@@ -57,14 +58,8 @@ export function registerAppletHost(): AppletHostRegistry {
     );
   }
 
-  const useAppletAPI = () => {
-    throw new Error(
-      "INERT_NOT_WIRED: globalThis.__THINKWORK_APPLET_HOST__.useAppletAPI is registered but U9 will activate it",
-    );
-  };
-
   const registry = {
-    useAppletAPI,
+    useAppletAPI: createHostAppletAPI,
     [REGISTRY_OWNER]: true,
   } as unknown as AppletHostRegistry;
 

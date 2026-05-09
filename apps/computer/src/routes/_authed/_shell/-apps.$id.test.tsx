@@ -75,12 +75,23 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.clearAllMocks();
 });
 
 describe("AppletRouteContent", () => {
   it("fetches, transforms, imports, and mounts a live applet", async () => {
-    const MountedApplet = () => <div>Mounted generated app</div>;
+    const MountedApplet = ({
+      appId,
+      instanceId,
+    }: {
+      appId: string;
+      instanceId: string;
+    }) => (
+      <div>
+        Mounted generated app {appId} {instanceId}
+      </div>
+    );
 
     render(
       <AppletRouteContent
@@ -89,7 +100,10 @@ describe("AppletRouteContent", () => {
       />,
     );
 
-    await screen.findByText("Mounted generated app");
+    await screen.findByText(/Mounted generated app/);
+    expect(
+      screen.getByText(/33333333-3333-4333-8333-333333333333/),
+    ).toBeTruthy();
 
     expect(useQuery).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -184,6 +198,7 @@ describe("AppletMount", () => {
     render(
       <AppletMount
         appId="app-1"
+        instanceId="instance-1"
         source="import lodash from 'lodash'"
         version={1}
       />,
@@ -204,6 +219,7 @@ describe("AppletMount", () => {
       render(
         <AppletMount
           appId="app-1"
+          instanceId="instance-1"
           source="export default function App() { return null; }"
           version={1}
           loadModule={async () => ({ default: BrokenApplet })}
