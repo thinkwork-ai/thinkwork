@@ -31,5 +31,5 @@ autopilot mode.
   Prettier binary in `node_modules/.bin`.
 - **Verification note:** `pnpm lint` passed locally.
 - **Current PR:** #1047 (`docs(computer): lock applet contract`).
-- **CI:** Pending on PR #1047.
+- **CI:** PR #1047 checks passed: CLA, lint, test, typecheck, verify.
 - **Blockers:** None.
