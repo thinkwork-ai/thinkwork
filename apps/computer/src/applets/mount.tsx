@@ -34,6 +34,7 @@ export interface AppletMountProps {
   source: string;
   version: number;
   loadModule?: AppletModuleLoader;
+  onHeaderActionChange?: (action: ReactNode | null) => void;
   // When true, hides the AppRefreshControl banner. Used for inline (in-thread)
   // embeds where the surrounding card already provides controls and chrome.
   hideRefreshControl?: boolean;
@@ -45,6 +46,7 @@ export function AppletMount({
   source,
   version,
   loadModule = defaultAppletModuleLoader,
+  onHeaderActionChange,
   hideRefreshControl = false,
 }: AppletMountProps) {
   const [state, setState] = useState<
@@ -108,6 +110,19 @@ export function AppletMount({
     };
   }, [appId, instanceId, loadModule, source, version]);
 
+  useEffect(() => {
+    if (!onHeaderActionChange) return;
+    if (state.status !== "ready" || !state.refresh) {
+      onHeaderActionChange(null);
+      return;
+    }
+
+    onHeaderActionChange(
+      <AppRefreshControl onRefresh={state.refresh} onData={setRefreshData} />,
+    );
+    return () => onHeaderActionChange(null);
+  }, [onHeaderActionChange, state]);
+
   if (state.status === "loading") {
     return <AppletLoading />;
   }
@@ -118,8 +133,8 @@ export function AppletMount({
 
   const MountedApplet = state.Component;
   return (
-    <div className="grid min-w-0 gap-4">
-      {state.refresh && !hideRefreshControl ? (
+    <div className="grid min-w-0">
+      {state.refresh && !hideRefreshControl && !onHeaderActionChange ? (
         <AppRefreshControl onRefresh={state.refresh} onData={setRefreshData} />
       ) : null}
       <AppletErrorBoundary resetKey={state.resetKey}>

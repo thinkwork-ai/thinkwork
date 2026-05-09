@@ -30,6 +30,10 @@ export interface PageHeaderActions {
    * The active tab is highlighted by AppTopBar based on the current pathname.
    */
   tabs?: { to: string; label: string }[];
+  /** Optional compact action controls rendered at the right side of AppTopBar. */
+  action?: ReactNode;
+  /** Stable key used to refresh the header when action controls appear/disappear. */
+  actionKey?: string;
 }
 
 interface PageHeaderContextValue {
@@ -70,7 +74,7 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const tabsKey =
     actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const key = actions
-    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}`
+    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${actions.actionKey ?? ""}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {

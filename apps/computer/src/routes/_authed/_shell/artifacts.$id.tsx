@@ -1,5 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { RefreshCw } from "lucide-react";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
@@ -55,8 +61,17 @@ export function AppletRouteContent({
     version: number;
   } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [headerAction, setHeaderAction] = useState<ReactNode>(null);
+  const handleHeaderActionChange = useCallback((action: ReactNode | null) => {
+    setHeaderAction(action);
+  }, []);
 
-  usePageHeaderActions({ title, backHref: "/artifacts" });
+  usePageHeaderActions({
+    title,
+    backHref: "/artifacts",
+    action: headerAction,
+    actionKey: headerAction ? "artifact-actions" : "",
+  });
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -67,6 +82,7 @@ export function AppletRouteContent({
 
   useEffect(() => {
     if (!source) return;
+    setHeaderAction(null);
     setMountedSnapshot((current) => {
       if (current?.appId === appId) return current;
       return {
@@ -143,6 +159,7 @@ export function AppletRouteContent({
             source={mountedSnapshot.source}
             version={mountedSnapshot.version}
             loadModule={loadModule}
+            onHeaderActionChange={handleHeaderActionChange}
           />
         ) : (
           <AppletLoading />

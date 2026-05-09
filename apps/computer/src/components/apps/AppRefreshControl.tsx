@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
+import { Ellipsis, Loader2, RefreshCw } from "lucide-react";
 import {
-  RefreshBar,
-  type AppletRefreshResult,
-} from "@thinkwork/computer-stdlib";
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@thinkwork/ui";
+import type { AppletRefreshResult } from "@thinkwork/computer-stdlib";
 
 type AppRefreshState =
   | "available"
@@ -28,6 +35,8 @@ export function AppRefreshControl({
     () => partialWarning(sourceStatuses, refreshState),
     [refreshState, sourceStatuses],
   );
+  const isRefreshing = refreshState === "running";
+  const statusText = refreshStatusText(refreshState, error ?? warning);
 
   async function handleRefresh() {
     setRefreshState("running");
@@ -51,15 +60,51 @@ export function AppRefreshControl({
   }
 
   return (
-    <RefreshBar
-      title="Refresh app"
-      description="Refresh runs this app's saved deterministic update function. It does not ask Computer to reinterpret the request."
-      refreshState={refreshState}
-      sourceStatuses={sourceStatuses}
-      error={error ?? warning}
-      onRefresh={handleRefresh}
-    />
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Artifact actions"
+          title="Artifact actions"
+          className="text-muted-foreground"
+        >
+          <Ellipsis className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          {statusText}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={isRefreshing} onClick={handleRefresh}>
+          {isRefreshing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+          Refresh
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+}
+
+function refreshStatusText(state: AppRefreshState, message: string | null) {
+  if (message) return message;
+  switch (state) {
+    case "running":
+      return "Refreshing...";
+    case "succeeded":
+      return "Refresh completed.";
+    case "partial":
+      return "Refresh partially completed.";
+    case "failed":
+      return "Refresh failed.";
+    default:
+      return "Refresh available.";
+  }
 }
 
 function refreshStateFromStatuses(

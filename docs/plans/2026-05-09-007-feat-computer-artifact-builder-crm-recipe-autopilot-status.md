@@ -260,3 +260,18 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   for thread artifacts, full artifact views, web previews, sandboxed code
   previews, JSX previews, thinking/tool traces, and generated-artifact error
   states unless a concrete security/runtime blocker is found.
+- **Urgent viewer cleanup follow-up:** Started branch
+  `codex/artifact-actions-dropdown` from latest `origin/main` to remove the
+  host-level refresh panel from artifact bodies. Refresh is now exposed only as
+  a compact `...` top-bar actions menu when the mounted applet exports
+  `refresh()`. The Artifact Builder CRM recipe now also avoids recommending
+  in-artifact `RefreshBar` UI because the host owns refresh actions. Local
+  verification passed on
+  `http://localhost:5174/artifacts/41f5f12e-db34-4afe-adaf-bce0b73f55a9`: the
+  Austin Map artifact renders immediately without the old "Refresh app" block,
+  and the menu exposes a single Refresh action.
+- **Verification note:** `pnpm --filter @thinkwork/computer typecheck`,
+  `pnpm --filter @thinkwork/computer test`, focused artifact/AppRefreshControl
+  Vitest coverage, workspace-defaults verification, and `git diff --check`
+  passed locally. The root `pnpm format:check ...` script could not run because
+  `prettier` is not installed in this workspace checkout.
