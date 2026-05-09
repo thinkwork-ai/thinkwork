@@ -608,13 +608,7 @@ export async function recordThreadTurnResponse(input: {
     threadId: payload.threadId,
     messageId: payload.messageId,
   });
-  const content = input.content.trim();
-  if (!content) {
-    throw new ComputerTaskDelegationError(
-      "Computer thread turn response content is required",
-      400,
-    );
-  }
+  const content = input.content;
 
   const preview =
     content.length > 240 ? `${content.slice(0, 237)}...` : content;

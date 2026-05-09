@@ -214,7 +214,7 @@ async function route(
         tenantId,
         computerId,
         taskId: validUuid(threadTurnResponseMatch[1], "taskId"),
-        content: requiredString(body.content, "content"),
+        content: bodyString(body.content, "content"),
         model: optionalString(body.model),
         usage: body.usage,
       }),
@@ -277,6 +277,13 @@ function requiredString(value: unknown, name: string): string {
     throw new BadRequestError(`${name}: required`);
   }
   return value.trim();
+}
+
+function bodyString(value: unknown, name: string): string {
+  if (typeof value !== "string") {
+    throw new BadRequestError(`${name}: required`);
+  }
+  return value;
 }
 
 function optionalString(value: unknown): string | null {

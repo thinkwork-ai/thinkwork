@@ -285,6 +285,8 @@ export async function invokeChatAgent(payload: {
   agentId: string;
   userMessage: string;
   messageId: string;
+  computerId?: string;
+  computerTaskId?: string;
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();

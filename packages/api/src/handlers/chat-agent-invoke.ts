@@ -158,6 +158,8 @@ interface InvokeEvent {
   agentId: string;
   userMessage: string;
   messageId?: string;
+  computerId?: string;
+  computerTaskId?: string;
 }
 
 type ChatInvokeIdentitySource =
@@ -544,6 +546,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
       thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
       appsync_endpoint: APPSYNC_ENDPOINT || undefined,
       appsync_api_key: APPSYNC_API_KEY || undefined,
+      computer_id: event.computerId || undefined,
+      computer_task_id: event.computerTaskId || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: runtimeConfig.webSearchConfig,
       send_email_config: runtimeConfig.sendEmailConfig
@@ -943,21 +947,28 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const toolInvocations = (invokeResult.tool_invocations ||
       (invokeResult.response as Record<string, unknown>)?.tool_invocations ||
       []) as Array<Record<string, unknown>>;
+    const computerThreadResponse = (invokeResult.computer_thread_response ||
+      (invokeResult.response as Record<string, unknown>)
+        ?.computer_thread_response) as
+      | { responseMessageId?: string; threadId?: string; messageId?: string }
+      | undefined;
 
     // 3. Insert assistant message into DB (with GenUI tool results if present)
-    const assistantMsg = await insertAssistantMessage(
-      threadId,
-      tenantId,
-      agentId,
-      displayResponse,
-      toolInvocations,
-    );
+    const assistantMsg = computerThreadResponse?.responseMessageId
+      ? { id: computerThreadResponse.responseMessageId }
+      : await insertAssistantMessage(
+          threadId,
+          tenantId,
+          agentId,
+          displayResponse,
+          toolInvocations,
+        );
 
     // 3a. Link orphan artifacts created during this turn to the thread + message.
     // The Strands runtime doesn't forward thread_id to MCP tools, so artifacts
     // created via create_artifact lack thread_id and source_message_id.
     // Scope: only artifacts by this agent, in this tenant, created during this turn window.
-    if (assistantMsg && turnId) {
+    if (assistantMsg && turnId && !computerThreadResponse?.responseMessageId) {
       try {
         const { artifacts } = await import("@thinkwork/database-pg/schema");
         const { isNull, gte } = await import("drizzle-orm");
@@ -985,31 +996,33 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     // 3b. Bump thread timestamps — last_turn_completed_at drives inbox sorting
-    try {
-      const { threads } = await import("@thinkwork/database-pg/schema");
-      await db
-        .update(threads)
-        .set({
-          updated_at: new Date(),
-          last_turn_completed_at: new Date(),
-          last_response_preview:
-            displayResponse
-              .replace(/[#*_`]/g, "")
-              .trim()
-              .slice(0, 200) || null,
-        })
-        .where(eq(threads.id, threadId));
-    } catch (err) {
-      console.error(
-        `[chat-agent-invoke] Failed to update thread updated_at:`,
-        err,
-      );
+    if (!computerThreadResponse?.responseMessageId) {
+      try {
+        const { threads } = await import("@thinkwork/database-pg/schema");
+        await db
+          .update(threads)
+          .set({
+            updated_at: new Date(),
+            last_turn_completed_at: new Date(),
+            last_response_preview:
+              displayResponse
+                .replace(/[#*_`]/g, "")
+                .trim()
+                .slice(0, 200) || null,
+          })
+          .where(eq(threads.id, threadId));
+      } catch (err) {
+        console.error(
+          `[chat-agent-invoke] Failed to update thread updated_at:`,
+          err,
+        );
+      }
     }
 
     // PRD-22: Signal processing removed — agents use thread-management tools directly
 
     // 4. Notify subscribers via AppSync
-    if (assistantMsg) {
+    if (assistantMsg && !computerThreadResponse?.responseMessageId) {
       await notifyNewMessage({
         messageId: assistantMsg.id,
         threadId,
@@ -1022,29 +1035,33 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     // 4b. Notify thread update so the home screen list re-sorts
-    try {
-      const { notifyThreadUpdate } = await import("../graphql/notify.js");
-      notifyThreadUpdate({
-        threadId,
-        tenantId,
-        status: "in_progress",
-        title: "",
-      }).catch(() => {});
-    } catch {}
+    if (!computerThreadResponse?.responseMessageId) {
+      try {
+        const { notifyThreadUpdate } = await import("../graphql/notify.js");
+        notifyThreadUpdate({
+          threadId,
+          tenantId,
+          status: "in_progress",
+          title: "",
+        }).catch(() => {});
+      } catch {}
+    }
 
     // 4c. Send push notification to user devices
-    try {
-      const { sendTurnCompletedPush } =
-        await import("../lib/push-notifications.js");
-      await sendTurnCompletedPush({
-        threadId,
-        tenantId,
-        agentId,
-        title: agent.name || "Agent",
-        body: responseText.replace(/[#*_`]/g, "").trim(),
-      });
-    } catch (err) {
-      console.error("[chat-agent-invoke] Push notification failed:", err);
+    if (!computerThreadResponse?.responseMessageId) {
+      try {
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
+        await sendTurnCompletedPush({
+          threadId,
+          tenantId,
+          agentId,
+          title: agent.name || "Agent",
+          body: responseText.replace(/[#*_`]/g, "").trim(),
+        });
+      } catch (err) {
+        console.error("[chat-agent-invoke] Push notification failed:", err);
+      }
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);

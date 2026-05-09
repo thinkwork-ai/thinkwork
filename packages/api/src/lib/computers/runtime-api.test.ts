@@ -644,6 +644,63 @@ describe("Computer runtime API thread turn execution", () => {
     );
   });
 
+  it("records empty native Computer responses so turn completion stays durable", async () => {
+    mocks.insertRows = [{ id: "assistant-message-empty" }];
+    mocks.selectQueue = [
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+            source: "chat_message",
+          },
+        },
+      ],
+      [{ id: "thread-1", title: "Hello", status: "in_progress" }],
+      [{ id: "message-1", role: "user", content: "hello computer" }],
+      [
+        {
+          id: "computer-1",
+          tenant_id: "tenant-1",
+          owner_user_id: "user-1",
+          migrated_from_agent_id: "agent-1",
+        },
+      ],
+      [
+        {
+          id: "task-1",
+          task_type: "thread_turn",
+          input: {
+            threadId: "thread-1",
+            messageId: "message-1",
+            source: "chat_message",
+          },
+        },
+      ],
+    ];
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "",
+    });
+
+    expect(result).toMatchObject({
+      responded: true,
+      responseMessageId: "assistant-message-empty",
+    });
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        content: "",
+        sender_type: "computer",
+      }),
+    );
+  });
+
   it("rejects legacy managed-agent Thread turn execution", async () => {
     mocks.selectQueue = [
       [
