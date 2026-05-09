@@ -1,23 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CustomizeTabBody } from "@/components/customize/CustomizeTabBody";
-import { CONNECTORS_FIXTURE } from "@/components/customize/customize-fixtures";
+import { useConnectorItems } from "@/components/customize/use-customize-data";
 
 export const Route = createFileRoute("/_authed/_shell/customize/connectors")({
   component: ConnectorsTab,
 });
 
-/**
- * v1 renders a fixture catalog. U4 swaps the fixture for real urql
- * queries against tenant_connector_catalog + tenant_mcp_servers + the
- * caller's connector / agent_mcp_server bindings.
- */
 function ConnectorsTab() {
+  const { items, fetching, error } = useConnectorItems();
   return (
     <CustomizeTabBody
       activeTab="/customize/connectors"
-      items={CONNECTORS_FIXTURE}
+      items={items}
       searchPlaceholder="Search connectors…"
-      emptyMessage="No connectors match your filters."
+      emptyMessage={
+        error
+          ? `Couldn't load connectors: ${error.message}`
+          : fetching
+            ? "Loading connectors…"
+            : "No connectors match your filters."
+      }
     />
   );
 }

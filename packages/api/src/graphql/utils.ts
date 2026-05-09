@@ -103,6 +103,12 @@ import {
   resolvedCapabilityManifests,
   tenantMcpContextTools,
   tenantCredentials,
+  // Customize page (apps/computer)
+  connectors,
+  skillCatalog,
+  tenantSkills,
+  tenantConnectorCatalog,
+  tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -184,6 +190,11 @@ export {
   resolvedCapabilityManifests,
   tenantMcpContextTools,
   tenantCredentials,
+  connectors,
+  skillCatalog,
+  tenantSkills,
+  tenantConnectorCatalog,
+  tenantWorkflowCatalog,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

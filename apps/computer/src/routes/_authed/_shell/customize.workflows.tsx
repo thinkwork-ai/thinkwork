@@ -1,23 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CustomizeTabBody } from "@/components/customize/CustomizeTabBody";
-import { WORKFLOWS_FIXTURE } from "@/components/customize/customize-fixtures";
+import { useWorkflowItems } from "@/components/customize/use-customize-data";
 
 export const Route = createFileRoute("/_authed/_shell/customize/workflows")({
   component: WorkflowsTab,
 });
 
-/**
- * v1 renders a fixture catalog. U6 swaps the fixture for real urql
- * queries against tenant_workflow_catalog + the caller's routine
- * bindings.
- */
 function WorkflowsTab() {
+  const { items, fetching, error } = useWorkflowItems();
   return (
     <CustomizeTabBody
       activeTab="/customize/workflows"
-      items={WORKFLOWS_FIXTURE}
+      items={items}
       searchPlaceholder="Search workflows…"
-      emptyMessage="No workflows match your filters."
+      emptyMessage={
+        error
+          ? `Couldn't load workflows: ${error.message}`
+          : fetching
+            ? "Loading workflows…"
+            : "No workflows match your filters."
+      }
     />
   );
 }

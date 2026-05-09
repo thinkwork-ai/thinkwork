@@ -540,3 +540,63 @@ export const ComputerKnowledgeBaseDetailQuery = gql`
     }
   }
 `;
+
+// ─── Customize page (apps/computer Customize) ─────────────────────────────
+
+export const ConnectorCatalogQuery = gql`
+  query ConnectorCatalog {
+    connectorCatalog {
+      id
+      slug
+      kind
+      displayName
+      description
+      category
+      icon
+      status
+      enabled
+    }
+  }
+`;
+
+export const SkillCatalogQuery = gql`
+  query SkillCatalog {
+    skillCatalog {
+      id
+      skillId
+      displayName
+      description
+      category
+      icon
+      source
+      enabled
+    }
+  }
+`;
+
+export const WorkflowCatalogQuery = gql`
+  query WorkflowCatalog {
+    workflowCatalog {
+      id
+      slug
+      displayName
+      description
+      category
+      icon
+      defaultSchedule
+      status
+      enabled
+    }
+  }
+`;
+
+export const CustomizeBindingsQuery = gql`
+  query CustomizeBindings {
+    customizeBindings {
+      computerId
+      connectedConnectorSlugs
+      connectedSkillIds
+      connectedWorkflowSlugs
+    }
+  }
+`;

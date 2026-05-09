@@ -1,22 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CustomizeTabBody } from "@/components/customize/CustomizeTabBody";
-import { SKILLS_FIXTURE } from "@/components/customize/customize-fixtures";
+import { useSkillItems } from "@/components/customize/use-customize-data";
 
 export const Route = createFileRoute("/_authed/_shell/customize/skills")({
   component: SkillsTab,
 });
 
-/**
- * v1 renders a fixture catalog. U5 swaps the fixture for real urql
- * queries against tenant_skills + the caller's agent_skills bindings.
- */
 function SkillsTab() {
+  const { items, fetching, error } = useSkillItems();
   return (
     <CustomizeTabBody
       activeTab="/customize/skills"
-      items={SKILLS_FIXTURE}
+      items={items}
       searchPlaceholder="Search skills…"
-      emptyMessage="No skills match your filters."
+      emptyMessage={
+        error
+          ? `Couldn't load skills: ${error.message}`
+          : fetching
+            ? "Loading skills…"
+            : "No skills match your filters."
+      }
     />
   );
 }
