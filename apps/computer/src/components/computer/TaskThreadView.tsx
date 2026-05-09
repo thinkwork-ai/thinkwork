@@ -88,9 +88,7 @@ export function TaskThreadView({
   const showProcessingShimmer =
     !showStreamingBuffer &&
     isAwaitingAssistantResponse(thread, visibleMessages);
-  const artifactCount = thread.messages.filter(
-    (message) => message.durableArtifact,
-  ).length;
+  const sourceCount = countThreadSources(visibleMessages, thread.turns);
   const latestUserIndex = findLastIndex(
     visibleMessages,
     (message) => message.role.toUpperCase() === "USER",
@@ -116,7 +114,7 @@ export function TaskThreadView({
               <span className="text-lg leading-none">...</span>
               <span className="sr-only">More</span>
             </Button>
-            <SourceCountButton count={artifactCount ? 4 : 0} />
+            <SourceCountButton count={sourceCount} />
             <UsageButton costSummary={thread.costSummary} />
           </div>
         </div>
@@ -577,6 +575,85 @@ function actionRowsForTurn(usage: Record<string, unknown>) {
   }
 
   return rows;
+}
+
+function countThreadSources(
+  messages: TaskThreadMessage[],
+  turns: TaskThreadTurn[] = [],
+) {
+  const sources = new Set<string>();
+
+  for (const message of messages) {
+    addSourceValues(sources, parseArray(message.toolResults), "tool-result");
+
+    const metadata = parseRecord(message.metadata);
+    addSourceValues(sources, parseArray(metadata.sources), "source");
+    addSourceValues(sources, parseArray(metadata.citations), "citation");
+    addSourceValues(sources, parseArray(metadata.sourceIds), "source-id");
+    addSourceValues(sources, parseArray(metadata.source_ids), "source-id");
+
+    const artifactMetadata = parseRecord(message.durableArtifact?.metadata);
+    addSourceValues(
+      sources,
+      parseArray(artifactMetadata.sourceStatuses),
+      "artifact-source",
+    );
+    addSourceValues(
+      sources,
+      parseArray(artifactMetadata.sources),
+      "artifact-source",
+    );
+  }
+
+  for (const turn of turns) {
+    const usage = parseRecord(turn.usageJson);
+    for (const invocation of parseArray(usage.tool_invocations)) {
+      const record = parseRecord(invocation);
+      const name =
+        stringValue(record.tool_name) ||
+        stringValue(record.toolName) ||
+        stringValue(record.name) ||
+        "";
+      if (toolKind(name) === "source") {
+        addSourceValues(sources, [record], "turn-source");
+      }
+    }
+
+    for (const tool of parseArray(usage.tools_called)) {
+      if (typeof tool === "string" && toolKind(tool) === "source") {
+        sources.add(`tool:${tool}`);
+      }
+    }
+  }
+
+  return sources.size;
+}
+
+function addSourceValues(
+  target: Set<string>,
+  values: unknown[],
+  prefix: string,
+) {
+  for (const value of values) {
+    const key = sourceKey(value);
+    if (key) target.add(`${prefix}:${key}`);
+  }
+}
+
+function sourceKey(value: unknown) {
+  if (typeof value === "string") return value.trim() || null;
+  const record = parseRecord(value);
+  return (
+    stringValue(record.id) ||
+    stringValue(record.url) ||
+    stringValue(record.href) ||
+    stringValue(record.provider) ||
+    stringValue(record.name) ||
+    stringValue(record.title) ||
+    stringValue(record.tool_name) ||
+    stringValue(record.toolName) ||
+    (Object.keys(record).length ? JSON.stringify(record) : null)
+  );
 }
 
 function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
