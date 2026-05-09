@@ -1,9 +1,15 @@
-import { Client, cacheExchange, fetchExchange, subscriptionExchange } from "@urql/core";
+import {
+  Client,
+  cacheExchange,
+  fetchExchange,
+  subscriptionExchange,
+} from "@urql/core";
 
 // HTTP endpoint for queries/mutations (API Gateway). apps/computer Phase 1
 // AppSync carries the subscription-only realtime schema.
 const GRAPHQL_HTTP_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || "";
-const GRAPHQL_WS_URL = import.meta.env.VITE_GRAPHQL_URL || "";
+const GRAPHQL_APPSYNC_URL = import.meta.env.VITE_GRAPHQL_URL || "";
+const GRAPHQL_WS_URL = import.meta.env.VITE_GRAPHQL_WS_URL || "";
 const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";
 
 // Token provider — called on every request so Cognito can refresh expired tokens.
@@ -20,7 +26,9 @@ export function setGraphqlTenantId(tenantId: string | null) {
   currentTenantId = tenantId;
 }
 
-export function setTokenProvider(provider: (() => Promise<string | null>) | null) {
+export function setTokenProvider(
+  provider: (() => Promise<string | null>) | null,
+) {
   tokenProvider = provider;
 }
 
@@ -30,13 +38,18 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startTokenRefresh() {
   if (refreshTimer) return;
-  refreshTimer = setInterval(async () => {
-    if (!tokenProvider) return;
-    try {
-      const fresh = await tokenProvider();
-      if (fresh) cachedToken = fresh;
-    } catch { /* best-effort */ }
-  }, 5 * 60 * 1000); // every 5 minutes
+  refreshTimer = setInterval(
+    async () => {
+      if (!tokenProvider) return;
+      try {
+        const fresh = await tokenProvider();
+        if (fresh) cachedToken = fresh;
+      } catch {
+        /* best-effort */
+      }
+    },
+    5 * 60 * 1000,
+  ); // every 5 minutes
 }
 
 export function stopTokenRefresh() {
@@ -68,30 +81,63 @@ function isExpiredJwt(token: string): boolean {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
     const decoded = JSON.parse(atob(padded)) as { exp?: number };
-    return typeof decoded.exp === "number" && decoded.exp * 1000 <= Date.now() + 30_000;
+    return (
+      typeof decoded.exp === "number" &&
+      decoded.exp * 1000 <= Date.now() + 30_000
+    );
   } catch {
     return false;
   }
 }
 
-function getAppSyncHost(): string {
-  if (!GRAPHQL_WS_URL) return "";
-  return new URL(GRAPHQL_WS_URL).host;
+export function buildAppSyncAuthHost(
+  graphqlUrl = GRAPHQL_APPSYNC_URL,
+  realtimeUrl = GRAPHQL_WS_URL,
+): string {
+  const sourceUrl =
+    graphqlUrl ||
+    realtimeUrl
+      .replace("appsync-realtime-api", "appsync-api")
+      .replace(/^wss:/, "https:")
+      .replace(/^ws:/, "http:");
+  if (!sourceUrl) return "";
+  return new URL(sourceUrl).host;
 }
 
-function buildRealtimeUrl(): string {
-  const host = getAppSyncHost();
-  const realtimeHost = host.replace("appsync-api", "appsync-realtime-api");
-  if (!host || !realtimeHost || !GRAPHQL_API_KEY) return "";
+export function buildAppSyncRealtimeUrl(
+  graphqlUrl = GRAPHQL_APPSYNC_URL,
+  realtimeUrl = GRAPHQL_WS_URL,
+  apiKey = GRAPHQL_API_KEY,
+): string {
+  const host = buildAppSyncAuthHost(graphqlUrl, realtimeUrl);
+  const websocketUrl = realtimeUrl
+    ? normalizeWebSocketUrl(realtimeUrl)
+    : deriveRealtimeUrl(graphqlUrl);
+  if (!host || !websocketUrl || !apiKey) return "";
 
   const header = btoa(
     JSON.stringify({
       host,
-      "x-api-key": GRAPHQL_API_KEY,
+      "x-api-key": apiKey,
     }),
   );
 
-  return `wss://${realtimeHost}/graphql?header=${encodeURIComponent(header)}&payload=e30=`;
+  return `${websocketUrl}?header=${encodeURIComponent(header)}&payload=e30=`;
+}
+
+function normalizeWebSocketUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol === "https:") url.protocol = "wss:";
+  if (url.protocol === "http:") url.protocol = "ws:";
+  return `${url.protocol}//${url.host}${url.pathname || "/graphql"}`;
+}
+
+function deriveRealtimeUrl(graphqlUrl: string): string {
+  if (!graphqlUrl) return "";
+  const url = new URL(graphqlUrl);
+  url.protocol = url.protocol === "http:" ? "ws:" : "wss:";
+  url.host = url.host.replace("appsync-api", "appsync-realtime-api");
+  return `${url.protocol}//${url.host}${url.pathname || "/graphql"}`;
 }
 
 type Sink<T = unknown> = {
@@ -112,7 +158,7 @@ class AppSyncSubscriptionClient {
   private kaTimer: ReturnType<typeof setTimeout> | null = null;
 
   connect() {
-    const url = buildRealtimeUrl();
+    const url = buildAppSyncRealtimeUrl();
     if (!url) return;
 
     try {
@@ -191,10 +237,14 @@ class AppSyncSubscriptionClient {
     }, 3000);
   }
 
-  private sendStart(id: string, query: string, variables: Record<string, unknown>) {
+  private sendStart(
+    id: string,
+    query: string,
+    variables: Record<string, unknown>,
+  ) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    const host = getAppSyncHost();
+    const host = buildAppSyncAuthHost();
     this.ws.send(
       JSON.stringify({
         id,
@@ -231,10 +281,14 @@ class AppSyncSubscriptionClient {
   }
 }
 
-const appSyncClient = GRAPHQL_WS_URL ? new AppSyncSubscriptionClient() : null;
+const appSyncClient = buildAppSyncRealtimeUrl()
+  ? new AppSyncSubscriptionClient()
+  : null;
 
 export const graphqlClient = new Client({
-  url: GRAPHQL_HTTP_URL || "https://placeholder.api.us-east-1.amazonaws.com/graphql",
+  url:
+    GRAPHQL_HTTP_URL ||
+    "https://placeholder.api.us-east-1.amazonaws.com/graphql",
   exchanges: [
     cacheExchange,
     fetchExchange,
@@ -243,7 +297,10 @@ export const graphqlClient = new Client({
           subscriptionExchange({
             forwardSubscription(request) {
               const query = request.query || "";
-              const variables = (request.variables || {}) as Record<string, unknown>;
+              const variables = (request.variables || {}) as Record<
+                string,
+                unknown
+              >;
               return {
                 subscribe(sink) {
                   const unsubscribe = appSyncClient.subscribe(

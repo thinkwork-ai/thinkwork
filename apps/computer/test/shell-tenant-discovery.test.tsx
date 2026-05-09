@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NoTenantAssigned } from "../src/components/NoTenantAssigned";
 
@@ -33,9 +33,8 @@ vi.mock("../src/lib/graphql-client", () => ({
 }));
 
 async function renderTenantProbe() {
-  const { TenantProvider, useTenant } = await import(
-    "../src/context/TenantContext"
-  );
+  const { TenantProvider, useTenant } =
+    await import("../src/context/TenantContext");
 
   function Probe() {
     const tenant = useTenant();
@@ -113,7 +112,9 @@ describe("apps/computer tenant discovery", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/tenants/tenant-A", {
       extraHeaders: { "x-tenant-id": "tenant-A" },
     });
-    expect(setGraphqlTenantIdMock).toHaveBeenCalledWith("tenant-A");
+    await waitFor(() =>
+      expect(setGraphqlTenantIdMock).toHaveBeenCalledWith("tenant-A"),
+    );
   });
 
   it("renders the no-tenant surface instead of bootstrapping when discovery finds nothing", async () => {
@@ -128,11 +129,15 @@ describe("apps/computer tenant discovery", () => {
 
     await renderTenantProbe();
 
-    expect(await screen.findByRole("heading", { name: "No tenant assigned" }))
-      .toBeTruthy();
-    expect(screen.getByText(/Ask your tenant operator to invite you/))
-      .toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "No tenant assigned" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Ask your tenant operator to invite you/),
+    ).toBeTruthy();
     expect(apiFetchMock).not.toHaveBeenCalled();
-    expect(setGraphqlTenantIdMock).not.toHaveBeenCalledWith("tenant-A");
+    expect(
+      setGraphqlTenantIdMock.mock.calls.map(([tenantId]) => tenantId),
+    ).not.toContain("tenant-A");
   });
 });
