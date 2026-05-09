@@ -21,7 +21,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python ag
 
 ## Tooling ground rules
 
-- **pnpm ≥ 9, Node ≥ 20. Never use `npm` inside this workspace** — scripts assume pnpm's workspace protocol. `npx` is fine for one-off CLI tools.
+- **pnpm ≥ 9, Node ≥ 22. Never use `npm` inside this workspace** — scripts assume pnpm's workspace protocol. `npx` is fine for one-off CLI tools. (Node 22 became the floor when `streamdown` landed; its transitive `mermaid → langium → chevrotain@12` chain enforces `engines.node >= 22`.)
 - **Python ≥ 3.11 with `uv`** for the Strands runtime (`pyproject.toml` declares `packages/agentcore-strands` as a uv workspace member). Ruff is the linter (line-length 100, target `py311`).
 - **Terraform ≥ 1.5 (or OpenTofu ≥ 1.6)**. Modules are registry-shaped; most real changes happen under `terraform/modules/`.
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`).
