@@ -6,7 +6,7 @@ import { FIXTURE_APP_ARTIFACTS } from "@/lib/app-artifacts";
 afterEach(cleanup);
 
 describe("AppPreviewCard", () => {
-  it("renders a generated app preview and routes to split-view detail", () => {
+  it("renders a generated app preview and routes to applet detail", () => {
     render(<AppPreviewCard artifact={FIXTURE_APP_ARTIFACTS[0]} />);
 
     expect(screen.getByText("LastMile CRM pipeline risk")).toBeTruthy();

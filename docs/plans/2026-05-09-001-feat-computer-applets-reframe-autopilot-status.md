@@ -14,6 +14,48 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U8:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u8-live-route` on branch
+  `codex/computer-applets-u8-live-route` from `origin/main` after U7 merged.
+- **Progress:** Rebound the apps gallery and `/apps/$id` route toward the live
+  applet GraphQL surface. The detail route now fetches `applet(appId)`,
+  transforms source through the U5 applet transform path, lazy-loads host
+  externals, dynamic-imports the compiled module, and mounts it inside the
+  single bounded applet canvas.
+- **Decision:** The mounted applet snapshots the source/version at first load
+  and shows a "newer version available" reload affordance when polling observes
+  a higher metadata version; it does not auto-remount over the user's active
+  applet.
+- **Verification note:** `pnpm install --frozen-lockfile`, focused app route
+  and shell tests, `pnpm --filter @thinkwork/computer test`, `pnpm --filter
+  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer build`,
+  `git diff --check`, `pnpm lint`, `pnpm -r --if-present typecheck`, and
+  `pnpm -r --if-present test` passed locally. Build still emits the existing
+  shared UI sourcemap/chunk-size warnings and expected host-registry
+  dynamic-import warnings.
+- **Smoke note:** The apps/computer dev server returned HTTP 200 for
+  `/apps/33333333-3333-4333-8333-333333333333` on port 5177. Browser OAuth
+  verification must use `localhost:5174` (not `127.0.0.1`) because the Cognito
+  callback allowlist is hostname/port sensitive; port 5174 was already occupied
+  by another local dev worktree, so U8 did not take it over.
+- **Rebase note:** Rebased U8 on fresh `origin/main`, refreshed worktree
+  dependencies with `pnpm install --frozen-lockfile`, then reran the applet
+  route test, `pnpm --filter @thinkwork/computer test` (34 files, 109 tests),
+  `pnpm --filter @thinkwork/computer typecheck`, `pnpm --filter
+  @thinkwork/computer build`, `pnpm lint`, `pnpm -r --if-present typecheck`,
+  and `git diff --check`; all passed. Build warnings remain the existing
+  sourcemap/chunk-size and host-registry dynamic-import warnings.
+- **Rebase note:** Main moved again after PR #1060 opened. Resolved the
+  GraphQL query test conflict by keeping both the new Brain assertions from
+  main and the U8 applet query assertions, refreshed dependencies, and reran
+  the applet route/query tests, `pnpm --filter @thinkwork/computer typecheck`,
+  and `git diff --check`; all passed.
+- **Current PR:** #1060 (`feat(computer): mount live applets`).
+- **CI:** PR #1060 checks passed: CLA, lint, test, typecheck, verify.
+- **Merged U7:** PR #1057 (`feat(computer): activate Strands applet tools`)
+  was squash-merged to `main` at
+  `c48a913291252dc6e94062aab3a79fdfadeed25f`; remote/local branches and the
+  U7 worktree were deleted.
 - **Started U7:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u7-strands-live` on branch
   `codex/computer-applets-u7-strands-live` from `origin/main` after U6 merged.

@@ -1,44 +1,27 @@
+import type { ReactNode } from "react";
 import { AppCanvasPanel } from "@/components/apps/AppCanvasPanel";
 import { AppTopBar } from "@/components/apps/AppTopBar";
-import type {
-  DashboardArtifactManifest,
-  DashboardArtifactRefreshTask,
-} from "@/lib/app-artifacts";
 
 interface AppArtifactSplitShellProps {
-  manifest: DashboardArtifactManifest;
-  latestRefreshTask?: DashboardArtifactRefreshTask | null;
-  canRefresh?: boolean;
-  onRefreshDashboardArtifact?: () => Promise<
-    DashboardArtifactRefreshTask | null | undefined
-  >;
-  onRefreshSettled?: () => void;
+  title: string;
+  children: ReactNode;
 }
 
 export function AppArtifactSplitShell({
-  manifest,
-  latestRefreshTask,
-  canRefresh,
-  onRefreshDashboardArtifact,
-  onRefreshSettled,
+  title,
+  children,
 }: AppArtifactSplitShellProps) {
   return (
     <div
       data-testid="app-artifact-split-shell"
       className="flex h-svh min-h-0 flex-col bg-background text-foreground"
     >
-      <AppTopBar title={manifest.snapshot.title} />
+      <AppTopBar title={title} />
       <div
         data-testid="app-artifact-panels"
         className="min-h-0 min-w-0 flex-1"
       >
-        <AppCanvasPanel
-          manifest={manifest}
-          latestRefreshTask={latestRefreshTask}
-          canRefresh={canRefresh}
-          onRefreshDashboardArtifact={onRefreshDashboardArtifact}
-          onRefreshSettled={onRefreshSettled}
-        />
+        <AppCanvasPanel>{children}</AppCanvasPanel>
       </div>
     </div>
   );

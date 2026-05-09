@@ -1,19 +1,56 @@
 import { Search } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "urql";
 import { Button, Input } from "@thinkwork/ui";
 import {
-  FIXTURE_APP_ARTIFACTS,
   type AppArtifactPreview,
+  type AppletPreviewNode,
+  toAppletPreview,
 } from "@/lib/app-artifacts";
 import { AppPreviewCard } from "@/components/apps/AppPreviewCard";
+import { AppletsQuery } from "@/lib/graphql-queries";
 
 interface AppsGalleryProps {
-  artifacts?: AppArtifactPreview[];
+  applets?: AppArtifactPreview[];
 }
 
-export function AppsGallery({
-  artifacts = FIXTURE_APP_ARTIFACTS,
-}: AppsGalleryProps) {
+interface AppletsResult {
+  applets?: {
+    nodes?: AppletPreviewNode[] | null;
+    nextCursor?: string | null;
+  } | null;
+}
+
+export function AppsGallery({ applets }: AppsGalleryProps) {
+  if (applets) return <AppsGalleryContent artifacts={applets} />;
+  return <LiveAppsGallery />;
+}
+
+function LiveAppsGallery() {
+  const [{ data, fetching, error }] = useQuery<AppletsResult>({
+    query: AppletsQuery,
+    requestPolicy: "cache-and-network",
+  });
+  const artifacts = (data?.applets?.nodes ?? []).map(toAppletPreview);
+
+  return (
+    <AppsGalleryContent
+      artifacts={artifacts}
+      fetching={fetching}
+      errorMessage={error?.message}
+    />
+  );
+}
+
+export function AppsGalleryContent({
+  artifacts,
+  fetching = false,
+  errorMessage,
+}: {
+  artifacts: AppArtifactPreview[];
+  fetching?: boolean;
+  errorMessage?: string;
+}) {
   return (
     <main className="flex w-full flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
@@ -33,10 +70,20 @@ export function AppsGallery({
           </label>
         ) : null}
 
-        {artifacts.length === 0 ? (
+        {fetching && artifacts.length === 0 ? (
+          <div className="rounded-lg border border-border/70 p-8 text-center">
+            <p className="text-muted-foreground">Loading apps...</p>
+          </div>
+        ) : errorMessage ? (
           <div className="rounded-lg border border-border/70 p-8 text-center">
             <p className="text-muted-foreground">
-              Ask Computer to build a dashboard and it will appear here.
+              {errorMessage || "Generated apps could not be loaded."}
+            </p>
+          </div>
+        ) : artifacts.length === 0 ? (
+          <div className="rounded-lg border border-border/70 p-8 text-center">
+            <p className="text-muted-foreground">
+              Ask Computer to build an app and it will appear here.
             </p>
           </div>
         ) : (
