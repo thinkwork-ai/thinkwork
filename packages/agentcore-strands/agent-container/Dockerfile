@@ -15,7 +15,6 @@ WORKDIR /app
 # Install Python dependencies (includes strands-agents + hindsight-strands)
 COPY packages/agentcore-strands/agent-container/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    (playwright install chromium --with-deps 2>/dev/null || true) && \
     command -v opentelemetry-instrument >/dev/null && \
     (find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true)
 

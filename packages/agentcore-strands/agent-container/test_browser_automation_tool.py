@@ -40,14 +40,14 @@ class FakeNovaAct:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def act_get(self, task, schema):
+    def act(self, task, schema):
         assert task == "Find the thing"
         assert schema == {"type": "string"}
         return FakeActResult()
 
 
 class FailingNovaAct(FakeNovaAct):
-    def act_get(self, task, schema):
+    def act(self, task, schema):
         raise RuntimeError("browser exploded")
 
 
