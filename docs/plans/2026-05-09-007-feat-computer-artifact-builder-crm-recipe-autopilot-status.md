@@ -275,3 +275,8 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   Vitest coverage, workspace-defaults verification, and `git diff --check`
   passed locally. The root `pnpm format:check ...` script could not run because
   `prettier` is not installed in this workspace checkout.
+- **PR handoff:** Opened PR #1094
+  (`fix(computer): move artifact refresh into actions menu`) from
+  `codex/artifact-actions-dropdown`. At session close, PR checks were:
+  CLA/pass, lint/pass, typecheck/pass, verify/pass, and test/pending. Local
+  dev server on `localhost:5174` was stopped.
