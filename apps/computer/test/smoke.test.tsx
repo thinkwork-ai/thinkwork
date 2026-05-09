@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { PlaceholderPage } from "../src/components/PlaceholderPage";
 
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: vi.fn(),
+}));
+
 describe("apps/computer scaffold smoke", () => {
-  it("renders a PlaceholderPage with the supplied title", () => {
-    const { getByRole } = render(<PlaceholderPage title="Test Surface" />);
-    expect(getByRole("heading", { level: 1 }).textContent).toBe("Test Surface");
+  it("renders the supplied subtitle", () => {
+    const { container } = render(
+      <PlaceholderPage title="Test Surface" subtitle="Custom subtitle text" />,
+    );
+    expect(container.textContent).toContain("Custom subtitle text");
   });
 
   it("renders the default subtitle when none is supplied", () => {

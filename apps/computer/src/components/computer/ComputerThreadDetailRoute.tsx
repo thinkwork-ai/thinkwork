@@ -4,7 +4,7 @@ import {
   TaskThreadView,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
-import { useBreadcrumbs } from "@/context/BreadcrumbContext";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerEventsQuery,
@@ -90,7 +90,7 @@ export function ComputerThreadDetailRoute({
     variables: { id: threadId, messageLimit: 100 },
   });
   const threadTitle = data?.thread?.title?.trim() || "Thread";
-  useBreadcrumbs([{ label: threadTitle }]);
+  usePageHeaderActions({ backHref: "/threads", title: threadTitle });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({

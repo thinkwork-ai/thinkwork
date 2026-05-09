@@ -43,6 +43,13 @@ export function ComputerComposer({
         aria-label="Ask your Computer"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            if (canSubmit) onSubmit();
+          }
+        }}
+        autoFocus
         placeholder="Type @ for connectors and sources"
         rows={1}
         className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"

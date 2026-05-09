@@ -11,7 +11,7 @@ export function NotFound() {
         admin.thinkwork.ai.
       </p>
       <Button asChild variant="outline" size="sm">
-        <Link to="/computer">Back to your Computer</Link>
+        <Link to="/threads">Back to your Threads</Link>
       </Button>
     </div>
   );

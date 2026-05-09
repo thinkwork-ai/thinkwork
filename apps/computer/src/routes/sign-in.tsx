@@ -13,10 +13,10 @@ function SignInPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  // If the user is already signed in, send them to /computer.
+  // If the user is already signed in, send them to /threads.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate({ to: "/computer", replace: true });
+      navigate({ to: "/threads", replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);
 

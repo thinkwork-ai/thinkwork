@@ -14,6 +14,10 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-1" }),
 }));
 
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: vi.fn(),
+}));
+
 vi.mock("@/lib/use-computer-thread-chunks", () => ({
   useComputerThreadChunks: vi.fn(),
 }));

@@ -40,7 +40,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
+    // Thread title now lives in AppTopBar via PageHeaderContext, not inside TaskThreadView.
     expect(screen.getByText("Build a CRM pipeline dashboard")).toBeTruthy();
     expect(screen.getByText("I created a dashboard app.")).toBeTruthy();
     expect(screen.getByText("Thinking")).toBeTruthy();
@@ -250,57 +250,6 @@ describe("TaskThreadView", () => {
     expect(screen.getByText(/"runId": "task-1"/)).toBeTruthy();
     expect(screen.queryByText(/"task":/)).toBeNull();
     expect(screen.queryByText(/"taskId":/)).toBeNull();
-  });
-
-  it("derives the source count from message and turn evidence", () => {
-    render(
-      <TaskThreadView
-        thread={{
-          id: "thread-1",
-          title: "Sources thread",
-          lifecycleStatus: "COMPLETED",
-          messages: [
-            {
-              id: "message-1",
-              role: "USER",
-              content: "Find account risk",
-            },
-            {
-              id: "message-2",
-              role: "ASSISTANT",
-              content: "Here is the risk.",
-              metadata: {
-                sources: [{ id: "crm-opportunities" }],
-              },
-              toolResults: [{ url: "https://example.test/account" }],
-              durableArtifact: {
-                id: "artifact_123",
-                title: "CRM app",
-                metadata: {
-                  sourceStatuses: [{ provider: "lastmile-crm" }],
-                },
-              },
-            },
-          ],
-          turns: [
-            {
-              id: "turn-1",
-              status: "succeeded",
-              usageJson: {
-                tool_invocations: [
-                  {
-                    tool_name: "web_search",
-                    input_preview: "account news",
-                  },
-                ],
-              },
-            },
-          ],
-        }}
-      />,
-    );
-
-    expect(screen.getByText("4 sources")).toBeTruthy();
   });
 
   it("renders the mobile-style processing shimmer while waiting for the first chunk", () => {

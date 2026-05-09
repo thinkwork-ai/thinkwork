@@ -2,6 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskDashboard } from "./TaskDashboard";
 
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: vi.fn(),
+}));
+
 afterEach(cleanup);
 
 describe("TaskDashboard", () => {
@@ -30,8 +34,7 @@ describe("TaskDashboard", () => {
       />,
     );
 
-    expect(screen.getByText("Computer")).toBeTruthy();
-    expect(screen.getByText("1 thread")).toBeTruthy();
+    // "Computer" title and "1 thread" subtitle now live in AppTopBar via PageHeaderContext.
     expect(screen.getByText("CHAT-318")).toBeTruthy();
     expect(screen.getByText("Build CRM dashboard")).toBeTruthy();
     expect(screen.getByText("Computer-owned")).toBeTruthy();

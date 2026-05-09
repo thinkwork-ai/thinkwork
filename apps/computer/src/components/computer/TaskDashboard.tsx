@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Archive, Lock, Search } from "lucide-react";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { COMPUTER_NEW_THREAD_ROUTE } from "@/lib/computer-routes";
 
 export interface TaskSummary {
@@ -52,6 +53,10 @@ export function TaskDashboard({
   onPageSizeChange,
   onSearchChange,
 }: TaskDashboardProps) {
+  usePageHeaderActions({
+    title: "Threads",
+    subtitle: isLoading ? "Loading..." : `${totalCount} thread${totalCount === 1 ? "" : "s"}`,
+  });
   const columns = useMemo<ColumnDef<TaskSummary>[]>(
     () => [
       {
@@ -64,44 +69,31 @@ export function TaskDashboard({
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-5 sm:px-6">
-        <header className="flex shrink-0 flex-col gap-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Computer
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isLoading ? "Loading..." : `${totalCount} thread${totalCount === 1 ? "" : "s"}`}
-              </p>
-            </div>
-            <Button asChild>
+      <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+          <label className="relative w-full max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              className="pl-9"
+              placeholder="Search threads..."
+              aria-label="Search threads"
+            />
+          </label>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Button type="button" variant="ghost" size="sm" disabled>
+              Filter
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled>
+              Sort
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled>
+              Group
+            </Button>
+            <Button asChild size="sm">
               <Link to={COMPUTER_NEW_THREAD_ROUTE}>New</Link>
             </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => onSearchChange(event.target.value)}
-                className="pl-9"
-                placeholder="Search threads..."
-                aria-label="Search threads"
-              />
-            </label>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Button type="button" variant="ghost" size="sm" disabled>
-                Filter
-              </Button>
-              <Button type="button" variant="ghost" size="sm" disabled>
-                Sort
-              </Button>
-              <Button type="button" variant="ghost" size="sm" disabled>
-                Group
-              </Button>
-            </div>
           </div>
         </header>
 
@@ -146,7 +138,7 @@ function ThreadTableRow({ thread }: { thread: TaskSummary }) {
     <Link
       to="/threads/$id"
       params={{ id: thread.id }}
-      className="flex h-11 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm"
+      className="flex h-10 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm"
       onClick={(event) => event.stopPropagation()}
     >
       <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">

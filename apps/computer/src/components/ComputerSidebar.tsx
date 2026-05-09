@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
   Brain,
-  Monitor,
+  MessagesSquare,
   PenSquare,
   Repeat,
   SlidersHorizontal,
@@ -28,19 +28,24 @@ import {
   COMPUTER_APPS_ROUTE,
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
-  COMPUTER_WORKBENCH_ROUTE,
+  COMPUTER_THREADS_ROUTE,
 } from "@/lib/computer-routes";
-import { ComputerApprovalsQuery } from "@/lib/graphql-queries";
+import { ThreadsPagedQuery } from "@/lib/graphql-queries";
 
 interface NavItem {
   href: FileRouteTypes["to"];
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  badge?: number;
+  badge?: number | string;
 }
 
-interface ApprovalsResult {
-  inboxItems: Array<{ id: string; type: string }>;
+function formatCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
+}
+
+interface ThreadsPagedCountResult {
+  threadsPaged?: { totalCount?: number | null } | null;
 }
 
 export function ComputerSidebar() {
@@ -48,29 +53,35 @@ export function ComputerSidebar() {
   const { tenantId } = useTenant();
   const { state, setOpen } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const [{ data: approvalsData }] = useQuery<ApprovalsResult>({
-    query: ComputerApprovalsQuery,
-    variables: { tenantId: tenantId ?? "" },
+  const [{ data: threadsCountData }] = useQuery<ThreadsPagedCountResult>({
+    query: ThreadsPagedQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
+      limit: 1,
+      offset: 0,
+    },
     pause: !tenantId,
+    requestPolicy: "cache-and-network",
   });
 
-  const pendingApprovalCount = (approvalsData?.inboxItems ?? []).filter(
-    (item) => item.type === "computer_approval",
-  ).length;
+  const threadCount = threadsCountData?.threadsPaged?.totalCount ?? 0;
   const navItems = useMemo<NavItem[]>(
     () => [
       {
-        href: COMPUTER_WORKBENCH_ROUTE,
-        icon: Monitor,
-        label: "Computer",
-        badge: pendingApprovalCount,
+        href: COMPUTER_THREADS_ROUTE,
+        icon: MessagesSquare,
+        label: "Threads",
+        badge: threadCount ? formatCount(threadCount) : undefined,
       },
       { href: COMPUTER_APPS_ROUTE, icon: Shapes, label: "Apps" },
       { href: "/automations", icon: Repeat, label: "Automations" },
       { href: COMPUTER_MEMORY_ROUTE, icon: Brain, label: "Memory" },
       { href: "/customize", icon: SlidersHorizontal, label: "Customize" },
     ],
-    [pendingApprovalCount],
+    [threadCount],
   );
 
   return (
@@ -81,7 +92,7 @@ export function ComputerSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
                 <Link
-                  to={COMPUTER_WORKBENCH_ROUTE}
+                  to={COMPUTER_THREADS_ROUTE}
                   onClick={(event) => {
                     if (isCollapsed) {
                       event.preventDefault();
@@ -106,7 +117,7 @@ export function ComputerSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
+          <SidebarTrigger className="mt-0.5 self-start group-data-[collapsible=icon]:hidden" />
         </div>
       </SidebarHeader>
 
@@ -130,7 +141,7 @@ export function ComputerSidebar() {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(`${item.href}/`) ||
-                  (item.href === COMPUTER_WORKBENCH_ROUTE &&
+                  (item.href === COMPUTER_THREADS_ROUTE &&
                     pathname.startsWith(`${COMPUTER_NEW_THREAD_ROUTE}/`));
                 return (
                   <SidebarMenuItem key={item.href}>

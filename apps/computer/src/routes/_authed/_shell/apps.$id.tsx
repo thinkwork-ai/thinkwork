@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "urql";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
-import { useBreadcrumbs } from "@/context/BreadcrumbContext";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   type DashboardArtifactManifest,
   type DashboardArtifactRefreshTask,
@@ -51,7 +51,7 @@ function AppArtifactPage() {
     [data?.dashboardArtifact?.manifest, fixtureManifest],
   );
   const appLabel = manifest?.snapshot?.title?.trim() || "App";
-  useBreadcrumbs([{ label: "Apps", href: "/apps" }, { label: appLabel }]);
+  usePageHeaderActions({ title: appLabel, backHref: "/apps" });
   const latestRefreshTask = data?.dashboardArtifact?.latestRefreshTask ?? null;
   const isRefreshActive = ["pending", "running"].includes(
     String(latestRefreshTask?.status ?? "").toLowerCase(),
