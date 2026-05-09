@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import browser_automation_tool as bat  # type: ignore
 
 
@@ -46,6 +49,52 @@ class FakeNovaAct:
 class FailingNovaAct(FakeNovaAct):
     def act_get(self, task, schema):
         raise RuntimeError("browser exploded")
+
+
+class FakeSsm:
+    def __init__(self, values):
+        self.values = values
+        self.names: list[str] = []
+
+    def get_parameter(self, *, Name, WithDecryption):
+        assert WithDecryption is True
+        self.names.append(Name)
+        if Name not in self.values:
+            raise RuntimeError("missing")
+        return {"Parameter": {"Value": self.values[Name]}}
+
+
+def test_load_nova_act_key_prefers_agentcore_ssm_path(monkeypatch):
+    fake_ssm = FakeSsm(
+        {
+            "/thinkwork/dev/agentcore/nova-act-api-key": "secret",
+            "/thinkwork/dev/nova-act-api-key": "legacy-secret",
+        },
+    )
+    fake_boto3 = types.SimpleNamespace(client=lambda service, region_name: fake_ssm)
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+    monkeypatch.delenv("NOVA_ACT_API_KEY", raising=False)
+    monkeypatch.delenv("NOVA_ACT_SSM_PARAM_NAME", raising=False)
+    monkeypatch.setenv("STACK_NAME", "dev")
+
+    assert bat.load_nova_act_key(region="us-east-1") == "secret"
+    assert fake_ssm.names[0] == "/thinkwork/dev/agentcore/nova-act-api-key"
+
+
+def test_load_nova_act_key_ignores_placeholder_then_uses_legacy(monkeypatch):
+    fake_ssm = FakeSsm(
+        {
+            "/thinkwork/dev/agentcore/nova-act-api-key": "PLACEHOLDER_SET_VIA_CLI",
+            "/thinkwork/dev/nova-act-api-key": "legacy-secret",
+        },
+    )
+    fake_boto3 = types.SimpleNamespace(client=lambda service, region_name: fake_ssm)
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+    monkeypatch.delenv("NOVA_ACT_API_KEY", raising=False)
+    monkeypatch.delenv("NOVA_ACT_SSM_PARAM_NAME", raising=False)
+    monkeypatch.setenv("STACK_NAME", "dev")
+
+    assert bat.load_nova_act_key(region="us-east-1") == "legacy-secret"
 
 
 def test_browser_automation_returns_unavailable_when_key_missing():

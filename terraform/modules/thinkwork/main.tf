@@ -408,8 +408,9 @@ module "agentcore" {
   # is declared above at line 156 as `module "api"`, so the reference
   # is `module.api` — not `module.lambda_api` (which doesn't exist and
   # broke terraform apply on every merge since #389).
-  api_endpoint    = module.api.api_endpoint
-  api_auth_secret = var.api_auth_secret
+  api_endpoint     = module.api.api_endpoint
+  api_auth_secret  = var.api_auth_secret
+  nova_act_api_key = var.nova_act_api_key
 }
 
 ################################################################################

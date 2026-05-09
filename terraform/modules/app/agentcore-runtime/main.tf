@@ -51,6 +51,13 @@ variable "api_auth_secret" {
   sensitive   = true
 }
 
+variable "nova_act_api_key" {
+  description = "Nova Act API key used by the Strands Browser Automation tool. Stored as SSM SecureString at /thinkwork/<stage>/agentcore/nova-act-api-key. Empty string creates a placeholder; rotate the real value with aws ssm put-parameter --overwrite."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "memory_engine" {
   description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
   type        = string
@@ -69,6 +76,19 @@ variable "memory_engine" {
 locals {
   memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
   memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
+}
+
+resource "aws_ssm_parameter" "nova_act_api_key" {
+  name        = "/thinkwork/${var.stage}/agentcore/nova-act-api-key"
+  type        = "SecureString"
+  value       = var.nova_act_api_key != "" ? var.nova_act_api_key : "PLACEHOLDER_SET_VIA_CLI"
+  description = "Nova Act API key consumed by the Strands Browser Automation tool."
+
+  lifecycle {
+    # Allow operator rotation to stick across applies. The runtime treats
+    # PLACEHOLDER_SET_VIA_CLI as unconfigured until the real key is populated.
+    ignore_changes = [value]
+  }
 }
 
 ################################################################################
@@ -302,8 +322,9 @@ resource "aws_lambda_function" "agentcore" {
       MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
       # Needed by run_skill_dispatch.py to POST terminal state back to
       # /api/skills/complete after a composition run finishes.
-      THINKWORK_API_URL = var.api_endpoint
-      API_AUTH_SECRET   = var.api_auth_secret
+      THINKWORK_API_URL       = var.api_endpoint
+      API_AUTH_SECRET         = var.api_auth_secret
+      NOVA_ACT_SSM_PARAM_NAME = aws_ssm_parameter.nova_act_api_key.name
     }
   }
 
