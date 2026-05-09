@@ -13,7 +13,7 @@ export function StreamingMessageBuffer({
 
   return (
     <article
-      className="prose prose-sm prose-invert max-w-none text-sm leading-6 text-foreground prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
+      className="prose prose-sm prose-invert max-w-none text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
       aria-label="Streaming assistant response"
     >
       <Streamdown>{text}</Streamdown>

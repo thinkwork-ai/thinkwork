@@ -659,7 +659,7 @@ describe("TaskThreadView", () => {
   it("renders assistant Markdown wrapper with Codex-transcript prose density", () => {
     // Regression guard: matches the tightened token set targeted by the
     // "make Computer match the Codex CLI transcript density" iteration —
-    // text-sm + leading-6 + my-1.5 paragraph/list margins, prose-sm modifier
+    // text-sm + leading-5 + my-1.5 paragraph/list margins, prose-sm modifier
     // shrinks the inline element rhythm. Reverting any one token sends the
     // page back toward the looser pre-merge rhythm.
     const { container } = render(
@@ -685,7 +685,9 @@ describe("TaskThreadView", () => {
     for (const token of [
       "prose-sm",
       "text-sm",
-      "leading-6",
+      "leading-5",
+      "prose-p:leading-5",
+      "prose-li:leading-5",
       "prose-p:my-1.5",
       "prose-ul:my-1.5",
       "prose-ol:my-1.5",
