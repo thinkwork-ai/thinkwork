@@ -1,0 +1,84 @@
+import { useMemo } from "react";
+import { useQuery } from "urql";
+import {
+  AppletFailure,
+  AppletLoading,
+  AppletMount,
+  appletSource,
+  defaultAppletModuleLoader,
+  useAppletInstanceId,
+  type AppletModuleLoader,
+} from "@/applets/mount";
+import type { AppletPayload } from "@/lib/app-artifacts";
+import { AppletQuery } from "@/lib/graphql-queries";
+
+interface AppletResult {
+  applet?: AppletPayload | null;
+}
+
+interface InlineAppletEmbedProps {
+  appId: string;
+  // Pixel height of the embed surface. Default sized to fit a chart or small
+  // dashboard inside a thread message bubble without dominating the transcript.
+  height?: number;
+  // Test seam: lets unit tests inject a fake module loader so tests don't have
+  // to spin up the real applet transform pipeline.
+  loadModule?: AppletModuleLoader;
+}
+
+export function InlineAppletEmbed({
+  appId,
+  height = 480,
+  loadModule = defaultAppletModuleLoader,
+}: InlineAppletEmbedProps) {
+  const [{ data, fetching, error }] = useQuery<AppletResult>({
+    query: AppletQuery,
+    variables: { appId },
+    requestPolicy: "cache-and-network",
+  });
+  const applet = data?.applet ?? null;
+  const source = useMemo(() => appletSource(applet), [applet]);
+  const version = applet?.applet?.version ?? 1;
+  const instanceId = useAppletInstanceId(appId);
+
+  if (error) {
+    return (
+      <AppletFailure>
+        Failed to load applet: {error.message}
+      </AppletFailure>
+    );
+  }
+  if (!applet) {
+    return fetching ? (
+      <AppletLoading />
+    ) : (
+      <AppletFailure>Artifact not found.</AppletFailure>
+    );
+  }
+  if (!source) {
+    return (
+      <AppletFailure>
+        This artifact does not include a source file that can be mounted.
+      </AppletFailure>
+    );
+  }
+
+  return (
+    <div
+      className="overflow-hidden rounded-md border border-border/70 bg-background"
+      data-testid="inline-applet-embed"
+      style={{ height, maxHeight: "70vh" }}
+    >
+      <div className="h-full overflow-auto">
+        <AppletMount
+          appId={appId}
+          instanceId={instanceId}
+          source={source}
+          version={version}
+          loadModule={loadModule}
+          hideRefreshControl
+        />
+      </div>
+    </div>
+  );
+}

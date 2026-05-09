@@ -4,10 +4,20 @@ import { useMutation, useQuery, useSubscription } from "urql";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
 
-vi.mock("urql", () => ({
-  useMutation: vi.fn(),
-  useQuery: vi.fn(),
-  useSubscription: vi.fn(),
+vi.mock("urql", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("urql")>();
+  return {
+    ...actual,
+    useMutation: vi.fn(),
+    useQuery: vi.fn(),
+    useSubscription: vi.fn(),
+  };
+});
+
+vi.mock("@/components/apps/InlineAppletEmbed", () => ({
+  InlineAppletEmbed: ({ appId }: { appId: string }) => (
+    <div data-testid="inline-applet-embed-stub" data-app-id={appId} />
+  ),
 }));
 
 vi.mock("@/context/TenantContext", () => ({
