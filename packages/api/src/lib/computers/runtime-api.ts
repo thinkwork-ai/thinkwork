@@ -664,6 +664,39 @@ export async function recordThreadTurnResponse(input: {
     },
   });
 
+  await db
+    .update(computerTasks)
+    .set({
+      status: "completed",
+      output: {
+        responseMessageId: assistantMessage.id,
+        threadId: thread.id,
+        sourceMessageId: message.id,
+        model: input.model ?? null,
+      },
+      completed_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(computerTasks.tenant_id, input.tenantId),
+        eq(computerTasks.computer_id, input.computerId),
+        eq(computerTasks.id, input.taskId),
+      ),
+    );
+
+  await appendComputerTaskEvent({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    taskId: input.taskId,
+    eventType: "task_completed",
+    level: "info",
+    payload: {
+      responseMessageId: assistantMessage.id,
+      threadId: thread.id,
+    },
+  });
+
   await notifyNewMessage({
     messageId: assistantMessage.id,
     threadId: thread.id,

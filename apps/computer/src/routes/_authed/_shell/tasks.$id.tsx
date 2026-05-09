@@ -8,7 +8,9 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerThreadQuery,
+  NewMessageSubscription,
   SendMessageMutation,
+  ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
@@ -63,6 +65,23 @@ function TaskDetailPage() {
     variables: { tenantId },
     pause: !tenantId,
   });
+  const [{ data: threadUpdate }] = useSubscription<{
+    onThreadUpdated?: { threadId?: string | null } | null;
+  }>({
+    query: ThreadUpdatedSubscription,
+    variables: { tenantId },
+    pause: !tenantId,
+  });
+  const [{ data: messageUpdate }] = useSubscription<{
+    onNewMessage?: {
+      threadId?: string | null;
+      messageId?: string | null;
+    } | null;
+  }>({
+    query: NewMessageSubscription,
+    variables: { threadId: id },
+    pause: !id,
+  });
 
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === id) {
@@ -70,12 +89,31 @@ function TaskDetailPage() {
     }
   }, [id, reexecuteQuery, turnUpdate?.onThreadTurnUpdated?.threadId]);
 
+  useEffect(() => {
+    if (threadUpdate?.onThreadUpdated?.threadId === id) {
+      reexecuteQuery({ requestPolicy: "network-only" });
+    }
+  }, [id, reexecuteQuery, threadUpdate?.onThreadUpdated?.threadId]);
+
+  useEffect(() => {
+    if (messageUpdate?.onNewMessage?.threadId === id) {
+      reexecuteQuery({ requestPolicy: "network-only" });
+    }
+  }, [
+    id,
+    messageUpdate?.onNewMessage?.messageId,
+    messageUpdate?.onNewMessage?.threadId,
+    reexecuteQuery,
+  ]);
+
+  const thread = data?.thread ? toTaskThread(data.thread) : null;
+
   return (
     <TaskThreadView
-      thread={data?.thread ? toTaskThread(data.thread) : null}
+      thread={thread}
       isLoading={fetching && !data}
       error={error?.message ?? null}
-      streamingChunks={chunks}
+      streamingChunks={hasDurableAssistantAfterLatestUser(thread) ? [] : chunks}
       isSending={sending}
       onSendFollowUp={async (content) => {
         const result = await sendMessage({
@@ -136,4 +174,23 @@ function metadataObject(value: unknown): Record<string, unknown> | null {
     }
   }
   return null;
+}
+
+function hasDurableAssistantAfterLatestUser(thread: TaskThread | null) {
+  if (!thread) return false;
+  const latestUserIndex = findLastIndex(
+    thread.messages,
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (latestUserIndex < 0) return false;
+  return thread.messages
+    .slice(latestUserIndex + 1)
+    .some((message) => message.role.toUpperCase() === "ASSISTANT");
+}
+
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index])) return index;
+  }
+  return -1;
 }
