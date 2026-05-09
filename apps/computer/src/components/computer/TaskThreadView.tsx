@@ -139,18 +139,28 @@ export function TaskThreadView({
     if (el) el.scrollTop = el.scrollHeight;
   }, [latestUserMessageId]);
 
-  // Continuously follow growing content while stuck-to-bottom.
+  // Continuously follow growing content while stuck-to-bottom. The dep on
+  // `threadIsAvailable` is critical: when the component first mounts in a
+  // loading state, refs are null because the section + inner div aren't
+  // rendered yet (the early-return path renders TaskThreadState instead).
+  // An effect with `[]` deps runs once and bails. We need to re-attach the
+  // observer when the thread loads and the refs become real.
+  const threadIsAvailable = thread != null && !isLoading && !error;
   useEffect(() => {
+    if (!threadIsAvailable) return;
     const inner = innerContentRef.current;
     const container = scrollContainerRef.current;
     if (!inner || !container) return;
+    // Pin to the bottom on first attach so the user lands at the most-recent
+    // turn instead of the top of the thread.
+    container.scrollTop = container.scrollHeight;
     const observer = new ResizeObserver(() => {
       if (!stickToBottomRef.current) return;
       container.scrollTop = container.scrollHeight;
     });
     observer.observe(inner);
     return () => observer.disconnect();
-  }, []);
+  }, [threadIsAvailable]);
 
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
