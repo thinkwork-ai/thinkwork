@@ -322,6 +322,9 @@ importers:
       '@tanstack/router-plugin':
         specifier: ^1.154.14
         version: 1.167.12(@tanstack/react-router@1.168.10(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(vite@6.4.2(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@thinkwork/computer-stdlib':
+        specifier: workspace:*
+        version: link:../../packages/computer-stdlib
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph
@@ -331,6 +334,12 @@ importers:
       '@urql/core':
         specifier: ^6.0.0
         version: 6.0.1(graphql@16.13.2)
+      acorn:
+        specifier: ^8.16.0
+        version: 8.16.0
+      acorn-walk:
+        specifier: ^8.3.5
+        version: 8.3.5
       amazon-cognito-identity-js:
         specifier: ^6.3.16
         version: 6.3.16
@@ -370,6 +379,9 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      sucrase:
+        specifier: ^3.35.1
+        version: 3.35.1
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -4739,10 +4751,12 @@ packages:
   '@mariozechner/pi-agent-core@0.70.2':
     resolution: {integrity: sha512-g1hIdKyDwmQOoBGO0R4OhpemKeMENeK0vE5FJtuQKqEcsdCAkVBgZAK6aZUARYZVxMA718JS6WPLFWoddzjD7g==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-agent-core instead going forward
 
   '@mariozechner/pi-ai@0.70.2':
     resolution: {integrity: sha512-+30LRPjXsXF+oI96DvGWMbdPGeqoLJvadh6UPev7wx2DzhC9FEqXkQcoMZ0usbCm7E9pl8ua8a9s/pQ5ikaUbg==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-ai instead going forward
     hasBin: true
 
   '@mdx-js/mdx@3.1.1':
@@ -7074,6 +7088,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@urql/core@5.2.0':
     resolution: {integrity: sha512-/n0ieD0mvvDnVAXEQgX/7qJiVcvYvNkOHeBvkwtylfjydar123caCXcl58PXFY11oU1oquJocVXHxLAbtv4x1A==}
