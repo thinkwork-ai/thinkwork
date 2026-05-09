@@ -90,7 +90,15 @@ export function ComputerThreadDetailRoute({
     variables: { id: threadId, messageLimit: 100 },
   });
   const threadTitle = data?.thread?.title?.trim() || "Thread";
-  usePageHeaderActions({ backHref: "/threads", title: threadTitle });
+  usePageHeaderActions({
+    backHref: "/threads",
+    title: threadTitle,
+    // Tab title gets the "Thread · " prefix to match the section pattern
+    // used by Memory and other pages ("Memory · ThinkWork", etc.). The
+    // in-page header keeps the bare thread title — no need to repeat
+    // "Thread" inside the page the user is already on.
+    documentTitle: `Thread · ${threadTitle}`,
+  });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({

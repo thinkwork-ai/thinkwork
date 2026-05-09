@@ -6,6 +6,7 @@ from appsync_publisher import (
     AppSyncChunkPublisher,
     build_appsync_chunk_callback,
     extract_stream_text_deltas,
+    extract_tool_use_starts,
 )
 
 
@@ -254,3 +255,136 @@ def test_publisher_does_not_retry_non_retryable_auth_failures():
     publisher.drain()
 
     assert len(calls) == 1
+
+
+def test_extract_tool_use_starts_picks_up_bedrock_content_block_start():
+    seen: set[str] = set()
+    starts = extract_tool_use_starts(
+        event={
+            "contentBlockStart": {
+                "start": {
+                    "toolUse": {
+                        "toolUseId": "tool-1",
+                        "name": "web_search",
+                        "input": {"query": "best brunch east austin"},
+                    }
+                }
+            }
+        },
+        seen=seen,
+    )
+
+    assert len(starts) == 1
+    assert starts[0]["tool_name"] == "web_search"
+    assert starts[0]["tool_use_id"] == "tool-1"
+    assert "best brunch" in starts[0]["input_preview"]
+
+
+def test_extract_tool_use_starts_dedupes_repeats_across_callback_fires():
+    seen: set[str] = set()
+    payload = {
+        "contentBlockStart": {
+            "start": {"toolUse": {"toolUseId": "tool-1", "name": "recall"}}
+        }
+    }
+    first = extract_tool_use_starts(event=payload, seen=seen)
+    second = extract_tool_use_starts(event=payload, seen=seen)
+
+    assert len(first) == 1
+    assert second == []
+
+
+def test_extract_tool_use_starts_uses_synthetic_id_for_idless_strands_kwarg():
+    seen: set[str] = set()
+    starts = extract_tool_use_starts(
+        current_tool_use={"name": "memory_recall"}, seen=seen
+    )
+
+    assert len(starts) == 1
+    assert starts[0]["tool_name"] == "memory_recall"
+    assert starts[0]["tool_use_id"] == ""
+
+
+def test_extract_tool_use_starts_skips_text_only_callbacks():
+    starts = extract_tool_use_starts(data="streaming text", seen=set())
+
+    assert starts == []
+
+
+def test_callback_emits_tool_invocation_started_event_via_sink():
+    emitted: list[tuple[str, str, dict]] = []
+
+    def post(_endpoint, _headers, body, _timeout):
+        return 200, "{}"
+
+    def sink(event_type: str, level: str, payload: dict) -> None:
+        emitted.append((event_type, level, payload))
+
+    callback, publisher = build_appsync_chunk_callback(
+        "thread-1",
+        env={
+            "APPSYNC_ENDPOINT": "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+            "APPSYNC_API_KEY": "test-key",
+        },
+        post_fn=post,
+        tool_event_sink=sink,
+    )
+
+    assert callback is not None
+    callback(
+        event={
+            "contentBlockStart": {
+                "start": {
+                    "toolUse": {"toolUseId": "tool-9", "name": "web_search"}
+                }
+            }
+        }
+    )
+    # Same tool fires again (Bedrock often replays earlier frames) — must not
+    # double-emit.
+    callback(
+        event={
+            "contentBlockStart": {
+                "start": {
+                    "toolUse": {"toolUseId": "tool-9", "name": "web_search"}
+                }
+            }
+        }
+    )
+    publisher.drain()
+
+    assert len(emitted) == 1
+    event_type, level, payload = emitted[0]
+    assert event_type == "tool_invocation_started"
+    assert level == "info"
+    assert payload["tool_name"] == "web_search"
+    assert payload["tool_use_id"] == "tool-9"
+
+
+def test_callback_swallows_tool_event_sink_failures():
+    def post(_endpoint, _headers, body, _timeout):
+        return 200, "{}"
+
+    def sink(_event_type: str, _level: str, _payload: dict) -> None:
+        raise RuntimeError("boom")
+
+    callback, publisher = build_appsync_chunk_callback(
+        "thread-1",
+        env={
+            "APPSYNC_ENDPOINT": "https://example.appsync-api.us-east-1.amazonaws.com/graphql",
+            "APPSYNC_API_KEY": "test-key",
+        },
+        post_fn=post,
+        tool_event_sink=sink,
+    )
+
+    assert callback is not None
+    # Must not raise; tool-event failures cannot fail the streaming turn.
+    callback(
+        event={
+            "contentBlockStart": {
+                "start": {"toolUse": {"toolUseId": "tool-x", "name": "any"}}
+            }
+        }
+    )
+    publisher.drain()

@@ -1,7 +1,22 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 export interface PageHeaderActions {
   title: string;
+  /**
+   * Optional override for `document.title` (the browser tab). When set,
+   * the tab uses this value instead of `title`, allowing the visible
+   * AppTopBar header to stay short (e.g. just the thread title) while
+   * the tab carries section context (e.g. "Thread · <title>") so users
+   * can disambiguate between multiple Computer tabs.
+   */
+  documentTitle?: string;
   /** When set, AppTopBar shows a back arrow that links to this href */
   backHref?: string;
   /** Optional secondary text displayed next to the title (e.g., "216 threads") */
@@ -32,7 +47,8 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.title = actions ? `${actions.title} · ThinkWork` : "ThinkWork";
+    const docTitle = actions?.documentTitle ?? actions?.title;
+    document.title = docTitle ? `${docTitle} · ThinkWork` : "ThinkWork";
   }, [actions]);
 
   return (
@@ -44,15 +60,17 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 
 export function usePageHeader() {
   const ctx = useContext(PageHeaderContext);
-  if (!ctx) throw new Error("usePageHeader must be used within PageHeaderProvider");
+  if (!ctx)
+    throw new Error("usePageHeader must be used within PageHeaderProvider");
   return ctx;
 }
 
 export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const ctx = usePageHeader();
-  const tabsKey = actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
+  const tabsKey =
+    actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const key = actions
-    ? `${actions.title}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}`
+    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {

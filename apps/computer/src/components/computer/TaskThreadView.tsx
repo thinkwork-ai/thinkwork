@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   Bot,
+  Brain,
   ChevronRight,
   Code2,
   Database,
@@ -9,7 +10,16 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  Children,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Streamdown } from "streamdown";
 import { Button, Textarea } from "@thinkwork/ui";
 import {
@@ -81,6 +91,77 @@ export function TaskThreadView({
   isSending = false,
   onSendFollowUp,
 }: TaskThreadViewProps) {
+  // Stick-to-bottom autoscroll. The user's "follow along" gesture is implicit:
+  // when they're already near the bottom, new streamed text + action rows +
+  // ProcessingShimmer growth should keep them pinned there. When they've
+  // scrolled up to read prior context, we leave them alone (no surprise jumps
+  // mid-read).
+  //
+  // We use a ResizeObserver on the inner content rather than dep-based
+  // scrolling because turn activity (Thinking detail, action rows, Processing
+  // shimmer text) grows the page height between renders without any prop
+  // change the parent passes us — only the inner DOM's size changes. A
+  // ResizeObserver fires on every height change regardless of source.
+  //
+  // We *also* force-scroll when the latest user message id changes — the user
+  // expects to see their own question land at the bottom, even if they were
+  // scrolled up reading older context when they hit Send.
+  //
+  // Could graduate to Vercel's <Conversation> from ai-elements later if we
+  // want a sticky scroll-to-bottom button, but the inline pattern is enough
+  // for this PR.
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const innerContentRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 80;
+  }, []);
+
+  // Re-arm stick-to-bottom and force a scroll when the user sends a new
+  // message — they always want to see what they just typed, regardless of
+  // where they were scrolled before.
+  const messages = thread?.messages ?? [];
+  let latestUserMessageId: string | undefined;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role.toUpperCase() === "USER") {
+      latestUserMessageId = messages[i].id;
+      break;
+    }
+  }
+  useLayoutEffect(() => {
+    if (!latestUserMessageId) return;
+    stickToBottomRef.current = true;
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [latestUserMessageId]);
+
+  // Continuously follow growing content while stuck-to-bottom. The dep on
+  // `threadIsAvailable` is critical: when the component first mounts in a
+  // loading state, refs are null because the section + inner div aren't
+  // rendered yet (the early-return path renders TaskThreadState instead).
+  // An effect with `[]` deps runs once and bails. We need to re-attach the
+  // observer when the thread loads and the refs become real.
+  const threadIsAvailable = thread != null && !isLoading && !error;
+  useEffect(() => {
+    if (!threadIsAvailable) return;
+    const inner = innerContentRef.current;
+    const container = scrollContainerRef.current;
+    if (!inner || !container) return;
+    // Pin to the bottom on first attach so the user lands at the most-recent
+    // turn instead of the top of the thread.
+    container.scrollTop = container.scrollHeight;
+    const observer = new ResizeObserver(() => {
+      if (!stickToBottomRef.current) return;
+      container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, [threadIsAvailable]);
+
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
   }
@@ -98,14 +179,23 @@ export function TaskThreadView({
     visibleMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
+  const turnByUserMessageId = mapTurnsToUserMessages(
+    visibleMessages,
+    thread.turns ?? [],
+  );
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
       <section
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
-        <div className="mx-auto grid w-full max-w-[750px] gap-8 px-4 pt-10 pb-6 sm:px-6">
+        <div
+          ref={innerContentRef}
+          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-6 sm:px-6"
+        >
           {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
@@ -117,10 +207,16 @@ export function TaskThreadView({
               <TranscriptSegment
                 key={message.id}
                 message={message}
-                showLatestActivity={index === latestUserIndex}
-                latestTurn={thread.turns?.[0]}
-                streamingChunks={showStreamingBuffer ? streamingChunks : []}
-                showProcessingShimmer={showProcessingShimmer}
+                turn={turnByUserMessageId.get(message.id)}
+                isLatestUser={index === latestUserIndex}
+                streamingChunks={
+                  index === latestUserIndex && showStreamingBuffer
+                    ? streamingChunks
+                    : []
+                }
+                showProcessingShimmer={
+                  index === latestUserIndex && showProcessingShimmer
+                }
               />
             ))
           )}
@@ -142,23 +238,23 @@ export function TaskThreadView({
 
 function TranscriptSegment({
   message,
-  showLatestActivity,
-  latestTurn,
+  turn,
+  isLatestUser,
   streamingChunks,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
-  showLatestActivity: boolean;
-  latestTurn?: TaskThreadTurn;
+  turn?: TaskThreadTurn;
+  isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   showProcessingShimmer: boolean;
 }) {
   return (
     <>
       <TranscriptMessage message={message} />
-      {showLatestActivity ? (
+      {turn ? <ThreadTurnActivity turn={turn} /> : null}
+      {isLatestUser ? (
         <>
-          <ThreadTurnActivity turn={latestTurn} />
           {streamingChunks.length > 0 ? (
             <StreamingMessageBuffer chunks={streamingChunks} />
           ) : null}
@@ -169,33 +265,57 @@ function TranscriptSegment({
   );
 }
 
+const EXPANDED_TURN_STATUSES = new Set([
+  "running",
+  "pending",
+  "queued",
+  "claimed",
+]);
+const RENDERED_TURN_STATUSES = new Set([
+  ...EXPANDED_TURN_STATUSES,
+  "completed",
+  "succeeded",
+  "failed",
+]);
+
+function normalizeStatus(status: unknown) {
+  return String(status ?? "")
+    .toLowerCase()
+    .trim();
+}
+
+function isExpandedStatus(status: string) {
+  return EXPANDED_TURN_STATUSES.has(status);
+}
+
+function shouldDefaultOpen(turn: TaskThreadTurn) {
+  return isExpandedStatus(normalizeStatus(turn.status)) || Boolean(turn.error);
+}
+
 function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   if (!turn) return null;
 
-  const status = String(turn.status ?? "").toLowerCase();
+  const status = normalizeStatus(turn.status);
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage);
   const shouldRender =
-    [
-      "pending",
-      "queued",
-      "claimed",
-      "running",
-      "completed",
-      "succeeded",
-      "failed",
-    ].includes(status) ||
+    RENDERED_TURN_STATUSES.has(status) ||
     rows.length > 0 ||
     Boolean(turn.error);
   if (!shouldRender) return null;
 
+  const expanded = isExpandedStatus(status);
+  const defaultOpen = shouldDefaultOpen(turn);
+
   return (
-    <article className="grid gap-3" aria-label="Thinking and tool activity">
-      <ThinkingRow
-        title="Thinking"
-        detail={turnSummary(turn, usage)}
-        isActive={status === "running"}
-      />
+    <ThinkingRow
+      key={defaultOpen ? "open" : "closed"}
+      title="Thinking"
+      detail={turnSummary(turn, usage)}
+      isActive={expanded}
+      defaultOpen={defaultOpen}
+      ariaLabel="Thinking and tool activity"
+    >
       {rows.map((row) => (
         <ActionRow
           key={`${turn.id}-${row.title}`}
@@ -207,18 +327,83 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
       ) : null}
-    </article>
+    </ThinkingRow>
   );
+}
+
+// Match each USER message to its corresponding turn so multi-turn threads
+// render one Thinking row per turn (parity with the admin thread view).
+// Sort turns ASC by startedAt (the GraphQL resolver emits DESC), then assign
+// turns to user messages in document order. Extra turns (e.g. scheduled-job
+// triggers with no preceding user message) attach to the latest user message
+// so the activity remains discoverable.
+function mapTurnsToUserMessages(
+  messages: TaskThreadMessage[],
+  turns: TaskThreadTurn[],
+): Map<string, TaskThreadTurn> {
+  const map = new Map<string, TaskThreadTurn>();
+  if (turns.length === 0) return map;
+
+  const sortedTurns = [...turns].sort((a, b) => {
+    const ta = parseEventTimestamp(a.startedAt ?? null);
+    const tb = parseEventTimestamp(b.startedAt ?? null);
+    if (ta !== tb) return ta - tb;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+
+  const userMessages = messages.filter(
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (userMessages.length === 0) return map;
+
+  const pairCount = Math.min(userMessages.length, sortedTurns.length);
+  for (let i = 0; i < pairCount; i += 1) {
+    map.set(userMessages[i].id, sortedTurns[i]);
+  }
+
+  // If there are more turns than user messages, anchor the trailing turns to
+  // the latest user message so they remain visible.
+  if (sortedTurns.length > userMessages.length) {
+    map.set(
+      userMessages[userMessages.length - 1].id,
+      sortedTurns[sortedTurns.length - 1],
+    );
+  }
+
+  return map;
 }
 
 function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
   if (hasAssistantAfterLatestUser(thread.messages)) return thread.messages;
 
-  const latestCompletedTurn = (thread.turns ?? []).find((turn) =>
-    ["completed", "succeeded"].includes(
-      String(turn.status ?? "").toLowerCase(),
-    ),
+  // The fallback exists for the brief window between a turn finishing and the
+  // assistant message being persisted/refetched. Only synthesize when the
+  // latest completed turn actually corresponds to the latest user message —
+  // i.e. it finished AT OR AFTER the latest user message was sent. Otherwise
+  // a previous question's response gets re-rendered below the new question's
+  // running Thinking row, producing a phantom duplicate.
+  const latestUserMessage = findLastIndex(
+    thread.messages,
+    (message) => message.role.toUpperCase() === "USER",
   );
+  if (latestUserMessage < 0) return thread.messages;
+  const latestUserTime = parseEventTimestamp(
+    thread.messages[latestUserMessage].createdAt ?? null,
+  );
+
+  const latestCompletedTurn = (thread.turns ?? []).find((turn) => {
+    if (
+      !["completed", "succeeded"].includes(
+        String(turn.status ?? "").toLowerCase(),
+      )
+    ) {
+      return false;
+    }
+    const finishedTime = parseEventTimestamp(turn.finishedAt ?? null);
+    // Allow when timestamps are unavailable (treat as 0) so older threads
+    // without timestamps still render their fallback once.
+    return finishedTime === 0 || finishedTime >= latestUserTime;
+  });
   const response = stringValue(
     parseRecord(latestCompletedTurn?.resultJson).response,
   );
@@ -311,8 +496,12 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
               ))}
             </div>
           ) : null}
-          <div className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0">
-            {body ? <Streamdown>{body}</Streamdown> : <p>(No message content)</p>}
+          <div className="prose prose-invert max-w-none text-[1.05rem] text-foreground prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-4">
+            {body ? (
+              <Streamdown>{body}</Streamdown>
+            ) : (
+              <p>(No message content)</p>
+            )}
           </div>
           {message.durableArtifact ? (
             <GeneratedArtifactCard artifact={message.durableArtifact} />
@@ -367,15 +556,24 @@ function FollowUpComposer({
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing
+          ) {
             event.preventDefault();
             void handleSubmit();
           }
         }}
         placeholder="Type a command..."
         rows={1}
-        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
-        disabled={disabled || isSending}
+        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 disabled:bg-transparent disabled:opacity-100 dark:bg-transparent dark:disabled:bg-transparent"
+        // Don't disable the textarea while a send is in flight — the shared
+        // Textarea applies a muted disabled-bg + reduced opacity that flashes
+        // visibly on every Enter. The send button is already gated on
+        // canSubmit, so the user can't double-fire. They can keep typing the
+        // next message while the previous one streams.
+        disabled={disabled}
       />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -419,28 +617,42 @@ function ThinkingRow({
   title,
   detail,
   isActive = false,
+  defaultOpen = false,
+  ariaLabel,
+  children,
 }: {
   title: string;
   detail?: string;
   isActive?: boolean;
+  defaultOpen?: boolean;
+  ariaLabel?: string;
+  children?: ReactNode;
 }) {
+  // React.Children.toArray + filter Boolean handles arrays containing empty
+  // arrays (truthy in plain JS) and falsy nodes correctly; a bare children.some
+  // would render an empty container when rows=[] because Boolean([]) is true.
+  const hasChildren = Children.toArray(children).some(Boolean);
   return (
-    <details className="group w-fit text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
-        <span
-          className={
-            isActive
-              ? "size-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin"
-              : "flex size-4 items-center justify-center rounded-full border border-muted-foreground/80"
-          }
-        />
+    <details
+      className="group/thinking w-fit text-muted-foreground"
+      open={defaultOpen}
+      aria-label={ariaLabel}
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
+        <Brain aria-hidden="true" className="size-4 text-sky-400" />
         {title}
-        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 transition-transform group-open/thinking:rotate-90"
+        />
       </summary>
       {detail ? (
         <p className="ml-7 mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
           {detail}
         </p>
+      ) : null}
+      {hasChildren ? (
+        <div className="ml-7 mt-3 grid gap-2">{children}</div>
       ) : null}
     </details>
   );
@@ -464,11 +676,11 @@ function ActionRow({
           ? Sparkles
           : Bot;
   return (
-    <details className="group w-fit text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
+    <details className="group/action w-fit text-muted-foreground">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
         <Icon className="size-4" />
         {title}
-        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+        <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
       {detail ? (
         <pre className="ml-7 mt-2 max-w-2xl whitespace-pre-wrap rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
@@ -571,6 +783,22 @@ function actionRowsForTurn(
   for (const event of sortedEvents) {
     const row = actionRowForEvent(event);
     if (!row) continue;
+    // Live tool_invocation_started events emitted by the Strands runtime
+    // dedup against the post-turn `usage.tool_invocations` row. Once the
+    // turn finishes and the invocation is in `seen` by tool-name, the live
+    // event for the same tool would otherwise re-render as a duplicate.
+    if (stringValue(event.eventType) === "tool_invocation_started") {
+      const payload = parseRecord(event.payload);
+      const toolName =
+        stringValue(payload.tool_name) ||
+        stringValue(payload.toolName) ||
+        stringValue(payload.name);
+      if (toolName) {
+        const toolKey = toolName.toLowerCase();
+        if (seen.has(toolKey)) continue;
+        seen.add(toolKey);
+      }
+    }
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -586,6 +814,18 @@ function actionRowForEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
+  if (eventType === "tool_invocation_started") {
+    const toolName =
+      stringValue(payload.tool_name) ||
+      stringValue(payload.toolName) ||
+      stringValue(payload.name) ||
+      "tool";
+    return {
+      title: toolActionTitle(toolName),
+      detail,
+      kind: toolKind(toolName),
+    };
+  }
   if (eventType === "browser_automation_started") {
     return { title: "Opening browser", detail, kind: "source" as const };
   }

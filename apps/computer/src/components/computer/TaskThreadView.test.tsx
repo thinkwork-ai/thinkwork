@@ -4,6 +4,16 @@ import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(cleanup);
 
+// Asserts the labelled element is actually a <details> before narrowing to
+// HTMLDetailsElement. Without this guard, `as HTMLDetailsElement` would cast
+// any HTMLElement and surface confusing "expected undefined" failures if the
+// label ever migrates to a non-details element.
+function getThinkingDetails(): HTMLDetailsElement {
+  const el = screen.getByLabelText("Thinking and tool activity");
+  expect(el.tagName.toLowerCase()).toBe("details");
+  return el as HTMLDetailsElement;
+}
+
 describe("TaskThreadView", () => {
   it("renders transcript messages, generated artifact cards, and command composer", () => {
     render(
@@ -644,6 +654,435 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByText("(No message content)")).toBeTruthy();
+  });
+
+  it("renders assistant Markdown wrapper with tightened prose density modifiers", () => {
+    // U1 regression guard: dropping `prose-p:my-2 prose-li:my-0 …` reverts the
+    // page to the loose default vertical rhythm that pre-merge content used.
+    const { container } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Density check",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            { id: "m1", role: "USER", content: "List options" },
+            {
+              id: "m2",
+              role: "ASSISTANT",
+              content: "## Options\n\n- Alpha\n- Beta\n- Gamma",
+            },
+          ],
+        }}
+      />,
+    );
+    const proseWrapper = container.querySelector("div.prose");
+    expect(proseWrapper).not.toBeNull();
+    const cls = proseWrapper!.className;
+    for (const token of [
+      "prose-p:my-2",
+      "prose-ul:my-2",
+      "prose-ol:my-2",
+      "prose-li:my-0",
+      "prose-headings:mt-4",
+      "prose-headings:mb-2",
+    ]) {
+      expect(cls).toContain(token);
+    }
+    // Pre-existing loose tokens must not survive the refactor.
+    expect(cls).not.toContain("leading-8");
+    expect(cls).not.toContain("prose-p:my-0");
+  });
+
+  it("renders the transcript segment grid with tightened gap-3 spacing", () => {
+    // U1 regression guard: gap-8 (and the interim gap-5) waste vertical
+    // space between transcript segments — Thinking should sit close to the
+    // assistant answer it precedes, like one continuous thought.
+    const { container } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Gap check",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            { id: "m1", role: "USER", content: "Hi" },
+            { id: "m2", role: "ASSISTANT", content: "Hello." },
+          ],
+        }}
+      />,
+    );
+    const grid = container.querySelector("div.gap-3");
+    expect(grid).not.toBeNull();
+    expect(container.querySelector("div.gap-8")).toBeNull();
+    expect(container.querySelector("div.gap-5")).toBeNull();
+  });
+
+  it("renders Thinking row collapsed when a turn completes cleanly", () => {
+    // U2 collapse-on-finish: defaultOpen is false for terminal-clean states so
+    // child action rows nest inside the closed disclosure by default.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed quietly",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Pull leads" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-09T08:01:05Z",
+              events: [
+                {
+                  id: "e1",
+                  eventType: "browser_automation_started",
+                  payload: { url: "https://example.com" },
+                  createdAt: "2026-05-09T08:01:00Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    const details = getThinkingDetails();
+    expect(details.open).toBe(false);
+  });
+
+  it("renders Thinking row expanded with the Run failed row visible when a turn errors", () => {
+    // U2 / DL-002 regression guard: a failed turn must surface its error
+    // without forcing the user to expand a closed disclosure.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Failed turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Reach the page" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "failed",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-09T08:01:05Z",
+              error: "Browser session timed out",
+            },
+          ],
+        }}
+      />,
+    );
+    const details = getThinkingDetails();
+    expect(details.open).toBe(true);
+    expect(screen.getByText("Run failed")).toBeTruthy();
+    expect(screen.getByText("Browser session timed out")).toBeTruthy();
+  });
+
+  it("renders Thinking row expanded for queued and pending turns", () => {
+    // U2 / DL-001 regression guard: pre-running statuses must default the
+    // disclosure open so users see the activity rows stream in (the
+    // ProcessingShimmer carries the in-flight signal — no spinner needed
+    // on the brain icon itself).
+    for (const status of ["pending", "queued", "claimed"] as const) {
+      const { unmount } = render(
+        <TaskThreadView
+          thread={{
+            id: `thread-${status}`,
+            title: `${status} turn`,
+            lifecycleStatus: "RUNNING",
+            messages: [{ id: "m1", role: "USER", content: "Start" }],
+            turns: [
+              {
+                id: "turn-1",
+                status,
+                invocationSource: "chat_message",
+              },
+            ],
+          }}
+        />,
+      );
+      const details = getThinkingDetails();
+      expect(details.open).toBe(true);
+      // The brain icon stays static; the in-flight signal is carried by
+      // ProcessingShimmer / streaming buffer, so this test only asserts the
+      // disclosure is open. The dedicated brain-icon assertion lives in the
+      // hover/visual tests above.
+      unmount();
+    }
+  });
+
+  it("collapses the Thinking disclosure when a running turn transitions to a clean terminal status", () => {
+    // U2: rerender with a status flip across the open-state boundary forces a
+    // remount via the `key` strategy, applying defaultOpen=false.
+    const baseThread = {
+      id: "thread-1",
+      title: "Collapse on finish",
+      lifecycleStatus: "RUNNING",
+      messages: [{ id: "m1", role: "USER", content: "Run" }],
+      turns: [
+        {
+          id: "turn-1",
+          status: "running",
+          invocationSource: "chat_message",
+        },
+      ],
+    };
+
+    const { rerender } = render(<TaskThreadView thread={baseThread} />);
+    const runningDetails = getThinkingDetails();
+    expect(runningDetails.open).toBe(true);
+
+    rerender(
+      <TaskThreadView
+        thread={{
+          ...baseThread,
+          turns: [{ ...baseThread.turns[0], status: "completed" }],
+        }}
+      />,
+    );
+    const finishedDetails = getThinkingDetails();
+    expect(finishedDetails.open).toBe(false);
+  });
+
+  it("does not synthesize a fallback response when a new turn is in flight after a previous completed turn", () => {
+    // Regression: withTurnResponseFallback used to append the latest *completed*
+    // turn's response after the latest user message, even when the latest user
+    // message was a brand-new question whose own turn was still running. The
+    // result was the previous answer rendered as a phantom duplicate below the
+    // new question's running Thinking row.
+    const previousResponse =
+      "Two great options at the same location — Springdale General.";
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-flight",
+          title: "Mid-flight follow-up",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Find the farmer's market",
+              createdAt: "2026-05-09T10:00:00Z",
+            },
+            {
+              id: "a1",
+              role: "ASSISTANT",
+              content: previousResponse,
+              createdAt: "2026-05-09T10:00:30Z",
+            },
+            {
+              id: "u2",
+              role: "USER",
+              content: "What is its address?",
+              createdAt: "2026-05-09T10:01:00Z",
+            },
+          ],
+          turns: [
+            // Newest first (resolver emits DESC). The new turn for u2 is still
+            // running; the previous turn for u1 is completed but its response
+            // is already represented by message a1.
+            {
+              id: "turn-2",
+              status: "running",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:01:01Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:00:00Z",
+              finishedAt: "2026-05-09T10:00:30Z",
+              resultJson: { response: previousResponse },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // The previous response should appear exactly once (as the persisted
+    // assistant message a1), not twice (no synthesized duplicate below u2).
+    expect(
+      screen.getAllByText(previousResponse, { exact: false }),
+    ).toHaveLength(1);
+  });
+
+  it("renders live tool_invocation_started events with toolActionTitle formatting", () => {
+    // U4 regression guard: the Strands runtime emits tool_invocation_started
+    // events as tools begin (instead of waiting for end-of-turn). The UI
+    // must format them with the same toolActionTitle helper used for
+    // post-turn usage.tool_invocations so the live row's title matches what
+    // the row will look like once the turn finishes.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-live",
+          title: "Live tools",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "u1", role: "USER", content: "Find sources" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+              events: [
+                {
+                  id: "e1",
+                  eventType: "tool_invocation_started",
+                  payload: {
+                    tool_name: "web_search",
+                    tool_use_id: "tool-1",
+                    input_preview: "best brunch east austin",
+                  },
+                  createdAt: "2026-05-09T11:30:00Z",
+                },
+                {
+                  id: "e2",
+                  eventType: "tool_invocation_started",
+                  payload: { tool_name: "recall", tool_use_id: "tool-2" },
+                  createdAt: "2026-05-09T11:30:01Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    // toolActionTitle maps "web_search" → "Finding sources" and "recall" →
+    // "Checking memory" — verifying the live event uses that formatter.
+    expect(screen.getByText("Finding sources")).toBeTruthy();
+    expect(screen.getByText("Checking memory")).toBeTruthy();
+  });
+
+  it("dedupes live tool_invocation_started events against post-turn usage.tool_invocations", () => {
+    // U4 regression guard: when a turn finishes, the same tool appears in
+    // both `usage.tool_invocations` (post-turn reconstruction) and the
+    // streaming events list. Without dedup, the row renders twice.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-dedup",
+          title: "Dedup",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "u1", role: "USER", content: "Find sources" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              usageJson: {
+                tool_invocations: [
+                  {
+                    tool_name: "web_search",
+                    input_preview: "best brunch east austin",
+                    output_preview: "...",
+                    status: "success",
+                  },
+                ],
+              },
+              events: [
+                {
+                  id: "e1",
+                  eventType: "tool_invocation_started",
+                  payload: {
+                    tool_name: "web_search",
+                    tool_use_id: "tool-1",
+                  },
+                  createdAt: "2026-05-09T11:30:00Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    // Exactly one "Finding sources" row, not two.
+    expect(screen.getAllByText("Finding sources")).toHaveLength(1);
+  });
+
+  it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {
+    // U3 regression guard: prior behavior attached only the latest turn's
+    // activity to the latest user message, leaving earlier turns invisible.
+    // Admin shows a Thinking row per user/computer pair; Computer must match.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-multi",
+          title: "Multi-turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            { id: "u1", role: "USER", content: "First question" },
+            {
+              id: "a1",
+              role: "ASSISTANT",
+              content: "First answer",
+            },
+            { id: "u2", role: "USER", content: "Second question" },
+            {
+              id: "a2",
+              role: "ASSISTANT",
+              content: "Second answer",
+            },
+          ],
+          // Resolver emits turns DESC; the component must sort ASC before
+          // pairing with user messages.
+          turns: [
+            {
+              id: "turn-2",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:05:00Z",
+              finishedAt: "2026-05-09T10:05:30Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:00:00Z",
+              finishedAt: "2026-05-09T10:00:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Exactly one Thinking summary per turn, both with the labelled-region affordance.
+    const thinkingDetailsList = screen.getAllByLabelText(
+      "Thinking and tool activity",
+    );
+    expect(thinkingDetailsList).toHaveLength(2);
+
+    // Chronological order: the first user's Thinking row must appear before
+    // the second user's Thinking row in the DOM.
+    const [first, second] = thinkingDetailsList;
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps the Thinking summary aria-label intact on the new <details> element", () => {
+    // U2 / DL-003: dropping the <article> wrapper must not lose the labelled
+    // region affordance. Screen readers continue to find the same name.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Aria check",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "m1", role: "USER", content: "Run" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+      />,
+    );
+    const labelled = screen.getByLabelText("Thinking and tool activity");
+    expect(labelled.tagName.toLowerCase()).toBe("details");
   });
 
   it("sends follow-up messages from the composer", () => {

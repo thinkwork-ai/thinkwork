@@ -707,8 +707,14 @@ def _call_strands_agent(system_prompt: str, messages: list,
     if stream_thread_id:
         try:
             from appsync_publisher import build_appsync_chunk_callback
+            # Wire the same computer-event sink the browser tool uses so
+            # tool_invocation_started events surface live (otherwise the UI
+            # only sees tool calls when the turn finishes and
+            # agent.messages reconstruction populates usage.tool_invocations).
+            tool_event_sink = _build_computer_event_sink(computer_event_context)
             stream_callback_handler, stream_publisher = build_appsync_chunk_callback(
-                stream_thread_id
+                stream_thread_id,
+                tool_event_sink=tool_event_sink,
             )
             if stream_callback_handler:
                 logger.info("AppSync chunk streaming enabled for thread=%s", stream_thread_id)

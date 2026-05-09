@@ -5,13 +5,15 @@ interface StreamingMessageBufferProps {
   chunks: ComputerThreadChunk[];
 }
 
-export function StreamingMessageBuffer({ chunks }: StreamingMessageBufferProps) {
+export function StreamingMessageBuffer({
+  chunks,
+}: StreamingMessageBufferProps) {
   if (chunks.length === 0) return null;
   const text = chunks.map((chunk) => chunk.text).join("");
 
   return (
     <article
-      className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0"
+      className="prose prose-invert max-w-none text-[1.05rem] text-foreground prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-4"
       aria-label="Streaming assistant response"
     >
       <Streamdown>{text}</Streamdown>
