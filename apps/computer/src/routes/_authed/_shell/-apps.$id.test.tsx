@@ -12,6 +12,7 @@ import { transformApplet } from "@/applets/transform/transform";
 import { AppletMount, AppletRouteContent } from "./apps.$id";
 
 vi.mock("urql", () => ({
+  gql: (strings: TemplateStringsArray) => strings.join(""),
   useQuery: vi.fn(),
 }));
 
@@ -189,6 +190,56 @@ describe("AppletRouteContent", () => {
 });
 
 describe("AppletMount", () => {
+  it("shows refresh only when the applet exports it and passes refreshed data", async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      data: { count: 2 },
+      sourceStatuses: { crm: "success" },
+    });
+    const MountedApplet = ({ refreshData }: { refreshData?: unknown }) => (
+      <div>
+        Count{" "}
+        {typeof refreshData === "object" && refreshData
+          ? String((refreshData as { count?: number }).count)
+          : "1"}
+      </div>
+    );
+
+    render(
+      <AppletMount
+        appId="app-1"
+        instanceId="instance-1"
+        source="export default function App() { return null; }"
+        version={1}
+        loadModule={async () => ({ default: MountedApplet, refresh })}
+      />,
+    );
+
+    await screen.findByText("Count 1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await screen.findByText("Count 2");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides refresh when the applet does not export it", async () => {
+    const MountedApplet = () => <div>No refresh app</div>;
+
+    render(
+      <AppletMount
+        appId="app-1"
+        instanceId="instance-1"
+        source="export default function App() { return null; }"
+        version={1}
+        loadModule={async () => ({ default: MountedApplet })}
+      />,
+    );
+
+    await screen.findByText("No refresh app");
+
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  });
+
   it("renders transform failures as recoverable app errors", async () => {
     vi.mocked(transformApplet).mockResolvedValueOnce({
       ok: false,

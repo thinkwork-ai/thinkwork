@@ -9,9 +9,12 @@ import {
 import { RefreshCw } from "lucide-react";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
+import type { AppletRefreshResult } from "@thinkwork/computer-stdlib";
+import { registerAppletRefreshHandler } from "@/applets/host-applet-api";
 import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
+import { AppRefreshControl } from "@/components/apps/AppRefreshControl";
 import { AppletErrorBoundary } from "@/components/apps/AppletErrorBoundary";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import type { AppletPayload } from "@/lib/app-artifacts";
@@ -27,6 +30,7 @@ interface AppletResult {
 
 type AppletModule = {
   default?: ComponentType<AppletComponentProps>;
+  refresh?: () => Promise<AppletRefreshResult>;
 };
 
 type AppletModuleLoader = (moduleUrl: string) => Promise<AppletModule>;
@@ -34,6 +38,7 @@ type AppletModuleLoader = (moduleUrl: string) => Promise<AppletModule>;
 interface AppletComponentProps {
   appId: string;
   instanceId: string;
+  refreshData?: unknown;
 }
 
 const defaultAppletModuleLoader: AppletModuleLoader = (moduleUrl) =>
@@ -183,15 +188,19 @@ export function AppletMount({
         status: "ready";
         Component: ComponentType<AppletComponentProps>;
         resetKey: string;
+        refresh?: () => Promise<AppletRefreshResult>;
       }
     | { status: "error"; message: string }
   >({ status: "loading" });
+  const [refreshData, setRefreshData] = useState<unknown>();
 
   useEffect(() => {
     let cancelled = false;
 
     async function mount() {
       setState({ status: "loading" });
+      setRefreshData(undefined);
+      registerAppletRefreshHandler(appId, instanceId, null);
       await loadAppletHostExternals();
       const transformed = await transformApplet(source, version, { appId });
       if (cancelled) return;
@@ -214,7 +223,9 @@ export function AppletMount({
         status: "ready",
         Component: module.default,
         resetKey: transformed.cacheKey,
+        refresh: module.refresh,
       });
+      registerAppletRefreshHandler(appId, instanceId, module.refresh ?? null);
     }
 
     mount().catch((error: unknown) => {
@@ -228,8 +239,9 @@ export function AppletMount({
 
     return () => {
       cancelled = true;
+      registerAppletRefreshHandler(appId, instanceId, null);
     };
-  }, [appId, loadModule, source, version]);
+  }, [appId, instanceId, loadModule, source, version]);
 
   if (state.status === "loading") {
     return <AppletLoading />;
@@ -241,11 +253,20 @@ export function AppletMount({
 
   const MountedApplet = state.Component;
   return (
-    <AppletErrorBoundary resetKey={state.resetKey}>
-      <div className="min-w-0 overflow-x-hidden">
-        <MountedApplet appId={appId} instanceId={instanceId} />
-      </div>
-    </AppletErrorBoundary>
+    <div className="grid min-w-0 gap-4">
+      {state.refresh ? (
+        <AppRefreshControl onRefresh={state.refresh} onData={setRefreshData} />
+      ) : null}
+      <AppletErrorBoundary resetKey={state.resetKey}>
+        <div className="min-w-0 overflow-x-hidden">
+          <MountedApplet
+            appId={appId}
+            instanceId={instanceId}
+            refreshData={refreshData}
+          />
+        </div>
+      </AppletErrorBoundary>
+    </div>
   );
 }
 

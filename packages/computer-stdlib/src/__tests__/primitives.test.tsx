@@ -154,14 +154,20 @@ describe("@thinkwork/computer-stdlib primitives", () => {
     const onRefresh = vi.fn();
     render(
       <RefreshBar
+        title="Refresh app"
         refreshState="failed"
+        sourceStatuses={{ crm: "success", email: "partial" }}
         error="Refresh failed"
         onRefresh={onRefresh}
       />,
     );
 
+    expect(screen.getByText("Refresh app")).toBeTruthy();
     expect(screen.getByText("Failed")).toBeTruthy();
     expect(screen.getByText("Refresh failed")).toBeTruthy();
+    expect(screen.getByText("Refresh source status")).toBeTruthy();
+    expect(screen.getByText("crm")).toBeTruthy();
+    expect(screen.getByText("email")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Ask Computer" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
