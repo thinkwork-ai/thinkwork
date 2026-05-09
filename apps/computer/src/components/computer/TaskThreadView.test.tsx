@@ -656,9 +656,12 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("(No message content)")).toBeTruthy();
   });
 
-  it("renders assistant Markdown wrapper with tightened prose density modifiers", () => {
-    // U1 regression guard: dropping `prose-p:my-2 prose-li:my-0 …` reverts the
-    // page to the loose default vertical rhythm that pre-merge content used.
+  it("renders assistant Markdown wrapper with Codex-transcript prose density", () => {
+    // Regression guard: matches the tightened token set targeted by the
+    // "make Computer match the Codex CLI transcript density" iteration —
+    // text-sm + leading-6 + my-1.5 paragraph/list margins, prose-sm modifier
+    // shrinks the inline element rhythm. Reverting any one token sends the
+    // page back toward the looser pre-merge rhythm.
     const { container } = render(
       <TaskThreadView
         thread={{
@@ -680,18 +683,23 @@ describe("TaskThreadView", () => {
     expect(proseWrapper).not.toBeNull();
     const cls = proseWrapper!.className;
     for (const token of [
-      "prose-p:my-2",
-      "prose-ul:my-2",
-      "prose-ol:my-2",
+      "prose-sm",
+      "text-sm",
+      "leading-6",
+      "prose-p:my-1.5",
+      "prose-ul:my-1.5",
+      "prose-ol:my-1.5",
       "prose-li:my-0",
-      "prose-headings:mt-4",
-      "prose-headings:mb-2",
+      "prose-headings:mt-3",
+      "prose-headings:mb-1.5",
     ]) {
       expect(cls).toContain(token);
     }
-    // Pre-existing loose tokens must not survive the refactor.
+    // Loose tokens from earlier iterations must not survive.
     expect(cls).not.toContain("leading-8");
+    expect(cls).not.toContain("text-[1.05rem]");
     expect(cls).not.toContain("prose-p:my-0");
+    expect(cls).not.toContain("prose-p:my-2");
   });
 
   it("renders the transcript segment grid with tightened gap-3 spacing", () => {

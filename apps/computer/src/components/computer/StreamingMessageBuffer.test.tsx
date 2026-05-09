@@ -44,17 +44,22 @@ describe("StreamingMessageBuffer", () => {
     expect(article).not.toBeNull();
     const cls = article!.className;
     for (const token of [
-      "prose-p:my-2",
-      "prose-ul:my-2",
-      "prose-ol:my-2",
+      "prose-sm",
+      "text-sm",
+      "leading-6",
+      "prose-p:my-1.5",
+      "prose-ul:my-1.5",
+      "prose-ol:my-1.5",
       "prose-li:my-0",
-      "prose-headings:mt-4",
-      "prose-headings:mb-2",
+      "prose-headings:mt-3",
+      "prose-headings:mb-1.5",
     ]) {
       expect(cls).toContain(token);
     }
     expect(cls).not.toContain("leading-8");
+    expect(cls).not.toContain("text-[1.05rem]");
     expect(cls).not.toContain("prose-p:my-0");
+    expect(cls).not.toContain("prose-p:my-2");
   });
 
   it("renders partial Markdown mid-stream without throwing", () => {
