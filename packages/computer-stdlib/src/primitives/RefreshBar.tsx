@@ -5,12 +5,20 @@ import {
   RefreshStateTimeline,
   type RefreshState,
 } from "./RefreshStateTimeline.js";
+import {
+  SourceStatusList,
+  type SourceStatus,
+  type SourceStatusItem,
+} from "./SourceStatusList.js";
 
 export interface RefreshBarProps {
+  title?: string;
+  description?: string;
   recipeVersion?: string | number;
   lastRefreshAt?: string | Date;
   nextAllowedAt?: string | Date;
   refreshState?: RefreshState;
+  sourceStatuses?: Record<string, SourceStatus>;
   disabled?: boolean;
   error?: string | null;
   onRefresh?: () => void | Promise<void>;
@@ -18,10 +26,13 @@ export interface RefreshBarProps {
 }
 
 export function RefreshBar({
+  title = "Refresh recipe",
+  description = "Refresh re-runs saved source queries and deterministic transforms. It does not reinterpret the business question or mutate external systems.",
   recipeVersion,
   lastRefreshAt,
   nextAllowedAt,
   refreshState = "available",
+  sourceStatuses,
   disabled = false,
   error,
   onRefresh,
@@ -35,7 +46,7 @@ export function RefreshBar({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold">Refresh recipe</h3>
+            <h3 className="text-sm font-semibold">{title}</h3>
             {recipeVersion != null ? (
               <Badge variant="outline" className="rounded-md">
                 v{recipeVersion}
@@ -44,9 +55,7 @@ export function RefreshBar({
             <RefreshStateBadge state={refreshState} />
           </div>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Refresh re-runs saved source queries and deterministic transforms.
-            It does not reinterpret the business question or mutate external
-            systems.
+            {description}
           </p>
           {lastRefreshAt || nextAllowedAt ? (
             <p className="mt-2 text-xs text-muted-foreground">
@@ -94,9 +103,26 @@ export function RefreshBar({
           {error}
         </div>
       ) : null}
+      {sourceStatuses ? (
+        <SourceStatusList
+          title="Refresh source status"
+          description="Each source reports whether the deterministic refresh had full, partial, or failed coverage."
+          sources={sourceStatusItems(sourceStatuses)}
+        />
+      ) : null}
       <RefreshStateTimeline state={refreshState} />
     </section>
   );
+}
+
+function sourceStatusItems(
+  sourceStatuses: Record<string, SourceStatus>,
+): SourceStatusItem[] {
+  return Object.entries(sourceStatuses).map(([id, status]) => ({
+    id,
+    label: id,
+    status,
+  }));
 }
 
 function RefreshStateBadge({ state }: { state: RefreshState }) {

@@ -1,7 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
-import { createHostAppletAPI } from "../host-applet-api";
+import {
+  createHostAppletAPI,
+  registerAppletRefreshHandler,
+} from "../host-applet-api";
 
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
@@ -166,5 +169,25 @@ describe("createHostAppletAPI", () => {
 
     expect(result.current[0]).toEqual(["draft"]);
     expect(result.current[2].error?.message).toBe("network down");
+  });
+
+  it("routes refresh through the registered applet export", async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      data: { ok: true },
+      sourceStatuses: { crm: "success" },
+    });
+    registerAppletRefreshHandler("app-1", "instance-1", refresh);
+    const api = createHostAppletAPI("app-1", "instance-1");
+
+    await expect(api.refresh()).resolves.toEqual({
+      data: { ok: true },
+      sourceStatuses: { crm: "success" },
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    registerAppletRefreshHandler("app-1", "instance-1", null);
+    await expect(api.refresh()).rejects.toThrow(
+      "This app does not expose a deterministic refresh function.",
+    );
   });
 });

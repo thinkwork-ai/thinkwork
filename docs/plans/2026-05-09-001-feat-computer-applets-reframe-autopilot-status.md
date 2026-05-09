@@ -14,6 +14,35 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U10:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u10-refresh` on branch
+  `codex/computer-applets-u10-refresh` from `origin/main` after U9 merged.
+- **Progress:** Activated the live applet refresh contract. Applet modules can
+  export `refresh()`, the app detail canvas registers it per `(appId,
+  instanceId)`, the host `useAppletAPI().refresh()` routes to that registered
+  handler, and the UI only shows refresh controls when an applet provides the
+  export. Refresh results surface per-source success/partial/failed status and
+  preserve prior rendered data for thrown refreshes, null data, or all-source
+  failures.
+- **Verification note:** `pnpm install --frozen-lockfile`, U10-focused
+  computer refresh/host/route tests, `pnpm --filter @thinkwork/computer-stdlib
+  test`, `pnpm --filter @thinkwork/computer-stdlib typecheck`, `pnpm --filter
+  @thinkwork/computer typecheck`, `pnpm --filter @thinkwork/computer test`,
+  `pnpm --filter @thinkwork/computer build`, `git diff --check`, `pnpm lint`,
+  `pnpm -r --if-present typecheck`, and `pnpm -r --if-present test` passed
+  locally. Build warnings remain the existing shared UI sourcemap/chunk-size
+  and host-registry dynamic-import warnings. `pnpm format:check` is blocked by
+  the existing missing root `prettier` binary in this workspace.
+- **Smoke note:** Started the apps/computer dev server from the U10 worktree on
+  `http://localhost:5174` and confirmed the applet route returned HTTP 200.
+  The smoke used `localhost` rather than `127.0.0.1` to match the OAuth
+  callback hostname requirement.
+- **Current PR:** #1062 (`feat(computer): activate applet refresh`).
+- **CI:** PR #1062 checks passed: CLA, lint, test, typecheck, verify.
+- **Merged U9:** PR #1061 (`feat(computer): activate applet host api`) was
+  squash-merged to `main` at
+  `b8887161791bb01b171919c7526831a114da8acf`; remote/local branches and the
+  U9 worktree were deleted.
 - **Started U9:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u9-host-api` on branch
   `codex/computer-applets-u9-host-api` from `origin/main` after U8 merged.

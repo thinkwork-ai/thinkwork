@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gql, useMutation, useQuery, type DocumentInput } from "urql";
-import type { AppletAPI, AppletStateMeta } from "@thinkwork/computer-stdlib";
+import type {
+  AppletAPI,
+  AppletRefreshResult,
+  AppletStateMeta,
+} from "@thinkwork/computer-stdlib";
 import { AppletQuery, AppletsQuery } from "@/lib/graphql-queries";
 
 const APPLET_STATE_SAVE_DEBOUNCE_MS = 1_000;
+type AppletRefreshHandler = () => Promise<AppletRefreshResult>;
+const refreshHandlers = new Map<string, AppletRefreshHandler>();
 
 const AppletStateQuery = gql`
   query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {
@@ -61,12 +67,30 @@ export function createHostAppletAPI(appId: string, instanceId: string): AppletAP
     useAppletMutation<T>(name: string) {
       return useHostAppletMutation<T>(name);
     },
-    async refresh() {
-      throw new Error(
-        "INERT_NOT_WIRED: applet refresh is registered but U10 will activate it",
-      );
-    },
+    refresh: <T = unknown>() =>
+      refreshApplet(appId, instanceId) as Promise<AppletRefreshResult<T>>,
   };
+}
+
+export function registerAppletRefreshHandler(
+  appId: string,
+  instanceId: string,
+  handler: AppletRefreshHandler | null,
+) {
+  const key = refreshHandlerKey(appId, instanceId);
+  if (handler) {
+    refreshHandlers.set(key, handler);
+  } else {
+    refreshHandlers.delete(key);
+  }
+}
+
+export async function refreshApplet(appId: string, instanceId: string) {
+  const handler = refreshHandlers.get(refreshHandlerKey(appId, instanceId));
+  if (!handler) {
+    throw new Error("This app does not expose a deterministic refresh function.");
+  }
+  return handler();
 }
 
 function useHostAppletState<T>(
@@ -164,4 +188,8 @@ function unknownAppletQuery(name: string) {
 
 function unknownAppletMutation(name: string) {
   return new Error(`Unknown applet mutation "${name}"`);
+}
+
+function refreshHandlerKey(appId: string, instanceId: string) {
+  return `${appId}:${instanceId}`;
 }
