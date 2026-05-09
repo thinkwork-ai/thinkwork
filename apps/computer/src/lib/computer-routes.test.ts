@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  COMPUTER_ROUTE_LABELS,
   COMPUTER_ARTIFACTS_ROUTE,
+  COMPUTER_CUSTOMIZE_ROUTE,
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
+  COMPUTER_ROUTE_LABELS,
   COMPUTER_THREADS_ROUTE,
   InvalidComputerRouteParamError,
   computerArtifactRoute,
@@ -36,5 +37,10 @@ describe("computer route helpers", () => {
     expect(COMPUTER_ROUTE_LABELS.newThread).toBe("New");
     expect(COMPUTER_ROUTE_LABELS.artifacts).toBe("Artifacts");
     expect(COMPUTER_ROUTE_LABELS.memory).toBe("Memory");
+  });
+
+  it("exposes the customize route constant + label", () => {
+    expect(COMPUTER_CUSTOMIZE_ROUTE).toBe("/customize");
+    expect(COMPUTER_ROUTE_LABELS.customize).toBe("Customize");
   });
 });
