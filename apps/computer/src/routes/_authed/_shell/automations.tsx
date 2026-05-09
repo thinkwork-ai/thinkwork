@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 
 export const Route = createFileRoute("/_authed/_shell/automations")({
   component: AutomationsPage,
 });
 
 function AutomationsPage() {
+  useBreadcrumbs([{ label: "Automations" }]);
   return (
     <PlaceholderPage
       title="Automations"

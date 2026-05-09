@@ -5,6 +5,7 @@ import {
   MemoryPanel,
   type ComputerMemoryRecord,
 } from "@/components/memory/MemoryPanel";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerMemoryRecordsQuery,
@@ -29,6 +30,7 @@ interface MemoryRecordsResult {
 }
 
 function MemoryPage() {
+  useBreadcrumbs([{ label: "Memory" }]);
   const { tenantId } = useTenant();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [{ data: computerData }] = useQuery<MyComputerResult>({

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useQuery } from "urql";
 import { ApprovalQueue } from "@/components/approvals/ApprovalQueue";
 import type { ComputerApproval } from "@/components/approvals/approval-types";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { ComputerApprovalsQuery } from "@/lib/graphql-queries";
 
@@ -15,6 +16,7 @@ interface ApprovalsResult {
 }
 
 function ApprovalsPage() {
+  useBreadcrumbs([{ label: "Approvals" }]);
   const { tenantId } = useTenant();
   const [{ data, fetching, error }] = useQuery<ApprovalsResult>({
     query: ComputerApprovalsQuery,

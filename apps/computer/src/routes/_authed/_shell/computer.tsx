@@ -5,6 +5,7 @@ import {
   TaskDashboard,
   type TaskSummary,
 } from "@/components/computer/TaskDashboard";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ThreadTurnUpdatedSubscription,
@@ -50,6 +51,7 @@ interface ThreadsPagedResult {
 const DEFAULT_PAGE_SIZE = 50;
 
 function ComputerPage() {
+  useBreadcrumbs([{ label: "Computer" }]);
   const { tenantId } = useTenant();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");

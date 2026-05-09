@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "urql";
 import { ApprovalDetail } from "@/components/approvals/ApprovalDetail";
 import { ApprovalQueue } from "@/components/approvals/ApprovalQueue";
 import type { ComputerApproval } from "@/components/approvals/approval-types";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ApproveComputerApprovalMutation,
@@ -33,6 +34,11 @@ function ApprovalDetailPage() {
     query: ComputerApprovalQuery,
     variables: { id: approvalId },
   });
+  const approvalLabel = data?.inboxItem?.title?.trim() || "Approval";
+  useBreadcrumbs([
+    { label: "Approvals", href: "/approvals" },
+    { label: approvalLabel },
+  ]);
   const [{ data: queueData, fetching: queueFetching, error: queueError }] =
     useQuery<ApprovalsResult>({
       query: ComputerApprovalsQuery,
