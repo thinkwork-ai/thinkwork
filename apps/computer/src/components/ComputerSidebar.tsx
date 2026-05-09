@@ -26,6 +26,7 @@ import type { FileRouteTypes } from "@/routeTree.gen";
 import { useTenant } from "@/context/TenantContext";
 import {
   COMPUTER_ARTIFACTS_ROUTE,
+  COMPUTER_CUSTOMIZE_ROUTE,
   COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_THREADS_ROUTE,
@@ -79,7 +80,11 @@ export function ComputerSidebar() {
       { href: COMPUTER_ARTIFACTS_ROUTE, icon: Shapes, label: "Artifacts" },
       { href: "/automations", icon: Repeat, label: "Automations" },
       { href: COMPUTER_MEMORY_ROUTE, icon: Brain, label: "Memory" },
-      { href: "/customize", icon: SlidersHorizontal, label: "Customize" },
+      {
+        href: COMPUTER_CUSTOMIZE_ROUTE,
+        icon: SlidersHorizontal,
+        label: "Customize",
+      },
     ],
     [threadCount],
   );

@@ -57,6 +57,15 @@ export const computers = pgTable(
     migrated_from_agent_id: uuid("migrated_from_agent_id").references(
       () => agents.id,
     ),
+    /**
+     * Anchor agent for per-agent bindings (skills, MCP servers, routines)
+     * surfaced through the Customize page. Backfilled from
+     * `migrated_from_agent_id` where present and resolved from
+     * `(tenant_id, owner_user_id, template_id)` for greenfield Computers.
+     */
+    primary_agent_id: uuid("primary_agent_id").references(() => agents.id, {
+      onDelete: "set null",
+    }),
     migration_metadata: jsonb("migration_metadata"),
     created_by: uuid("created_by").references(() => users.id),
     created_at: timestamp("created_at", { withTimezone: true })
@@ -75,6 +84,7 @@ export const computers = pgTable(
     index("idx_computers_owner").on(table.owner_user_id),
     index("idx_computers_template").on(table.template_id),
     index("idx_computers_migrated_agent").on(table.migrated_from_agent_id),
+    index("idx_computers_primary_agent").on(table.primary_agent_id),
     check(
       "computers_status_allowed",
       sql`${table.status} IN ('active','provisioning','failed','archived')`,

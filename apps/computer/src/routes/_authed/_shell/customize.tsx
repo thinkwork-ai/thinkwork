@@ -1,15 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 export const Route = createFileRoute("/_authed/_shell/customize")({
-  component: CustomizePage,
+  component: CustomizeLayout,
 });
 
-function CustomizePage() {
-  return (
-    <PlaceholderPage
-      title="Customize"
-      subtitle="Computer instructions, connectors, skills, and workflow preferences will live here."
-    />
-  );
+export const CUSTOMIZE_TABS = [
+  { to: "/customize/connectors", label: "Connectors" },
+  { to: "/customize/skills", label: "Skills" },
+  { to: "/customize/workflows", label: "Workflows" },
+] as const;
+
+function CustomizeLayout() {
+  usePageHeaderActions({ title: "Customize" });
+  return <Outlet />;
 }
