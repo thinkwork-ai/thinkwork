@@ -3,51 +3,48 @@ import { cleanup, render } from "@testing-library/react";
 import { Route as MemoryLayoutRoute } from "../src/routes/_authed/_shell/memory";
 import { Route as MemoryIndexRoute } from "../src/routes/_authed/_shell/memory.index";
 
-const pathnameRef = { current: "/memory/brain" };
-
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
-    Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-      <a href={to}>{children}</a>
-    ),
     Outlet: () => <div data-testid="outlet" />,
-    useRouterState: ({ select }: { select: (s: any) => unknown }) =>
-      select({ location: { pathname: pathnameRef.current } }),
   };
 });
 
+const setActions = vi.fn();
+const usePageHeaderActions = vi.fn();
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: vi.fn(),
+  usePageHeaderActions: (a: unknown) => usePageHeaderActions(a),
+  usePageHeader: () => ({ actions: null, setActions }),
 }));
 
 describe("Memory layout (U4)", () => {
   beforeEach(() => {
-    pathnameRef.current = "/memory/brain";
+    setActions.mockClear();
+    usePageHeaderActions.mockClear();
   });
   afterEach(() => cleanup());
-
-  it("renders Brain, Pages, KBs tabs as links to the right routes", () => {
-    const Component = MemoryLayoutRoute.options.component!;
-    const { container } = render(<Component />);
-    const links = Array.from(container.querySelectorAll("a")).map((a) => ({
-      label: a.textContent,
-      href: a.getAttribute("href"),
-    }));
-    expect(links).toEqual(
-      expect.arrayContaining([
-        { label: "Brain", href: "/memory/brain" },
-        { label: "Pages", href: "/memory/pages" },
-        { label: "KBs", href: "/memory/kbs" },
-      ]),
-    );
-  });
 
   it("renders an Outlet for child routes", () => {
     const Component = MemoryLayoutRoute.options.component!;
     const { getByTestId } = render(<Component />);
     expect(getByTestId("outlet")).toBeDefined();
+  });
+
+  it("publishes Brain/Pages/KBs tabs to PageHeaderActions", () => {
+    const Component = MemoryLayoutRoute.options.component!;
+    render(<Component />);
+    expect(usePageHeaderActions).toHaveBeenCalledTimes(1);
+    const arg = usePageHeaderActions.mock.calls[0]![0] as {
+      title: string;
+      tabs: { to: string; label: string }[];
+    };
+    expect(arg.title).toBe("Memory");
+    expect(arg.tabs).toEqual([
+      { to: "/memory/brain", label: "Brain" },
+      { to: "/memory/pages", label: "Pages" },
+      { to: "/memory/kbs", label: "KBs" },
+    ]);
   });
 
   it("memory index route redirects (throws Redirect) so /memory lands on /memory/brain", () => {
