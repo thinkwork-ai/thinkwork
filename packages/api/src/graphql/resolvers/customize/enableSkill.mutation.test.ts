@@ -33,7 +33,12 @@ const {
     tenant_id: "tenant-1",
     agent_id: "agent-primary",
     skill_id: "sales-prep",
+    config: null,
+    permissions: null,
+    rate_limit_rpm: null,
+    model_override: null,
     enabled: true,
+    created_at: "2026-05-09T00:00:00Z",
   },
   lastInsertValues: { value: null as Record<string, unknown> | null },
 }));
@@ -107,7 +112,7 @@ describe("enableSkill", () => {
     });
   });
 
-  it("enables a skill and returns the binding keyed on primary_agent_id", async () => {
+  it("enables a skill and returns the AgentSkill projection keyed on primary_agent_id", async () => {
     const result = await enableSkill(
       null,
       { input: { computerId: "computer-1", skillId: "sales-prep" } },
@@ -116,10 +121,27 @@ describe("enableSkill", () => {
     expect(result.skillId).toBe("sales-prep");
     expect(result.agentId).toBe("agent-primary");
     expect(result.enabled).toBe(true);
+    expect(result.createdAt).toBe("2026-05-09T00:00:00Z");
     expect(mockRequireTenantMember).toHaveBeenCalledWith(ctx, "tenant-1");
     expect(lastInsertValues.value?.agent_id).toBe("agent-primary");
     expect(lastInsertValues.value?.skill_id).toBe("sales-prep");
     expect(lastInsertValues.value?.enabled).toBe(true);
+  });
+
+  it("is idempotent — re-enabling the same skill calls the upsert path again with identical values", async () => {
+    await enableSkill(
+      null,
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
+      ctx,
+    );
+    const first = { ...lastInsertValues.value };
+    await enableSkill(
+      null,
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
+      ctx,
+    );
+    expect(mockInsert).toHaveBeenCalledTimes(2);
+    expect(lastInsertValues.value).toEqual(first);
   });
 
   it("falls back to migrated_from_agent_id when primary_agent_id is null", async () => {

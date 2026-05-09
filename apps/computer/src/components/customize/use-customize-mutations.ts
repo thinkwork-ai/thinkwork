@@ -27,11 +27,7 @@ const CONNECTOR_TYPENAMES = [
   "CustomizeBindings",
 ] as const;
 
-const SKILL_TYPENAMES = [
-  "AgentSkill",
-  "SkillBinding",
-  "CustomizeBindings",
-] as const;
+const SKILL_TYPENAMES = ["AgentSkill", "CustomizeBindings"] as const;
 
 /** Surfaced when a user clicks Connect on an MCP-kind card. */
 export const MCP_VIA_MOBILE_HINT =

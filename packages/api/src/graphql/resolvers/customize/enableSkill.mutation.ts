@@ -124,11 +124,18 @@ export async function enableSkill(
     });
   }
 
+  // Return the AgentSkill projection (matches the existing GraphQL type
+  // exposed by setAgentSkills + agents.graphql — no duplicate projection).
   return {
     id: row.id,
     tenantId: row.tenant_id,
     agentId: row.agent_id,
     skillId: row.skill_id,
+    config: row.config ?? null,
+    permissions: row.permissions ?? null,
+    rateLimitRpm: row.rate_limit_rpm ?? null,
+    modelOverride: row.model_override ?? null,
     enabled: row.enabled,
+    createdAt: row.created_at,
   };
 }

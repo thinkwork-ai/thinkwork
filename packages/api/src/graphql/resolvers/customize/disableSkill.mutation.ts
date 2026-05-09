@@ -69,6 +69,11 @@ export async function disableSkill(
   const agentId =
     computer.primary_agent_id ?? computer.migrated_from_agent_id ?? null;
   if (!agentId) {
+    // Disable is idempotent end-to-end. With no primary agent there is no
+    // `agent_skills` row that could possibly be enabled, so the disable
+    // contract is already satisfied. Return true silently rather than
+    // mirror enableSkill's CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND error —
+    // enable can't proceed (nowhere to write), disable has nothing to do.
     return true;
   }
 
