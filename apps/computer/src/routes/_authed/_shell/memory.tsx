@@ -1,79 +1,39 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { useMutation, useQuery } from "urql";
-import {
-  MemoryPanel,
-  type ComputerMemoryRecord,
-} from "@/components/memory/MemoryPanel";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { useTenant } from "@/context/TenantContext";
-import {
-  ComputerMemoryRecordsQuery,
-  DeleteComputerMemoryRecordMutation,
-  MyComputerQuery,
-} from "@/lib/graphql-queries";
 
 export const Route = createFileRoute("/_authed/_shell/memory")({
-  component: MemoryPage,
+  component: MemoryLayout,
 });
 
-interface MyComputerResult {
-  myComputer?: {
-    id: string;
-    tenantId: string;
-    ownerUserId: string;
-  } | null;
-}
+const TABS = [
+  { to: "/memory/brain", label: "Brain" },
+  { to: "/memory/pages", label: "Pages" },
+  { to: "/memory/kbs", label: "KBs" },
+] as const;
 
-interface MemoryRecordsResult {
-  memoryRecords?: ComputerMemoryRecord[] | null;
-}
-
-function MemoryPage() {
+function MemoryLayout() {
   usePageHeaderActions({ title: "Memory" });
-  const { tenantId } = useTenant();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const userId = computerData?.myComputer?.ownerUserId ?? null;
-  const effectiveTenantId = tenantId ?? computerData?.myComputer?.tenantId ?? null;
-  const namespace = userId ? `user_${userId}` : "";
-  const [{ data, fetching, error }, reexecuteQuery] =
-    useQuery<MemoryRecordsResult>({
-      query: ComputerMemoryRecordsQuery,
-      variables: {
-        tenantId: effectiveTenantId,
-        userId,
-        namespace,
-      },
-      pause: !effectiveTenantId || !userId,
-    });
-  const [, deleteMemoryRecord] = useMutation(
-    DeleteComputerMemoryRecordMutation,
-  );
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Match by longest prefix so /memory/kbs/$kbId still highlights "KBs".
+  const activeTab =
+    [...TABS].reverse().find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "/memory/brain";
 
   return (
-    <MemoryPanel
-      records={data?.memoryRecords ?? []}
-      isLoading={fetching && !data}
-      error={error?.message ?? null}
-      deletingId={deletingId}
-      onForget={async (memoryRecordId) => {
-        if (!effectiveTenantId || !userId) return;
-        setDeletingId(memoryRecordId);
-        try {
-          const result = await deleteMemoryRecord({
-            tenantId: effectiveTenantId,
-            userId,
-            memoryRecordId,
-          });
-          if (result.error) throw result.error;
-          reexecuteQuery({ requestPolicy: "network-only" });
-        } finally {
-          setDeletingId(null);
-        }
-      }}
-    />
+    <main className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="flex shrink-0 justify-center border-b border-border/50 px-6 pt-4 pb-3">
+        <ToggleGroup type="single" value={activeTab} variant="outline">
+          {TABS.map((tab) => (
+            <ToggleGroupItem key={tab.to} value={tab.to} asChild className="px-4 text-xs">
+              <Link to={tab.to}>{tab.label}</Link>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Outlet />
+      </div>
+    </main>
   );
 }
