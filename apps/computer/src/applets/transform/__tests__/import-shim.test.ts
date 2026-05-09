@@ -35,6 +35,21 @@ describe("rewriteAppletImports", () => {
     );
   });
 
+  it("rewrites React imports because saved applet validation allows them", () => {
+    const result = rewriteAppletImports(`
+      import React, { useMemo as useStableMemo } from "react";
+      export default React;
+    `);
+
+    expect(result).toContain(
+      'const React = globalThis.__THINKWORK_APPLET_HOST__["react"].default ?? globalThis.__THINKWORK_APPLET_HOST__["react"];',
+    );
+    expect(result).toContain(
+      'const useStableMemo = globalThis.__THINKWORK_APPLET_HOST__["react"].useMemo;',
+    );
+    expect(result).not.toContain('from "react"');
+  });
+
   it("rejects disallowed bare imports with the module name", () => {
     expect(() =>
       rewriteAppletImports('import lodash from "lodash"; export default lodash;'),

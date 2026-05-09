@@ -6,6 +6,7 @@ const REGISTRY_NAME = "globalThis.__THINKWORK_APPLET_HOST__";
 export const ALLOWED_APPLET_IMPORTS = new Set([
   "@thinkwork/ui",
   "@thinkwork/computer-stdlib",
+  "react",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "useAppletAPI",
@@ -167,6 +168,9 @@ function rewriteImportSpecifier(
     return `const ${importSpecifier.local.name} = ${registry};`;
   }
   if (importSpecifier.type === "ImportDefaultSpecifier") {
+    if (moduleSpecifier === "react") {
+      return `const ${importSpecifier.local.name} = ${registry}.default ?? ${registry};`;
+    }
     return `const ${importSpecifier.local.name} = ${registry}.default;`;
   }
 
