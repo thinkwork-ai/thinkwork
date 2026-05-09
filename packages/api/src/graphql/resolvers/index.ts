@@ -50,7 +50,10 @@ import {
   computerMutations,
   computerTypeResolvers,
 } from "./computers/index.js";
-import { customizeQueries } from "./customize/index.js";
+import {
+  customizeQueries,
+  customizeMutations,
+} from "./customize/index.js";
 import {
   complianceQueries,
   complianceMutations,
@@ -117,6 +120,7 @@ export const mutationResolvers: Record<string, any> = {
   ...quickActionMutations,
   ...connectorMutations,
   ...computerMutations,
+  ...customizeMutations,
   ...complianceMutations,
 };
 

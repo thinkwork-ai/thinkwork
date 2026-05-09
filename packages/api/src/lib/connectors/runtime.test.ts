@@ -843,6 +843,7 @@ function connector(
     config: {},
     dispatch_target_type: "agent",
     dispatch_target_id: "agent-1",
+    catalog_slug: null,
     last_poll_at: null,
     last_poll_cursor: null,
     next_poll_at: null,

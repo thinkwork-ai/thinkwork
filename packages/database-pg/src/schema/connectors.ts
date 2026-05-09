@@ -40,6 +40,13 @@ export const connectors = pgTable(
 		config: jsonb("config"),
 		dispatch_target_type: text("dispatch_target_type").notNull(),
 		dispatch_target_id: uuid("dispatch_target_id").notNull(),
+		/**
+		 * Stable pointer to the `tenant_connector_catalog.slug` row this
+		 * connector represents. Lets the apps/computer Customize page match
+		 * Connected items unambiguously to a catalog row, instead of the
+		 * fragile `connectors.type` heuristic.
+		 */
+		catalog_slug: text("catalog_slug"),
 		last_poll_at: timestamp("last_poll_at", { withTimezone: true }),
 		last_poll_cursor: text("last_poll_cursor"),
 		next_poll_at: timestamp("next_poll_at", { withTimezone: true }),
@@ -56,6 +63,11 @@ export const connectors = pgTable(
 	},
 	(table) => [
 		uniqueIndex("uq_connectors_tenant_name").on(table.tenant_id, table.name),
+		uniqueIndex("uq_connectors_catalog_slug_per_computer")
+			.on(table.tenant_id, table.dispatch_target_id, table.catalog_slug)
+			.where(
+				sql`${table.dispatch_target_type} = 'computer' AND ${table.catalog_slug} IS NOT NULL`,
+			),
 		index("idx_connectors_tenant_status").on(table.tenant_id, table.status),
 		index("idx_connectors_tenant_type").on(table.tenant_id, table.type),
 		index("idx_connectors_enabled").on(table.tenant_id, table.enabled),
