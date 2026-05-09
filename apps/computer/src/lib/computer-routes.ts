@@ -7,19 +7,18 @@ export class InvalidComputerRouteParamError extends Error {
 
 export const COMPUTER_WORKBENCH_ROUTE = "/computer" as const;
 export const COMPUTER_NEW_THREAD_ROUTE = "/threads" as const;
-export const COMPUTER_TASKS_ROUTE = "/threads" as const;
 export const COMPUTER_APPS_ROUTE = "/apps" as const;
 export const COMPUTER_MEMORY_ROUTE = "/memory" as const;
 
 export const COMPUTER_ROUTE_LABELS = {
   computer: "Computer",
-  tasks: "New",
+  newThread: "New",
   apps: "Apps",
   memory: "Memory",
 } as const;
 
-export function computerTaskRoute(taskId: string): string {
-  return `${COMPUTER_TASKS_ROUTE}/${safeRouteId("thread", taskId)}`;
+export function computerThreadRoute(threadId: string): string {
+  return `${COMPUTER_NEW_THREAD_ROUTE}/${safeRouteId("thread", threadId)}`;
 }
 
 export function computerAppArtifactRoute(artifactId: string): string {

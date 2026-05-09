@@ -6,7 +6,7 @@ import {
   COMPUTER_WORKBENCH_ROUTE,
   InvalidComputerRouteParamError,
   computerAppArtifactRoute,
-  computerTaskRoute,
+  computerThreadRoute,
 } from "./computer-routes";
 
 describe("computer route helpers", () => {
@@ -14,8 +14,8 @@ describe("computer route helpers", () => {
     expect(computerAppArtifactRoute("artifact_123")).toBe("/apps/artifact_123");
   });
 
-  it("builds task detail URLs", () => {
-    expect(computerTaskRoute("thread-abc")).toBe("/threads/thread-abc");
+  it("builds thread detail URLs", () => {
+    expect(computerThreadRoute("thread-abc")).toBe("/threads/thread-abc");
   });
 
   it("throws a typed client error for unsafe artifact ids", () => {
@@ -29,7 +29,7 @@ describe("computer route helpers", () => {
     expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/threads");
     expect(COMPUTER_MEMORY_ROUTE).toBe("/memory");
     expect(COMPUTER_ROUTE_LABELS.computer).toBe("Computer");
-    expect(COMPUTER_ROUTE_LABELS.tasks).toBe("New");
+    expect(COMPUTER_ROUTE_LABELS.newThread).toBe("New");
     expect(COMPUTER_ROUTE_LABELS.memory).toBe("Memory");
   });
 });

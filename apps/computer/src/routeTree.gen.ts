@@ -21,11 +21,9 @@ import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shel
 import { Route as AuthedShellComputerRouteImport } from "./routes/_authed/_shell/computer";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
-import { Route as AuthedShellTasksIndexRouteImport } from "./routes/_authed/_shell/tasks.index";
 import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
-import { Route as AuthedShellTasksIdRouteImport } from "./routes/_authed/_shell/tasks.$id";
 import { Route as AuthedShellAppsIdRouteImport } from "./routes/_authed/_shell/apps.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 
@@ -87,11 +85,6 @@ const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   path: "/threads/",
   getParentRoute: () => AuthedShellRoute,
 } as any);
-const AuthedShellTasksIndexRoute = AuthedShellTasksIndexRouteImport.update({
-  id: "/tasks/",
-  path: "/tasks/",
-  getParentRoute: () => AuthedShellRoute,
-} as any);
 const AuthedShellAppsIndexRoute = AuthedShellAppsIndexRouteImport.update({
   id: "/apps/",
   path: "/apps/",
@@ -106,11 +99,6 @@ const AuthedShellApprovalsIndexRoute =
 const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
-  getParentRoute: () => AuthedShellRoute,
-} as any);
-const AuthedShellTasksIdRoute = AuthedShellTasksIdRouteImport.update({
-  id: "/tasks/$id",
-  path: "/tasks/$id",
   getParentRoute: () => AuthedShellRoute,
 } as any);
 const AuthedShellAppsIdRoute = AuthedShellAppsIdRouteImport.update({
@@ -137,11 +125,9 @@ export interface FileRoutesByFullPath {
   "/memory": typeof AuthedShellMemoryRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
-  "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/apps/": typeof AuthedShellAppsIndexRoute;
-  "/tasks/": typeof AuthedShellTasksIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesByTo {
@@ -156,11 +142,9 @@ export interface FileRoutesByTo {
   "/memory": typeof AuthedShellMemoryRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/apps/$id": typeof AuthedShellAppsIdRoute;
-  "/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/apps": typeof AuthedShellAppsIndexRoute;
-  "/tasks": typeof AuthedShellTasksIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRoutesById {
@@ -178,11 +162,9 @@ export interface FileRoutesById {
   "/_authed/_shell/memory": typeof AuthedShellMemoryRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/apps/$id": typeof AuthedShellAppsIdRoute;
-  "/_authed/_shell/tasks/$id": typeof AuthedShellTasksIdRoute;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
-  "/_authed/_shell/tasks/": typeof AuthedShellTasksIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
 }
 export interface FileRouteTypes {
@@ -199,11 +181,9 @@ export interface FileRouteTypes {
     | "/memory"
     | "/approvals/$approvalId"
     | "/apps/$id"
-    | "/tasks/$id"
     | "/threads/$id"
     | "/approvals/"
     | "/apps/"
-    | "/tasks/"
     | "/threads/";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -218,11 +198,9 @@ export interface FileRouteTypes {
     | "/memory"
     | "/approvals/$approvalId"
     | "/apps/$id"
-    | "/tasks/$id"
     | "/threads/$id"
     | "/approvals"
     | "/apps"
-    | "/tasks"
     | "/threads";
   id:
     | "__root__"
@@ -239,11 +217,9 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/apps/$id"
-    | "/_authed/_shell/tasks/$id"
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/apps/"
-    | "/_authed/_shell/tasks/"
     | "/_authed/_shell/threads/";
   fileRoutesById: FileRoutesById;
 }
@@ -341,13 +317,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellThreadsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
-    "/_authed/_shell/tasks/": {
-      id: "/_authed/_shell/tasks/";
-      path: "/tasks";
-      fullPath: "/tasks/";
-      preLoaderRoute: typeof AuthedShellTasksIndexRouteImport;
-      parentRoute: typeof AuthedShellRoute;
-    };
     "/_authed/_shell/apps/": {
       id: "/_authed/_shell/apps/";
       path: "/apps";
@@ -367,13 +336,6 @@ declare module "@tanstack/react-router" {
       path: "/threads/$id";
       fullPath: "/threads/$id";
       preLoaderRoute: typeof AuthedShellThreadsIdRouteImport;
-      parentRoute: typeof AuthedShellRoute;
-    };
-    "/_authed/_shell/tasks/$id": {
-      id: "/_authed/_shell/tasks/$id";
-      path: "/tasks/$id";
-      fullPath: "/tasks/$id";
-      preLoaderRoute: typeof AuthedShellTasksIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
     "/_authed/_shell/apps/$id": {
@@ -401,11 +363,9 @@ interface AuthedShellRouteChildren {
   AuthedShellMemoryRoute: typeof AuthedShellMemoryRoute;
   AuthedShellApprovalsApprovalIdRoute: typeof AuthedShellApprovalsApprovalIdRoute;
   AuthedShellAppsIdRoute: typeof AuthedShellAppsIdRoute;
-  AuthedShellTasksIdRoute: typeof AuthedShellTasksIdRoute;
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
   AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
-  AuthedShellTasksIndexRoute: typeof AuthedShellTasksIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
 }
 
@@ -417,11 +377,9 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellMemoryRoute: AuthedShellMemoryRoute,
   AuthedShellApprovalsApprovalIdRoute: AuthedShellApprovalsApprovalIdRoute,
   AuthedShellAppsIdRoute: AuthedShellAppsIdRoute,
-  AuthedShellTasksIdRoute: AuthedShellTasksIdRoute,
   AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
   AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
-  AuthedShellTasksIndexRoute: AuthedShellTasksIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
 };
 
