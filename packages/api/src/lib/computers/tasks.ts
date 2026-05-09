@@ -1,5 +1,5 @@
 import { GraphQLError } from "graphql";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   computers,
@@ -119,6 +119,7 @@ async function insertTask(input: {
 export async function listComputerTasks(input: {
   tenantId: string;
   computerId: string;
+  threadId?: string | null;
   status?: ComputerTaskStatus | null;
   limit?: number | null;
 }) {
@@ -129,6 +130,9 @@ export async function listComputerTasks(input: {
   ];
   if (input.status) {
     conditions.push(eq(computerTasks.status, input.status));
+  }
+  if (input.threadId) {
+    conditions.push(sql`${computerTasks.input}->>'threadId' = ${input.threadId}`);
   }
   const rows = await db
     .select()

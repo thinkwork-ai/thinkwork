@@ -93,6 +93,7 @@ export const ComputerThreadQuery = gql`
       title
       status
       channel
+      computerId
       lifecycleStatus
       lastResponsePreview
       costSummary
@@ -125,17 +126,19 @@ export const ComputerThreadQuery = gql`
   }
 `;
 
-export const ComputerThreadTurnsQuery = gql`
-  query ComputerThreadTurns($tenantId: ID!, $threadId: ID!, $limit: Int) {
-    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: $limit) {
+export const ComputerThreadTasksQuery = gql`
+  query ComputerThreadTasks($computerId: ID!, $threadId: ID!, $limit: Int) {
+    computerTasks(computerId: $computerId, threadId: $threadId, limit: $limit) {
       id
+      taskType
       status
-      invocationSource
-      startedAt
-      finishedAt
-      usageJson
-      resultJson
+      input
+      output
       error
+      claimedAt
+      completedAt
+      createdAt
+      updatedAt
     }
   }
 `;

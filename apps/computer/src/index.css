@@ -6,3 +6,17 @@
    explicit @source directive. Without this, shadcn primitives from
    the shared UI package render unstyled. */
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
+
+@keyframes tw-shimmer-character {
+  0%,
+  100% {
+    color: #6b7280;
+  }
+  50% {
+    color: #d1d5db;
+  }
+}
+
+.tw-shimmer-char {
+  animation: tw-shimmer-character 1.68s ease-in-out infinite;
+}

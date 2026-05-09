@@ -22,6 +22,9 @@ import { StreamingMessageBuffer } from "@/components/computer/StreamingMessageBu
 import { UsageButton } from "@/components/computer/UsageButton";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
+const SHIMMER_TEXT = "Processing...";
+const SHIMMER_CHAR_DURATION_MS = 120;
+
 export interface TaskThreadMessage {
   id: string;
   role: string;
@@ -81,6 +84,9 @@ export function TaskThreadView({
   const visibleMessages = withTurnResponseFallback(thread);
   const showStreamingBuffer =
     streamingChunks.length > 0 && !hasAssistantAfterLatestUser(visibleMessages);
+  const showProcessingShimmer =
+    !showStreamingBuffer &&
+    isAwaitingAssistantResponse(thread, visibleMessages);
   const artifactCount = thread.messages.filter(
     (message) => message.durableArtifact,
   ).length;
@@ -128,6 +134,7 @@ export function TaskThreadView({
           {showStreamingBuffer ? (
             <StreamingMessageBuffer chunks={streamingChunks} />
           ) : null}
+          {showProcessingShimmer ? <ProcessingShimmer /> : null}
         </section>
 
         <FollowUpComposer
@@ -207,6 +214,46 @@ function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
   return messages
     .slice(latestUserIndex + 1)
     .some((message) => message.role.toUpperCase() === "ASSISTANT");
+}
+
+function isAwaitingAssistantResponse(
+  thread: TaskThread,
+  visibleMessages: TaskThreadMessage[],
+) {
+  const latestUserIndex = findLastIndex(
+    visibleMessages,
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (latestUserIndex < 0) return false;
+  if (hasAssistantAfterLatestUser(visibleMessages)) return false;
+  return (thread.turns ?? []).some((turn) =>
+    ["pending", "running"].includes(String(turn.status ?? "").toLowerCase()),
+  );
+}
+
+function ProcessingShimmer() {
+  return (
+    <article
+      className="text-sm leading-6"
+      aria-label="Processing request"
+      role="status"
+    >
+      <span aria-hidden="true">
+        {SHIMMER_TEXT.split("").map((char, index) => (
+          <span
+            className="tw-shimmer-char"
+            key={`${char}-${index}`}
+            style={{
+              animationDelay: `${index * SHIMMER_CHAR_DURATION_MS}ms`,
+            }}
+          >
+            {char}
+          </span>
+        ))}
+      </span>
+      <span className="sr-only">Processing request</span>
+    </article>
+  );
 }
 
 function TranscriptMessage({ message }: { message: TaskThreadMessage }) {

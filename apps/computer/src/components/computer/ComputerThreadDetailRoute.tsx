@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
@@ -7,7 +7,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   ComputerThreadQuery,
-  ComputerThreadTurnsQuery,
+  ComputerThreadTasksQuery,
   NewMessageSubscription,
   SendMessageMutation,
   ThreadUpdatedSubscription,
@@ -22,6 +22,7 @@ interface ComputerThreadDetailRouteProps {
 interface ThreadResult {
   thread: {
     id: string;
+    computerId?: string | null;
     title?: string | null;
     status?: string | null;
     lifecycleStatus?: string | null;
@@ -49,16 +50,18 @@ interface ThreadResult {
   } | null;
 }
 
-interface ThreadTurnsResult {
-  threadTurns?: Array<{
+interface ThreadTasksResult {
+  computerTasks?: Array<{
     id: string;
+    taskType?: string | null;
     status?: string | null;
-    invocationSource?: string | null;
-    startedAt?: string | null;
-    finishedAt?: string | null;
-    usageJson?: unknown;
-    resultJson?: unknown;
-    error?: string | null;
+    input?: unknown;
+    output?: unknown;
+    error?: unknown;
+    claimedAt?: string | null;
+    completedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
   }> | null;
 }
 
@@ -66,15 +69,19 @@ export function ComputerThreadDetailRoute({
   threadId,
 }: ComputerThreadDetailRouteProps) {
   const { tenantId } = useTenant();
+  const [optimisticMessage, setOptimisticMessage] = useState<string | null>(
+    null,
+  );
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
   });
-  const [{ data: turnsData }, reexecuteTurnsQuery] =
-    useQuery<ThreadTurnsResult>({
-      query: ComputerThreadTurnsQuery,
-      variables: { tenantId, threadId, limit: 6 },
-      pause: !tenantId,
+  const computerId = data?.thread?.computerId ?? null;
+  const [{ data: tasksData }, reexecuteTasksQuery] =
+    useQuery<ThreadTasksResult>({
+      query: ComputerThreadTasksQuery,
+      variables: { computerId, threadId, limit: 6 },
+      pause: !computerId,
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const latestUserMessageId = latestUserMessageIdFromEdges(
@@ -109,11 +116,11 @@ export function ComputerThreadDetailRoute({
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
-      reexecuteTurnsQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteQuery,
-    reexecuteTurnsQuery,
+    reexecuteTasksQuery,
     threadId,
     turnUpdate?.onThreadTurnUpdated?.threadId,
   ]);
@@ -121,11 +128,11 @@ export function ComputerThreadDetailRoute({
   useEffect(() => {
     if (threadUpdate?.onThreadUpdated?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
-      reexecuteTurnsQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteQuery,
-    reexecuteTurnsQuery,
+    reexecuteTasksQuery,
     threadId,
     threadUpdate?.onThreadUpdated?.threadId,
   ]);
@@ -133,29 +140,44 @@ export function ComputerThreadDetailRoute({
   useEffect(() => {
     if (messageUpdate?.onNewMessage?.threadId === threadId) {
       reexecuteQuery({ requestPolicy: "network-only" });
-      reexecuteTurnsQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
     reexecuteQuery,
-    reexecuteTurnsQuery,
+    reexecuteTasksQuery,
     threadId,
   ]);
 
+  useEffect(() => {
+    if (
+      optimisticMessage &&
+      hasPersistedUserMessage(data?.thread?.messages?.edges, optimisticMessage)
+    ) {
+      setOptimisticMessage(null);
+    }
+  }, [data?.thread?.messages?.edges, optimisticMessage]);
+
   const thread = data?.thread ? toTaskThread(data.thread) : null;
   if (thread) {
-    thread.turns = toTaskThreadTurns(turnsData?.threadTurns);
+    thread.turns = toTaskThreadTurns(tasksData?.computerTasks);
   }
+  const visibleThread = optimisticMessage
+    ? withOptimisticUserTurn(thread, optimisticMessage)
+    : thread;
 
   return (
     <TaskThreadView
-      thread={thread}
+      thread={visibleThread}
       isLoading={fetching && !data}
       error={error?.message ?? null}
-      streamingChunks={hasDurableAssistantAfterLatestUser(thread) ? [] : chunks}
+      streamingChunks={
+        hasDurableAssistantAfterLatestUser(visibleThread) ? [] : chunks
+      }
       isSending={sending}
       onSendFollowUp={async (content) => {
+        setOptimisticMessage(content);
         const result = await sendMessage({
           input: {
             threadId,
@@ -163,11 +185,49 @@ export function ComputerThreadDetailRoute({
             content,
           },
         });
-        if (result.error) throw result.error;
+        if (result.error) {
+          setOptimisticMessage(null);
+          throw result.error;
+        }
         reexecuteQuery({ requestPolicy: "network-only" });
+        reexecuteTasksQuery({ requestPolicy: "network-only" });
       }}
     />
   );
+}
+
+function withOptimisticUserTurn(
+  thread: TaskThread | null,
+  content: string,
+): TaskThread | null {
+  if (!thread) return null;
+  const alreadyPersisted = thread.messages.some(
+    (message) =>
+      message.role.toUpperCase() === "USER" &&
+      message.content?.trim() === content.trim(),
+  );
+  if (alreadyPersisted) return thread;
+
+  return {
+    ...thread,
+    messages: [
+      ...thread.messages,
+      {
+        id: "optimistic-user-message",
+        role: "USER",
+        content,
+      },
+    ],
+    turns: [
+      {
+        id: "optimistic-computer-turn",
+        status: "running",
+        invocationSource: "chat_message",
+        startedAt: new Date().toISOString(),
+      },
+      ...(thread.turns ?? []),
+    ],
+  };
 }
 
 function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
@@ -216,17 +276,32 @@ function metadataObject(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function toTaskThreadTurns(turns: ThreadTurnsResult["threadTurns"]) {
-  return (turns ?? []).map((turn) => ({
-    id: turn.id,
-    status: turn.status,
-    invocationSource: turn.invocationSource,
-    startedAt: turn.startedAt,
-    finishedAt: turn.finishedAt,
-    usageJson: turn.usageJson,
-    resultJson: turn.resultJson,
-    error: turn.error,
-  }));
+function toTaskThreadTurns(tasks: ThreadTasksResult["computerTasks"]) {
+  return (tasks ?? []).map((task) => {
+    const input = metadataObject(task.input) ?? {};
+    const output = metadataObject(task.output) ?? {};
+    return {
+      id: task.id,
+      status: task.status,
+      invocationSource: stringValue(input.source) ?? "chat_message",
+      startedAt: task.claimedAt ?? task.createdAt,
+      finishedAt: task.completedAt,
+      usageJson: output.usage,
+      resultJson: output,
+      error: taskErrorMessage(task.error),
+    };
+  });
+}
+
+function taskErrorMessage(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  const record = metadataObject(value);
+  return stringValue(record?.message) ?? stringValue(record?.code);
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function latestUserMessageIdFromEdges(
@@ -238,6 +313,20 @@ function latestUserMessageIdFromEdges(
     if (node?.role?.toUpperCase() === "USER") return node.id;
   }
   return null;
+}
+
+function hasPersistedUserMessage(
+  edges:
+    | Array<{ node: { role: string; content?: string | null } }>
+    | undefined
+    | null,
+  content: string,
+) {
+  return (edges ?? []).some(
+    ({ node }) =>
+      node.role.toUpperCase() === "USER" &&
+      node.content?.trim() === content.trim(),
+  );
 }
 
 function hasDurableAssistantAfterLatestUser(thread: TaskThread | null) {

@@ -635,6 +635,16 @@ describe("Computer runtime API thread turn execution", () => {
         task_id: "task-1",
       }),
     );
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        status: "completed",
+        output: expect.objectContaining({
+          response: "Native Computer response",
+          responseMessageId: "assistant-message-1",
+          usage: { inputTokens: 5 },
+        }),
+      }),
+    );
     expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         messageId: "assistant-message-1",
