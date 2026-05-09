@@ -37,6 +37,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "builtin_tool_filter",
     "capability_catalog",
     "capability_manifest",
+    "computer_thread_response",
     "delegate_to_workspace_tool",
     "eval_span_attrs",
     "external_task_context",

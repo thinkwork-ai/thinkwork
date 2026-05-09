@@ -2017,6 +2017,12 @@ def _execute_agent_turn(payload: dict) -> dict:
         os.environ["_INSTANCE_ID"] = instance_id
     if assistant_id:
         os.environ["_ASSISTANT_ID"] = assistant_id
+    computer_id = payload.get("computer_id") or payload.get("computerId") or ""
+    computer_task_id = (
+        payload.get("computer_task_id")
+        or payload.get("computerTaskId")
+        or ""
+    )
 
     # Sync workspace from S3.
     _ensure_workspace_ready(
@@ -2115,6 +2121,20 @@ def _execute_agent_turn(payload: dict) -> dict:
             stream_thread_id=ticket_id or None,
         )
         duration_ms = int(time.time() * 1000) - start_ms
+        computer_thread_response = None
+        if computer_id and computer_task_id:
+            from computer_thread_response import record_thread_turn_response
+
+            computer_thread_response = record_thread_turn_response(
+                tenant_id=workspace_tenant_id or tenant_id_for_audit,
+                computer_id=computer_id,
+                task_id=computer_task_id,
+                content=response_text,
+                model=request_model or DEFAULT_MODEL,
+                usage=strands_usage,
+                api_url=thinkwork_api_url,
+                api_secret=thinkwork_api_secret,
+            )
 
         # Drain per-invocation tool costs. The chat handler also clears this
         # list on guardrail failure inside its except block; our caller
@@ -2127,6 +2147,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             "strands_usage": strands_usage,
             "duration_ms": duration_ms,
             "invocation_tool_costs": invocation_tool_costs,
+            "computer_thread_response": computer_thread_response,
         }
     finally:
         detach_eval_context(eval_ctx_token)
@@ -2269,6 +2290,10 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     # this and writes one cost_events row per entry.
                     "hindsight_usage": strands_usage.get("hindsight_usage", []),
                 }
+                if turn_result.get("computer_thread_response") is not None:
+                    result["computer_thread_response"] = turn_result[
+                        "computer_thread_response"
+                    ]
 
                 # Attach guardrail block info if present
                 if strands_usage.get("guardrail_block"):

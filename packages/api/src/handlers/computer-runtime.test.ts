@@ -332,6 +332,32 @@ describe("computer-runtime handler", () => {
     });
   });
 
+  it("allows empty Computer-native thread response content", async () => {
+    const response = await handler(
+      event(
+        "POST",
+        `/api/computers/runtime/tasks/${TASK_ID}/thread-turn-response`,
+        {
+          body: {
+            tenantId: TENANT_ID,
+            computerId: COMPUTER_ID,
+            content: "",
+          },
+        },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.recordThreadTurnResponse).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+      taskId: TASK_ID,
+      content: "",
+      model: null,
+      usage: undefined,
+    });
+  });
+
   it("surfaces connector work delegation errors with their status code", async () => {
     mocks.delegateConnectorWorkTask.mockRejectedValueOnce(
       new mocks.ComputerTaskDelegationError(

@@ -76,3 +76,71 @@ def test_execute_agent_turn_passes_thread_id_to_strands_streaming(monkeypatch):
         "https://example.appsync-api.us-east-1.amazonaws.com/graphql"
     )
     assert server.os.environ["APPSYNC_API_KEY"] == "test-key"
+
+
+def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
+    captured = {}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "eval_span_attrs",
+        SimpleNamespace(
+            attach_eval_context=lambda **_kwargs: object(),
+            detach_eval_context=lambda _token: None,
+        ),
+    )
+    def fake_record_thread_turn_response(**kwargs):
+        captured["response"] = kwargs
+        return {
+            "responded": True,
+            "responseMessageId": "assistant-message-1",
+        }
+
+    monkeypatch.setitem(
+        sys.modules,
+        "computer_thread_response",
+        SimpleNamespace(
+            record_thread_turn_response=fake_record_thread_turn_response,
+        ),
+    )
+    monkeypatch.setattr(server, "_ensure_workspace_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
+    monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        server,
+        "_call_strands_agent",
+        lambda *args, **kwargs: ("Final answer", {"input_tokens": 3}),
+    )
+
+    result = server._execute_agent_turn(
+        {
+            "workspace_tenant_id": "tenant-1",
+            "assistant_id": "agent-1",
+            "tenant_slug": "tenant",
+            "instance_id": "agent-1",
+            "agent_name": "Marco",
+            "human_name": "Eric",
+            "message": "Hello",
+            "thread_id": "thread-1",
+            "computer_id": "computer-1",
+            "computer_task_id": "task-1",
+            "thinkwork_api_url": "https://api.example.test",
+            "thinkwork_api_secret": "service-secret",
+            "messages_history": [],
+        }
+    )
+
+    assert result["computer_thread_response"]["responseMessageId"] == (
+        "assistant-message-1"
+    )
+    assert captured["response"] == {
+        "tenant_id": "tenant-1",
+        "computer_id": "computer-1",
+        "task_id": "task-1",
+        "content": "Final answer",
+        "model": server.DEFAULT_MODEL,
+        "usage": {"input_tokens": 3},
+        "api_url": "https://api.example.test",
+        "api_secret": "service-secret",
+    }

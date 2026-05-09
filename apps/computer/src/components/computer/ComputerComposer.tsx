@@ -1,4 +1,5 @@
 import { ArrowUp, Mic, Plus, Search } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { Button, Textarea } from "@thinkwork/ui";
 
 interface ComputerComposerProps {
@@ -18,7 +19,16 @@ export function ComputerComposer({
   isSubmitting = false,
   error,
 }: ComputerComposerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canSubmit = value.trim().length > 0 && !disabled && !isSubmitting;
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "32px";
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 32), 160)}px`;
+  }, [value]);
 
   return (
     <form
@@ -29,12 +39,13 @@ export function ComputerComposer({
       }}
     >
       <Textarea
+        ref={textareaRef}
         aria-label="Ask your Computer"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Type @ for connectors and sources"
         rows={1}
-        className="max-h-40 min-h-8 resize-none overflow-y-auto border-0 bg-transparent p-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
+        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
         disabled={disabled || isSubmitting}
       />
       <div className="flex items-center justify-between gap-3">
