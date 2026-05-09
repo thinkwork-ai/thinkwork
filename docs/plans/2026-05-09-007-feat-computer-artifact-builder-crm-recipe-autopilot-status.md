@@ -1,7 +1,7 @@
 ---
 title: "Computer Artifact Builder CRM recipe autopilot status"
 type: status
-status: active
+status: complete
 date: 2026-05-09
 plan: docs/plans/2026-05-09-007-feat-computer-artifact-builder-crm-recipe-plan.md
 ---
@@ -236,5 +236,27 @@ scripts/smoke-computer.sh`, touched-file Prettier check, `pnpm lint`,
   `pnpm --filter @thinkwork/workspace-defaults typecheck`, and
   `git diff --check` passed locally. PR #1092 checks passed: CLA, lint, test,
   typecheck, verify.
-- **Current PR:** PR #1092 is pending merge for the stdlib alias/render-crash
-  fix before rerunning the browser/render proof.
+- **Merged stdlib alias/render-crash fix:** PR #1092
+  (`fix(computer): tolerate generated applet prop aliases`) was
+  squash-merged to `main` at
+  `16c6afc88b6b56912e942edc407e698e9c94bcda`; CI passed: CLA, lint, test,
+  typecheck, verify. The deployed `main` pipeline `25613821320` passed,
+  including Terraform Apply, Computer deploy, Bootstrap workspace-defaults
+  reseed, and Deploy Summary.
+- **End-to-end proof succeeded:** The live smoke prompt
+  `Build a CRM pipeline risk dashboard for LastMile opportunities, including
+  stale activity, stage exposure, and the top risks to review.` created
+  thread `3d7837a1-6393-40db-86e3-f1fb6df2c113`, task
+  `493c1ab9-c4fe-4b59-8c89-51d77b688f72`, and applet
+  `ac71f0e9-13fd-48af-87d8-763878950b95`. Local browser verification on
+  `http://localhost:5174/artifacts/ac71f0e9-13fd-48af-87d8-763878950b95`
+  loaded the generated LastMile Pipeline Risk Dashboard artifact without the
+  old subheader, import error, or `undefined.length` crash. The rendered
+  artifact showed refresh controls, source coverage, KPI cards, stage exposure,
+  stale activity buckets, top risks, the opportunities table, and supporting
+  evidence.
+- **Plan status:** Complete. The remaining recommended work is a new artifact
+  rendering plan that adopts Vercel AI Elements as the default UI foundation
+  for thread artifacts, full artifact views, web previews, sandboxed code
+  previews, JSX previews, thinking/tool traces, and generated-artifact error
+  states unless a concrete security/runtime blocker is found.
