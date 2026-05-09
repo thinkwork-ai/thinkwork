@@ -71,6 +71,29 @@ const SOURCE_DIRS = [
 
 const TERRAFORM_FILE = "terraform/modules/app/agentcore-runtime/main.tf";
 
+const REQUIRED_ACTIONS = [
+  {
+    action: "StartBrowserSession",
+    reason:
+      "browser_automation_tool.py uses the bedrock_agentcore BrowserSession helper, whose boto3 calls live in the dependency package.",
+  },
+  {
+    action: "StopBrowserSession",
+    reason:
+      "browser_automation_tool.py closes the managed browser session through the dependency helper context manager.",
+  },
+  {
+    action: "GetBrowserSession",
+    reason:
+      "AgentCore Browser helpers may inspect the managed browser session while generating CDP headers.",
+  },
+  {
+    action: "ListBrowserSessions",
+    reason:
+      "Keep the runtime role complete for AgentCore Browser session lifecycle helpers.",
+  },
+];
+
 function listPythonFiles(dir) {
   const abs = path.join(repoRoot, dir);
   if (!fs.existsSync(abs)) return [];
@@ -160,6 +183,22 @@ function main() {
     }
   }
 
+  for (const required of REQUIRED_ACTIONS) {
+    if (!granted.has(required.action)) {
+      missing.push({
+        op: "(dependency helper)",
+        action: required.action,
+        citations: [
+          {
+            file: "packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py",
+            line: 0,
+            reason: required.reason,
+          },
+        ],
+      });
+    }
+  }
+
   let hadWarn = false;
   if (unknown.size > 0) {
     hadWarn = true;
@@ -188,7 +227,9 @@ function main() {
     console.error(`\n  Missing IAM action: bedrock-agentcore:${action}`);
     console.error(`    (called as client.${op}(...) in:)`);
     for (const c of citations) {
-      console.error(`      - ${c.file}:${c.line}`);
+      const suffix = c.line > 0 ? `:${c.line}` : "";
+      const reason = c.reason ? ` — ${c.reason}` : "";
+      console.error(`      - ${c.file}${suffix}${reason}`);
     }
   }
   console.error(
