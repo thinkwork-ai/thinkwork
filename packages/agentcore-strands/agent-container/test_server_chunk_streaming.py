@@ -170,6 +170,15 @@ def test_save_app_tool_summary_preserves_artifact_persistence_evidence():
     }
 
 
+def test_computer_applet_build_request_classifier():
+    assert server._is_computer_applet_build_request(
+        "Build a CRM pipeline risk dashboard for LastMile opportunities"
+    )
+    assert server._is_computer_applet_build_request("Create an applet from these notes")
+    assert not server._is_computer_applet_build_request("Summarize the CRM pipeline")
+    assert not server._is_computer_applet_build_request("Build trust with the customer")
+
+
 def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     captured = {}
 
@@ -232,5 +241,6 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     assert "delegate applet saving" in captured["system_prompt"]
     assert "unless your own successful save_app tool call" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
+    assert captured["suppress_delegate_tools"] is True
     assert "COMPUTER_THREAD_ID" not in server.os.environ
     assert "COMPUTER_TURN_PROMPT" not in server.os.environ
