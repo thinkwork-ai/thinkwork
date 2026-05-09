@@ -14,6 +14,20 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U2:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u2-stdlib` on branch
+  `codex/computer-applets-u2-stdlib` from `origin/main` after U1 merged.
+- **Progress:** Added the initial `@thinkwork/computer-stdlib` package with
+  generic primitives, formatters, the inert `useAppletAPI` hook, and package
+  contract tests. No consumers are wired yet.
+- **Current PR:** #1049 (`feat(computer): add applet stdlib package`).
+- **CI:** PR #1049 checks passed: CLA, lint, test, typecheck, verify.
+- **Verification note:** `pnpm install --no-frozen-lockfile` updated the
+  lockfile for the new workspace package, and `pnpm install --frozen-lockfile`
+  then passed. `pnpm --filter @thinkwork/computer-stdlib test`, `pnpm
+  --filter @thinkwork/computer-stdlib build`, `pnpm -r --if-present
+  typecheck`, `pnpm lint`, `pnpm -r --if-present test`, and `git diff --check`
+  all passed locally.
 - **Started U1:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u1-contract` on branch
   `codex/computer-applets-u1-contract` from `origin/main`.

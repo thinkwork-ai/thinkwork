@@ -1,0 +1,40 @@
+{
+  "name": "@thinkwork/computer-stdlib",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@thinkwork/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "lucide-react": "^0.574.0",
+    "react": ">=19",
+    "react-dom": ">=19",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^26.0.0",
+    "lucide-react": "^0.574.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.4",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0",
+    "vitest": "3.2.4"
+  }
+}
