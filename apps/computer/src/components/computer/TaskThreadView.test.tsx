@@ -837,6 +837,66 @@ describe("TaskThreadView", () => {
     expect(finishedDetails.open).toBe(false);
   });
 
+  it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {
+    // U3 regression guard: prior behavior attached only the latest turn's
+    // activity to the latest user message, leaving earlier turns invisible.
+    // Admin shows a Thinking row per user/computer pair; Computer must match.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-multi",
+          title: "Multi-turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            { id: "u1", role: "USER", content: "First question" },
+            {
+              id: "a1",
+              role: "ASSISTANT",
+              content: "First answer",
+            },
+            { id: "u2", role: "USER", content: "Second question" },
+            {
+              id: "a2",
+              role: "ASSISTANT",
+              content: "Second answer",
+            },
+          ],
+          // Resolver emits turns DESC; the component must sort ASC before
+          // pairing with user messages.
+          turns: [
+            {
+              id: "turn-2",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:05:00Z",
+              finishedAt: "2026-05-09T10:05:30Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T10:00:00Z",
+              finishedAt: "2026-05-09T10:00:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Exactly one Thinking summary per turn, both with the labelled-region affordance.
+    const thinkingDetailsList = screen.getAllByLabelText(
+      "Thinking and tool activity",
+    );
+    expect(thinkingDetailsList).toHaveLength(2);
+
+    // Chronological order: the first user's Thinking row must appear before
+    // the second user's Thinking row in the DOM.
+    const [first, second] = thinkingDetailsList;
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps the Thinking summary aria-label intact on the new <details> element", () => {
     // U2 / DL-003: dropping the <article> wrapper must not lose the labelled
     // region affordance. Screen readers continue to find the same name.

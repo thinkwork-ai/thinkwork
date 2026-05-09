@@ -105,6 +105,10 @@ export function TaskThreadView({
     visibleMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
+  const turnByUserMessageId = mapTurnsToUserMessages(
+    visibleMessages,
+    thread.turns ?? [],
+  );
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
@@ -124,10 +128,16 @@ export function TaskThreadView({
               <TranscriptSegment
                 key={message.id}
                 message={message}
-                showLatestActivity={index === latestUserIndex}
-                latestTurn={thread.turns?.[0]}
-                streamingChunks={showStreamingBuffer ? streamingChunks : []}
-                showProcessingShimmer={showProcessingShimmer}
+                turn={turnByUserMessageId.get(message.id)}
+                isLatestUser={index === latestUserIndex}
+                streamingChunks={
+                  index === latestUserIndex && showStreamingBuffer
+                    ? streamingChunks
+                    : []
+                }
+                showProcessingShimmer={
+                  index === latestUserIndex && showProcessingShimmer
+                }
               />
             ))
           )}
@@ -149,23 +159,23 @@ export function TaskThreadView({
 
 function TranscriptSegment({
   message,
-  showLatestActivity,
-  latestTurn,
+  turn,
+  isLatestUser,
   streamingChunks,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
-  showLatestActivity: boolean;
-  latestTurn?: TaskThreadTurn;
+  turn?: TaskThreadTurn;
+  isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   showProcessingShimmer: boolean;
 }) {
   return (
     <>
       <TranscriptMessage message={message} />
-      {showLatestActivity ? (
+      {turn ? <ThreadTurnActivity turn={turn} /> : null}
+      {isLatestUser ? (
         <>
-          <ThreadTurnActivity turn={latestTurn} />
           {streamingChunks.length > 0 ? (
             <StreamingMessageBuffer chunks={streamingChunks} />
           ) : null}
@@ -240,6 +250,48 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
       ) : null}
     </ThinkingRow>
   );
+}
+
+// Match each USER message to its corresponding turn so multi-turn threads
+// render one Thinking row per turn (parity with the admin thread view).
+// Sort turns ASC by startedAt (the GraphQL resolver emits DESC), then assign
+// turns to user messages in document order. Extra turns (e.g. scheduled-job
+// triggers with no preceding user message) attach to the latest user message
+// so the activity remains discoverable.
+function mapTurnsToUserMessages(
+  messages: TaskThreadMessage[],
+  turns: TaskThreadTurn[],
+): Map<string, TaskThreadTurn> {
+  const map = new Map<string, TaskThreadTurn>();
+  if (turns.length === 0) return map;
+
+  const sortedTurns = [...turns].sort((a, b) => {
+    const ta = parseEventTimestamp(a.startedAt ?? null);
+    const tb = parseEventTimestamp(b.startedAt ?? null);
+    if (ta !== tb) return ta - tb;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+
+  const userMessages = messages.filter(
+    (message) => message.role.toUpperCase() === "USER",
+  );
+  if (userMessages.length === 0) return map;
+
+  const pairCount = Math.min(userMessages.length, sortedTurns.length);
+  for (let i = 0; i < pairCount; i += 1) {
+    map.set(userMessages[i].id, sortedTurns[i]);
+  }
+
+  // If there are more turns than user messages, anchor the trailing turns to
+  // the latest user message so they remain visible.
+  if (sortedTurns.length > userMessages.length) {
+    map.set(
+      userMessages[userMessages.length - 1].id,
+      sortedTurns[sortedTurns.length - 1],
+    );
+  }
+
+  return map;
 }
 
 function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
@@ -475,7 +527,7 @@ function ThinkingRow({
   const hasChildren = Children.toArray(children).some(Boolean);
   return (
     <details
-      className="group w-fit text-muted-foreground"
+      className="group/thinking w-fit text-muted-foreground"
       open={defaultOpen}
       aria-label={ariaLabel}
     >
@@ -491,7 +543,7 @@ function ThinkingRow({
         {title}
         <ChevronRight
           aria-hidden="true"
-          className="size-4 transition-transform group-open:rotate-90"
+          className="size-4 transition-transform group-open/thinking:rotate-90"
         />
       </summary>
       {detail ? (
@@ -524,11 +576,11 @@ function ActionRow({
           ? Sparkles
           : Bot;
   return (
-    <details className="group w-fit text-muted-foreground">
+    <details className="group/action w-fit text-muted-foreground">
       <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
         <Icon className="size-4" />
         {title}
-        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+        <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
       {detail ? (
         <pre className="ml-7 mt-2 max-w-2xl whitespace-pre-wrap rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
