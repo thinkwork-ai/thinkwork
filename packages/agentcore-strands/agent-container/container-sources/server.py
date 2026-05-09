@@ -2279,6 +2279,8 @@ def _execute_agent_turn(payload: dict) -> dict:
     )
 
     computer_env_snapshot = _set_computer_turn_env(
+        computer_id=computer_id,
+        computer_task_id=computer_task_id,
         thread_id=ticket_id,
         prompt=message,
     )
@@ -2409,11 +2411,27 @@ def _execute_agent_turn(payload: dict) -> dict:
         _restore_env_snapshot(computer_env_snapshot)
 
 
-def _set_computer_turn_env(*, thread_id: str, prompt: str) -> dict[str, str | None]:
+def _set_computer_turn_env(
+    *,
+    computer_id: str,
+    computer_task_id: str,
+    thread_id: str,
+    prompt: str,
+) -> dict[str, str | None]:
     snapshot = {
+        "COMPUTER_ID": os.environ.get("COMPUTER_ID"),
+        "COMPUTER_TASK_ID": os.environ.get("COMPUTER_TASK_ID"),
         "COMPUTER_THREAD_ID": os.environ.get("COMPUTER_THREAD_ID"),
         "COMPUTER_TURN_PROMPT": os.environ.get("COMPUTER_TURN_PROMPT"),
     }
+    if computer_id:
+        os.environ["COMPUTER_ID"] = computer_id
+    else:
+        os.environ.pop("COMPUTER_ID", None)
+    if computer_task_id:
+        os.environ["COMPUTER_TASK_ID"] = computer_task_id
+    else:
+        os.environ.pop("COMPUTER_TASK_ID", None)
     if thread_id:
         os.environ["COMPUTER_THREAD_ID"] = thread_id
     else:
