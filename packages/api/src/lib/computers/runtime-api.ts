@@ -17,6 +17,7 @@ import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { runSymphonyPrConnectorWork } from "./symphony-pr-harness.js";
 import { ensureMigratedComputerWorkspaceSeeded } from "./workspace-seed.js";
+import { toGraphqlComputerTask } from "./tasks.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -781,8 +782,19 @@ async function finishTask(input: {
     )
     .returning({
       id: computerTasks.id,
+      tenant_id: computerTasks.tenant_id,
+      computer_id: computerTasks.computer_id,
+      task_type: computerTasks.task_type,
       status: computerTasks.status,
+      input: computerTasks.input,
+      output: computerTasks.output,
+      error: computerTasks.error,
+      idempotency_key: computerTasks.idempotency_key,
+      claimed_at: computerTasks.claimed_at,
       completed_at: computerTasks.completed_at,
+      created_by_user_id: computerTasks.created_by_user_id,
+      created_at: computerTasks.created_at,
+      updated_at: computerTasks.updated_at,
     });
   if (!row) throw new ComputerTaskNotFoundError(input.taskId);
   await appendComputerTaskEvent({
@@ -793,11 +805,7 @@ async function finishTask(input: {
     level: input.status === "failed" ? "error" : "info",
     payload: input.status === "failed" ? { error: input.error } : undefined,
   });
-  return {
-    id: row.id,
-    status: row.status,
-    completedAt: row.completed_at,
-  };
+  return toGraphqlComputerTask(row);
 }
 
 async function loadComputer(tenantId: string, computerId: string) {
