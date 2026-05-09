@@ -223,6 +223,7 @@ describe("TaskThreadView", () => {
                   payload: {
                     url: "https://example.com",
                     task: "Read the page title",
+                    taskId: "task-1",
                   },
                   createdAt: "2026-05-09T08:01:00Z",
                 },
@@ -243,6 +244,12 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Opening browser")).toBeTruthy();
     expect(screen.getByText("Browser completed")).toBeTruthy();
     expect(screen.getByText(/https:\/\/example.com/)).toBeTruthy();
+    expect(
+      screen.getByText(/"instruction": "Read the page title"/),
+    ).toBeTruthy();
+    expect(screen.getByText(/"runId": "task-1"/)).toBeTruthy();
+    expect(screen.queryByText(/"task":/)).toBeNull();
+    expect(screen.queryByText(/"taskId":/)).toBeNull();
   });
 
   it("derives the source count from message and turn evidence", () => {

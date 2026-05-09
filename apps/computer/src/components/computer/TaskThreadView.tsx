@@ -633,16 +633,40 @@ function actionRowForEvent(event: TaskThreadEvent) {
 }
 
 function eventDetail(event: TaskThreadEvent, payload: Record<string, unknown>) {
-  const { task, ...payloadRest } = payload;
   const detail = {
     ...(event.createdAt ? { createdAt: event.createdAt } : {}),
     ...(event.level ? { level: event.level } : {}),
-    ...(task ? { instruction: task } : {}),
-    ...payloadRest,
+    ...sanitizeEventPayload(payload),
   };
   return Object.keys(detail).length
     ? JSON.stringify(detail, null, 2)
     : undefined;
+}
+
+function sanitizeEventPayload(payload: Record<string, unknown>) {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    sanitized[sanitizeEventPayloadKey(key)] = sanitizeEventPayloadValue(value);
+  }
+  return sanitized;
+}
+
+function sanitizeEventPayloadValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeEventPayloadValue);
+  if (value && typeof value === "object") {
+    return sanitizeEventPayload(value as Record<string, unknown>);
+  }
+  return value;
+}
+
+function sanitizeEventPayloadKey(key: string) {
+  const normalized = key.replace(/[_-]/g, "").toLowerCase();
+  if (normalized === "task") return "instruction";
+  if (normalized === "taskid") return "runId";
+  if (normalized === "tasktype") return "runType";
+  if (normalized === "taskstatus") return "runStatus";
+  if (normalized === "computertaskid") return "computerRunId";
+  return key.replace(/task/gi, "run");
 }
 
 function countThreadSources(
