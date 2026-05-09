@@ -241,7 +241,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByText("Opening browser")).toBeTruthy();
-    expect(screen.getByText("Browser task completed")).toBeTruthy();
+    expect(screen.getByText("Browser completed")).toBeTruthy();
     expect(screen.getByText(/https:\/\/example.com/)).toBeTruthy();
   });
 

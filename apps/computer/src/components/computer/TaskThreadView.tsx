@@ -608,10 +608,10 @@ function actionRowForEvent(event: TaskThreadEvent) {
     return { title: "Opening browser", detail, kind: "source" as const };
   }
   if (eventType === "browser_automation_completed") {
-    return { title: "Browser task completed", detail, kind: "source" as const };
+    return { title: "Browser completed", detail, kind: "source" as const };
   }
   if (eventType === "browser_automation_failed") {
-    return { title: "Browser task failed", detail, kind: "tool" as const };
+    return { title: "Browser failed", detail, kind: "tool" as const };
   }
   if (eventType === "browser_automation_unavailable") {
     return { title: "Browser unavailable", detail, kind: "tool" as const };
@@ -633,10 +633,12 @@ function actionRowForEvent(event: TaskThreadEvent) {
 }
 
 function eventDetail(event: TaskThreadEvent, payload: Record<string, unknown>) {
+  const { task, ...payloadRest } = payload;
   const detail = {
     ...(event.createdAt ? { createdAt: event.createdAt } : {}),
     ...(event.level ? { level: event.level } : {}),
-    ...payload,
+    ...(task ? { instruction: task } : {}),
+    ...payloadRest,
   };
   return Object.keys(detail).length
     ? JSON.stringify(detail, null, 2)
