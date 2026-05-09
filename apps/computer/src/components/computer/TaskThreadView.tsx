@@ -532,7 +532,7 @@ function ThinkingRow({
       open={defaultOpen}
       aria-label={ariaLabel}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
         <Brain
           aria-hidden="true"
           className={
@@ -578,7 +578,7 @@ function ActionRow({
           : Bot;
   return (
     <details className="group/action w-fit text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
         <Icon className="size-4" />
         {title}
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
