@@ -9,14 +9,17 @@ export function StreamingMessageBuffer({ chunks }: StreamingMessageBufferProps) 
   const text = chunks.map((chunk) => chunk.text).join("");
 
   return (
-    <article className="grid gap-3" aria-label="Streaming assistant response">
-      <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm leading-6">
+    <article
+      className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0"
+      aria-label="Streaming assistant response"
+    >
+      <p>
         <span>{text}</span>
         <span
           aria-label="Computer is typing"
-          className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground"
+          className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground align-middle"
         />
-      </div>
+      </p>
     </article>
   );
 }
