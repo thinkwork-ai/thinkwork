@@ -24,7 +24,7 @@ export function AppCanvasPanel({
   return (
     <section
       data-testid="app-canvas-panel"
-      className="min-h-0 overflow-auto bg-muted/20 p-4 sm:p-5"
+      className="min-h-0 overflow-y-auto overflow-x-hidden bg-muted/20 px-3 py-4 sm:px-6 sm:py-6"
     >
       {manifest.dashboardKind === "pipeline_risk" ? (
         <CrmPipelineRiskApp
@@ -35,7 +35,7 @@ export function AppCanvasPanel({
           onRefreshSettled={onRefreshSettled}
         />
       ) : (
-        <div className="rounded-lg border border-border/70 bg-background p-6 text-sm text-muted-foreground">
+        <div className="mx-auto w-full max-w-[1280px] rounded-lg border border-border/70 bg-background p-6 text-sm text-muted-foreground">
           Unsupported dashboard kind: {manifest.dashboardKind}
         </div>
       )}

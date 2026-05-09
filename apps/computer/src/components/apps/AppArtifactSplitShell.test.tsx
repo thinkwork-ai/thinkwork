@@ -6,7 +6,7 @@ import { getFixtureDashboardManifestByArtifactId } from "@/lib/app-artifacts";
 afterEach(cleanup);
 
 describe("AppArtifactSplitShell", () => {
-  it("renders a fixture app with provenance and canvas panels", () => {
+  it("renders a fixture app as a single canvas without provenance split view", () => {
     const manifest = getFixtureDashboardManifestByArtifactId(
       "artifact-crm-pipeline-risk-fixture",
     );
@@ -17,7 +17,7 @@ describe("AppArtifactSplitShell", () => {
     expect(
       screen.getAllByText("LastMile CRM pipeline risk").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Computer provenance")).toBeTruthy();
+    expect(screen.queryByLabelText("Computer provenance")).toBeNull();
     expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getAllByText("Source coverage").length).toBeGreaterThan(0);
   });

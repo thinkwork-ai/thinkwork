@@ -29,7 +29,7 @@ export function CrmPipelineRiskApp({
   onRefreshSettled,
 }: CrmPipelineRiskAppProps) {
   return (
-    <div className="mx-auto grid max-w-7xl gap-4">
+    <div className="mx-auto grid w-full min-w-0 max-w-[1280px] gap-4">
       <CrmPipelineHeader manifest={manifest} />
       <CrmRefreshBar
         manifest={manifest}

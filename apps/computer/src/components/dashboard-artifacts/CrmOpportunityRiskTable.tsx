@@ -43,17 +43,27 @@ export function CrmOpportunityRiskTable({
           </Badge>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+      <div className="overflow-hidden">
+        <table className="w-full table-fixed text-sm">
           <thead className="border-b border-border/70 bg-muted/30 text-xs text-muted-foreground">
             <tr>
-              <TableHead>Opportunity</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Stage</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Last activity</TableHead>
-              <TableHead>Risk</TableHead>
+              <TableHead className="w-[36%]">Opportunity</TableHead>
+              <TableHead className="hidden w-[22%] sm:table-cell">
+                Account
+              </TableHead>
+              <TableHead className="hidden w-[14%] md:table-cell">
+                Stage
+              </TableHead>
+              <TableHead className="hidden w-[14%] lg:table-cell">
+                Product
+              </TableHead>
+              <TableHead className="w-[24%] text-right sm:w-[16%]">
+                Amount
+              </TableHead>
+              <TableHead className="hidden w-[14%] xl:table-cell">
+                Last activity
+              </TableHead>
+              <TableHead className="w-[20%] sm:w-[12%]">Risk</TableHead>
             </tr>
           </thead>
           <tbody>
@@ -71,21 +81,25 @@ function RiskRow({ row }: { row: OpportunityRiskRow }) {
   return (
     <tr className="border-b border-border/50 last:border-b-0">
       <TableCell>
-        <span className="block max-w-[18rem] truncate font-medium">
+        <span className="block min-w-0 truncate font-medium">
           {row.opportunity}
         </span>
       </TableCell>
-      <TableCell>
-        <span className="block max-w-[16rem] truncate">{row.account}</span>
+      <TableCell className="hidden sm:table-cell">
+        <span className="block min-w-0 truncate">{row.account}</span>
       </TableCell>
-      <TableCell>{row.stage}</TableCell>
-      <TableCell>
-        <span className="block max-w-[12rem] truncate">{row.product}</span>
+      <TableCell className="hidden truncate md:table-cell">
+        {row.stage}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <span className="block min-w-0 truncate">{row.product}</span>
       </TableCell>
       <TableCell className="text-right font-mono tabular-nums">
         {formatCurrency(row.amount)}
       </TableCell>
-      <TableCell>{row.lastActivity}</TableCell>
+      <TableCell className="hidden truncate xl:table-cell">
+        {row.lastActivity}
+      </TableCell>
       <TableCell>
         <RiskBadge risk={row.risk} />
       </TableCell>
@@ -115,7 +129,11 @@ function TableHead({
   children: ReactNode;
   className?: string;
 }) {
-  return <th className={`px-3 py-2 text-left font-medium ${className}`}>{children}</th>;
+  return (
+    <th className={`px-3 py-2 text-left font-medium ${className}`}>
+      {children}
+    </th>
+  );
 }
 
 function TableCell({
@@ -125,5 +143,9 @@ function TableCell({
   children: ReactNode;
   className?: string;
 }) {
-  return <td className={`px-3 py-3 align-middle ${className}`}>{children}</td>;
+  return (
+    <td className={`min-w-0 overflow-hidden px-3 py-3 align-middle ${className}`}>
+      {children}
+    </td>
+  );
 }
