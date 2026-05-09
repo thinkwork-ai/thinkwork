@@ -64,3 +64,4 @@ export VITE_GRAPHQL_API_KEY="$APPSYNC_API_KEY"
 
 node scripts/smoke/computer-surface-smoke.mjs
 node scripts/smoke/computer-applet-pipeline-smoke.mjs
+node scripts/smoke/computer-crm-dashboard-prompt-smoke.mjs
