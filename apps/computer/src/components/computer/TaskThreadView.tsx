@@ -9,7 +9,13 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Streamdown } from "streamdown";
 import { Button, Textarea } from "@thinkwork/ui";
 import {
@@ -105,7 +111,7 @@ export function TaskThreadView({
         className="flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
-        <div className="mx-auto grid w-full max-w-[750px] gap-8 px-4 pt-10 pb-6 sm:px-6">
+        <div className="mx-auto grid w-full max-w-[750px] gap-5 px-4 pt-10 pb-6 sm:px-6">
           {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
@@ -169,6 +175,24 @@ function TranscriptSegment({
   );
 }
 
+const EXPANDED_TURN_STATUSES = new Set([
+  "running",
+  "pending",
+  "queued",
+  "claimed",
+]);
+
+function isExpandedStatus(status: string) {
+  return EXPANDED_TURN_STATUSES.has(status);
+}
+
+function shouldDefaultOpen(turn: TaskThreadTurn) {
+  return (
+    isExpandedStatus(String(turn.status ?? "").toLowerCase()) ||
+    Boolean(turn.error)
+  );
+}
+
 function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   if (!turn) return null;
 
@@ -189,13 +213,18 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
     Boolean(turn.error);
   if (!shouldRender) return null;
 
+  const expanded = isExpandedStatus(status);
+  const defaultOpen = shouldDefaultOpen(turn);
+
   return (
-    <article className="grid gap-3" aria-label="Thinking and tool activity">
-      <ThinkingRow
-        title="Thinking"
-        detail={turnSummary(turn, usage)}
-        isActive={status === "running"}
-      />
+    <ThinkingRow
+      key={defaultOpen ? "open" : "closed"}
+      title="Thinking"
+      detail={turnSummary(turn, usage)}
+      isActive={expanded}
+      defaultOpen={defaultOpen}
+      ariaLabel="Thinking and tool activity"
+    >
       {rows.map((row) => (
         <ActionRow
           key={`${turn.id}-${row.title}`}
@@ -207,7 +236,7 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
       ) : null}
-    </article>
+    </ThinkingRow>
   );
 }
 
@@ -311,8 +340,12 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
               ))}
             </div>
           ) : null}
-          <div className="prose prose-invert max-w-none text-[1.05rem] leading-8 text-foreground prose-p:my-0">
-            {body ? <Streamdown>{body}</Streamdown> : <p>(No message content)</p>}
+          <div className="prose prose-invert max-w-none text-[1.05rem] text-foreground prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-4">
+            {body ? (
+              <Streamdown>{body}</Streamdown>
+            ) : (
+              <p>(No message content)</p>
+            )}
           </div>
           {message.durableArtifact ? (
             <GeneratedArtifactCard artifact={message.durableArtifact} />
@@ -367,7 +400,11 @@ function FollowUpComposer({
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing
+          ) {
             event.preventDefault();
             void handleSubmit();
           }
@@ -419,15 +456,29 @@ function ThinkingRow({
   title,
   detail,
   isActive = false,
+  defaultOpen = false,
+  ariaLabel,
+  children,
 }: {
   title: string;
   detail?: string;
   isActive?: boolean;
+  defaultOpen?: boolean;
+  ariaLabel?: string;
+  children?: ReactNode;
 }) {
+  const hasChildren = Array.isArray(children)
+    ? children.some(Boolean)
+    : Boolean(children);
   return (
-    <details className="group w-fit text-muted-foreground">
+    <details
+      className="group w-fit text-muted-foreground"
+      open={defaultOpen}
+      aria-label={ariaLabel}
+    >
       <summary className="flex cursor-pointer list-none items-center gap-3 text-base">
         <span
+          aria-hidden="true"
           className={
             isActive
               ? "size-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin"
@@ -435,12 +486,18 @@ function ThinkingRow({
           }
         />
         {title}
-        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 transition-transform group-open:rotate-90"
+        />
       </summary>
       {detail ? (
         <p className="ml-7 mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
           {detail}
         </p>
+      ) : null}
+      {hasChildren ? (
+        <div className="ml-7 mt-3 grid gap-2">{children}</div>
       ) : null}
     </details>
   );

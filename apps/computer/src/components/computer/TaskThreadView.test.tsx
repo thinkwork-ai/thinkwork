@@ -646,6 +646,221 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("(No message content)")).toBeTruthy();
   });
 
+  it("renders assistant Markdown wrapper with tightened prose density modifiers", () => {
+    // U1 regression guard: dropping `prose-p:my-2 prose-li:my-0 …` reverts the
+    // page to the loose default vertical rhythm that pre-merge content used.
+    const { container } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Density check",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            { id: "m1", role: "USER", content: "List options" },
+            {
+              id: "m2",
+              role: "ASSISTANT",
+              content: "## Options\n\n- Alpha\n- Beta\n- Gamma",
+            },
+          ],
+        }}
+      />,
+    );
+    const proseWrapper = container.querySelector("div.prose");
+    expect(proseWrapper).not.toBeNull();
+    const cls = proseWrapper!.className;
+    for (const token of [
+      "prose-p:my-2",
+      "prose-ul:my-2",
+      "prose-ol:my-2",
+      "prose-li:my-0",
+      "prose-headings:mt-4",
+      "prose-headings:mb-2",
+    ]) {
+      expect(cls).toContain(token);
+    }
+    // Pre-existing loose tokens must not survive the refactor.
+    expect(cls).not.toContain("leading-8");
+    expect(cls).not.toContain("prose-p:my-0");
+  });
+
+  it("renders the transcript segment grid with tightened gap-5 spacing", () => {
+    // U1 regression guard: gap-8 wastes ~12px between every transcript segment.
+    const { container } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Gap check",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            { id: "m1", role: "USER", content: "Hi" },
+            { id: "m2", role: "ASSISTANT", content: "Hello." },
+          ],
+        }}
+      />,
+    );
+    const grid = container.querySelector("div.gap-5");
+    expect(grid).not.toBeNull();
+    expect(container.querySelector("div.gap-8")).toBeNull();
+  });
+
+  it("renders Thinking row collapsed when a turn completes cleanly", () => {
+    // U2 collapse-on-finish: defaultOpen is false for terminal-clean states so
+    // child action rows nest inside the closed disclosure by default.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed quietly",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Pull leads" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-09T08:01:05Z",
+              events: [
+                {
+                  id: "e1",
+                  eventType: "browser_automation_started",
+                  payload: { url: "https://example.com" },
+                  createdAt: "2026-05-09T08:01:00Z",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    const details = screen.getByLabelText(
+      "Thinking and tool activity",
+    ) as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+  });
+
+  it("renders Thinking row expanded with the Run failed row visible when a turn errors", () => {
+    // U2 / DL-002 regression guard: a failed turn must surface its error
+    // without forcing the user to expand a closed disclosure.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Failed turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Reach the page" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "failed",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-09T08:01:05Z",
+              error: "Browser session timed out",
+            },
+          ],
+        }}
+      />,
+    );
+    const details = screen.getByLabelText(
+      "Thinking and tool activity",
+    ) as HTMLDetailsElement;
+    expect(details.open).toBe(true);
+    expect(screen.getByText("Run failed")).toBeTruthy();
+    expect(screen.getByText("Browser session timed out")).toBeTruthy();
+  });
+
+  it("renders Thinking row expanded with active spinner for queued and pending turns", () => {
+    // U2 / DL-001 regression guard: pre-running statuses must communicate that
+    // work is starting up rather than render an empty closed disclosure.
+    for (const status of ["pending", "queued", "claimed"] as const) {
+      const { container, unmount } = render(
+        <TaskThreadView
+          thread={{
+            id: `thread-${status}`,
+            title: `${status} turn`,
+            lifecycleStatus: "RUNNING",
+            messages: [{ id: "m1", role: "USER", content: "Start" }],
+            turns: [
+              {
+                id: "turn-1",
+                status,
+                invocationSource: "chat_message",
+              },
+            ],
+          }}
+        />,
+      );
+      const details = screen.getByLabelText(
+        "Thinking and tool activity",
+      ) as HTMLDetailsElement;
+      expect(details.open).toBe(true);
+      // Spinner uses `animate-spin`; the static dot variant does not.
+      expect(container.querySelector(".animate-spin")).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it("collapses the Thinking disclosure when a running turn transitions to a clean terminal status", () => {
+    // U2: rerender with a status flip across the open-state boundary forces a
+    // remount via the `key` strategy, applying defaultOpen=false.
+    const baseThread = {
+      id: "thread-1",
+      title: "Collapse on finish",
+      lifecycleStatus: "RUNNING",
+      messages: [{ id: "m1", role: "USER", content: "Run" }],
+      turns: [
+        {
+          id: "turn-1",
+          status: "running",
+          invocationSource: "chat_message",
+        },
+      ],
+    };
+
+    const { rerender } = render(<TaskThreadView thread={baseThread} />);
+    const runningDetails = screen.getByLabelText(
+      "Thinking and tool activity",
+    ) as HTMLDetailsElement;
+    expect(runningDetails.open).toBe(true);
+
+    rerender(
+      <TaskThreadView
+        thread={{
+          ...baseThread,
+          turns: [{ ...baseThread.turns[0], status: "completed" }],
+        }}
+      />,
+    );
+    const finishedDetails = screen.getByLabelText(
+      "Thinking and tool activity",
+    ) as HTMLDetailsElement;
+    expect(finishedDetails.open).toBe(false);
+  });
+
+  it("keeps the Thinking summary aria-label intact on the new <details> element", () => {
+    // U2 / DL-003: dropping the <article> wrapper must not lose the labelled
+    // region affordance. Screen readers continue to find the same name.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Aria check",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "m1", role: "USER", content: "Run" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+      />,
+    );
+    const labelled = screen.getByLabelText("Thinking and tool activity");
+    expect(labelled.tagName.toLowerCase()).toBe("details");
+  });
+
   it("sends follow-up messages from the composer", () => {
     const onSendFollowUp = vi.fn();
     render(
