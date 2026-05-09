@@ -3053,6 +3053,8 @@ export type Query = {
   __typename?: "Query";
   _empty?: Maybe<Scalars["String"]["output"]>;
   activityLog: Array<ActivityLogEntry>;
+  adminApplet?: Maybe<AppletPayload>;
+  adminApplets: AppletConnection;
   /**
    * Returns the caller's own role on the caller's own tenant.
    *
@@ -3290,6 +3292,17 @@ export type QueryActivityLogArgs = {
   entityType?: InputMaybe<Scalars["String"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryAdminAppletArgs = {
+  appId: Scalars["ID"]["input"];
+};
+
+export type QueryAdminAppletsArgs = {
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryAgentArgs = {
@@ -8283,6 +8296,76 @@ export type ArtifactDetailQuery = {
     threadId?: string | null;
     createdAt: any;
     updatedAt: any;
+  } | null;
+};
+
+export type AdminAppletsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type AdminAppletsQuery = {
+  __typename?: "Query";
+  adminApplets: {
+    __typename?: "AppletConnection";
+    nextCursor?: string | null;
+    nodes: Array<{
+      __typename?: "Applet";
+      appId: string;
+      name: string;
+      version: number;
+      tenantId: string;
+      threadId?: string | null;
+      prompt?: string | null;
+      agentVersion?: string | null;
+      modelId?: string | null;
+      generatedAt: any;
+      stdlibVersionAtGeneration: string;
+      artifact: {
+        __typename?: "Artifact";
+        id: string;
+        agentId?: string | null;
+        threadId?: string | null;
+        createdAt: any;
+        updatedAt: any;
+      };
+    }>;
+  };
+};
+
+export type AdminAppletQueryVariables = Exact<{
+  appId: Scalars["ID"]["input"];
+}>;
+
+export type AdminAppletQuery = {
+  __typename?: "Query";
+  adminApplet?: {
+    __typename?: "AppletPayload";
+    source: string;
+    metadata: any;
+    applet: {
+      __typename?: "Applet";
+      appId: string;
+      name: string;
+      version: number;
+      tenantId: string;
+      threadId?: string | null;
+      prompt?: string | null;
+      agentVersion?: string | null;
+      modelId?: string | null;
+      generatedAt: any;
+      stdlibVersionAtGeneration: string;
+      artifact: {
+        __typename?: "Artifact";
+        id: string;
+        agentId?: string | null;
+        threadId?: string | null;
+        createdAt: any;
+        updatedAt: any;
+      };
+    };
   } | null;
 };
 
@@ -19469,6 +19552,301 @@ export const ArtifactDetailDocument = {
     },
   ],
 } as unknown as DocumentNode<ArtifactDetailQuery, ArtifactDetailQueryVariables>;
+export const AdminAppletsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "AdminApplets" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "cursor" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "adminApplets" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "cursor" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "cursor" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "nodes" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "appId" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "version" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "threadId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "prompt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "modelId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "generatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: {
+                          kind: "Name",
+                          value: "stdlibVersionAtGeneration",
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "artifact" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "agentId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "threadId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "createdAt" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "updatedAt" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "nextCursor" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<AdminAppletsQuery, AdminAppletsQueryVariables>;
+export const AdminAppletDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "AdminApplet" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "appId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "adminApplet" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "appId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "appId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "applet" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "appId" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "version" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "threadId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "prompt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "modelId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "generatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: {
+                          kind: "Name",
+                          value: "stdlibVersionAtGeneration",
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "artifact" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "agentId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "threadId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "createdAt" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "updatedAt" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                { kind: "Field", name: { kind: "Name", value: "metadata" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<AdminAppletQuery, AdminAppletQueryVariables>;
 export const MemoryRecordsDocument = {
   kind: "Document",
   definitions: [

@@ -2172,6 +2172,71 @@ export const ArtifactDetailQuery = gql`
   }
 `;
 
+export const AdminAppletsQuery = graphql(`
+  query AdminApplets(
+    $tenantId: ID!
+    $userId: ID
+    $cursor: String
+    $limit: Int
+  ) {
+    adminApplets(
+      tenantId: $tenantId
+      userId: $userId
+      cursor: $cursor
+      limit: $limit
+    ) {
+      nodes {
+        appId
+        name
+        version
+        tenantId
+        threadId
+        prompt
+        agentVersion
+        modelId
+        generatedAt
+        stdlibVersionAtGeneration
+        artifact {
+          id
+          agentId
+          threadId
+          createdAt
+          updatedAt
+        }
+      }
+      nextCursor
+    }
+  }
+`);
+
+export const AdminAppletQuery = graphql(`
+  query AdminApplet($appId: ID!) {
+    adminApplet(appId: $appId) {
+      applet {
+        appId
+        name
+        version
+        tenantId
+        threadId
+        prompt
+        agentVersion
+        modelId
+        generatedAt
+        stdlibVersionAtGeneration
+        artifact {
+          id
+          agentId
+          threadId
+          createdAt
+          updatedAt
+        }
+      }
+      source
+      metadata
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Memory
 // ---------------------------------------------------------------------------

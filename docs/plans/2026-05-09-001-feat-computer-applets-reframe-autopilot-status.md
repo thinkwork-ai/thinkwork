@@ -14,6 +14,26 @@ autopilot mode.
 
 ## 2026-05-09
 
+- **Started U13:** Created isolated worktree
+  `.Codex/worktrees/computer-applets-u13-admin-observability` on branch
+  `codex/computer-applets-u13-admin-observability` from `origin/main` after
+  U12 merged.
+- **Progress:** Added tenant-admin applet observability GraphQL queries,
+  resolver tests, generated API client types, and admin routes for browsing
+  tenant applets, filtering by user id, and inspecting source plus metadata.
+  The route is read-only and linked from the sidebar and command palette.
+- **Verification note:** `pnpm install --frozen-lockfile`, `pnpm schema:build`,
+  codegen for admin/mobile/CLI, focused API/admin type/build/test checks,
+  `pnpm lint`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`,
+  and `git diff --check` passed locally. Root `pnpm exec prettier --check`
+  remains blocked by the repo's existing missing root `prettier` binary; touched
+  files were formatted before verification. Local browser smoke for `/applets`
+  is deferred until the new backend query fields are deployed because the admin
+  dev server points at the deployed GraphQL API.
+- **Merged U12:** PR #1067 (`refactor(computer): delete legacy CRM dashboard path`)
+  was squash-merged to `main` at
+  `e188c253f111f5bf7d724fedcf0c3b1c12765f53`; remote/local branches and the
+  U12 worktree were deleted. CI passed: CLA, lint, test, typecheck, verify.
 - **Started U12:** Created isolated worktree
   `.Codex/worktrees/computer-applets-u12-legacy-delete` on branch
   `codex/computer-applets-u12-legacy-delete` from `origin/main` after U11
@@ -36,8 +56,6 @@ schema:build`, codegen for admin/mobile/CLI, focused Computer/API
 @thinkwork/computer build`, the legacy-symbol grep, and diff whitespace
   checks; all passed. Build warnings remain the existing shared UI sourcemap,
   dynamic import, and chunk-size warnings.
-- **Current PR:** #1067 (`refactor(computer): delete legacy CRM dashboard
-path`).
 - **Merged U11:** PR #1064 (`feat(computer): migrate CRM applet fixture`) was
   squash-merged to `main` at
   `ba02bbcd2c8d3b684e7c851b69d87ffc11056732`; remote/local branches and the
