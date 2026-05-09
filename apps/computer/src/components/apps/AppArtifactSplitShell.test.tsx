@@ -7,12 +7,13 @@ afterEach(cleanup);
 describe("AppArtifactSplitShell", () => {
   it("renders applet content as a single canvas without provenance split view", () => {
     render(
-      <AppArtifactSplitShell title="Generated app">
+      <AppArtifactSplitShell>
         <div>Applet body</div>
       </AppArtifactSplitShell>,
     );
 
-    expect(screen.getAllByText("Generated app").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Made with ThinkWork Computer")).toBeNull();
+    expect(screen.queryByText("New thread")).toBeNull();
     expect(screen.queryByLabelText("Computer provenance")).toBeNull();
     expect(screen.getByText("Applet body")).toBeTruthy();
   });

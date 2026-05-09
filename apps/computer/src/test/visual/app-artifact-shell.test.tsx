@@ -9,9 +9,7 @@ afterEach(cleanup);
 describe("app artifact visual contract", () => {
   it("renders a single bounded applet canvas without horizontal page scroll", () => {
     render(
-      <AppArtifactSplitShell
-        title={crmDashboardVisualFixtures.base.snapshot.title}
-      >
+      <AppArtifactSplitShell>
         <div>Applet canvas body</div>
       </AppArtifactSplitShell>,
     );
