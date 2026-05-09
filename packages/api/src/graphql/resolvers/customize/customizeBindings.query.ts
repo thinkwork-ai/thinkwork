@@ -8,6 +8,7 @@ import {
   eq,
   isNotNull,
   ne,
+  routines,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 
@@ -21,9 +22,11 @@ import { resolveCaller } from "../core/resolve-auth-user.js";
  *     appear bound to anything on the Customize surface.
  *   - **Skills:** `agent_skills.skill_id` is the same shape as
  *     `tenant_skills.skill_id`. Direct equality.
- *   - **Workflows:** returned empty for v1 — the routines table has no
- *     slug yet. U6 will introduce a catalog-link column and populate
- *     this list.
+ *   - **Workflows:** `routines.catalog_slug` is the canonical pointer to
+ *     the catalog row (added by plan 010 U6-1). Active rows for the
+ *     caller's primary agent appear in the connected list; inactive
+ *     rows and pre-backfill rows with a NULL `catalog_slug` are
+ *     excluded.
  */
 export async function customizeBindings(
   _parent: unknown,
@@ -54,7 +57,7 @@ export async function customizeBindings(
     computer.migrated_from_agent_id,
   );
 
-  const [connectorRows, skillRows] = await Promise.all([
+  const [connectorRows, skillRows, workflowRows] = await Promise.all([
     db
       .select({
         catalog_slug: connectors.catalog_slug,
@@ -81,6 +84,18 @@ export async function customizeBindings(
             ),
           )
       : Promise.resolve([] as { skill_id: string }[]),
+    agentId
+      ? db
+          .select({ catalog_slug: routines.catalog_slug })
+          .from(routines)
+          .where(
+            and(
+              eq(routines.agent_id, agentId),
+              eq(routines.status, "active"),
+              isNotNull(routines.catalog_slug),
+            ),
+          )
+      : Promise.resolve([] as { catalog_slug: string | null }[]),
   ]);
 
   const connectedConnectorSlugs = Array.from(
@@ -96,13 +111,19 @@ export async function customizeBindings(
   const connectedSkillIds = Array.from(
     new Set(skillRows.map((row) => row.skill_id)),
   );
+  const connectedWorkflowSlugs = Array.from(
+    new Set(
+      workflowRows
+        .filter((row): row is { catalog_slug: string } => row.catalog_slug !== null)
+        .map((row) => row.catalog_slug),
+    ),
+  );
 
   return {
     computerId: computer.id,
     connectedConnectorSlugs,
     connectedSkillIds,
-    // Empty in v1; populated by U6 once routines carry a catalog slug link.
-    connectedWorkflowSlugs: [] as string[],
+    connectedWorkflowSlugs,
   };
 }
 

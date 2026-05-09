@@ -62,6 +62,15 @@ type ConnectorBinding {
   updatedAt: AWSDateTime!
 }
 
+type WorkflowBinding {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  catalogSlug: String!
+  status: String!
+  updatedAt: AWSDateTime!
+}
+
 input EnableConnectorInput {
   computerId: ID!
   slug: String!
@@ -82,6 +91,16 @@ input DisableSkillInput {
   skillId: String!
 }
 
+input EnableWorkflowInput {
+  computerId: ID!
+  slug: String!
+}
+
+input DisableWorkflowInput {
+  computerId: ID!
+  slug: String!
+}
+
 extend type Query {
   connectorCatalog: [ConnectorCatalogItem!]!
   skillCatalog: [SkillCatalogItem!]!
@@ -94,4 +113,6 @@ extend type Mutation {
   disableConnector(input: DisableConnectorInput!): Boolean!
   enableSkill(input: EnableSkillInput!): AgentSkill!
   disableSkill(input: DisableSkillInput!): Boolean!
+  enableWorkflow(input: EnableWorkflowInput!): WorkflowBinding!
+  disableWorkflow(input: DisableWorkflowInput!): Boolean!
 }

@@ -70,6 +70,11 @@ export const routines = pgTable(
 		// admin-ops/checkRoutineVisibility.
 		visibility: text("visibility").notNull().default("agent_private"),
 		owning_agent_id: uuid("owning_agent_id").references(() => agents.id),
+		// Stable pointer back to `tenant_workflow_catalog.slug` for routines
+		// surfaced through the apps/computer Customize page. Null for
+		// user-authored routines that don't map to a catalog row.
+		// Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md (U6-1).
+		catalog_slug: text("catalog_slug"),
 		last_run_at: timestamp("last_run_at", { withTimezone: true }),
 		next_run_at: timestamp("next_run_at", { withTimezone: true }),
 		created_at: timestamp("created_at", { withTimezone: true })
