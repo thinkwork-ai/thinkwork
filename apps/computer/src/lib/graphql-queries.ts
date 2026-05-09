@@ -367,9 +367,19 @@ export const ComputerMemoryRecordsQuery = gql`
       createdAt
       updatedAt
       namespace
+      strategyId
+      strategy
+      userSlug
+      agentSlug
       factType
       confidence
+      eventDate
+      occurredStart
+      occurredEnd
+      mentionedAt
       tags
+      accessCount
+      proofCount
       context
       threadId
     }
@@ -387,5 +397,172 @@ export const DeleteComputerMemoryRecordMutation = gql`
       userId: $userId
       memoryRecordId: $memoryRecordId
     )
+  }
+`;
+
+export const ComputerMemorySearchQuery = gql`
+  query ComputerMemorySearch(
+    $tenantId: ID
+    $userId: ID!
+    $query: String!
+    $strategy: MemoryStrategy
+    $limit: Int
+  ) {
+    memorySearch(
+      tenantId: $tenantId
+      userId: $userId
+      query: $query
+      strategy: $strategy
+      limit: $limit
+    ) {
+      records {
+        memoryRecordId
+        content {
+          text
+        }
+        score
+        namespace
+        strategy
+        createdAt
+        threadId
+      }
+      totalCount
+    }
+  }
+`;
+
+export const ComputerMemorySystemConfigQuery = gql`
+  query ComputerMemorySystemConfig {
+    memorySystemConfig {
+      managedMemoryEnabled
+      hindsightEnabled
+    }
+  }
+`;
+
+export const ComputerRecentWikiPagesQuery = gql`
+  query ComputerRecentWikiPages($userId: ID!, $limit: Int) {
+    recentWikiPages(userId: $userId, limit: $limit) {
+      id
+      type
+      slug
+      title
+      summary
+      lastCompiledAt
+      updatedAt
+    }
+  }
+`;
+
+export const ComputerWikiSearchQuery = gql`
+  query ComputerWikiSearch(
+    $tenantId: ID!
+    $userId: ID!
+    $query: String!
+    $limit: Int
+  ) {
+    wikiSearch(
+      tenantId: $tenantId
+      userId: $userId
+      query: $query
+      limit: $limit
+    ) {
+      score
+      matchedAlias
+      page {
+        id
+        type
+        slug
+        title
+        summary
+        lastCompiledAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const ComputerWikiPageQuery = gql`
+  query ComputerWikiPage(
+    $tenantId: ID!
+    $userId: ID!
+    $type: WikiPageType!
+    $slug: String!
+  ) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
+      id
+      type
+      slug
+      title
+      summary
+      bodyMd
+      status
+      lastCompiledAt
+      updatedAt
+      aliases
+      sections {
+        id
+        sectionSlug
+        heading
+        bodyMd
+        position
+        lastSourceAt
+      }
+    }
+  }
+`;
+
+export const ComputerWikiBacklinksQuery = gql`
+  query ComputerWikiBacklinks($pageId: ID!) {
+    wikiBacklinks(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      summary
+    }
+  }
+`;
+
+export const ComputerKnowledgeBasesQuery = gql`
+  query ComputerKnowledgeBases($tenantId: ID!) {
+    knowledgeBases(tenantId: $tenantId) {
+      id
+      tenantId
+      name
+      slug
+      description
+      status
+      documentCount
+      lastSyncAt
+      lastSyncStatus
+      errorMessage
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const ComputerKnowledgeBaseDetailQuery = gql`
+  query ComputerKnowledgeBaseDetail($id: ID!) {
+    knowledgeBase(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      description
+      embeddingModel
+      chunkingStrategy
+      chunkSizeTokens
+      chunkOverlapPercent
+      status
+      awsKbId
+      lastSyncAt
+      lastSyncStatus
+      documentCount
+      errorMessage
+      createdAt
+      updatedAt
+    }
   }
 `;

@@ -8,6 +8,13 @@ export interface PageHeaderActions {
   subtitle?: string;
   /** When true, hide the AppTopBar entirely on this page (still updates document.title) */
   hideTopBar?: boolean;
+  /**
+   * Optional tab strip rendered centered in the AppTopBar — used by the
+   * Memory layout (and any future multi-tab layout) to fold the tab
+   * strip into the page header instead of stacking a sub-header below it.
+   * The active tab is highlighted by AppTopBar based on the current pathname.
+   */
+  tabs?: { to: string; label: string }[];
 }
 
 interface PageHeaderContextValue {
@@ -43,8 +50,9 @@ export function usePageHeader() {
 
 export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const ctx = usePageHeader();
+  const tabsKey = actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const key = actions
-    ? `${actions.title}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}`
+    ? `${actions.title}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {

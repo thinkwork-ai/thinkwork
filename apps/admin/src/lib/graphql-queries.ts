@@ -2477,51 +2477,9 @@ export const RollbackAgentVersionMutation = graphql(`
   }
 `);
 
-export const MemoryGraphQuery = graphql(`
-  query MemoryGraph($userId: ID!) {
-    memoryGraph(userId: $userId) {
-      nodes {
-        id
-        label
-        type
-        strategy
-        entityType
-        edgeCount
-        latestThreadId
-      }
-      edges {
-        source
-        target
-        type
-        label
-        weight
-      }
-    }
-  }
-`);
-
-export const WikiGraphQuery = graphql(`
-  query WikiGraph($tenantId: ID!, $userId: ID!) {
-    wikiGraph(tenantId: $tenantId, userId: $userId) {
-      nodes {
-        id
-        label
-        type
-        entityType
-        slug
-        strategy
-        edgeCount
-        latestThreadId
-      }
-      edges {
-        source
-        target
-        label
-        weight
-      }
-    }
-  }
-`);
+// MemoryGraphQuery + WikiGraphQuery now live in @thinkwork/graph as plain
+// gql template literals; consumed directly by MemoryGraph/WikiGraph
+// components. No admin code outside those components imports them.
 
 export const WikiPageQuery = graphql(`
   query AdminWikiPage(

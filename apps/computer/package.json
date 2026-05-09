@@ -21,6 +21,7 @@
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
     "@thinkwork/computer-stdlib": "workspace:*",
+    "@thinkwork/graph": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@urql/core": "^6.0.0",
     "acorn": "^8.16.0",

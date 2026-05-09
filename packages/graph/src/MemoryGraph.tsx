@@ -1,33 +1,35 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from "react";
+/**
+ * MemoryGraph — 3D force-graph rendering Hindsight memories + entities.
+ *
+ * Performance patterns (in-place opacity mute on filter, one-shot camera
+ * init, stable nodeThreeObject) are load-bearing — each one exists to
+ * avoid a camera reset or simulation restart on filter-keystrokes. Do
+ * not "clean up" those without measuring.
+ *
+ * Ported from apps/admin/src/components/MemoryGraph.tsx in U2 of the
+ * apps/computer Memory port (plan
+ * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md). Both
+ * apps/admin and apps/computer consume this version.
+ */
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 import { useQuery, useClient } from "urql";
-import { Loader2, Sparkles } from "lucide-react";
 import * as d3 from "d3-force";
-import { MemoryGraphQuery } from "@/lib/graphql-queries";
-
-const MEMORY_COLOR = "#e879a0";
-const ENTITY_COLOR = "#7dd3fc";
-const AGENT_COLOR = "#34d399";
-
-// Ontology type → color mapping
-const TYPE_COLORS: Record<string, string> = {
-  Person: "#34d399",     // green
-  Company: "#60a5fa",    // blue
-  Org: "#60a5fa",        // blue
-  Location: "#fbbf24",   // amber
-  Restaurant: "#f97316", // orange
-  Product: "#a78bfa",    // purple
-  Software: "#a78bfa",   // purple
-  System: "#a78bfa",     // purple
-  Event: "#f472b6",      // pink
-  Decision: "#fb923c",   // orange
-  Concept: "#94a3b8",    // slate
-  Document: "#67e8f9",   // cyan
-  Project: "#4ade80",    // lime
-  BusinessConcept: "#94a3b8", // slate
-  Tool: "#a78bfa",       // purple
-};
+import { MemoryGraphQuery } from "./queries.js";
+import {
+  MEMORY_COLOR,
+  ENTITY_COLOR,
+  MEMORY_TYPE_COLORS,
+} from "./palettes/memory-palette.js";
 
 export interface MemoryGraphNode {
   id: string;
@@ -41,7 +43,15 @@ export interface MemoryGraphNode {
 
 export interface MemoryGraphHandle {
   refetch: () => void;
-  getNodeWithEdges: (nodeId: string) => { node: MemoryGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] } | null;
+  getNodeWithEdges: (nodeId: string) => {
+    node: MemoryGraphNode;
+    edges: {
+      label: string;
+      targetLabel: string;
+      targetType: string;
+      targetId: string;
+    }[];
+  } | null;
 }
 
 interface MemoryGraphProps {
@@ -52,15 +62,43 @@ interface MemoryGraphProps {
   /** @deprecated Use userIds. */
   agentIds?: string[];
   agentNames?: Record<string, string>;
-  onNodeClick?: (node: MemoryGraphNode, connectedEdges: { label: string; targetLabel: string; targetType: string; targetId: string }[]) => void;
+  onNodeClick?: (
+    node: MemoryGraphNode,
+    connectedEdges: {
+      label: string;
+      targetLabel: string;
+      targetType: string;
+      targetId: string;
+    }[],
+  ) => void;
   onTypesLoaded?: (types: string[]) => void;
   typeFilter?: string[];
   searchQuery?: string;
   hideFiltered?: boolean;
+  /** Optional render slot for the loading state. */
+  loadingFallback?: React.ReactNode;
+  /** Optional render slot for the empty state. */
+  emptyFallback?: React.ReactNode;
 }
 
 export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
-  function MemoryGraph({ userId, userIds, agentId, agentIds, agentNames, onNodeClick, onTypesLoaded, typeFilter, searchQuery, hideFiltered = false }, ref) {
+  function MemoryGraph(
+    {
+      userId,
+      userIds,
+      agentId,
+      agentIds,
+      agentNames,
+      onNodeClick,
+      onTypesLoaded,
+      typeFilter,
+      searchQuery,
+      hideFiltered: _hideFiltered = false,
+      loadingFallback,
+      emptyFallback,
+    },
+    ref,
+  ) {
     // Callback ref: re-measures whenever the mounted DOM element changes.
     // A plain useRef + empty-deps effect misses the case where the
     // "Loading graph..." branch mounts first (no ref attached), then swaps
@@ -71,7 +109,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
     const effectiveUserIds = userIds ?? agentIds;
-    const effectiveUserId = userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
+    const effectiveUserId =
+      userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
     const isMultiAgent = !!effectiveUserIds && effectiveUserIds.length > 1;
     const client = useClient();
 
@@ -102,7 +141,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             } catch {
               results[id] = { nodes: [], edges: [] };
             }
-          })
+          }),
         );
         setMultiResults(results);
       } catch {
@@ -184,7 +223,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const types = new Set<string>();
       for (const n of allNodes) {
         if (n.nodeType === "memory") types.add("Memory");
-        else if (n.entityType) types.add(n.entityType.charAt(0).toUpperCase() + n.entityType.slice(1));
+        else if (n.entityType)
+          types.add(n.entityType.charAt(0).toUpperCase() + n.entityType.slice(1));
       }
       const sorted = Array.from(types).sort();
       const key = sorted.join(",");
@@ -205,12 +245,15 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         filtered = filtered.filter((n) => {
           if (n.nodeType === "agent") return filterSet.has("Agent");
           if (n.nodeType === "memory") return filterSet.has("Memory");
-          const et = n.entityType ? n.entityType.charAt(0).toUpperCase() + n.entityType.slice(1) : "";
+          const et = n.entityType
+            ? n.entityType.charAt(0).toUpperCase() + n.entityType.slice(1)
+            : "";
           return filterSet.has(et);
         });
       }
       if (searchQuery) {
-        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+        const normalize = (s: string) =>
+          s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
         const q = normalize(searchQuery);
         filtered = filtered.filter((n) => normalize(n.label).includes(q));
       }
@@ -232,7 +275,12 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             const src = `${aid}:${e.source}`;
             const tgt = `${aid}:${e.target}`;
             if (nodeIds.has(src) && nodeIds.has(tgt)) {
-              links.push({ source: src, target: tgt, label: e.label ?? "", weight: e.weight ?? 0.5 });
+              links.push({
+                source: src,
+                target: tgt,
+                label: e.label ?? "",
+                weight: e.weight ?? 0.5,
+              });
             }
           }
         }
@@ -241,7 +289,12 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         if (graph) {
           for (const e of graph.edges ?? []) {
             if (nodeIds.has(e.source) && nodeIds.has(e.target)) {
-              links.push({ source: e.source, target: e.target, label: e.label ?? "", weight: e.weight ?? 0.5 });
+              links.push({
+                source: e.source,
+                target: e.target,
+                label: e.label ?? "",
+                weight: e.weight ?? 0.5,
+              });
             }
           }
         }
@@ -284,8 +337,16 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const muted = matched ? !matched.has(node.id) : false;
       const isMemory = node.nodeType === "memory";
       const entityType = node.entityType as string | null;
-      const label = isMemory ? "Memory" : (entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : node.label?.slice(0, 12) || "Entity");
-      const color = isMemory ? MEMORY_COLOR : (entityType ? (TYPE_COLORS[entityType] || ENTITY_COLOR) : ENTITY_COLOR);
+      const label = isMemory
+        ? "Memory"
+        : entityType
+          ? entityType.charAt(0).toUpperCase() + entityType.slice(1)
+          : node.label?.slice(0, 12) || "Entity";
+      const color = isMemory
+        ? MEMORY_COLOR
+        : entityType
+          ? MEMORY_TYPE_COLORS[entityType] || ENTITY_COLOR
+          : ENTITY_COLOR;
       // Size by mention count (edgeCount carries mention_count from resolver)
       const mentions = node.edgeCount || 1;
       const r = isMemory ? 10 : Math.max(5, Math.min(18, 5 + Math.sqrt(mentions) * 1.5));
@@ -315,7 +376,11 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       ctx.textBaseline = "middle";
       ctx.fillText(label, size / 2, size / 2);
       const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
+      const spriteMaterial = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity,
+      });
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.scale.set(r * 3, r * 3, 1);
       sprite.position.set(0, 0, 0);
@@ -339,7 +404,6 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       }
       fgRef.current?.refresh?.();
     }, [matchedIds, graphData]);
-
 
     // Force layout tuning — safe to re-run when data changes (strengths
     // scale with node count). Does NOT touch the camera, so filter updates
@@ -385,29 +449,32 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       cameraInitRef.current = true;
     }, [dims, graphData]);
 
-    const anyFetching = isMultiAgent ? multiFetching : (singleResult.fetching && !singleResult.data);
+    const anyFetching = isMultiAgent
+      ? multiFetching
+      : singleResult.fetching && !singleResult.data;
     if (anyFetching) {
       return (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading graph...
-        </div>
+        loadingFallback ?? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+            Loading graph...
+          </div>
+        )
       );
     }
 
     if (!dims) {
-      return (
-        <div ref={setContainerEl} className="absolute inset-0" />
-      );
+      return <div ref={setContainerEl} className="absolute inset-0" />;
     }
 
     if (graphData.nodes.length === 0) {
       return (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <Sparkles className="h-12 w-12 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">
-            No knowledge graph yet. Click Dream to build one from agent memories.
-          </p>
-        </div>
+        emptyFallback ?? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-sm text-muted-foreground">
+              No knowledge graph yet. Click Dream to build one from agent memories.
+            </p>
+          </div>
+        )
       );
     }
 
@@ -445,7 +512,11 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               : "rgba(255,255,255,0.1)";
           }}
           linkLabel={(link: any) => link.label || "mentions"}
-          nodeLabel={(node: any) => `${node.label}${node.entityType ? ` (${node.entityType})` : ""}${node.edgeCount ? ` — ${node.edgeCount} mentions` : ""}`}
+          nodeLabel={(node: any) =>
+            `${node.label}${node.entityType ? ` (${node.entityType})` : ""}${
+              node.edgeCount ? ` — ${node.edgeCount} mentions` : ""
+            }`
+          }
           cooldownTicks={100}
           d3AlphaDecay={0.02}
           d3VelocityDecay={0.3}
@@ -479,15 +550,21 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           }}
         />
         <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
-          {Object.entries(TYPE_COLORS).filter(([k]) => graphData.nodes.some((n: any) => n.entityType === k)).slice(0, 6).map(([type, c]) => (
-            <span key={type} className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: c }} />
-              {type}
-            </span>
-          ))}
+          {Object.entries(MEMORY_TYPE_COLORS)
+            .filter(([k]) => graphData.nodes.some((n: any) => n.entityType === k))
+            .slice(0, 6)
+            .map(([type, c]) => (
+              <span key={type} className="flex items-center gap-1">
+                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: c }} />
+                {type}
+              </span>
+            ))}
           {graphData.nodes.some((n: any) => !n.entityType && n.nodeType === "entity") && (
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: ENTITY_COLOR }} />
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full"
+                style={{ background: ENTITY_COLOR }}
+              />
               Untyped
             </span>
           )}
