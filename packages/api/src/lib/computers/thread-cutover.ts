@@ -5,8 +5,10 @@ import {
   computerEvents,
   computerTasks,
   messages,
+  threads,
 } from "@thinkwork/database-pg/schema";
 import { invokeChatAgent } from "../../graphql/utils.js";
+import { notifyThreadUpdate } from "../../graphql/notify.js";
 import { normalizeTaskInput } from "./tasks.js";
 
 const db = getDb();
@@ -263,4 +265,21 @@ async function markDispatchFailed(
       error,
     },
   });
+
+  const [thread] = await db
+    .select({ status: threads.status, title: threads.title })
+    .from(threads)
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, input.threadId)),
+    )
+    .limit(1);
+
+  if (thread) {
+    await notifyThreadUpdate({
+      threadId: input.threadId,
+      tenantId: input.tenantId,
+      status: thread.status ?? "in_progress",
+      title: thread.title ?? "Untitled thread",
+    }).catch(() => {});
+  }
 }

@@ -9,7 +9,12 @@ import { requireComputerReadAccess } from "./shared.js";
 
 export async function computerTasks(
   _parent: any,
-  args: { computerId: string; status?: string | null; limit?: number | null },
+  args: {
+    computerId: string;
+    threadId?: string | null;
+    status?: string | null;
+    limit?: number | null;
+  },
   ctx: GraphQLContext,
 ) {
   const [computer] = await db
@@ -26,6 +31,7 @@ export async function computerTasks(
   return listComputerTasks({
     tenantId: computer.tenant_id,
     computerId: computer.id,
+    threadId: args.threadId,
     status: parseComputerTaskStatus(args.status),
     limit: args.limit,
   });

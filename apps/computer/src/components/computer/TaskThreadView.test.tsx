@@ -127,6 +127,39 @@ describe("TaskThreadView", () => {
     expect(screen.queryByLabelText("Computer is typing")).toBeNull();
   });
 
+  it("renders a completed Computer task response when the assistant message has not refetched yet", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed task",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "What is my name?",
+            },
+          ],
+          turns: [
+            {
+              id: "task-1",
+              status: "COMPLETED",
+              invocationSource: "chat_message",
+              finishedAt: "2026-05-08T20:00:00Z",
+              resultJson: {
+                response: "Your name is Eric.",
+                responseMessageId: "message-2",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Your name is Eric.")).toBeTruthy();
+  });
+
   it("renders thread turn thinking and tool details", () => {
     render(
       <TaskThreadView
@@ -161,6 +194,65 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Using crm_search")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
+  });
+
+  it("renders the mobile-style processing shimmer while waiting for the first chunk", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Waiting thread",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Answer me",
+            },
+          ],
+          turns: [
+            {
+              id: "task-1",
+              status: "RUNNING",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+    expect(screen.queryByLabelText("Computer is typing")).toBeNull();
+  });
+
+  it("prefers streaming chunks over the processing shimmer", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Streaming thread",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Answer me",
+            },
+          ],
+          turns: [
+            {
+              id: "task-1",
+              status: "RUNNING",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+        streamingChunks={[{ seq: 1, text: "Streaming now" }]}
+      />,
+    );
+
+    expect(screen.getByText("Streaming now")).toBeTruthy();
+    expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
   it("sends follow-up messages from the composer", () => {

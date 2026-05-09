@@ -151,6 +151,7 @@ extend type Query {
   computer(id: ID!): Computer
   computerTasks(
     computerId: ID!
+    threadId: ID
     status: ComputerTaskStatus
     limit: Int
   ): [ComputerTask!]!
