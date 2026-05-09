@@ -89,7 +89,9 @@ export function ComputerWorkbench() {
           error={error}
         />
 
-        <StarterCardGrid onSelect={setPrompt} />
+        <div className="mt-6">
+          <StarterCardGrid onSelect={setPrompt} />
+        </div>
       </div>
     </section>
   );

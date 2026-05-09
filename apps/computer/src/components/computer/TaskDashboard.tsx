@@ -63,9 +63,9 @@ export function TaskDashboard({
   );
 
   return (
-    <main className="flex w-full flex-1 flex-col bg-background">
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
-        <header className="flex flex-col gap-4">
+    <main className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-5 sm:px-6">
+        <header className="flex shrink-0 flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">
@@ -113,7 +113,7 @@ export function TaskDashboard({
           <TaskDashboardState label="No threads match the current search" />
         ) : (
           <section
-            className="min-h-0 flex-1"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             aria-label="Computer threads table"
           >
             <DataTable
