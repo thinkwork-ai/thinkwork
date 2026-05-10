@@ -12,14 +12,18 @@ import {
 } from "lucide-react";
 import {
   Children,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
+import {
+  Conversation,
+  ConversationContent,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+} from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputBody,
@@ -103,39 +107,6 @@ export function TaskThreadView({
   isSending = false,
   onSendFollowUp,
 }: TaskThreadViewProps) {
-  // Stick-to-bottom autoscroll. The user's "follow along" gesture is implicit:
-  // when they're already near the bottom, new streamed text + action rows +
-  // ProcessingShimmer growth should keep them pinned there. When they've
-  // scrolled up to read prior context, we leave them alone (no surprise jumps
-  // mid-read).
-  //
-  // We use a ResizeObserver on the inner content rather than dep-based
-  // scrolling because turn activity (Thinking detail, action rows, Processing
-  // shimmer text) grows the page height between renders without any prop
-  // change the parent passes us — only the inner DOM's size changes. A
-  // ResizeObserver fires on every height change regardless of source.
-  //
-  // We *also* force-scroll when the latest user message id changes — the user
-  // expects to see their own question land at the bottom, even if they were
-  // scrolled up reading older context when they hit Send.
-  //
-  // Could graduate to Vercel's <Conversation> from ai-elements later if we
-  // want a sticky scroll-to-bottom button, but the inline pattern is enough
-  // for this PR.
-  const scrollContainerRef = useRef<HTMLElement | null>(null);
-  const innerContentRef = useRef<HTMLDivElement | null>(null);
-  const stickToBottomRef = useRef(true);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 80;
-  }, []);
-
-  // Re-arm stick-to-bottom and force a scroll when the user sends a new
-  // message — they always want to see what they just typed, regardless of
-  // where they were scrolled before.
   const messages = thread?.messages ?? [];
   let latestUserMessageId: string | undefined;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -144,35 +115,6 @@ export function TaskThreadView({
       break;
     }
   }
-  useLayoutEffect(() => {
-    if (!latestUserMessageId) return;
-    stickToBottomRef.current = true;
-    const el = scrollContainerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [latestUserMessageId]);
-
-  // Continuously follow growing content while stuck-to-bottom. The dep on
-  // `threadIsAvailable` is critical: when the component first mounts in a
-  // loading state, refs are null because the section + inner div aren't
-  // rendered yet (the early-return path renders TaskThreadState instead).
-  // An effect with `[]` deps runs once and bails. We need to re-attach the
-  // observer when the thread loads and the refs become real.
-  const threadIsAvailable = thread != null && !isLoading && !error;
-  useEffect(() => {
-    if (!threadIsAvailable) return;
-    const inner = innerContentRef.current;
-    const container = scrollContainerRef.current;
-    if (!inner || !container) return;
-    // Pin to the bottom on first attach so the user lands at the most-recent
-    // turn instead of the top of the thread.
-    container.scrollTop = container.scrollHeight;
-    const observer = new ResizeObserver(() => {
-      if (!stickToBottomRef.current) return;
-      container.scrollTop = container.scrollHeight;
-    });
-    observer.observe(inner);
-    return () => observer.disconnect();
-  }, [threadIsAvailable]);
 
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
@@ -198,16 +140,12 @@ export function TaskThreadView({
 
   return (
     <main className="relative flex h-full w-full flex-col overflow-hidden bg-background">
-      <section
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
+      <Conversation
+        key={latestUserMessageId ?? thread.id}
         className="h-full flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
-        <div
-          ref={innerContentRef}
-          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-32 sm:px-6"
-        >
+        <ConversationContent className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-32 sm:px-6">
           {visibleMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
@@ -236,8 +174,8 @@ export function TaskThreadView({
               />
             ))
           )}
-        </div>
-      </section>
+        </ConversationContent>
+      </Conversation>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6">
         <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
@@ -508,40 +446,59 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
   const body = message.content?.trim() ?? "";
 
   return (
-    <article className={isUser ? "ml-auto max-w-[78%]" : "grid gap-5"}>
-      {isUser ? (
-        <div className="rounded-2xl bg-muted/70 px-5 py-3 text-base leading-7 text-foreground">
-          {body || "(No message content)"}
-        </div>
-      ) : (
-        <>
-          {actions.length > 0 ? (
-            <div className="grid gap-2">
-              {actions.map((action) => (
-                <ActionRow key={`${message.id}-${action.title}`} {...action} />
-              ))}
-            </div>
-          ) : null}
-          {/* Plan-012 U8 / contract v1 §AE4: assistant markdown renders
+    <Message
+      from={toAiMessageRole(message.role)}
+      className={isUser ? "max-w-[78%]" : "max-w-full"}
+      data-message-role={isUser ? "user" : "assistant"}
+    >
+      <MessageContent
+        className={
+          isUser
+            ? "rounded-2xl bg-muted/70 px-5 py-3 text-base leading-7 text-foreground"
+            : "grid w-full gap-3 overflow-visible"
+        }
+      >
+        {isUser ? (
+          body || "(No message content)"
+        ) : (
+          <>
+            {actions.length > 0 ? (
+              <div className="grid gap-2">
+                {actions.map((action) => (
+                  <ActionRow
+                    key={`${message.id}-${action.title}`}
+                    {...action}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {/* Plan-012 U8 / contract v1 §AE4: assistant markdown renders
               via <Response>, not raw <Streamdown>. The Response wrapper
               keeps the prose tokens; the underlying engine is still
               Streamdown internally. */}
-          {body ? (
-            <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
-              {body}
-            </Response>
-          ) : (
-            <p className="text-sm leading-5 text-foreground">
-              (No message content)
-            </p>
-          )}
-          {message.durableArtifact ? (
-            <GeneratedArtifactCard artifact={message.durableArtifact} />
-          ) : null}
-        </>
-      )}
-    </article>
+            {body ? (
+              <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
+                {body}
+              </Response>
+            ) : (
+              <p className="text-sm leading-5 text-foreground">
+                (No message content)
+              </p>
+            )}
+            {message.durableArtifact ? (
+              <GeneratedArtifactCard artifact={message.durableArtifact} />
+            ) : null}
+          </>
+        )}
+      </MessageContent>
+    </Message>
   );
+}
+
+function toAiMessageRole(role: string): "user" | "assistant" | "system" {
+  const normalized = role.toLowerCase();
+  if (normalized === "user" || normalized === "system") return normalized;
+  return "assistant";
 }
 
 function FollowUpComposer({
