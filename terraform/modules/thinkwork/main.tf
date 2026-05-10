@@ -661,6 +661,20 @@ module "computer_sandbox_site" {
   inline_response_headers = {
     content_security_policy       = local.computer_sandbox_csp
     content_type_options_override = true
+    # The iframe document runs with an opaque "null" origin because the
+    # parent sets sandbox="allow-scripts" without allow-same-origin.
+    # Module-script and asset requests from that document are therefore
+    # CORS requests back to this distribution. Allow public reads from
+    # any origin; credentials are false and the sandbox CSP still keeps
+    # connect-src 'none'.
+    cors = {
+      allow_origins     = ["*"]
+      allow_methods     = ["GET", "HEAD", "OPTIONS"]
+      allow_headers     = ["*"]
+      allow_credentials = false
+      max_age_sec       = 600
+      origin_override   = true
+    }
     strict_transport_security = {
       max_age_sec        = 63072000 # 2 years
       include_subdomains = true

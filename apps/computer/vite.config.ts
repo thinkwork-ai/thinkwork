@@ -24,7 +24,9 @@ export default defineConfig(({ mode }) => {
   const sandboxIframeSrc =
     env.VITE_SANDBOX_IFRAME_SRC ||
     process.env.VITE_SANDBOX_IFRAME_SRC ||
-    "https://sandbox.thinkwork.ai/iframe-shell.html";
+    (mode === "development"
+      ? "http://localhost:5175/iframe-shell.html"
+      : "https://sandbox.thinkwork.ai/iframe-shell.html");
 
   return {
     plugins: [

@@ -66,7 +66,7 @@ variable "response_headers_policy_id" {
 }
 
 variable "inline_response_headers" {
-  description = "When set, this module mints a new response-headers policy and attaches it. Pass null to skip. Fields: content_security_policy (string), content_type_options_override (bool), strict_transport_security (object: max_age_sec, include_subdomains, preload, override). Mutually exclusive with response_headers_policy_id."
+  description = "When set, this module mints a new response-headers policy and attaches it. Pass null to skip. Fields: content_security_policy (string), content_type_options_override (bool), strict_transport_security (object: max_age_sec, include_subdomains, preload, override), cors (object: allow_origins, allow_methods, allow_headers, allow_credentials, max_age_sec, origin_override). Mutually exclusive with response_headers_policy_id."
   type = object({
     content_security_policy       = optional(string)
     content_type_options_override = optional(bool, true)
@@ -75,6 +75,14 @@ variable "inline_response_headers" {
       include_subdomains = bool
       preload            = bool
       override           = bool
+    }))
+    cors = optional(object({
+      allow_origins     = list(string)
+      allow_methods     = optional(list(string), ["GET", "HEAD", "OPTIONS"])
+      allow_headers     = optional(list(string), ["*"])
+      allow_credentials = optional(bool, false)
+      max_age_sec       = optional(number, 600)
+      origin_override   = optional(bool, true)
     }))
   })
   default = null
@@ -165,6 +173,27 @@ resource "aws_cloudfront_response_headers_policy" "inline" {
           preload                    = var.inline_response_headers.strict_transport_security.preload
           override                   = var.inline_response_headers.strict_transport_security.override
         }
+      }
+    }
+  }
+
+  dynamic "cors_config" {
+    for_each = var.inline_response_headers.cors != null ? [var.inline_response_headers.cors] : []
+    content {
+      access_control_allow_credentials = cors_config.value.allow_credentials
+      access_control_max_age_sec       = cors_config.value.max_age_sec
+      origin_override                  = cors_config.value.origin_override
+
+      access_control_allow_headers {
+        items = cors_config.value.allow_headers
+      }
+
+      access_control_allow_methods {
+        items = cors_config.value.allow_methods
+      }
+
+      access_control_allow_origins {
+        items = cors_config.value.allow_origins
       }
     }
   }

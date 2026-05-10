@@ -125,6 +125,8 @@ export class IframeAppletController {
 		this.element.src = opts.srcOverride ?? SANDBOX_IFRAME_SRC;
 		this.element.style.border = "0";
 		this.element.style.width = "100%";
+		this.element.style.minHeight = "480px";
+		this.element.style.display = "block";
 		this.element.setAttribute("data-channel-id", this.channelId);
 		this.element.setAttribute("data-applet-iframe", "true");
 		// Smoke pin: `data-ready` is set to "true" once the iframe sends

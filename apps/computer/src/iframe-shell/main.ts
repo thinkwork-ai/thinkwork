@@ -24,6 +24,7 @@ import {
 	loadAppletHostExternals,
 } from "../applets/host-registry";
 import { rewriteAppletImports } from "../applets/transform/import-shim";
+import "../index.css";
 import {
 	ALLOWED_PARENT_ORIGINS,
 	assertSafeAllowlist,
@@ -31,6 +32,7 @@ import {
 	type Envelope,
 	type ErrorPayload,
 	type InitPayload,
+	type ResizePayload,
 	type ReadyWithComponentPayload,
 	type ThemePayload,
 } from "./iframe-protocol";
@@ -70,6 +72,9 @@ const state: IframeShellState = {
 	pendingStateReplies: new Map(),
 };
 
+let resizeObserver: ResizeObserver | null = null;
+let resizeFrame: number | null = null;
+
 function postToParent<P>(
 	kind: Envelope["kind"],
 	payload: P,
@@ -78,6 +83,49 @@ function postToParent<P>(
 	if (!state.parentWindow || !state.channelId) return;
 	const envelope = buildEnvelope(kind, payload, state.channelId, replyTo);
 	state.parentWindow.postMessage(envelope, "*");
+}
+
+function measureContentHeight(rootEl: HTMLElement): number {
+	const body = document.body;
+	const documentElement = document.documentElement;
+	const rawHeight = Math.max(
+		rootEl.scrollHeight,
+		rootEl.offsetHeight,
+		body?.scrollHeight ?? 0,
+		body?.offsetHeight ?? 0,
+		documentElement?.scrollHeight ?? 0,
+		documentElement?.offsetHeight ?? 0,
+	);
+	return Math.max(320, Math.ceil(rawHeight));
+}
+
+function scheduleResizeReport(rootEl: HTMLElement): void {
+	if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+	resizeFrame = requestAnimationFrame(() => {
+		resizeFrame = null;
+		postToParent<ResizePayload>("resize", {
+			height: measureContentHeight(rootEl),
+		});
+	});
+}
+
+function startResizeReporting(rootEl: HTMLElement): void {
+	if (resizeObserver) resizeObserver.disconnect();
+
+	scheduleResizeReport(rootEl);
+
+	if (typeof ResizeObserver === "function") {
+		resizeObserver = new ResizeObserver(() => scheduleResizeReport(rootEl));
+		resizeObserver.observe(rootEl);
+		if (document.body) resizeObserver.observe(document.body);
+	}
+
+	// React rendering and chart layout can settle after the ready ack.
+	// Send a few post-paint samples so the parent iframe does not stay
+	// clipped when charts/fonts finish laying out without a resize event.
+	window.setTimeout(() => scheduleResizeReport(rootEl), 50);
+	window.setTimeout(() => scheduleResizeReport(rootEl), 250);
+	window.setTimeout(() => scheduleResizeReport(rootEl), 750);
 }
 
 function applyThemeOverrides(overrides: Record<string, string>): void {
@@ -197,6 +245,7 @@ async function compileAndMount(
 			);
 		}
 		state.mounted = true;
+		startResizeReporting(rootEl);
 
 		// Notify the parent the component rendered.
 		const ack: ReadyWithComponentPayload = {

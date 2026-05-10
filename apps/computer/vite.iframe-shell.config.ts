@@ -31,7 +31,7 @@
  *     too.
  *
  * Output:
- *   apps/computer/dist/iframe-shell/index.html
+ *   apps/computer/dist/iframe-shell/iframe-shell.html
  *   apps/computer/dist/iframe-shell/assets/*.js
  */
 
@@ -95,8 +95,15 @@ export default defineConfig(({ mode }) => {
 			outDir: "../../dist/iframe-shell",
 			emptyOutDir: true,
 			rollupOptions: {
-				input: "src/iframe-shell/index.html",
+				input: "src/iframe-shell/iframe-shell.html",
 			},
+		},
+		server: {
+			// The parent iframe uses sandbox="allow-scripts" without
+			// allow-same-origin, so the iframe document's module-script
+			// requests have Origin: null. Mirror the production CloudFront
+			// CORS policy in dev so the sandbox can actually execute.
+			cors: true,
 		},
 	};
 });

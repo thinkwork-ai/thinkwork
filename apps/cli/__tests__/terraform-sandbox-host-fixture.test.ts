@@ -102,6 +102,17 @@ describe("U3 — computer_sandbox_site instance", () => {
     expect(source).toMatch(/frame-ancestors/);
   });
 
+  it("computer_sandbox_site enables CORS for opaque-origin sandbox module scripts", () => {
+    const source = read(THINKWORK_MAIN);
+    const sandboxSiteBlock = source.match(
+      /module "computer_sandbox_site"\s*\{[\s\S]*?\n\}/,
+    )?.[0];
+    expect(sandboxSiteBlock).toBeDefined();
+    expect(sandboxSiteBlock!).toMatch(/cors\s*=/);
+    expect(sandboxSiteBlock!).toMatch(/allow_origins\s*=\s*\["\*"\]/);
+    expect(sandboxSiteBlock!).toMatch(/allow_credentials\s*=\s*false/);
+  });
+
   it("computer_sandbox_site CSP frame-ancestors derives from var.computer_sandbox_allowed_parent_origins", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_sandbox_allowed_parent_origins/);

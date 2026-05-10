@@ -20,7 +20,13 @@
  * If either is missing, the build-time injection regressed.
  */
 
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,18 +36,35 @@ import { build } from "vite";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APPS_COMPUTER_ROOT = resolve(__dirname, "../../..");
 
-function readAllJs(dir: string): string {
+function readAllByExtension(dir: string, extension: string): string {
 	const entries = readdirSync(dir, { withFileTypes: true });
 	const chunks: string[] = [];
 	for (const entry of entries) {
 		const full = join(dir, entry.name);
 		if (entry.isDirectory()) {
-			chunks.push(readAllJs(full));
-		} else if (entry.isFile() && entry.name.endsWith(".js")) {
+			chunks.push(readAllByExtension(full, extension));
+		} else if (entry.isFile() && entry.name.endsWith(extension)) {
 			chunks.push(readFileSync(full, "utf8"));
 		}
 	}
 	return chunks.join("\n");
+}
+
+function readAllJs(dir: string): string {
+	return readAllByExtension(dir, ".js");
+}
+
+function readAllCss(dir: string): string {
+	return readAllByExtension(dir, ".css");
+}
+
+function fileNameExists(dir: string, fileName: string): boolean {
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		const full = join(dir, entry.name);
+		if (entry.isDirectory() && fileNameExists(full, fileName)) return true;
+		if (entry.isFile() && entry.name === fileName) return true;
+	}
+	return false;
 }
 
 describe("Vite `define` build-time substitution (production smoke)", () => {
@@ -87,6 +110,15 @@ describe("Vite `define` build-time substitution (production smoke)", () => {
 				for (const origin of stagedOrigins) {
 					expect(bundle).toContain(origin);
 				}
+				expect(
+					existsSync(join(outDir, "iframe-shell.html")) ||
+						fileNameExists(outDir, "iframe-shell.html"),
+				).toBe(true);
+				expect(fileNameExists(outDir, "index.html")).toBe(false);
+
+				const css = readAllCss(outDir);
+				expect(css).toContain("tailwindcss");
+				expect(css).toContain(".h-64");
 				// The production-default URL still appears in the bundle
 				// as the dead-code fallback inside resolveSandboxIframeSrc
 				// (when minify: false the unreachable branch is kept).

@@ -10,16 +10,17 @@
 		<!--
 			CSP is set authoritatively by the CloudFront response-headers
 			policy on the computer_sandbox_site distribution (plan-012 U3,
-			contract v1 §CSP profile). The meta tag below is defense-in-depth
-			for local dev / preview where the response-headers policy isn't
-			applied. The directives match the CDN policy.
+			contract v1 section CSP profile). The meta tag below is
+			defense-in-depth for local dev / preview where the response-
+			headers policy is not applied. The directives match the CDN
+			policy except frame-ancestors, which browsers ignore in meta CSP.
 		-->
 		<meta
 			http-equiv="Content-Security-Policy"
 			content="default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self';"
 		/>
 	</head>
-	<body>
+	<body style="margin: 0">
 		<div id="thinkwork-iframe-shell-root"></div>
 		<script type="module" src="./main.ts"></script>
 	</body>

@@ -383,6 +383,12 @@ describe("IframeAppletController — dispose", () => {
 });
 
 describe("IframeAppletController — resize protocol", () => {
+	it("starts with a usable minimum height before the iframe reports its content size", () => {
+		const { controller } = createController();
+		expect(controller.element.style.minHeight).toBe("480px");
+		expect(controller.element.style.display).toBe("block");
+	});
+
 	it("applies iframe.style.height on resize envelope", () => {
 		const { controller, fakeWindow } = createController();
 		postFromIframe(controller, fakeWindow, "ready", { ready: true });

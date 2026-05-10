@@ -50,6 +50,29 @@ describe("rewriteAppletImports", () => {
     expect(result).not.toContain('from "react"');
   });
 
+  it("rewrites bundled visualization and icon imports loaded by the iframe registry", () => {
+    const result = rewriteAppletImports(`
+      import { BarChart } from "recharts";
+      import { ShieldCheck } from "lucide-react";
+      import { MapContainer } from "react-leaflet";
+      import L from "leaflet";
+      export { BarChart, ShieldCheck, MapContainer, L };
+    `);
+
+    expect(result).toContain(
+      'const BarChart = globalThis.__THINKWORK_APPLET_HOST__["recharts"].BarChart;',
+    );
+    expect(result).toContain(
+      'const ShieldCheck = globalThis.__THINKWORK_APPLET_HOST__["lucide-react"].ShieldCheck;',
+    );
+    expect(result).toContain(
+      'const MapContainer = globalThis.__THINKWORK_APPLET_HOST__["react-leaflet"].MapContainer;',
+    );
+    expect(result).toContain(
+      'const L = globalThis.__THINKWORK_APPLET_HOST__["leaflet"].default;',
+    );
+  });
+
   it("rejects disallowed bare imports with the module name", () => {
     expect(() =>
       rewriteAppletImports('import lodash from "lodash"; export default lodash;'),
