@@ -118,19 +118,37 @@ describe("IframeAppletController — element + handshake", () => {
 		expect(controller.element.src).toBe(initial);
 	});
 
-	it("waits for iframe `ready` before posting `init`", () => {
-		const { controller, calls, fakeWindow } = createController();
+	it("posts init on iframe `load` (resolves the chicken-and-egg without iframe knowing channelId)", () => {
+		const { controller, calls } = createController();
 
-		// Before `ready` arrives, no init has been posted.
-		expect(calls.find((c) => (c.envelope as { kind?: string }).kind === "init")).toBeUndefined();
+		// Before load, no init has been posted.
+		expect(
+			calls.find((c) => (c.envelope as { kind?: string }).kind === "init"),
+		).toBeUndefined();
 
-		postFromIframe(controller, fakeWindow, "ready", { ready: true });
+		// Simulate the iframe's DOM `load` event. The controller posts
+		// init unconditionally on load — the iframe-shell's message
+		// listener captures our channelId from this very envelope.
+		controller.element.dispatchEvent(new Event("load"));
 
 		const init = calls.find(
 			(c) => (c.envelope as { kind?: string }).kind === "init",
 		);
 		expect(init).toBeDefined();
-		expect((init!.envelope as { payload: { tsx: string } }).payload.tsx).toBe("<App />");
+		expect(
+			(init!.envelope as { payload: { tsx: string } }).payload.tsx,
+		).toBe("<App />");
+	});
+
+	it("re-posts init defensively on iframe `ready` envelope (legacy/forward-compat)", () => {
+		const { controller, calls, fakeWindow } = createController();
+		// Skip `load` to isolate this path. A theoretical iframe-shell
+		// that does send `ready` first should still work.
+		postFromIframe(controller, fakeWindow, "ready", { ready: true });
+		const init = calls.find(
+			(c) => (c.envelope as { kind?: string }).kind === "init",
+		);
+		expect(init).toBeDefined();
 	});
 
 	it("ready promise resolves on `ready-with-component`", async () => {

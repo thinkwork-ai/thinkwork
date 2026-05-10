@@ -170,15 +170,14 @@ export class IframeAppletController {
 
 	private installLoadHandshake(): void {
 		this.element.addEventListener("load", () => {
-			// The iframe-shell sends `ready` once its main.ts has booted.
-			// We respond with `init`. If `ready` arrives before `load`
-			// (cached bundle, fast network), the message listener already
-			// has the controller wired and will respond directly.
-			//
-			// We do NOT post init here unconditionally — we wait for the
-			// `ready` envelope to confirm the iframe-shell has registered
-			// its message listener. Otherwise our init can race and be
-			// dropped.
+			// The iframe-shell can't post a `ready` envelope first because
+			// it doesn't know our channelId yet (the parent mints the
+			// nonce). We resolve the chicken-and-egg by posting `init`
+			// unconditionally on the iframe's `load` DOM event — by then
+			// the iframe's main.ts has booted and registered its message
+			// listener. The iframe captures our channelId from this init
+			// and replies with `ready-with-component`.
+			this.postInit();
 		});
 	}
 
