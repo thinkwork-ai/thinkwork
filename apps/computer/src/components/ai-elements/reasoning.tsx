@@ -127,7 +127,12 @@ const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
 };
 
 export const ReasoningTrigger = memo(
-  ({ className, children, getThinkingMessage = defaultGetThinkingMessage, ...props }: ReasoningTriggerProps) => {
+  ({
+    className,
+    children,
+    getThinkingMessage = defaultGetThinkingMessage,
+    ...props
+  }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning();
 
     return (
@@ -158,7 +163,7 @@ export const ReasoningTrigger = memo(
 export type ReasoningContentProps = ComponentProps<
   typeof CollapsibleContent
 > & {
-  children: string;
+  children: ReactNode;
 };
 
 export const ReasoningContent = memo(
@@ -177,7 +182,11 @@ export const ReasoningContent = memo(
         )}
         {...props}
       >
-        <Streamdown>{children}</Streamdown>
+        {typeof children === "string" ? (
+          <Streamdown>{children}</Streamdown>
+        ) : (
+          children
+        )}
       </CollapsibleContent>
     );
   }
