@@ -9,9 +9,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U2 — Server helper for typed spike events
-- Branch: `codex/agui-spike-u2`
-- Worktree: `.Codex/worktrees/agui-spike-u2`
+- Unit: U3 — Experimental Thread + Canvas route
+- Branch: `codex/agui-spike-u3`
+- Worktree: `.Codex/worktrees/agui-spike-u3`
 - Status: in progress
 
 ## Progress Log
@@ -28,14 +28,21 @@ status: active
 - 2026-05-10: Implemented U2 typed AG-UI event envelope helper and publisher tests.
 - 2026-05-10: Verified U2 with focused API tests, full `@thinkwork/api` tests, typecheck, and Prettier.
 - 2026-05-10: Opened PR #1103: https://github.com/thinkwork-ai/thinkwork/pull/1103.
+- 2026-05-10: PR #1103 passed CI and was squash-merged to `main`.
+- 2026-05-10: Removed U2 worktree/local branch and synced `main`.
+- 2026-05-10: Created U3 worktree from `origin/main`.
+- 2026-05-10: Started U3 experimental Thread + Canvas route implementation.
+- 2026-05-10: Implemented `/agui/threads/$id` experimental route with transcript, run/tool timeline, Canvas placeholder, diagnostics, raw chunk subscription handling, and follow-up sending.
+- 2026-05-10: Verified U3 with route tests, full `@thinkwork/computer` tests, typecheck, build, and Prettier.
+- 2026-05-10: Opened PR #1104: https://github.com/thinkwork-ai/thinkwork/pull/1104.
 
 ## Unit Status
 
 | Unit                                                     | Status  | Branch                | PR    | Notes                                                                                           |
 | -------------------------------------------------------- | ------- | --------------------- | ----- | ----------------------------------------------------------------------------------------------- |
 | U1 — Local AG-UI event model and existing-stream adapter | Merged  | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up.                                                          |
-| U2 — Server helper for typed spike events                | PR open | `codex/agui-spike-u2` | #1103 | Awaiting CI.                                                                                    |
-| U3 — Experimental Thread + Canvas route                  | Pending |                       |       | Starts after U2 merges.                                                                         |
+| U2 — Server helper for typed spike events                | Merged  | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up.                                                          |
+| U3 — Experimental Thread + Canvas route                  | PR open | `codex/agui-spike-u3` | #1104 | Awaiting CI.                                                                                    |
 | U4 — Registered Canvas component proof                   | Pending |                       |       | Starts after U3 merges.                                                                         |
 | U5 — Real scenario smoke path                            | Pending |                       |       | Starts after U4 merges.                                                                         |
 | U6 — Optional OSS CopilotKit integration check           | Pending |                       |       | Starts after U5; may be skipped only if U5 verdict rejects package integration as out of scope. |
@@ -52,6 +59,12 @@ status: active
 - 2026-05-10 U2: `pnpm --filter @thinkwork/api typecheck` passed.
 - 2026-05-10 U2: `pnpm --filter @thinkwork/api test` passed: 2,470 tests passed, 16 skipped.
 - 2026-05-10 U2: `pnpm dlx prettier --check <touched files>` passed.
+- 2026-05-10 U2 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed on PR #1103.
+- 2026-05-10 U3: `pnpm --filter @thinkwork/computer test -- src/components/computer-agui/AguiThreadCanvasRoute.test.tsx` passed.
+- 2026-05-10 U3: `pnpm --filter @thinkwork/computer typecheck` passed.
+- 2026-05-10 U3: `pnpm --filter @thinkwork/computer build` passed.
+- 2026-05-10 U3: `pnpm --filter @thinkwork/computer test` passed: 212 tests passed.
+- 2026-05-10 U3: `pnpm dlx prettier --check <touched files>` passed.
 
 ## Blockers
 
