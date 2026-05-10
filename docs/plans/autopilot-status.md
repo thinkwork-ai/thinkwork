@@ -16,8 +16,8 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - **Branch:** `codex/computer-ai-elements-u7-visual-regression`
 - **Worktree:** `.Codex/worktrees/computer-ai-elements-u7`
 - **Started:** 2026-05-10
-- **PR:** Pending
-- **Status:** Local verification complete; ready for U7 PR
+- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1118
+- **Status:** PR open; CI in progress
 
 ## Progress Log
 
@@ -29,6 +29,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
 - 2026-05-10: Browser smoke passed on `localhost:5174`: thread transcript rendered, inline generated App mounted through sandbox iframe, full artifact route rendered the same sandboxed App, and the app route back control returned to the originating thread.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
+- 2026-05-10: Opened PR #1118.
 - 2026-05-10: Squash-merged U5 PR #1115 into `main`, deleted the remote and local U5 branch, removed the U5 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U6 worktree from updated `origin/main`.
 - 2026-05-10: Updated Artifact Builder defaults to state that host-provided Artifact chrome owns title/actions/refresh placement, generated TSX should render only body content, and generated Apps run in the sandboxed iframe runtime.
