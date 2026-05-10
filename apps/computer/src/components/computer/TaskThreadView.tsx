@@ -239,8 +239,8 @@ export function TaskThreadView({
         </div>
       </section>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-background px-4 pb-4 sm:px-6">
-        <div className="pointer-events-auto mx-auto w-full max-w-[750px]">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6">
+        <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
           <FollowUpComposer
             disabled={!onSendFollowUp || isSending}
             isSending={isSending}
