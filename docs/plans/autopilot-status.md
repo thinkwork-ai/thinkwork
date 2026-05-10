@@ -17,7 +17,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - **Worktree:** `.Codex/worktrees/computer-ai-elements-u5`
 - **Started:** 2026-05-10
 - **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1115
-- **Status:** PR opened; CI pending
+- **Status:** CI passed; ready to squash merge
 
 ## Progress Log
 
@@ -30,6 +30,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
 - 2026-05-10: Opened PR #1115.
+- 2026-05-10: PR #1115 CI passed: CLA, lint, verify, typecheck, and test.
 - 2026-05-10: Squash-merged U3 PR #1113 into `main`, deleted the remote and local U3 branch, removed the U3 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U4 worktree from updated `origin/main`.
 - 2026-05-10: Routed full-page generated Apps through the generated App Artifact shell with hidden shell chrome so the route top bar remains primary.
