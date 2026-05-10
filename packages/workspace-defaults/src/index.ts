@@ -300,6 +300,14 @@ existing app, and use \`list_apps\` when you need to reference prior apps. App
 refreshes must be deterministic \`refresh()\` exports; do not use refresh to ask the
 user's Computer to reinterpret the original request.
 
+Computer hosts generated Apps inside host-provided Artifact chrome and a
+sandboxed iframe runtime. App TSX should render only body/canvas content and
+must not assume access to parent app globals, credentials, cookies, local
+storage, network, dynamic imports, or browser APIs outside the supported
+stdlib surface. Do not duplicate the host title, \`App\` label, open-full
+action, refresh controls, source coverage, evidence, or provenance panels
+unless the user explicitly asks for that content inside the app.
+
 ## Web Search
 
 If web search is available, use it to find current information when your training data
@@ -604,16 +612,24 @@ Use this skill when the user wants Computer to produce an interactive, reusable 
 8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
 9. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
 
+## Host Chrome And Runtime
+
+The Computer host renders generated Apps inside host-provided Artifact chrome: title, \`App\` label, open-full action, refresh action placement, route header, iframe wrapper, and future provenance/version controls. Your TSX should render only the app body or canvas content.
+
+Do not create an outer artifact card, duplicate route header, \`App\` badge, "Open full" button, refresh recipe, source coverage, evidence, or provenance panel unless the user explicitly asks for that in the app body.
+
+Generated Apps run in the sandboxed iframe runtime. Do not assume access to parent app globals, credentials, cookies, local storage, window navigation, network, dynamic imports, or browser APIs outside the supported stdlib surface.
+
 ## App Shape
 
 Use \`App.tsx\` as the main file. Export one default React component. Prefer concise component-local data transforms over large abstractions. Do not use network calls, browser globals, dynamic imports, \`eval\`, or raw HTML injection.
 
 Good apps include:
 
-- Header with title, summary, and source badges.
+- Focused body content that starts at the useful work, not wrapper chrome.
 - KPI strip for key totals.
 - Charts or tables that make comparison easy.
-- Empty, partial, and failed-source states.
+- Empty, partial, and failed-source states proportional to the requested task.
 
 ## Maps
 
@@ -708,9 +724,11 @@ Normalize source results into \`CrmDashboardData\` before writing TSX. Keep this
 
 Build one responsive app that fits the available horizontal space with \`w-full min-w-0 max-w-[1280px]\`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
 
+The host already provides Artifact chrome, including the route title, \`App\` label, full-screen action, refresh action placement, and sandboxed iframe wrapper. Render the dashboard body only; do not add a duplicate app shell, route header, evidence panel, source coverage panel, or refresh recipe unless the user explicitly requests it.
+
 Required sections:
 
-- Header: title, summary, generated time, and source badges.
+- Body intro or context row only when it helps interpret the dashboard.
 - KPIs: total pipeline, high-risk exposure, stale opportunity count, and next-meeting or source-health count when available.
 - Stage exposure: a bar chart from \`stageExposure\`.
 - Stale activity: a chart or compact table from \`staleActivity\`.
@@ -793,7 +811,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 11;
+export const DEFAULTS_VERSION = 12;
 
 // ---------------------------------------------------------------------------
 // Aggregator

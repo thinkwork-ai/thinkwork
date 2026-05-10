@@ -19,16 +19,24 @@ Use this skill when the user wants Computer to produce an interactive, reusable 
 8. Include `threadId`, `prompt`, `agentVersion`, and `modelId` in metadata when available.
 9. After `save_app` returns `ok`, answer concisely with what was created and the `/artifacts/{appId}` route.
 
+## Host Chrome And Runtime
+
+The Computer host renders generated Apps inside host-provided Artifact chrome: title, `App` label, open-full action, refresh action placement, route header, iframe wrapper, and future provenance/version controls. Your TSX should render only the app body or canvas content.
+
+Do not create an outer artifact card, duplicate route header, `App` badge, "Open full" button, refresh recipe, source coverage, evidence, or provenance panel unless the user explicitly asks for that in the app body.
+
+Generated Apps run in the sandboxed iframe runtime. Do not assume access to parent app globals, credentials, cookies, local storage, window navigation, network, dynamic imports, or browser APIs outside the supported stdlib surface.
+
 ## App Shape
 
 Use `App.tsx` as the main file. Export one default React component. Prefer concise component-local data transforms over large abstractions. Do not use network calls, browser globals, dynamic imports, `eval`, or raw HTML injection.
 
 Good apps include:
 
-- Header with title, summary, and source badges.
+- Focused body content that starts at the useful work, not wrapper chrome.
 - KPI strip for key totals.
 - Charts or tables that make comparison easy.
-- Empty, partial, and failed-source states.
+- Empty, partial, and failed-source states proportional to the requested task.
 
 ## Maps
 
