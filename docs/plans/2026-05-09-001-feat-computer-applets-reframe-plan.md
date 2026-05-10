@@ -1,5 +1,5 @@
 ---
-title: 'feat: ThinkWork Computer applets reframe (M3 swap)'
+title: "feat: ThinkWork Computer applets reframe (M3 swap)"
 type: feat
 status: active
 date: 2026-05-09
@@ -8,6 +8,25 @@ origin: docs/brainstorms/2026-05-09-computer-applets-reframe-requirements.md
 ---
 
 # feat: ThinkWork Computer applets reframe (M3 swap)
+
+## Implementation Status
+
+U1-U14 and the follow-up Computer route rename are merged. The end-user
+collection route is now `/artifacts` and the detail route is
+`/artifacts/$appId`; generated applets remain one artifact type alongside future
+charts, documents, and other artifact kinds.
+
+Admin observability intentionally remains applet-specific at `/applets` for
+now. That route exposes applet source TSX, applet metadata, and generation
+provenance rather than a generic artifact browser. Rename or broaden it only
+when the admin surface supports multiple artifact kinds.
+
+Remaining blocker as of 2026-05-09: the fresh prompt-driven E2E for "Build a
+CRM pipeline risk dashboard for LastMile opportunities, including stale
+activity, stage exposure, and the top risks to review." did not create a new
+applet on dev. The thread completed by asking for CRM source data instead. Keep
+this plan active until prompt-driven LastMile applet generation is fixed and
+verified.
 
 ## Summary
 
@@ -34,7 +53,7 @@ All R1–R15 carry forward from origin. Acceptance examples AE1–AE6 are mirror
 - R7. Compiled chunk runs same-origin in the existing split-view shell (see origin R7)
 - R8. Recoverable error surface for transform/runtime errors (see origin R8)
 - R9. User-state flows through host API hook to thread/artifact persistence, not into source storage (see origin R9)
-- R10. User-state scoped per applet *instance* (see origin R10)
+- R10. User-state scoped per applet _instance_ (see origin R10)
 - R11. Applet exports a `refresh()` function the agent writes; apps/computer's Refresh button calls it; no agent re-prompt (see origin R11)
 - R12. UI distinguishes deterministic refresh from "Ask Computer" reinterpretation (see origin R12)
 - R13. Plan 009's manifest replaced outright, not extended with a discriminant (see origin R13)
@@ -71,8 +90,8 @@ This plan adds these plan-local exclusions:
 
 ### Relevant Code and Patterns
 
-- `apps/computer/src/routes/_authed/_shell/apps.$id.tsx` — current applet open route (loads fixture; reframe rebinds resolver to live `applet(appId)` query)
-- `apps/computer/src/routes/_authed/_shell/apps.index.tsx` — apps gallery list (currently fixture-driven via `FIXTURE_APP_ARTIFACTS`)
+- `apps/computer/src/routes/_authed/_shell/artifacts.$id.tsx` — current artifact open route for applets (loads fixture; reframe rebinds resolver to live `applet(appId)` query)
+- `apps/computer/src/routes/_authed/_shell/artifacts.index.tsx` — artifacts gallery list (formerly fixture-driven via `FIXTURE_APP_ARTIFACTS`)
 - `apps/computer/src/components/apps/{AppArtifactSplitShell,AppCanvasPanel,AppTopBar,AppTranscriptPanel,AppsGallery,AppPreviewCard}.tsx` — host-shell pieces; canvas becomes dynamic-import mount point
 - `apps/computer/src/components/dashboard-artifacts/*` — eight CRM components to harvest (seven primitives + one orchestrator); `dashboard-data.ts` derivation helpers move into `computer-stdlib` formatters or are deleted
 - `packages/ui/src/index.ts` — existing shadcn surface (incl. `data-table`, `card`, `chart`, `table`, `dialog`, etc.); `@thinkwork/computer-stdlib` layers above this
@@ -111,8 +130,8 @@ This plan adds these plan-local exclusions:
 ## Key Technical Decisions
 
 - **Storage on S3 reuse, not EFS.** Origin's "EFS over S3" Key Decision is superseded. Rationale: GraphQL Lambda has no `fileSystemConfig` today; granting EFS read requires per-tenant `aws_efs_access_point`, Lambda VPC subnet placement, and incurs cold-start cost. The existing `dashboardArtifactsBucket()` is already wired with tenant-prefix safety (`assertDashboardManifestKey`); we extend it. Storage path: `tenants/{tenantId}/applets/{appId}/source.tsx` + `metadata.json`.
-- **Transform location: browser-side sucrase in a Web Worker.** Honors origin's "transform at open" framing. Server-side sucrase parse runs at `save_app` time for *validation only* (catches syntax errors before persist); the actual JSX→JS transform happens once per cold open in the browser. Cached in a service-worker-friendly shape. Esbuild-wasm rejected: 10MB+ browser payload vs. sucrase's ~150KB.
-- **Regenerate semantics: stable `appId`, version-pinned mount, S3 stores newest only.** Per origin Scope Boundaries ("newest writes win, no version history"), regenerate overwrites the single S3 source object at the same `appId`. The `version` field on metadata is a monotonically-increasing label *only* — there is no S3 version history, no historical bundles preserved. A mounted applet view holds its compiled blob in browser memory (transformed at the moment of open); the blob is not invalidated when the agent regenerates, so the user keeps interacting with v1 until they reload. The "newer version available" banner detects `metadata.version > mounted version` via a periodic poll and offers reload — reload always fetches the now-current source, which produces v2's blob. Closes the user-pulled-out-from-under gap without violating origin's no-version-history scope.
+- **Transform location: browser-side sucrase in a Web Worker.** Honors origin's "transform at open" framing. Server-side sucrase parse runs at `save_app` time for _validation only_ (catches syntax errors before persist); the actual JSX→JS transform happens once per cold open in the browser. Cached in a service-worker-friendly shape. Esbuild-wasm rejected: 10MB+ browser payload vs. sucrase's ~150KB.
+- **Regenerate semantics: stable `appId`, version-pinned mount, S3 stores newest only.** Per origin Scope Boundaries ("newest writes win, no version history"), regenerate overwrites the single S3 source object at the same `appId`. The `version` field on metadata is a monotonically-increasing label _only_ — there is no S3 version history, no historical bundles preserved. A mounted applet view holds its compiled blob in browser memory (transformed at the moment of open); the blob is not invalidated when the agent regenerates, so the user keeps interacting with v1 until they reload. The "newer version available" banner detects `metadata.version > mounted version` via a periodic poll and offers reload — reload always fetches the now-current source, which produces v2's blob. Closes the user-pulled-out-from-under gap without violating origin's no-version-history scope.
 - **Regenerate-vs-new on the Strands tool surface.** Agents call a single `save_app(appId, name, files, metadata)` Strands tool. If `appId` is null/empty, the API generates a fresh UUID (new applet). If `appId` is provided, the API treats it as a regenerate against that stable identifier, increments `metadata.version`, and overwrites the source. There is NO separate `regenerate_app` Strands tool — the agent surface stays minimal. The GraphQL surface keeps `saveApplet` and `regenerateApplet` as distinct mutations for clarity at the resolver layer; the Strands tool dispatches to the appropriate one based on `appId` presence.
 - **Writer-role authorization: service-auth only for v1.** `saveApplet` and `regenerateApplet` mutations require service-auth (`API_AUTH_SECRET` Bearer token). Plain Cognito-authenticated users (admin SPA, mobile, CLI) cannot write applets in v1. Only the Strands ECS task (which holds `API_AUTH_SECRET`) is the authorized writer. This narrows the attack surface introduced by U6 going live before U7. Read access (`applet`, `applets` queries) flows through `assertCallerCanReadApplet` with normal Cognito tenant scoping.
 - **Operator (admin) reads via a separate resolver.** The admin route U13 calls a distinct `adminApplet(appId)` / `adminApplets(userId)` query path that explicitly checks the operator role first, then resolves the target tenant. End-user `applet`/`applets` queries do NOT take a `userId` argument and ignore operator-role tokens. This prevents future refactors from accidentally collapsing the two paths into one resolver where operator-tenant boundary becomes implicit.
@@ -131,7 +150,7 @@ This plan adds these plan-local exclusions:
 - **Env snapshot at factory construction.** `make_save_app_fn(*, tenant_id, agent_id, computer_id, api_url, api_secret)` reads env once; never re-read inside `async def save_app(...)`.
 - **One-way dep edges:** `apps/computer` → `@thinkwork/computer-stdlib` → `@thinkwork/ui`. Stdlib never imports from apps/computer. Contract test in U2 enforces this with a build-time check.
 - **Transform shim externalizes via `globalThis.__THINKWORK_APPLET_HOST__`.** Bare imports (`import { KpiStrip } from "@thinkwork/computer-stdlib"`) get rewritten at transform time to lookups against a host registry populated in `apps/computer/src/main.tsx`. This is what makes "constrained import surface" cheap to enforce — disallowed imports fail at transform time, not at runtime.
-- **`useAppletAPI` is the single *intended* entry point — but content-scan validation enforces it.** The import shim only operates on import declarations. Agent-emitted TSX could literally write `globalThis.fetch(...)`, `Function("return fetch")()`, `eval("...")`, `import("lodash")` (dynamic), `Reflect.get(globalThis, "fetch")`, `XMLHttpRequest`, `WebSocket` — none of which are import statements, all of which sucrase passes through. Therefore `validation.ts` (U3) runs a regex content scan for the patterns `\bfetch\b`, `\bXMLHttpRequest\b`, `\bWebSocket\b`, `\bglobalThis\b`, `\beval\b`, `\bFunction\s*\(`, `\bimport\s*\(`, `\bReflect\b` against the source body and rejects on match. This is the load-bearing security boundary for v1, not the import shim. False positives (e.g., `fetchData` user-defined function) are acceptable; the agent can rename and resubmit.
+- **`useAppletAPI` is the single _intended_ entry point — but content-scan validation enforces it.** The import shim only operates on import declarations. Agent-emitted TSX could literally write `globalThis.fetch(...)`, `Function("return fetch")()`, `eval("...")`, `import("lodash")` (dynamic), `Reflect.get(globalThis, "fetch")`, `XMLHttpRequest`, `WebSocket` — none of which are import statements, all of which sucrase passes through. Therefore `validation.ts` (U3) runs a regex content scan for the patterns `\bfetch\b`, `\bXMLHttpRequest\b`, `\bWebSocket\b`, `\bglobalThis\b`, `\beval\b`, `\bFunction\s*\(`, `\bimport\s*\(`, `\bReflect\b` against the source body and rejects on match. This is the load-bearing security boundary for v1, not the import shim. False positives (e.g., `fetchData` user-defined function) are acceptable; the agent can rename and resubmit.
 - **CSP + `dangerouslySetInnerHTML` constraints.** apps/computer sets a Content-Security-Policy `connect-src` restricted to the same origin and the GraphQL endpoint; `script-src` allows `'self'` plus `blob:` (for the dynamic-import compiled chunks) but no inline scripts. `@thinkwork/computer-stdlib` primitives must NOT expose `dangerouslySetInnerHTML` as a prop — locked in U1's contract spec and verified by U2's contract test. These are plan-level constraints; the implementer follows them in U2/U5 without re-litigating.
 - **JSX runtime: automatic, not classic.** Sucrase configured with `jsxRuntime: "automatic"` (not the default classic). Compiled output uses `import { jsx as _jsx } from "react/jsx-runtime"` rather than `React.createElement`, which means React does NOT need to be a free identifier in the applet module's scope. The import-shim adds `react/jsx-runtime` and `react/jsx-dev-runtime` to its rewrite list (resolves to the host registry's pre-bundled jsx-runtime functions). This avoids the `ReferenceError: React is not defined` failure mode that classic-runtime would have introduced.
 - **Import-specifier parsing strategy: `acorn`.** Sucrase has no plugin/visitor API for rewriting bare specifiers. Regex-based rewriting is fragile around comments, template strings, dynamic imports, and multi-line imports. Pick `acorn` (~200KB minified, well-trodden, maintains compatibility with the latest TC39 imports proposals) for the AST pass that powers `import-shim.ts`. The shim does its own walk; sucrase still does the JSX/TS transform.
@@ -243,7 +262,7 @@ This is a scope declaration; the implementer may adjust file boundaries within t
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ### End-to-end flow (generate → open → refresh)
 
@@ -329,31 +348,36 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** None.
 
 **Files:**
+
 - Create: `docs/specs/computer-applet-contract-v1.md` (single-source spec)
 - Modify: `docs/plans/2026-05-08-014-feat-thinkwork-computer-v1-consolidated-plan.md` (M1 contract-freeze gate section: add "applet-package shape" alongside streaming and memory contracts)
 
 **Approach:**
+
 - Spec captures: tool signatures, GraphQL types, hook surface, allowed-import list (`@thinkwork/ui` re-exports + `@thinkwork/computer-stdlib` re-exports + `useAppletAPI` + `react/jsx-runtime` + `react/jsx-dev-runtime`), forbidden-runtime patterns (validation.ts content-scan list: `\bfetch\b`, `\bXMLHttpRequest\b`, `\bWebSocket\b`, `\bglobalThis\b`, `\beval\b`, `\bFunction\s*\(`, `\bimport\s*\(`, `\bReflect\b`), metadata schema (`appId`, `version`, `tenantId`, `threadId`, `prompt`, `agentVersion`, `modelId`, `generatedAt`, `stdlibVersionAtGeneration`), S3 path layout (`tenants/{tenantId}/applets/{appId}/source.tsx` + `.../metadata.json`), refresh return shape `{data, sourceStatuses: {<sourceId>: success|partial|failed}, errors?}`, multi-instance state-key shape `(appId, instanceId, key)`, applet-state persistence path (`artifacts` row of `type = 'applet_state'` linked from `Message.durableArtifact`), Strands tool surface (`save_app(appId?, name, files, metadata)` — null `appId` = new applet, provided = regenerate), writer-role authorization model (service-auth Bearer token only for `saveApplet`/`regenerateApplet`), CSP constraints (`connect-src` restricted to same-origin + GraphQL endpoint, no `dangerouslySetInnerHTML` props on stdlib primitives), `httpx.AsyncClient` lifecycle (per-call, 30s timeout, 2 retries with exponential backoff), `applets()` pagination (50 newest-first per page, `nextCursor` field), JSX runtime (sucrase `jsxRuntime: "automatic"`), import-shim parsing strategy (`acorn`-based AST walk).
 - Reference origin requirements doc; do not re-litigate origin decisions.
 - Mark this as v1 of the contract; future revisions get `v2.md` siblings, never edits in place.
 
 **Test scenarios:**
+
 - Test expectation: none — decision artifact (pure documentation, no behavior).
 
 **Verification:**
+
 - Spec doc committed; plan 014 frontmatter unchanged but body has the new gate addendum.
 
 ---
 
 ### U2. Create `@thinkwork/computer-stdlib` workspace package (inert exports)
 
-**Goal:** Stand up the new package with all rebranded primitives + `useAppletAPI` hook *signature* (no live behavior). Harvested from `apps/computer/src/components/dashboard-artifacts/` and genericized; no consumer wiring yet.
+**Goal:** Stand up the new package with all rebranded primitives + `useAppletAPI` hook _signature_ (no live behavior). Harvested from `apps/computer/src/components/dashboard-artifacts/` and genericized; no consumer wiring yet.
 
 **Requirements:** R3, R14.
 
 **Dependencies:** U1.
 
 **Files:**
+
 - Create: `packages/computer-stdlib/package.json` (workspace package; deps on `@thinkwork/ui`, `react`, `react-dom`, `recharts`, `lucide-react` as peerDependencies)
 - Create: `packages/computer-stdlib/tsconfig.json`
 - Create: `packages/computer-stdlib/src/index.ts` (barrel)
@@ -375,18 +399,21 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: root `package.json` lint/test/typecheck globs if they don't already cover new packages (they should)
 
 **Approach:**
+
 - Each primitive takes typed props (no `manifest: DashboardArtifactManifest` — that coupling is dead). For example, `KpiStrip` takes `KpiCard[]`; `DataTable` takes `{ columns, rows, emptyState? }`.
-- **These are structural rewrites, not renames.** The original CRM components (e.g., `CrmPipelineKpiStrip.tsx`) computed their KPIs internally by calling `getOpportunityRows`, `getAtRiskAmount`, `getStaleOpportunityCount` against the manifest. The genericized primitives are pure renderers — derivation logic moves out (into the agent's authored TSX or into `useAppletQuery` callers; pure formatters move into `formatters/`). U2's "harvest from `dashboard-artifacts/`" is shorthand for "extract the inner JSX + Tailwind classes from each Crm* component into a reusable primitive AND drop all manifest-derivation code." Visual parity is achievable with care; semantic parity (same data shapes flowing through to the rendered DOM) is U11's job, not U2's.
+- **These are structural rewrites, not renames.** The original CRM components (e.g., `CrmPipelineKpiStrip.tsx`) computed their KPIs internally by calling `getOpportunityRows`, `getAtRiskAmount`, `getStaleOpportunityCount` against the manifest. The genericized primitives are pure renderers — derivation logic moves out (into the agent's authored TSX or into `useAppletQuery` callers; pure formatters move into `formatters/`). U2's "harvest from `dashboard-artifacts/`" is shorthand for "extract the inner JSX + Tailwind classes from each Crm\* component into a reusable primitive AND drop all manifest-derivation code." Visual parity is achievable with care; semantic parity (same data shapes flowing through to the rendered DOM) is U11's job, not U2's.
 - Empty-state rendering is built into each primitive (per Key Decision); apps importing the stdlib never see "props are present but data array is empty" gracelessly.
 - `useAppletAPI` exports the type signature and a placeholder hook body that throws unless `globalThis.__THINKWORK_APPLET_HOST__.useAppletAPI` is registered; this is how U5's host registry overrides it in the running app.
 - Contract test enforces one-way dep edge: `import { Imports } from '@thinkwork/computer-stdlib'` is allowed; reverse is not. Implemented as a build-time `import-graph` lint or a test that statically reads `package.json` deps and asserts no app/admin entries.
 - Visual parity: snapshot tests (or visual contract tests using the same fixture data the CRM components were tested against) prove the rebranded primitives render the same output as their CRM ancestors.
 
 **Patterns to follow:**
+
 - `packages/ui/src/index.ts` barrel structure
 - `apps/computer/src/components/dashboard-artifacts/Crm*.tsx` — source for harvested behavior
 
 **Test scenarios:**
+
 - Happy path: `KpiStrip` renders one card per `KpiCard` entry with currency/number formatting from the formatters module.
 - Happy path: `DataTable` renders columns + rows; empty `rows` array renders the configured `emptyState` slot.
 - Happy path: `EvidenceList` renders link cards; missing `url` renders text-only.
@@ -397,9 +424,10 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Error path: calling `useAppletAPI` in a Vitest render without the host registry throws `Error("INERT_NOT_WIRED")` with a message naming the registry global.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/computer-stdlib build` succeeds.
 - `pnpm --filter @thinkwork/computer-stdlib test` green.
-- No consumer imports from the package yet (nothing in apps/* or packages/api/* references it).
+- No consumer imports from the package yet (nothing in apps/_ or packages/api/_ references it).
 
 ---
 
@@ -412,6 +440,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `packages/database-pg/graphql/types/artifacts.graphql` (add `Applet`, `AppletPayload`, `AppletState`, `applet(appId)`, `applets(cursor, limit)`, `appletState(appId, instanceId, key)`, `adminApplet(appId)`, `adminApplets(userId, cursor, limit)`, `saveApplet`, `regenerateApplet`, `saveAppletState`; extend `ArtifactType` with `APPLET` + `APPLET_STATE`). **Note:** `terraform/schema.graphql` is NOT regenerated for this change — `scripts/schema-build.sh` reads only `subscriptions.graphql` and produces the AppSync subscription-only schema. Edits to `artifacts.graphql` propagate to HTTP-API consumers via per-package `codegen`, not via `pnpm schema:build`.
 - Create: `packages/api/src/lib/applets/storage.ts` (functions: `appletSourceKey`, `appletMetadataKey`, `appletBundleCacheKey`, `assertAppletKey`, `readAppletSourceFromS3`, `writeAppletSourceToS3`, `readAppletMetadataFromS3`, `writeAppletMetadataToS3`)
 - Create: `packages/api/src/lib/applets/access.ts` (`parseAppletMetadata`, `assertCallerCanReadApplet`, `assertCallerCanWriteApplet` — modeled on `dashboardArtifact.shared.ts:assertDashboardArtifactAccess`)
@@ -432,6 +461,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: every consumer with a `codegen` script (`apps/computer`, `apps/admin`, `apps/cli`, `apps/mobile`, `packages/api`): regenerate; commit the result. Per `AGENTS.md` "Common commands → Database / GraphQL schema", mobile is in the codegen-consumer set even though no source under `apps/mobile/` references applets in v1 — its generated `apps/mobile/lib/gql/graphql.ts` mirrors the canonical schema, so changes here AND deletions in U12 must regenerate it or its build diverges.
 
 **Approach:**
+
 - Reuse the existing `dashboardArtifactsBucket()` env var resolution; the new keys are siblings under `tenants/{tenantId}/applets/`.
 - `assertAppletKey` enforces `tenants/<uuid>/applets/<uuid>/(source\.tsx|metadata\.json)` to prevent path traversal — model after `assertDashboardManifestKey`.
 - `validation.ts` exports `validateAppletSource(source: string): { ok: true } | { ok: false, errors: ImportError[] | ParseError[] | RuntimePatternError[] }`; pulls allowed prefixes and forbidden runtime patterns from constants matching U1.
@@ -440,11 +470,13 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - `parseAppletMetadata` throws `Error("MalformedAppletMetadata")` with field-level detail; never returns a partial object.
 
 **Patterns to follow:**
+
 - `packages/api/src/lib/dashboard-artifacts/storage.ts` for S3 helpers
 - `packages/api/src/lib/dashboard-artifacts/access.ts` for tenant-prefix safety
 - `packages/api/src/graphql/resolvers/artifacts/dashboardArtifact.shared.ts` for `loadApplet` shape
 
 **Test scenarios:**
+
 - Happy path: `appletSourceKey({ tenantId, appId })` returns the expected path; `assertAppletKey` accepts it.
 - Edge case: `assertAppletKey` rejects keys missing the tenant prefix; rejects path traversal (`..`); rejects paths with a different artifact root.
 - Happy path: `parseAppletMetadata` parses a valid metadata.json; rejects missing required fields with field-level errors.
@@ -457,6 +489,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Edge case: per-package `codegen` produces a deterministic diff for the new applet types across `apps/computer`, `apps/admin`, `apps/cli`, `apps/mobile`, and `packages/api` (no spurious reordering, no orphaned imports).
 
 **Verification:**
+
 - `pnpm -r --if-present typecheck` green; `pnpm -r --if-present test` green for new test files.
 - `pnpm schema:build` regenerates `terraform/schema.graphql` and the diff is intentional.
 - All consumer codegen passes (admin, computer, CLI, api); no orphaned types.
@@ -473,6 +506,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U1.
 
 **Files:**
+
 - Create: `packages/agentcore-strands/agent-container/container-sources/applet_tool.py` (exports `make_save_app_fn`, `make_load_app_fn`, `make_list_apps_fn`, plus `make_*_from_env()` helpers; inert seam returns `{ok: false, reason: "INERT_NOT_WIRED"}`)
 - Create: `packages/agentcore-strands/agent-container/test_applet_tool.py` (inert + body-swap forcing tests)
 - Modify: `packages/agentcore-strands/agent-container/container-sources/server.py` (register the three tools next to `wake_workspace_tool`/`write_memory_tool` block ~lines 716–727)
@@ -480,6 +514,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: `packages/agentcore-strands/agent-container/Dockerfile` (add `COPY container-sources/applet_tool.py ./container-sources/`)
 
 **Approach:**
+
 - Each tool's factory snapshots env at construction time (`THINKWORK_API_URL`, `API_AUTH_SECRET`, `TENANT_ID`, `AGENT_ID`, `COMPUTER_ID`); never re-read inside the async tool body. Pair with auto-memory `feedback_completion_callback_snapshot_pattern`.
 - Inert seams: `_inert_save_app(name, files, metadata)` returns `{"ok": False, "reason": "INERT_NOT_WIRED", "validated": False, "persisted": False}`. Same shape for load/list.
 - Live seam interface (locked at U1) for U7 to swap into:
@@ -493,10 +528,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Execution note:** Test-first. Write the inert tests + body-swap forcing tests in the same commit as the inert tool, so U7's PR demonstrably swaps the body.
 
 **Patterns to follow:**
+
 - `packages/agentcore-strands/agent-container/container-sources/wake_workspace_tool.py` (~3.4K, simplest reference)
 - `packages/agentcore-strands/agent-container/container-sources/delegate_to_workspace_tool.py` (factory-closure with `seam_fn=` pattern)
 
 **Test scenarios:**
+
 - Happy path: `make_save_app_fn(seam_fn=lambda *a, **kw: {"ok": True, "appId": "a1", "version": 1, "validated": True, "persisted": True})` returns a callable; calling it with valid input returns the seam result.
 - Happy path: `make_save_app_from_env()` reads env and returns a function; calling it (no `seam_fn`) returns the inert payload.
 - Edge case: `make_save_app_fn` called with missing required env raises immediately at construction, not on first call (env snapshot at entry).
@@ -506,6 +543,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Body-swap forcing: `assert get_save_app_for_test() is _inert_save_app` — proves the inert is wired; in U7 this assertion will be replaced with `is _live_save_app`.
 
 **Verification:**
+
 - `uv run pytest packages/agentcore-strands/agent-container/test_applet_tool.py` green.
 - Container builds and the agent-container Dockerfile COPY list is updated; running the container locally registers the three tools without `try/except` swallowing imports.
 
@@ -520,6 +558,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U1, U2 (stdlib externals exist), U3 (`Applet` GraphQL type for codegen).
 
 **Files:**
+
 - Modify: `apps/computer/package.json` (add `sucrase` + `acorn` + `acorn-walk` deps)
 - Create: `apps/computer/src/applets/transform/sucrase-worker.ts` (Web Worker entry; receives `{ source, appId, version }`, returns `{ compiledModuleUrl }` or `{ error }`)
 - Create: `apps/computer/src/applets/transform/transform.ts` (main-thread API: `transformApplet(source, version): Promise<TransformResult>`)
@@ -534,17 +573,20 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: `apps/computer/vite.config.ts` (only if Web Worker imports need explicit handling)
 
 **Approach:**
+
 - Sucrase config: `transforms: ["typescript", "jsx"]`, `production: true`, `jsxRuntime: "automatic"`. Automatic runtime emits `import { jsx as _jsx } from "react/jsx-runtime"` so React does NOT need to be a free identifier in the compiled module's scope (avoids the `ReferenceError: React is not defined` failure mode classic-runtime would have introduced). Bundle size: sucrase ~150KB + acorn ~200KB gzipped on the worker bundle, not main thread.
 - Import shim runs a separate `acorn` AST pass over the source: walks every `ImportDeclaration` node, validates each specifier is in the allowlist (`@thinkwork/ui`, `@thinkwork/computer-stdlib`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `useAppletAPI`), rewrites each `ImportDeclaration` to `const { ... } = globalThis.__THINKWORK_APPLET_HOST__["..."]`. Sucrase then runs JSX/TS transforms over the rewritten source. Disallowed imports throw a structured error at transform time naming the specifier and line. Two-pass design (acorn for imports + sucrase for JSX/TS) is necessary because sucrase has no plugin/visitor API for specifier rewrites.
 - Cache uses Blob URLs (`URL.createObjectURL(new Blob([compiled], { type: "application/javascript" }))`) so dynamic `import()` works against same-origin compile output. URLs are revoked on cache eviction.
 - `host-registry.ts` exposes a typed surface; the placeholder `useAppletAPI` throws `Error("INERT_NOT_WIRED: U6/U9 will activate")` if invoked.
-- Entry point in `main.tsx` is the *only* module that should write to `globalThis.__THINKWORK_APPLET_HOST__`; tests assert single-write semantics.
+- Entry point in `main.tsx` is the _only_ module that should write to `globalThis.__THINKWORK_APPLET_HOST__`; tests assert single-write semantics.
 
 **Patterns to follow:**
+
 - `apps/computer/src/main.tsx` for router/provider mounting
 - `apps/computer/src/lib/api-fetch.ts` for the closest existing host-side fetch pattern
 
 **Test scenarios:**
+
 - Happy path: `transformApplet(validTsxSource, "1.0.0")` resolves with a `compiledModuleUrl` that can be dynamically `import()`-ed and exports the expected component.
 - Happy path: `import-shim` rewrites `import { KpiStrip } from "@thinkwork/computer-stdlib"` to a `globalThis.__THINKWORK_APPLET_HOST__["@thinkwork/computer-stdlib"].KpiStrip` reference.
 - Happy path: `cache.get(key)` returns `undefined` on miss; `cache.set(key, url)` makes subsequent `get(key)` return the same URL.
@@ -556,6 +598,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Error path: `useAppletAPI` placeholder throws when called outside an applet context; error message names the registry global.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/computer test` green.
 - `apps/computer` dev server starts, no console errors from `host-registry` registration.
 - Bundle analysis: sucrase worker chunk < 200KB gzipped; main bundle increase < 50KB.
@@ -571,6 +614,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U3.
 
 **Files:**
+
 - Modify: `packages/api/src/graphql/resolvers/applets/applet.query.ts` (live)
 - Modify: `packages/api/src/graphql/resolvers/applets/applets.query.ts` (live)
 - Modify: `packages/api/src/graphql/resolvers/applets/saveApplet.mutation.ts` (live)
@@ -580,6 +624,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: `packages/api/src/graphql/resolvers/applets/__tests__/applet.test.ts` (live behavior)
 
 **Approach:**
+
 - `saveApplet`: validates input → runs `validateAppletSource` (import-allowlist + sucrase parse) → on success, writes `source.tsx` + `metadata.json` to S3 (await both writes) → returns `{ok: true, appId, version, persisted: true, validated: true}`. On validation failure, returns `{ok: false, errors: [...]}` and does NOT write to S3.
 - `regenerateApplet`: identical to `saveApplet` but `appId` is provided in input (stable), version is incremented from existing metadata, `metadata.json` updated with new prompt/timestamp. Source overwrites in place.
 - `applet(appId)` query: access check via `assertCallerCanReadApplet` → reads source + metadata from S3 → returns `AppletPayload`.
@@ -588,10 +633,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Body-swap forcing test: assert resolver function references are no longer the inert ones (replace U3's `is _inert_save_applet_resolver` with `is _live_save_applet_resolver`).
 
 **Patterns to follow:**
+
 - `packages/api/src/graphql/resolvers/artifacts/dashboardArtifact.query.ts` for query shape
 - `packages/api/src/graphql/resolvers/artifacts/refreshDashboardArtifact.mutation.ts` for mutation idempotency
 
 **Test scenarios:**
+
 - Happy path: `saveApplet` with valid input writes to S3, returns ok payload, metadata reflects current timestamp.
 - Happy path: `regenerateApplet` increments version, overwrites source, preserves `appId`.
 - Happy path: `applet(appId)` returns the source + metadata from S3 with version intact.
@@ -604,6 +651,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Integration (covers AE2): `saveApplet` rejects `import lodash from "lodash"` with a structured error naming the disallowed import; nothing written to S3.
 
 **Verification:**
+
 - All applet resolver tests green.
 - Manual GraphQL playground call: `mutation { saveApplet(input: ...) { ok appId version } }` works against dev.
 
@@ -618,10 +666,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U4 (inert tools), U6 (live resolvers).
 
 **Files:**
+
 - Modify: `packages/agentcore-strands/agent-container/container-sources/applet_tool.py` (replace `_inert_*` bodies with live ones; `_live_save_app` POSTs GraphQL `saveApplet` mutation via `httpx.AsyncClient`)
 - Modify: `packages/agentcore-strands/agent-container/test_applet_tool.py` (replace inert body-swap assertions with structural assertions: `mock_api.calls` includes `saveApplet`)
 
 **Approach:**
+
 - `_live_save_app(snapshot)`: serializes input → POSTs to `{snapshot.api_url}/graphql` with `Authorization: Bearer {snapshot.api_secret}` → parses GraphQL response → returns the response payload as the tool result.
 - Errors from the API surface are wrapped: `{ok: false, errors: [...], persisted: false, validated: false}`. Network errors get `{ok: false, reason: "API_UNAVAILABLE"}`. Validation errors come through as the API's structured `errors` array.
 - Smoke-pin friendly: response includes `ok`, `validated`, `persisted` distinct fields so smoke can assert each transition.
@@ -629,10 +679,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Body-swap forcing-function test from U4 inverts: `assert get_save_app_for_test() is _live_save_app` — ensures the swap happened.
 
 **Patterns to follow:**
+
 - `packages/agentcore-strands/agent-container/container-sources/delegate_to_workspace_tool.py` (live HTTP-to-API pattern)
 - `packages/agentcore-strands/agent-container/container-sources/wake_workspace_tool.py`
 
 **Test scenarios:**
+
 - Happy path: `save_app("CRM dashboard", {"App.tsx": "..."}, {prompt: "..."})` calls the GraphQL mutation; returns `{ok: True, appId: "...", version: 1, validated: True, persisted: True}`.
 - Happy path: `load_app("a1")` calls `applet(appId)` query; returns source + metadata.
 - Happy path: `list_apps()` calls `applets()` query; returns the user's applet previews.
@@ -643,6 +695,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Integration: end-to-end test (with mocked API) — Strands agent in a test harness calls `save_app` and the mock receives a `saveApplet` mutation with the correct `Authorization` header.
 
 **Verification:**
+
 - `uv run pytest packages/agentcore-strands/agent-container/test_applet_tool.py` green.
 - Container locally: agent prompt → calls `save_app` → applet appears in S3 (verified via U6's resolver smoke).
 
@@ -650,14 +703,15 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 
 ### U8. Live applet open route + dynamic-import mount in apps/computer
 
-**Goal:** Wire the `/apps/$id` route to fetch via the live GraphQL `applet(appId)` query, run the transform, dynamic-import the compiled module, and mount in the canvas. Render error boundaries per R8. Replace fixture-driven CRM rendering on this route with the live applet path. (CRM fixture is the *only* applet during the cutover gap; it gets migrated in U11.)
+**Goal:** Wire the `/artifacts/$id` route to fetch via the live GraphQL `applet(appId)` query, run the transform, dynamic-import the compiled module, and mount in the canvas. Render error boundaries per R8. Replace fixture-driven CRM rendering on this route with the live applet path. (CRM fixture is the _only_ applet during the cutover gap; it gets migrated in U11.)
 
 **Requirements:** R5, R7, R8.
 
 **Dependencies:** U2, U5, U6.
 
 **Files:**
-- Modify: `apps/computer/src/routes/_authed/_shell/apps.$id.tsx` (rebind from fixture to live `applet(appId)` query; call transform; mount via dynamic `import()` in the canvas pane)
+
+- Modify: `apps/computer/src/routes/_authed/_shell/artifacts.$id.tsx` (rebind from fixture to live `applet(appId)` query; call transform; mount via dynamic `import()` in the canvas pane)
 - Modify: `apps/computer/src/components/apps/AppArtifactSplitShell.tsx` (canvas pane accepts a mounted-component child; transcript pane unchanged)
 - Modify: `apps/computer/src/components/apps/AppCanvasPanel.tsx` (becomes the dynamic-import mount target)
 - Create: `apps/computer/src/components/apps/AppletErrorBoundary.tsx` (React error boundary; renders R8 recoverable error UI)
@@ -665,9 +719,10 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: `apps/computer/src/components/apps/AppPreviewCard.tsx` (drop CRM-specific KPI tiles in favor of generic preview from applet metadata)
 - Modify: `apps/computer/src/components/apps/AppsGallery.tsx` (replace `FIXTURE_APP_ARTIFACTS` with `useQuery(AppletsQuery)`)
 - Modify: `apps/computer/src/lib/app-artifacts.ts` (deprecate fixture re-exports; new file or redirect to live-data shape)
-- Create: `apps/computer/src/routes/_authed/_shell/apps.$id.test.tsx` (E2E open route test)
+- Create: `apps/computer/src/routes/_authed/_shell/artifacts.$id.test.tsx` (E2E open route test)
 
 **Approach:**
+
 - Route loader: call `applet(appId)` → on success, hand source + version to `transformApplet` → dynamic `import(compiledModuleUrl)` → render the module's default export inside `AppletErrorBoundary` inside `AppCanvasPanel`.
 - Error boundary: catches transform errors, runtime mount errors, and import errors. Renders a recoverable surface with a "Regenerate with Computer" CTA (stub link to the agent regenerate path; full agent dispatch wiring lands later).
 - "Newer version available" banner: route loader subscribes to a polling refresh of the `metadata.version` field; if version > mounted version, show banner. Pure UI, no auto-reload.
@@ -676,10 +731,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Execution note:** Test-first for the error boundary. The recoverable error path is hard to manually trigger; build a Vitest test that mounts a bad applet first, confirm the error UI renders, then implement.
 
 **Patterns to follow:**
+
 - `apps/computer/src/routes/_authed/_shell/tasks.$id.tsx` for loader + urql query + subscription pattern
 - React Error Boundary class-component pattern (no `react-error-boundary` lib needed)
 
 **Test scenarios:**
+
 - Happy path (covers AE1): valid applet renders end-to-end — query → transform → mount → canvas displays applet content within the test render budget.
 - Happy path: cache-warm second open skips the transform (cache hit observed in test instrumentation).
 - Edge case: applet metadata.version > mounted version surfaces the "newer version available" banner; banner click reloads the canvas.
@@ -689,8 +746,9 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Integration: `useAppletAPI` registered by host-registry resolves to a working hook inside the mounted applet (placeholder from U5 has been replaced with the live one in U9 — but U8 can still test against an injected mock).
 
 **Verification:**
+
 - E2E test passes on local dev.
-- Manual smoke on dev stage: pre-seed an applet via `saveApplet` mutation, navigate to `/apps/$id`, confirm canvas mounts and the route loads in < 2s warm.
+- Manual smoke on dev stage: pre-seed an applet via `saveApplet` mutation, navigate to `/artifacts/$id`, confirm canvas mounts and the route loads in < 2s warm.
 
 ---
 
@@ -703,6 +761,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U6 (live mutations), U8 (mount path established).
 
 **Files:**
+
 - Modify: `packages/computer-stdlib/src/hooks/useAppletAPI.ts` (signature unchanged; impl moved into apps/computer host registry)
 - Modify: `apps/computer/src/applets/host-registry.ts` (replace placeholder `useAppletAPI` with the live impl)
 - Create: `apps/computer/src/applets/host-applet-api.ts` (the live hook impl: `useAppletQuery`, `useAppletState`, `useAppletMutation`, `refresh`)
@@ -712,6 +771,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Or modify (if separate artifact subtype): `packages/api/src/graphql/resolvers/applets/appletState.{query,mutation}.ts` (new) + `packages/database-pg/graphql/types/artifacts.graphql` (extend)
 
 **Approach:**
+
 - `useAppletState<T>(key: string, initial: T)` returns `[T, (next: T) => void]`. The setter debounces (~1s) and writes to the persistence path keyed on `(appId, instanceId, key)`. On mount, restores from the persistence path.
 - `useAppletQuery` and `useAppletMutation` are thin urql wrappers that limit the GraphQL surface to a curated catalog (no arbitrary field selection from inside an applet — only types the agent has been told about). The catalog is enforced via TypeScript discriminated union types; runtime check rejects unknown query names.
 - `refresh()` is the trigger surface for U10's `refresh` contract; this unit only exposes the hook surface and connects it to the applet-exported function via the host-registry indirection.
@@ -720,10 +780,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Execution note:** Test-first for the multi-instance isolation case — render two `useAppletState` consumers with distinct `instanceId` values, write to one, assert the other is unaffected.
 
 **Patterns to follow:**
+
 - Existing urql usage in `apps/computer/src/routes/_authed/_shell/tasks.$id.tsx`
 - `apps/computer/src/context/TenantContext.tsx` for context-injection patterns
 
 **Test scenarios:**
+
 - Happy path (covers AE3): `useAppletState("agenda", [])` set with `[{ topic: "..." }]` triggers a debounced save; second mount with the same `(appId, instanceId)` restores the value.
 - Happy path: `useAppletQuery` calls a curated query (e.g., `crmOpportunities`) and returns data.
 - Edge case: `useAppletQuery("unknownField")` throws with a clear message naming the unknown query.
@@ -733,6 +795,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Integration: applet that uses `useAppletState`, dynamically imported via U8's mount path, renders, mutates state, re-renders with new state, persists across remount.
 
 **Verification:**
+
 - E2E test: mount meeting-brief style applet (test fixture), type into agenda, unmount, re-mount, content restored.
 - All hook tests green.
 
@@ -747,6 +810,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U8 (mounted applet), U9 (host hook).
 
 **Files:**
+
 - Modify: `apps/computer/src/applets/host-applet-api.ts` (add `refresh()` to the host hook surface; calls the applet-exported `refresh` if present)
 - Create: `apps/computer/src/components/apps/AppRefreshControl.tsx` (Refresh button in the canvas top bar; calls `host.refresh()`; renders the per-source status afterward)
 - Modify: `apps/computer/src/components/apps/AppArtifactSplitShell.tsx` (mount the refresh control if the applet exports `refresh`)
@@ -754,6 +818,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Create: `apps/computer/src/components/apps/__tests__/AppRefreshControl.test.tsx`
 
 **Approach:**
+
 - `refresh()` contract (locked in U1 spec): `refresh(): Promise<{ data: any, sourceStatuses: Record<string, "success" | "partial" | "failed">, errors?: Error[] }>`.
 - If the applet doesn't export `refresh`, the Refresh button hides (per Key Decision G10).
 - Refresh visually distinguishes from regenerate — Refresh shows a subtle progress indicator + success/partial/failed source coverage; regenerate is a separate "Ask Computer" CTA outside the applet canvas.
@@ -761,10 +826,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - On `failed` for all sources, show stale data (prior render preserved) with a banner explaining the failure.
 
 **Patterns to follow:**
+
 - Existing `apps/computer/src/components/dashboard-artifacts/CrmRefreshBar.tsx` for the source-coverage UX (now harvested into stdlib)
 - `apps/computer/src/components/dashboard-artifacts/RefreshStateTimeline.tsx` for the timeline UI
 
 **Test scenarios:**
+
 - Happy path (covers AE4): applet exports `refresh()` returning all-success → Refresh button click invokes it → UI renders new data + all-green status indicator → no agent re-prompt fires (assert via instrumentation).
 - Happy path: `refresh()` returns mixed `{ crm: "success", email: "partial" }` → UI shows mixed-status indicator; data renders with partial-source warning.
 - Edge case: applet does NOT export `refresh` → Refresh button is hidden; canvas still functional.
@@ -773,6 +840,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Integration: full flow — mount applet (from U8), click Refresh, re-render data → assert instrumentation: no agent invocation, no GraphQL `chat` mutation fired.
 
 **Verification:**
+
 - AE4 acceptance example covered end-to-end.
 - All test scenarios green.
 
@@ -787,30 +855,35 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U7, U8, U9, U10 (full live pipeline).
 
 **Files:**
+
 - Create: `apps/computer/src/test/fixtures/crm-pipeline-risk-applet/source.tsx` (the agent-style TSX that imports from `@thinkwork/computer-stdlib` and produces the same UX as `CrmPipelineRiskApp.tsx`)
 - Create: `apps/computer/src/test/fixtures/crm-pipeline-risk-applet/metadata.json`
 - Create: `scripts/seed-crm-pipeline-risk-applet.ts` (one-shot seeder: writes the fixture into S3 under a canonical `appId`)
 - Modify: `apps/computer/src/test/fixtures/crm-pipeline-risk-dashboard.json` (remove or mark as deprecated; the JSON manifest is no longer the format)
 - Modify: `apps/computer/src/test/visual/crm-dashboard.fixture.ts` (rebind to render the new applet via the same applet pipeline path used in production)
-- Modify: `apps/computer/src/routes/_authed/_shell/apps.$id.test.tsx` (E2E test against the migrated applet — covers AE6)
+- Modify: `apps/computer/src/routes/_authed/_shell/artifacts.$id.test.tsx` (E2E test against the migrated applet — covers AE6)
 
 **Approach:**
+
 - Author the canonical CRM applet TSX by hand (this is the deliberate dogfood — what an agent would produce). Imports from `@thinkwork/computer-stdlib`: `AppHeader`, `KpiStrip`, `DataTable`, `BarChart`, `StackedBarChart`, `EvidenceList`, `SourceStatusList`, `RefreshBar`. Uses `useAppletQuery("crmOpportunities", ...)` for data; exports `refresh()` that re-queries.
 - Visual parity gate: structural snapshot (rendered tree contains all seven primitive types in the expected layout regions) + interaction smoke (refresh button click invokes `refresh()`; evidence drawer opens and closes; opportunity table sorts) + human visual review on the migrated applet. NO 1%-pixel-diff threshold — the rebranded primitives' internal class composition will differ from the legacy CRM components by design (different prop shapes, different layout containers, different formatter call sites) and a strict pixel gate would block U11 indefinitely on cosmetic micro-tweaks. The real goal (origin Success Criterion: "visual work survives in `computer-stdlib` under generic names") is preserved by the structural+interaction gate.
 - Seeder script is idempotent — if the applet already exists at the canonical `appId`, it overwrites; if not, it creates.
 - Real users see a CRM applet just like before, but via the new pipeline.
 
 **Patterns to follow:**
+
 - The existing `CrmPipelineRiskApp.tsx` orchestrator is the reference for the layout the new TSX must reproduce
 - `scripts/build-lambdas.sh` for one-shot Node script structure
 
 **Test scenarios:**
+
 - Happy path (covers AE6 + AE1): migrated CRM applet's rendered tree contains `AppHeader`, `RefreshBar`, `KpiStrip` (with KPI cards), `BarChart`, `StackedBarChart`, `DataTable` (with sortable opportunity rows), `SourceStatusList`, `EvidenceList` in the expected layout regions; clicking Refresh invokes the exported `refresh()`; clicking an evidence link opens the drawer; sorting the opportunity table reorders rows.
 - Happy path: M5 smoke gate's CRM scenario (per plan 014) loads the route, sees the canvas mount, sees the seven primitive types render — confirms the new applet path is alive.
 - Edge case: re-running the seeder overwrites without error; metadata version increments.
 - Integration: an end-user prompt "Show me the CRM pipeline-risk dashboard" can theoretically be answered by the agent generating an applet that produces the same shape — this is dogfood, not a hard requirement (the seeded fixture lives in parallel until the agent is reliable).
 
 **Verification:**
+
 - Visual contract test green.
 - M5 smoke (separate unit U14) extends to pin this path.
 
@@ -825,6 +898,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U11 (cutover complete).
 
 **Files:**
+
 - Delete: `apps/computer/src/components/dashboard-artifacts/CrmPipelineRiskApp.tsx`
 - Delete: `apps/computer/src/components/dashboard-artifacts/CrmPipelineHeader.tsx`
 - Delete: `apps/computer/src/components/dashboard-artifacts/CrmPipelineKpiStrip.tsx`
@@ -845,18 +919,21 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Modify: `apps/computer/src/lib/app-artifacts.ts` — delete fixture loader
 
 **Approach:**
+
 - Run a grep before each delete: `grep -r "CrmPipelineRiskApp\|dashboardKind\|pipeline_risk" apps/ packages/` to confirm zero remaining consumers (other than tests asserting deletion).
 - Keep one assertive test per deleted file: `import('./CrmPipelineRiskApp')` rejects (file not found) — guards against accidental restoration.
 - For the GraphQL surface deletion: confirm no codegen consumer (admin, mobile, CLI) references the removed types; if any do, update them in the same PR.
 - Delete `apps/computer/src/lib/app-artifacts.ts` last — it's the loader for the deprecated fixture.
 
 **Test scenarios:**
+
 - Test expectation: the deletion itself is the change. A regression test that imports `CrmPipelineRiskApp` and expects the import to fail (file not found) guards against accidental restoration.
 - Integration: full-repo `pnpm typecheck` green after deletion (no orphaned imports).
 - Integration: GraphQL schema compiles (`pnpm schema:build`) with the removed types and no consumer breaks.
 - Edge case: `apps.$id.tsx` no longer imports from `dashboard-artifacts/`; only from `@thinkwork/computer-stdlib`.
 
 **Verification:**
+
 - All tests green.
 - `find apps/computer/src/components/dashboard-artifacts -type f` returns empty.
 - `grep -r "dashboardKind" packages/` returns only references in this plan or tests asserting deletion.
@@ -872,6 +949,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U6 (live applet query).
 
 **Files:**
+
 - Create: `apps/admin/src/routes/_authed/_tenant/applets/index.tsx` (list user's applets — defaults to current tenant; operator filter for user-id)
 - Create: `apps/admin/src/routes/_authed/_tenant/applets/$appId.tsx` (single applet view: source TSX, metadata JSON, generation provenance)
 - Modify: `apps/admin/src/lib/graphql-queries.ts` (or wherever admin's GraphQL queries live) — add `AppletsQuery`, `AppletQuery`
@@ -880,6 +958,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Create: `apps/admin/src/routes/_authed/_tenant/applets/__tests__/$appId.test.tsx`
 
 **Approach:**
+
 - Read-only surface in v1; no edit, no delete. (Per origin "no in-applet code editing".)
 - Source view renders TSX with a basic syntax-highlighter (whatever admin already uses or `prism-react-renderer`).
 - Metadata view renders the JSON.
@@ -887,10 +966,12 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Per `feedback_user_opt_in_over_admin_config`: this is operator/support tooling, not user-facing — admin is the right place.
 
 **Patterns to follow:**
+
 - Existing admin route pattern in `apps/admin/src/routes/_authed/_tenant/`
 - `apps/admin/src/components/threads/ExecutionTrace.tsx` for read-only inspection UX
 
 **Test scenarios:**
+
 - Happy path: list page renders applets for the current tenant; click into one; source + metadata visible.
 - Happy path: operator filter switches to a different user; applets reflect that user's set.
 - Edge case: empty list renders an empty state.
@@ -898,6 +979,7 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - Error path: non-operator user accessing the route is redirected (existing admin auth).
 
 **Verification:**
+
 - All admin route tests green.
 - Manual smoke on dev: navigate to `/applets`, see the migrated CRM applet, click in, see source + metadata.
 
@@ -912,25 +994,29 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 **Dependencies:** U11 (cutover), U12 (legacy gone). U13 (admin observability) is parallel — none of the smoke scenarios A1–A5 exercise the admin route, so admin observability does not gate the smoke gate.
 
 **Files:**
+
 - Modify: the M5 smoke gate script (location per plan 014 — likely `scripts/smoke/computer-m5-*.sh` or a CI workflow under `.github/workflows/`)
 - Modify: `docs/plans/2026-05-08-014-feat-thinkwork-computer-v1-consolidated-plan.md` (M5 section) — add applet scenarios to the list
 - Possibly create: `scripts/smoke/applet-pipeline.sh` (one scenario script)
 
 **Approach:**
+
 - New smoke scenarios (per `feedback_smoke_pin_dispatch_status_in_response`):
   - **A1.** Strands `save_app` writes to S3: smoke calls a test-only endpoint (or runs the agent against a canned prompt) and asserts the resulting `applet(appId)` query returns valid source + metadata.
-  - **A2.** apps/computer open path: HTTP GET against `/apps/$id` for a seeded applet returns 200 and the page loads the applet source via the API.
+  - **A2.** apps/computer open path: HTTP GET against `/artifacts/$id` for a seeded applet returns 200 and the page loads the applet source via the API.
   - **A3.** Refresh contract: an applet exporting `refresh()` is invoked via instrumentation and the response surfaces per-source statuses.
   - **A4.** User-state persistence: write via `useAppletState`, refetch, value persists.
   - **A5.** CRM cutover scenario: the canonical CRM applet renders via the new pipeline (replaces the existing fixture-renderer scenario in plan 014 M5).
 - Each scenario surfaces a `dispatched`/`persisted`/`validated` payload so smoke can pin all three transitions.
 
 **Test scenarios:**
+
 - Test expectation: live deploy smoke — runs against dev stage; failure blocks merge to main per plan 014's smoke gate convention.
 - Integration: each of A1–A5 has a CI assertion.
 - Edge case: smoke timeout for a slow applet open is logged with appId so debugging is straightforward.
 
 **Verification:**
+
 - Smoke gate runs in CI on PR merge to main.
 - Manual smoke against dev passes all five scenarios.
 - Plan 014's M5 section reflects the new scenarios.
@@ -944,29 +1030,29 @@ The boundary between Phase A (substrate inert) and Phase B (live wire) is the M1
 - **State lifecycle risks:** stable `appId` overwrite on regenerate is the load-bearing assumption — a race between agent regenerate and user mount must surface the "newer version available" banner, not silently mismatch. Cache invalidation must catch stdlib-version bumps (cache key includes `stdlibVersion`).
 - **API surface parity:** mobile has no applet rendering in v1 (deferred per origin Scope Boundaries). Mobile push deep-links existing per plan 014 D1 still target apps/computer; nothing changes there.
 - **Integration coverage:** end-to-end happy path requires Strands tools + GraphQL + apps/computer + S3 all wired live — covered by U14 smoke; intermediate states (substrate-only, partial-live) are exercised by per-unit body-swap forcing tests during the inert→live ladder.
-- **Unchanged invariants:** `Message.durableArtifact` link semantics (only the `kind` extends); apps/computer's split-view shell, transcript pane, apps gallery shell; AppSync streaming wire from plan 014 M2 (untouched); Hindsight memory tools (untouched); operator pre-provision flow from plan 014 M1 (untouched); apps/computer's Cognito auth + tenant discovery (untouched).
+- **Unchanged invariants:** `Message.durableArtifact` link semantics (only the `kind` extends); apps/computer's bounded artifact canvas and artifacts gallery shell; AppSync streaming wire from plan 014 M2 (untouched); Hindsight memory tools (untouched); operator pre-provision flow from plan 014 M1 (untouched); apps/computer's Cognito auth + tenant discovery (untouched).
 
 ---
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Stdlib semver-major drift breaks user applets in flight | Cache key includes `stdlibVersion`; major-bump triggers a tracked recompile pass; smoke gate exercises stdlib-version skew |
-| Agent regenerates applet under a mounted user | Stable `appId` + version-pinned mount + "newer version available" banner; tested in U8 |
-| Browser sucrase Web Worker cold-load latency exceeds AE1's ~2s warm budget on first open | Cache compiled output in IndexedDB; if cold open exceeds budget, U14 smoke catches it; fallback is server-side pre-bake (in deferred follow-up) |
-| Strands tool count assertion masks a real registration failure | Assertion is part of container startup; failure crashes the boot, surfaced in CloudWatch immediately |
-| Disallowed import slips through validation and causes runtime mount failure | Belt and suspenders: import-allowlist at save time + content-scan for runtime escape patterns (fetch/eval/Function/import/Reflect/globalThis/XMLHttpRequest/WebSocket) + acorn-based import-shim at transform time + error boundary at mount time |
+| Risk                                                                                                 | Mitigation                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stdlib semver-major drift breaks user applets in flight                                              | Cache key includes `stdlibVersion`; major-bump triggers a tracked recompile pass; smoke gate exercises stdlib-version skew                                                                                                                                                                                               |
+| Agent regenerates applet under a mounted user                                                        | Stable `appId` + version-pinned mount + "newer version available" banner; tested in U8                                                                                                                                                                                                                                   |
+| Browser sucrase Web Worker cold-load latency exceeds AE1's ~2s warm budget on first open             | Cache compiled output in IndexedDB; if cold open exceeds budget, U14 smoke catches it; fallback is server-side pre-bake (in deferred follow-up)                                                                                                                                                                          |
+| Strands tool count assertion masks a real registration failure                                       | Assertion is part of container startup; failure crashes the boot, surfaced in CloudWatch immediately                                                                                                                                                                                                                     |
+| Disallowed import slips through validation and causes runtime mount failure                          | Belt and suspenders: import-allowlist at save time + content-scan for runtime escape patterns (fetch/eval/Function/import/Reflect/globalThis/XMLHttpRequest/WebSocket) + acorn-based import-shim at transform time + error boundary at mount time                                                                        |
 | Agent emits TSX with runtime escape (e.g., `globalThis.fetch("/graphql")`) that exfiltrates user JWT | Content scan in `validation.ts` rejects on the patterns; CSP `connect-src` restricts allowed network destinations; stdlib primitives don't expose `dangerouslySetInnerHTML`. Same-origin trust is explicitly accepted in v1; sandboxed-iframe migration documented as the v2 escape if real incidents prove insufficient |
-| Sucrase classic JSX runtime introduces `React is not defined` at applet mount | `jsxRuntime: "automatic"` configured; import-shim rewrites `react/jsx-runtime` and `react/jsx-dev-runtime` against the host registry; React free-identifier coupling avoided |
-| `saveApplet`/`regenerateApplet` exposed to non-agent callers between U6 and U7 | Both mutations require service-auth (`API_AUTH_SECRET` Bearer); plain Cognito users cannot write applets in v1. Reads (`applet`, `applets`) flow through normal Cognito tenant scoping |
-| Operator-side `adminApplets(userId)` accidentally collapses with end-user `applets()` resolver | Separate `adminApplet`/`adminApplets` resolver path that explicitly checks operator role first; end-user `applets()` does not accept a `userId` arg |
-| `pnpm schema:build` produces unexpected diff in `terraform/schema.graphql` | U3's test suite includes deterministic-diff guard; admin/computer/CLI codegen runs in same PR |
-| Legacy dashboardArtifact GraphQL surface still has consumers when U12 deletes it | Pre-delete grep for `dashboardKind`, `pipeline_risk`, `dashboardArtifact` across apps/ and packages/; defer deletion if external consumers exist |
-| Multi-instance state hooks collide across browser tabs | `useAppletAPI(appId, instanceId)` with mount-key derivation; tested in U9 |
-| Cache hits across stdlib-version bump return stale compiled chunks | Cache key includes `stdlibVersion`; bump invalidates all entries; tested in U5 |
-| Strands tool factory env snapshot misses an env var that's only available in production | Same env-shadowing class as `agentcore-completion-callback-env-shadowing-2026-04-25.md`; explicit env list in factory signature, not `**env` slurp; smoke surfaces missing env on first deploy |
-| Post-cutover the seeded CRM applet diverges from the visual fixture | Visual contract test in U11 + U14's smoke A5; pixel-diff threshold |
+| Sucrase classic JSX runtime introduces `React is not defined` at applet mount                        | `jsxRuntime: "automatic"` configured; import-shim rewrites `react/jsx-runtime` and `react/jsx-dev-runtime` against the host registry; React free-identifier coupling avoided                                                                                                                                             |
+| `saveApplet`/`regenerateApplet` exposed to non-agent callers between U6 and U7                       | Both mutations require service-auth (`API_AUTH_SECRET` Bearer); plain Cognito users cannot write applets in v1. Reads (`applet`, `applets`) flow through normal Cognito tenant scoping                                                                                                                                   |
+| Operator-side `adminApplets(userId)` accidentally collapses with end-user `applets()` resolver       | Separate `adminApplet`/`adminApplets` resolver path that explicitly checks operator role first; end-user `applets()` does not accept a `userId` arg                                                                                                                                                                      |
+| `pnpm schema:build` produces unexpected diff in `terraform/schema.graphql`                           | U3's test suite includes deterministic-diff guard; admin/computer/CLI codegen runs in same PR                                                                                                                                                                                                                            |
+| Legacy dashboardArtifact GraphQL surface still has consumers when U12 deletes it                     | Pre-delete grep for `dashboardKind`, `pipeline_risk`, `dashboardArtifact` across apps/ and packages/; defer deletion if external consumers exist                                                                                                                                                                         |
+| Multi-instance state hooks collide across browser tabs                                               | `useAppletAPI(appId, instanceId)` with mount-key derivation; tested in U9                                                                                                                                                                                                                                                |
+| Cache hits across stdlib-version bump return stale compiled chunks                                   | Cache key includes `stdlibVersion`; bump invalidates all entries; tested in U5                                                                                                                                                                                                                                           |
+| Strands tool factory env snapshot misses an env var that's only available in production              | Same env-shadowing class as `agentcore-completion-callback-env-shadowing-2026-04-25.md`; explicit env list in factory signature, not `**env` slurp; smoke surfaces missing env on first deploy                                                                                                                           |
+| Post-cutover the seeded CRM applet diverges from the visual fixture                                  | Visual contract test in U11 + U14's smoke A5; pixel-diff threshold                                                                                                                                                                                                                                                       |
 
 ---
 
