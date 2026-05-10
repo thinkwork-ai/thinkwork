@@ -26,6 +26,7 @@ const THINKWORK_VARS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/variables.tf",
 );
+const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-computer.sh");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -181,7 +182,10 @@ describe("U10 — host CSP wired for computer_site", () => {
   it("host CSP locals carry the load-bearing directives", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_host_csp/);
-    expect(source).toMatch(/script-src 'self'/);
+    expect(source).toMatch(/computer_host_script_src/);
+    expect(source).toMatch(/computer_host_worker_src/);
+    expect(source).toMatch(/script-src \$\{local\.computer_host_script_src\}/);
+    expect(source).toMatch(/worker-src \$\{local\.computer_host_worker_src\}/);
     expect(source).toMatch(/frame-ancestors 'none'/);
     // connect-src must allow API Gateway for GraphQL queries/mutations,
     // AppSync for the streaming wire, and Cognito for auth flow.
@@ -219,5 +223,29 @@ describe("U10 — host CSP wired for computer_site", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_host_frame_src/);
     expect(source).toMatch(/computer_sandbox_domain/);
+  });
+
+  it("host CSP permits legacy blob applet modules only while sandbox is unprovisioned", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(
+      /computer_host_script_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
+    );
+    expect(source).toMatch(
+      /computer_host_worker_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
+    );
+    expect(source).toMatch(
+      /computer_host_frame_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"https:\/\/\$\{var\.computer_sandbox_domain\}"\s*:\s*"'none'"/,
+    );
+  });
+});
+
+describe("U11.5 — computer deploy script sandbox fallback", () => {
+  it("build-computer enables the legacy applet loader when sandbox outputs are absent", () => {
+    const source = read(BUILD_COMPUTER);
+    expect(source).toMatch(/COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/);
+    expect(source).toMatch(/elif \[\[ -z "\$COMPUTER_SANDBOX_URL" \]\]/);
+    expect(source).toMatch(/APPLET_LEGACY_LOADER="true"/);
+    expect(source).toMatch(/APPLET_LEGACY_LOADER="false"/);
+    expect(source).toMatch(/VITE_APPLET_LEGACY_LOADER=\$\{APPLET_LEGACY_LOADER\}/);
   });
 });
