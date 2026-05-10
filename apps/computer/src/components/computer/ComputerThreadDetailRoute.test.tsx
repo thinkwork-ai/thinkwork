@@ -93,6 +93,11 @@ beforeEach(() => {
   ]);
   vi.mocked(useComputerThreadChunks).mockImplementation(() => ({
     chunks: streamingChunks,
+    streamState: {
+      parts: [],
+      legacyText: "",
+      status: "idle" as const,
+    },
     reset: resetStreamingChunks,
   }));
   vi.mocked(useQuery).mockImplementation((options) => {

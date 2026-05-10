@@ -47,15 +47,22 @@ describe("mergeComputerThreadChunk", () => {
     ]);
   });
 
-  it("drops chunks that arrive too far behind the current stream", () => {
+  it("retains seq-out-of-order chunks (U6 retires the seq < highest - 2 window heuristic)", () => {
+    // Plan-012 U6: typed chunks use per-part-id cursors instead of a seq
+    // window, so the legacy fallback path no longer drops late-arriving
+    // chunks just because their seq is far behind. Out-of-order arrival
+    // is rare for the legacy {text} shape and dropping by window has
+    // hidden real tool-output-available chunks in interleaved streams.
     const chunks = [
       { seq: 4, text: "current" },
       { seq: 5, text: " stream" },
     ];
 
-    expect(mergeComputerThreadChunk(chunks, { seq: 1, text: "stale" })).toEqual(
-      chunks,
-    );
+    expect(mergeComputerThreadChunk(chunks, { seq: 1, text: "stale" })).toEqual([
+      { seq: 1, text: "stale" },
+      { seq: 4, text: "current" },
+      { seq: 5, text: " stream" },
+    ]);
   });
 
   it("keeps live chunks across same-thread rerenders until an explicit reset or thread change", () => {
