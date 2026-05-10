@@ -1,7 +1,11 @@
 import { ArrowRight, Boxes, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@thinkwork/ui";
-import type { AppArtifactPreview } from "@/lib/app-artifacts";
+import {
+  formatShortDate,
+  shortModel,
+  type AppArtifactPreview,
+} from "@/lib/app-artifacts";
 
 interface AppPreviewCardProps {
   artifact: AppArtifactPreview;
@@ -32,9 +36,12 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
           <div className="mt-auto grid grid-cols-3 gap-2">
             <PreviewMetric
               label="Generated"
-              value={formatDate(artifact.generatedAt)}
+              value={formatShortDate(artifact.generatedAt, undefined, "-")}
             />
-            <PreviewMetric label="Model" value={shortModel(artifact.modelId)} />
+            <PreviewMetric
+              label="Model"
+              value={shortModel(artifact.modelId, "-")}
+            />
             <PreviewMetric
               label="Stdlib"
               value={artifact.stdlibVersionAtGeneration || "-"}
@@ -71,20 +78,4 @@ function PreviewMetric({ label, value }: { label: string; value: string }) {
       <p className="truncate text-sm font-semibold">{value}</p>
     </div>
   );
-}
-
-function formatDate(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function shortModel(value?: string | null) {
-  if (!value) return "-";
-  const parts = value.split(/[/:.]/).filter(Boolean);
-  return parts.at(-1) ?? value;
 }
