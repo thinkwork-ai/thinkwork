@@ -13,7 +13,7 @@ status: active
 - Active unit: U5 Strands Runbook Context and Capability Mapping
 - Active branch/worktree: `codex/runbooks-u5` at `.Codex/worktrees/runbooks-u5`
 - Latest synced base: `origin/main` at `e0ad47d6`
-- Overall status: U5 local verification complete; preparing PR
+- Overall status: U5 PR open; monitoring CI
 
 ## Progress Log
 
@@ -43,6 +43,7 @@ status: active
 - 2026-05-10: Removed U4 remote/local branch and worktree, synced `main`, and started U5 in `.Codex/worktrees/runbooks-u5` on branch `codex/runbooks-u5`.
 - 2026-05-10: Began U5 implementation with Python runbook context formatting, capability role mapping, typed queue update publishing, and Strands prompt wiring.
 - 2026-05-10: Completed U5 local verification: focused Python tests, Strands agent-container tests with transient extras, Python lint/format checks for new modules, workspace typecheck/tests/lint/build, and diff check passed.
+- 2026-05-10: Opened U5 PR #1123 from `codex/runbooks-u5`.
 
 ## Implementation Units
 
@@ -52,7 +53,7 @@ status: active
 | U2 Catalog and Run Data Model                     | merged  | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed. |
 | U3 Routing and Confirmation API                   | merged  | `codex/runbooks-u3` | #1121   | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
 | U4 Sequential Runbook Executor                    | merged  | `codex/runbooks-u4` | #1122   | Squash-merged to `main` at `e0ad47d6`; branch and worktree removed. |
-| U5 Strands Runbook Context and Capability Mapping | active  | `codex/runbooks-u5` | pending | Local verification passed; preparing PR.                            |
+| U5 Strands Runbook Context and Capability Mapping | active  | `codex/runbooks-u5` | #1123   | Local verification passed; PR checks in progress.                   |
 | U6 Computer UI Confirmation and Queue             | pending | pending             | pending | Depends on U2 and U3.                                               |
 | U7 Artifact Builder Runbook Bridge                | pending | pending             | pending | Depends on U1, U5, and U6.                                          |
 | U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending | pending             | pending | Depends on U1 through U7.                                           |
@@ -65,7 +66,7 @@ status: active
 | U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
 | U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
 | U4   | #1122 | merged | `e0ad47d6`   | Required checks passed before squash merge. |
-| U5   | TBD   | local  | pending      | Local verification passed; preparing PR.    |
+| U5   | #1123 | open   | pending      | PR checks in progress.                      |
 
 ## CI / Verification Notes
 
