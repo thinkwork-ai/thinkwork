@@ -183,18 +183,21 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(/computer_host_csp/);
     expect(source).toMatch(/script-src 'self'/);
     expect(source).toMatch(/frame-ancestors 'none'/);
-    // connect-src must allow AppSync / Cognito for the streaming
-    // wire and auth flow.
+    // connect-src must allow API Gateway for GraphQL queries/mutations,
+    // AppSync for the streaming wire, and Cognito for auth flow.
+    expect(source).toMatch(/execute-api/);
     expect(source).toMatch(/appsync-api/);
     expect(source).toMatch(/cognito-idp/);
   });
 
-  it("host CSP AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
+  it("host CSP API Gateway + AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
     // Plan-012: non-us-east-1 stages (e.g. eu-west-1) would have a
     // broken host CSP if the region were hardcoded. var.region drives
-    // the AppSync API host, AppSync realtime host, and Cognito IdP
-    // host segments.
+    // the API Gateway, AppSync API, AppSync realtime, and Cognito IdP
+    // host segments. API Gateway is required for GraphQL
+    // queries/mutations; AppSync is subscriptions only.
     const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/execute-api\.\$\{var\.region\}\.amazonaws\.com/);
     expect(source).toMatch(/appsync-api\.\$\{var\.region\}\.amazonaws\.com/);
     expect(source).toMatch(
       /appsync-realtime-api\.\$\{var\.region\}\.amazonaws\.com/,
@@ -204,6 +207,7 @@ describe("U10 — host CSP wired for computer_site", () => {
     // host CSP. (Other terraform resources legitimately reference
     // us-east-1 — e.g. CloudFront ACM cert region — so we scope the
     // regex to the known CSP host suffixes.)
+    expect(source).not.toMatch(/execute-api\.us-east-1\.amazonaws\.com/);
     expect(source).not.toMatch(/appsync-api\.us-east-1\.amazonaws\.com/);
     expect(source).not.toMatch(
       /appsync-realtime-api\.us-east-1\.amazonaws\.com/,
