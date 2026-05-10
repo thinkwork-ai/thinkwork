@@ -9,6 +9,10 @@ import {
   useAppletInstanceId,
   type AppletModuleLoader,
 } from "@/applets/mount";
+import {
+  Artifact,
+  ArtifactContent,
+} from "@/components/ai-elements/artifact";
 import type { AppletPayload } from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
 
@@ -63,13 +67,18 @@ export function InlineAppletEmbed({
     );
   }
 
+  // Plan-012 U12: lighter <Artifact> variant for inline embeds. The
+  // surrounding thread message bubble already provides regenerate /
+  // branch chrome via useChat, so the inline variant drops the header
+  // entirely; the wrapper exists so future stylesheet passes can
+  // target inline applets uniformly with canvas applets.
   return (
-    <div
-      className="overflow-hidden rounded-md border border-border/70 bg-background"
+    <Artifact
+      className="overflow-hidden rounded-md border border-border/70 bg-background shadow-none"
       data-testid="inline-applet-embed"
       style={{ height, maxHeight: "70vh" }}
     >
-      <div className="h-full overflow-auto">
+      <ArtifactContent className="h-full overflow-auto p-0">
         <AppletMount
           appId={appId}
           instanceId={instanceId}
@@ -78,7 +87,7 @@ export function InlineAppletEmbed({
           loadModule={loadModule}
           hideRefreshControl
         />
-      </div>
-    </div>
+      </ArtifactContent>
+    </Artifact>
   );
 }
