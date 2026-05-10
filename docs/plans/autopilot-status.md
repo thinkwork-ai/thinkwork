@@ -17,7 +17,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - **Worktree:** `.Codex/worktrees/computer-ai-elements-u2`
 - **Started:** 2026-05-10
 - **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1112
-- **Status:** PR opened; CI pending
+- **Status:** CI passed; ready to squash merge
 
 ## Progress Log
 
@@ -30,6 +30,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
 - 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
 - 2026-05-10: Opened PR #1112.
+- 2026-05-10: PR #1112 CI passed: CLA, lint, verify, typecheck, and test.
 - 2026-05-10: Created isolated U1 worktree from `origin/main`.
 - 2026-05-10: Carried the active plan file into the U1 branch because it was created locally before autopilot started.
 - 2026-05-10: Migrated `TaskThreadView` transcript structure to AI Elements `Conversation` and role-aware `Message` primitives while preserving existing stream, Thinking, artifact-card, and composer behavior.
