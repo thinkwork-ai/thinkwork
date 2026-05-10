@@ -184,10 +184,33 @@ A chunk arriving with an unknown `type` is dropped with a structured
 warning; the stream remains healthy. A chunk addressing a part already in
 terminal state is dropped with a structured warning.
 
-A chunk without an `id` field is treated as a legacy `{text}`-shape chunk
-(forward-compat for any straggler emission paths) and routed to the
-legacy text-append fallback; once Phase 2 of plan-012 ships fully, this
-fallback is removed in a follow-up cleanup PR.
+### Legacy-vs-protocol detection (shape-based, not id-based)
+
+Some valid protocol chunk types legitimately have no `id` field — `start`,
+`finish`, `start-step`, `finish-step`, `abort`, and `error` are
+transport-level signals that carry no per-part identity. Tool chunks
+(`tool-input-available`, `tool-output-available`) carry `toolCallId` but
+not `id`. These are normal protocol traffic and MUST flow through the
+protocol path, not a legacy fallback.
+
+Legacy-shape detection is therefore **shape-based**, not id-based. A
+parsed chunk is treated as a legacy `{text}` envelope when ALL of the
+following hold:
+
+1. The chunk has no `type` field, or `type` is not a string.
+2. The chunk has a `text` field whose value is a string.
+
+Anything else — including a chunk with a known protocol `type` but no
+`id` — is protocol traffic and is dispatched by `type`. A chunk that
+matches neither the legacy nor any known protocol shape is dropped with a
+structured warning; the stream remains healthy.
+
+This rule survives the Phase 2 cleanup that retires the legacy fallback:
+the cleanup deletes the legacy branch of `mergeUIMessageChunks` and the
+chunk parser's legacy detector, leaving only the type-dispatch path.
+Until then, the legacy shape is the **only** path that uses an
+absence-of-`type` test; protocol chunks are never demoted to legacy
+because of a missing `id`.
 
 ## `useChat` transport submit-ownership
 
@@ -501,6 +524,7 @@ font-src 'self' data:;
 connect-src 'none';
 object-src 'none';
 base-uri 'self';
+frame-ancestors https://thinkwork.ai https://dev.thinkwork.ai;
 ```
 
 Notes:
@@ -518,9 +542,17 @@ Notes:
   envelopes. Defense-in-depth: even if the host CSP regresses, the
   iframe's `connect-src 'none'` blocks fetch/exfiltration inside the
   iframe boundary.
-- `X-Frame-Options` is **omitted** on this distribution; the iframe is
-  meant to be framed by `apps/computer`. Use `frame-ancestors` if a
-  successor needs to constrain framing.
+- `frame-ancestors` allowlists the Computer parent origins (production
+  + staging/dev analogues) so that hostile pages cannot frame the
+  iframe-shell standalone. The exact origin list is wired in the
+  CloudFront response-headers policy from Terraform per stage and MUST
+  match the iframe-shell's `__ALLOWED_PARENT_ORIGINS__` Vite `define`
+  list — they are the same trust set, expressed at two layers (CSP
+  network gate + JS message gate).
+- `X-Frame-Options` is **omitted** on this distribution because it must
+  be framed by `apps/computer`; CSP `frame-ancestors` is the canonical
+  modern equivalent and avoids the legacy header's binary
+  same-origin-only behavior.
 - `X-Content-Type-Options: nosniff` is set as a non-CSP header on both
   distributions.
 
