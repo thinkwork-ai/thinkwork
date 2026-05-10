@@ -12,15 +12,23 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Current Unit
 
-- **Unit:** U6 — Update generated App authoring guidance
-- **Branch:** `codex/computer-ai-elements-u6-authoring-guidance`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u6`
+- **Unit:** U7 — Conversation and Artifact visual/regression verification
+- **Branch:** `codex/computer-ai-elements-u7-visual-regression`
+- **Worktree:** `.Codex/worktrees/computer-ai-elements-u7`
 - **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1116
-- **Status:** CI passed; ready to squash merge
+- **PR:** Pending
+- **Status:** Local verification complete; ready for U7 PR
 
 ## Progress Log
 
+- 2026-05-10: Squash-merged U6 PR #1116 into `main`, deleted the remote and local U6 branch, removed the U6 worktree, and fast-forwarded local `main`.
+- 2026-05-10: Created isolated U7 worktree from updated `origin/main`.
+- 2026-05-10: Started U7 Computer dev server on `http://127.0.0.1:5174` and iframe-shell dev server on `http://localhost:5175` for visual/regression validation.
+- 2026-05-10: Verification passed: focused Computer Artifact/Conversation tests covering `TaskThreadView`, inline generated App artifacts, full artifact shell, iframe controller, and host registry.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
+- 2026-05-10: Browser smoke passed on `localhost:5174`: thread transcript rendered, inline generated App mounted through sandbox iframe, full artifact route rendered the same sandboxed App, and the app route back control returned to the originating thread.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
 - 2026-05-10: Squash-merged U5 PR #1115 into `main`, deleted the remote and local U5 branch, removed the U5 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U6 worktree from updated `origin/main`.
 - 2026-05-10: Updated Artifact Builder defaults to state that host-provided Artifact chrome owns title/actions/refresh placement, generated TSX should render only body content, and generated Apps run in the sandboxed iframe runtime.
@@ -82,6 +90,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Merged PRs
 
+- PR #1116 — `docs(computer): update generated app authoring guidance`
 - PR #1115 — `refactor(computer): codify app artifact runtime trust`
 - PR #1114 — `refactor(computer): align full app canvas with artifact shell`
 - PR #1113 — `refactor(computer): render inline apps through artifact shell`
