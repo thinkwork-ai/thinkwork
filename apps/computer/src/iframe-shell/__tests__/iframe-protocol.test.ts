@@ -12,7 +12,7 @@
  *      passed channelId.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
 	IframePayloadSecretLeakError,
 	assertNoSecretsInPayload,
@@ -20,6 +20,8 @@ import {
 	buildEnvelope,
 	newChannelId,
 	newMsgId,
+	resolveAllowedParentOrigins,
+	resolveSandboxIframeSrc,
 	validateInboundEnvelope,
 } from "../iframe-protocol";
 
@@ -172,5 +174,110 @@ describe("assertNoSecretsInPayload — no-secrets invariant", () => {
 		expect(() => assertNoSecretsInPayload(null)).not.toThrow();
 		expect(() => assertNoSecretsInPayload(undefined)).not.toThrow();
 		expect(() => assertNoSecretsInPayload("string")).not.toThrow();
+	});
+});
+
+describe("resolveSandboxIframeSrc — Vitest test-fallback branch", () => {
+	// Vite's `define` plugin does not run under Vitest, so the bare
+	// identifier `__SANDBOX_IFRAME_SRC__` is genuinely undeclared and
+	// `typeof __SANDBOX_IFRAME_SRC__` returns "undefined". The
+	// resolver falls through to globalThis lookup so tests can stage
+	// values without rebuilding. The build-time substitution path
+	// itself is covered by build-define-smoke.test.ts.
+
+	const originalSrc = (
+		globalThis as { __SANDBOX_IFRAME_SRC__?: string }
+	).__SANDBOX_IFRAME_SRC__;
+	const originalOrigins = (
+		globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+	).__ALLOWED_PARENT_ORIGINS__;
+
+	afterEach(() => {
+		if (originalSrc === undefined) {
+			delete (globalThis as { __SANDBOX_IFRAME_SRC__?: string })
+				.__SANDBOX_IFRAME_SRC__;
+		} else {
+			(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ =
+				originalSrc;
+		}
+		if (originalOrigins === undefined) {
+			delete (globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] })
+				.__ALLOWED_PARENT_ORIGINS__;
+		} else {
+			(
+				globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+			).__ALLOWED_PARENT_ORIGINS__ = originalOrigins;
+		}
+	});
+
+	it("returns the production default when no override is staged", () => {
+		delete (globalThis as { __SANDBOX_IFRAME_SRC__?: string })
+			.__SANDBOX_IFRAME_SRC__;
+		expect(resolveSandboxIframeSrc()).toBe(
+			"https://sandbox.thinkwork.ai/iframe-shell.html",
+		);
+	});
+
+	it("returns the staged URL from globalThis when set", () => {
+		(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ =
+			"https://sandbox.dev.thinkwork.test/iframe-shell.html";
+		expect(resolveSandboxIframeSrc()).toBe(
+			"https://sandbox.dev.thinkwork.test/iframe-shell.html",
+		);
+	});
+
+	it("ignores empty-string globalThis overrides and falls back to default", () => {
+		(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ =
+			"";
+		expect(resolveSandboxIframeSrc()).toBe(
+			"https://sandbox.thinkwork.ai/iframe-shell.html",
+		);
+	});
+});
+
+describe("resolveAllowedParentOrigins — Vitest test-fallback branch", () => {
+	const originalOrigins = (
+		globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+	).__ALLOWED_PARENT_ORIGINS__;
+
+	afterEach(() => {
+		if (originalOrigins === undefined) {
+			delete (globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] })
+				.__ALLOWED_PARENT_ORIGINS__;
+		} else {
+			(
+				globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+			).__ALLOWED_PARENT_ORIGINS__ = originalOrigins;
+		}
+	});
+
+	it("returns the production default when no override is staged", () => {
+		delete (globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] })
+			.__ALLOWED_PARENT_ORIGINS__;
+		expect(resolveAllowedParentOrigins()).toEqual([
+			"https://thinkwork.ai",
+		]);
+	});
+
+	it("returns the staged list from globalThis when set", () => {
+		(
+			globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+		).__ALLOWED_PARENT_ORIGINS__ = [
+			"https://thinkwork.ai",
+			"https://dev.thinkwork.ai",
+		];
+		expect(resolveAllowedParentOrigins()).toEqual([
+			"https://thinkwork.ai",
+			"https://dev.thinkwork.ai",
+		]);
+	});
+
+	it("ignores empty array overrides and falls back to default", () => {
+		(
+			globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
+		).__ALLOWED_PARENT_ORIGINS__ = [];
+		expect(resolveAllowedParentOrigins()).toEqual([
+			"https://thinkwork.ai",
+		]);
 	});
 });

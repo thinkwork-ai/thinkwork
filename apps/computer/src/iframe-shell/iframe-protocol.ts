@@ -243,34 +243,95 @@ export class IframePayloadSecretLeakError extends Error {
 }
 
 /**
- * Build-time injected sandbox iframe URL — Vite's `define` substitutes
- * `__SANDBOX_IFRAME_SRC__` at build time per stage.
+ * Build-time substituted globals.
  *
- * In test environments (vitest), the substitution is the literal string
- * `__SANDBOX_IFRAME_SRC__`, so the function below resolves a sentinel
- * that test fixtures override.
+ * Vite's `define` plugin replaces bare identifier references at build
+ * time. To get production substitution we MUST read the bare
+ * identifier (e.g. `__SANDBOX_IFRAME_SRC__`), not a property read like
+ * `globalThis.__SANDBOX_IFRAME_SRC__` — Vite's textual-replacement
+ * pass is anchored on the bare-identifier syntax (or on explicitly
+ * dotted define keys). Reading via `globalThis.X` would silently fall
+ * through to the fallback in every production bundle, which is what
+ * Codex flagged as a build-time blocker.
+ *
+ * The `typeof <identifier> !== "undefined"` guard is the standard
+ * cross-environment pattern: in production after Vite substitutes
+ * `__SANDBOX_IFRAME_SRC__` with the literal string, the typeof check
+ * narrows to `"string"` and the read returns the build-time value;
+ * in Vitest (no Vite `define`) the identifier is genuinely undeclared
+ * and `typeof` returns `"undefined"` without throwing a ReferenceError,
+ * so we fall through to the test-override path that reads
+ * `globalThis.__SANDBOX_IFRAME_SRC__` for `vi.stubGlobal`-style tests.
+ *
+ * Keep in sync with the Terraform CSP frame-ancestors list (contract
+ * v1 §CSP profile, U3 var.computer_sandbox_allowed_parent_origins).
  */
-export const SANDBOX_IFRAME_SRC: string =
-	(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ ??
+
+declare const __SANDBOX_IFRAME_SRC__: string;
+declare const __ALLOWED_PARENT_ORIGINS__: readonly string[];
+
+const SANDBOX_IFRAME_SRC_DEFAULT =
 	"https://sandbox.thinkwork.ai/iframe-shell.html";
 
+const ALLOWED_PARENT_ORIGINS_DEFAULT: readonly string[] = Object.freeze([
+	"https://thinkwork.ai",
+]);
+
 /**
- * Build-time injected list of trusted parent origins. The iframe-shell
- * uses this to validate `event.origin` on inbound parent messages.
- * Keep in sync with the Terraform CSP frame-ancestors list (contract v1
- * §CSP profile, U3 var.computer_sandbox_allowed_parent_origins).
+ * Production build-time-substituted iframe URL. Tests can override via
+ * `globalThis.__SANDBOX_IFRAME_SRC__` (which only takes effect when
+ * the bare identifier is undeclared — i.e. in Vitest where Vite
+ * `define` has not run).
  */
-export const ALLOWED_PARENT_ORIGINS: readonly string[] = (() => {
+export function resolveSandboxIframeSrc(): string {
+	if (typeof __SANDBOX_IFRAME_SRC__ !== "undefined") {
+		// Defensive: a zero-length build-time substitution would still
+		// satisfy `typeof !== "undefined"` (and Vitest sees globalThis
+		// assignments as bare-identifier hits). Treat empty as unset.
+		if (
+			typeof __SANDBOX_IFRAME_SRC__ === "string" &&
+			__SANDBOX_IFRAME_SRC__.length > 0
+		) {
+			return __SANDBOX_IFRAME_SRC__;
+		}
+	}
+	const fromGlobal = (
+		globalThis as { __SANDBOX_IFRAME_SRC__?: string }
+	).__SANDBOX_IFRAME_SRC__;
+	return typeof fromGlobal === "string" && fromGlobal.length > 0
+		? fromGlobal
+		: SANDBOX_IFRAME_SRC_DEFAULT;
+}
+
+/**
+ * Production build-time-substituted parent-origin allowlist. Tests
+ * override via `globalThis.__ALLOWED_PARENT_ORIGINS__`.
+ */
+export function resolveAllowedParentOrigins(): readonly string[] {
+	if (typeof __ALLOWED_PARENT_ORIGINS__ !== "undefined") {
+		const list = __ALLOWED_PARENT_ORIGINS__;
+		if (Array.isArray(list) && list.length > 0) {
+			return Object.freeze([...list]);
+		}
+	}
 	const fromGlobal = (
 		globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }
 	).__ALLOWED_PARENT_ORIGINS__;
 	if (Array.isArray(fromGlobal) && fromGlobal.length > 0) {
 		return Object.freeze([...fromGlobal]);
 	}
-	// Default fallback — production builds substitute these via Vite
-	// `define` at build time; tests override via the global.
-	return Object.freeze(["https://thinkwork.ai"]);
-})();
+	return ALLOWED_PARENT_ORIGINS_DEFAULT;
+}
+
+/**
+ * Eager-resolved exports for call sites that don't need to re-read at
+ * runtime (e.g. iframe-shell's boot-time allowlist assertion). The
+ * resolver helpers above are the testable surface; these constants
+ * are the production read path.
+ */
+export const SANDBOX_IFRAME_SRC: string = resolveSandboxIframeSrc();
+export const ALLOWED_PARENT_ORIGINS: readonly string[] =
+	resolveAllowedParentOrigins();
 
 /**
  * Defense: assert the allowlist never contains the dangerous values
