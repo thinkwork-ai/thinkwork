@@ -8,9 +8,16 @@ import {
   validateRunbookDefinition,
 } from "./schema.js";
 
-export const defaultRunbooksRoot = fileURLToPath(
-  new URL("../runbooks", import.meta.url),
-);
+export const defaultRunbooksRoot = fileURLToPath(resolveDefaultRunbooksRoot());
+
+export function resolveDefaultRunbooksRoot(importMetaUrl = import.meta.url) {
+  const sourceRoot = fileURLToPath(new URL("../runbooks", importMetaUrl));
+  const bundledRoot = fileURLToPath(new URL("./runbooks", importMetaUrl));
+
+  if (existsSync(sourceRoot)) return new URL("../runbooks", importMetaUrl);
+  if (existsSync(bundledRoot)) return new URL("./runbooks", importMetaUrl);
+  return new URL("../runbooks", importMetaUrl);
+}
 
 export function loadRunbookFromDirectory(directory: string): RunbookDefinition {
   const yamlPath = join(directory, "runbook.yaml");
