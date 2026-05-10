@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppsGallery } from "@/components/apps/AppsGallery";
+import {
+  ArtifactsCreateAction,
+  ArtifactsListBody,
+} from "@/components/artifacts/ArtifactsListBody";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 export const Route = createFileRoute("/_authed/_shell/artifacts/")({
@@ -7,6 +10,10 @@ export const Route = createFileRoute("/_authed/_shell/artifacts/")({
 });
 
 function ArtifactsPage() {
-  usePageHeaderActions({ title: "Artifacts" });
-  return <AppsGallery />;
+  usePageHeaderActions({
+    title: "Artifacts",
+    action: <ArtifactsCreateAction />,
+    actionKey: "artifacts-create",
+  });
+  return <ArtifactsListBody />;
 }

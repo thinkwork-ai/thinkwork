@@ -34,6 +34,23 @@ export interface AppletPayload {
   applet?: AppletPreviewNode | null;
 }
 
+export function shortModel(value?: string | null, fallback = "—"): string {
+  if (!value) return fallback;
+  const parts = value.split(/[/:.]/).filter(Boolean);
+  return parts.at(-1) ?? value;
+}
+
+export function formatShortDate(
+  value?: string | null,
+  options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" },
+  fallback = "—",
+): string {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleDateString(undefined, options);
+}
+
 export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
   const title = applet.name?.trim() || "Generated app";
   const prompt = applet.prompt?.trim();
