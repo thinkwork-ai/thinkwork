@@ -25,7 +25,22 @@ export const threadTypeResolvers = {
 	},
 	messages: async (thread: any, args: any, _ctx: GraphQLContext) => {
 		const limit = Math.min(args.limit || 50, 200);
+		// Plan-012 U7: belt-and-suspenders tenant scoping. The thread row
+		// here was already fetched through a tenant-aware path
+		// (Query.thread / Query.threads / etc.), but adding Message.parts
+		// — which carries tool input/output and reasoning content per
+		// contract v1 — means we want a defense-in-depth filter on every
+		// query that selects messages. If `thread.tenantId` is set on the
+		// parent (it always is for resolvers reachable from
+		// thread.query.ts and threadToCamel), gate the message read on
+		// it; otherwise fall back to thread_id-only and trust the
+		// upstream gate.
+		const threadTenantId =
+			thread.tenantId ?? thread.tenant_id ?? null;
 		const conditions = [eq(messages.thread_id, thread.id)];
+		if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
+			conditions.push(eq(messages.tenant_id, threadTenantId));
+		}
 		if (args.cursor) {
 			conditions.push(lt(messages.created_at, new Date(args.cursor)));
 		}
