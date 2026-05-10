@@ -20,8 +20,20 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+  type PromptInputMessage,
+} from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
-import { Button, Textarea } from "@thinkwork/ui";
+import { renderTypedParts } from "@/components/computer/render-typed-part";
+import type { UIMessageStreamState } from "@/lib/ui-message-merge";
+import { useComposerState } from "@/lib/use-composer-state";
+import { Button } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
   type GeneratedArtifact,
@@ -79,6 +91,7 @@ interface TaskThreadViewProps {
   isLoading?: boolean;
   error?: string | null;
   streamingChunks?: ComputerThreadChunk[];
+  streamState?: UIMessageStreamState;
   isSending?: boolean;
   onSendFollowUp?: (content: string) => Promise<void> | void;
 }
@@ -88,6 +101,7 @@ export function TaskThreadView({
   isLoading = false,
   error,
   streamingChunks = [],
+  streamState,
   isSending = false,
   onSendFollowUp,
 }: TaskThreadViewProps) {
@@ -213,6 +227,11 @@ export function TaskThreadView({
                     ? streamingChunks
                     : []
                 }
+                streamState={
+                  index === latestUserIndex && showStreamingBuffer
+                    ? streamState
+                    : undefined
+                }
                 showProcessingShimmer={
                   index === latestUserIndex && showProcessingShimmer
                 }
@@ -240,21 +259,42 @@ function TranscriptSegment({
   turn,
   isLatestUser,
   streamingChunks,
+  streamState,
   showProcessingShimmer,
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
   isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
+  streamState?: UIMessageStreamState;
   showProcessingShimmer: boolean;
 }) {
+  // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
+  // render via renderTypedParts (Reasoning + Tool + Response per part).
+  // Falls back to the legacy chunk-based StreamingMessageBuffer when the
+  // wire still produces {text} envelopes (non-Computer agents and
+  // pre-U6 historical messages).
+  const hasTypedParts =
+    streamState != null && streamState.parts.length > 0;
   return (
     <>
       <TranscriptMessage message={message} />
       {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
         <>
-          {streamingChunks.length > 0 ? (
+          {hasTypedParts ? (
+            <article aria-label="Streaming assistant response">
+              {renderTypedParts(streamState!.parts, {
+                keyPrefix: `${message.id}::stream`,
+              })}
+              {streamState!.status === "streaming" ? (
+                <span
+                  aria-label="Computer is typing"
+                  className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground align-middle"
+                />
+              ) : null}
+            </article>
+          ) : streamingChunks.length > 0 ? (
             <StreamingMessageBuffer chunks={streamingChunks} />
           ) : null}
           {showProcessingShimmer ? <ProcessingShimmer /> : null}
@@ -515,95 +555,56 @@ function FollowUpComposer({
   isSending?: boolean;
   onSubmit?: (content: string) => Promise<void> | void;
 }) {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const canSubmit = value.trim().length > 0 && !disabled && !isSending;
+  const composer = useComposerState(null);
+  const canSubmit = composer.text.trim().length > 0 && !disabled && !isSending;
 
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "32px";
-    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 32), 160)}px`;
-  }, [value]);
-
-  async function handleSubmit(event?: FormEvent) {
-    event?.preventDefault();
+  // Plan-012 U13: in-thread composer migrated to AI Elements
+  // <PromptInput>. Shares useComposerState with the empty-thread
+  // composer; submit semantics unchanged. The composer never invokes
+  // the turn-start mutation directly (single-submit invariant, P0) —
+  // the route's onSendFollowUp is the sole owner of the call.
+  async function handlePromptSubmit(_message: PromptInputMessage) {
     if (!canSubmit || !onSubmit) return;
-    setError(null);
+    composer.setError(null);
+    composer.setSubmitting(true);
     try {
-      await onSubmit(value.trim());
-      setValue("");
+      await onSubmit(composer.text.trim());
+      composer.clear();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send");
+      composer.setError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      composer.setSubmitting(false);
     }
   }
 
   return (
-    <form
-      className="grid gap-3 rounded-2xl border border-border/80 bg-background p-3 shadow-lg transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 dark:bg-input/95"
-      onSubmit={handleSubmit}
-    >
-      <Textarea
-        ref={textareaRef}
-        aria-label="Follow up"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !event.nativeEvent.isComposing
-          ) {
-            event.preventDefault();
-            void handleSubmit();
-          }
-        }}
-        placeholder="Type a command..."
-        rows={1}
-        className="field-sizing-fixed h-8 max-h-40 min-h-8 resize-none overflow-hidden border-0 bg-transparent px-1 py-1 text-lg leading-6 shadow-none focus-visible:ring-0 disabled:bg-transparent disabled:opacity-100 dark:bg-transparent dark:disabled:bg-transparent"
-        // Don't disable the textarea while a send is in flight — the shared
-        // Textarea applies a muted disabled-bg + reduced opacity that flashes
-        // visibly on every Enter. The send button is already gated on
-        // canSubmit, so the user can't double-fire. They can keep typing the
-        // next message while the previous one streams.
-        disabled={disabled}
-      />
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" disabled>
-            <Plus className="size-5" />
-            <span className="sr-only">Add source</span>
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="gap-2 rounded-full"
-            disabled
-          >
-            <Search className="size-4" />
-            Search
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" disabled>
-            <Mic className="size-4" />
-            <span className="sr-only">Voice input</span>
-          </Button>
-          <Button
-            type="submit"
-            size="icon"
-            className="rounded-full"
+    <div className="grid gap-2">
+      <PromptInput
+        className="rounded-2xl border border-border/80 bg-background shadow-lg transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 dark:bg-input/95"
+        onSubmit={handlePromptSubmit}
+      >
+        <PromptInputBody>
+          <PromptInputTextarea
+            aria-label="Follow up"
+            value={composer.text}
+            onChange={(event) => composer.setText(event.target.value)}
+            placeholder="Type a command..."
+            disabled={disabled}
+          />
+        </PromptInputBody>
+        <PromptInputFooter>
+          <PromptInputTools />
+          <PromptInputSubmit
             disabled={!canSubmit}
+            status={isSending ? "submitted" : undefined}
             aria-label={isSending ? "Sending" : "Send"}
-          >
-            <ArrowUp className="size-4" />
-          </Button>
-        </div>
-      </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </form>
+          />
+        </PromptInputFooter>
+      </PromptInput>
+      {composer.error ? (
+        <p className="text-sm text-destructive">{composer.error}</p>
+      ) : null}
+    </div>
   );
 }
 

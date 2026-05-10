@@ -114,7 +114,7 @@ export function ComputerThreadDetailRoute({
       pause: !computerId,
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
-  const { chunks, reset: resetStreamingChunks } =
+  const { chunks, streamState, reset: resetStreamingChunks } =
     useComputerThreadChunks(threadId);
 
   // Plan-012 U8: instantiate the useChat AppSync transport adapter for
@@ -234,6 +234,7 @@ export function ComputerThreadDetailRoute({
       isLoading={fetching && !data}
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
+      streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
       onSendFollowUp={async (content) => {
         setOptimisticMessage(content);
