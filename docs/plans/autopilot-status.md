@@ -13,7 +13,7 @@ status: active
 - Active unit: U4 Sequential Runbook Executor
 - Active branch/worktree: `codex/runbooks-u4` at `.Codex/worktrees/runbooks-u4`
 - Latest synced base: `origin/main` at `573ac4bb`
-- Overall status: U4 local verification complete; preparing PR
+- Overall status: U4 PR open; monitoring CI
 
 ## Progress Log
 
@@ -38,6 +38,7 @@ status: active
 - 2026-05-10: Removed U3 remote/local branch and worktree, synced `main`, and started U4 in `.Codex/worktrees/runbooks-u4` on branch `codex/runbooks-u4`.
 - 2026-05-10: Implemented U4 sequential runbook executor, runtime API endpoints for runbook context/task/run state, Computer runtime client methods, and coarse task cancellation support.
 - 2026-05-10: Completed U4 local verification: focused runtime/API tests, package typechecks/builds, workspace tests, workspace lint scripts, workspace build, diff check, and touched-file Prettier check passed.
+- 2026-05-10: Opened U4 PR #1122 from `codex/runbooks-u4`.
 
 ## Implementation Units
 
@@ -46,7 +47,7 @@ status: active
 | U1 Runbook Source Package                         | merged  | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed. |
 | U2 Catalog and Run Data Model                     | merged  | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed. |
 | U3 Routing and Confirmation API                   | merged  | `codex/runbooks-u3` | #1121   | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
-| U4 Sequential Runbook Executor                    | active  | `codex/runbooks-u4` | pending | Local verification passed; preparing PR.                            |
+| U4 Sequential Runbook Executor                    | active  | `codex/runbooks-u4` | #1122   | Local verification passed; PR checks in progress.                   |
 | U5 Strands Runbook Context and Capability Mapping | pending | pending             | pending | Depends on U1 and U4.                                               |
 | U6 Computer UI Confirmation and Queue             | pending | pending             | pending | Depends on U2 and U3.                                               |
 | U7 Artifact Builder Runbook Bridge                | pending | pending             | pending | Depends on U1, U5, and U6.                                          |
@@ -59,7 +60,7 @@ status: active
 | U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge. |
 | U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
 | U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
-| U4   | TBD   | local  | pending      | Local verification passed; preparing PR.    |
+| U4   | #1122 | open   | pending      | PR checks in progress.                     |
 
 ## CI / Verification Notes
 
