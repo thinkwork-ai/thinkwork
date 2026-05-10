@@ -9,9 +9,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U3 — Experimental Thread + Canvas route
-- Branch: `codex/agui-spike-u3`
-- Worktree: `.Codex/worktrees/agui-spike-u3`
+- Unit: U4 — Registered Canvas component proof
+- Branch: `codex/agui-spike-u4`
+- Worktree: `.Codex/worktrees/agui-spike-u4`
 - Status: in progress
 
 ## Progress Log
@@ -35,6 +35,13 @@ status: active
 - 2026-05-10: Implemented `/agui/threads/$id` experimental route with transcript, run/tool timeline, Canvas placeholder, diagnostics, raw chunk subscription handling, and follow-up sending.
 - 2026-05-10: Verified U3 with route tests, full `@thinkwork/computer` tests, typecheck, build, and Prettier.
 - 2026-05-10: Opened PR #1104: https://github.com/thinkwork-ai/thinkwork/pull/1104.
+- 2026-05-10: PR #1104 passed CI and was squash-merged to `main`.
+- 2026-05-10: Removed U3 worktree/local branch and synced `main`.
+- 2026-05-10: Created U4 worktree from `origin/main`.
+- 2026-05-10: Started U4 registered Canvas component proof implementation.
+- 2026-05-10: Implemented registered `lastmile_risk_canvas` rendering with zod prop validation and diagnostic fallbacks for unknown components or invalid props.
+- 2026-05-10: Verified U4 with registry/component tests, route regression test, full `@thinkwork/computer` tests, typecheck, and Prettier.
+- 2026-05-10: Opened PR #1105: https://github.com/thinkwork-ai/thinkwork/pull/1105.
 
 ## Unit Status
 
@@ -42,8 +49,8 @@ status: active
 | -------------------------------------------------------- | ------- | --------------------- | ----- | ----------------------------------------------------------------------------------------------- |
 | U1 — Local AG-UI event model and existing-stream adapter | Merged  | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up.                                                          |
 | U2 — Server helper for typed spike events                | Merged  | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up.                                                          |
-| U3 — Experimental Thread + Canvas route                  | PR open | `codex/agui-spike-u3` | #1104 | Awaiting CI.                                                                                    |
-| U4 — Registered Canvas component proof                   | Pending |                       |       | Starts after U3 merges.                                                                         |
+| U3 — Experimental Thread + Canvas route                  | Merged  | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up.                                                          |
+| U4 — Registered Canvas component proof                   | PR open | `codex/agui-spike-u4` | #1105 | Awaiting CI.                                                                                    |
 | U5 — Real scenario smoke path                            | Pending |                       |       | Starts after U4 merges.                                                                         |
 | U6 — Optional OSS CopilotKit integration check           | Pending |                       |       | Starts after U5; may be skipped only if U5 verdict rejects package integration as out of scope. |
 | U7 — Verdict document and follow-up recommendation       | Pending |                       |       | Final unit.                                                                                     |
@@ -65,6 +72,11 @@ status: active
 - 2026-05-10 U3: `pnpm --filter @thinkwork/computer build` passed.
 - 2026-05-10 U3: `pnpm --filter @thinkwork/computer test` passed: 212 tests passed.
 - 2026-05-10 U3: `pnpm dlx prettier --check <touched files>` passed.
+- 2026-05-10 U3 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed on PR #1104.
+- 2026-05-10 U4: `pnpm --filter @thinkwork/computer test -- src/agui/component-registry.test.tsx src/components/computer-agui/LastMileRiskCanvas.test.tsx src/components/computer-agui/AguiThreadCanvasRoute.test.tsx` passed.
+- 2026-05-10 U4: `pnpm --filter @thinkwork/computer typecheck` passed.
+- 2026-05-10 U4: `pnpm --filter @thinkwork/computer test` passed: 217 tests passed.
+- 2026-05-10 U4: `pnpm dlx prettier --check <touched files>` passed.
 
 ## Blockers
 
