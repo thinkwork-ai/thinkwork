@@ -195,6 +195,58 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
   });
 
+  it("renders persisted runbook queue parts after reload", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the research dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "Starting Research Dashboard.",
+              parts: [
+                {
+                  type: "data-runbook-queue",
+                  id: "runbook-queue:run-1",
+                  data: {
+                    runbookRunId: "run-1",
+                    displayName: "Research Dashboard",
+                    status: "QUEUED",
+                    phases: [
+                      {
+                        id: "discover",
+                        title: "Discover",
+                        tasks: [
+                          {
+                            id: "task-1",
+                            title: "Gather source material",
+                            status: "PENDING",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Research Dashboard")).toBeTruthy();
+    expect(screen.getByText("Discover")).toBeTruthy();
+    expect(screen.getByText("Gather source material")).toBeTruthy();
+    expect(screen.queryByText("Starting Research Dashboard.")).toBeNull();
+  });
+
   it("renders a completed turn response when the assistant message has not refetched yet", () => {
     render(
       <TaskThreadView

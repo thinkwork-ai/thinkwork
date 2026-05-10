@@ -12,10 +12,10 @@
  */
 
 import type {
-	UIMessage as AiUIMessage,
-	UIMessageChunk as AiUIMessageChunk,
-	UIMessagePart as AiUIMessagePart,
-	UITools,
+  UIMessage as AiUIMessage,
+  UIMessageChunk as AiUIMessageChunk,
+  UIMessagePart as AiUIMessagePart,
+  UITools,
 } from "ai";
 
 /**
@@ -33,10 +33,7 @@ export type UIMessage = AiUIMessage<unknown, Record<string, unknown>, UITools>;
  * (`text | reasoning | tool-${name} | source-url | source-document | file |
  * data-${name} | step-start`).
  */
-export type UIMessagePart = AiUIMessagePart<
-	Record<string, unknown>,
-	UITools
->;
+export type UIMessagePart = AiUIMessagePart<Record<string, unknown>, UITools>;
 
 /**
  * Wire-format chunk emitted by Strands and carried inside
@@ -51,10 +48,7 @@ export type UIMessagePart = AiUIMessagePart<
  * `message-metadata`). Legacy detection therefore MUST be shape-based, not
  * id-based — see the parser for the rule.
  */
-export type UIMessageChunk = AiUIMessageChunk<
-	unknown,
-	Record<string, unknown>
->;
+export type UIMessageChunk = AiUIMessageChunk<unknown, Record<string, unknown>>;
 
 /**
  * Legacy `{text}`-shape envelope produced by the pre-typed `appsync_publisher`
@@ -65,7 +59,7 @@ export type UIMessageChunk = AiUIMessageChunk<
  * goes away.
  */
 export interface LegacyTextChunk {
-	text: string;
+  text: string;
 }
 
 /**
@@ -73,19 +67,79 @@ export interface LegacyTextChunk {
  * `kind` so consumers can branch without re-checking shapes.
  */
 export type ParsedChunk =
-	| { kind: "protocol"; chunk: UIMessageChunk }
-	| { kind: "legacy"; chunk: LegacyTextChunk }
-	| { kind: "drop"; reason: ParseDropReason; raw: unknown };
+  | { kind: "protocol"; chunk: UIMessageChunk }
+  | { kind: "legacy"; chunk: LegacyTextChunk }
+  | { kind: "drop"; reason: ParseDropReason; raw: unknown };
 
 export type ParseDropReason =
-	| "EMPTY"
-	| "INVALID_JSON"
-	| "NOT_OBJECT"
-	| "UNKNOWN_TYPE"
-	| "MALFORMED_PROTOCOL_FIELDS";
+  | "EMPTY"
+  | "INVALID_JSON"
+  | "NOT_OBJECT"
+  | "UNKNOWN_TYPE"
+  | "MALFORMED_PROTOCOL_FIELDS";
 
 /**
  * Computer-thread chat id is the thread UUID. Pulled out as a brand to help
  * call sites avoid string-vs-string mistakes; runtime is still just a string.
  */
 export type ComputerChatId = string & { readonly __brand: "ComputerChatId" };
+
+export interface RunbookConfirmationCandidate {
+  runbookSlug?: string;
+  displayName?: string;
+  description?: string;
+  confidence?: number;
+}
+
+export interface RunbookConfirmationPhase {
+  id?: string;
+  title?: string;
+  dependsOn?: unknown;
+}
+
+export interface RunbookConfirmationData {
+  mode?: "approval" | "choice" | string;
+  runbookRunId?: string;
+  runbookSlug?: string;
+  runbookVersion?: string;
+  title?: string;
+  displayName?: string;
+  description?: string;
+  summary?: string;
+  expectedOutputs?: unknown;
+  likelyTools?: unknown;
+  phaseSummary?: unknown;
+  phases?: RunbookConfirmationPhase[];
+  candidates?: RunbookConfirmationCandidate[];
+  confidence?: number;
+  matchedKeywords?: unknown;
+}
+
+export interface RunbookQueueTask {
+  id?: string;
+  key?: string;
+  taskKey?: string;
+  title?: string;
+  summary?: string;
+  status?: string;
+  dependsOn?: unknown;
+  capabilityRoles?: unknown;
+  sortOrder?: number;
+}
+
+export interface RunbookQueuePhase {
+  id?: string;
+  title?: string;
+  tasks?: RunbookQueueTask[];
+}
+
+export interface RunbookQueueData {
+  runbookRunId?: string;
+  runbookSlug?: string;
+  runbookVersion?: string;
+  displayName?: string;
+  status?: string;
+  currentTaskKey?: string;
+  sourceMessageId?: string;
+  phases?: RunbookQueuePhase[];
+}

@@ -10,10 +10,10 @@ status: active
 
 ## Current State
 
-- Active unit: U5 Strands Runbook Context and Capability Mapping
-- Active branch/worktree: `codex/runbooks-u5` at `.Codex/worktrees/runbooks-u5`
-- Latest synced base: `origin/main` at `e0ad47d6`
-- Overall status: U5 PR open; monitoring CI
+- Active unit: U6 Computer UI Confirmation and Queue
+- Active branch/worktree: `codex/runbooks-u6` at `.Codex/worktrees/runbooks-u6`
+- Latest synced base: `origin/main` at `e41aca1e`
+- Overall status: U6 PR #1124 open; waiting for required CI checks
 
 ## Progress Log
 
@@ -44,6 +44,12 @@ status: active
 - 2026-05-10: Began U5 implementation with Python runbook context formatting, capability role mapping, typed queue update publishing, and Strands prompt wiring.
 - 2026-05-10: Completed U5 local verification: focused Python tests, Strands agent-container tests with transient extras, Python lint/format checks for new modules, workspace typecheck/tests/lint/build, and diff check passed.
 - 2026-05-10: Opened U5 PR #1123 from `codex/runbooks-u5`.
+- 2026-05-10: U5 PR #1123 passed required checks and was squash-merged to `main` at `e41aca1e`.
+- 2026-05-10: Removed U5 remote/local branch and worktree, synced `main`, and started U6 in `.Codex/worktrees/runbooks-u6` on branch `codex/runbooks-u6`.
+- 2026-05-10: Implemented U6 runbook confirmation and queue renderers, runbook GraphQL mutations, persisted `Message.parts` reload rendering, and stable streamed queue data-part replacement.
+- 2026-05-10: Completed U6 focused local verification: Computer runbook component tests, typed chunk parser/merge/transport tests, TaskThreadView persisted-part test, Computer typecheck, Computer build, and diff check passed.
+- 2026-05-10: Completed U6 workspace verification: workspace typecheck, tests, lint scripts, build, and touched-file Prettier check passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
+- 2026-05-10: Opened U6 PR #1124 from `codex/runbooks-u6`.
 
 ## Implementation Units
 
@@ -53,8 +59,8 @@ status: active
 | U2 Catalog and Run Data Model                     | merged  | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed. |
 | U3 Routing and Confirmation API                   | merged  | `codex/runbooks-u3` | #1121   | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
 | U4 Sequential Runbook Executor                    | merged  | `codex/runbooks-u4` | #1122   | Squash-merged to `main` at `e0ad47d6`; branch and worktree removed. |
-| U5 Strands Runbook Context and Capability Mapping | active  | `codex/runbooks-u5` | #1123   | Local verification passed; PR checks in progress.                   |
-| U6 Computer UI Confirmation and Queue             | pending | pending             | pending | Depends on U2 and U3.                                               |
+| U5 Strands Runbook Context and Capability Mapping | merged  | `codex/runbooks-u5` | #1123   | Squash-merged to `main` at `e41aca1e`; branch and worktree removed. |
+| U6 Computer UI Confirmation and Queue             | active  | `codex/runbooks-u6` | #1124   | Required checks pending.                                            |
 | U7 Artifact Builder Runbook Bridge                | pending | pending             | pending | Depends on U1, U5, and U6.                                          |
 | U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending | pending             | pending | Depends on U1 through U7.                                           |
 
@@ -66,7 +72,8 @@ status: active
 | U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
 | U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
 | U4   | #1122 | merged | `e0ad47d6`   | Required checks passed before squash merge. |
-| U5   | #1123 | open   | pending      | PR checks in progress.                      |
+| U5   | #1123 | merged | `e41aca1e`   | Required checks passed before squash merge. |
+| U6   | #1124 | open   | pending      | Required checks pending.                    |
 
 ## CI / Verification Notes
 
@@ -125,6 +132,17 @@ status: active
 | U5   | `pnpm -r --if-present test`                      | passed | Workspace tests completed; notable suites included `packages/api` 242 files / 2493 tests and `apps/computer` 52 files / 363 tests.                               |
 | U5   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                 |
 | U5   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                                |
+| U5   | GitHub required checks                           | passed | cla, lint, test, typecheck, and verify passed on PR #1123 before merge.                                                                                          |
+| U6   | `pnpm install`                                   | passed | Linked fresh worktree dependencies.                                                                                                                              |
+| U6   | focused Computer runbook UI tests                | passed | 94 tests across runbook confirmation, queue, typed chunk parser, UI message merge, AppSync transport, and TaskThreadView persisted-part rendering.               |
+| U6   | `pnpm --filter @thinkwork/computer typecheck`    | passed | Computer app typecheck completed cleanly.                                                                                                                        |
+| U6   | `pnpm --filter @thinkwork/computer build`        | passed | Computer app build completed; emitted pre-existing sourcemap/chunk-size warnings only.                                                                           |
+| U6   | `git diff --check`                               | passed | No whitespace errors.                                                                                                                                            |
+| U6   | `pnpm -r --if-present typecheck`                 | passed | Workspace typecheck completed across packages.                                                                                                                   |
+| U6   | `pnpm -r --if-present test`                      | passed | Workspace tests completed; notable suites included `packages/api` 242 passed / 3 skipped and `apps/computer` 54 files / 373 tests.                               |
+| U6   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                 |
+| U6   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing docs/admin/computer sourcemap and chunk-size warnings only.                                                |
+| U6   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on touched U6 files and status doc. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency.                     |
 
 ## Blockers
 
