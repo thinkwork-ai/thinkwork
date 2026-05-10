@@ -19,7 +19,10 @@ import {
 } from "@/applets/mount";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import type { AppletPayload } from "@/lib/app-artifacts";
+import {
+  resolveGeneratedAppRuntimeMode,
+  type AppletPayload,
+} from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
 
 export const Route = createFileRoute("/_authed/_shell/artifacts/$id")({
@@ -56,6 +59,7 @@ export function AppletRouteContent({
   const applet = data?.applet ?? null;
   const title = applet?.applet?.name?.trim() || "Artifact";
   const source = useMemo(() => appletSource(applet), [applet]);
+  const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
   const latestVersion = applet?.applet?.version ?? null;
   const instanceId = useAppletInstanceId(appId);
   const [mountedSnapshot, setMountedSnapshot] = useState<{
@@ -113,7 +117,7 @@ export function AppletRouteContent({
 
   if (!source) {
     return (
-      <AppArtifactSplitShell title={title}>
+      <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
         <AppletFailure>
           This artifact does not include a source file that can be mounted.
         </AppletFailure>
@@ -127,7 +131,7 @@ export function AppletRouteContent({
     latestVersion > mountedSnapshot.version;
 
   return (
-    <AppArtifactSplitShell title={title}>
+    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
       <div className="grid h-full min-h-0 min-w-0 p-4">
         {hasNewerVersion ? (
           <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">

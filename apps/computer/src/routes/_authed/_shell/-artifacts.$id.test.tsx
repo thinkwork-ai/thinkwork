@@ -37,16 +37,18 @@ const reexecuteAppletQuery = vi.fn();
 function appletPayload({
   source = "export default function App() { return <main>Hello</main>; }",
   version = 1,
+  metadata = { prompt: "hello" },
 }: {
   source?: string;
   version?: number;
+  metadata?: Record<string, unknown>;
 } = {}) {
   return {
     source,
     files: {
       "App.tsx": source,
     },
-    metadata: { prompt: "hello" },
+    metadata,
     applet: {
       appId: "33333333-3333-4333-8333-333333333333",
       name: "Hello applet",
@@ -241,6 +243,33 @@ describe("AppletRouteContent", () => {
         .querySelector('[data-runtime-mode="sandboxedGenerated"]'),
     ).toBeTruthy();
     expect(screen.queryByText("Hello applet")).toBeNull();
+  });
+
+  it("ignores artifact metadata that claims the trusted native runtime", async () => {
+    vi.mocked(useQuery).mockReturnValue([
+      {
+        data: {
+          applet: appletPayload({
+            metadata: { prompt: "hello", runtimeMode: "nativeTrusted" },
+          }),
+        },
+        fetching: false,
+        stale: false,
+        hasNext: false,
+      },
+      reexecuteAppletQuery,
+    ]);
+
+    render(
+      <AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />,
+    );
+
+    await screen.findByTestId("applet-iframe-host");
+    const shell = screen.getByTestId("app-artifact-split-shell");
+    expect(
+      shell.querySelector('[data-runtime-mode="sandboxedGenerated"]'),
+    ).toBeTruthy();
+    expect(shell.querySelector('[data-runtime-mode="nativeTrusted"]')).toBeNull();
   });
 });
 

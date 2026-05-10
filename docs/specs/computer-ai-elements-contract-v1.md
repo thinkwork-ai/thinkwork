@@ -261,6 +261,27 @@ ship a server-side replay buffer.
 state machine `'idle' | 'streaming' | 'closed' | 'errored'` for deploy
 smoke pinning.
 
+## Artifact runtime trust modes
+
+Computer uses an explicit host-owned runtime vocabulary for generated App
+artifact surfaces:
+
+```ts
+type AppArtifactRuntimeMode = "sandboxedGenerated" | "nativeTrusted";
+```
+
+All arbitrary LLM-authored App artifacts resolve to
+`sandboxedGenerated`, regardless of any `metadata.runtimeMode`,
+`metadata.trust`, or similar fields persisted with the artifact. The
+metadata is model-authored/user-influenced content and MUST NOT select
+execution trust. `sandboxedGenerated` means the artifact body mounts
+through `AppletMount` and the iframe substrate described below.
+
+`nativeTrusted` is reserved for a future host-owned path for vetted
+first-party components. It is a vocabulary placeholder only in v1; no
+generated App metadata can opt into it, and this contract does not define
+a native renderer.
+
 ## AppletMount controller contract
 
 Plan-001's `AppletMount` interface

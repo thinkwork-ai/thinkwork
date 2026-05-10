@@ -61,6 +61,27 @@ describe("GeneratedArtifactCard", () => {
     expect(screen.queryByText(/preview unavailable/i)).toBeNull();
   });
 
+  it("does not let generated artifact metadata select the trusted native runtime", () => {
+    const { container } = render(
+      <GeneratedArtifactCard
+        artifact={{
+          id: "artifact_native_claim",
+          title: "Native claim",
+          type: "APPLET",
+          summary: "Metadata tries to escape the sandbox",
+          metadata: { kind: "computer_applet", runtimeMode: "nativeTrusted" },
+        }}
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-runtime-mode="sandboxedGenerated"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-runtime-mode="nativeTrusted"]'),
+    ).toBeNull();
+  });
+
   it("shows Preview unavailable for non-app artifacts", () => {
     render(
       <GeneratedArtifactCard

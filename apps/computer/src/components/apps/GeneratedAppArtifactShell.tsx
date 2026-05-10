@@ -8,15 +8,17 @@ import {
   ArtifactLabel,
   ArtifactTitle,
 } from "@/components/ai-elements/artifact";
+import {
+  GENERATED_APP_RUNTIME_MODE,
+  type AppArtifactRuntimeMode,
+} from "@/lib/app-artifacts";
 import { cn } from "@/lib/utils";
-
-export type GeneratedAppRuntimeMode = "sandboxedGenerated" | "nativeTrusted";
 
 export interface GeneratedAppArtifactShellProps {
   title: string;
   description?: string | null;
   label?: string;
-  runtimeMode?: GeneratedAppRuntimeMode;
+  runtimeMode?: AppArtifactRuntimeMode;
   actions?: ReactNode;
   children: ReactNode;
   showHeader?: boolean;
@@ -29,7 +31,7 @@ export function GeneratedAppArtifactShell({
   title,
   description,
   label = "App",
-  runtimeMode = "sandboxedGenerated",
+  runtimeMode = GENERATED_APP_RUNTIME_MODE,
   actions,
   children,
   showHeader = true,
