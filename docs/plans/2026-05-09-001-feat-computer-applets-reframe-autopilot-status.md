@@ -14,51 +14,33 @@ autopilot mode.
 
 ## 2026-05-09
 
-- **Started prompt-generation follow-up fix:** Created isolated worktree
-  `.Codex/worktrees/computer-smoke-api-key-auth` on branch
-  `codex/computer-smoke-api-key-auth` from fresh `origin/main` after PR #1072
-  merged and main advanced to `392b9da7`.
-- **CI failure:** Deploy run `25607781272` for PR #1072 reached the
-  post-deploy Computer smoke and failed after the streaming portion passed
-  because `scripts/smoke-computer.sh` still required local-only
-  `API_AUTH_SECRET` before running the applet pipeline smoke.
-- **Live E2E failure:** The exact prompt
-  `Build a CRM pipeline risk dashboard for LastMile opportunities, including
-  stale activity, stage exposure, and the top risks to review.` completed in
-  dev thread `b6a68fee-28ef-43be-998d-6ceef83cc8c4`, but no new `applet`
-  artifact was attached to the thread. The runtime tool trace showed the model
-  delegated applet saving instead of making a direct `save_app` call, and
-  Computer-only runtimes did not have `AGENT_ID`, which prevented direct applet
-  tool registration.
-- **Progress:** Updated the applet smoke to use AppSync API-key auth when the
-  service bearer is unavailable, sanitized fixture `threadId` metadata before
-  DB persistence, allowed applet tools to register for Computer-only runtimes
-  without `AGENT_ID`, omitted invalid `x-agent-id` headers, and hardened the
-  Computer-thread contract so applet saving must be done by a direct successful
-  `save_app` call.
-- **Verification note:** Focused applet/runtime Python tests passed locally, and
-  the previously failing applet pipeline smoke now saves, loads, opens,
-  refreshes, persists state, and seeds the CRM fixture using API-key auth.
-  `node --check scripts/smoke/computer-applet-pipeline-smoke.mjs`, `bash -n
-  scripts/smoke-computer.sh`, and `git diff --check` passed. A full local
-  `scripts/smoke-computer.sh --stage dev --region us-east-1` rerun reached the
-  deterministic streaming turn but the deployed task remained `running` after
-  persisting duplicate assistant messages, so the applet-pipeline fix was
-  verified directly and the full post-deploy gate will be rechecked in CI.
-- **Started prompt-generation fix:** Created isolated worktree
-  `.Codex/worktrees/computer-prompt-applet-generation` on branch
-  `codex/computer-prompt-applet-generation` from fresh `origin/main`.
-- **Progress:** Moved the applet-building playbook into a default workspace
-  Agent Skill at `skills/artifact-builder/SKILL.md`, kept only the
-  Computer-thread invariant in the runtime prompt, auto-populated `save_app`
-  metadata with the current thread id and prompt, and linked applets saved
-  during a Computer turn back to the final assistant message so they can render
-  as durable artifacts in the thread.
-- **Verification note:** Focused Python applet/runtime tests, focused API
-  Computer runtime tests, workspace-defaults parity tests, and API plus
-  workspace-defaults typechecks passed locally. The exact live prompt E2E must
-  be rerun after this branch is merged and deployed because dev is still on the
-  previous runtime image/API until the normal pipeline ships the change.
+- **Started cleanup follow-up:** Created isolated worktree
+  `.Codex/worktrees/computer-artifacts-doc-cleanup` on branch
+  `codex/computer-artifacts-doc-cleanup` from fresh `origin/main`
+  `8cf5390bc4421423644dcdf3a5a26e37e9c06917`.
+- **Audit decision:** End-user Computer collection/detail route language should
+  stay Artifacts (`/artifacts`, `/artifacts/$appId`) because applets are one
+  artifact type. Admin `/applets` should remain applet-specific for now because
+  it exposes source TSX, metadata JSON, and generation provenance for applets
+  rather than a generic artifact browser.
+- **Prompt E2E blocker:** Ran a dev thread with the exact prompt "Build a CRM
+  pipeline risk dashboard for LastMile opportunities, including stale activity,
+  stage exposure, and the top risks to review." Thread
+  `2cda2a98-e2d5-4c0d-98db-0fc178bb9d07` completed task
+  `4dc6d5ed-d27b-491b-98ed-340341ad858f`, but no `applet` artifact row was
+  created. The assistant response said no CRM data or LastMile-specific records
+  were available and asked for source data instead. Do not mark the reframe plan
+  complete until fresh prompt-driven LastMile applet generation creates a new
+  runnable applet and the `/artifacts/$appId` route opens it.
+- **Attempted commands:** `git fetch origin`, `git worktree add -b
+codex/computer-artifacts-doc-cleanup`, `pnpm install --frozen-lockfile`, a
+  GraphQL/API prompt-thread script against dev, `psql` checks against
+  `computer_tasks`, `messages`, and `artifacts`, and route-tree verification on
+  the local Computer dev server.
+- **Next recommended action:** Fix the agent/runtime path so the exact LastMile
+  CRM prompt can discover or seed the canonical CRM pipeline data and call
+  `save_app`/`saveApplet` to create a new applet, then rerun the prompt E2E
+  before completing this plan.
 - **Started follow-up rename:** Created isolated worktree
   `.Codex/worktrees/computer-artifacts-rename` on branch
   `codex/computer-artifacts-rename` from fresh `origin/main` after U14 merged,

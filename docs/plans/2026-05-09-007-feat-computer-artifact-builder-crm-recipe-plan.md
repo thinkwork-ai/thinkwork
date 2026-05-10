@@ -1,7 +1,7 @@
 ---
 title: "feat: Computer Artifact Builder CRM dashboard recipe"
 type: feat
-status: complete
+status: active
 date: 2026-05-09
 origin: docs/brainstorms/2026-05-09-computer-applets-reframe-requirements.md
 related:
