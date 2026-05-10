@@ -26,6 +26,7 @@ const THINKWORK_VARS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/variables.tf",
 );
+const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-computer.sh");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -181,20 +182,26 @@ describe("U10 — host CSP wired for computer_site", () => {
   it("host CSP locals carry the load-bearing directives", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_host_csp/);
-    expect(source).toMatch(/script-src 'self'/);
+    expect(source).toMatch(/computer_host_script_src/);
+    expect(source).toMatch(/computer_host_worker_src/);
+    expect(source).toMatch(/script-src \$\{local\.computer_host_script_src\}/);
+    expect(source).toMatch(/worker-src \$\{local\.computer_host_worker_src\}/);
     expect(source).toMatch(/frame-ancestors 'none'/);
-    // connect-src must allow AppSync / Cognito for the streaming
-    // wire and auth flow.
+    // connect-src must allow API Gateway for GraphQL queries/mutations,
+    // AppSync for the streaming wire, and Cognito for auth flow.
+    expect(source).toMatch(/execute-api/);
     expect(source).toMatch(/appsync-api/);
     expect(source).toMatch(/cognito-idp/);
   });
 
-  it("host CSP AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
+  it("host CSP API Gateway + AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
     // Plan-012: non-us-east-1 stages (e.g. eu-west-1) would have a
     // broken host CSP if the region were hardcoded. var.region drives
-    // the AppSync API host, AppSync realtime host, and Cognito IdP
-    // host segments.
+    // the API Gateway, AppSync API, AppSync realtime, and Cognito IdP
+    // host segments. API Gateway is required for GraphQL
+    // queries/mutations; AppSync is subscriptions only.
     const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/execute-api\.\$\{var\.region\}\.amazonaws\.com/);
     expect(source).toMatch(/appsync-api\.\$\{var\.region\}\.amazonaws\.com/);
     expect(source).toMatch(
       /appsync-realtime-api\.\$\{var\.region\}\.amazonaws\.com/,
@@ -204,6 +211,7 @@ describe("U10 — host CSP wired for computer_site", () => {
     // host CSP. (Other terraform resources legitimately reference
     // us-east-1 — e.g. CloudFront ACM cert region — so we scope the
     // regex to the known CSP host suffixes.)
+    expect(source).not.toMatch(/execute-api\.us-east-1\.amazonaws\.com/);
     expect(source).not.toMatch(/appsync-api\.us-east-1\.amazonaws\.com/);
     expect(source).not.toMatch(
       /appsync-realtime-api\.us-east-1\.amazonaws\.com/,
@@ -215,5 +223,29 @@ describe("U10 — host CSP wired for computer_site", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_host_frame_src/);
     expect(source).toMatch(/computer_sandbox_domain/);
+  });
+
+  it("host CSP permits legacy blob applet modules only while sandbox is unprovisioned", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(
+      /computer_host_script_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
+    );
+    expect(source).toMatch(
+      /computer_host_worker_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
+    );
+    expect(source).toMatch(
+      /computer_host_frame_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"https:\/\/\$\{var\.computer_sandbox_domain\}"\s*:\s*"'none'"/,
+    );
+  });
+});
+
+describe("U11.5 — computer deploy script sandbox fallback", () => {
+  it("build-computer enables the legacy applet loader when sandbox outputs are absent", () => {
+    const source = read(BUILD_COMPUTER);
+    expect(source).toMatch(/COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/);
+    expect(source).toMatch(/elif \[\[ -z "\$COMPUTER_SANDBOX_URL" \]\]/);
+    expect(source).toMatch(/APPLET_LEGACY_LOADER="true"/);
+    expect(source).toMatch(/APPLET_LEGACY_LOADER="false"/);
+    expect(source).toMatch(/VITE_APPLET_LEGACY_LOADER=\$\{APPLET_LEGACY_LOADER\}/);
   });
 });

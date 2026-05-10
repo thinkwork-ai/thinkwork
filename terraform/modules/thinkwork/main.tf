@@ -576,13 +576,15 @@ module "admin_site" {
 
 locals {
   # Host CSP for the Computer SPA (plan-012 U10 / contract v1 §CSP profile).
-  # script-src 'self' (no blob:) — sucrase no longer runs in the parent
-  # window; it lives inside the iframe scope after Phase 2 fully ships.
-  # frame-src allows the sandbox subdomain only; frame-ancestors 'none'
-  # keeps the parent itself unframable.
-  computer_host_frame_src = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
+  # Once the sandbox distribution is provisioned, sucrase runs in the iframe
+  # scope and the parent can stay on script-src/worker-src 'self'. Stages
+  # without sandbox infra intentionally fall back to the legacy same-origin
+  # loader, which needs blob: for transformed applet modules.
+  computer_host_script_src = local.computer_sandbox_enabled ? "'self'" : "'self' blob:"
+  computer_host_worker_src = local.computer_sandbox_enabled ? "'self'" : "'self' blob:"
+  computer_host_frame_src  = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
 
-  computer_host_csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self'; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+  computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
 }
 
 module "computer_site" {
@@ -642,7 +644,7 @@ locals {
 
   computer_sandbox_frame_ancestors = local.computer_sandbox_enabled && var.computer_sandbox_allowed_parent_origins != "" ? join(" ", split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", ""))) : "'none'"
 
-  computer_sandbox_map_img_src = "https://*.tile.openstreetmap.org https://api.mapbox.com"
+  computer_sandbox_map_img_src   = "https://*.tile.openstreetmap.org https://api.mapbox.com"
   computer_sandbox_map_frame_src = "https://www.openstreetmap.org"
 
   computer_sandbox_csp = "default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; connect-src 'none'; frame-src ${local.computer_sandbox_map_frame_src}; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_sandbox_frame_ancestors};"
