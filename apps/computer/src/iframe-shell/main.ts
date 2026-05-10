@@ -129,7 +129,18 @@ function startResizeReporting(rootEl: HTMLElement): void {
 	window.setTimeout(() => scheduleResizeReport(rootEl), 750);
 }
 
-function applyThemeOverrides(overrides: Record<string, string>): void {
+function applyTheme(payload: {
+	theme?: "light" | "dark";
+	overrides?: Record<string, string>;
+}): void {
+	if (payload.theme === "dark" || payload.theme === "light") {
+		const isDark = payload.theme === "dark";
+		document.documentElement.classList.toggle("dark", isDark);
+		document.documentElement.style.colorScheme = payload.theme;
+		document.body?.classList.toggle("dark", isDark);
+	}
+
+	const overrides = payload.overrides;
 	if (!overrides) return;
 	for (const [key, value] of Object.entries(overrides)) {
 		if (typeof key !== "string" || typeof value !== "string") continue;
@@ -213,8 +224,12 @@ async function compileAndMount(
 			return;
 		}
 
-		// Apply theme overrides before mount so the first paint matches.
-		applyThemeOverrides(payload.themeOverrides ?? {});
+		// Apply the host theme before mount so the first applet paint
+		// matches the surrounding Computer UI instead of flashing light.
+		applyTheme({
+			theme: payload.theme,
+			overrides: payload.themeOverrides ?? {},
+		});
 
 		// Mount or re-mount.
 		const rootEl = document.getElementById("thinkwork-iframe-shell-root");
@@ -280,7 +295,7 @@ function handleInit(payload: InitPayload, msgId: string): void {
 }
 
 function handleTheme(payload: ThemePayload): void {
-	applyThemeOverrides(payload.overrides ?? {});
+	applyTheme({ theme: payload.theme, overrides: payload.overrides ?? {} });
 }
 
 if (typeof window !== "undefined") {

@@ -49,6 +49,7 @@ export interface Envelope<P = unknown> {
 export interface InitPayload {
 	tsx: string;
 	version: string;
+	theme?: "light" | "dark";
 	themeOverrides?: Record<string, string>;
 }
 
@@ -62,6 +63,7 @@ export interface ReadyWithComponentPayload {
 }
 
 export interface ThemePayload {
+	theme?: "light" | "dark";
 	overrides: Record<string, string>;
 }
 

@@ -67,6 +67,9 @@ export interface IframeControllerOptions {
 	 * with the iframe-shell bundle so this map carries only dynamic
 	 * overrides (e.g., dark/light mode). */
 	themeOverrides?: Record<string, string>;
+	/** Host color scheme. The iframe owns a separate document, so the
+	 * host's `.dark` class does not cascade across the boundary. */
+	theme?: "light" | "dark";
 	/**
 	 * State proxy. The parent runs the actual GraphQL operation against
 	 * `appletState` resolvers — the iframe sees only the result.
@@ -91,6 +94,27 @@ export type IframeControllerStatus =
 	| "errored"
 	| "disposed";
 
+function iframeSrcForInitialTheme(
+	src: string,
+	theme: "light" | "dark" | undefined,
+): string {
+	if (theme !== "dark") return src;
+
+	try {
+		const url = new URL(src, window.location.href);
+		if (url.pathname.endsWith("/iframe-shell.html")) {
+			url.pathname = url.pathname.replace(
+				/iframe-shell\.html$/,
+				"iframe-shell-dark.html",
+			);
+		}
+		url.searchParams.set("tw-theme", theme);
+		return url.toString();
+	} catch {
+		return src;
+	}
+}
+
 export class IframeAppletController {
 	readonly element: HTMLIFrameElement;
 	readonly channelId: string;
@@ -109,10 +133,12 @@ export class IframeAppletController {
 	private opts: IframeControllerOptions;
 	private messageListener: ((event: MessageEvent) => void) | null = null;
 	private themeOverrides: Record<string, string>;
+	private theme: "light" | "dark" | undefined;
 
 	constructor(opts: IframeControllerOptions) {
 		this.opts = opts;
 		this.themeOverrides = { ...(opts.themeOverrides ?? {}) };
+		this.theme = opts.theme;
 		this.channelId = newChannelId();
 
 		this.element = document.createElement("iframe");
@@ -122,11 +148,17 @@ export class IframeAppletController {
 		// Use setAttribute (vs. iframe.sandbox.add) for portability —
 		// jsdom doesn't expose .sandbox as a DOMTokenList.
 		this.element.setAttribute("sandbox", "allow-scripts");
-		this.element.src = opts.srcOverride ?? SANDBOX_IFRAME_SRC;
+		this.element.src = iframeSrcForInitialTheme(
+			opts.srcOverride ?? SANDBOX_IFRAME_SRC,
+			this.theme,
+		);
 		this.element.style.border = "0";
 		this.element.style.width = "100%";
 		this.element.style.minHeight = "480px";
 		this.element.style.display = "block";
+		this.element.style.backgroundColor =
+			this.theme === "dark" ? "#09090b" : "transparent";
+		this.element.style.colorScheme = this.theme ?? "normal";
 		this.element.setAttribute("data-channel-id", this.channelId);
 		this.element.setAttribute("data-applet-iframe", "true");
 		// Smoke pin: `data-ready` is set to "true" once the iframe sends
@@ -305,6 +337,7 @@ export class IframeAppletController {
 		const payload: InitPayload = {
 			tsx: this.opts.tsx,
 			version: this.opts.version,
+			theme: this.theme,
 			themeOverrides: this.themeOverrides,
 		};
 		this.postOutbound("init", payload);
@@ -356,9 +389,13 @@ export class IframeAppletController {
 	 * base theme tokens ship with the iframe-shell bundle; this only
 	 * carries dynamic overrides (dark/light mode toggle, accent color).
 	 */
-	applyTheme(overrides: Record<string, string>): void {
+	applyTheme(
+		overrides: Record<string, string>,
+		theme?: "light" | "dark",
+	): void {
 		this.themeOverrides = { ...overrides };
-		this.postOutbound("theme", { overrides });
+		this.theme = theme ?? this.theme;
+		this.postOutbound("theme", { theme: this.theme, overrides });
 	}
 
 	/** Invoke a declared callback on the iframe-rendered component. */

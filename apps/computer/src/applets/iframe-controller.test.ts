@@ -23,7 +23,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IframeAppletController } from "./iframe-controller";
-import { buildEnvelope, IframePayloadSecretLeakError } from "@/iframe-shell/iframe-protocol";
+import {
+	buildEnvelope,
+	IframePayloadSecretLeakError,
+} from "@/iframe-shell/iframe-protocol";
 
 interface PostMessageCall {
 	envelope: unknown;
@@ -37,11 +40,17 @@ function createController(opts?: {
 	onCallback?: (name: string, payload: unknown) => void;
 	onError?: (err: { code: string; message: string }) => void;
 	srcOverride?: string;
+	theme?: "light" | "dark";
+	themeOverrides?: Record<string, string>;
 }) {
 	const calls: PostMessageCall[] = [];
 	// Build a fake contentWindow that records every postMessage call.
 	const fakeWindow = {
-		postMessage: (envelope: unknown, targetOrigin: string, transfer?: Transferable[]) => {
+		postMessage: (
+			envelope: unknown,
+			targetOrigin: string,
+			transfer?: Transferable[],
+		) => {
 			calls.push({
 				envelope,
 				targetOrigin,
@@ -159,8 +168,24 @@ describe("IframeAppletController — element + handshake", () => {
 		expect(controller.element.src).toBe(initial);
 	});
 
+	it("uses the dark prepaint shell when the host starts in dark mode", () => {
+		const { controller } = createController({
+			srcOverride: "https://sandbox.test/iframe-shell.html",
+			theme: "dark",
+		});
+
+		expect(controller.element.src).toBe(
+			"https://sandbox.test/iframe-shell-dark.html?tw-theme=dark",
+		);
+		expect(controller.element.style.backgroundColor).toBe("rgb(9, 9, 11)");
+		expect(controller.element.style.colorScheme).toBe("dark");
+	});
+
 	it("posts init on iframe `load` (resolves the chicken-and-egg without iframe knowing channelId)", () => {
-		const { controller, calls } = createController();
+		const { controller, calls } = createController({
+			theme: "dark",
+			themeOverrides: { "--background": "oklch(0.145 0 0)" },
+		});
 
 		// Before load, no init has been posted.
 		expect(
@@ -179,6 +204,13 @@ describe("IframeAppletController — element + handshake", () => {
 		expect(
 			(init!.envelope as { payload: { tsx: string } }).payload.tsx,
 		).toBe("<App />");
+		expect(
+			(init!.envelope as { payload: { theme?: string } }).payload.theme,
+		).toBe("dark");
+		expect(
+			(init!.envelope as { payload: { themeOverrides?: Record<string, string> } })
+				.payload.themeOverrides?.["--background"],
+		).toBe("oklch(0.145 0 0)");
 	});
 
 	it("re-posts init defensively on iframe `ready` envelope (legacy/forward-compat)", () => {
@@ -221,7 +253,7 @@ describe("IframeAppletController — outbound targetOrigin invariant (P0)", () =
 	it("ALWAYS posts with targetOrigin: '*' (regression: opaque iframe origin)", () => {
 		const { controller, calls, fakeWindow } = createController();
 		postFromIframe(controller, fakeWindow, "ready", { ready: true });
-		controller.applyTheme({ "--accent": "#fff" });
+		controller.applyTheme({ "--accent": "#fff" }, "dark");
 		controller.sendCallback("noop", { x: 1 });
 
 		// At least three outbound posts: init (after ready), theme, callback.
@@ -248,7 +280,11 @@ describe("IframeAppletController — inbound source-identity gate", () => {
 
 		// Hostile sibling source.
 		const hostile = { postMessage: vi.fn() } as unknown as Window;
-		const envelope = buildEnvelope("ready", { ready: true }, controller.channelId);
+		const envelope = buildEnvelope(
+			"ready",
+			{ ready: true },
+			controller.channelId,
+		);
 		window.dispatchEvent(
 			new MessageEvent("message", { data: envelope, source: hostile }),
 		);
@@ -292,6 +328,22 @@ describe("IframeAppletController — no-secrets-in-payload invariant (P0)", () =
 		).toThrow(IframePayloadSecretLeakError);
 	});
 
+	it("applyTheme sends the host color scheme with CSS variable overrides", () => {
+		const { controller, calls } = createController();
+
+		controller.applyTheme({ "--background": "oklch(0.145 0 0)" }, "dark");
+
+		const themeEnvelope = calls.find(
+			(c) => (c.envelope as { kind?: string }).kind === "theme",
+		)?.envelope as
+			| { payload?: { theme?: string; overrides?: Record<string, string> } }
+			| undefined;
+		expect(themeEnvelope?.payload?.theme).toBe("dark");
+		expect(themeEnvelope?.payload?.overrides?.["--background"]).toBe(
+			"oklch(0.145 0 0)",
+		);
+	});
+
 	it("sendCallback rejects a payload containing a credential field", () => {
 		const { controller } = createController();
 		expect(() =>
@@ -304,7 +356,11 @@ describe("IframeAppletController — no-secrets-in-payload invariant (P0)", () =
 			getState: async () => null,
 		});
 		await expect(
-			(controller as unknown as { requestReply: (k: string, p: unknown) => Promise<unknown> }).requestReply(
+			(
+				controller as unknown as {
+					requestReply: (k: string, p: unknown) => Promise<unknown>;
+				}
+			).requestReply(
 				"state-read",
 				{ apiKey: "leak" },
 			),

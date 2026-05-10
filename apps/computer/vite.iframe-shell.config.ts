@@ -95,7 +95,10 @@ export default defineConfig(({ mode }) => {
 			outDir: "../../dist/iframe-shell",
 			emptyOutDir: true,
 			rollupOptions: {
-				input: "src/iframe-shell/iframe-shell.html",
+				input: {
+					"iframe-shell": "src/iframe-shell/iframe-shell.html",
+					"iframe-shell-dark": "src/iframe-shell/iframe-shell-dark.html",
+				},
 			},
 		},
 		server: {

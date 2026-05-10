@@ -31,6 +31,57 @@ export interface AppletComponentProps {
   refreshData?: unknown;
 }
 
+const THEME_VARIABLES = [
+  "--background",
+  "--foreground",
+  "--card",
+  "--card-foreground",
+  "--popover",
+  "--popover-foreground",
+  "--primary",
+  "--primary-foreground",
+  "--secondary",
+  "--secondary-foreground",
+  "--muted",
+  "--muted-foreground",
+  "--accent",
+  "--accent-foreground",
+  "--destructive",
+  "--destructive-foreground",
+  "--border",
+  "--input",
+  "--ring",
+  "--chart-1",
+  "--chart-2",
+  "--chart-3",
+  "--chart-4",
+  "--chart-5",
+  "--sidebar",
+  "--sidebar-foreground",
+  "--sidebar-primary",
+  "--sidebar-primary-foreground",
+  "--sidebar-accent",
+  "--sidebar-accent-foreground",
+  "--sidebar-border",
+  "--sidebar-ring",
+] as const;
+
+function readHostThemeOverrides(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const computed = window.getComputedStyle(document.documentElement);
+  const overrides: Record<string, string> = {};
+  for (const name of THEME_VARIABLES) {
+    const value = computed.getPropertyValue(name).trim();
+    if (value) overrides[name] = value;
+  }
+  return overrides;
+}
+
+function readHostTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
 /**
  * Plan-012 U11.5: production AppletMount uses IframeAppletController
  * by default. The legacy same-origin module loader stays available
@@ -82,12 +133,25 @@ function IframeAppletMount({
   onHeaderActionChange,
   hideRefreshControl = false,
 }: AppletMountProps) {
+  const [theme, setTheme] = useState<"light" | "dark">(readHostTheme);
   const [status, setStatus] = useState<IframeControllerStatus | "loading">(
     "loading",
   );
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<IframeAppletController | null>(null);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+
+  useEffect(() => {
+    if (typeof MutationObserver !== "function") return;
+    const observer = new MutationObserver(() => setTheme(readHostTheme()));
+    observer.observe(document.documentElement, {
+      attributeFilter: ["class"],
+      attributes: true,
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +164,8 @@ function IframeAppletMount({
     const controller = new IframeAppletController({
       tsx: source,
       version: String(version),
+      theme: themeRef.current,
+      themeOverrides: readHostThemeOverrides(),
       onError: (payload) => {
         if (cancelled) return;
         setStatus("errored");
@@ -127,6 +193,10 @@ function IframeAppletMount({
       if (container) container.replaceChildren();
     };
   }, [appId, instanceId, source, version]);
+
+  useEffect(() => {
+    controllerRef.current?.applyTheme(readHostThemeOverrides(), theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!onHeaderActionChange) return;
