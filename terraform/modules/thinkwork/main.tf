@@ -585,6 +585,66 @@ module "computer_site" {
 }
 
 ################################################################################
+# Computer Sandbox Static Site (sandbox.thinkwork.ai — LLM-fragment iframe host)
+#
+# Plan-012 U3. Cross-origin sandbox subdomain that hosts the iframe-shell
+# bundle. The iframe document is loaded from this distribution by the
+# Computer SPA (computer_site above) via `<iframe sandbox="allow-scripts"
+# src="https://sandbox.thinkwork.ai/iframe-shell.html">`. Because the
+# sandbox attribute omits `allow-same-origin`, the iframe runs at an opaque
+# origin — the parent uses `targetOrigin: "*"` for postMessage delivery
+# and trust comes from pinned src + iframe-side parent-origin allowlist +
+# channelId nonce + no-secrets-in-payload (see contract v1).
+#
+# Bucket is empty in this PR. U9 populates it with the iframe-shell bundle
+# via scripts/build-computer.sh.
+#
+# Iframe CSP profile (per contract v1 §CSP profile):
+#   default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:;
+#   style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;
+#   font-src 'self' data:; connect-src 'none'; object-src 'none';
+#   base-uri 'self'; frame-ancestors <var.computer_sandbox_allowed_parent_origins>;
+#
+# Provisioning is gated on var.computer_sandbox_domain — leave empty in
+# stages that haven't allocated the subdomain yet.
+################################################################################
+
+locals {
+  computer_sandbox_enabled = var.computer_sandbox_domain != ""
+
+  computer_sandbox_frame_ancestors = local.computer_sandbox_enabled && var.computer_sandbox_allowed_parent_origins != "" ? join(" ", split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", ""))) : "'none'"
+
+  computer_sandbox_csp = "default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_sandbox_frame_ancestors};"
+}
+
+module "computer_sandbox_site" {
+  source = "../app/static-site"
+  count  = local.computer_sandbox_enabled ? 1 : 0
+
+  stage           = var.stage
+  site_name       = "computer-sandbox"
+  is_spa          = false
+  custom_domain   = var.computer_sandbox_domain
+  certificate_arn = var.computer_sandbox_certificate_arn
+
+  # Iframe CSP — load-bearing for the cross-origin sandbox security
+  # boundary. connect-src 'none' is the defense-in-depth invariant: even
+  # if the host CSP regresses, the iframe cannot exfiltrate via fetch /
+  # XHR / WebSocket because the browser blocks the request inside the
+  # iframe scope.
+  inline_response_headers = {
+    content_security_policy       = local.computer_sandbox_csp
+    content_type_options_override = true
+    strict_transport_security = {
+      max_age_sec        = 63072000 # 2 years
+      include_subdomains = true
+      preload            = true
+      override           = true
+    }
+  }
+}
+
+################################################################################
 # Docs Static Site
 ################################################################################
 
