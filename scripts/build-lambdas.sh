@@ -79,11 +79,18 @@ build_handler() {
     --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);" \
     2>/dev/null
 
-  # For graphql-http: include the .graphql schema files (loaded at runtime via readFileSync)
+  # For graphql-http: include assets loaded at runtime via readFileSync.
   if [ "$name" = "graphql-http" ]; then
     mkdir -p "$out_dir/packages/database-pg/graphql/types"
     cp "$REPO_ROOT/packages/database-pg/graphql/schema.graphql" "$out_dir/packages/database-pg/graphql/"
     cp "$REPO_ROOT/packages/database-pg/graphql/types/"*.graphql "$out_dir/packages/database-pg/graphql/types/"
+
+    # The bundled @thinkwork/runbooks loader resolves ../runbooks from the
+    # Lambda entrypoint, so these source-authored YAML/Markdown files must live
+    # at /var/task/runbooks in the deployed zip.
+    rm -rf "$out_dir/runbooks"
+    mkdir -p "$out_dir/runbooks"
+    cp -R "$REPO_ROOT/packages/runbooks/runbooks/." "$out_dir/runbooks/"
   fi
 
   # Create zip (exclude source maps to keep bundle small)
