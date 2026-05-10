@@ -282,6 +282,11 @@ describe("AppletMount", () => {
   });
 
   it("renders transform failures as recoverable app errors", async () => {
+    // Plan-012 U11.5: AppletMount defaults to the iframe path; passing
+    // loadModule routes back through the legacy same-origin path which
+    // calls transformApplet (the mock target). Without loadModule the
+    // iframe path skips transformApplet entirely and the
+    // mockResolvedValueOnce would leak into the next test.
     vi.mocked(transformApplet).mockResolvedValueOnce({
       ok: false,
       error: { message: "Import not allowed" },
@@ -293,6 +298,7 @@ describe("AppletMount", () => {
         instanceId="instance-1"
         source="import lodash from 'lodash'"
         version={1}
+        loadModule={async () => ({ default: () => null })}
       />,
     );
 

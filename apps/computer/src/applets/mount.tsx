@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ComponentType,
   type ReactNode,
@@ -10,6 +11,11 @@ import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
 import { AppRefreshControl } from "@/components/apps/AppRefreshControl";
 import { AppletErrorBoundary } from "@/components/apps/AppletErrorBoundary";
+import {
+  IframeAppletController,
+  type IframeControllerStatus,
+} from "@/applets/iframe-controller";
+import { isLegacyLoaderEnabled } from "@/applets/_testing/legacy-loader";
 import type { AppletPayload } from "@/lib/app-artifacts";
 
 export type AppletModule = {
@@ -25,6 +31,17 @@ export interface AppletComponentProps {
   refreshData?: unknown;
 }
 
+/**
+ * Plan-012 U11.5: production AppletMount uses IframeAppletController
+ * by default. The legacy same-origin module loader stays available
+ * behind `VITE_APPLET_LEGACY_LOADER === "true"` for emergency
+ * rollback. After Phase 2 stabilizes ≥1 week, a follow-up cleanup PR
+ * removes the legacy path, the same-origin host registry, and the
+ * transform/ directory.
+ *
+ * The `loadModule` prop on AppletMountProps survives only as a test
+ * seam for the legacy path. Iframe-mode does not consume it.
+ */
 export const defaultAppletModuleLoader: AppletModuleLoader = (moduleUrl) =>
   import(/* @vite-ignore */ moduleUrl) as Promise<AppletModule>;
 
@@ -33,14 +50,115 @@ export interface AppletMountProps {
   instanceId: string;
   source: string;
   version: number;
+  /** Legacy same-origin loader override (test seam; production uses
+   * the iframe substrate). */
   loadModule?: AppletModuleLoader;
   onHeaderActionChange?: (action: ReactNode | null) => void;
-  // When true, hides the AppRefreshControl banner. Used for inline (in-thread)
-  // embeds where the surrounding card already provides controls and chrome.
   hideRefreshControl?: boolean;
 }
 
-export function AppletMount({
+export function AppletMount(props: AppletMountProps) {
+  // Production cutover: iframe is the default, legacy is the rollback
+  // flag. Test runs that explicitly pass loadModule still hit the
+  // legacy code path so the existing applet test suite keeps working
+  // without an iframe in JSDOM.
+  const useIframe = !isLegacyLoaderEnabled() && props.loadModule === undefined;
+  return useIframe ? (
+    <IframeAppletMount {...props} />
+  ) : (
+    <LegacyAppletMount {...props} />
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Iframe path (production default)
+ * ───────────────────────────────────────────────────────────────── */
+
+function IframeAppletMount({
+  appId,
+  instanceId,
+  source,
+  version,
+  onHeaderActionChange,
+  hideRefreshControl = false,
+}: AppletMountProps) {
+  const [status, setStatus] = useState<IframeControllerStatus | "loading">(
+    "loading",
+  );
+  const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const controllerRef = useRef<IframeAppletController | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    setError(null);
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const controller = new IframeAppletController({
+      tsx: source,
+      version: String(version),
+      onError: (payload) => {
+        if (cancelled) return;
+        setStatus("errored");
+        setError(payload.message);
+      },
+    });
+    controllerRef.current = controller;
+    container.replaceChildren(controller.element);
+
+    controller.ready
+      .then(() => {
+        if (cancelled) return;
+        setStatus("ready");
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setStatus("errored");
+        setError(err instanceof Error ? err.message : String(err));
+      });
+
+    return () => {
+      cancelled = true;
+      controller.dispose();
+      controllerRef.current = null;
+      if (container) container.replaceChildren();
+    };
+  }, [appId, instanceId, source, version]);
+
+  useEffect(() => {
+    if (!onHeaderActionChange) return;
+    onHeaderActionChange(null);
+    return () => onHeaderActionChange(null);
+  }, [onHeaderActionChange]);
+
+  return (
+    <div className="grid min-w-0">
+      {!hideRefreshControl && !onHeaderActionChange ? null : null}
+      {status === "loading" || status === "pending" ? <AppletLoading /> : null}
+      {status === "errored" ? (
+        <AppletFailure>{error ?? "Applet mount failed."}</AppletFailure>
+      ) : null}
+      {/* The iframe element is appended into this div by the
+          controller's lifecycle. Always render the host so the
+          element has a stable mount point even before the controller
+          attaches. */}
+      <div
+        ref={containerRef}
+        data-testid="applet-iframe-host"
+        className="min-w-0 overflow-x-hidden"
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Legacy same-origin path (rollback flag)
+ * ───────────────────────────────────────────────────────────────── */
+
+function LegacyAppletMount({
   appId,
   instanceId,
   source,

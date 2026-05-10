@@ -1,42 +1,29 @@
 /**
  * Iframe-shell entry point — runs INSIDE the cross-origin iframe at
- * sandbox.thinkwork.ai (or the dev/staging analogue), NOT in the
- * parent app's document.
+ * sandbox.thinkwork.ai (or the dev/staging analogue).
  *
- * Plan-012 U9 shipped the inert scaffold. Plan-012 U10/U11 wire the
- * postMessage protocol and the TSX compile + mount pipeline. This
- * module is the iframe-side counterpart of
- * apps/computer/src/applets/iframe-controller.ts.
- *
- * Lifecycle:
+ * Plan-012 U11.5 — full TSX compile + mount pipeline:
  *   1. Boot — register the host registry inside the iframe scope and
- *      install the message listener.
- *   2. Send `kind: "ready"` envelope with a placeholder channelId so
- *      the parent's source-identity handshake can fire. (The parent's
- *      controller validates the channelId on every subsequent
- *      envelope; for the initial `ready` we mirror whatever channelId
- *      the parent attaches to its `init` envelope.)
- *   3. On `init` — verify origin against build-time
- *      __ALLOWED_PARENT_ORIGINS__, capture parent-origin + channelId,
- *      compile the TSX (TODO U11.5: full compile + mount pipeline
- *      lives in iframe-transform.ts; current path acknowledges the
- *      contract and posts ready-with-component so the parent's
- *      `controller.ready` promise resolves under the live protocol).
- *   4. Forward `securitypolicyviolation` events to the parent via
- *      `kind: "error"` envelopes so the layered Playwright CSP smoke
- *      can assert browser-level enforcement.
- *
- * What this file does NOT do (yet):
- *   - Compile TSX or render a real React component (U11.5 follow-up).
- *     The iframe-shell currently treats the init payload as
- *     authenticated handshake only; the rendered surface is the
- *     iframe-shell's own placeholder until the compile pipeline
- *     migrates.
- *   - Outbound network of any kind — iframe CSP `connect-src 'none'`
- *     blocks it, by design.
+ *      install the message listener. Validate origin allowlist.
+ *   2. On `init` — sucrase-transform the payload TSX, run the
+ *      acorn-based import-shim allowlist, instantiate via dynamic
+ *      import() of a blob URL, mount the default export via
+ *      React.createRoot.
+ *   3. Forward `securitypolicyviolation` events to the parent via
+ *      `kind: "error"` envelopes.
+ *   4. State proxy — useAppletAPI inside the iframe routes through
+ *      the parent via state-read / state-write envelopes; pendingReplies
+ *      keyed by msgId.
  */
 
-import { registerAppletHost } from "../applets/host-registry";
+import { createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { transform as sucraseTransform } from "sucrase";
+import {
+	registerAppletHost,
+	loadAppletHostExternals,
+} from "../applets/host-registry";
+import { rewriteAppletImports } from "../applets/transform/import-shim";
 import {
 	ALLOWED_PARENT_ORIGINS,
 	assertSafeAllowlist,
@@ -44,28 +31,43 @@ import {
 	type Envelope,
 	type ErrorPayload,
 	type InitPayload,
-	type ReadyPayload,
 	type ReadyWithComponentPayload,
 	type ThemePayload,
 } from "./iframe-protocol";
 
-// Defense-in-depth — fail at boot if the build-time allowlist somehow
-// contains "null" or "*".
 assertSafeAllowlist(ALLOWED_PARENT_ORIGINS);
 
-// Register the host registry inside the iframe's globalThis.
+// Register the host registry inside the iframe's globalThis. Then load
+// React, ReactDOM, jsx-runtime, @thinkwork/ui, @thinkwork/computer-stdlib,
+// recharts, lucide-react, leaflet, react-leaflet into it so compiled
+// fragments can resolve their imports against the registry. We start
+// the load proactively at boot so the first init handshake doesn't pay
+// the dynamic-import latency.
 registerAppletHost();
+const registryReady = loadAppletHostExternals().catch((err) => {
+	// eslint-disable-next-line no-console
+	console.warn("[iframe-shell] host externals load failed", err);
+});
 
 interface IframeShellState {
 	parentWindow: Window | null;
 	channelId: string | null;
 	mounted: boolean;
+	root: Root | null;
+	rootContainer: HTMLDivElement | null;
+	pendingStateReplies: Map<
+		string,
+		{ resolve: (value: unknown) => void; reject: (err: Error) => void }
+	>;
 }
 
 const state: IframeShellState = {
 	parentWindow: null,
 	channelId: null,
 	mounted: false,
+	root: null,
+	rootContainer: null,
+	pendingStateReplies: new Map(),
 };
 
 function postToParent<P>(
@@ -75,10 +77,6 @@ function postToParent<P>(
 ): void {
 	if (!state.parentWindow || !state.channelId) return;
 	const envelope = buildEnvelope(kind, payload, state.channelId, replyTo);
-	// Outbound to parent uses targetOrigin "*" because the iframe runs
-	// at opaque origin; the parent's contentWindow + channelId checks
-	// are the actual gate. The parent's iframe-controller mirrors the
-	// same invariant on its outbound side.
 	state.parentWindow.postMessage(envelope, "*");
 }
 
@@ -86,64 +84,9 @@ function applyThemeOverrides(overrides: Record<string, string>): void {
 	if (!overrides) return;
 	for (const [key, value] of Object.entries(overrides)) {
 		if (typeof key !== "string" || typeof value !== "string") continue;
-		// Only allow CSS custom properties — values are inert strings,
-		// keys must look like CSS variables (start with --).
 		if (!key.startsWith("--")) continue;
 		document.documentElement.style.setProperty(key, value);
 	}
-}
-
-function handleInit(payload: InitPayload, msgId: string): void {
-	if (state.mounted) {
-		// Re-init for the same iframe is supported (theme refresh, source
-		// regeneration). For now, just re-apply theme + acknowledge.
-		applyThemeOverrides(payload.themeOverrides ?? {});
-		const ack: ReadyWithComponentPayload = {
-			rendered: true,
-			renderedAt: new Date().toISOString(),
-		};
-		postToParent("ready-with-component", ack, msgId);
-		return;
-	}
-
-	try {
-		applyThemeOverrides(payload.themeOverrides ?? {});
-
-		// TODO U11.5: drive the sucrase + import-shim transform pipeline
-		// here against payload.tsx and mount the resulting component.
-		// Until then, render a placeholder so the visible iframe content
-		// reflects the handshake state and the parent's controller.ready
-		// promise still resolves under the live protocol.
-		const root = document.getElementById("thinkwork-iframe-shell-root");
-		if (root) {
-			const placeholder = document.createElement("div");
-			placeholder.style.padding = "12px";
-			placeholder.style.fontFamily = "system-ui, sans-serif";
-			placeholder.style.fontSize = "13px";
-			placeholder.style.color = "rgba(0,0,0,0.6)";
-			placeholder.textContent = `iframe-shell ready (${payload.tsx.length} chars TSX, version ${payload.version})`;
-			root.replaceChildren(placeholder);
-		}
-
-		state.mounted = true;
-
-		const ack: ReadyWithComponentPayload = {
-			rendered: true,
-			renderedAt: new Date().toISOString(),
-		};
-		postToParent("ready-with-component", ack, msgId);
-	} catch (err) {
-		const error: ErrorPayload = {
-			code: "RUNTIME_ERROR",
-			message: err instanceof Error ? err.message : "iframe init failed",
-			stack: err instanceof Error ? err.stack : undefined,
-		};
-		postToParent("error", error, msgId);
-	}
-}
-
-function handleTheme(payload: ThemePayload): void {
-	applyThemeOverrides(payload.overrides ?? {});
 }
 
 function isAllowedParentOrigin(origin: string): boolean {
@@ -151,12 +94,142 @@ function isAllowedParentOrigin(origin: string): boolean {
 	return ALLOWED_PARENT_ORIGINS.includes(origin);
 }
 
+function createCompiledModuleUrl(code: string): string {
+	if (typeof URL.createObjectURL === "function") {
+		return URL.createObjectURL(
+			new Blob([code], { type: "application/javascript" }),
+		);
+	}
+	return `data:text/javascript;charset=utf-8,${encodeURIComponent(code)}`;
+}
+
+async function compileAndMount(
+	payload: InitPayload,
+	msgId: string,
+): Promise<void> {
+	try {
+		// Wait for host externals (react / @thinkwork/ui / etc.) to load.
+		await registryReady;
+
+		// Sucrase-transform the TSX.
+		let compiledCode: string;
+		try {
+			const sucraseResult = sucraseTransform(payload.tsx, {
+				transforms: ["typescript", "jsx"],
+				keepUnusedImports: true,
+				preserveDynamicImport: true,
+				production: true,
+				jsxRuntime: "automatic",
+			});
+			// Acorn import-shim — rejects forbidden imports, rewrites
+			// allowed ones to globalThis.__THINKWORK_APPLET_HOST__ lookups.
+			compiledCode = rewriteAppletImports(sucraseResult.code);
+		} catch (err) {
+			const message =
+				err instanceof Error ? err.message : "compile failed";
+			postToParent<ErrorPayload>(
+				"error",
+				{
+					code: err && typeof err === "object" && "failure" in err
+						? "IMPORT_REJECTED"
+						: "COMPILE_FAILED",
+					message,
+				},
+				msgId,
+			);
+			return;
+		}
+
+		// Dynamic-import the compiled module via a blob URL. This runs
+		// inside the iframe's own scope; the iframe's CSP `script-src
+		// 'self' blob:` permits it. Same sandbox attribute on the parent
+		// iframe (allow-scripts only) keeps the module isolated.
+		const moduleUrl = createCompiledModuleUrl(compiledCode);
+		const module = (await import(/* @vite-ignore */ moduleUrl)) as {
+			default?: unknown;
+		};
+
+		const Component = module.default;
+		if (typeof Component !== "function") {
+			postToParent<ErrorPayload>(
+				"error",
+				{
+					code: "RUNTIME_ERROR",
+					message:
+						"Applet module must export a default React component.",
+				},
+				msgId,
+			);
+			URL.revokeObjectURL(moduleUrl);
+			return;
+		}
+
+		// Apply theme overrides before mount so the first paint matches.
+		applyThemeOverrides(payload.themeOverrides ?? {});
+
+		// Mount or re-mount.
+		const rootEl = document.getElementById("thinkwork-iframe-shell-root");
+		if (!rootEl) {
+			postToParent<ErrorPayload>(
+				"error",
+				{
+					code: "RUNTIME_ERROR",
+					message: "iframe-shell root element missing",
+				},
+				msgId,
+			);
+			URL.revokeObjectURL(moduleUrl);
+			return;
+		}
+
+		// Reuse the existing root if possible; createRoot on the same
+		// container twice produces a console warning.
+		if (state.root && state.rootContainer === rootEl) {
+			state.root.render(
+				createElement(Component as React.ComponentType, {}),
+			);
+		} else {
+			if (state.root) state.root.unmount();
+			state.root = createRoot(rootEl);
+			state.rootContainer = rootEl as HTMLDivElement;
+			state.root.render(
+				createElement(Component as React.ComponentType, {}),
+			);
+		}
+		state.mounted = true;
+
+		// Notify the parent the component rendered.
+		const ack: ReadyWithComponentPayload = {
+			rendered: true,
+			renderedAt: new Date().toISOString(),
+		};
+		postToParent("ready-with-component", ack, msgId);
+
+		// Clean up the blob URL — the import has cached the module
+		// reference, so revoking the URL doesn't unload it.
+		URL.revokeObjectURL(moduleUrl);
+	} catch (err) {
+		postToParent<ErrorPayload>(
+			"error",
+			{
+				code: "RUNTIME_ERROR",
+				message: err instanceof Error ? err.message : "mount failed",
+				stack: err instanceof Error ? err.stack : undefined,
+			},
+			msgId,
+		);
+	}
+}
+
+function handleInit(payload: InitPayload, msgId: string): void {
+	void compileAndMount(payload, msgId);
+}
+
+function handleTheme(payload: ThemePayload): void {
+	applyThemeOverrides(payload.overrides ?? {});
+}
+
 if (typeof window !== "undefined") {
-	// Forward securitypolicyviolation events to the parent (via the
-	// established channel) so the Playwright smoke at deploy time can
-	// assert browser-level CSP enforcement is firing for known-bad
-	// fragments. Until the parent has captured channelId via init, we
-	// only log to console — the smoke runs after init handshake.
 	window.addEventListener("securitypolicyviolation", (event) => {
 		const cspEvent = event as SecurityPolicyViolationEvent;
 		const error: ErrorPayload = {
@@ -173,9 +246,7 @@ if (typeof window !== "undefined") {
 	});
 
 	window.addEventListener("message", (event: MessageEvent) => {
-		// Origin allowlist gate — drop silently if the parent isn't on
-		// the build-time-injected list. "null" and "*" are also rejected
-		// by isAllowedParentOrigin defensively.
+		// Origin allowlist gate.
 		if (!isAllowedParentOrigin(event.origin)) return;
 
 		const data = event.data;
@@ -186,8 +257,7 @@ if (typeof window !== "undefined") {
 		if (typeof candidate.channelId !== "string") return;
 		if (typeof candidate.msgId !== "string") return;
 
-		// Capture parent identity + channelId on the first init envelope
-		// that comes in. Subsequent envelopes must match.
+		// Capture parent identity + channelId on the first init envelope.
 		if (state.parentWindow === null) {
 			state.parentWindow = event.source as Window;
 			state.channelId = candidate.channelId;
@@ -204,47 +274,93 @@ if (typeof window !== "undefined") {
 				handleTheme(candidate.payload as ThemePayload);
 				return;
 			case "callback":
-				// TODO U11.5: route declared callbacks into the mounted
-				// component. Acknowledge silently for now.
+				// TODO: route into mounted component when the component
+				// surface declares a callback registry. Acknowledge silently.
 				return;
 			case "state-read-ack":
-			case "state-write-ack":
-				// Parent acks for state proxy requests the iframe issued.
-				// No-op here — the iframe-side useAppletAPI stub (added in
-				// U11.5) will keep a pendingReplies map.
+			case "state-write-ack": {
+				const replyTo = candidate.replyTo;
+				if (!replyTo) return;
+				const pending = state.pendingStateReplies.get(replyTo);
+				if (!pending) return;
+				state.pendingStateReplies.delete(replyTo);
+				const payload = candidate.payload as
+					| { value?: unknown; ok?: boolean }
+					| undefined;
+				pending.resolve(
+					candidate.kind === "state-read-ack"
+						? payload?.value
+						: (payload?.ok ?? false),
+				);
 				return;
+			}
 			default:
 				return;
 		}
 	});
-
-	// Send the initial `ready` envelope. The parent doesn't know the
-	// channelId yet — it ignores the channelId on this very first
-	// envelope and waits for our second `ready` (which mirrors the
-	// channelId from the parent's init). To keep the protocol simple
-	// and deterministic, we DON'T post anything proactively here:
-	// instead, we wait for the parent's init envelope (which carries
-	// the parent's channelId) and reply with ready-with-component.
-	//
-	// The parent's IframeAppletController posts init only after seeing
-	// our `ready` though — so to break the chicken-and-egg, we send a
-	// `ready` envelope with the placeholder channelId "_pending" that
-	// the parent's validateInboundEnvelope will reject. This is
-	// deliberate: the parent treats the iframe `load` event as the
-	// secondary trigger for posting init. See iframe-controller's
-	// installLoadHandshake comment.
-	//
-	// In practice the working sequence is:
-	//   1. parent creates iframe with src = sandbox URL
-	//   2. iframe loads, our message listener registers
-	//   3. parent receives 'load' DOM event, posts init unconditionally
-	//      with the parent's channelId
-	//   4. our message listener captures parent identity + channelId on
-	//      that init, replies with ready-with-component
-	// To enable this, the parent needs to post init on `load` — see
-	// the U11 controller update.
 }
 
-// Export for tests — confirms the module's wiring without doing anything
-// observable to the iframe runtime.
+/**
+ * Iframe-side state-proxy helpers. The iframe-shell exposes these on
+ * `globalThis` so the iframe-side `useAppletAPI` (re-exposed from
+ * @thinkwork/computer-stdlib) can call through to the parent.
+ */
+declare global {
+	interface Window {
+		__THINKWORK_IFRAME_STATE_PROXY__?: {
+			read: (key: string) => Promise<unknown>;
+			write: (key: string, value: unknown) => Promise<void>;
+		};
+	}
+}
+
+if (typeof window !== "undefined") {
+	window.__THINKWORK_IFRAME_STATE_PROXY__ = {
+		async read(key: string): Promise<unknown> {
+			return new Promise((resolve, reject) => {
+				if (!state.parentWindow || !state.channelId) {
+					reject(
+						new Error(
+							"iframe-shell state proxy: parent handshake not yet complete",
+						),
+					);
+					return;
+				}
+				const envelope = buildEnvelope(
+					"state-read",
+					{ key },
+					state.channelId,
+				);
+				state.pendingStateReplies.set(envelope.msgId, {
+					resolve,
+					reject,
+				});
+				state.parentWindow.postMessage(envelope, "*");
+			});
+		},
+		async write(key: string, value: unknown): Promise<void> {
+			await new Promise<void>((resolve, reject) => {
+				if (!state.parentWindow || !state.channelId) {
+					reject(
+						new Error(
+							"iframe-shell state proxy: parent handshake not yet complete",
+						),
+					);
+					return;
+				}
+				const envelope = buildEnvelope(
+					"state-write",
+					{ key, value },
+					state.channelId,
+				);
+				state.pendingStateReplies.set(envelope.msgId, {
+					resolve: () => resolve(),
+					reject,
+				});
+				state.parentWindow.postMessage(envelope, "*");
+			});
+		},
+	};
+}
+
 export const __IFRAME_SHELL_LIVE__ = "U11_IFRAME_SHELL_LIVE" as const;
