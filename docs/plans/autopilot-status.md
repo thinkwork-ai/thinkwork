@@ -16,8 +16,8 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - **Branch:** `codex/computer-ai-elements-u6-authoring-guidance`
 - **Worktree:** `.Codex/worktrees/computer-ai-elements-u6`
 - **Started:** 2026-05-10
-- **PR:** Pending
-- **Status:** Locally verified; preparing PR
+- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1116
+- **Status:** PR opened; CI pending
 
 ## Progress Log
 
@@ -27,6 +27,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults test`.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults typecheck`.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults build`.
+- 2026-05-10: Opened PR #1116.
 - 2026-05-10: Squash-merged U4 PR #1114 into `main`, deleted the remote and local U4 branch, removed the U4 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U5 worktree from updated `origin/main`.
 - 2026-05-10: Started the host-owned Artifact runtime-mode model so generated App metadata cannot select trusted native rendering.
