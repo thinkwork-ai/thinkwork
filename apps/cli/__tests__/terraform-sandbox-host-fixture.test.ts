@@ -102,6 +102,17 @@ describe("U3 — computer_sandbox_site instance", () => {
     expect(source).toMatch(/frame-ancestors/);
   });
 
+  it("computer_sandbox_site CSP only allows the map embed/tile origins needed by applets", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/computer_sandbox_map_img_src/);
+    expect(source).toMatch(/https:\/\/\*\.tile\.openstreetmap\.org/);
+    expect(source).toMatch(/https:\/\/api\.mapbox\.com/);
+    expect(source).toMatch(/computer_sandbox_map_frame_src/);
+    expect(source).toMatch(/frame-src \$\{local\.computer_sandbox_map_frame_src\}/);
+    expect(source).toMatch(/https:\/\/www\.openstreetmap\.org/);
+    expect(source).not.toMatch(/frame-src \*/);
+  });
+
   it("computer_sandbox_site enables CORS for opaque-origin sandbox module scripts", () => {
     const source = read(THINKWORK_MAIN);
     const sandboxSiteBlock = source.match(

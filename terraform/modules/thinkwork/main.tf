@@ -627,8 +627,10 @@ module "computer_site" {
 #
 # Iframe CSP profile (per contract v1 §CSP profile):
 #   default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:;
-#   style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;
-#   font-src 'self' data:; connect-src 'none'; object-src 'none';
+#   style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:
+#     https://*.tile.openstreetmap.org https://api.mapbox.com;
+#   font-src 'self' data:; connect-src 'none';
+#   frame-src https://www.openstreetmap.org; object-src 'none';
 #   base-uri 'self'; frame-ancestors <var.computer_sandbox_allowed_parent_origins>;
 #
 # Provisioning is gated on var.computer_sandbox_domain — leave empty in
@@ -640,7 +642,10 @@ locals {
 
   computer_sandbox_frame_ancestors = local.computer_sandbox_enabled && var.computer_sandbox_allowed_parent_origins != "" ? join(" ", split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", ""))) : "'none'"
 
-  computer_sandbox_csp = "default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_sandbox_frame_ancestors};"
+  computer_sandbox_map_img_src = "https://*.tile.openstreetmap.org https://api.mapbox.com"
+  computer_sandbox_map_frame_src = "https://www.openstreetmap.org"
+
+  computer_sandbox_csp = "default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; connect-src 'none'; frame-src ${local.computer_sandbox_map_frame_src}; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_sandbox_frame_ancestors};"
 }
 
 module "computer_sandbox_site" {

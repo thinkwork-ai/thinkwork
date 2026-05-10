@@ -119,6 +119,12 @@ describe("Vite `define` build-time substitution (production smoke)", () => {
 				const css = readAllCss(outDir);
 				expect(css).toContain("tailwindcss");
 				expect(css).toContain(".h-64");
+
+				const html = readAllByExtension(outDir, ".html");
+				expect(html).toContain("frame-src https://www.openstreetmap.org");
+				expect(html).toContain("https://*.tile.openstreetmap.org");
+				expect(html).toContain("https://api.mapbox.com");
+				expect(html).toContain("connect-src 'none'");
 				// The production-default URL still appears in the bundle
 				// as the dead-code fallback inside resolveSandboxIframeSrc
 				// (when minify: false the unreachable branch is kept).
