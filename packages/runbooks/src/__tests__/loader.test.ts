@@ -1,8 +1,13 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadRunbookFromDirectory, loadRunbooks } from "../loader.js";
+import {
+  loadRunbookFromDirectory,
+  loadRunbooks,
+  resolveDefaultRunbooksRoot,
+} from "../loader.js";
 import { RunbookValidationError } from "../schema.js";
 
 const tempDirs: string[] = [];
@@ -65,6 +70,18 @@ describe("runbook loader", () => {
       "alpha-runbook",
       "zeta-runbook",
     ]);
+  });
+
+  it("resolves bundled Lambda runbooks next to the entrypoint", () => {
+    const root = mkdtempSync(join(tmpdir(), "runbook-bundle-"));
+    tempDirs.push(root);
+    mkdirSync(join(root, "runbooks"), { recursive: true });
+
+    expect(
+      resolveDefaultRunbooksRoot(
+        pathToFileURL(join(root, "index.mjs")).toString(),
+      ),
+    ).toEqual(pathToFileURL(join(root, "runbooks")));
   });
 });
 
