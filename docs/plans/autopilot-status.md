@@ -18,6 +18,7 @@ status: complete
 ## Progress Log
 
 - 2026-05-10: Autopilot started from `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`.
+- 2026-05-10: Post-merge live smoke found deployed `runbookCatalog` returning no rows because the GraphQL Lambda artifact did not include the source-authored runbook YAML/Markdown assets. Started `codex/fix-runbook-lambda-assets` to include those assets in the `graphql-http` zip before rerunning live end-to-end validation.
 - 2026-05-10: U1 selected as the first implementation unit because it has no dependencies and is required by U2/U3.
 - 2026-05-10: Created U1 worktree `.Codex/worktrees/runbooks-u1` on branch `codex/runbooks-u1` from `origin/main`.
 - 2026-05-10: Implemented initial `@thinkwork/runbooks` package, validation/loader/registry tests, and CRM Dashboard, Research Dashboard, and Map Artifact runbook definitions.
