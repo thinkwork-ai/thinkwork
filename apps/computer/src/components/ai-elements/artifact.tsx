@@ -80,6 +80,18 @@ export const ArtifactDescription = ({
   <p className={cn("text-muted-foreground text-sm", className)} {...props} />
 );
 
+export type ArtifactLabelProps = HTMLAttributes<HTMLSpanElement>;
+
+export const ArtifactLabel = ({ className, ...props }: ArtifactLabelProps) => (
+  <span
+    className={cn(
+      "inline-flex items-center rounded-md border border-border/60 px-2 py-0.5 font-medium text-muted-foreground text-xs",
+      className
+    )}
+    {...props}
+  />
+);
+
 export type ArtifactActionsProps = HTMLAttributes<HTMLDivElement>;
 
 export const ArtifactActions = ({
