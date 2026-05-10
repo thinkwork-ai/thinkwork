@@ -297,7 +297,6 @@ export class IframeAppletController {
 			}
 		}
 		// Reply envelopes that don't match a pending request are dropped.
-		void expectedSource;
 	}
 
 	private postInit(): void {

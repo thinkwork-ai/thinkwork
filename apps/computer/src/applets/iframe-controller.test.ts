@@ -293,11 +293,18 @@ describe("IframeAppletController — state proxy", () => {
 		// need to intercept that reply.
 		const replyCalls: unknown[] = [];
 		// Replace the fake postMessage to also re-dispatch into the
-		// window so our ackPromise listener can hear it.
-		const origPostMessage = (fakeWindow as { postMessage: typeof Window.prototype.postMessage }).postMessage;
+		// window so our ackPromise listener can hear it. Type the
+		// reference to the string-targetOrigin overload of postMessage
+		// — TS' DOM lib also exposes a (message, options) overload that
+		// would mis-resolve our second arg as WindowPostMessageOptions.
+		const origPostMessage = (
+			fakeWindow as unknown as {
+				postMessage: (message: unknown, targetOrigin: string) => void;
+			}
+		).postMessage;
 		Object.defineProperty(fakeWindow, "postMessage", {
 			value: (env: unknown, targetOrigin: string) => {
-				origPostMessage.call(fakeWindow, env as never, targetOrigin);
+				origPostMessage.call(fakeWindow, env, targetOrigin);
 				replyCalls.push(env);
 				window.dispatchEvent(
 					new MessageEvent("message", { data: env, source: fakeWindow }),
