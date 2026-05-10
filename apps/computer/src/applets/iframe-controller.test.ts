@@ -94,6 +94,47 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+describe("IframeAppletController — __SANDBOX_IFRAME_SRC__ build-time wiring", () => {
+	it("uses globalThis.__SANDBOX_IFRAME_SRC__ as the default iframe src when no override is passed", async () => {
+		// Plan-012 U10/U11.5: scripts/build-computer.sh writes
+		// VITE_SANDBOX_IFRAME_SRC into apps/computer/.env.production from
+		// the Terraform `computer_sandbox_url` output. apps/computer/
+		// vite.config.ts substitutes it as `__SANDBOX_IFRAME_SRC__` at
+		// build time. The controller's iframe-protocol.ts reads
+		// `globalThis.__SANDBOX_IFRAME_SRC__` (the build-time-injected
+		// constant) and falls back to the production default only when
+		// unset. This test pins that the controller actually consumes
+		// the configured URL.
+		const stagedUrl = "https://sandbox.dev.thinkwork.test/iframe-shell.html";
+		const original = (
+			globalThis as { __SANDBOX_IFRAME_SRC__?: string }
+		).__SANDBOX_IFRAME_SRC__;
+		(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ =
+			stagedUrl;
+		try {
+			vi.resetModules();
+			const { IframeAppletController: FreshController } = await import(
+				"./iframe-controller"
+			);
+			const controller = new FreshController({
+				tsx: "<App />",
+				version: "0.1.0",
+			});
+			expect(controller.element.src).toBe(stagedUrl);
+			controller.dispose();
+		} finally {
+			if (original === undefined) {
+				delete (globalThis as { __SANDBOX_IFRAME_SRC__?: string })
+					.__SANDBOX_IFRAME_SRC__;
+			} else {
+				(globalThis as { __SANDBOX_IFRAME_SRC__?: string }).__SANDBOX_IFRAME_SRC__ =
+					original;
+			}
+			vi.resetModules();
+		}
+	});
+});
+
 describe("IframeAppletController — element + handshake", () => {
 	it("creates a sandbox iframe with allow-scripts ONLY (no allow-same-origin)", () => {
 		const { controller } = createController();

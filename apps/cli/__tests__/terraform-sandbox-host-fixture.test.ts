@@ -167,6 +167,28 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(/cognito-idp/);
   });
 
+  it("host CSP AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
+    // Plan-012: non-us-east-1 stages (e.g. eu-west-1) would have a
+    // broken host CSP if the region were hardcoded. var.region drives
+    // the AppSync API host, AppSync realtime host, and Cognito IdP
+    // host segments.
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/appsync-api\.\$\{var\.region\}\.amazonaws\.com/);
+    expect(source).toMatch(
+      /appsync-realtime-api\.\$\{var\.region\}\.amazonaws\.com/,
+    );
+    expect(source).toMatch(/cognito-idp\.\$\{var\.region\}\.amazonaws\.com/);
+    // Defensive negative: no remaining hardcoded us-east-1 in the
+    // host CSP. (Other terraform resources legitimately reference
+    // us-east-1 — e.g. CloudFront ACM cert region — so we scope the
+    // regex to the known CSP host suffixes.)
+    expect(source).not.toMatch(/appsync-api\.us-east-1\.amazonaws\.com/);
+    expect(source).not.toMatch(
+      /appsync-realtime-api\.us-east-1\.amazonaws\.com/,
+    );
+    expect(source).not.toMatch(/cognito-idp\.us-east-1\.amazonaws\.com/);
+  });
+
   it("host CSP frame-src allowlists the sandbox subdomain when provisioned", () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/computer_host_frame_src/);

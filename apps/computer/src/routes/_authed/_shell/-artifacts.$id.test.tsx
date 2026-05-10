@@ -190,6 +190,27 @@ describe("AppletRouteContent", () => {
 
     expect(screen.getByText("Artifact not found.")).toBeTruthy();
   });
+
+  it("default production render takes the iframe substrate path (no loadModule prop)", async () => {
+    // Plan-012 U11.5: AppletRouteContent must NOT default loadModule
+    // to defaultAppletModuleLoader. Without loadModule, the
+    // AppletMount routes to IframeAppletMount which appends an
+    // iframe host element (data-testid='applet-iframe-host'). The
+    // legacy transformApplet seam MUST NOT fire — that's the
+    // load-bearing assertion that the production bypass adversarial
+    // review flagged is closed.
+    vi.mocked(transformApplet).mockClear();
+    vi.mocked(loadAppletHostExternals).mockClear();
+
+    render(
+      <AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />,
+    );
+
+    const host = await screen.findByTestId("applet-iframe-host");
+    expect(host).toBeTruthy();
+    expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
+    expect(vi.mocked(loadAppletHostExternals)).not.toHaveBeenCalled();
+  });
 });
 
 describe("AppletMount", () => {

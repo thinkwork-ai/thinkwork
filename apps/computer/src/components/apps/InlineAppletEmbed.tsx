@@ -5,7 +5,6 @@ import {
   AppletLoading,
   AppletMount,
   appletSource,
-  defaultAppletModuleLoader,
   useAppletInstanceId,
   type AppletModuleLoader,
 } from "@/applets/mount";
@@ -26,14 +25,16 @@ interface InlineAppletEmbedProps {
   // dashboard inside a thread message bubble without dominating the transcript.
   height?: number;
   // Test seam: lets unit tests inject a fake module loader so tests don't have
-  // to spin up the real applet transform pipeline.
+  // to spin up the real applet transform pipeline. Plan-012 U11.5: this is
+  // intentionally NOT defaulted to defaultAppletModuleLoader — production
+  // renders MUST pass undefined so AppletMount routes to the iframe substrate.
   loadModule?: AppletModuleLoader;
 }
 
 export function InlineAppletEmbed({
   appId,
   height = 480,
-  loadModule = defaultAppletModuleLoader,
+  loadModule,
 }: InlineAppletEmbedProps) {
   const [{ data, fetching, error }] = useQuery<AppletResult>({
     query: AppletQuery,
@@ -84,7 +85,9 @@ export function InlineAppletEmbed({
           instanceId={instanceId}
           source={source}
           version={version}
-          loadModule={loadModule}
+          // Forward only when supplied — production renders pass
+          // undefined so AppletMount routes to the iframe substrate.
+          {...(loadModule ? { loadModule } : {})}
           hideRefreshControl
         />
       </ArtifactContent>
