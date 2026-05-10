@@ -143,6 +143,81 @@ abort                       { "type": "abort" }
 error                       { "type": "error", "errorText": "<short message>" }
 ```
 
+### Runbook `data-*` parts
+
+Computer runbooks use `data-${name}` parts for approval and progress.
+
+`data-runbook-confirmation` is emitted for auto-selected published runbooks
+before execution starts:
+
+```json
+{
+  "type": "data-runbook-confirmation",
+  "id": "runbook-confirmation:<runId>",
+  "data": {
+    "runbookRunId": "<uuid>",
+    "runbookSlug": "map-artifact",
+    "runbookVersion": "0.1.0",
+    "displayName": "Map Artifact",
+    "title": "Build Map Artifact",
+    "summary": "Computer will discover location data...",
+    "expectedOutputs": ["Interactive map artifact"],
+    "likelyTools": ["workspace search", "artifact builder"],
+    "phaseSummary": [
+      "Discover entities...",
+      "Produce a map-centered artifact."
+    ],
+    "candidates": [
+      {
+        "slug": "map-artifact",
+        "displayName": "Map Artifact",
+        "confidence": 0.84
+      }
+    ]
+  }
+}
+```
+
+`data-runbook-queue` is emitted for explicit, approved, running, completed,
+failed, cancelled, and ad hoc plan progress:
+
+```json
+{
+  "type": "data-runbook-queue",
+  "id": "runbook-queue:<runId-or-ad-hoc-id>",
+  "data": {
+    "runbookRunId": "<uuid-or-null>",
+    "runbookSlug": "crm-dashboard",
+    "runbookVersion": "0.1.0",
+    "displayName": "CRM Dashboard",
+    "status": "running",
+    "currentTaskKey": "produce:1",
+    "phases": [
+      {
+        "id": "produce",
+        "title": "Produce dashboard artifact",
+        "tasks": [
+          {
+            "id": "<task uuid>",
+            "taskKey": "produce:1",
+            "title": "Generate an interactive CRM dashboard...",
+            "status": "running"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Queue updates for the same run MUST reuse the same `id`, normally
+`runbook-queue:<runId>`. The client replaces an existing `data-*` part with
+the same `type` and `id`; changing ids appends duplicate Queue cards.
+
+Persisted assistant `Message.parts` MUST include these data parts. Thread
+reload renders `parts` before legacy `content`, so confirmation and queue
+cards remain visible after navigation.
+
 `text-start` IDs are **stable per part across deltas**. Minting a new id per
 delta renders the same logical text part as N separate text bubbles in the
 client; this is a producer bug, not a consumer accommodation. Reasoning ids

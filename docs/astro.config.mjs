@@ -66,6 +66,10 @@ export default defineConfig({
                   label: "App Artifact UI",
                   slug: "concepts/computers/app-artifact-ui",
                 },
+                {
+                  label: "Runbooks",
+                  slug: "concepts/computers/runbooks",
+                },
               ],
             },
             {
@@ -260,6 +264,7 @@ export default defineConfig({
                 { label: "GraphQL Schema", slug: "api/graphql" },
                 { label: "Compiled Pages", slug: "api/compounding-memory" },
                 { label: "Company Brain Context", slug: "api/context-engine" },
+                { label: "Runbooks", slug: "reference/runbooks" },
               ],
             },
             {

@@ -1,0 +1,111 @@
+---
+title: Runbooks reference
+description: Authoring and execution reference for ThinkWork-published Computer runbooks.
+---
+
+Runbooks live in `packages/runbooks/runbooks/<slug>/`. Each runbook has one `runbook.yaml` file and one Markdown file per phase.
+
+```text
+packages/runbooks/runbooks/crm-dashboard/
+  runbook.yaml
+  phases/
+    discover.md
+    analyze.md
+    produce.md
+    validate.md
+```
+
+## YAML shape
+
+`runbook.yaml` is the durable product definition. It must include:
+
+| Field       | Purpose                                                                 |
+| ----------- | ----------------------------------------------------------------------- |
+| `slug`      | stable unique id, used in routing, catalog rows, runs, and smoke checks |
+| `version`   | source version copied into catalog rows and historical run snapshots    |
+| `catalog`   | display name, description, and category                                 |
+| `routing`   | explicit aliases, trigger examples, and confidence hints                |
+| `inputs`    | user, context, or system inputs expected by the runbook                 |
+| `approval`  | Confirmation-card copy for auto-selected runs                           |
+| `phases`    | ordered phase ids, titles, guidance file names, roles, dependencies     |
+| `outputs`   | expected artifacts, summaries, evidence, datasets, or maps              |
+| `overrides` | fields future operators may safely edit                                 |
+
+Minimal phase example:
+
+```yaml
+phases:
+  - id: produce
+    title: Produce dashboard artifact
+    guidance: produce.md
+    capabilityRoles:
+      - artifact_build
+    dependsOn:
+      - analyze
+    taskSeeds:
+      - Generate an interactive dashboard using the runbook phase guidance.
+      - Persist the dashboard through save_app with runbook metadata.
+```
+
+## Phase Markdown
+
+Phase Markdown is execution guidance. It should be specific enough for the runtime to execute one task at a time without inventing a new plan.
+
+Good phase Markdown includes:
+
+- source and evidence handling rules
+- output shape or artifact metadata requirements
+- capability-specific constraints such as `MapView` for map artifacts
+- save and validation expectations
+- what to do with missing or partial data
+
+Do not put secrets, tenant-specific credentials, or concrete specialist agent names in phase Markdown.
+
+## Routing rules
+
+Explicit invocation starts directly when the prompt names the runbook, slug, display name, or one of its explicit aliases.
+
+Auto-selection uses deterministic API-side scoring over trigger examples and confidence hints. High-confidence auto-selection creates an `awaiting_confirmation` run and a `data-runbook-confirmation` part. Ambiguous or no-match prompts fall back to normal Computer execution.
+
+## Run lifecycle
+
+| State                   | Meaning                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `awaiting_confirmation` | auto-selected run waiting for user approval           |
+| `queued`                | approved or explicit run has a `runbook_execute` task |
+| `running`               | runtime is executing current expanded task            |
+| `completed`             | every required task completed                         |
+| `failed`                | execution failed and recorded an error                |
+| `cancelled`             | user cancelled run; later tasks must not continue     |
+| `rejected`              | user rejected auto-selected run before execution      |
+
+Every run stores `definitionSnapshot` so catalog changes do not rewrite history.
+
+## UIMessage data parts
+
+Runbook UI uses the AI SDK `data-${name}` extension point:
+
+| Part type                   | Used for                                    |
+| --------------------------- | ------------------------------------------- |
+| `data-runbook-confirmation` | auto-selected approval card                 |
+| `data-runbook-queue`        | phase/task progress, including ad hoc plans |
+
+Stable ids matter. Queue updates for the same run should reuse `runbook-queue:<runId>` so the Computer client replaces the existing queue card instead of appending duplicates.
+
+## Smoke coverage
+
+Use the runbook smoke script after deploying a stack with the runbook migrations and GraphQL API:
+
+```sh
+node scripts/smoke/computer-runbook-smoke.mjs
+SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/computer-runbook-smoke.mjs
+```
+
+Dry-run mode validates the repo-authored runbooks and expected part names. Live mode exercises:
+
+- auto-selected `map-artifact` confirmation before execution
+- explicit `crm-dashboard` Queue without confirmation
+- explicit `research-dashboard` Queue plus cancellation
+- no-match prompt avoiding a published runbook run
+
+Live mode accepts `SMOKE_TENANT_ID`, `SMOKE_COMPUTER_ID`, and `SMOKE_USER_ID`; otherwise it selects the most recently updated owned Computer.

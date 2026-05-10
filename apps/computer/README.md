@@ -45,6 +45,22 @@ SMOKE_ENABLE_AGENT_APPLET_PROMPT=1 scripts/smoke-computer.sh dev
 
 The default prompt is `Build a simple CRM pipeline dashboard from the available CRM data.` Override it with `SMOKE_CRM_DASHBOARD_PROMPT` when running post-deploy acceptance prompts.
 
+## Runbook Smoke
+
+Computer runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to a deterministic repo dry-run:
+
+```bash
+node scripts/smoke/computer-runbook-smoke.mjs
+```
+
+To exercise a deployed Computer, database, GraphQL API, and runbook lifecycle:
+
+```bash
+SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/computer-runbook-smoke.mjs
+```
+
+Live mode checks an auto-selected `map-artifact` confirmation, explicit `crm-dashboard` and `research-dashboard` Queue creation, research-run cancellation, and a no-match prompt that must not create a published runbook run.
+
 To run the browser-backed evidence path manually:
 
 ```bash
