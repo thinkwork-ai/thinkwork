@@ -50,14 +50,9 @@ import {
   computerMutations,
   computerTypeResolvers,
 } from "./computers/index.js";
-import {
-  customizeQueries,
-  customizeMutations,
-} from "./customize/index.js";
-import {
-  complianceQueries,
-  complianceMutations,
-} from "./compliance/index.js";
+import { runbookQueries, runbookMutations } from "./runbooks/index.js";
+import { customizeQueries, customizeMutations } from "./customize/index.js";
+import { complianceQueries, complianceMutations } from "./compliance/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -88,6 +83,7 @@ export const queryResolvers: Record<string, any> = {
   ...quickActionQueries,
   ...connectorQueries,
   ...computerQueries,
+  ...runbookQueries,
   ...customizeQueries,
   ...complianceQueries,
 };
@@ -120,6 +116,7 @@ export const mutationResolvers: Record<string, any> = {
   ...quickActionMutations,
   ...connectorMutations,
   ...computerMutations,
+  ...runbookMutations,
   ...customizeMutations,
   ...complianceMutations,
 };

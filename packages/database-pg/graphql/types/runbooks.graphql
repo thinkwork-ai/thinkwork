@@ -1,0 +1,116 @@
+# Tenant-visible runbook catalog and run state for computer-guided work.
+
+enum RunbookCatalogStatus {
+  ACTIVE
+  UNAVAILABLE
+  ARCHIVED
+}
+
+enum RunbookRunStatus {
+  AWAITING_CONFIRMATION
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REJECTED
+}
+
+enum RunbookInvocationMode {
+  AUTO
+  EXPLICIT
+  AD_HOC
+}
+
+enum RunbookTaskStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+type RunbookCatalogItem {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  sourceVersion: String!
+  displayName: String!
+  description: String!
+  category: String!
+  status: RunbookCatalogStatus!
+  enabled: Boolean!
+  definition: AWSJSON!
+  operatorOverrides: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type RunbookRunTask {
+  id: ID!
+  tenantId: ID!
+  runId: ID!
+  phaseId: String!
+  phaseTitle: String!
+  taskKey: String!
+  title: String!
+  summary: String
+  status: RunbookTaskStatus!
+  dependsOn: AWSJSON!
+  capabilityRoles: AWSJSON!
+  sortOrder: Int!
+  details: AWSJSON
+  output: AWSJSON
+  error: AWSJSON
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type RunbookRun {
+  id: ID!
+  tenantId: ID!
+  computerId: ID!
+  threadId: ID
+  catalogId: ID
+  runbookSlug: String!
+  runbookVersion: String!
+  status: RunbookRunStatus!
+  invocationMode: RunbookInvocationMode!
+  selectedByMessageId: ID
+  approvedByUserId: ID
+  rejectedByUserId: ID
+  cancelledByUserId: ID
+  definitionSnapshot: AWSJSON!
+  inputs: AWSJSON!
+  output: AWSJSON
+  error: AWSJSON
+  idempotencyKey: String
+  approvedAt: AWSDateTime
+  rejectedAt: AWSDateTime
+  cancelledAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  tasks: [RunbookRunTask!]!
+}
+
+extend type Query {
+  runbookCatalog: [RunbookCatalogItem!]!
+  runbookRun(id: ID!): RunbookRun
+  runbookRuns(
+    computerId: ID!
+    threadId: ID
+    status: RunbookRunStatus
+    limit: Int
+  ): [RunbookRun!]!
+}
+
+extend type Mutation {
+  confirmRunbookRun(id: ID!): RunbookRun!
+  rejectRunbookRun(id: ID!): RunbookRun!
+  cancelRunbookRun(id: ID!): RunbookRun!
+}

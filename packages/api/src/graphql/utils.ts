@@ -21,6 +21,7 @@ import {
   isNotNull,
   sql,
   inArray,
+  notInArray,
 } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -92,6 +93,9 @@ import {
   computerEvents,
   computerSnapshots,
   computerDelegations,
+  tenantRunbookCatalog,
+  computerRunbookRuns,
+  computerRunbookTasks,
   // Skill Runs (composable-skills Unit 4)
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
@@ -133,6 +137,7 @@ export {
   isNotNull,
   sql,
   inArray,
+  notInArray,
   randomUUID,
   randomBytes,
   tenants,
@@ -183,6 +188,9 @@ export {
   computerEvents,
   computerSnapshots,
   computerDelegations,
+  tenantRunbookCatalog,
+  computerRunbookRuns,
+  computerRunbookTasks,
   skillRuns,
   mutationIdempotency,
   tenantPolicyEvents,
@@ -459,7 +467,8 @@ async function getSkillRunInvokeFnName(
     return _skillRunInvokeFnName[runtimeType] ?? null;
   }
   if (runtimeType === "flue") {
-    _skillRunInvokeFnName.flue = process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
+    _skillRunInvokeFnName.flue =
+      process.env.AGENTCORE_FLUE_FUNCTION_NAME || null;
     return _skillRunInvokeFnName.flue;
   }
   // Reuse the same Lambda as chat invocation — there's exactly one
