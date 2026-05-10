@@ -61,4 +61,15 @@ describe("GeneratedAppArtifactShell", () => {
       container.querySelector('[data-runtime-mode="nativeTrusted"]'),
     ).toBeTruthy();
   });
+
+  it("can hide generated app chrome when the host route already owns it", () => {
+    render(
+      <GeneratedAppArtifactShell title="Full page app" showHeader={false}>
+        <div>Full canvas</div>
+      </GeneratedAppArtifactShell>,
+    );
+
+    expect(screen.queryByText("Full page app")).toBeNull();
+    expect(screen.getByText("Full canvas")).toBeTruthy();
+  });
 });

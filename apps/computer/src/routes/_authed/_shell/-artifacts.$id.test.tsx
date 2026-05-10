@@ -223,6 +223,25 @@ describe("AppletRouteContent", () => {
       }),
     );
   });
+
+  it("renders full-route content through the generated app artifact shell without duplicate visible chrome", async () => {
+    render(
+      <AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />,
+    );
+
+    await screen.findByTestId("applet-iframe-host");
+    expect(
+      screen
+        .getByTestId("app-artifact-split-shell")
+        .querySelector('[data-generated-app-artifact]'),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("app-artifact-split-shell")
+        .querySelector('[data-runtime-mode="sandboxedGenerated"]'),
+    ).toBeTruthy();
+    expect(screen.queryByText("Hello applet")).toBeNull();
+  });
 });
 
 describe("AppletMount", () => {

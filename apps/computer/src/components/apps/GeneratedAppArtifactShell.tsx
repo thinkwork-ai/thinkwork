@@ -19,6 +19,7 @@ export interface GeneratedAppArtifactShellProps {
   runtimeMode?: GeneratedAppRuntimeMode;
   actions?: ReactNode;
   children: ReactNode;
+  showHeader?: boolean;
   className?: string;
   headerClassName?: string;
   contentClassName?: string;
@@ -31,6 +32,7 @@ export function GeneratedAppArtifactShell({
   runtimeMode = "sandboxedGenerated",
   actions,
   children,
+  showHeader = true,
   className,
   headerClassName,
   contentClassName,
@@ -43,20 +45,22 @@ export function GeneratedAppArtifactShell({
       data-generated-app-artifact=""
       data-runtime-mode={runtimeMode}
     >
-      <ArtifactHeader className={cn("gap-3 bg-transparent", headerClassName)}>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <ArtifactTitle className="truncate">{title}</ArtifactTitle>
-            <ArtifactLabel>{label}</ArtifactLabel>
+      {showHeader ? (
+        <ArtifactHeader className={cn("gap-3 bg-transparent", headerClassName)}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <ArtifactTitle className="truncate">{title}</ArtifactTitle>
+              <ArtifactLabel>{label}</ArtifactLabel>
+            </div>
+            {hasDescription ? (
+              <ArtifactDescription className="mt-1 leading-5">
+                {description}
+              </ArtifactDescription>
+            ) : null}
           </div>
-          {hasDescription ? (
-            <ArtifactDescription className="mt-1 leading-5">
-              {description}
-            </ArtifactDescription>
-          ) : null}
-        </div>
-        {actions ? <ArtifactActions>{actions}</ArtifactActions> : null}
-      </ArtifactHeader>
+          {actions ? <ArtifactActions>{actions}</ArtifactActions> : null}
+        </ArtifactHeader>
+      ) : null}
       <ArtifactContent className={cn("p-0", contentClassName)}>
         {children}
       </ArtifactContent>

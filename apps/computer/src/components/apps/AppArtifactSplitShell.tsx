@@ -1,12 +1,17 @@
 import type { ReactNode } from "react";
 import { AppCanvasPanel } from "@/components/apps/AppCanvasPanel";
+import type { GeneratedAppRuntimeMode } from "@/components/apps/GeneratedAppArtifactShell";
 
 interface AppArtifactSplitShellProps {
   children: ReactNode;
+  title?: string;
+  runtimeMode?: GeneratedAppRuntimeMode;
 }
 
 export function AppArtifactSplitShell({
   children,
+  title,
+  runtimeMode,
 }: AppArtifactSplitShellProps) {
   return (
     <div
@@ -17,7 +22,9 @@ export function AppArtifactSplitShell({
         data-testid="app-artifact-panels"
         className="min-h-0 min-w-0 flex-1"
       >
-        <AppCanvasPanel>{children}</AppCanvasPanel>
+        <AppCanvasPanel title={title} runtimeMode={runtimeMode}>
+          {children}
+        </AppCanvasPanel>
       </div>
     </div>
   );
