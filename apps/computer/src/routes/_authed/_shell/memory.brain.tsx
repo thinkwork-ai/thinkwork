@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { Brain, Loader2, Search, X } from "lucide-react";
+import { Brain, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -27,6 +27,7 @@ import {
   DeleteComputerMemoryRecordMutation,
   MyComputerQuery,
 } from "@/lib/graphql-queries";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
   STRATEGY_COLORS,
@@ -305,17 +306,17 @@ function BrainPage() {
                 }}
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Loading…
+              <div className="flex h-full items-center justify-center">
+                <LoadingShimmer />
               </div>
             )}
           </div>
         ) : isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
+          <div className="flex h-full items-center justify-center">
+            <LoadingShimmer />
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <Brain className="h-12 w-12 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
               {activeSearch
