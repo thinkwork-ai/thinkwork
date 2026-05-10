@@ -26,7 +26,7 @@ export function AppPreviewCard({ artifact }: AppPreviewCardProps) {
                 <Boxes className="size-4 text-primary" />
               </span>
               <span className="text-xs font-medium text-muted-foreground">
-                Applet
+                App
               </span>
             </div>
             <Badge variant="outline" className="rounded-md">

@@ -23,7 +23,7 @@ export class AppletErrorBoundary extends Component<
 
   componentDidCatch(_error: Error, _errorInfo: ErrorInfo) {
     // React still records the component stack in development; the UI keeps
-    // the recoverable applet failure readable for end users.
+    // the recoverable app failure readable for end users.
   }
 
   componentDidUpdate(previousProps: AppletErrorBoundaryProps) {
@@ -50,7 +50,7 @@ export class AppletErrorBoundary extends Component<
                 This app could not render
               </h2>
               <p className="mt-1 break-words text-sm text-muted-foreground">
-                {this.state.error.message || "The applet runtime failed."}
+                {this.state.error.message || "The app runtime failed."}
               </p>
             </div>
             <Button

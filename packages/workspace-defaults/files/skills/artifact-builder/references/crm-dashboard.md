@@ -1,8 +1,8 @@
 # CRM Dashboard Recipe
 
-Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard applet.
+Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard app.
 
-The goal is a saved, reusable applet. Do not stop at analysis prose. Normalize the available data first, generate the applet source second, then call `save_app` directly.
+The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call `save_app` directly.
 
 ## Source Discovery
 
@@ -10,10 +10,10 @@ Use the best sources available in this order:
 
 1. Thread context and any attached or already retrieved CRM rows.
 2. Available CRM, connector, MCP, context, workspace, memory, or Hindsight tools.
-3. Email, calendar, and web context when the prompt asks for stale activity, next meetings, external account risk, or evidence.
-4. A small demo or fixture-shaped dataset only when live sources are missing. Mark that source as partial or failed inside the applet.
+3. Email, calendar, and web context when the prompt asks for stale activity, next meetings, or external account risk.
+4. A small demo or fixture-shaped dataset only when live sources are missing. Make limitations visible only when they materially affect the displayed result.
 
-Missing live data is not a blocker. The applet should still run and should show source coverage honestly.
+Missing live data is not a blocker. The app should still run and should stay focused on the requested dashboard rather than rendering provenance panels.
 
 ## Canonical Data Shape
 
@@ -29,14 +29,6 @@ Normalize source results into `CrmDashboardData` before writing TSX. Keep this s
         generatedAt: string;
         accountFilter?: string;
       };
-      sourceStatuses: Array<{
-        id: "crm" | "email" | "calendar" | "web" | string;
-        label: string;
-        status: SourceStatus;
-        asOf?: string;
-        recordCount: number;
-        error?: string;
-      }>;
       kpis: Array<{
         id: string;
         label: string;
@@ -76,20 +68,12 @@ Normalize source results into `CrmDashboardData` before writing TSX. Keep this s
         lastActivity?: string;
         risk?: RiskLevel;
       }>;
-      evidence: Array<{
-        id: string;
-        title: string;
-        snippet: string;
-        sourceId: string;
-        observedAt?: string;
-        url?: string;
-      }>;
       refreshNote?: string;
     }
 
-## Applet Layout
+## App Layout
 
-Build one responsive applet that fits the available horizontal space with `w-full min-w-0 max-w-[1280px]`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
+Build one responsive app that fits the available horizontal space with `w-full min-w-0 max-w-[1280px]`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
 
 Required sections:
 
@@ -98,26 +82,22 @@ Required sections:
 - Stage exposure: a bar chart from `stageExposure`.
 - Stale activity: a chart or compact table from `staleActivity`.
 - Top risks: a ranked table or list from `topRisks`, sorted by risk and exposure.
-- Source coverage: `SourceStatusList` using `sourceStatuses`.
-- Evidence: `EvidenceList` with CRM/email/calendar/web signals.
 
-Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, `SourceStatusList`, `EvidenceList`, and formatters such as `formatCurrency`.
+Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
 Use the stdlib prop names directly:
 
 - `KpiStrip` receives `cards={data.kpis}`.
-- `SourceStatusList` receives `sources={data.sourceStatuses}`.
-- `EvidenceList` receives `items={data.evidence}`.
 - `DataTable` receives `columns={...}` and `rows={data.opportunities}`.
 - `BarChart` receives `data={data.stageExposure}` or `data={data.staleActivity}`.
 
 ## Empty And Partial States
 
-If no CRM opportunities are available, still save a runnable applet. Show empty KPI values, an empty table, and a source status explaining which source is missing.
+If no CRM opportunities are available, still save a runnable app. Show empty KPI values, an empty table, and a concise empty state.
 
-If CRM rows exist but email, calendar, or web signals are missing, keep the CRM sections populated and mark the missing supporting source as `partial` or `failed`.
+If CRM rows exist but email, calendar, or web signals are missing, keep the CRM sections populated. Do not add source coverage or evidence panels.
 
-Never hide uncertainty. Put the limitation in `sourceStatuses` and, when useful, in `refreshNote`.
+Never hide uncertainty, but keep it proportional: use a short note near the affected metric only when it changes how the user should read the dashboard.
 
 ## Refresh Contract
 
@@ -126,18 +106,13 @@ Export `refresh()` when the dashboard can be refreshed. It must return determini
     export async function refresh() {
       return {
         data: refreshedCrmDashboardData,
-        sourceStatuses: Object.fromEntries(
-          refreshedCrmDashboardData.sourceStatuses.map((source) => [
-            source.id,
-            source.status,
-          ]),
-        ),
+        sourceStatuses: { crm: "success" },
       };
     }
 
-Refresh should rerun saved source queries or deterministic transforms. It must not reinterpret the whole prompt or create a different applet.
+Refresh should rerun saved source queries or deterministic transforms. It must not reinterpret the whole prompt or create a different app.
 
-The artifact host renders refresh actions in its top-bar actions menu. Do not render a refresh control, refresh timeline, or `RefreshBar` inside the applet unless the user explicitly asks for a custom in-artifact refresh experience.
+The artifact host renders refresh actions in its top-bar actions menu. Do not render a refresh control, refresh timeline, recipe explainer, or `RefreshBar` inside the app unless the user explicitly asks for a custom in-artifact refresh experience.
 
 ## Save Contract
 

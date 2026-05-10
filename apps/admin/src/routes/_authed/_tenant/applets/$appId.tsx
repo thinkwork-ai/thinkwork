@@ -27,8 +27,8 @@ function AppletDetailPage() {
   const applet = payload?.applet;
 
   useBreadcrumbs([
-    { label: "Applets", href: "/applets" },
-    { label: applet?.name ?? "Applet" },
+    { label: "Apps", href: "/applets" },
+    { label: applet?.name ?? "App" },
   ]);
 
   if (result.fetching && !result.data) return <PageSkeleton />;
@@ -37,22 +37,22 @@ function AppletDetailPage() {
     return (
       <PageLayout
         header={
-          <PageHeader title="Applet not found">
+          <PageHeader title="App not found">
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate({ to: "/applets" })}
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Applets
+              Back to Apps
             </Button>
           </PageHeader>
         }
       >
         <EmptyState
           icon={Code2}
-          title="Applet unavailable"
-          description="The applet may have been deleted or the current account cannot inspect it."
+          title="App unavailable"
+          description="The app may have been deleted or the current account cannot inspect it."
         />
       </PageLayout>
     );

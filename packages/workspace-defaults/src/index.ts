@@ -290,13 +290,13 @@ pages, workspace files, knowledge bases, and approved search-safe MCP tools. It 
 and returns cited results plus provider status. Use \`query_memory_context\` only when you need
 Hindsight memory synthesis; it can be slower than the default Company Brain path.
 
-## Computer Applets
+## Computer Apps
 
 If \`save_app\`, \`load_app\`, and \`list_apps\` are available, use them for interactive
-TSX applets such as dashboards, briefings, or task-specific work surfaces. Generate
-the applet source with \`@thinkwork/computer-stdlib\` primitives, call \`save_app\`
+TSX apps such as dashboards, briefings, or task-specific work surfaces. Generate
+the app source with \`@thinkwork/computer-stdlib\` primitives, call \`save_app\`
 with one or more TSX files and metadata, use \`load_app\` before regenerating an
-existing app, and use \`list_apps\` when you need to reference prior applets. Applet
+existing app, and use \`list_apps\` when you need to reference prior apps. App
 refreshes must be deterministic \`refresh()\` exports; do not use refresh to ask the
 user's Computer to reinterpret the original request.
 
@@ -585,35 +585,34 @@ _(empty — add entries as you encounter them)_
  */
 const ARTIFACT_BUILDER_SKILL_MD = `---
 name: artifact-builder
-description: Builds reusable ThinkWork Computer applets and interactive artifacts from research prompts. Use when the user asks to build, create, generate, or make a dashboard, applet, report, briefing, workspace, or other interactive surface.
+description: Builds reusable ThinkWork Computer apps and interactive artifacts from research prompts. Use when the user asks to build, create, generate, or make a dashboard, app, report, briefing, workspace, or other interactive surface.
 ---
 
 # Artifact Builder
 
-Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a saved applet, not just a prose answer.
+Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a saved app, not just a prose answer.
 
 ## Contract
 
 1. Research with the available tools and thread context.
-2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Show missing or partial source status inside the applet.
+2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Keep the visible app focused on the user's requested output; do not render provenance, source coverage, or recipe/refresh explainers unless the user explicitly asks for them.
 3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path.
-4. Keep applet generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the applet.
+4. Keep app generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the app.
 5. Generate TSX using \`@thinkwork/computer-stdlib\` primitives and \`@thinkwork/ui\`.
 6. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
 7. Call \`save_app\` directly before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
 8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
 9. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
 
-## Applet Shape
+## App Shape
 
 Use \`App.tsx\` as the main file. Export one default React component. Prefer concise component-local data transforms over large abstractions. Do not use network calls, browser globals, dynamic imports, \`eval\`, or raw HTML injection.
 
-Good applets include:
+Good apps include:
 
 - Header with title, summary, and source badges.
 - KPI strip for key totals.
 - Charts or tables that make comparison easy.
-- Evidence or source-status sections so users can inspect what drove the result.
 - Empty, partial, and failed-source states.
 
 ## Maps
@@ -624,9 +623,9 @@ Pass \`fit\` (one of \`{type: "country", code: "<ISO-3166-1-alpha-2>"}\`, \`{typ
 
 ## Missing Data
 
-Missing data is not a reason to stop before creating the artifact. Create a runnable applet that makes source gaps explicit, then ask for source setup or approval as a follow-up when needed.
+Missing data is not a reason to stop before creating the artifact. Create a runnable app that handles gaps gracefully, then ask for source setup or approval as a follow-up when needed.
 
-For the LastMile CRM pipeline risk prompt, build an applet that covers stale activity, stage exposure, and top risks. If live LastMile CRM records are unavailable, use the canonical LastMile-shaped structure and mark CRM/email/calendar/web source coverage honestly.
+For the LastMile CRM pipeline risk prompt, build an app that covers stale activity, stage exposure, and top risks. If live LastMile CRM records are unavailable, use the canonical LastMile-shaped structure and mention limitations only when they materially affect the displayed result.
 `;
 
 /**
@@ -634,9 +633,9 @@ For the LastMile CRM pipeline risk prompt, build an applet that covers stale act
  */
 const ARTIFACT_BUILDER_CRM_DASHBOARD_MD = `# CRM Dashboard Recipe
 
-Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard applet.
+Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard app.
 
-The goal is a saved, reusable applet. Do not stop at analysis prose. Normalize the available data first, generate the applet source second, then call \`save_app\` directly.
+The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call \`save_app\` directly.
 
 ## Source Discovery
 
@@ -644,10 +643,10 @@ Use the best sources available in this order:
 
 1. Thread context and any attached or already retrieved CRM rows.
 2. Available CRM, connector, MCP, context, workspace, memory, or Hindsight tools.
-3. Email, calendar, and web context when the prompt asks for stale activity, next meetings, external account risk, or evidence.
-4. A small demo or fixture-shaped dataset only when live sources are missing. Mark that source as partial or failed inside the applet.
+3. Email, calendar, and web context when the prompt asks for stale activity, next meetings, or external account risk.
+4. A small demo or fixture-shaped dataset only when live sources are missing. Make limitations visible only when they materially affect the displayed result.
 
-Missing live data is not a blocker. The applet should still run and should show source coverage honestly.
+Missing live data is not a blocker. The app should still run and should stay focused on the requested dashboard rather than rendering provenance panels.
 
 ## Canonical Data Shape
 
@@ -663,14 +662,6 @@ Normalize source results into \`CrmDashboardData\` before writing TSX. Keep this
         generatedAt: string;
         accountFilter?: string;
       };
-      sourceStatuses: Array<{
-        id: "crm" | "email" | "calendar" | "web" | string;
-        label: string;
-        status: SourceStatus;
-        asOf?: string;
-        recordCount: number;
-        error?: string;
-      }>;
       kpis: Array<{
         id: string;
         label: string;
@@ -710,20 +701,12 @@ Normalize source results into \`CrmDashboardData\` before writing TSX. Keep this
         lastActivity?: string;
         risk?: RiskLevel;
       }>;
-      evidence: Array<{
-        id: string;
-        title: string;
-        snippet: string;
-        sourceId: string;
-        observedAt?: string;
-        url?: string;
-      }>;
       refreshNote?: string;
     }
 
-## Applet Layout
+## App Layout
 
-Build one responsive applet that fits the available horizontal space with \`w-full min-w-0 max-w-[1280px]\`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
+Build one responsive app that fits the available horizontal space with \`w-full min-w-0 max-w-[1280px]\`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
 
 Required sections:
 
@@ -732,26 +715,22 @@ Required sections:
 - Stage exposure: a bar chart from \`stageExposure\`.
 - Stale activity: a chart or compact table from \`staleActivity\`.
 - Top risks: a ranked table or list from \`topRisks\`, sorted by risk and exposure.
-- Source coverage: \`SourceStatusList\` using \`sourceStatuses\`.
-- Evidence: \`EvidenceList\` with CRM/email/calendar/web signals.
 
-Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`SourceStatusList\`, \`EvidenceList\`, and formatters such as \`formatCurrency\`.
+Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, and formatters such as \`formatCurrency\`.
 
 Use the stdlib prop names directly:
 
 - \`KpiStrip\` receives \`cards={data.kpis}\`.
-- \`SourceStatusList\` receives \`sources={data.sourceStatuses}\`.
-- \`EvidenceList\` receives \`items={data.evidence}\`.
 - \`DataTable\` receives \`columns={...}\` and \`rows={data.opportunities}\`.
 - \`BarChart\` receives \`data={data.stageExposure}\` or \`data={data.staleActivity}\`.
 
 ## Empty And Partial States
 
-If no CRM opportunities are available, still save a runnable applet. Show empty KPI values, an empty table, and a source status explaining which source is missing.
+If no CRM opportunities are available, still save a runnable app. Show empty KPI values, an empty table, and a concise empty state.
 
-If CRM rows exist but email, calendar, or web signals are missing, keep the CRM sections populated and mark the missing supporting source as \`partial\` or \`failed\`.
+If CRM rows exist but email, calendar, or web signals are missing, keep the CRM sections populated. Do not add source coverage or evidence panels.
 
-Never hide uncertainty. Put the limitation in \`sourceStatuses\` and, when useful, in \`refreshNote\`.
+Never hide uncertainty, but keep it proportional: use a short note near the affected metric only when it changes how the user should read the dashboard.
 
 ## Refresh Contract
 
@@ -760,18 +739,13 @@ Export \`refresh()\` when the dashboard can be refreshed. It must return determi
     export async function refresh() {
       return {
         data: refreshedCrmDashboardData,
-        sourceStatuses: Object.fromEntries(
-          refreshedCrmDashboardData.sourceStatuses.map((source) => [
-            source.id,
-            source.status,
-          ]),
-        ),
+        sourceStatuses: { crm: "success" },
       };
     }
 
-Refresh should rerun saved source queries or deterministic transforms. It must not reinterpret the whole prompt or create a different applet.
+Refresh should rerun saved source queries or deterministic transforms. It must not reinterpret the whole prompt or create a different app.
 
-The artifact host renders refresh actions in its top-bar actions menu. Do not render a refresh control, refresh timeline, or \`RefreshBar\` inside the applet unless the user explicitly asks for a custom in-artifact refresh experience.
+The artifact host renders refresh actions in its top-bar actions menu. Do not render a refresh control, refresh timeline, recipe explainer, or \`RefreshBar\` inside the app unless the user explicitly asks for a custom in-artifact refresh experience.
 
 ## Save Contract
 
@@ -819,7 +793,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 10;
+export const DEFAULTS_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Aggregator

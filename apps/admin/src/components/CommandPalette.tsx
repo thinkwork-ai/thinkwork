@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
   { label: "Computers", to: "/computers", icon: Monitor },
-  { label: "Applets", to: "/applets", icon: AppWindow },
+  { label: "Apps", to: "/applets", icon: AppWindow },
   { label: "Agents", to: "/agents", icon: Bot },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
   { label: "Credentials", to: "/automations/credentials", icon: KeyRound },

@@ -7,10 +7,10 @@ import PipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source"
 afterEach(cleanup);
 
 describe("app artifact visual contract", () => {
-  it("renders a single bounded applet canvas without horizontal page scroll", () => {
+  it("renders a single bounded app canvas without horizontal page scroll", () => {
     render(
       <AppArtifactSplitShell>
-        <div>Applet canvas body</div>
+        <div>App canvas body</div>
       </AppArtifactSplitShell>,
     );
 
@@ -47,16 +47,15 @@ describe("app artifact visual contract", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 
-  it("keeps partial and failed source coverage visible beside usable charts", () => {
+  it("keeps the dashboard focused on the primary analysis without recipe chrome", () => {
     render(
       <PipelineRiskApplet refreshData={crmDashboardVisualFixtures.failedCrm} />,
     );
 
-    expect(screen.getAllByText("failed").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/prior dashboard snapshot remains visible/i),
-    ).toBeTruthy();
     expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getByText("Opportunity risk")).toBeTruthy();
+    expect(screen.queryByText(/refresh recipe/i)).toBeNull();
+    expect(screen.queryByText(/source coverage/i)).toBeNull();
+    expect(screen.queryByText(/^evidence$/i)).toBeNull();
   });
 });

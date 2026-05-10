@@ -174,8 +174,7 @@ export function MapView({
           <TileLayer
             key={`${theme}-${token ? "mapbox" : "osm"}`}
             url={tileUrl}
-            tileSize={token ? 512 : 256}
-            zoomOffset={token ? -1 : 0}
+            tileSize={256}
             attribution={tileAttribution}
           />
           <FitOnSpecChange
@@ -210,7 +209,7 @@ function buildTileUrl({
 }): string {
   if (token) {
     const styleId = isDark ? MAPBOX_STYLES.dark : MAPBOX_STYLES.light;
-    return `https://api.mapbox.com/styles/v1/${MAPBOX_USERNAME}/${styleId}/tiles/512/{z}/{x}/{y}@2x?access_token=${token}`;
+    return `https://api.mapbox.com/styles/v1/${MAPBOX_USERNAME}/${styleId}/tiles/256/{z}/{x}/{y}@2x?access_token=${token}`;
   }
   return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 }

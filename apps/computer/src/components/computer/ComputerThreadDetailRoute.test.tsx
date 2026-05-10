@@ -11,6 +11,10 @@ vi.mock("urql", async (importOriginal) => {
     useMutation: vi.fn(),
     useQuery: vi.fn(),
     useSubscription: vi.fn(),
+    useClient: vi.fn(() => ({
+      mutation: vi.fn(),
+      subscription: vi.fn(),
+    })),
   };
 });
 
@@ -93,6 +97,11 @@ beforeEach(() => {
   ]);
   vi.mocked(useComputerThreadChunks).mockImplementation(() => ({
     chunks: streamingChunks,
+    streamState: {
+      parts: [],
+      legacyText: "",
+      status: "idle" as const,
+    },
     reset: resetStreamingChunks,
   }));
   vi.mocked(useQuery).mockImplementation((options) => {

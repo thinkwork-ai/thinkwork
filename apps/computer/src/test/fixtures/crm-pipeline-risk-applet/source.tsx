@@ -2,17 +2,13 @@ import {
   AppHeader,
   BarChart,
   DataTable,
-  EvidenceList,
   KpiStrip,
-  RefreshBar,
-  SourceStatusList,
   StackedBarChart,
   formatCurrency,
 } from "@thinkwork/computer-stdlib";
 import { Badge } from "@thinkwork/ui";
 
 type Risk = "high" | "medium" | "low";
-type SourceStatus = "success" | "partial" | "failed";
 
 interface OpportunityRow {
   [key: string]: string | number;
@@ -31,14 +27,6 @@ interface DashboardData {
     summary: string;
     generatedAt: string;
   };
-  sources: Array<{
-    id: string;
-    label: string;
-    status: SourceStatus;
-    asOf: string;
-    recordCount: number;
-    error?: string;
-  }>;
   stageExposure: Array<{ label: string; value: number; count: number }>;
   productExposure: Array<{
     label: string;
@@ -46,14 +34,6 @@ interface DashboardData {
     highRiskAmount: number;
   }>;
   opportunities: OpportunityRow[];
-  evidence: Array<{
-    id: string;
-    title: string;
-    snippet: string;
-    sourceId: string;
-    observedAt: string;
-    url?: string;
-  }>;
   refreshNote?: string;
 }
 
@@ -64,38 +44,6 @@ const DASHBOARD_DATA: DashboardData = {
       "12 open opportunities with $3.52M in exposure, including four stale late-stage deals and two product-line concentration risks.",
     generatedAt: "2026-05-08T16:00:00.000Z",
   },
-  sources: [
-    {
-      id: "crm",
-      label: "crm",
-      status: "success",
-      asOf: "2026-05-08T15:52:00.000Z",
-      recordCount: 12,
-    },
-    {
-      id: "email",
-      label: "email",
-      status: "success",
-      asOf: "2026-05-08T15:54:00.000Z",
-      recordCount: 38,
-    },
-    {
-      id: "calendar",
-      label: "calendar",
-      status: "success",
-      asOf: "2026-05-08T15:55:00.000Z",
-      recordCount: 7,
-    },
-    {
-      id: "web",
-      label: "web",
-      status: "partial",
-      asOf: "2026-05-08T15:58:00.000Z",
-      recordCount: 8,
-      error:
-        "Two account news searches timed out before returning cited results.",
-    },
-  ],
   stageExposure: [
     { label: "Qualification", value: 260000, count: 2 },
     { label: "Discovery", value: 270000, count: 2 },
@@ -228,41 +176,6 @@ const DASHBOARD_DATA: DashboardData = {
       risk: "medium",
     },
   ],
-  evidence: [
-    {
-      id: "evidence-blue-harbor-email",
-      sourceId: "email",
-      title: "Blue Harbor engagement gap",
-      snippet:
-        "Last outbound reply is 41 days old; no inbound response found after procurement requested revised implementation dates.",
-      observedAt: "2026-05-08T15:54:00.000Z",
-    },
-    {
-      id: "evidence-delta-calendar",
-      sourceId: "calendar",
-      title: "Delta executive review slipped",
-      snippet:
-        "Commit-stage executive review was removed from the next two-week calendar window.",
-      observedAt: "2026-05-08T15:55:00.000Z",
-    },
-    {
-      id: "evidence-granite-web",
-      sourceId: "web",
-      title: "Granite Transport acquisition note",
-      snippet:
-        "Public filing mentions a routing-platform consolidation review after the April acquisition close.",
-      url: "https://example.com/granite-transport-acquisition",
-      observedAt: "2026-05-08T15:58:00.000Z",
-    },
-    {
-      id: "evidence-juniper-calendar",
-      sourceId: "calendar",
-      title: "Juniper has an upcoming legal review",
-      snippet:
-        "Legal review is scheduled, reducing timing risk but not stale CRM activity risk.",
-      observedAt: "2026-05-08T15:55:00.000Z",
-    },
-  ],
 };
 
 export const crmPipelineRiskData = DASHBOARD_DATA;
@@ -291,13 +204,6 @@ export default function LastMilePipelineRiskApplet({
         new Date(`${row.lastActivity}T00:00:00.000Z`).getTime() >=
       30 * 86_400_000,
   ).length;
-  const calendarSource = data.sources.find(
-    (source) => source.id === "calendar",
-  );
-  const sourceStatuses = Object.fromEntries(
-    data.sources.map((source) => [source.id, source.status]),
-  ) as Record<string, SourceStatus>;
-
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-[1280px] gap-4">
       <AppHeader
@@ -315,13 +221,6 @@ export default function LastMilePipelineRiskApplet({
           {data.refreshNote}
         </div>
       ) : null}
-
-      <RefreshBar
-        recipeVersion={1}
-        lastRefreshAt={data.snapshot.generatedAt}
-        nextAllowedAt="2026-05-08T17:00:00.000Z"
-        sourceStatuses={sourceStatuses}
-      />
 
       <KpiStrip
         cards={[
@@ -342,9 +241,9 @@ export default function LastMilePipelineRiskApplet({
             detail: "30+ days since CRM activity",
           },
           {
-            label: "Next meetings",
-            value: String(calendarSource?.recordCount ?? 0),
-            detail: "from calendar metadata",
+            label: "Visible records",
+            value: String(rows.length),
+            detail: "sorted by risk and exposure",
           },
         ]}
       />
@@ -423,38 +322,6 @@ export default function LastMilePipelineRiskApplet({
           },
         ]}
       />
-
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <SourceStatusList
-          sources={data.sources.map((source) => ({
-            id: source.id,
-            label: source.label,
-            status: source.status,
-            recordCount: source.recordCount,
-            asOf: source.asOf,
-            error: source.error,
-          }))}
-        />
-        <details className="rounded-lg border border-border/70 bg-background p-4">
-          <summary className="cursor-pointer text-sm font-semibold">
-            Evidence
-          </summary>
-          <div className="mt-4">
-            <EvidenceList
-              title="Evidence"
-              description="Signals used to support the risk ranking."
-              items={data.evidence.map((item) => ({
-                id: item.id,
-                title: item.title,
-                snippet: item.snippet,
-                sourceId: item.sourceId,
-                ["fet" + "chedAt"]: item.observedAt,
-                url: item.url,
-              }))}
-            />
-          </div>
-        </details>
-      </div>
     </div>
   );
 }
@@ -472,9 +339,7 @@ export async function refresh() {
 
   return {
     data: refreshedData,
-    sourceStatuses: Object.fromEntries(
-      refreshedData.sources.map((source) => [source.id, source.status]),
-    ),
+    sourceStatuses: { crm: "success" as const },
   };
 }
 
@@ -483,8 +348,7 @@ function isDashboardData(value: unknown): value is DashboardData {
     !!value &&
     typeof value === "object" &&
     "snapshot" in value &&
-    "opportunities" in value &&
-    "sources" in value
+    "opportunities" in value
   );
 }
 

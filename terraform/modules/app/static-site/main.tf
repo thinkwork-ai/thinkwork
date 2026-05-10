@@ -39,12 +39,85 @@ variable "is_spa" {
   default     = false
 }
 
+# ---------------------------------------------------------------------------
+# Response-headers policy (optional, plan-012 U3)
+#
+# Two opt-in forms, both backwards compatible — existing callers
+# (computer_site, admin_site, docs_site, www_site) leave both unset and the
+# distribution is created with no response-headers policy attached:
+#
+#   - Pass `response_headers_policy_id` to attach an existing policy by id.
+#     Useful if a sibling module already minted the policy and you want to
+#     share it across distributions.
+#
+#   - Pass `inline_response_headers` (an object describing the CSP + other
+#     response headers) to have this module mint a fresh policy and attach
+#     it. Used by `computer_sandbox_site` to ship the iframe-side CSP
+#     (script-src 'self' blob:; connect-src 'none'; frame-ancestors ... etc.)
+#     alongside the dedicated sandbox distribution.
+#
+# Passing both is an error — the inline policy would be unused.
+# ---------------------------------------------------------------------------
+
+variable "response_headers_policy_id" {
+  description = "ID of an existing aws_cloudfront_response_headers_policy to attach. Mutually exclusive with inline_response_headers."
+  type        = string
+  default     = ""
+}
+
+variable "inline_response_headers" {
+  description = "When set, this module mints a new response-headers policy and attaches it. Pass null to skip. Fields: content_security_policy (string), content_type_options_override (bool), strict_transport_security (object: max_age_sec, include_subdomains, preload, override), cors (object: allow_origins, allow_methods, allow_headers, allow_credentials, max_age_sec, origin_override). Mutually exclusive with response_headers_policy_id."
+  type = object({
+    content_security_policy       = optional(string)
+    content_type_options_override = optional(bool, true)
+    strict_transport_security = optional(object({
+      max_age_sec        = number
+      include_subdomains = bool
+      preload            = bool
+      override           = bool
+    }))
+    cors = optional(object({
+      allow_origins     = list(string)
+      allow_methods     = optional(list(string), ["GET", "HEAD", "OPTIONS"])
+      allow_headers     = optional(list(string), ["*"])
+      allow_credentials = optional(bool, false)
+      max_age_sec       = optional(number, 600)
+      origin_override   = optional(bool, true)
+    }))
+  })
+  default = null
+}
+
 ################################################################################
 # S3 Bucket
 ################################################################################
 
 locals {
   bucket_name = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-${var.site_name}"
+
+  # Mutually-exclusive validator — surface as an error during plan.
+  _conflicting_policy_inputs = var.response_headers_policy_id != "" && var.inline_response_headers != null
+
+  inline_policy_enabled = var.inline_response_headers != null
+
+  # Final policy id wired into the cache behavior. Empty string means no
+  # policy (CloudFront default). Terraform's resource attribute treats ""
+  # the same as null because we condition on it below.
+  effective_response_headers_policy_id = (
+    var.response_headers_policy_id != ""
+    ? var.response_headers_policy_id
+    : (local.inline_policy_enabled
+      ? aws_cloudfront_response_headers_policy.inline[0].id
+      : ""
+    )
+  )
+}
+
+check "policy_inputs_are_mutually_exclusive" {
+  assert {
+    condition     = !local._conflicting_policy_inputs
+    error_message = "static-site: response_headers_policy_id and inline_response_headers are mutually exclusive."
+  }
 }
 
 resource "aws_s3_bucket" "site" {
@@ -62,6 +135,68 @@ resource "aws_s3_bucket_public_access_block" "site" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+################################################################################
+# CloudFront Response-Headers Policy (optional, inline-minted variant)
+################################################################################
+
+resource "aws_cloudfront_response_headers_policy" "inline" {
+  count = local.inline_policy_enabled ? 1 : 0
+
+  name    = "thinkwork-${var.stage}-${var.site_name}-headers"
+  comment = "Response-headers policy for thinkwork-${var.stage}-${var.site_name}"
+
+  dynamic "security_headers_config" {
+    for_each = var.inline_response_headers.content_security_policy != null || var.inline_response_headers.content_type_options_override != false || var.inline_response_headers.strict_transport_security != null ? [1] : []
+    content {
+      dynamic "content_security_policy" {
+        for_each = var.inline_response_headers.content_security_policy != null ? [1] : []
+        content {
+          content_security_policy = var.inline_response_headers.content_security_policy
+          override                = true
+        }
+      }
+
+      dynamic "content_type_options" {
+        for_each = var.inline_response_headers.content_type_options_override == true ? [1] : []
+        content {
+          override = true
+        }
+      }
+
+      dynamic "strict_transport_security" {
+        for_each = var.inline_response_headers.strict_transport_security != null ? [1] : []
+        content {
+          access_control_max_age_sec = var.inline_response_headers.strict_transport_security.max_age_sec
+          include_subdomains         = var.inline_response_headers.strict_transport_security.include_subdomains
+          preload                    = var.inline_response_headers.strict_transport_security.preload
+          override                   = var.inline_response_headers.strict_transport_security.override
+        }
+      }
+    }
+  }
+
+  dynamic "cors_config" {
+    for_each = var.inline_response_headers.cors != null ? [var.inline_response_headers.cors] : []
+    content {
+      access_control_allow_credentials = cors_config.value.allow_credentials
+      access_control_max_age_sec       = cors_config.value.max_age_sec
+      origin_override                  = cors_config.value.origin_override
+
+      access_control_allow_headers {
+        items = cors_config.value.allow_headers
+      }
+
+      access_control_allow_methods {
+        items = cors_config.value.allow_methods
+      }
+
+      access_control_allow_origins {
+        items = cors_config.value.allow_origins
+      }
+    }
+  }
 }
 
 ################################################################################
@@ -135,11 +270,12 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-${local.bucket_name}"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
+    target_origin_id           = "s3-${local.bucket_name}"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    response_headers_policy_id = local.effective_response_headers_policy_id != "" ? local.effective_response_headers_policy_id : null
 
     dynamic "function_association" {
       for_each = var.is_spa ? [] : [1]
@@ -227,4 +363,9 @@ output "distribution_domain" {
 output "bucket_name" {
   description = "S3 bucket name for the site"
   value       = aws_s3_bucket.site.id
+}
+
+output "response_headers_policy_id" {
+  description = "ID of the response-headers policy attached to the default cache behavior. Empty when no policy is attached."
+  value       = local.effective_response_headers_policy_id
 }

@@ -5,7 +5,7 @@ function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-describe("Applets admin routes", () => {
+describe("Apps admin routes", () => {
   const sidebarSource = readSource("../../../../components/Sidebar.tsx");
   const commandPaletteSource = readSource(
     "../../../../components/CommandPalette.tsx",
@@ -14,10 +14,10 @@ describe("Applets admin routes", () => {
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$appId.tsx");
 
-  it("exposes Applets as a read-only admin surface", () => {
-    expect(sidebarSource).toContain('label: "Applets"');
+  it("exposes Apps as a read-only admin surface", () => {
+    expect(sidebarSource).toContain('label: "Apps"');
     expect(sidebarSource).toContain('to: "/applets"');
-    expect(commandPaletteSource).toContain('label: "Applets"');
+    expect(commandPaletteSource).toContain('label: "Apps"');
     expect(commandPaletteSource).toContain('to: "/applets"');
   });
 

@@ -14,7 +14,7 @@ import { ALL_KINDS, TAB_ALL } from "./artifacts-filtering";
 
 export const ARTIFACT_TABS = [
   { value: TAB_ALL, label: "All" },
-  { value: "applet", label: "Applets" },
+  { value: "applet", label: "Apps" },
 ] as const;
 
 export type ArtifactTabValue = (typeof ARTIFACT_TABS)[number]["value"];

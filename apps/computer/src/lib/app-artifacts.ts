@@ -58,7 +58,7 @@ export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
     id: applet.appId,
     title,
     kind: "applet",
-    summary: prompt || `Version ${applet.version ?? 1} generated applet.`,
+    summary: prompt || `Version ${applet.version ?? 1} generated app.`,
     href: computerArtifactRoute(applet.appId),
     generatedAt: applet.generatedAt ?? "",
     version: applet.version ?? null,

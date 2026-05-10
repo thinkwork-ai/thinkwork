@@ -17,8 +17,10 @@ export interface PageHeaderActions {
    * can disambiguate between multiple Computer tabs.
    */
   documentTitle?: string;
-  /** When set, AppTopBar shows a back arrow that links to this href */
+  /** When set, AppTopBar shows a back arrow. Used as href or history fallback. */
   backHref?: string;
+  /** Use browser history for the back arrow, falling back to backHref on direct entry. */
+  backBehavior?: "href" | "history";
   /** Optional secondary text displayed next to the title (e.g., "216 threads") */
   subtitle?: string;
   /** When true, hide the AppTopBar entirely on this page (still updates document.title) */
@@ -74,7 +76,7 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const tabsKey =
     actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const key = actions
-    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${actions.actionKey ?? ""}`
+    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${actions.actionKey ?? ""}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {

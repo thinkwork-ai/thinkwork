@@ -332,6 +332,24 @@ variable "computer_certificate_arn" {
   default     = ""
 }
 
+variable "computer_sandbox_domain" {
+  description = "Custom domain for the LLM-fragment iframe substrate (e.g. sandbox.thinkwork.ai). Cross-origin from the computer SPA — load-bearing for the iframe-isolation security boundary documented in docs/specs/computer-ai-elements-contract-v1.md. Leave empty to skip provisioning the sandbox distribution."
+  type        = string
+  default     = ""
+}
+
+variable "computer_sandbox_certificate_arn" {
+  description = "ACM certificate ARN for the sandbox domain (us-east-1, required for CloudFront custom domains)."
+  type        = string
+  default     = ""
+}
+
+variable "computer_sandbox_allowed_parent_origins" {
+  description = "Comma-separated list of trusted parent origins that may frame the sandbox iframe (e.g. 'https://thinkwork.ai,https://dev.thinkwork.ai'). Wired into the sandbox CSP frame-ancestors directive AND mirrored at iframe-shell build time as __ALLOWED_PARENT_ORIGINS__. The two trust sets MUST stay in sync. Leave empty to allow no parents (effectively disabling the sandbox)."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # API Gateway (custom domain — optional)
 # ---------------------------------------------------------------------------

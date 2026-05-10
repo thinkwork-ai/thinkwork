@@ -1,0 +1,52 @@
+-- messages.parts — typed UIMessage parts persisted at turn-finalize.
+--
+-- Plan-012 U7 (docs/plans/2026-05-09-012-feat-computer-ai-elements-adoption-plan.md).
+-- Contract: docs/specs/computer-ai-elements-contract-v1.md (§Persistence boundary).
+--
+-- For new Computer assistant messages, the writer persists the post-stream
+-- UIMessage.parts array into this column at turn-finalize. The legacy
+-- messages.content text column also continues to populate as a flattened
+-- text representation (text-typed parts only) so internal callers that
+-- still read `content` keep working.
+--
+-- Render-path precedence (locked in contract v1): `parts IS NOT NULL`
+-- wins over `content`. Half-migrated rows with both populated are
+-- expected and deliberate.
+--
+-- Why hand-rolled (not Drizzle codegen):
+--   1. We need the explicit `-- creates-column:` marker so the
+--      pnpm db:migrate-manual drift gate (CLAUDE.md, the Aurora drift
+--      reporter wired into deploy.yml) can confirm the column landed
+--      after `psql -f` is applied to dev.
+--   2. The author runs `psql "$DATABASE_URL" -f
+--      packages/database-pg/drizzle/0082_messages_parts_jsonb.sql`
+--      against dev right after merge per
+--      feedback_handrolled_migrations_apply_to_dev.
+--
+-- Apply:
+--   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0082_messages_parts_jsonb.sql
+--
+-- Drift detection:
+--   pnpm db:migrate-manual
+--
+-- Pre-migration invariants:
+--   - public.messages exists (created by drizzle/0000_petite_marvel_apes.sql).
+--   - public.messages.parts does not exist yet.
+--
+-- Post-migration invariants:
+--   - public.messages.parts is jsonb NULL with no default.
+--   - existing rows have parts IS NULL (no backfill).
+--   - the legacy messages.content text column is unchanged.
+--
+-- Tenant scoping for the new field is the U7 P0 audit, documented in
+-- the PR description: every read path that selects Message.parts must
+-- scope by resolveCallerTenantId(ctx) (per
+-- feedback_oauth_tenant_resolver) AND the same thread/computer
+-- ownership gate already enforced on Message.content. The audit and
+-- regression test live alongside the resolver in
+-- packages/api/src/graphql/resolvers/messages/.
+--
+-- creates-column: public.messages.parts
+
+ALTER TABLE "messages"
+	ADD COLUMN IF NOT EXISTS "parts" jsonb;

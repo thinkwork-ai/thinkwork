@@ -70,7 +70,7 @@ export function TaskDashboard({
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
+      <div className="flex h-full min-h-0 flex-col gap-3 px-4 py-3">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <label className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

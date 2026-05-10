@@ -9,6 +9,10 @@ export const ALLOWED_APPLET_IMPORTS = new Set([
   "react",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
+  "recharts",
+  "lucide-react",
+  "leaflet",
+  "react-leaflet",
   "useAppletAPI",
 ]);
 

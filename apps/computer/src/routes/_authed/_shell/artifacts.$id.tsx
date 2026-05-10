@@ -14,7 +14,6 @@ import {
   AppletLoading,
   AppletMount,
   appletSource,
-  defaultAppletModuleLoader,
   useAppletInstanceId,
   type AppletModuleLoader,
 } from "@/applets/mount";
@@ -38,9 +37,14 @@ function AppArtifactPage() {
 
 export function AppletRouteContent({
   appId,
-  loadModule = defaultAppletModuleLoader,
+  loadModule,
 }: {
   appId: string;
+  // Plan-012 U11.5: do NOT default to defaultAppletModuleLoader. The
+  // production AppletMount routes by `loadModule === undefined` —
+  // defaulting here would force every production render through the
+  // legacy same-origin path and bypass the iframe substrate. Tests
+  // pass an explicit loader to opt into the legacy code path.
   loadModule?: AppletModuleLoader;
 }) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
@@ -69,6 +73,7 @@ export function AppletRouteContent({
   usePageHeaderActions({
     title,
     backHref: "/artifacts",
+    backBehavior: "history",
     action: headerAction,
     actionKey: headerAction ? "artifact-actions" : "",
   });
@@ -123,9 +128,9 @@ export function AppletRouteContent({
 
   return (
     <AppArtifactSplitShell>
-      <div className="grid min-w-0 gap-4">
+      <div className="grid h-full min-h-0 min-w-0 p-4">
         {hasNewerVersion ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-primary">
               A newer version of this artifact is available.
             </p>
@@ -158,7 +163,9 @@ export function AppletRouteContent({
             instanceId={mountedSnapshot.instanceId}
             source={mountedSnapshot.source}
             version={mountedSnapshot.version}
-            loadModule={loadModule}
+            // Forward only when supplied — production renders pass
+            // undefined so AppletMount routes to the iframe path.
+            {...(loadModule ? { loadModule } : {})}
             onHeaderActionChange={handleHeaderActionChange}
           />
         ) : (

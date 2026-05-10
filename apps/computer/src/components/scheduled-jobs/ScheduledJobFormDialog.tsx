@@ -11,9 +11,9 @@
 
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 import {
   Button,
   Input,
@@ -74,7 +74,7 @@ export function ScheduledJobFormDialog({
   });
 
   const form = useForm<TriggerFormValues>({
-    resolver: zodResolver(triggerFormSchema),
+    resolver: zodResolver(triggerFormSchema as never) as Resolver<TriggerFormValues>,
     defaultValues: {
       name: initial?.name || "",
       prompt: initial?.prompt || "",

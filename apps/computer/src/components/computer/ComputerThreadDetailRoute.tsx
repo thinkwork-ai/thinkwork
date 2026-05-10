@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useSubscription } from "urql";
+import { useEffect, useMemo, useState } from "react";
+import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import {
   TaskThreadView,
   type TaskThread,
@@ -16,6 +16,7 @@ import {
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
+import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 
 interface ComputerThreadDetailRouteProps {
   threadId: string;
@@ -113,8 +114,25 @@ export function ComputerThreadDetailRoute({
       pause: !computerId,
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
-  const { chunks, reset: resetStreamingChunks } =
+  const { chunks, streamState, reset: resetStreamingChunks } =
     useComputerThreadChunks(threadId);
+
+  // Plan-012 U8: instantiate the useChat AppSync transport adapter for
+  // this thread. Adapter lives parallel to the legacy subscription
+  // wiring above — once U13 (composer migration) consumes it as the
+  // sole submit owner, the legacy SendMessageMutation invocations from
+  // composers retire. The adapter is constructed eagerly here so smoke
+  // pins (transportStatus) can be inspected from devtools while the
+  // cutover is in flight; it has no side effects until sendMessages
+  // is called.
+  const urqlClient = useClient();
+  const _appSyncChatTransport = useMemo(
+    () =>
+      threadId
+        ? createAppSyncChatTransport({ urqlClient, threadId })
+        : null,
+    [urqlClient, threadId],
+  );
   const [{ data: turnUpdate }] = useSubscription<{
     onThreadTurnUpdated?: { threadId?: string | null } | null;
   }>({
@@ -216,6 +234,7 @@ export function ComputerThreadDetailRoute({
       isLoading={fetching && !data}
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
+      streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
       onSendFollowUp={async (content) => {
         setOptimisticMessage(content);

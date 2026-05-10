@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/apps/InlineAppletEmbed", () => ({
@@ -1110,7 +1116,11 @@ describe("TaskThreadView", () => {
     expect(labelled.tagName.toLowerCase()).toBe("details");
   });
 
-  it("sends follow-up messages from the composer", () => {
+  it("sends follow-up messages from the composer", async () => {
+    // Plan-012 U13: PromptInput form submit is async (Promise.all
+    // chain through file conversion before dispatch). useComposerState
+    // tracks the text so we type via the textarea and click submit;
+    // waitFor handles the microtask boundary.
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
@@ -1135,6 +1145,8 @@ describe("TaskThreadView", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
-    expect(onSendFollowUp).toHaveBeenCalledWith("Add detail");
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail");
+    });
   });
 });

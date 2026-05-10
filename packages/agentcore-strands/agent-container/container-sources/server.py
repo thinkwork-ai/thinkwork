@@ -716,6 +716,7 @@ def _call_strands_agent(
     stream_thread_id: str | None = None,
     computer_event_context: dict | None = None,
     suppress_app_build_helper_tools: bool = False,
+    ui_message_emit: bool = False,
 ) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -785,9 +786,14 @@ def _call_strands_agent(
     )
     stream_callback_handler = None
     stream_publisher = None
+    ui_message_publisher_instance = None
     if stream_thread_id:
         try:
-            from appsync_publisher import build_appsync_chunk_callback
+            from appsync_publisher import (
+                build_appsync_chunk_callback,
+                extract_stream_text_deltas,
+                extract_tool_use_starts,
+            )
 
             # Wire the same computer-event sink the browser tool uses so
             # tool_invocation_started events surface live (otherwise the UI
@@ -799,7 +805,141 @@ def _call_strands_agent(
                 tool_event_sink=tool_event_sink,
             )
             if stream_callback_handler:
-                logger.info("AppSync chunk streaming enabled for thread=%s", stream_thread_id)
+                logger.info(
+                    "AppSync chunk streaming enabled for thread=%s ui_message_emit=%s",
+                    stream_thread_id,
+                    ui_message_emit,
+                )
+
+            # Plan-012 U6: per-Computer-thread typed UIMessage emission.
+            # Capability flag is per-invocation, NOT a runtime-wide env
+            # var — Flue and sub-agent dispatch leave ui_message_emit at
+            # False and continue using the legacy {text} envelope. The
+            # Computer thread handler (chat-agent-invoke) is the
+            # entrypoint that flips this to True.
+            if ui_message_emit:
+                from ui_message_publisher import (
+                    make_ui_message_publisher_from_env,
+                    text_delta,
+                    text_start,
+                    text_end,
+                    reasoning_delta,
+                    reasoning_start,
+                    reasoning_end,
+                    tool_input_available,
+                )
+
+                ui_message_publisher_instance = make_ui_message_publisher_from_env(
+                    thread_id=stream_thread_id,
+                    ui_message_emit=True,
+                    seam_fn=None,  # default: live AppSync POST via executor
+                )
+
+                if ui_message_publisher_instance is not None:
+                    # Build a parallel callback that maps each Strands /
+                    # Bedrock streaming event to typed UIMessageChunk
+                    # JSON. The legacy {text} chunk callback ALSO runs
+                    # (the parent stream_callback_handler) so consumers
+                    # in transition can read either shape; once the TS
+                    # consumer (U8) commits to the typed path, the
+                    # legacy callback will be the cleanup target.
+                    _legacy_callback = stream_callback_handler
+
+                    # Stable per-turn part ids — text and reasoning each
+                    # get one logical part for the assistant turn. Mint
+                    # at first emission so the consumer's per-part-id
+                    # cursor sees a stable id across deltas.
+                    typed_state: dict[str, str | bool | set] = {
+                        "text_part_id": "",
+                        "text_started": False,
+                        "text_done": False,
+                        "reasoning_part_id": "",
+                        "reasoning_started": False,
+                        "reasoning_done": False,
+                        "seen_tool_uses": set(),
+                    }
+
+                    import uuid as _uuid_mod
+
+                    def _new_id(prefix: str) -> str:
+                        return f"{prefix}-{_uuid_mod.uuid4().hex[:12]}"
+
+                    def _typed_callback(*args, **kwargs) -> None:
+                        if _legacy_callback is not None:
+                            try:
+                                _legacy_callback(*args, **kwargs)
+                            except Exception as exc:  # noqa: BLE001
+                                logger.warning(
+                                    "legacy stream callback failed: %s", exc
+                                )
+
+                        # Bedrock text + reasoning deltas
+                        try:
+                            deltas = extract_stream_text_deltas(*args, **kwargs)
+                        except Exception as exc:  # noqa: BLE001
+                            deltas = []
+                            logger.warning(
+                                "ui_message extract_stream_text_deltas failed: %s",
+                                exc,
+                            )
+
+                        # Heuristic: appsync_publisher's
+                        # extract_stream_text_deltas already collapses
+                        # both `text` and `reasoningContent` into the
+                        # same flat list. For v1 we treat all of them
+                        # as text deltas — reasoning emission lights up
+                        # in U14 once we route reasoning vs text
+                        # explicitly upstream.
+                        for delta in deltas:
+                            if not delta:
+                                continue
+                            if not typed_state["text_started"]:
+                                typed_state["text_part_id"] = _new_id("text")
+                                ui_message_publisher_instance.publish_part(
+                                    text_start(typed_state["text_part_id"])
+                                )
+                                typed_state["text_started"] = True
+                            ui_message_publisher_instance.publish_part(
+                                text_delta(typed_state["text_part_id"], delta)
+                            )
+
+                        # Tool-use starts
+                        try:
+                            tool_uses = extract_tool_use_starts(
+                                *args,
+                                seen=typed_state["seen_tool_uses"],
+                                **kwargs,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            tool_uses = []
+                            logger.warning(
+                                "ui_message extract_tool_use_starts failed: %s",
+                                exc,
+                            )
+
+                        for tool_use in tool_uses:
+                            tool_call_id = (
+                                tool_use.get("tool_use_id") or _new_id("tool")
+                            )
+                            tool_name = tool_use.get("tool_name") or "unknown"
+                            input_preview = tool_use.get("input_preview") or ""
+                            ui_message_publisher_instance.publish_part(
+                                tool_input_available(
+                                    tool_call_id=tool_call_id,
+                                    tool_name=tool_name,
+                                    input_payload={"preview": input_preview},
+                                )
+                            )
+
+                    stream_callback_handler = _typed_callback
+                    logger.info(
+                        "ui_message_publisher wired alongside legacy publisher for thread=%s",
+                        stream_thread_id,
+                    )
+                else:
+                    logger.warning(
+                        "ui_message_publisher not constructed — falling back to legacy {text} only (env missing?)"
+                    )
         except Exception as e:
             logger.warning("AppSync chunk streaming setup failed: %s", e)
 
@@ -2359,6 +2499,15 @@ def _execute_agent_turn(payload: dict) -> dict:
             context_engine_config=context_engine_config,
             browser_automation_enabled=browser_automation_enabled,
             stream_thread_id=ticket_id or None,
+            # Plan-012 U6: enable typed UIMessage emission for Computer
+            # threads only. Per-Computer-thread capability flag — Flue
+            # and sub-agent dispatch entrypoints leave this False and
+            # continue using the legacy {text} envelope unchanged.
+            # Gated on computer_id + computer_task_id so non-Computer
+            # callers that happen to pass a ticket_id (e.g. legacy
+            # streaming threads outside the Computer surface) keep the
+            # legacy shape until they explicitly opt in.
+            ui_message_emit=bool(computer_id and computer_task_id),
             suppress_app_build_helper_tools=bool(
                 computer_id
                 and computer_task_id

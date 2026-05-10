@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./theme.css": "./src/theme.css"
+    "./theme.css": "./src/theme.css",
+    "./*": "./src/components/ui/*.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "react-resizable-panels": "^4.11.0",
     "tailwind-merge": "^3.5.0"
   },
   "peerDependencies": {

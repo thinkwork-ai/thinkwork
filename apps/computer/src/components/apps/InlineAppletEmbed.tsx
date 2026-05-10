@@ -5,10 +5,13 @@ import {
   AppletLoading,
   AppletMount,
   appletSource,
-  defaultAppletModuleLoader,
   useAppletInstanceId,
   type AppletModuleLoader,
 } from "@/applets/mount";
+import {
+  Artifact,
+  ArtifactContent,
+} from "@/components/ai-elements/artifact";
 import type { AppletPayload } from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
 
@@ -18,18 +21,21 @@ interface AppletResult {
 
 interface InlineAppletEmbedProps {
   appId: string;
-  // Pixel height of the embed surface. Default sized to fit a chart or small
-  // dashboard inside a thread message bubble without dominating the transcript.
+  // Initial/minimum pixel height before the iframe reports its content height.
+  // After mount, inline embeds grow to content to avoid nested scroll regions
+  // inside thread transcripts.
   height?: number;
   // Test seam: lets unit tests inject a fake module loader so tests don't have
-  // to spin up the real applet transform pipeline.
+  // to spin up the real applet transform pipeline. Plan-012 U11.5: this is
+  // intentionally NOT defaulted to defaultAppletModuleLoader — production
+  // renders MUST pass undefined so AppletMount routes to the iframe substrate.
   loadModule?: AppletModuleLoader;
 }
 
 export function InlineAppletEmbed({
   appId,
   height = 480,
-  loadModule = defaultAppletModuleLoader,
+  loadModule,
 }: InlineAppletEmbedProps) {
   const [{ data, fetching, error }] = useQuery<AppletResult>({
     query: AppletQuery,
@@ -44,7 +50,7 @@ export function InlineAppletEmbed({
   if (error) {
     return (
       <AppletFailure>
-        Failed to load applet: {error.message}
+        Failed to load app: {error.message}
       </AppletFailure>
     );
   }
@@ -63,22 +69,30 @@ export function InlineAppletEmbed({
     );
   }
 
+  // Plan-012 U12: lighter <Artifact> variant for inline embeds. The
+  // surrounding thread message bubble already provides regenerate /
+  // branch chrome via useChat, so the inline variant drops the header
+  // entirely; the wrapper exists so future stylesheet passes can
+  // target inline applets uniformly with canvas applets.
   return (
-    <div
-      className="overflow-hidden rounded-md border border-border/70 bg-background"
+    <Artifact
+      className="overflow-hidden rounded-md border border-border/70 bg-background shadow-none"
       data-testid="inline-applet-embed"
-      style={{ height, maxHeight: "70vh" }}
+      style={{ minHeight: height }}
     >
-      <div className="h-full overflow-auto">
+      <ArtifactContent className="overflow-visible p-0">
         <AppletMount
           appId={appId}
           instanceId={instanceId}
           source={source}
           version={version}
-          loadModule={loadModule}
+          // Forward only when supplied — production renders pass
+          // undefined so AppletMount routes to the iframe substrate.
+          {...(loadModule ? { loadModule } : {})}
           hideRefreshControl
+          fitContentHeight
         />
-      </div>
-    </div>
+      </ArtifactContent>
+    </Artifact>
   );
 }

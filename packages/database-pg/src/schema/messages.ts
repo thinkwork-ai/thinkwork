@@ -36,6 +36,13 @@ export const messages = pgTable(
 			.notNull(),
 		role: text("role").notNull(),
 		content: text("content"),
+		// Plan-012 U7: typed UIMessage parts persisted at turn-finalize.
+		// Render-path precedence per contract v1: parts IS NOT NULL wins
+		// over the legacy content text column. Hand-rolled migration at
+		// drizzle/0082_messages_parts_jsonb.sql adds this column with
+		// the `-- creates-column:` marker for the drift gate; do not
+		// regenerate from this schema with `db:generate`.
+		parts: jsonb("parts"),
 		sender_type: text("sender_type"),
 		sender_id: uuid("sender_id"),
 		tool_calls: jsonb("tool_calls"),

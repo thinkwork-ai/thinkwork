@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
 import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import * as crmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
@@ -190,6 +191,38 @@ describe("AppletRouteContent", () => {
 
     expect(screen.getByText("Artifact not found.")).toBeTruthy();
   });
+
+  it("default production render takes the iframe substrate path (no loadModule prop)", async () => {
+    // Plan-012 U11.5: AppletRouteContent must NOT default loadModule
+    // to defaultAppletModuleLoader. Without loadModule, the
+    // AppletMount routes to IframeAppletMount which appends an
+    // iframe host element (data-testid='applet-iframe-host'). The
+    // legacy transformApplet seam MUST NOT fire — that's the
+    // load-bearing assertion that the production bypass adversarial
+    // review flagged is closed.
+    vi.mocked(transformApplet).mockClear();
+    vi.mocked(loadAppletHostExternals).mockClear();
+
+    render(
+      <AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />,
+    );
+
+    const host = await screen.findByTestId("applet-iframe-host");
+    expect(host).toBeTruthy();
+    expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
+    expect(vi.mocked(loadAppletHostExternals)).not.toHaveBeenCalled();
+  });
+
+  it("uses browser history for the artifact back button with /artifacts as fallback", () => {
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        backBehavior: "history",
+        backHref: "/artifacts",
+      }),
+    );
+  });
 });
 
 describe("AppletMount", () => {
@@ -205,23 +238,15 @@ describe("AppletMount", () => {
     );
 
     expect(await screen.findByText("LastMile CRM pipeline risk")).toBeTruthy();
-    expect(screen.getByText("Refresh recipe")).toBeTruthy();
     expect(screen.getByText("Open pipeline")).toBeTruthy();
     expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getByText("Product-line exposure")).toBeTruthy();
     expect(screen.getByText("Opportunity risk")).toBeTruthy();
-    expect(screen.getByText("Source coverage")).toBeTruthy();
-    expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Refresh recipe")).toBeNull();
+    expect(screen.queryByText("Source coverage")).toBeNull();
+    expect(screen.queryByText("Evidence")).toBeNull();
 
     expect(screen.queryByText("Refresh app")).toBeNull();
-
-    const evidenceSummary = screen.getAllByText("Evidence")[0];
-    const details = evidenceSummary.closest("details");
-    expect(details?.hasAttribute("open")).toBe(false);
-    fireEvent.click(evidenceSummary);
-    expect(details?.hasAttribute("open")).toBe(true);
-    fireEvent.click(evidenceSummary);
-    expect(details?.hasAttribute("open")).toBe(false);
 
     expect(firstOpportunityRow()).toContain("Regional carrier rollout");
     fireEvent.click(screen.getByRole("button", { name: "Amount" }));
@@ -282,6 +307,11 @@ describe("AppletMount", () => {
   });
 
   it("renders transform failures as recoverable app errors", async () => {
+    // Plan-012 U11.5: AppletMount defaults to the iframe path; passing
+    // loadModule routes back through the legacy same-origin path which
+    // calls transformApplet (the mock target). Without loadModule the
+    // iframe path skips transformApplet entirely and the
+    // mockResolvedValueOnce would leak into the next test.
     vi.mocked(transformApplet).mockResolvedValueOnce({
       ok: false,
       error: { message: "Import not allowed" },
@@ -293,6 +323,7 @@ describe("AppletMount", () => {
         instanceId="instance-1"
         source="import lodash from 'lodash'"
         version={1}
+        loadModule={async () => ({ default: () => null })}
       />,
     );
 
