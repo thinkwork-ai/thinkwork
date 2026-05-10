@@ -2,8 +2,9 @@ import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq, and, asc, lt, sql, inArray,
 	threads, messages, artifacts, costEvents, threadTurns, threadDependencies,
-	messageToCamel, artifactToCamel, snakeToCamel, threadToCamel,
+	messageToCamel, snakeToCamel, threadToCamel,
 } from "../../utils.js";
+import { artifactToCamelWithPayload } from "../artifacts/payload.js";
 
 export const threadTypeResolvers = {
 	agent: (thread: any, _args: any, ctx: GraphQLContext) => {
@@ -67,7 +68,8 @@ export const threadTypeResolvers = {
 				.where(inArray(artifacts.source_message_id, messageIds));
 			for (const a of linkedArtifacts) {
 				if (a.source_message_id) {
-					artifactsByMessageId[a.source_message_id] = artifactToCamel(a);
+					artifactsByMessageId[a.source_message_id] =
+						await artifactToCamelWithPayload(a);
 				}
 			}
 		}

@@ -2,10 +2,13 @@ import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq,
 	artifacts,
-	artifactToCamel,
 } from "../../utils.js";
+import { requireTenantMember } from "../core/authz.js";
+import { artifactToCamelWithPayload } from "./payload.js";
 
 export const artifact = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [row] = await db.select().from(artifacts).where(eq(artifacts.id, args.id));
-	return row ? artifactToCamel(row) : null;
+	if (!row) return null;
+	await requireTenantMember(ctx, row.tenant_id);
+	return artifactToCamelWithPayload(row);
 };

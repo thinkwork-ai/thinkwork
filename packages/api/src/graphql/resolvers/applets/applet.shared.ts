@@ -31,6 +31,11 @@ import {
   writeAppletSourceToS3,
 } from "../../../lib/applets/storage.js";
 import {
+  appletStatePayloadKey,
+  readArtifactJsonPayloadFromS3,
+  writeArtifactJsonPayloadToS3,
+} from "../../../lib/artifacts/payload-storage.js";
+import {
   AppletImportError,
   AppletRuntimePatternError,
   AppletSyntaxError,
@@ -70,7 +75,7 @@ interface AppletStateMetadata {
   appId: string;
   instanceId: string;
   key: string;
-  value: unknown;
+  value?: unknown;
 }
 
 interface AppletStateArtifactRow {
@@ -78,6 +83,7 @@ interface AppletStateArtifactRow {
   tenant_id: string;
   thread_id?: string | null;
   type: string;
+  s3_key?: string | null;
   metadata?: unknown;
   updated_at: Date | string;
 }
@@ -454,7 +460,7 @@ export async function loadAppletState(args: {
     key: args.key,
   });
 
-  return row ? toAppletState(row) : null;
+  return row ? await toAppletState(row) : null;
 }
 
 export async function saveAppletStateInner(args: {
@@ -472,13 +478,26 @@ export async function saveAppletStateInner(args: {
     instanceId: args.input.instanceId,
     key: args.input.key,
   });
+  const stateArtifactId = existing?.id ?? randomUUID();
+  const stateS3Key = appletStatePayloadKey({
+    tenantId: applet.tenant_id,
+    appId: args.input.appId,
+    instanceId: args.input.instanceId,
+    stateKey: args.input.key,
+    revision: randomUUID(),
+  });
+  await writeArtifactJsonPayloadToS3({
+    tenantId: applet.tenant_id,
+    key: stateS3Key,
+    value: args.input.value,
+  });
+
   const metadata: AppletStateMetadata = {
     schemaVersion: 1,
     kind: "computer_applet_state",
     appId: args.input.appId,
     instanceId: args.input.instanceId,
     key: args.input.key,
-    value: args.input.value,
   };
   const now = new Date();
 
@@ -487,17 +506,22 @@ export async function saveAppletStateInner(args: {
       .update(artifacts)
       .set({
         title: appletStateTitle(args.input.key),
+        s3_key: stateS3Key,
         metadata,
         updated_at: now,
       })
       .where(eq(artifacts.id, existing.id))
       .returning();
-    return toAppletState(updated ?? { ...existing, metadata, updated_at: now });
+    return toAppletState(
+      updated ?? { ...existing, s3_key: stateS3Key, metadata, updated_at: now },
+      args.input.value,
+    );
   }
 
   const [inserted] = await db
     .insert(artifacts)
     .values({
+      id: stateArtifactId,
       tenant_id: applet.tenant_id,
       agent_id: applet.agent_id ?? null,
       thread_id: applet.thread_id ?? null,
@@ -505,7 +529,7 @@ export async function saveAppletStateInner(args: {
       type: "applet_state",
       status: "final",
       content: null,
-      s3_key: null,
+      s3_key: stateS3Key,
       summary: null,
       source_message_id: null,
       metadata,
@@ -513,7 +537,7 @@ export async function saveAppletStateInner(args: {
     })
     .returning();
 
-  return toAppletState(inserted);
+  return toAppletState(inserted, args.input.value);
 }
 
 async function loadAppletArtifactForState(args: {
@@ -572,18 +596,27 @@ async function findAppletStateArtifact(args: {
   );
 }
 
-function toAppletState(row: AppletStateArtifactRow) {
+async function toAppletState(row: AppletStateArtifactRow, valueOverride?: unknown) {
   const metadata = parseAppletStateMetadata(row.metadata);
   if (!metadata) {
     throw new GraphQLError("Applet state artifact metadata is invalid", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
+  const value =
+    valueOverride !== undefined
+      ? valueOverride
+      : row.s3_key
+        ? await readArtifactJsonPayloadFromS3({
+            tenantId: row.tenant_id,
+            key: row.s3_key,
+          })
+        : metadata.value;
   return {
     appId: metadata.appId,
     instanceId: metadata.instanceId,
     key: metadata.key,
-    value: metadata.value,
+    value,
     updatedAt: serializeDate(row.updated_at),
   };
 }

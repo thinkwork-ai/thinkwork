@@ -2,6 +2,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
+import { randomUUID } from "node:crypto";
 import { eq, and, desc, lt, sql } from "drizzle-orm";
 import {
 	threads,
@@ -17,6 +18,12 @@ import {
 	unauthorized,
 	paginated,
 } from "../lib/response.js";
+import {
+	isArtifactPayloadS3Key,
+	messageArtifactContentKey,
+	readArtifactPayloadFromS3,
+	writeArtifactPayloadToS3,
+} from "../lib/artifacts/payload-storage.js";
 
 // ---------------------------------------------------------------------------
 // Router
@@ -195,7 +202,7 @@ async function listArtifacts(
 		.where(eq(messageArtifacts.message_id, messageId))
 		.orderBy(desc(messageArtifacts.created_at));
 
-	return json(rows);
+	return json(await Promise.all(rows.map(hydrateMessageArtifactContent)));
 }
 
 async function createArtifact(
@@ -215,21 +222,66 @@ async function createArtifact(
 		.where(eq(messages.id, messageId));
 	if (!msg) return notFound("Message not found");
 
+	const artifactId = randomUUID();
+	const contentS3Key =
+		typeof body.content === "string"
+			? messageArtifactContentKey({
+					tenantId: msg.tenant_id,
+					messageArtifactId: artifactId,
+					revision: randomUUID(),
+				})
+			: null;
+	if (contentS3Key) {
+		await writeArtifactPayloadToS3({
+			tenantId: msg.tenant_id,
+			key: contentS3Key,
+			body: body.content,
+			contentType: body.mime_type ?? "text/plain; charset=utf-8",
+		});
+	}
+
 	const [artifact] = await db
 		.insert(messageArtifacts)
 		.values({
+			id: artifactId,
 			message_id: messageId,
 			thread_id: msg.thread_id,
 			tenant_id: msg.tenant_id,
 			artifact_type: body.artifact_type,
 			name: body.name,
-			content: body.content,
-			s3_key: body.s3_key,
+			content: contentS3Key ? null : body.content,
+			s3_key: contentS3Key,
 			mime_type: body.mime_type,
-			size_bytes: body.size_bytes,
+			size_bytes:
+				body.size_bytes ??
+				(typeof body.content === "string"
+					? Buffer.byteLength(body.content, "utf8")
+					: undefined),
 			metadata: body.metadata,
 		})
 		.returning();
 
-	return json(artifact, 201);
+	return json(
+		contentS3Key ? { ...artifact, content: body.content } : artifact,
+		201,
+	);
+}
+
+async function hydrateMessageArtifactContent(
+	row: typeof messageArtifacts.$inferSelect,
+) {
+	if (
+		!row.s3_key ||
+		row.content !== null ||
+		!isArtifactPayloadS3Key(row.tenant_id, row.s3_key)
+	) {
+		return row;
+	}
+	return {
+		...row,
+		content: await readArtifactPayloadFromS3({
+			tenantId: row.tenant_id,
+			key: row.s3_key,
+		}),
+	};
 }

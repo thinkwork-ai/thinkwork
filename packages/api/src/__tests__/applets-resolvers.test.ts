@@ -396,15 +396,31 @@ describe("applet GraphQL resolvers", () => {
       thread_id: "11111111-1111-4111-8111-111111111111",
       type: "applet_state",
       status: "final",
+      content: null,
+      s3_key: expect.stringContaining(
+        `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${appId}/state/`,
+      ),
       metadata: expect.objectContaining({
         kind: "computer_applet_state",
         appId,
         instanceId: "route-1",
         key: "form",
-        value: { agenda: ["renewal"] },
       }),
     });
+    expect(insertedRows[0].metadata).not.toHaveProperty("value");
+    const statePut = s3Mock.commandCalls(PutObjectCommand).at(-1);
+    expect(statePut?.args[0].input).toMatchObject({
+      Bucket: "workspace-bucket",
+      Key: insertedRows[0].s3_key,
+      Body: JSON.stringify({ agenda: ["renewal"] }),
+      ContentType: "application/json",
+    });
 
+    s3Mock.on(GetObjectCommand, { Key: insertedRows[0].s3_key }).resolves({
+      Body: {
+        transformToString: async () => JSON.stringify({ agenda: ["renewal"] }),
+      } as any,
+    });
     selectRows.push(insertedRows[0]);
 
     await expect(
@@ -460,11 +476,14 @@ describe("applet GraphQL resolvers", () => {
       value: { agenda: ["new"] },
     });
     expect(updatedRows[0]).toMatchObject({
+      s3_key: expect.stringContaining(
+        `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${appId}/state/`,
+      ),
       metadata: expect.objectContaining({
         instanceId: "route-1",
-        value: { agenda: ["new"] },
       }),
     });
+    expect(updatedRows[0].metadata).not.toHaveProperty("value");
   });
 });
 
