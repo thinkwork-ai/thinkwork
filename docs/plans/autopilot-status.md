@@ -17,7 +17,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - **Worktree:** `.Codex/worktrees/computer-ai-elements-u1`
 - **Started:** 2026-05-10
 - **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1111
-- **Status:** PR open; waiting for CI
+- **Status:** CI passed; ready to squash merge
 
 ## Progress Log
 
@@ -29,6 +29,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
 - 2026-05-10: Opened PR #1111.
+- 2026-05-10: PR #1111 CI passed: CLA, lint, verify, typecheck, and test.
 
 ## Merged PRs
 
