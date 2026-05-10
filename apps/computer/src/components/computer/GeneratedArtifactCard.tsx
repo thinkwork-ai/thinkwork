@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
+import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
 import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
 
 export interface GeneratedArtifact {
@@ -24,33 +25,17 @@ export function GeneratedArtifactCard({
     artifact.metadata?.kind === "computer_applet" ||
     artifact.metadata?.kind === "research_dashboard" ||
     artifact.metadata?.uiSurface === "app";
-  const articleClassName = isAppArtifact
-    ? "grid gap-2 bg-transparent"
-    : "grid gap-3 rounded-lg border border-border/70 bg-background/70 p-4";
-  const titleClassName = isAppArtifact
-    ? "truncate text-sm font-medium text-muted-foreground"
-    : "truncate text-sm font-semibold";
-  const badgeClassName = isAppArtifact
-    ? "rounded-md border-border/50 bg-transparent text-muted-foreground"
-    : "rounded-md";
 
-  return (
-    <article className={articleClassName}>
-      <div className="flex items-center gap-3 px-1">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className={titleClassName}>{artifact.title}</h3>
-            <Badge variant="outline" className={badgeClassName}>
-              {isAppArtifact ? "App" : (artifact.type ?? "Artifact")}
-            </Badge>
-          </div>
-          {!isAppArtifact && artifact.summary ? (
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {artifact.summary}
-            </p>
-          ) : null}
-        </div>
-        {isAppArtifact ? (
+  if (isAppArtifact) {
+    return (
+      <GeneratedAppArtifactShell
+        title={artifact.title}
+        label="App"
+        runtimeMode="sandboxedGenerated"
+        className="border-border/70 bg-background shadow-none"
+        headerClassName="border-0 bg-transparent px-1 py-0"
+        contentClassName="overflow-visible p-0"
+        actions={
           <Button
             asChild
             type="button"
@@ -64,21 +49,41 @@ export function GeneratedArtifactCard({
               <span className="hidden sm:inline">Open full</span>
             </Link>
           </Button>
-        ) : null}
-      </div>
-      {isAppArtifact ? (
+        }
+      >
         <InlineAppletEmbed appId={artifact.id} />
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled
-          className="justify-self-start"
-        >
-          Preview unavailable
-        </Button>
-      )}
+      </GeneratedAppArtifactShell>
+    );
+  }
+
+  return (
+    <article className="grid gap-3 rounded-lg border border-border/70 bg-background/70 p-4">
+      <div className="flex items-center gap-3 px-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-sm font-semibold">
+              {artifact.title}
+            </h3>
+            <Badge variant="outline" className="rounded-md">
+              {artifact.type ?? "Artifact"}
+            </Badge>
+          </div>
+          {artifact.summary ? (
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {artifact.summary}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        className="justify-self-start"
+      >
+        Preview unavailable
+      </Button>
     </article>
   );
 }
