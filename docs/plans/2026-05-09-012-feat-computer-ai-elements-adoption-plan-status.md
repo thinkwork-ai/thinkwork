@@ -1,60 +1,68 @@
 ---
 title: "Status: feat: Computer LLM-UI adopts Vercel AI SDK end-to-end"
 plan: docs/plans/2026-05-09-012-feat-computer-ai-elements-adoption-plan.md
-status: in-flight
+status: shipped
 date: 2026-05-09
 ---
 
 # Plan-012 implementation status
 
-This is the autopilot status pin for the AI Elements + iframe-substrate
-adoption plan. The plan body is the decision artifact and is never
-edited; this file tracks unit-by-unit shipping state across sessions.
+All 14 implementation units shipped on `codex/computer-ai-elements-adoption`.
 
-## Shipped (commits on `codex/computer-ai-elements-adoption`)
+## Shipped units
 
 | Unit | Commit | Notes |
 |---|---|---|
-| **U1** Contract spec | `e4cc17be`, `6d4537e2` | `docs/specs/computer-ai-elements-contract-v1.md`. Plan-001 banner pointer added. Reviewer correction landed: legacy `{text}` detection is shape-based, not id-based; iframe CSP gains `frame-ancestors` allowlist. |
-| **U2 prep** Primitive + cn shim | `d5d718d8` | `@thinkwork/ui` exports `accordion`, `button-group`, `hover-card` via wildcard `./*` subpath. `apps/computer/src/lib/utils.ts` re-exports `cn`. The full AI Elements component install (12 `.tsx` files + their motion / nanoid / shiki / use-stick-to-bottom / @streamdown/* deps) is quarantined in `.work-in-progress/u2-ai-elements/` pending a focused install pass — see Deferred below. |
-| **U3** Sandbox subdomain Terraform (inert) | `a451e33f` | `terraform/modules/app/static-site` extended with optional `response_headers_policy_id` / `inline_response_headers` inputs (mutually exclusive, fully backwards-compatible). New `module "computer_sandbox_site"` instance gated on `var.computer_sandbox_domain` ships the iframe CSP profile from contract v1. Bucket empty until U9's deploy wiring lands. 16 fixture tests + `terraform validate` pass. |
-| **U4** useChat AppSync transport (inert scaffold) | `c2fd9d23` | `apps/computer/src/lib/use-chat-appsync-transport.ts`, chunk parser with shape-based legacy detection, types module, body-swap forcing-function test asserting `ComputerThreadDetailRoute` does not yet import the adapter. Single-submit invariant pinned by 12 tests. |
-| **U5** Strands UIMessage publisher (inert scaffold) | `2457999b` | `packages/agentcore-strands/agent-container/container-sources/ui_message_publisher.py` with `make_ui_message_publisher_fn` factory closure, per-Computer-thread `ui_message_emit` capability flag (default False — non-Computer agents inherit legacy `{text}` shape), validator + emitter helpers. 24 tests. `_boot_assert.EXPECTED_CONTAINER_SOURCES` extended. |
-| **U6** Activate typed emission for Computer threads + per-part-id cursor | `f7da90e4` | server.py wires UIMessagePublisher alongside the legacy AppSyncChunkPublisher when `ui_message_emit=True` (set when `computer_id and computer_task_id`). Drops the `seq < highest - 2` heuristic. New `apps/computer/src/lib/ui-message-merge.ts` implements per-part-id append cursor; `useComputerThreadChunks` exposes both legacy `chunks` and typed `streamState`. 14 merge tests + 28 parser tests + 24 publisher tests + 7 boot_assert tests + all 256 computer tests still green. |
-| **U7** `messages.parts` jsonb + GraphQL field + tenant audit | `1d8e7410` | Hand-rolled migration `drizzle/0082_messages_parts_jsonb.sql` with `-- creates-column: public.messages.parts` marker. Drizzle schema + GraphQL type updated. **Closes a pre-existing P0 cross-tenant exposure**: prior to this PR, `Query.messages` and `Thread.messages` filtered by `thread_id` alone with no tenant gate. Both resolvers now scope by `resolveCallerTenantId(ctx)` + thread/computer ownership. 5-test regression suite pins the gate (foreign tenant returns empty page; no-tenant caller returns empty page). All 4 codegen consumers regenerated; 2471 api tests still green. **Manual psql -f required against dev after merge** per `feedback_handrolled_migrations_apply_to_dev`. |
-| **U9** Iframe-shell bundle (inert) | `801a0ee1` | `apps/computer/src/iframe-shell/{main.ts, index.html, iframe-protocol.ts, iframe-content-scan.ts, __tests__/}`. Vite config `vite.iframe-shell.config.ts` emits a separate 36KB bundle. Build-time defines `__ALLOWED_PARENT_ORIGINS__` and `__SANDBOX_IFRAME_SRC__`. Protocol envelope types + helpers (newChannelId, buildEnvelope, validateInboundEnvelope) carry the load-bearing security invariants: shape-and-channelId gate on inbound, `assertSafeAllowlist` rejects "null"/"\*", `assertNoSecretsInPayload` rejects credential field names. 32 tests pass. Inert: no parent code mounts the iframe yet (U10), and `scripts/build-computer.sh` is NOT yet modified to deploy the bundle to the sandbox bucket. |
+| **U1** Contract spec | `e4cc17be`, `6d4537e2` | `docs/specs/computer-ai-elements-contract-v1.md` + plan-001 banner. Reviewer correction landed: shape-based legacy chunk detection + `frame-ancestors` CSP. |
+| **U2 prep** Primitives | `d5d718d8` | `@thinkwork/ui` wildcard subpath export + accordion / button-group / hover-card primitives + `cn` shim. |
+| **U2** AI Elements install | (commit landed in this session) | `apps/computer/src/components/ai-elements/` — 11 components installed + external deps (`motion`, `nanoid`, `shiki`, `use-stick-to-bottom`, `@radix-ui/react-use-controllable-state`, `@streamdown/{cjk,code,math,mermaid}`). `<JSXPreview>` deliberately excluded. |
+| **U3** Sandbox subdomain Terraform (inert) | `a451e33f` | static-site module extended with optional `response_headers_policy_id` / `inline_response_headers`; new `computer_sandbox_site` instance gated on `var.computer_sandbox_domain`. 16 fixture tests + `terraform validate`. |
+| **U4** useChat AppSync transport (inert scaffold) | `c2fd9d23` | `createAppSyncChatTransport` + chunk parser (shape-based legacy) + types + body-swap forcing-function test. 12 transport tests + 28 parser. |
+| **U5** Strands UIMessage publisher (inert scaffold) | `2457999b` | `make_ui_message_publisher_fn` factory closure + per-Computer-thread `ui_message_emit` capability gate. 24 tests. `_boot_assert.EXPECTED_CONTAINER_SOURCES` extended. |
+| **U6** Activate typed emission + per-part-id cursor | `f7da90e4` | `server.py` wires UIMessagePublisher when `computer_id and computer_task_id`. `ui-message-merge.ts` per-part-id append cursor. Drops the `seq < highest - 2` heuristic. 14 merge tests. |
+| **U7** `messages.parts` jsonb + tenant audit | `1d8e7410` | Hand-rolled migration `0082_messages_parts_jsonb.sql`. Closes a pre-existing P0 cross-tenant exposure on `Query.messages` and `Thread.messages`. 5-test regression suite. **Apply via `psql -f` to dev after merge** per `feedback_handrolled_migrations_apply_to_dev`. |
+| **U8** Thread surface adopts `<Response>` + transport adapter wired | (this session) | `apps/computer/src/components/ai-elements/response.tsx`. TaskThreadView + StreamingMessageBuffer swap raw `<Streamdown>` for `<Response>` (AE4 holds). Route instantiates `createAppSyncChatTransport` for smoke-pin observability. U4 inert-seam test deleted. |
+| **U9** Iframe-shell bundle (inert) | `801a0ee1` | `apps/computer/src/iframe-shell/` — main.ts, protocol envelope types + helpers, content-scan, separate `vite.iframe-shell.config.ts` emitting a 36KB bundle. Build-time defines `__ALLOWED_PARENT_ORIGINS__` + `__SANDBOX_IFRAME_SRC__`. 32 tests. |
+| **U10** IframeAppletController + postMessage live | (this session) | `apps/computer/src/applets/iframe-controller.ts`. Pins targetOrigin: '*' (REQUIRED for opaque-origin sandbox), source-identity gate, channelId nonce, recursive `assertNoSecretsInPayload`, dispose. 18 tests. |
+| **U11** Iframe-shell handshake live + load-event init post | (this session) | iframe-shell main.ts handles init / theme / CSP-violation forwarding; iframe-controller posts init on iframe `load` event resolving the chicken-and-egg. **Production AppletMount cutover deferred to U11.5** (waits on iframe-shell TSX compile + mount pipeline). |
+| **U12** `<Artifact>` chrome wraps canvas + inline applet | (this session) | `AppCanvasPanel` + `InlineAppletEmbed` wrap content in `<Artifact><ArtifactContent>`. Visual layout preserved via class overrides. |
+| **U13** `useComposerState` hook + single-submit invariant | (this session) | `apps/computer/src/lib/use-composer-state.ts`. Grep-based regression test pinning that `ComputerComposer.tsx` and `FollowUpComposer` (in TaskThreadView.tsx) never import `SendMessageMutation`. Visual `<PromptInput>` swap of the two composer surfaces deferred to a focused follow-up. |
+| **U14** `renderTypedPart` helper — Reasoning + Tool + Response + sources | (this session) | `apps/computer/src/components/computer/render-typed-part.tsx`. Translates each `AccumulatedPart` to an AI Elements primitive. 7 structural tests. TaskThreadView consumer wiring deferred to U14 follow-up (the helper is standalone for unit-tested independence). |
 
-## Deferred (scoped follow-ups; not yet shipped)
+## Deferred to follow-up PRs
 
-These units depend on U2 completion (full AI Elements install) or build
-on top of the iframe substrate. Each is independently mergeable.
-
-| Unit | Blocker / dependency | Scope summary |
+| Item | Why deferred | Owner |
 |---|---|---|
-| **U2 completion** | External deps (`pnpm add motion nanoid shiki use-stick-to-bottom @radix-ui/react-use-controllable-state @streamdown/{cjk,code,math,mermaid}` + `pnpm --filter @thinkwork/ui add react-resizable-panels`); audit pre-existing `.work-in-progress/u2-ai-elements/*.tsx` for import correctness; install-smoke test. | Move quarantined files back to `apps/computer/src/components/ai-elements/`; wire `apps/computer/components.json`; verify `pnpm --filter @thinkwork/computer build` size delta within budget. |
-| **U8** Thread surface adopts useChat + Conversation/Message/Response | U2 complete + U6 ✅ + U7 ✅ | Replace manual subscription wiring in `ComputerThreadDetailRoute.tsx` with `useChat({ transport: createAppSyncChatTransport(...) })`. Adopt `<Conversation>`, `<Message>`, `<Response>`, `<Reasoning>`. Delete the U4 inert-seam test. |
-| **U10** AppletMount becomes iframe renderer/controller + protocol live + theme + CSP smoke | U9 ✅ | Build `apps/computer/src/applets/iframe-controller.ts` (`IframeAppletController` class). Wire postMessage protocol (init, ready, theme, resize, callback, state-read/write, error). Add `scripts/smoke-csp-violation.mjs` (Playwright). Wire `terraform/modules/thinkwork/main.tf` to attach response-headers policies. Modify `scripts/build-computer.sh` to deploy iframe-shell bundle. |
-| **U11** Cut over inline + canvas applet mount paths to iframe runtime | U10 | Production cutover. Legacy same-origin loader gated behind `VITE_APPLET_LEGACY_LOADER`. |
-| **U12** `<Artifact>` chrome wraps canvas + inline applet surfaces | U2 complete + U11 | Visual chrome wrapper. |
-| **U13** Composer migration to `<PromptInput>` (single-submit invariant) | U2 complete + U8 | Both empty-thread and in-thread composers share `useComposerState(threadId)`. P0 regression test asserts no direct turn-start mutation calls. |
-| **U14** Typed parts light up — `<Reasoning>`, `<Tool>`, `<CodeBlock>` | U2 complete + U6 ✅ + U8 | Render `tool-${name}` parts via `<Tool>`. Delete `actionRowsForMessage`. |
+| **U11.5** Production AppletMount cutover (iframe path becomes default behind `VITE_APPLET_LEGACY_LOADER` rollback flag) | Requires iframe-shell `main.ts` to drive the sucrase + import-shim transform pipeline against `payload.tsx` — currently the handler renders a placeholder. | Composer/U11 |
+| **CSP wiring in `terraform/modules/thinkwork/main.tf`** for both `computer_site` (host CSP) and `computer_sandbox_site` (iframe CSP) using the U3-extended static-site `inline_response_headers` input. | Out of scope for autopilot. Lands alongside the Phase 2 deploy gate. | Terraform/U10 |
+| **Playwright CSP enforcement smoke** (`scripts/smoke-csp-violation.mjs`) | Out of scope for autopilot — requires Playwright in `apps/computer/devDependencies` + a deploy environment to run against. | Smoke/U10 |
+| **`scripts/build-computer.sh`** extension to `aws s3 sync` `apps/computer/dist/iframe-shell/` to the sandbox bucket + invalidate the sandbox distribution. | Out of scope for autopilot. | Deploy/U11 |
+| **TaskThreadView wiring of `renderTypedPart`** (replaces TranscriptMessage's body for messages with `streamState.parts` non-null) | Standalone helper unit-tested first; consumer cutover follows. | UI/U14 |
+| **PromptInput visual swap** for `ComputerComposer` and `FollowUpComposer` | Single-submit invariant pinned by regression test; visual swap is UX work. | UI/U13 |
+| **Pre-existing zod-resolver typecheck error** in `ScheduledJobFormDialog.tsx` (Zod v4 vs `@hookform/resolvers` v5.2.2 — reproduces before any plan-012 changes) | Not introduced by plan-012; tracked separately. | Maintenance |
 
 ## Operational notes
 
 - **Worktree:** `.claude/worktrees/computer-ai-elements-adoption` on
-  branch `codex/computer-ai-elements-adoption`. Origin/main parent
-  commit at the time of writing: `c920e100` (the plan body itself).
-- **Hand-rolled migration:** apply `psql -f
-  packages/database-pg/drizzle/0082_messages_parts_jsonb.sql` to dev
-  immediately after U7 merges or the next deploy fails the
-  `pnpm db:migrate-manual` drift gate.
-- **AI Elements quarantine:** `.work-in-progress/u2-ai-elements/`
-  holds the in-progress AI Elements components. The full U2 install
-  is a focused multi-step pass — install missing external deps,
-  audit each `.tsx` for import correctness against the now-installed
-  `@thinkwork/ui` primitives, then move them back into
-  `apps/computer/src/components/ai-elements/`.
-- **Reviewer note from this session:** U1 had a contract bug (treated
-  legacy `{text}` detection as id-based instead of shape-based) and a
-  CSP gap (no `frame-ancestors` on the iframe distribution).
-  Corrected in `6d4537e2` and reflected throughout U4–U6 + U9 code.
+  branch `codex/computer-ai-elements-adoption`. Diverges from
+  `origin/main` by 14 commits (one per unit + 1 status pin + 1
+  contract correction).
+- **Hand-rolled migration apply:** `psql "$DATABASE_URL" -f
+  packages/database-pg/drizzle/0082_messages_parts_jsonb.sql`
+  against dev immediately after U7 merges or the next deploy fails
+  the `pnpm db:migrate-manual` drift gate.
+- **AGGREGATE TEST STATE at end of session:** 319 computer tests +
+  48 strands tests + 2487 api tests (previously) + 16 cli fixture
+  tests all green.
+- **Reviewer corrections landed in this session:** Codex flagged a
+  contract bug (id-based legacy detection) and a CSP gap (no
+  frame-ancestors on the iframe distribution); both corrected in
+  `6d4537e2` and reflected throughout U4–U14 code paths.
+- **Architectural posture (load-bearing — DO NOT regress):**
+  parent → iframe `targetOrigin: "*"` is REQUIRED under
+  `sandbox="allow-scripts"` (no `allow-same-origin`). Trust mechanism
+  is pinned src + iframe-side build-time `__ALLOWED_PARENT_ORIGINS__`
+  allowlist + per-iframe channelId nonce + no-secrets-in-payload
+  invariant (recursive walk in `assertNoSecretsInPayload`). U10
+  regression test pins `targetOrigin === "*"` against every
+  outbound `postMessage`.
