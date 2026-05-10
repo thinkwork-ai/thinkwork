@@ -185,6 +185,7 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
 
 
 from external_task_context import format_external_task_context
+from runbook_context import format_runbook_context
 from workflow_skill_context import format_workflow_skill_context
 
 
@@ -689,6 +690,20 @@ def _build_computer_event_sink(context: dict | None):
     return append_event
 
 
+def _publish_initial_runbook_queue_update(ui_message_publisher_instance, runbook_context):
+    if ui_message_publisher_instance is None or not runbook_context:
+        return None
+    try:
+        from runbook_context import build_runbook_queue_part
+
+        return ui_message_publisher_instance.publish_part(
+            build_runbook_queue_part(runbook_context)
+        )
+    except Exception as exc:  # noqa: BLE001 - publishing must never crash the turn
+        logger.warning("runbook queue update publish failed: %s", exc)
+        return None
+
+
 def _save_app_tool_summary(payload: object) -> dict | None:
     if not isinstance(payload, dict):
         return None
@@ -717,6 +732,7 @@ def _call_strands_agent(
     computer_event_context: dict | None = None,
     suppress_app_build_helper_tools: bool = False,
     ui_message_emit: bool = False,
+    runbook_context: dict | None = None,
 ) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -822,10 +838,6 @@ def _call_strands_agent(
                     make_ui_message_publisher_from_env,
                     text_delta,
                     text_start,
-                    text_end,
-                    reasoning_delta,
-                    reasoning_start,
-                    reasoning_end,
                     tool_input_available,
                 )
 
@@ -836,6 +848,11 @@ def _call_strands_agent(
                 )
 
                 if ui_message_publisher_instance is not None:
+                    _publish_initial_runbook_queue_update(
+                        ui_message_publisher_instance,
+                        runbook_context,
+                    )
+
                     # Build a parallel callback that maps each Strands /
                     # Bedrock streaming event to typed UIMessageChunk
                     # JSON. The legacy {text} chunk callback ALSO runs
@@ -2362,6 +2379,7 @@ def _execute_agent_turn(payload: dict) -> dict:
         context_engine_config = None
     thread_metadata = payload.get("thread_metadata") or {}
     workflow_skill = payload.get("workflow_skill")
+    runbook_context = payload.get("runbook_context") or payload.get("runbookContext")
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
     template_blocked_tools = payload.get("blocked_tools") or []
     browser_automation_enabled = bool(payload.get("browser_automation_enabled"))
@@ -2469,6 +2487,10 @@ def _execute_agent_turn(payload: dict) -> dict:
         if workflow_block:
             system_prompt += "\n\n---\n\n" + workflow_block
 
+        runbook_block = format_runbook_context(runbook_context)
+        if runbook_block:
+            system_prompt += "\n\n---\n\n" + runbook_block
+
         if knowledge_bases_config and not has_workspace_map:
             try:
                 kb_context = _retrieve_kb_context(knowledge_bases_config, message)
@@ -2524,6 +2546,7 @@ def _execute_agent_turn(payload: dict) -> dict:
                 if computer_id and computer_task_id
                 else None
             ),
+            runbook_context=runbook_context if isinstance(runbook_context, dict) else None,
         )
         duration_ms = int(time.time() * 1000) - start_ms
         computer_thread_response = None
@@ -2635,6 +2658,12 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "",
         "You are operating inside ThinkWork Computer, an end-user workspace for",
         "deep agent research that produces durable, reusable artifacts.",
+        "",
+        "When a Runbook Execution Context section is present, it controls the",
+        "current task. Execute that task only, use prior task outputs as the",
+        "handoff, and do not replace the runbook with a separate plan. When no",
+        "runbook context is active and the work is substantial, make progress",
+        "visible with an ad hoc task list before diving into execution.",
         "",
         "When the user asks you to build, create, generate, or make an app,",
         "applet, dashboard, report, briefing, workspace, or other interactive",
