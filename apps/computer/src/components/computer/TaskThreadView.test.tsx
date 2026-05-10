@@ -17,14 +17,10 @@ import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(cleanup);
 
-// Asserts the labelled element is actually a <details> before narrowing to
-// HTMLDetailsElement. Without this guard, `as HTMLDetailsElement` would cast
-// any HTMLElement and surface confusing "expected undefined" failures if the
-// label ever migrates to a non-details element.
-function getThinkingDetails(): HTMLDetailsElement {
+function getThinkingDisclosure(): HTMLElement {
   const el = screen.getByLabelText("Thinking and tool activity");
-  expect(el.tagName.toLowerCase()).toBe("details");
-  return el as HTMLDetailsElement;
+  expect(el.getAttribute("data-state")).not.toBeNull();
+  return el;
 }
 
 describe("TaskThreadView", () => {
@@ -774,8 +770,8 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const details = getThinkingDetails();
-    expect(details.open).toBe(false);
+    const disclosure = getThinkingDisclosure();
+    expect(disclosure.getAttribute("data-state")).toBe("closed");
   });
 
   it("nests the Run failed row inside the Thinking disclosure when a turn errors", () => {
@@ -801,12 +797,12 @@ describe("TaskThreadView", () => {
         }}
       />,
     );
-    const details = getThinkingDetails();
-    expect(details.open).toBe(false);
+    const disclosure = getThinkingDisclosure();
+    expect(disclosure.getAttribute("data-state")).toBe("closed");
     // Run failed row is mounted inside the closed disclosure (revealed on
     // expand). Asserting via queryByText to confirm presence regardless of
-    // visibility — JSDOM renders <details closed> children but they're not
-    // visible to the user without expansion.
+    // visibility — the rows remain mounted inside the closed AI Elements
+    // Reasoning disclosure and are revealed on expansion.
     expect(screen.queryByText("Run failed")).toBeTruthy();
     expect(screen.queryByText("Browser session timed out")).toBeTruthy();
   });
@@ -842,8 +838,8 @@ describe("TaskThreadView", () => {
           }}
         />,
       );
-      const details = getThinkingDetails();
-      expect(details.open).toBe(false);
+      const disclosure = getThinkingDisclosure();
+      expect(disclosure.getAttribute("data-state")).toBe("closed");
       unmount();
     }
   });
@@ -867,17 +863,14 @@ describe("TaskThreadView", () => {
     };
 
     const { rerender } = render(<TaskThreadView thread={baseThread} />);
-    const details = getThinkingDetails();
-    expect(details.open).toBe(false);
+    const disclosure = getThinkingDisclosure();
+    expect(disclosure.getAttribute("data-state")).toBe("closed");
 
-    // Manually expand (JSDOM doesn't propagate summary clicks; toggle
-    // imperatively via the open property + a synthetic toggle event).
-    details.open = true;
-    details.dispatchEvent(new Event("toggle", { bubbles: true }));
+    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
 
     rerender(<TaskThreadView thread={{ ...baseThread }} />);
-    const reRendered = getThinkingDetails();
-    expect(reRendered.open).toBe(true);
+    const reRendered = getThinkingDisclosure();
+    expect(reRendered.getAttribute("data-state")).toBe("open");
   });
 
   it("does not synthesize a fallback response when a new turn is in flight after a previous completed turn", () => {
@@ -1097,7 +1090,7 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the Thinking summary aria-label intact on the new <details> element", () => {
+  it("keeps the Thinking summary aria-label intact on the Reasoning disclosure", () => {
     // U2 / DL-003: dropping the <article> wrapper must not lose the labelled
     // region affordance. Screen readers continue to find the same name.
     render(
@@ -1118,7 +1111,7 @@ describe("TaskThreadView", () => {
       />,
     );
     const labelled = screen.getByLabelText("Thinking and tool activity");
-    expect(labelled.tagName.toLowerCase()).toBe("details");
+    expect(labelled.getAttribute("data-state")).toBe("closed");
   });
 
   it("sends follow-up messages from the composer", async () => {

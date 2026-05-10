@@ -1,7 +1,6 @@
 import {
   ArrowUp,
   Bot,
-  Brain,
   ChevronRight,
   Code2,
   Database,
@@ -31,6 +30,11 @@ import {
   PromptInputTextarea,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { renderTypedParts } from "@/components/computer/render-typed-part";
 import type { UIMessageStreamState } from "@/lib/ui-message-merge";
@@ -579,31 +583,30 @@ function ThinkingRow({
   const hasChildren = Children.toArray(children).some(Boolean);
   // Always defaults closed — preventing the content-shift the user
   // explicitly called out (action rows streaming in pushed the rest of the
-  // page mid-read). The native `<details>` element starts closed, and React
-  // does not control the `open` attribute after the user toggles it (since
-  // we no longer pass `open`), so manual expansion sticks across re-renders.
+  // page mid-read). Use the AI Elements Reasoning primitive so the turn-level
+  // activity panel follows the same substrate as typed reasoning parts.
   return (
-    <details
-      className="group/thinking w-fit text-muted-foreground"
+    <Reasoning
+      defaultOpen={false}
+      className="mb-0 w-fit text-muted-foreground"
       aria-label={ariaLabel}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 text-base transition-colors hover:text-foreground">
-        <Brain aria-hidden="true" className="size-4 text-sky-400" />
-        {title}
-        <ChevronRight
-          aria-hidden="true"
-          className="size-4 transition-transform group-open/thinking:rotate-90"
-        />
-      </summary>
-      {detail ? (
-        <p className="ml-7 mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          {detail}
-        </p>
+      <ReasoningTrigger
+        className="gap-3 text-base [&>svg:first-child]:text-sky-400"
+        getThinkingMessage={() => title}
+      />
+      {detail || hasChildren ? (
+        <ReasoningContent
+          forceMount
+          className="ml-7 mt-2 max-w-none text-sm leading-6 text-muted-foreground"
+        >
+          {detail ? <p className="max-w-xl">{detail}</p> : null}
+          {hasChildren ? (
+            <div className="mt-3 grid gap-2">{children}</div>
+          ) : null}
+        </ReasoningContent>
       ) : null}
-      {hasChildren ? (
-        <div className="ml-7 mt-3 grid gap-2">{children}</div>
-      ) : null}
-    </details>
+    </Reasoning>
   );
 }
 

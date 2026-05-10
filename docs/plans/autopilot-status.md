@@ -30,6 +30,11 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 - 2026-05-10: Browser smoke passed on `localhost:5174`: thread transcript rendered, inline generated App mounted through sandbox iframe, full artifact route rendered the same sandboxed App, and the app route back control returned to the originating thread.
 - 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
 - 2026-05-10: Opened PR #1118.
+- 2026-05-10: Updated the turn-level Thinking/tool activity disclosure to use the AI Elements `Reasoning`, `ReasoningTrigger`, and `ReasoningContent` primitives instead of the prior custom disclosure.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- TaskThreadView.test.tsx render-typed-part.test.tsx`.
+- 2026-05-10: Verification passed after the Reasoning update: `pnpm --filter @thinkwork/computer typecheck`.
+- 2026-05-10: Verification passed after the Reasoning update: `pnpm --filter @thinkwork/computer build`.
+- 2026-05-10: Verification passed after the Reasoning update: `pnpm --filter @thinkwork/computer test`.
 - 2026-05-10: Squash-merged U5 PR #1115 into `main`, deleted the remote and local U5 branch, removed the U5 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U6 worktree from updated `origin/main`.
 - 2026-05-10: Updated Artifact Builder defaults to state that host-provided Artifact chrome owns title/actions/refresh placement, generated TSX should render only body content, and generated Apps run in the sandboxed iframe runtime.
