@@ -45,6 +45,33 @@ SMOKE_ENABLE_AGENT_APPLET_PROMPT=1 scripts/smoke-computer.sh dev
 
 The default prompt is `Build a simple CRM pipeline dashboard from the available CRM data.` Override it with `SMOKE_CRM_DASHBOARD_PROMPT` when running post-deploy acceptance prompts.
 
+## AG-UI Spike Smoke
+
+The experimental AG-UI Thread + Canvas route is available at:
+
+```text
+/agui/threads/<thread-id>
+```
+
+Use this real comparison prompt for live Computer turns:
+
+```text
+Build a CRM pipeline risk dashboard for LastMile opportunities, including stale activity, stage exposure, and the top risks to review.
+```
+
+For local visual verification without waiting on live AgentCore output, append the deterministic LastMile Canvas smoke flag:
+
+```text
+/agui/threads/<thread-id>?aguiSmoke=lastmile
+```
+
+Manual check:
+
+- Open `/threads/<thread-id>` and confirm the default Thread route still loads.
+- Open `/agui/threads/<thread-id>` and confirm transcript, run/tool events, Canvas, and diagnostics render from the AG-UI-shaped stream.
+- Open `/agui/threads/<thread-id>?aguiSmoke=lastmile` and confirm the registered `lastmile_risk_canvas` renders KPIs, risk rows, and source status.
+- Send the LastMile prompt from the AG-UI route and compare the result against the current Vercel AI Elements direction.
+
 To run the browser-backed evidence path manually:
 
 ```bash

@@ -9,9 +9,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U4 — Registered Canvas component proof
-- Branch: `codex/agui-spike-u4`
-- Worktree: `.Codex/worktrees/agui-spike-u4`
+- Unit: U5 — Real scenario smoke path
+- Branch: `codex/agui-spike-u5`
+- Worktree: `.Codex/worktrees/agui-spike-u5`
 - Status: in progress
 
 ## Progress Log
@@ -42,6 +42,13 @@ status: active
 - 2026-05-10: Implemented registered `lastmile_risk_canvas` rendering with zod prop validation and diagnostic fallbacks for unknown components or invalid props.
 - 2026-05-10: Verified U4 with registry/component tests, route regression test, full `@thinkwork/computer` tests, typecheck, and Prettier.
 - 2026-05-10: Opened PR #1105: https://github.com/thinkwork-ai/thinkwork/pull/1105.
+- 2026-05-10: PR #1105 passed CI and was squash-merged to `main`.
+- 2026-05-10: Removed U4 worktree/local branch and synced `main`.
+- 2026-05-10: Created U5 worktree from `origin/main`.
+- 2026-05-10: Started U5 real scenario smoke path implementation.
+- 2026-05-10: Implemented deterministic `/agui/threads/<thread-id>?aguiSmoke=lastmile` smoke path and README verification notes for the LastMile prompt.
+- 2026-05-10: Verified U5 with focused route/registry/component tests, full `@thinkwork/computer` tests, typecheck, and Prettier.
+- 2026-05-10: Opened PR #1106: https://github.com/thinkwork-ai/thinkwork/pull/1106.
 
 ## Unit Status
 
@@ -50,8 +57,8 @@ status: active
 | U1 — Local AG-UI event model and existing-stream adapter | Merged  | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up.                                                          |
 | U2 — Server helper for typed spike events                | Merged  | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up.                                                          |
 | U3 — Experimental Thread + Canvas route                  | Merged  | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up.                                                          |
-| U4 — Registered Canvas component proof                   | PR open | `codex/agui-spike-u4` | #1105 | Awaiting CI.                                                                                    |
-| U5 — Real scenario smoke path                            | Pending |                       |       | Starts after U4 merges.                                                                         |
+| U4 — Registered Canvas component proof                   | Merged  | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up.                                                          |
+| U5 — Real scenario smoke path                            | PR open | `codex/agui-spike-u5` | #1106 | Awaiting CI.                                                                                    |
 | U6 — Optional OSS CopilotKit integration check           | Pending |                       |       | Starts after U5; may be skipped only if U5 verdict rejects package integration as out of scope. |
 | U7 — Verdict document and follow-up recommendation       | Pending |                       |       | Final unit.                                                                                     |
 
@@ -77,6 +84,11 @@ status: active
 - 2026-05-10 U4: `pnpm --filter @thinkwork/computer typecheck` passed.
 - 2026-05-10 U4: `pnpm --filter @thinkwork/computer test` passed: 217 tests passed.
 - 2026-05-10 U4: `pnpm dlx prettier --check <touched files>` passed.
+- 2026-05-10 U4 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed on PR #1105.
+- 2026-05-10 U5: `pnpm --filter @thinkwork/computer test -- src/components/computer-agui/AguiThreadCanvasRoute.test.tsx src/agui/component-registry.test.tsx src/components/computer-agui/LastMileRiskCanvas.test.tsx` passed.
+- 2026-05-10 U5: `pnpm --filter @thinkwork/computer typecheck` passed.
+- 2026-05-10 U5: `pnpm --filter @thinkwork/computer test` passed: 218 tests passed.
+- 2026-05-10 U5: `pnpm dlx prettier --check <touched files>` passed.
 
 ## Blockers
 

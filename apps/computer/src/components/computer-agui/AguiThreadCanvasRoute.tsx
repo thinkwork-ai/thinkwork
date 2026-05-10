@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import type { AguiChunkInput, AguiComputerEventInput } from "@/agui/events";
+import {
+  buildLastMileRiskCanvasSmokeChunk,
+  isLastMileAguiSmokeEnabled,
+} from "@/agui/lastmile-risk-smoke";
 import { useAguiThreadStream } from "@/agui/use-agui-thread-stream";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -101,6 +105,11 @@ export function AguiThreadCanvasRoute({
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const { chunks, reset: resetChunks } = useAguiRouteChunks(threadId);
+  const smokeChunks = useMemo(
+    () =>
+      isLastMileAguiSmokeEnabled() ? [buildLastMileRiskCanvasSmokeChunk()] : [],
+    [],
+  );
   const computerEvents = useMemo(
     () =>
       filterThreadEvents(
@@ -112,7 +121,7 @@ export function AguiThreadCanvasRoute({
   );
   const { events, diagnostics } = useAguiThreadStream({
     threadId,
-    chunks,
+    chunks: [...chunks, ...smokeChunks],
     computerEvents,
   });
 

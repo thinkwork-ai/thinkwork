@@ -112,6 +112,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AguiThreadCanvasRoute", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
   it("renders legacy text chunks as transcript deltas", async () => {
     chunkSubscriptionData = {
       onComputerThreadChunk: {
@@ -194,6 +198,20 @@ describe("AguiThreadCanvasRoute", () => {
     expect(reexecuteThreadQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
+  });
+
+  it("renders the LastMile smoke Canvas from the AG-UI smoke search flag", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/agui/threads/thread-1?aguiSmoke=lastmile",
+    );
+
+    render(<AguiThreadCanvasRoute threadId="thread-1" />);
+
+    expect(screen.getByText("LastMile AG-UI smoke")).toBeTruthy();
+    expect(screen.getByText("Northstar Freight")).toBeTruthy();
+    expect(screen.getByText("CRM opportunities")).toBeTruthy();
   });
 });
 
