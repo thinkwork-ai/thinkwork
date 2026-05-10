@@ -12,8 +12,17 @@ import {
   runComputerChatTurn,
   type ComputerChatRunner,
 } from "./computer-chat.js";
+import { executeRunbook, type RunbookTaskRunner } from "./runbooks.js";
 
 type GoogleWorkspaceCliRunner = typeof listGoogleCalendarUpcomingWithGws;
+type RunbookApiMethods = Pick<
+  ComputerRuntimeApi,
+  | "loadRunbookExecutionContext"
+  | "startRunbookTask"
+  | "completeRunbookTask"
+  | "failRunbookTask"
+  | "completeRunbookRun"
+>;
 
 export type TaskLoopOptions = {
   api: Pick<
@@ -27,13 +36,15 @@ export type TaskLoopOptions = {
     | "loadThreadTurnContext"
     | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
-  >;
+  > &
+    Partial<Pick<ComputerRuntimeApi, "cancelTask"> & RunbookApiMethods>;
   workspaceRoot: string;
   idleDelayMs: number;
   computerChat?: ComputerChatRunner;
+  runbookTaskRunner?: RunbookTaskRunner;
 };
 
-export async function runTaskLoopOnce(options: TaskLoopOptions) {
+export async function runTaskLoopOnce(options: TaskLoopOptions): Promise<any> {
   const task = await options.api.claimTask();
   if (!task) {
     await sleep(options.idleDelayMs);
@@ -47,7 +58,13 @@ export async function runTaskLoopOnce(options: TaskLoopOptions) {
       options.api,
       undefined,
       options.computerChat,
+      options.runbookTaskRunner,
     );
+    if (isCancelledOutput(output)) {
+      assertCancelApi(options.api);
+      await options.api.cancelTask(task.id, output);
+      return { handled: true as const, taskId: task.id, output };
+    }
     await options.api.completeTask(task.id, output);
     return { handled: true as const, taskId: task.id, output };
   } catch (err) {
@@ -75,10 +92,12 @@ export async function handleTask(
     | "loadThreadTurnContext"
     | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
-  >,
+  > &
+    Partial<RunbookApiMethods>,
   googleWorkspaceCli: GoogleWorkspaceCliRunner = listGoogleCalendarUpcomingWithGws,
   computerChat: ComputerChatRunner = runComputerChatTurn,
-) {
+  runbookTaskRunner?: RunbookTaskRunner,
+): Promise<any> {
   if (task.taskType === "noop") {
     return { ok: true, taskType: "noop" };
   }
@@ -136,6 +155,11 @@ export async function handleTask(
       taskType: "thread_turn",
       ...execution,
     };
+  }
+  if (task.taskType === "runbook_execute") {
+    if (!api) throw new Error("Computer runtime API is required");
+    assertRunbookApi(api);
+    return executeRunbook(task, api, runbookTaskRunner);
   }
   if (task.taskType === "google_workspace_auth_check") {
     if (!api) throw new Error("Computer runtime API is required");
@@ -277,4 +301,40 @@ function requiredString(value: unknown, name: string): string {
     throw new Error(`${name} is required`);
   }
   return value;
+}
+
+function isCancelledOutput(value: unknown): value is { cancelled: true } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).cancelled === true,
+  );
+}
+
+function assertRunbookApi(
+  api: Partial<RunbookApiMethods>,
+): asserts api is RunbookApiMethods {
+  const required: Array<keyof RunbookApiMethods> = [
+    "loadRunbookExecutionContext",
+    "startRunbookTask",
+    "completeRunbookTask",
+    "failRunbookTask",
+    "completeRunbookRun",
+  ];
+  for (const key of required) {
+    if (typeof api[key] !== "function") {
+      throw new Error(
+        "Computer runtime API is missing runbook execution methods",
+      );
+    }
+  }
+}
+
+function assertCancelApi(
+  api: Partial<Pick<ComputerRuntimeApi, "cancelTask">>,
+): asserts api is Pick<ComputerRuntimeApi, "cancelTask"> {
+  if (typeof api.cancelTask !== "function") {
+    throw new Error("Computer runtime API is missing task cancellation");
+  }
 }

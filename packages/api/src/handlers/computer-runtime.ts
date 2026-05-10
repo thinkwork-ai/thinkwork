@@ -14,6 +14,7 @@ import {
   appendComputerTaskEvent,
   checkGoogleWorkspaceConnection,
   claimNextComputerTask,
+  cancelComputerTask,
   completeComputerTask,
   ComputerTaskDelegationError,
   ComputerNotFoundError,
@@ -27,6 +28,14 @@ import {
   resolveGoogleWorkspaceCliToken,
   resolveComputerRuntimeConfig,
 } from "../lib/computers/runtime-api.js";
+import {
+  completeRunbookExecutionRun,
+  completeRunbookExecutionTask,
+  failRunbookExecutionTask,
+  loadRunbookExecutionContext,
+  RunbookRuntimeError,
+  startRunbookExecutionTask,
+} from "../lib/runbooks/runtime-api.js";
 import {
   COMPUTER_TASK_TYPES,
   ComputerTaskInputError,
@@ -52,6 +61,9 @@ export async function handler(
     if (err instanceof BadRequestError) return error(err.message, 400);
     if (err instanceof ComputerTaskInputError) return error(err.message, 400);
     if (err instanceof ComputerTaskDelegationError) {
+      return error(err.message, err.statusCode);
+    }
+    if (err instanceof RunbookRuntimeError) {
       return error(err.message, err.statusCode);
     }
     if (err instanceof ComputerNotFoundError) return notFound(err.message);
@@ -221,6 +233,87 @@ async function route(
     );
   }
 
+  const runbookContextMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/context$/,
+  );
+  if (method === "POST" && runbookContextMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await loadRunbookExecutionContext({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookContextMatch[1], "taskId"),
+      }),
+    );
+  }
+
+  const runbookTaskStartMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/start$/,
+  );
+  if (method === "POST" && runbookTaskStartMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await startRunbookExecutionTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookTaskStartMatch[1], "taskId"),
+        runbookTaskId: validUuid(runbookTaskStartMatch[2], "runbookTaskId"),
+      }),
+    );
+  }
+
+  const runbookTaskCompleteMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/complete$/,
+  );
+  if (method === "POST" && runbookTaskCompleteMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await completeRunbookExecutionTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookTaskCompleteMatch[1], "taskId"),
+        runbookTaskId: validUuid(runbookTaskCompleteMatch[2], "runbookTaskId"),
+        output: body.output,
+      }),
+    );
+  }
+
+  const runbookTaskFailMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/fail$/,
+  );
+  if (method === "POST" && runbookTaskFailMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await failRunbookExecutionTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookTaskFailMatch[1], "taskId"),
+        runbookTaskId: validUuid(runbookTaskFailMatch[2], "runbookTaskId"),
+        error: body.error ?? { message: "Runbook task failed" },
+      }),
+    );
+  }
+
+  const runbookCompleteMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/complete$/,
+  );
+  if (method === "POST" && runbookCompleteMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await completeRunbookExecutionRun({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookCompleteMatch[1], "taskId"),
+        output: body.output,
+      }),
+    );
+  }
+
   const completeMatch = path.match(
     /^\/api\/computers\/runtime\/tasks\/([^/]+)\/complete$/,
   );
@@ -232,6 +325,22 @@ async function route(
         tenantId,
         computerId,
         taskId: validUuid(completeMatch[1], "taskId"),
+        output: body.output,
+      }),
+    );
+  }
+
+  const cancelMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/cancel$/,
+  );
+  if (method === "POST" && cancelMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await cancelComputerTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(cancelMatch[1], "taskId"),
         output: body.output,
       }),
     );

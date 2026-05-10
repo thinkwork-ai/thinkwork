@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleTask } from "./task-loop.js";
+import { handleTask, runTaskLoopOnce } from "./task-loop.js";
 import { listGoogleCalendarUpcomingWithGws } from "./google-workspace-cli.js";
 
 describe("Computer task loop", () => {
@@ -134,6 +134,123 @@ describe("Computer task loop", () => {
         tokenResolved: true,
       },
     });
+  });
+
+  it("executes runbook tasks through the runbook runtime API", async () => {
+    const api = {
+      appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-runbook" }),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+      loadRunbookExecutionContext: vi.fn().mockResolvedValue({
+        taskId: "task-runbook",
+        run: {
+          id: "run-1",
+          status: "queued",
+          runbookSlug: "research-dashboard",
+          runbookVersion: "0.1.0",
+        },
+        tasks: [
+          {
+            id: "rt-1",
+            phaseId: "discover",
+            phaseTitle: "Discover",
+            taskKey: "discover:1",
+            title: "Discover evidence",
+            status: "pending",
+            dependsOn: [],
+            capabilityRoles: ["research"],
+            sortOrder: 1,
+          },
+        ],
+        previousOutputs: {},
+      }),
+      startRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
+      completeRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
+      failRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
+      completeRunbookRun: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    const runbookTaskRunner = vi.fn().mockResolvedValue({ done: true });
+
+    const output = await handleTask(
+      {
+        id: "task-runbook",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      "/workspace",
+      api,
+      undefined,
+      undefined,
+      runbookTaskRunner,
+    );
+
+    expect(api.startRunbookTask).toHaveBeenCalledWith("task-runbook", "rt-1");
+    expect(runbookTaskRunner).toHaveBeenCalledWith(
+      expect.objectContaining({ taskKey: "discover:1" }),
+      expect.objectContaining({
+        run: expect.objectContaining({ id: "run-1" }),
+      }),
+    );
+    expect(api.completeRunbookRun).toHaveBeenCalledWith(
+      "task-runbook",
+      expect.objectContaining({ runbookRunId: "run-1" }),
+    );
+    expect(output).toMatchObject({
+      ok: true,
+      taskType: "runbook_execute",
+      runbookRunId: "run-1",
+      status: "completed",
+    });
+  });
+
+  it("marks the coarse Computer task cancelled when runbook execution is cancelled", async () => {
+    const api = {
+      claimTask: vi.fn().mockResolvedValue({
+        id: "task-runbook",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      }),
+      cancelTask: vi.fn().mockResolvedValue({ id: "task-runbook" }),
+      completeTask: vi.fn(),
+      failTask: vi.fn(),
+      appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-runbook" }),
+      checkGoogleWorkspaceConnection: vi.fn(),
+      delegateConnectorWork: vi.fn(),
+      loadThreadTurnContext: vi.fn(),
+      recordThreadTurnResponse: vi.fn(),
+      resolveGoogleWorkspaceCliToken: vi.fn(),
+      loadRunbookExecutionContext: vi.fn().mockResolvedValue({
+        taskId: "task-runbook",
+        run: {
+          id: "run-1",
+          status: "cancelled",
+          runbookSlug: "research-dashboard",
+          runbookVersion: "0.1.0",
+        },
+        tasks: [],
+        previousOutputs: {},
+      }),
+      startRunbookTask: vi.fn(),
+      completeRunbookTask: vi.fn(),
+      failRunbookTask: vi.fn(),
+      completeRunbookRun: vi.fn(),
+    };
+
+    const result = await runTaskLoopOnce({
+      api,
+      workspaceRoot: "/workspace",
+      idleDelayMs: 0,
+    });
+
+    expect(api.cancelTask).toHaveBeenCalledWith(
+      "task-runbook",
+      expect.objectContaining({ cancelled: true }),
+    );
+    expect(api.completeTask).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ handled: true, taskId: "task-runbook" });
   });
 
   it("lists upcoming Google Calendar events through the runtime API", async () => {

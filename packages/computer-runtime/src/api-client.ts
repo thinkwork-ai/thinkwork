@@ -44,6 +44,38 @@ export type ThreadTurnContext = {
   systemPrompt?: string | null;
 };
 
+export type RunbookExecutionContext = {
+  taskId: string;
+  run: {
+    id: string;
+    status: string;
+    runbookSlug: string;
+    runbookVersion: string;
+  };
+  tasks: Array<{
+    id: string;
+    phaseId: string;
+    phaseTitle: string;
+    taskKey: string;
+    title: string;
+    summary?: string | null;
+    status:
+      | "pending"
+      | "running"
+      | "completed"
+      | "failed"
+      | "skipped"
+      | "cancelled";
+    dependsOn: string[];
+    capabilityRoles: string[];
+    sortOrder: number;
+    output?: unknown;
+  }>;
+  definitionSnapshot?: unknown;
+  inputs?: unknown;
+  previousOutputs: Record<string, unknown>;
+};
+
 export class ComputerRuntimeApi {
   constructor(private readonly config: RuntimeApiConfig) {}
 
@@ -155,6 +187,17 @@ export class ComputerRuntimeApi {
     });
   }
 
+  async cancelTask(taskId: string, output: unknown) {
+    return this.request(`/api/computers/runtime/tasks/${taskId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({
+        tenantId: this.config.tenantId,
+        computerId: this.config.computerId,
+        output,
+      }),
+    });
+  }
+
   async delegateConnectorWork(taskId: string): Promise<{
     delegated: boolean;
     idempotent: boolean;
@@ -238,6 +281,80 @@ export class ComputerRuntimeApi {
           tenantId: this.config.tenantId,
           computerId: this.config.computerId,
           ...input,
+        }),
+      },
+    );
+  }
+
+  async loadRunbookExecutionContext(
+    taskId: string,
+  ): Promise<RunbookExecutionContext> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/context`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
+  async startRunbookTask(taskId: string, runbookTaskId: string) {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/tasks/${runbookTaskId}/start`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
+  async completeRunbookTask(
+    taskId: string,
+    runbookTaskId: string,
+    output: unknown,
+  ) {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/tasks/${runbookTaskId}/complete`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+          output,
+        }),
+      },
+    );
+  }
+
+  async failRunbookTask(taskId: string, runbookTaskId: string, error: unknown) {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/tasks/${runbookTaskId}/fail`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+          error,
+        }),
+      },
+    );
+  }
+
+  async completeRunbookRun(taskId: string, output: unknown) {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/complete`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+          output,
         }),
       },
     );
