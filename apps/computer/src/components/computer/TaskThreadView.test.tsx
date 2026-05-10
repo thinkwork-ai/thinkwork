@@ -23,6 +23,14 @@ function getThinkingDisclosure(): HTMLElement {
   return el;
 }
 
+function openThinkingDisclosure(index = 0): HTMLElement {
+  const buttons = screen.getAllByRole("button", { name: /thinking/i });
+  fireEvent.click(buttons[index]);
+  const disclosures = screen.getAllByLabelText("Thinking and tool activity");
+  expect(disclosures[index].getAttribute("data-state")).toBe("open");
+  return disclosures[index];
+}
+
 describe("TaskThreadView", () => {
   it("renders transcript messages, generated artifact cards, and command composer", () => {
     render(
@@ -348,6 +356,7 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.getByLabelText("Thinking and tool activity")).toBeTruthy();
+    openThinkingDisclosure();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
@@ -398,6 +407,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
+    openThinkingDisclosure();
     expect(screen.getByText("Opening browser")).toBeTruthy();
     expect(screen.getByText("Browser completed")).toBeTruthy();
     expect(screen.getByText(/https:\/\/example.com/)).toBeTruthy();
@@ -457,6 +467,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
+    openThinkingDisclosure();
     const rendered = [
       screen.getByText("thread turn enqueued"),
       screen.getByText("Opening browser"),
@@ -514,6 +525,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
+    openThinkingDisclosure();
     const opening = screen.getByText("Opening browser");
     const completed = screen.getByText("Browser completed");
     expect(
@@ -851,10 +863,11 @@ describe("TaskThreadView", () => {
     );
     const disclosure = getThinkingDisclosure();
     expect(disclosure.getAttribute("data-state")).toBe("closed");
-    // Run failed row is mounted inside the closed disclosure (revealed on
-    // expand). Asserting via queryByText to confirm presence regardless of
-    // visibility — the rows remain mounted inside the closed AI Elements
-    // Reasoning disclosure and are revealed on expansion.
+    expect(screen.queryByText("Run failed")).toBeNull();
+    expect(screen.queryByText("Browser session timed out")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
+    expect(getThinkingDisclosure().getAttribute("data-state")).toBe("open");
     expect(screen.queryByText("Run failed")).toBeTruthy();
     expect(screen.queryByText("Browser session timed out")).toBeTruthy();
   });
@@ -1032,6 +1045,7 @@ describe("TaskThreadView", () => {
     );
     // toolActionTitle maps "web_search" → "Finding sources" and "recall" →
     // "Checking memory" — verifying the live event uses that formatter.
+    openThinkingDisclosure();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText("Checking memory")).toBeTruthy();
   });
@@ -1079,6 +1093,7 @@ describe("TaskThreadView", () => {
       />,
     );
     // Exactly one "Finding sources" row, not two.
+    openThinkingDisclosure();
     expect(screen.getAllByText("Finding sources")).toHaveLength(1);
   });
 
