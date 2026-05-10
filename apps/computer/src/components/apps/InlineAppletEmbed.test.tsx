@@ -126,6 +126,8 @@ describe("InlineAppletEmbed", () => {
     const embed = await screen.findByTestId("inline-applet-embed");
     expect(embed.getAttribute("style")).toContain("min-height: 320px");
     expect(embed.getAttribute("style")).not.toContain("max-height");
+    expect(embed.className).toContain("overflow-visible");
+    expect(embed.className).not.toContain("overflow-auto");
 
     await waitFor(() => {
       expect(screen.getByTestId("stub-applet-body")).toBeTruthy();

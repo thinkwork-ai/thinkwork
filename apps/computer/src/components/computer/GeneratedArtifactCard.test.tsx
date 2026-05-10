@@ -13,7 +13,7 @@ afterEach(cleanup);
 
 describe("GeneratedArtifactCard", () => {
   it("renders an inline applet embed for app artifacts and routes the full-screen link", () => {
-    render(
+    const { container } = render(
       <GeneratedArtifactCard
         artifact={{
           id: "artifact_123",
@@ -26,6 +26,12 @@ describe("GeneratedArtifactCard", () => {
     );
 
     expect(screen.getByText("CRM pipeline risk")).toBeTruthy();
+    expect(screen.getByText("App")).toBeTruthy();
+    expect(screen.queryByText("DATA_VIEW")).toBeNull();
+    expect(
+      container.querySelector('[data-runtime-mode="sandboxedGenerated"]'),
+    ).toBeTruthy();
+
     const stub = screen.getByTestId("inline-applet-embed-stub");
     expect(stub.getAttribute("data-app-id")).toBe("artifact_123");
 
@@ -50,6 +56,8 @@ describe("GeneratedArtifactCard", () => {
 
     const stub = screen.getByTestId("inline-applet-embed-stub");
     expect(stub.getAttribute("data-app-id")).toBe("artifact_map");
+    expect(screen.getByText("App")).toBeTruthy();
+    expect(screen.queryByText("APPLET")).toBeNull();
     expect(screen.queryByText(/preview unavailable/i)).toBeNull();
   });
 

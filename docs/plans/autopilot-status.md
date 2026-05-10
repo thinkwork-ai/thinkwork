@@ -12,15 +12,23 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Current Unit
 
-- **Unit:** U2 — Define generated App Artifact shell contract
-- **Branch:** `codex/computer-ai-elements-u2-artifact-shell`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u2`
+- **Unit:** U3 — Migrate inline thread App embeds to full Artifact shell
+- **Branch:** `codex/computer-ai-elements-u3-inline-shell`
+- **Worktree:** `.Codex/worktrees/computer-ai-elements-u3`
 - **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1112
-- **Status:** CI passed; ready to squash merge
+- **PR:** Pending
+- **Status:** Locally verified; preparing PR
 
 ## Progress Log
 
+- 2026-05-10: Squash-merged U2 PR #1112 into `main`, deleted the remote and local U2 branch, removed the U2 worktree, and fast-forwarded local `main`.
+- 2026-05-10: Created isolated U3 worktree from updated `origin/main`.
+- 2026-05-10: Migrated inline generated App artifact cards onto `GeneratedAppArtifactShell` and removed the nested Artifact wrapper from `InlineAppletEmbed`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- GeneratedArtifactCard.test.tsx InlineAppletEmbed.test.tsx TaskThreadView.test.tsx`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
+- 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
 - 2026-05-10: Squash-merged U1 PR #1111 into `main`, deleted the remote and local U1 branch, removed the U1 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U2 worktree from updated `origin/main`.
 - 2026-05-10: Added generated App Artifact shell contract around AI Elements Artifact primitives, including runtime mode metadata and isolated tests.
@@ -43,6 +51,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Merged PRs
 
+- PR #1112 — `feat(computer): define generated app artifact shell`
 - PR #1111 — `refactor(computer): adopt Conversation and Message thread shell`
 
 ## CI Failures
