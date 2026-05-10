@@ -66,6 +66,11 @@ describe("TaskThreadView", () => {
     // Thread title now lives in AppTopBar via PageHeaderContext, not inside TaskThreadView.
     expect(screen.getByText("Build a CRM pipeline dashboard")).toBeTruthy();
     expect(screen.getByText("I created a dashboard app.")).toBeTruthy();
+    expect(screen.getByRole("log", { name: "Thread transcript" })).toBeTruthy();
+    expect(document.querySelector('[data-message-role="user"]')).toBeTruthy();
+    expect(
+      document.querySelector('[data-message-role="assistant"]'),
+    ).toBeTruthy();
     expect(screen.getByText("Using data_visualization")).toBeTruthy();
     expect(screen.getByText("CRM pipeline risk app")).toBeTruthy();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
