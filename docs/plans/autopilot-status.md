@@ -12,15 +12,24 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Current Unit
 
-- **Unit:** U3 — Migrate inline thread App embeds to full Artifact shell
-- **Branch:** `codex/computer-ai-elements-u3-inline-shell`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u3`
+- **Unit:** U4 — Migrate full artifact route canvas to Artifact shell
+- **Branch:** `codex/computer-ai-elements-u4-full-canvas-shell`
+- **Worktree:** `.Codex/worktrees/computer-ai-elements-u4`
 - **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1113
-- **Status:** CI passed; ready to squash merge
+- **PR:** Pending
+- **Status:** Locally verified; preparing PR
 
 ## Progress Log
 
+- 2026-05-10: Squash-merged U3 PR #1113 into `main`, deleted the remote and local U3 branch, removed the U3 worktree, and fast-forwarded local `main`.
+- 2026-05-10: Created isolated U4 worktree from updated `origin/main`.
+- 2026-05-10: Routed full-page generated Apps through the generated App Artifact shell with hidden shell chrome so the route top bar remains primary.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- src/components/apps/GeneratedAppArtifactShell.test.tsx src/components/apps/AppArtifactSplitShell.test.tsx src/test/visual/app-artifact-shell.test.tsx`.
+- 2026-05-10: Verification passed: `pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'` from `apps/computer`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
+- 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
 - 2026-05-10: Squash-merged U2 PR #1112 into `main`, deleted the remote and local U2 branch, removed the U2 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U3 worktree from updated `origin/main`.
 - 2026-05-10: Migrated inline generated App artifact cards onto `GeneratedAppArtifactShell` and removed the nested Artifact wrapper from `InlineAppletEmbed`.
@@ -53,6 +62,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Merged PRs
 
+- PR #1113 — `refactor(computer): render inline apps through artifact shell`
 - PR #1112 — `feat(computer): define generated app artifact shell`
 - PR #1111 — `refactor(computer): adopt Conversation and Message thread shell`
 

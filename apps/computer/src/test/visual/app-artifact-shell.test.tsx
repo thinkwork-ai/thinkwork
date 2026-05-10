@@ -26,6 +26,12 @@ describe("app artifact visual contract", () => {
     expect(screen.getByTestId("app-canvas-panel").className).toContain(
       "overflow-y-auto",
     );
+    expect(
+      screen
+        .getByTestId("app-artifact-split-shell")
+        .querySelector('[data-generated-app-artifact]'),
+    ).toBeTruthy();
+    expect(screen.queryByText("Generated app")).toBeNull();
     expect(screen.queryByLabelText("Computer provenance")).toBeNull();
   });
 
