@@ -10,10 +10,10 @@ status: active
 
 ## Current State
 
-- Active unit: U3 Routing and Confirmation API
-- Active branch/worktree: `codex/runbooks-u3` at `.Codex/worktrees/runbooks-u3`
-- Latest synced base: `origin/main` at `45e81e72`
-- Overall status: U3 in review
+- Active unit: U4 Sequential Runbook Executor
+- Active branch/worktree: `codex/runbooks-u4` at `.Codex/worktrees/runbooks-u4`
+- Latest synced base: `origin/main` at `573ac4bb`
+- Overall status: U4 local verification complete; preparing PR
 
 ## Progress Log
 
@@ -34,19 +34,23 @@ status: active
 - 2026-05-10: Regenerated GraphQL consumers after adding the `RUNBOOK_EXECUTE` Computer task type.
 - 2026-05-10: Completed U3 local verification: package checks, workspace typecheck, workspace tests, workspace lint scripts, workspace build, and touched-file Prettier check passed.
 - 2026-05-10: Opened U3 PR #1121 from `codex/runbooks-u3`.
+- 2026-05-10: U3 PR #1121 passed required checks and was squash-merged to `main` at `573ac4bb`.
+- 2026-05-10: Removed U3 remote/local branch and worktree, synced `main`, and started U4 in `.Codex/worktrees/runbooks-u4` on branch `codex/runbooks-u4`.
+- 2026-05-10: Implemented U4 sequential runbook executor, runtime API endpoints for runbook context/task/run state, Computer runtime client methods, and coarse task cancellation support.
+- 2026-05-10: Completed U4 local verification: focused runtime/API tests, package typechecks/builds, workspace tests, workspace lint scripts, workspace build, diff check, and touched-file Prettier check passed.
 
 ## Implementation Units
 
-| Unit                                              | Status    | Branch              | PR      | Notes                                                                                   |
-| ------------------------------------------------- | --------- | ------------------- | ------- | --------------------------------------------------------------------------------------- |
-| U1 Runbook Source Package                         | merged    | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed.                     |
-| U2 Catalog and Run Data Model                     | merged    | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed.                     |
-| U3 Routing and Confirmation API                   | in review | `codex/runbooks-u3` | #1121   | Routes explicit, auto-selected, ambiguous, unavailable, and no-match Computer messages. |
-| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                   |
-| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                   |
-| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                   |
-| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                              |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                               |
+| Unit                                              | Status  | Branch              | PR      | Notes                                                               |
+| ------------------------------------------------- | ------- | ------------------- | ------- | ------------------------------------------------------------------- |
+| U1 Runbook Source Package                         | merged  | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed. |
+| U2 Catalog and Run Data Model                     | merged  | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed. |
+| U3 Routing and Confirmation API                   | merged  | `codex/runbooks-u3` | #1121   | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
+| U4 Sequential Runbook Executor                    | active  | `codex/runbooks-u4` | pending | Local verification passed; preparing PR.                            |
+| U5 Strands Runbook Context and Capability Mapping | pending | pending             | pending | Depends on U1 and U4.                                               |
+| U6 Computer UI Confirmation and Queue             | pending | pending             | pending | Depends on U2 and U3.                                               |
+| U7 Artifact Builder Runbook Bridge                | pending | pending             | pending | Depends on U1, U5, and U6.                                          |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending | pending             | pending | Depends on U1 through U7.                                           |
 
 ## PRs
 
@@ -54,7 +58,8 @@ status: active
 | ---- | ----- | ------ | ------------ | ------------------------------------------- |
 | U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge. |
 | U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
-| U3   | #1121 | open   | pending      | Waiting for required CI checks.             |
+| U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
+| U4   | TBD   | local  | pending      | Local verification passed; preparing PR.    |
 
 ## CI / Verification Notes
 
@@ -92,6 +97,17 @@ status: active
 | U3   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                          |
 | U3   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                         |
 | U3   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on authored code, GraphQL schema, and status doc. Generated clients are intentionally left in codegen format.                                      |
+| U3   | GitHub required checks                           | passed | cla, lint, test, typecheck, and verify passed on PR #1121 before merge.                                                                                   |
+| U4   | `pnpm install`                                   | passed | Linked fresh worktree dependencies.                                                                                                                       |
+| U4   | focused computer-runtime tests                   | passed | 2 files, 13 tests: sequential executor, task-loop runbook handling, and cancellation handoff.                                                             |
+| U4   | focused API runtime tests                        | passed | 3 files, 34 tests: runbook runtime context helper, Computer runtime handler routes, and existing runtime API behavior.                                    |
+| U4   | package typechecks                               | passed | API and computer-runtime package typechecks passed after the first implementation pass.                                                                   |
+| U4   | package builds                                   | passed | API and computer-runtime package builds completed cleanly.                                                                                                |
+| U4   | `git diff --check`                               | passed | No whitespace errors.                                                                                                                                     |
+| U4   | `pnpm -r --if-present test`                      | passed | Workspace tests completed; notable suites included `packages/api` 242 files / 2493 tests and `apps/computer` 52 files / 363 tests.                        |
+| U4   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                          |
+| U4   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                         |
+| U4   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on authored code and status doc.                                                                                                                   |
 
 ## Blockers
 

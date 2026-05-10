@@ -887,11 +887,25 @@ export async function failComputerTask(input: {
   });
 }
 
+export async function cancelComputerTask(input: {
+  tenantId: string;
+  computerId: string;
+  taskId: string;
+  output?: unknown;
+}) {
+  return finishTask({
+    ...input,
+    status: "cancelled",
+    output: input.output ?? null,
+    error: null,
+  });
+}
+
 async function finishTask(input: {
   tenantId: string;
   computerId: string;
   taskId: string;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "cancelled";
   output: unknown;
   error: unknown;
 }) {
@@ -934,7 +948,12 @@ async function finishTask(input: {
     taskId: input.taskId,
     eventType: `task_${input.status}`,
     level: input.status === "failed" ? "error" : "info",
-    payload: input.status === "failed" ? { error: input.error } : undefined,
+    payload:
+      input.status === "failed"
+        ? { error: input.error }
+        : input.status === "cancelled"
+          ? { output: input.output }
+          : undefined,
   });
   return toGraphqlComputerTask(row);
 }
