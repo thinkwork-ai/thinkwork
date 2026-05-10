@@ -15,6 +15,11 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("CRM pipeline");
     expect(skill).toContain("save_app");
     expect(skill).toContain("/artifacts/{appId}");
+    expect(skill).toContain(
+      "compatibility shim for the published ThinkWork runbooks",
+    );
+    expect(skill).toContain("runbook's current phase guidance");
+    expect(skill).toContain("Runbook Bridge");
     expect(skill).toContain("host-provided Artifact chrome");
     expect(skill).toContain("sandboxed iframe runtime");
     expect(skill).toContain("Your TSX should render only the app body");
@@ -23,6 +28,9 @@ describe("Artifact Builder defaults", () => {
   it("defines the CRM dashboard applet contract", () => {
     expect(crmRecipe).toContain("interface CrmDashboardData");
     expect(crmRecipe).toContain("sourceStatuses");
+    expect(crmRecipe).toContain(
+      "published `crm-dashboard` runbook owns orchestration",
+    );
     expect(crmRecipe).toContain("stageExposure");
     expect(crmRecipe).toContain("staleActivity");
     expect(crmRecipe).toContain("topRisks");
@@ -38,7 +46,9 @@ describe("Artifact Builder defaults", () => {
   it("keeps host chrome and provenance guidance out of default app bodies", () => {
     expect(skill).toContain("Do not create an outer artifact card");
     expect(skill).toContain("source coverage, evidence, or provenance panel");
-    expect(skill).not.toContain("Header with title, summary, and source badges");
+    expect(skill).not.toContain(
+      "Header with title, summary, and source badges",
+    );
     expect(crmRecipe).not.toContain("Header: title, summary");
   });
 });

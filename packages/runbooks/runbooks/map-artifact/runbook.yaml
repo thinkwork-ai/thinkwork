@@ -73,8 +73,8 @@ phases:
     dependsOn:
       - analyze
     taskSeeds:
-      - Generate an interactive map artifact with layers, filters, and entity details.
-      - Persist the map artifact through the Computer artifact save path.
+      - Generate an interactive map artifact with `MapView`, layers, filters, entity details, and proportional location caveats.
+      - Persist the map artifact through `save_app` with map runbook metadata and the current thread id.
   - id: validate
     title: Validate map result
     guidance: validate.md

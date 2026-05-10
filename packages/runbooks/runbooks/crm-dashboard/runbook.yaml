@@ -71,8 +71,8 @@ phases:
     dependsOn:
       - analyze
     taskSeeds:
-      - Generate an interactive dashboard with metric cards, entity tables, filters, and drill-in sections.
-      - Persist the dashboard through the Computer artifact save path.
+      - Generate an interactive CRM dashboard using the runbook phase guidance, `CrmDashboardData`, and Artifact Builder compatibility shim.
+      - Persist the dashboard through `save_app` with CRM runbook metadata and the current thread id.
   - id: validate
     title: Validate result
     guidance: validate.md

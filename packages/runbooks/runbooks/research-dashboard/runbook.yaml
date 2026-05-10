@@ -71,8 +71,8 @@ phases:
     dependsOn:
       - analyze
     taskSeeds:
-      - Generate an inspectable dashboard with findings, source evidence, comparisons, and filters.
-      - Persist the dashboard through the Computer artifact save path.
+      - Generate an inspectable research dashboard with findings, source evidence, confidence/caveats, comparisons, and filters.
+      - Persist the dashboard through `save_app` with research runbook metadata and the current thread id.
   - id: validate
     title: Validate evidence and caveats
     guidance: validate.md

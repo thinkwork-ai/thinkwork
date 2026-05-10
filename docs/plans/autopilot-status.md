@@ -10,10 +10,10 @@ status: active
 
 ## Current State
 
-- Active unit: U6 Computer UI Confirmation and Queue
-- Active branch/worktree: `codex/runbooks-u6` at `.Codex/worktrees/runbooks-u6`
-- Latest synced base: `origin/main` at `e41aca1e`
-- Overall status: U6 PR #1124 open; waiting for required CI checks
+- Active unit: U7 Artifact Builder Runbook Bridge
+- Active branch/worktree: `codex/runbooks-u7` at `.Codex/worktrees/runbooks-u7`
+- Latest synced base: `origin/main` at `345a6651`
+- Overall status: U7 PR #1125 open; waiting for required CI checks
 
 ## Progress Log
 
@@ -50,6 +50,12 @@ status: active
 - 2026-05-10: Completed U6 focused local verification: Computer runbook component tests, typed chunk parser/merge/transport tests, TaskThreadView persisted-part test, Computer typecheck, Computer build, and diff check passed.
 - 2026-05-10: Completed U6 workspace verification: workspace typecheck, tests, lint scripts, build, and touched-file Prettier check passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
 - 2026-05-10: Opened U6 PR #1124 from `codex/runbooks-u6`.
+- 2026-05-10: U6 PR #1124 passed required checks and was squash-merged to `main` at `345a6651`.
+- 2026-05-10: Removed U6 remote/local branch and worktree, synced `main`, and started U7 in `.Codex/worktrees/runbooks-u7` on branch `codex/runbooks-u7`.
+- 2026-05-10: Began U7 by moving artifact recipe detail into runbook produce-phase guidance, retaining Artifact Builder as a compatibility shim, and adding safe default upgrade paths for known shim files.
+- 2026-05-10: Completed U7 focused verification: API artifact bridge/default seeding tests, workspace default parity tests, runbook registry/loader tests, Strands runbook context/contract tests, package typechecks/builds, Python syntax/format checks, diff check, and touched-file Prettier check passed.
+- 2026-05-10: Completed U7 workspace verification: workspace typecheck, tests, lint scripts, and build passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
+- 2026-05-10: Opened U7 PR #1125 from `codex/runbooks-u7`.
 
 ## Implementation Units
 
@@ -60,8 +66,8 @@ status: active
 | U3 Routing and Confirmation API                   | merged  | `codex/runbooks-u3` | #1121   | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
 | U4 Sequential Runbook Executor                    | merged  | `codex/runbooks-u4` | #1122   | Squash-merged to `main` at `e0ad47d6`; branch and worktree removed. |
 | U5 Strands Runbook Context and Capability Mapping | merged  | `codex/runbooks-u5` | #1123   | Squash-merged to `main` at `e41aca1e`; branch and worktree removed. |
-| U6 Computer UI Confirmation and Queue             | active  | `codex/runbooks-u6` | #1124   | Required checks pending.                                            |
-| U7 Artifact Builder Runbook Bridge                | pending | pending             | pending | Depends on U1, U5, and U6.                                          |
+| U6 Computer UI Confirmation and Queue             | merged  | `codex/runbooks-u6` | #1124   | Squash-merged to `main` at `345a6651`; branch and worktree removed. |
+| U7 Artifact Builder Runbook Bridge                | active  | `codex/runbooks-u7` | #1125   | Required checks pending.                                            |
 | U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending | pending             | pending | Depends on U1 through U7.                                           |
 
 ## PRs
@@ -73,7 +79,8 @@ status: active
 | U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
 | U4   | #1122 | merged | `e0ad47d6`   | Required checks passed before squash merge. |
 | U5   | #1123 | merged | `e41aca1e`   | Required checks passed before squash merge. |
-| U6   | #1124 | open   | pending      | Required checks pending.                    |
+| U6   | #1124 | merged | `345a6651`   | Required checks passed before squash merge. |
+| U7   | #1125 | open   | pending      | Required checks pending.                    |
 
 ## CI / Verification Notes
 
@@ -143,6 +150,21 @@ status: active
 | U6   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                 |
 | U6   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing docs/admin/computer sourcemap and chunk-size warnings only.                                                |
 | U6   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on touched U6 files and status doc. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency.                     |
+| U6   | GitHub required checks                           | passed | cla, lint, test, typecheck, and verify passed on PR #1124 before merge.                                                                                          |
+| U7   | `pnpm install`                                   | passed | Linked fresh worktree dependencies.                                                                                                                              |
+| U7   | focused API artifact bridge tests                | passed | 13 tests across Artifact Builder default seeding, runbook artifact bridge, and run record expansion.                                                             |
+| U7   | focused workspace-defaults tests                 | passed | 21 tests covering Artifact Builder default content and byte-for-byte Markdown parity.                                                                            |
+| U7   | focused runbooks tests                           | passed | 6 registry/loader tests passed after runbook produce guidance changes.                                                                                           |
+| U7   | focused Strands runbook tests                    | passed | 8 Python tests passed across runbook context, capability mapping, and Computer artifact contract injection.                                                      |
+| U7   | package typechecks                               | passed | API, workspace-defaults, and runbooks typechecks passed.                                                                                                         |
+| U7   | package builds                                   | passed | API, workspace-defaults, and runbooks builds passed.                                                                                                             |
+| U7   | Python syntax/format checks                      | passed | `ruff check --select E9,F63,F7,F82` and `ruff format --check` passed for touched Python files.                                                                   |
+| U7   | `pnpm -r --if-present typecheck`                 | passed | Workspace typecheck completed across packages.                                                                                                                   |
+| U7   | `pnpm -r --if-present test`                      | passed | Workspace tests completed; notable suites included `packages/api` 243 passed / 3 skipped and `apps/computer` 54 files / 373 tests.                               |
+| U7   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                 |
+| U7   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; docs/admin/computer emitted pre-existing warnings only.                                                                              |
+| U7   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on touched TS, Markdown, YAML, and status doc files. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency.    |
+| U7   | `git diff --check`                               | passed | No whitespace errors.                                                                                                                                            |
 
 ## Blockers
 

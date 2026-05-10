@@ -244,6 +244,7 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
 
     assert "## Computer Thread Contract" in captured["system_prompt"]
     assert "use the artifact-builder skill if it is available" in captured["system_prompt"]
+    assert "treat Artifact Builder as the phase implementation detail" in captured["system_prompt"]
     assert "expected result is a saved Computer applet" in captured["system_prompt"]
     assert "keep the applet implementation and save_app" in captured["system_prompt"]
     assert "Do not" in captured["system_prompt"]
