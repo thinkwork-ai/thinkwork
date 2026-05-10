@@ -258,4 +258,3 @@ playwright/.cache/
 
 # Review scratch — large screenshots; keep .md feedback tracked
 .review/*.png
-.work-in-progress/

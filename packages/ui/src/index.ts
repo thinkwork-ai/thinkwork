@@ -33,6 +33,7 @@ export * from "./components/ui/multi-select.js";
 export * from "./components/ui/pagination.js";
 export * from "./components/ui/popover.js";
 export * from "./components/ui/progress.js";
+export * from "./components/ui/resizable.js";
 export * from "./components/ui/scroll-area.js";
 export * from "./components/ui/select.js";
 export * from "./components/ui/separator.js";
