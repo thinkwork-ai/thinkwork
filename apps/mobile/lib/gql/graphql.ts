@@ -2085,6 +2085,7 @@ export type Mutation = {
   cancelAgentWorkspaceReview: AgentWorkspaceRun;
   cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
+  cancelRunbookRun: RunbookRun;
   cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
@@ -2101,6 +2102,7 @@ export type Mutation = {
    * compile falls back to the env-default model.
    */
   compileWikiNow: WikiCompileJob;
+  confirmRunbookRun: RunbookRun;
   createAgent: Agent;
   createAgentApiKey: CreateAgentApiKeyResult;
   createAgentFromTemplate: Agent;
@@ -2190,6 +2192,7 @@ export type Mutation = {
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
   rejectInboxItem: InboxItem;
+  rejectRunbookRun: RunbookRun;
   rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
   releaseVanityEmailAddress: AgentCapability;
@@ -2370,6 +2373,11 @@ export type MutationCancelInboxItemArgs = {
 };
 
 
+export type MutationCancelRunbookRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationCancelSkillRunArgs = {
   runId: Scalars['ID']['input'];
 };
@@ -2408,6 +2416,11 @@ export type MutationCompileWikiNowArgs = {
   ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationConfirmRunbookRunArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -2843,6 +2856,11 @@ export type MutationRegisterPushTokenArgs = {
 export type MutationRejectInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<RejectInboxItemInput>;
+};
+
+
+export type MutationRejectRunbookRunArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -3462,6 +3480,9 @@ export type Query = {
   routineRecipeCatalog: Array<RoutineRecipe>;
   routineStepEvents: Array<RoutineStepEvent>;
   routines: Array<Routine>;
+  runbookCatalog: Array<RunbookCatalogItem>;
+  runbookRun?: Maybe<RunbookRun>;
+  runbookRuns: Array<RunbookRun>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
   runtimeManifestsByTemplate: Array<RuntimeManifest>;
   scheduledJob?: Maybe<ScheduledJob>;
@@ -4043,6 +4064,19 @@ export type QueryRoutinesArgs = {
   status?: InputMaybe<RoutineStatus>;
   teamId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryRunbookRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryRunbookRunsArgs = {
+  computerId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<RunbookRunStatus>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -4633,6 +4667,107 @@ export type RunBrainPageEnrichmentInput = {
   sourceFamilies?: InputMaybe<Array<BrainEnrichmentSourceFamily>>;
   tenantId: Scalars['ID']['input'];
 };
+
+export type RunbookCatalogItem = {
+  __typename?: 'RunbookCatalogItem';
+  category: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  definition: Scalars['AWSJSON']['output'];
+  description: Scalars['String']['output'];
+  displayName: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  operatorOverrides?: Maybe<Scalars['AWSJSON']['output']>;
+  slug: Scalars['String']['output'];
+  sourceVersion: Scalars['String']['output'];
+  status: RunbookCatalogStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum RunbookCatalogStatus {
+  Active = 'ACTIVE',
+  Archived = 'ARCHIVED',
+  Unavailable = 'UNAVAILABLE'
+}
+
+export enum RunbookInvocationMode {
+  AdHoc = 'AD_HOC',
+  Auto = 'AUTO',
+  Explicit = 'EXPLICIT'
+}
+
+export type RunbookRun = {
+  __typename?: 'RunbookRun';
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  approvedByUserId?: Maybe<Scalars['ID']['output']>;
+  cancelledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  cancelledByUserId?: Maybe<Scalars['ID']['output']>;
+  catalogId?: Maybe<Scalars['ID']['output']>;
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  computerId: Scalars['ID']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionSnapshot: Scalars['AWSJSON']['output'];
+  error?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  inputs: Scalars['AWSJSON']['output'];
+  invocationMode: RunbookInvocationMode;
+  output?: Maybe<Scalars['AWSJSON']['output']>;
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  rejectedByUserId?: Maybe<Scalars['ID']['output']>;
+  runbookSlug: Scalars['String']['output'];
+  runbookVersion: Scalars['String']['output'];
+  selectedByMessageId?: Maybe<Scalars['ID']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: RunbookRunStatus;
+  tasks: Array<RunbookRunTask>;
+  tenantId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum RunbookRunStatus {
+  AwaitingConfirmation = 'AWAITING_CONFIRMATION',
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Queued = 'QUEUED',
+  Rejected = 'REJECTED',
+  Running = 'RUNNING'
+}
+
+export type RunbookRunTask = {
+  __typename?: 'RunbookRunTask';
+  capabilityRoles: Scalars['AWSJSON']['output'];
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  dependsOn: Scalars['AWSJSON']['output'];
+  details?: Maybe<Scalars['AWSJSON']['output']>;
+  error?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars['ID']['output'];
+  output?: Maybe<Scalars['AWSJSON']['output']>;
+  phaseId: Scalars['String']['output'];
+  phaseTitle: Scalars['String']['output'];
+  runId: Scalars['ID']['output'];
+  sortOrder: Scalars['Int']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: RunbookTaskStatus;
+  summary?: Maybe<Scalars['String']['output']>;
+  taskKey: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum RunbookTaskStatus {
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Skipped = 'SKIPPED'
+}
 
 export type RuntimeManifest = {
   __typename?: 'RuntimeManifest';
