@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
@@ -140,6 +146,7 @@ describe("ComputerThreadDetailRoute", () => {
     render(<ComputerThreadDetailRoute threadId="thread-1" />);
 
     expect(screen.getByText("Streaming through the route")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /thinking/i }));
     expect(screen.getByText("Browser unavailable")).toBeTruthy();
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
     expect(screen.queryByLabelText("Processing request")).toBeNull();

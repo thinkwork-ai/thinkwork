@@ -626,10 +626,7 @@ function ThinkingRow({
         getThinkingMessage={() => title}
       />
       {detail || hasChildren ? (
-        <ReasoningContent
-          forceMount
-          className="ml-7 mt-2 max-w-none text-sm leading-6 text-muted-foreground"
-        >
+        <ReasoningContent className="ml-7 mt-2 max-w-none text-sm leading-6 text-muted-foreground">
           {detail ? <p className="max-w-xl">{detail}</p> : null}
           {hasChildren ? (
             <div className="mt-3 grid gap-2">{children}</div>
