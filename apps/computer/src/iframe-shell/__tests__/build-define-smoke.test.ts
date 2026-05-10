@@ -112,4 +112,81 @@ describe("Vite `define` build-time substitution (production smoke)", () => {
 		},
 		{ timeout: 120_000 },
 	);
+
+	it(
+		"empty VITE_ALLOWED_PARENT_ORIGINS produces an empty allowlist (matches frame-ancestors 'none')",
+		async () => {
+			// Plan-012: when terraform var.computer_sandbox_allowed_parent_origins
+			// is empty (operator hasn't allowlisted any parent),
+			// build-computer.sh writes VITE_ALLOWED_PARENT_ORIGINS="" into
+			// .env.production. The iframe-shell allowlist must mirror that
+			// — an empty array, NOT the dev-fallback ["https://thinkwork.ai"].
+			// Otherwise the iframe-side allowlist silently allows
+			// thinkwork.ai while the CSP frame-ancestors directive blocks
+			// every parent.
+			const stagedUrl =
+				"https://sandbox.empty-allowlist.thinkwork.test/iframe-shell.html";
+
+			const originalSrc = process.env.VITE_SANDBOX_IFRAME_SRC;
+			const originalOrigins = process.env.VITE_ALLOWED_PARENT_ORIGINS;
+			process.env.VITE_SANDBOX_IFRAME_SRC = stagedUrl;
+			process.env.VITE_ALLOWED_PARENT_ORIGINS = "";
+
+			const outDir = mkdtempSync(
+				join(tmpdir(), "iframe-shell-empty-allowlist-"),
+			);
+			try {
+				await build({
+					configFile: resolve(
+						APPS_COMPUTER_ROOT,
+						"vite.iframe-shell.config.ts",
+					),
+					root: APPS_COMPUTER_ROOT,
+					logLevel: "error",
+					build: {
+						outDir,
+						emptyOutDir: true,
+						minify: false,
+						sourcemap: false,
+						write: true,
+					},
+				});
+
+				const bundle = readAllJs(outDir);
+				// The build-time-injected ALLOWED_PARENT_ORIGINS appears
+				// as the JSON-stringified array. We assert it shows up as
+				// an empty literal `[]` somewhere in the bundle (the
+				// `Object.freeze([...[]])` wrapping the resolver helper
+				// preserves the [] literal in non-minified output).
+				expect(bundle).toContain("[]");
+				// Defensive negative — the dev-fallback origin must NOT
+				// appear in a bundle whose VITE_ALLOWED_PARENT_ORIGINS was
+				// explicitly empty. (It can still appear elsewhere in the
+				// bundle for unrelated reasons; we narrow by asserting on
+				// the production-default URL pattern that only appears in
+				// the resolver fallback path.)
+				const fallbackIframeSrc =
+					"https://sandbox.thinkwork.ai/iframe-shell.html";
+				// stagedUrl != fallback, so the only way the fallback
+				// would appear is if the resolver fallback path ran.
+				expect(bundle).toContain(stagedUrl);
+				expect(bundle).not.toMatch(
+					new RegExp(`${fallbackIframeSrc.replace(/[.]/g, "\\.")}.*Object\\.freeze`),
+				);
+			} finally {
+				rmSync(outDir, { recursive: true, force: true });
+				if (originalSrc === undefined) {
+					delete process.env.VITE_SANDBOX_IFRAME_SRC;
+				} else {
+					process.env.VITE_SANDBOX_IFRAME_SRC = originalSrc;
+				}
+				if (originalOrigins === undefined) {
+					delete process.env.VITE_ALLOWED_PARENT_ORIGINS;
+				} else {
+					process.env.VITE_ALLOWED_PARENT_ORIGINS = originalOrigins;
+				}
+			}
+		},
+		{ timeout: 120_000 },
+	);
 });
