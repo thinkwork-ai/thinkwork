@@ -9,6 +9,16 @@ origin: docs/brainstorms/2026-05-09-computer-applets-reframe-requirements.md
 
 # feat: ThinkWork Computer applets reframe (M3 swap)
 
+> **Same-origin trust decision superseded** — plan
+> `docs/plans/2026-05-09-012-feat-computer-ai-elements-adoption-plan.md` and
+> contract `docs/specs/computer-ai-elements-contract-v1.md` move applet
+> execution into a cross-origin iframe at `sandbox.thinkwork.ai`, reversing
+> the same-origin acceptance documented at lines 142 and 154 of this plan.
+> The same-origin substrate (`apps/computer/src/applets/`,
+> `@thinkwork/computer-stdlib`, applet GraphQL surface, Strands
+> `save_app`/`load_app`/`list_apps`) remains the foundation; the iframe flip
+> in plan-012 replaces only the execution boundary.
+
 ## Implementation Status
 
 U1-U14 and the follow-up Computer route rename are merged. The end-user
