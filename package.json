@@ -30,6 +30,7 @@
     "build:lambdas": "bash scripts/build-lambdas.sh",
     "db:push": "bash scripts/db-push.sh",
     "db:migrate-manual": "bash scripts/db-migrate-manual.sh",
+    "artifact-payloads:backfill": "tsx scripts/backfill-artifact-payloads-to-s3.ts",
     "cf:sync-mcp": "tsx scripts/cloudflare-sync-mcp.ts"
   },
   "devDependencies": {

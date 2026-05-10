@@ -2,6 +2,7 @@
 
 import json
 import os
+import uuid
 
 import boto3
 
@@ -12,8 +13,12 @@ DATABASE = os.environ.get("DATABASE_NAME", "thinkwork")
 TENANT_ID = os.environ.get("TENANT_ID", "")
 AGENT_ID = os.environ.get("AGENT_ID", "")
 THREAD_ID = os.environ.get("CURRENT_THREAD_ID", "")
+ARTIFACT_PAYLOADS_BUCKET = os.environ.get("ARTIFACT_PAYLOADS_BUCKET") or os.environ.get(
+    "WORKSPACE_BUCKET", ""
+)
 
 _rds = boto3.client("rds-data", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+_s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 
 
 def _execute(sql: str, params: list[dict]) -> dict:
@@ -26,6 +31,26 @@ def _execute(sql: str, params: list[dict]) -> dict:
         parameters=params,
         formatRecordsAs="JSON",
     )
+
+
+def _artifact_content_key(artifact_id: str, revision: str = "") -> str:
+    if revision:
+        return f"tenants/{TENANT_ID}/artifact-payloads/artifacts/{artifact_id}/content/{revision}.md"
+    return f"tenants/{TENANT_ID}/artifact-payloads/artifacts/{artifact_id}/content.md"
+
+
+def _write_artifact_content(artifact_id: str, content: str, revision: str = "") -> str:
+    if not ARTIFACT_PAYLOADS_BUCKET:
+        raise RuntimeError("ARTIFACT_PAYLOADS_BUCKET or WORKSPACE_BUCKET is required")
+    key = _artifact_content_key(artifact_id, revision)
+    _s3.put_object(
+        Bucket=ARTIFACT_PAYLOADS_BUCKET,
+        Key=key,
+        Body=content.encode("utf-8"),
+        ContentType="text/markdown; charset=utf-8",
+        Metadata={"tenant-id": TENANT_ID},
+    )
+    return key
 
 
 def create_artifact(
@@ -52,19 +77,22 @@ def create_artifact(
         JSON with the created artifact's id, title, type, status, and created_at.
     """
     tid = thread_id or THREAD_ID or None
+    artifact_id = str(uuid.uuid4())
+    s3_key = _write_artifact_content(artifact_id, content)
     sql = """
-        INSERT INTO artifacts (tenant_id, agent_id, thread_id, title, type, status, content, summary, source_message_id)
-        VALUES (:tenant_id::uuid, :agent_id::uuid, :thread_id::uuid, :title, :type, :status, :content, :summary, :source_msg::uuid)
+        INSERT INTO artifacts (id, tenant_id, agent_id, thread_id, title, type, status, content, s3_key, summary, source_message_id)
+        VALUES (:id::uuid, :tenant_id::uuid, :agent_id::uuid, :thread_id::uuid, :title, :type, :status, NULL, :s3_key, :summary, :source_msg::uuid)
         RETURNING id, title, type, status, created_at
     """
     params = [
+        {"name": "id", "value": {"stringValue": artifact_id}},
         {"name": "tenant_id", "value": {"stringValue": TENANT_ID}},
         {"name": "agent_id", "value": {"stringValue": AGENT_ID} if AGENT_ID else {"isNull": True}},
         {"name": "thread_id", "value": {"stringValue": tid} if tid else {"isNull": True}},
         {"name": "title", "value": {"stringValue": title}},
         {"name": "type", "value": {"stringValue": type}},
         {"name": "status", "value": {"stringValue": status}},
-        {"name": "content", "value": {"stringValue": content}},
+        {"name": "s3_key", "value": {"stringValue": s3_key}},
         {"name": "summary", "value": {"stringValue": summary} if summary else {"isNull": True}},
         {"name": "source_msg", "value": {"stringValue": source_message_id} if source_message_id else {"isNull": True}},
     ]
@@ -101,8 +129,10 @@ def update_artifact(
         sets.append("title = :title")
         params.append({"name": "title", "value": {"stringValue": title}})
     if content:
-        sets.append("content = :content")
-        params.append({"name": "content", "value": {"stringValue": content}})
+        s3_key = _write_artifact_content(artifact_id, content, str(uuid.uuid4()))
+        sets.append("content = NULL")
+        sets.append("s3_key = :s3_key")
+        params.append({"name": "s3_key", "value": {"stringValue": s3_key}})
     if status:
         sets.append("status = :status")
         params.append({"name": "status", "value": {"stringValue": status}})

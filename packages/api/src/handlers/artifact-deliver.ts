@@ -13,6 +13,10 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { artifacts, agents, agentCapabilities } from "@thinkwork/database-pg/schema";
 import { renderEmailDelivery, renderSmsDelivery } from "../lib/artifact-delivery.js";
+import {
+	isArtifactPayloadS3Key,
+	readArtifactPayloadFromS3,
+} from "../lib/artifacts/payload-storage.js";
 
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
@@ -85,12 +89,31 @@ export async function handler(event: APIGatewayProxyEventV2) {
 		};
 	}
 
-	// For large artifacts stored in S3, content may be null
-	if (!artifact.content) {
+	let artifactContent = artifact.content;
+	if (
+		artifactContent === null &&
+		artifact.s3_key &&
+		artifact.type !== "applet" &&
+		artifact.type !== "applet_state" &&
+		isArtifactPayloadS3Key(artifact.tenant_id, artifact.s3_key)
+	) {
+		try {
+			artifactContent = await readArtifactPayloadFromS3({
+				tenantId: artifact.tenant_id,
+				key: artifact.s3_key,
+			});
+		} catch (err) {
+			console.warn(
+				`[artifact-deliver] failed to read artifact payload ${artifact.id}: ${(err as Error).message}`,
+			);
+		}
+	}
+
+	if (artifactContent === null) {
 		return {
 			statusCode: 422,
 			body: JSON.stringify({
-				error: "Artifact content is stored in S3 — inline delivery not supported yet",
+				error: "Artifact content is unavailable for delivery",
 			}),
 		};
 	}
@@ -100,7 +123,7 @@ export async function handler(event: APIGatewayProxyEventV2) {
 		title: artifact.title,
 		type: artifact.type,
 		status: artifact.status,
-		content: artifact.content,
+		content: artifactContent,
 		summary: artifact.summary,
 		metadata: artifact.metadata as Record<string, unknown> | null,
 	};
