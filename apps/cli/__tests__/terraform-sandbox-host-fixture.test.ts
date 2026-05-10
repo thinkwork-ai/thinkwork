@@ -140,16 +140,36 @@ describe("U3 — sandbox variables", () => {
   });
 });
 
-describe("U3 — backwards compatibility", () => {
-  it("existing module \"computer_site\" still works with no policy attached (no opt-in to new inputs)", () => {
+describe("U10 — host CSP wired for computer_site", () => {
+  it("computer_site opts into inline_response_headers carrying the host CSP profile", () => {
+    // Plan-012 U10: the parent SPA's host CSP is set via the
+    // CloudFront response-headers policy, not via <meta> in
+    // index.html. Host CSP allowlists the sandbox subdomain in
+    // frame-src and keeps frame-ancestors 'none' so the parent is
+    // never framed by hostile pages.
     const source = read(THINKWORK_MAIN);
-    // The computer_site block does NOT pass inline_response_headers or
-    // response_headers_policy_id. Default behavior is unchanged.
     const computerSiteBlock = source.match(
       /module "computer_site"\s*\{[\s\S]*?\n\}/,
     )?.[0];
     expect(computerSiteBlock).toBeDefined();
-    expect(computerSiteBlock!).not.toMatch(/inline_response_headers/);
-    expect(computerSiteBlock!).not.toMatch(/response_headers_policy_id/);
+    expect(computerSiteBlock!).toMatch(/inline_response_headers/);
+    expect(computerSiteBlock!).toMatch(/computer_host_csp/);
+  });
+
+  it("host CSP locals carry the load-bearing directives", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/computer_host_csp/);
+    expect(source).toMatch(/script-src 'self'/);
+    expect(source).toMatch(/frame-ancestors 'none'/);
+    // connect-src must allow AppSync / Cognito for the streaming
+    // wire and auth flow.
+    expect(source).toMatch(/appsync-api/);
+    expect(source).toMatch(/cognito-idp/);
+  });
+
+  it("host CSP frame-src allowlists the sandbox subdomain when provisioned", () => {
+    const source = read(THINKWORK_MAIN);
+    expect(source).toMatch(/computer_host_frame_src/);
+    expect(source).toMatch(/computer_sandbox_domain/);
   });
 });

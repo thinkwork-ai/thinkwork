@@ -164,6 +164,35 @@ output "computer_url" {
   value       = var.computer_domain != "" ? "https://${var.computer_domain}" : "https://${module.computer_site.distribution_domain}"
 }
 
+# Computer sandbox subdomain (plan-012 U3 / U11.5 — iframe-isolated
+# fragment substrate). Provisioned only when var.computer_sandbox_domain
+# is set. scripts/build-computer.sh reads these to sync the iframe-shell
+# bundle and invalidate the sandbox distribution.
+output "computer_sandbox_distribution_id" {
+  description = "CloudFront distribution ID for the iframe-isolated sandbox subdomain (empty when not provisioned)"
+  value       = local.computer_sandbox_enabled ? module.computer_sandbox_site[0].distribution_id : ""
+}
+
+output "computer_sandbox_distribution_domain" {
+  description = "CloudFront domain for the sandbox subdomain (empty when not provisioned)"
+  value       = local.computer_sandbox_enabled ? module.computer_sandbox_site[0].distribution_domain : ""
+}
+
+output "computer_sandbox_bucket_name" {
+  description = "S3 bucket holding the iframe-shell bundle for the sandbox subdomain (empty when not provisioned)"
+  value       = local.computer_sandbox_enabled ? module.computer_sandbox_site[0].bucket_name : ""
+}
+
+output "computer_sandbox_url" {
+  description = "Public URL for the iframe-shell host (empty when not provisioned). The host app's __SANDBOX_IFRAME_SRC__ Vite define points at <url>/iframe-shell.html."
+  value       = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : ""
+}
+
+output "computer_sandbox_allowed_parent_origins" {
+  description = "Comma-separated list of trusted parent origins for the iframe-shell. Mirrors the CSP frame-ancestors directive on the sandbox distribution and is wired into the iframe-shell's __ALLOWED_PARENT_ORIGINS__ Vite define at build time."
+  value       = var.computer_sandbox_allowed_parent_origins
+}
+
 # Docs static site
 output "docs_distribution_id" {
   description = "CloudFront distribution ID for the docs site"

@@ -574,6 +574,17 @@ module "admin_site" {
 # Computer Static Site (apps/computer — end-user surface at computer.thinkwork.ai)
 ################################################################################
 
+locals {
+  # Host CSP for the Computer SPA (plan-012 U10 / contract v1 §CSP profile).
+  # script-src 'self' (no blob:) — sucrase no longer runs in the parent
+  # window; it lives inside the iframe scope after Phase 2 fully ships.
+  # frame-src allows the sandbox subdomain only; frame-ancestors 'none'
+  # keeps the parent itself unframable.
+  computer_host_frame_src = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
+
+  computer_host_csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self'; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.appsync-api.us-east-1.amazonaws.com wss://*.appsync-realtime-api.us-east-1.amazonaws.com https://cognito-idp.us-east-1.amazonaws.com; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+}
+
 module "computer_site" {
   source = "../app/static-site"
 
@@ -582,6 +593,21 @@ module "computer_site" {
   is_spa          = true
   custom_domain   = var.computer_domain
   certificate_arn = var.computer_certificate_arn
+
+  # Plan-012 U10: host CSP defends the parent origin. Iframe-shell's
+  # own CSP (set on computer_sandbox_site below) carries the
+  # `connect-src 'none'` + `frame-ancestors` allowlist defense as
+  # belt-and-suspenders.
+  inline_response_headers = {
+    content_security_policy       = local.computer_host_csp
+    content_type_options_override = true
+    strict_transport_security = {
+      max_age_sec        = 63072000
+      include_subdomains = true
+      preload            = true
+      override           = true
+    }
+  }
 }
 
 ################################################################################
