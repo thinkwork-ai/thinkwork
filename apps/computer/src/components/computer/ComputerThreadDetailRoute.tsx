@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { PanelRightOpen } from "lucide-react";
 import { useMutation, useQuery, useSubscription } from "urql";
-import { Button } from "@thinkwork/ui";
 import {
   TaskThreadView,
   type TaskThread,
@@ -101,15 +98,6 @@ export function ComputerThreadDetailRoute({
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
     documentTitle: `Thread · ${threadTitle}`,
-    action: (
-      <Button asChild type="button" variant="outline" size="sm">
-        <Link to="/agui/threads/$id" params={{ id: threadId }}>
-          <PanelRightOpen className="size-3.5" />
-          Open Canvas
-        </Link>
-      </Button>
-    ),
-    actionKey: `agui-canvas:${threadId}`,
   });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =
