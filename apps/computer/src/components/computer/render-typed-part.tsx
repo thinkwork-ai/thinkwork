@@ -21,131 +21,159 @@
 
 import type { ReactNode } from "react";
 import {
-	Reasoning,
-	ReasoningContent,
-	ReasoningTrigger,
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import {
-	Tool,
-	ToolContent,
-	ToolHeader,
-	ToolInput,
-	ToolOutput,
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
 } from "@/components/ai-elements/tool";
+import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
+import { RunbookQueue } from "@/components/runbooks/RunbookQueue";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
+import type {
+  RunbookConfirmationData,
+  RunbookQueueData,
+} from "@/lib/ui-message-types";
 
 export interface RenderTypedPartOptions {
-	/** Stable React key prefix (usually the message id). */
-	keyPrefix: string;
-	/** Index of the part within the message — appended to `keyPrefix`
-	 * to form a stable React key. */
-	index: number;
+  /** Stable React key prefix (usually the message id). */
+  keyPrefix: string;
+  /** Index of the part within the message — appended to `keyPrefix`
+   * to form a stable React key. */
+  index: number;
 }
 
 export function renderTypedPart(
-	part: AccumulatedPart,
-	{ keyPrefix, index }: RenderTypedPartOptions,
+  part: AccumulatedPart,
+  { keyPrefix, index }: RenderTypedPartOptions,
 ): ReactNode {
-	const key = `${keyPrefix}::${index}`;
+  const key = `${keyPrefix}::${index}`;
 
-	switch (part.type) {
-		case "text":
-			return (
-				<Response
-					key={key}
-					className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
-				>
-					{part.text}
-				</Response>
-			);
-		case "reasoning":
-			return (
-				<Reasoning
-					key={key}
-					isStreaming={part.state === "streaming"}
-					defaultOpen={false}
-				>
-					<ReasoningTrigger />
-					<ReasoningContent>{part.text}</ReasoningContent>
-				</Reasoning>
-			);
-		case "source-url":
-			return (
-				<a
-					key={key}
-					href={part.url}
-					target="_blank"
-					rel="noreferrer"
-					className="block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-				>
-					{part.title || part.url}
-				</a>
-			);
-		case "source-document":
-			return (
-				<div key={key} className="text-sm text-muted-foreground">
-					{part.title}
-					{part.filename ? ` — ${part.filename}` : null}
-				</div>
-			);
-		case "file":
-			return (
-				<a
-					key={key}
-					href={part.url}
-					target="_blank"
-					rel="noreferrer"
-					className="block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-				>
-					Attached file ({part.mediaType})
-				</a>
-			);
-		default:
-			break;
-	}
+  switch (part.type) {
+    case "text":
+      return (
+        <Response
+          key={key}
+          className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
+        >
+          {part.text}
+        </Response>
+      );
+    case "reasoning":
+      return (
+        <Reasoning
+          key={key}
+          isStreaming={part.state === "streaming"}
+          defaultOpen={false}
+        >
+          <ReasoningTrigger />
+          <ReasoningContent>{part.text}</ReasoningContent>
+        </Reasoning>
+      );
+    case "source-url":
+      return (
+        <a
+          key={key}
+          href={part.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          {part.title || part.url}
+        </a>
+      );
+    case "source-document":
+      return (
+        <div key={key} className="text-sm text-muted-foreground">
+          {part.title}
+          {part.filename ? ` — ${part.filename}` : null}
+        </div>
+      );
+    case "file":
+      return (
+        <a
+          key={key}
+          href={part.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Attached file ({part.mediaType})
+        </a>
+      );
+    default:
+      break;
+  }
 
-	if (part.type.startsWith("tool-")) {
-		const toolPart = part as Extract<
-			AccumulatedPart,
-			{ type: `tool-${string}` }
-		>;
-		return (
-			<Tool key={key}>
-				<ToolHeader type={toolPart.type} state={toolPart.state} />
-				<ToolContent>
-					<ToolInput input={toolPart.input} />
-					<ToolOutput
-						errorText={toolPart.errorText}
-						output={
-							toolPart.output !== undefined ? (
-								<pre className="overflow-x-auto whitespace-pre-wrap text-xs">
-									{typeof toolPart.output === "string"
-										? toolPart.output
-										: JSON.stringify(toolPart.output, null, 2)}
-								</pre>
-							) : null
-						}
-					/>
-				</ToolContent>
-			</Tool>
-		);
-	}
+  if (part.type.startsWith("tool-")) {
+    const toolPart = part as Extract<
+      AccumulatedPart,
+      { type: `tool-${string}` }
+    >;
+    return (
+      <Tool key={key}>
+        <ToolHeader type={toolPart.type} state={toolPart.state} />
+        <ToolContent>
+          <ToolInput input={toolPart.input} />
+          <ToolOutput
+            errorText={toolPart.errorText}
+            output={
+              toolPart.output !== undefined ? (
+                <pre className="overflow-x-auto whitespace-pre-wrap text-xs">
+                  {typeof toolPart.output === "string"
+                    ? toolPart.output
+                    : JSON.stringify(toolPart.output, null, 2)}
+                </pre>
+              ) : null
+            }
+          />
+        </ToolContent>
+      </Tool>
+    );
+  }
 
-	if (part.type.startsWith("data-")) {
-		// Forward-compat: render as a small debug strip so unknown
-		// data-${name} parts surface in the UI without crashing.
-		return (
-			<div
-				key={key}
-				className="rounded border border-border/50 bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
-			>
-				{part.type}
-			</div>
-		);
-	}
+  if (part.type.startsWith("data-")) {
+    if (part.type === "data-runbook-confirmation") {
+      return (
+        <RunbookConfirmation
+          key={key}
+          data={recordData(part.data) as RunbookConfirmationData}
+        />
+      );
+    }
+    if (part.type === "data-runbook-queue") {
+      return (
+        <RunbookQueue
+          key={key}
+          data={recordData(part.data) as RunbookQueueData}
+        />
+      );
+    }
+    // Forward-compat: render as a small debug strip so unknown
+    // data-${name} parts surface in the UI without crashing.
+    return (
+      <div
+        key={key}
+        className="rounded border border-border/50 bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
+      >
+        {part.type}
+      </div>
+    );
+  }
 
-	return null;
+  return null;
+}
+
+function recordData(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 /**
@@ -153,13 +181,13 @@ export function renderTypedPart(
  * message. Returns an array; the caller wraps it in <Message>.
  */
 export function renderTypedParts(
-	parts: AccumulatedPart[],
-	options: { keyPrefix: string },
+  parts: AccumulatedPart[],
+  options: { keyPrefix: string },
 ): ReactNode[] {
-	return parts.map((part, index) =>
-		renderTypedPart(part, {
-			keyPrefix: options.keyPrefix,
-			index,
-		}),
-	);
+  return parts.map((part, index) =>
+    renderTypedPart(part, {
+      keyPrefix: options.keyPrefix,
+      index,
+    }),
+  );
 }

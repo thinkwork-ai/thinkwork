@@ -109,6 +109,7 @@ export const ComputerThreadQuery = gql`
             id
             role
             content
+            parts
             metadata
             toolCalls
             toolResults
@@ -272,6 +273,81 @@ export const SendMessageMutation = gql`
       createdAt
     }
   }
+`;
+
+const RunbookRunFields = gql`
+  fragment RunbookRunFields on RunbookRun {
+    id
+    tenantId
+    computerId
+    threadId
+    runbookSlug
+    runbookVersion
+    status
+    invocationMode
+    approvedAt
+    rejectedAt
+    cancelledAt
+    startedAt
+    completedAt
+    createdAt
+    updatedAt
+    tasks {
+      id
+      phaseId
+      phaseTitle
+      taskKey
+      title
+      summary
+      status
+      dependsOn
+      capabilityRoles
+      sortOrder
+      details
+      output
+      error
+      startedAt
+      completedAt
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const RunbookRunQuery = gql`
+  query RunbookRun($id: ID!) {
+    runbookRun(id: $id) {
+      ...RunbookRunFields
+    }
+  }
+  ${RunbookRunFields}
+`;
+
+export const ConfirmRunbookRunMutation = gql`
+  mutation ConfirmRunbookRun($id: ID!) {
+    confirmRunbookRun(id: $id) {
+      ...RunbookRunFields
+    }
+  }
+  ${RunbookRunFields}
+`;
+
+export const RejectRunbookRunMutation = gql`
+  mutation RejectRunbookRun($id: ID!) {
+    rejectRunbookRun(id: $id) {
+      ...RunbookRunFields
+    }
+  }
+  ${RunbookRunFields}
+`;
+
+export const CancelRunbookRunMutation = gql`
+  mutation CancelRunbookRun($id: ID!) {
+    cancelRunbookRun(id: $id) {
+      ...RunbookRunFields
+    }
+  }
+  ${RunbookRunFields}
 `;
 
 const ComputerApprovalFields = gql`

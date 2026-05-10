@@ -9,20 +9,12 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import {
-  Children,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { Children, useState, type FormEvent, type ReactNode } from "react";
 import {
   Conversation,
   ConversationContent,
 } from "@/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-} from "@/components/ai-elements/message";
+import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputBody,
@@ -37,7 +29,10 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { renderTypedParts } from "@/components/computer/render-typed-part";
-import type { UIMessageStreamState } from "@/lib/ui-message-merge";
+import type {
+  AccumulatedPart,
+  UIMessageStreamState,
+} from "@/lib/ui-message-merge";
 import { useComposerState } from "@/lib/use-composer-state";
 import { Button } from "@thinkwork/ui";
 import {
@@ -58,6 +53,7 @@ export interface TaskThreadMessage {
   metadata?: unknown;
   toolCalls?: unknown;
   toolResults?: unknown;
+  parts?: AccumulatedPart[];
   durableArtifact?: GeneratedArtifact | null;
 }
 
@@ -214,8 +210,7 @@ function TranscriptSegment({
   // Falls back to the legacy chunk-based StreamingMessageBuffer when the
   // wire still produces {text} envelopes (non-Computer agents and
   // pre-U6 historical messages).
-  const hasTypedParts =
-    streamState != null && streamState.parts.length > 0;
+  const hasTypedParts = streamState != null && streamState.parts.length > 0;
   return (
     <>
       <TranscriptMessage message={message} />
@@ -448,6 +443,7 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
   const isUser = role === "USER";
   const actions = actionRowsForMessage(message);
   const body = message.content?.trim() ?? "";
+  const typedParts = !isUser ? (message.parts ?? []) : [];
 
   return (
     <Message
@@ -476,11 +472,9 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
                 ))}
               </div>
             ) : null}
-            {/* Plan-012 U8 / contract v1 §AE4: assistant markdown renders
-              via <Response>, not raw <Streamdown>. The Response wrapper
-              keeps the prose tokens; the underlying engine is still
-              Streamdown internally. */}
-            {body ? (
+            {typedParts.length > 0 ? (
+              renderTypedParts(typedParts, { keyPrefix: message.id })
+            ) : body ? (
               <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
                 {body}
               </Response>
@@ -497,6 +491,42 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
       </MessageContent>
     </Message>
   );
+}
+
+export function normalizePersistedParts(value: unknown): AccumulatedPart[] {
+  const rawParts = parseArray(value);
+  const parts: AccumulatedPart[] = [];
+  for (const rawPart of rawParts) {
+    const record = parseRecord(rawPart);
+    const type = stringValue(record.type);
+    if (!type) continue;
+    if (type === "text") {
+      parts.push({
+        type: "text",
+        id: stringValue(record.id) ?? `text-${parts.length}`,
+        text: typeof record.text === "string" ? record.text : "",
+        state: "done",
+      });
+      continue;
+    }
+    if (type === "reasoning") {
+      parts.push({
+        type: "reasoning",
+        id: stringValue(record.id) ?? `reasoning-${parts.length}`,
+        text: typeof record.text === "string" ? record.text : "",
+        state: "done",
+      });
+      continue;
+    }
+    if (type.startsWith("data-")) {
+      parts.push({
+        type: type as `data-${string}`,
+        id: stringValue(record.id) ?? undefined,
+        data: record.data,
+      });
+    }
+  }
+  return parts;
 }
 
 function toAiMessageRole(role: string): "user" | "assistant" | "system" {
