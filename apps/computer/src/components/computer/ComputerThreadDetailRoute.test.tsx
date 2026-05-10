@@ -1,8 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
-import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { ComputerThreadDetailRoute } from "./ComputerThreadDetailRoute";
 
@@ -115,25 +113,6 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
-  it("registers an AG-UI Canvas header action for the current thread", () => {
-    render(<ComputerThreadDetailRoute threadId="thread-1" />);
-
-    const headerActions = vi
-      .mocked(usePageHeaderActions)
-      .mock.calls.at(-1)?.[0];
-    const action = headerActions?.action as ReactElement<{
-      children: ReactElement<{ params: { id: string }; to: string }>;
-    }>;
-
-    expect(headerActions).toMatchObject({
-      actionKey: "agui-canvas:thread-1",
-    });
-    expect(action.props.children.props).toMatchObject({
-      to: "/agui/threads/$id",
-      params: { id: "thread-1" },
-    });
-  });
-
   it("passes live AppSync chunks into the thread detail while a turn is running", () => {
     streamingChunks = [{ seq: 1, text: "Streaming through the route" }];
     eventData = {

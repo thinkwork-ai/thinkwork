@@ -12,7 +12,19 @@ tags:
 
 # CopilotKit / AG-UI Computer Spike Verdict
 
-## Verdict
+## 2026-05-10 Follow-Up Decision
+
+This verdict is superseded by the AI Elements iframe Canvas decision:
+[AI Elements iframe Canvas foundation decision](./ai-elements-iframe-canvas-foundation-decision-2026-05-10.md).
+
+After comparing the spike against the raw AI Elements path, we decided to keep
+the iframe/app artifact foundation because Computer needs to generate generic
+dashboards and full embedded applications, not only registered Canvas
+components. The AG-UI/CopilotKit work remains valuable reference material for
+typed events, HITL, tool lifecycle, and future protocol thinking, but its
+implementation should not stay active in `main`.
+
+## Original Verdict (Superseded)
 
 Pivot the Computer Thread + Canvas foundation work from Vercel AI Elements to a
 ThinkWork-owned AG-UI protocol layer. Do not adopt CopilotKit React UI/runtime

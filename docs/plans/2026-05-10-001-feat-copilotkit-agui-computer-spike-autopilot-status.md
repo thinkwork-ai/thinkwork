@@ -2,17 +2,20 @@
 title: "Autopilot status: CopilotKit / AG-UI Computer foundation spike"
 date: 2026-05-10
 plan: docs/plans/2026-05-10-001-feat-copilotkit-agui-computer-spike-plan.md
-status: complete
+status: archived
 ---
 
 # Autopilot status: CopilotKit / AG-UI Computer foundation spike
 
-## Current Unit
+## Current Status
 
-- Unit: U7 — Verdict document and follow-up recommendation
-- Branch: `codex/agui-spike-u7`
-- Worktree: `.Codex/worktrees/agui-spike-u7`
-- Status: in progress
+- Status: archived after follow-up product decision.
+- Superseding decision:
+  `docs/solutions/architecture-patterns/ai-elements-iframe-canvas-foundation-decision-2026-05-10.md`
+- Cleanup branch: `codex/backout-agui-spike`
+- Outcome: keep the CopilotKit/AG-UI brainstorm, plan, status, package check,
+  and verdict docs for future reference; remove the merged AG-UI runtime/UI
+  implementation from `main`.
 
 ## Progress Log
 
@@ -67,18 +70,26 @@ status: complete
 - 2026-05-10: Opened PR #1108: https://github.com/thinkwork-ai/thinkwork/pull/1108.
 - 2026-05-10: PR #1108 passed CI and was squash-merged to `main`.
 - 2026-05-10: Removed U7 worktree/local branch and synced `main`.
+- 2026-05-10: Follow-up entrypoint PR #1109 linked the default Thread header to
+  the AG-UI Canvas route.
+- 2026-05-10: After comparing against the raw AI Elements branch, decided to
+  continue the iframe/app artifact path for maximum generic dashboard and
+  embedded application flexibility.
+- 2026-05-10: Started cleanup on `codex/backout-agui-spike` to back out active
+  AG-UI code while retaining docs for future reference.
 
 ## Unit Status
 
-| Unit                                                     | Status | Branch                | PR    | Notes                                  |
-| -------------------------------------------------------- | ------ | --------------------- | ----- | -------------------------------------- |
-| U1 — Local AG-UI event model and existing-stream adapter | Merged | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up. |
-| U2 — Server helper for typed spike events                | Merged | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up. |
-| U3 — Experimental Thread + Canvas route                  | Merged | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
-| U4 — Registered Canvas component proof                   | Merged | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
-| U5 — Real scenario smoke path                            | Merged | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
-| U6 — Optional OSS CopilotKit integration check           | Merged | `codex/agui-spike-u6` | #1107 | CI passed; branch/worktree cleaned up. |
-| U7 — Verdict document and follow-up recommendation       | Merged | `codex/agui-spike-u7` | #1108 | CI passed; branch/worktree cleaned up. |
+| Unit                                                     | Status | Branch                         | PR    | Notes                                      |
+| -------------------------------------------------------- | ------ | ------------------------------ | ----- | ------------------------------------------ |
+| U1 — Local AG-UI event model and existing-stream adapter | Merged | `codex/agui-spike-u1`          | #1102 | CI passed; branch/worktree cleaned up.     |
+| U2 — Server helper for typed spike events                | Merged | `codex/agui-spike-u2`          | #1103 | CI passed; branch/worktree cleaned up.     |
+| U3 — Experimental Thread + Canvas route                  | Merged | `codex/agui-spike-u3`          | #1104 | CI passed; branch/worktree cleaned up.     |
+| U4 — Registered Canvas component proof                   | Merged | `codex/agui-spike-u4`          | #1105 | CI passed; branch/worktree cleaned up.     |
+| U5 — Real scenario smoke path                            | Merged | `codex/agui-spike-u5`          | #1106 | CI passed; branch/worktree cleaned up.     |
+| U6 — Optional OSS CopilotKit integration check           | Merged | `codex/agui-spike-u6`          | #1107 | CI passed; branch/worktree cleaned up.     |
+| U7 — Verdict document and follow-up recommendation       | Merged | `codex/agui-spike-u7`          | #1108 | CI passed; branch/worktree cleaned up.     |
+| Follow-up — Thread header AG-UI entrypoint               | Merged | `codex/agui-thread-entrypoint` | #1109 | CI passed; superseded by cleanup decision. |
 
 ## CI / Verification Log
 
