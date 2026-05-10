@@ -57,6 +57,7 @@ status: active
 - 2026-05-10: Checked current CopilotKit/AG-UI package metadata for `@copilotkit/react-core@1.57.1`, `@copilotkit/react-ui@1.57.1`, and `@ag-ui/client@0.0.53`.
 - 2026-05-10: Decided not to install CopilotKit React packages during the spike; added a local adapter and architecture note so the integration stays reversible.
 - 2026-05-10: Verified U6 with focused adapter tests, full `@thinkwork/computer` tests, typecheck, and Prettier.
+- 2026-05-10: Opened PR #1107: https://github.com/thinkwork-ai/thinkwork/pull/1107.
 
 ## Unit Status
 
@@ -67,7 +68,7 @@ status: active
 | U3 — Experimental Thread + Canvas route                  | Merged  | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
 | U4 — Registered Canvas component proof                   | Merged  | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
 | U5 — Real scenario smoke path                            | Merged  | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
-| U6 — Optional OSS CopilotKit integration check           | Active  | `codex/agui-spike-u6` |       | Locally verified; ready for PR.        |
+| U6 — Optional OSS CopilotKit integration check           | PR open | `codex/agui-spike-u6` | #1107 | Awaiting CI.                           |
 | U7 — Verdict document and follow-up recommendation       | Pending |                       |       | Final unit.                            |
 
 ## CI / Verification Log
