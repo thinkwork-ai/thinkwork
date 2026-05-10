@@ -21,24 +21,26 @@ status: active
 - 2026-05-10: U1 selected as the first implementation unit because it has no dependencies and is required by U2/U3.
 - 2026-05-10: Created U1 worktree `.Codex/worktrees/runbooks-u1` on branch `codex/runbooks-u1` from `origin/main`.
 - 2026-05-10: Implemented initial `@thinkwork/runbooks` package, validation/loader/registry tests, and CRM Dashboard, Research Dashboard, and Map Artifact runbook definitions.
+- 2026-05-10: Opened U1 PR #1119.
 
 ## Implementation Units
 
-| Unit                                              | Status      | Branch              | PR      | Notes                                                                                                                              |
-| ------------------------------------------------- | ----------- | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Runbook Source Package                         | in progress | `codex/runbooks-u1` | pending | Create `packages/runbooks` with YAML/Markdown validation and initial CRM Dashboard, Research Dashboard, and Map Artifact runbooks. |
-| U2 Catalog and Run Data Model                     | pending     | pending             | pending | Depends on U1.                                                                                                                     |
-| U3 Routing and Confirmation API                   | pending     | pending             | pending | Depends on U1 and U2.                                                                                                              |
-| U4 Sequential Runbook Executor                    | pending     | pending             | pending | Depends on U2 and U3.                                                                                                              |
-| U5 Strands Runbook Context and Capability Mapping | pending     | pending             | pending | Depends on U1 and U4.                                                                                                              |
-| U6 Computer UI Confirmation and Queue             | pending     | pending             | pending | Depends on U2 and U3.                                                                                                              |
-| U7 Artifact Builder Runbook Bridge                | pending     | pending             | pending | Depends on U1, U5, and U6.                                                                                                         |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending     | pending             | pending | Depends on U1 through U7.                                                                                                          |
+| Unit                                              | Status    | Branch              | PR      | Notes                                                                                                                              |
+| ------------------------------------------------- | --------- | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Runbook Source Package                         | in review | `codex/runbooks-u1` | #1119   | Create `packages/runbooks` with YAML/Markdown validation and initial CRM Dashboard, Research Dashboard, and Map Artifact runbooks. |
+| U2 Catalog and Run Data Model                     | pending   | pending             | pending | Depends on U1.                                                                                                                     |
+| U3 Routing and Confirmation API                   | pending   | pending             | pending | Depends on U1 and U2.                                                                                                              |
+| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                                                              |
+| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                                                              |
+| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                                                              |
+| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                                                                         |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                                                                          |
 
 ## PRs
 
-| Unit | PR  | Status | Merge Commit | Notes |
-| ---- | --- | ------ | ------------ | ----- |
+| Unit | PR    | Status | Merge Commit | Notes                                      |
+| ---- | ----- | ------ | ------------ | ------------------------------------------ |
+| U1   | #1119 | open   | pending      | Waiting for required CI checks and review. |
 
 ## CI / Verification Notes
 
