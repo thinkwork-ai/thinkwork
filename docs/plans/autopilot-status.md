@@ -3,17 +3,17 @@ title: Computer Runbooks Foundation Autopilot Status
 date: 2026-05-10
 plan: docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md
 target_branch: main
-status: active
+status: complete
 ---
 
 # Computer Runbooks Foundation Autopilot Status
 
 ## Current State
 
-- Active unit: U8 Docs, Smoke Coverage, and Rollout Guardrails
-- Active branch/worktree: `codex/runbooks-u8` at `.Codex/worktrees/runbooks-u8`
-- Latest synced base: `origin/main` at `f6832e4f`
-- Overall status: U8 PR #1126 open; waiting for required CI checks
+- Active unit: none
+- Active branch/worktree: none
+- Latest synced base: `origin/main` at `069d0a5c`
+- Overall status: all implementation units are complete and merged
 
 ## Progress Log
 
@@ -62,6 +62,8 @@ status: active
 - 2026-05-10: Completed U8 focused verification: smoke script syntax/dry-run, docs build, runbooks package tests, touched-file Prettier, and diff check passed.
 - 2026-05-10: Completed U8 workspace verification: workspace typecheck, tests, lint scripts, and build passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
 - 2026-05-10: Opened U8 PR #1126 from `codex/runbooks-u8`.
+- 2026-05-10: U8 PR #1126 passed required checks and was squash-merged to `main` at `069d0a5c`.
+- 2026-05-10: Removed U8 remote/local branch and worktree. The main checkout has unrelated local changes, so final bookkeeping continued in `.Codex/worktrees/runbooks-final-status` from `origin/main`.
 
 ## Implementation Units
 
@@ -74,7 +76,7 @@ status: active
 | U5 Strands Runbook Context and Capability Mapping | merged | `codex/runbooks-u5` | #1123 | Squash-merged to `main` at `e41aca1e`; branch and worktree removed. |
 | U6 Computer UI Confirmation and Queue             | merged | `codex/runbooks-u6` | #1124 | Squash-merged to `main` at `345a6651`; branch and worktree removed. |
 | U7 Artifact Builder Runbook Bridge                | merged | `codex/runbooks-u7` | #1125 | Squash-merged to `main` at `f6832e4f`; branch and worktree removed. |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | active | `codex/runbooks-u8` | #1126 | Required checks pending.                                            |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | merged | `codex/runbooks-u8` | #1126 | Squash-merged to `main` at `069d0a5c`; branch and worktree removed. |
 
 ## PRs
 
@@ -87,7 +89,7 @@ status: active
 | U5   | #1123 | merged | `e41aca1e`   | Required checks passed before squash merge. |
 | U6   | #1124 | merged | `345a6651`   | Required checks passed before squash merge. |
 | U7   | #1125 | merged | `f6832e4f`   | Required checks passed before squash merge. |
-| U8   | #1126 | open   | pending      | Required checks pending.                    |
+| U8   | #1126 | merged | `069d0a5c`   | Required checks passed before squash merge. |
 
 ## CI / Verification Notes
 
@@ -182,6 +184,7 @@ status: active
 | U8   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; docs/admin/computer emitted existing sourcemap/chunk-size warnings only.                                                                                                                                                                         |
 | U8   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on touched Prettier-compatible docs, scripts, README files, and status doc; the AI Elements spec preserves legacy non-Prettier formatting to avoid unrelated churn. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency. |
 | U8   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
+| U8   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1126 before merge.                                                                                                                                                                                                      |
 
 ## Blockers
 
