@@ -208,15 +208,31 @@ const FORBIDDEN_PAYLOAD_FIELDS = [
 ] as const;
 
 export function assertNoSecretsInPayload(payload: unknown): void {
-	if (!payload || typeof payload !== "object") return;
-	const obj = payload as Record<string, unknown>;
-	for (const field of FORBIDDEN_PAYLOAD_FIELDS) {
-		if (field in obj) {
-			throw new IframePayloadSecretLeakError(
-				`Forbidden field '${field}' in iframe postMessage payload — the iframe runs untrusted LLM-authored code, payloads must never carry credentials. State proxy operations round-trip through the parent.`,
-			);
+	const visited = new WeakSet<object>();
+	const walk = (value: unknown): void => {
+		if (!value || typeof value !== "object") return;
+		// Cycle guard — defensive; LLM-authored payloads should not be
+		// circular but we don't trust them by definition.
+		const objRef = value as object;
+		if (visited.has(objRef)) return;
+		visited.add(objRef);
+
+		if (Array.isArray(value)) {
+			for (const item of value) walk(item);
+			return;
 		}
-	}
+
+		const obj = value as Record<string, unknown>;
+		for (const field of FORBIDDEN_PAYLOAD_FIELDS) {
+			if (Object.prototype.hasOwnProperty.call(obj, field)) {
+				throw new IframePayloadSecretLeakError(
+					`Forbidden field '${field}' in iframe postMessage payload — the iframe runs untrusted LLM-authored code, payloads must never carry credentials. State proxy operations round-trip through the parent.`,
+				);
+			}
+		}
+		for (const v of Object.values(obj)) walk(v);
+	};
+	walk(payload);
 }
 
 export class IframePayloadSecretLeakError extends Error {
