@@ -29,16 +29,24 @@ All 14 implementation units shipped on `codex/computer-ai-elements-adoption`.
 | **U13** `useComposerState` hook + single-submit invariant | (this session) | `apps/computer/src/lib/use-composer-state.ts`. Grep-based regression test pinning that `ComputerComposer.tsx` and `FollowUpComposer` (in TaskThreadView.tsx) never import `SendMessageMutation`. Visual `<PromptInput>` swap of the two composer surfaces deferred to a focused follow-up. |
 | **U14** `renderTypedPart` helper — Reasoning + Tool + Response + sources | (this session) | `apps/computer/src/components/computer/render-typed-part.tsx`. Translates each `AccumulatedPart` to an AI Elements primitive. 7 structural tests. TaskThreadView consumer wiring deferred to U14 follow-up (the helper is standalone for unit-tested independence). |
 
+## Acceptance items implemented in this PR (after adversarial review)
+
+| Item | Commit / where |
+|---|---|
+| **U11.5a** iframe-shell TSX compile + mount pipeline | `apps/computer/src/iframe-shell/main.ts` — sucrase-transform, acorn import-shim allowlist, dynamic import of blob URL, `createRoot.render(Component)`, full `kind:'error'` envelope routing, `__THINKWORK_IFRAME_STATE_PROXY__` for state-read/state-write. |
+| **U11.5b** AppletMount production cutover | `apps/computer/src/applets/mount.tsx` rewritten — `IframeAppletMount` is the default, `LegacyAppletMount` runs only when `loadModule` is supplied (test seam) or `import.meta.env.VITE_APPLET_LEGACY_LOADER === "true"` (rollback flag). Legacy loader moved to `apps/computer/src/applets/_testing/legacy-loader.ts`. |
+| **U13b** PromptInput composer migration | `ComputerComposer` (empty-thread) and `FollowUpComposer` (in-thread) rewritten to AI Elements `<PromptInput>`. Both consume `useComposerState`. Tests upgraded with `waitFor` for the async Promise.all submit chain. |
+| **U14b** renderTypedPart consumer wiring | `TaskThreadView`'s `TranscriptSegment` branches on `streamState.parts.length > 0` → `renderTypedParts(parts)` wrapped in landmark `<article>` with the streaming indicator. Falls back to legacy `StreamingMessageBuffer` for `{text}` envelopes. |
+| **Deploy: scripts/build-computer.sh** | Reads new sandbox terraform outputs, builds iframe-shell with `VITE_SANDBOX_IFRAME_SRC` + `VITE_ALLOWED_PARENT_ORIGINS`, syncs host bundle (excluding `iframe-shell/*`) and the iframe-shell bundle (to the sandbox bucket) with separate CloudFront invalidations. Conditional on sandbox provisioning per stage. |
+| **CSP wiring** | `terraform/modules/thinkwork/main.tf` passes `inline_response_headers` to **both** `computer_site` (host CSP — `script-src 'self'`, `frame-src` allowlists sandbox, `frame-ancestors 'none'`, AppSync + Cognito `connect-src`) and `computer_sandbox_site` (iframe CSP — `connect-src 'none'`, `frame-ancestors` mirrors parent allowlist). Both CSPs derive from named locals. New outputs (`computer_sandbox_*`) so `build-computer.sh` can read them. |
+
 ## Deferred to follow-up PRs
 
 | Item | Why deferred | Owner |
 |---|---|---|
-| **U11.5** Production AppletMount cutover (iframe path becomes default behind `VITE_APPLET_LEGACY_LOADER` rollback flag) | Requires iframe-shell `main.ts` to drive the sucrase + import-shim transform pipeline against `payload.tsx` — currently the handler renders a placeholder. | Composer/U11 |
-| **CSP wiring in `terraform/modules/thinkwork/main.tf`** for both `computer_site` (host CSP) and `computer_sandbox_site` (iframe CSP) using the U3-extended static-site `inline_response_headers` input. | Out of scope for autopilot. Lands alongside the Phase 2 deploy gate. | Terraform/U10 |
-| **Playwright CSP enforcement smoke** (`scripts/smoke-csp-violation.mjs`) | Out of scope for autopilot — requires Playwright in `apps/computer/devDependencies` + a deploy environment to run against. | Smoke/U10 |
-| **`scripts/build-computer.sh`** extension to `aws s3 sync` `apps/computer/dist/iframe-shell/` to the sandbox bucket + invalidate the sandbox distribution. | Out of scope for autopilot. | Deploy/U11 |
-| **TaskThreadView wiring of `renderTypedPart`** (replaces TranscriptMessage's body for messages with `streamState.parts` non-null) | Standalone helper unit-tested first; consumer cutover follows. | UI/U14 |
-| **PromptInput visual swap** for `ComputerComposer` and `FollowUpComposer` | Single-submit invariant pinned by regression test; visual swap is UX work. | UI/U13 |
+| **Playwright CSP enforcement smoke** (`scripts/smoke-csp-violation.mjs`) | Requires Playwright in `apps/computer/devDependencies` + a real deploy to run against. | Smoke/U10 |
+| **iframe-shell-side `useAppletAPI` re-export** (so fragments call `useAppletAPI()` and route via `__THINKWORK_IFRAME_STATE_PROXY__`) | The proxy is in place on `globalThis`; the `@thinkwork/computer-stdlib` re-export update is a separate PR against that package. Until it lands, fragments calling `useAppletAPI` see the legacy in-process implementation. | Stdlib follow-up |
+| **Iframe-shell bundle size budget tuning** (current: ~1.5MB gzipped due to react-leaflet + recharts + lucide) | Follow-up `manualChunks` config or lazy-import the heavy libs. Doesn't block v1 — the bundle does load and run end-to-end. | Perf follow-up |
 | **Pre-existing zod-resolver typecheck error** in `ScheduledJobFormDialog.tsx` (Zod v4 vs `@hookform/resolvers` v5.2.2 — reproduces before any plan-012 changes) | Not introduced by plan-012; tracked separately. | Maintenance |
 
 ## Operational notes
