@@ -1,0 +1,99 @@
+---
+title: Computer runbooks
+description: Published Computer runbooks define repeatable, confirmable work such as dashboards, maps, and research artifacts.
+---
+
+Computer runbooks are the product contract for substantial repeatable Computer work. A runbook tells Computer how to recognize a kind of work, what the user should approve, which phases must appear in the Queue, and what outputs should exist at the end.
+
+Runbooks are not workspace skills, Customize workflows, or Strands workflow definitions. They are ThinkWork-published YAML plus Markdown artifacts under `packages/runbooks`, surfaced through the tenant runbook catalog and executed by Computer.
+
+## What runbooks solve
+
+Before runbooks, dashboard and app generation lived mostly inside the Artifact Builder skill. That worked for a single family of artifacts, but it made every new application type another hidden recipe.
+
+Runbooks make the recipe explicit:
+
+| Layer              | Responsibility                                                             |
+| ------------------ | -------------------------------------------------------------------------- |
+| YAML definition    | catalog metadata, routing hints, inputs, phases, outputs, approval copy    |
+| Phase Markdown     | task guidance for discovery, analysis, artifact production, and validation |
+| Catalog rows       | tenant-visible published runbooks and future operator override boundaries  |
+| Run/task rows      | approval state, expanded phase tasks, dependencies, outputs, cancellation  |
+| Strands context    | current task, phase guidance, prior outputs, and capability-role mapping   |
+| Computer thread UI | `data-runbook-confirmation` and `data-runbook-queue` typed message parts   |
+
+## User lifecycle
+
+### Auto-selected work
+
+When Computer confidently matches a prompt to a published runbook, it creates an `awaiting_confirmation` run and replies with a Confirmation card. The run does not execute until the user approves.
+
+Example: "Build me a map of supplier risk" should select `map-artifact`, show what will be produced, and wait for approval.
+
+### Explicit invocation
+
+When the user names a runbook, Computer starts directly and shows a Queue. Explicit invocation does not ask for a second approval.
+
+Example: "Run the CRM dashboard runbook for LastMile" starts `crm-dashboard`, expands declared phases into tasks, and queues `runbook_execute`.
+
+### Queue progress
+
+Runbook progress is phase grouped. Raw tool calls can still appear as evidence or detail, but the primary progress surface is the declared runbook phases:
+
+- `discover`
+- `analyze`
+- `produce`
+- `validate`
+
+Each expanded task records `phaseId`, `taskKey`, status, dependencies, capability roles, and output handoff data.
+
+### Cancellation
+
+Cancelling a run marks the run and any unfinished tasks cancelled. Runtime cancellation is coarse in v1: the active task may finish its current turn, but later runbook tasks must not continue.
+
+### No confident match
+
+If no published runbook matches confidently, Computer should not pretend one applies. It falls back to normal Computer work and can still show an ad hoc visible task plan using `data-runbook-queue` without a catalog run id.
+
+## V1 execution model
+
+V1 execution is sequential. Dependency fields are still part of the data model so the same authored runbook can later compile to richer Strands agents-as-tools, Strands workflow, or state-machine execution.
+
+Runbooks declare capability roles, not concrete specialist agent names:
+
+| Role             | V1 target                   | Meaning                                         |
+| ---------------- | --------------------------- | ----------------------------------------------- |
+| `research`       | main Computer agent         | gather sources and inspect evidence             |
+| `analysis`       | main Computer agent         | synthesize findings, risks, tradeoffs, caveats  |
+| `artifact_build` | main Computer artifact path | build and persist apps through `save_app`       |
+| `map_build`      | main Computer artifact path | build spatial artifacts with `MapView` guidance |
+| `validation`     | main Computer agent         | verify scope, evidence, and output contract     |
+
+## Initial published runbooks
+
+| Runbook              | Purpose                                                                   |
+| -------------------- | ------------------------------------------------------------------------- |
+| `crm-dashboard`      | opinionated CRM dashboard with pipeline health, stale activity, and risks |
+| `research-dashboard` | generic evidence-backed dashboard for comparisons, findings, and caveats  |
+| `map-artifact`       | map-centered artifact for locations, regions, routes, and spatial risk    |
+
+Artifact Builder still exists as a compatibility shim. The runbook phase guidance is the source of truth; the skill supplies artifact-generation mechanics and the `save_app` path during rollout.
+
+## Rollout boundaries
+
+V1 is for ThinkWork-published runbooks only. Tenant operator authoring and editing are deferred, but the definition shape already names allowed override fields so future admin UI can safely expose them.
+
+Keep rollout conservative:
+
+- publish runbooks from repo-reviewed YAML and Markdown only
+- seed catalog rows from the package source
+- preserve historical `definitionSnapshot` on every run
+- require confirmation for auto-selected runs
+- keep explicit invocation direct
+- do not weaken the generated artifact sandbox boundary
+
+## Related
+
+- [Runbook reference](/reference/runbooks/) - authoring format and wire contract
+- [Computer app artifact UI](/concepts/computers/app-artifact-ui/) - generated app shell and sandbox expectations
+- [GraphQL schema](/api/graphql/) - runbook catalog, run, and task API surface
