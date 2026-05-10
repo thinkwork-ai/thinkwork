@@ -10,10 +10,10 @@ status: active
 
 ## Current State
 
-- Active unit: U2 Catalog and Run Data Model
-- Active branch/worktree: `codex/runbooks-u2` at `.Codex/worktrees/runbooks-u2`
-- Latest synced base: `origin/main` at `c63d1fa8`
-- Overall status: U2 in review
+- Active unit: U3 Routing and Confirmation API
+- Active branch/worktree: `codex/runbooks-u3` at `.Codex/worktrees/runbooks-u3`
+- Latest synced base: `origin/main` at `45e81e72`
+- Overall status: U3 in review
 
 ## Progress Log
 
@@ -28,26 +28,33 @@ status: active
 - 2026-05-10: Added U2 tests for catalog source seeding, unavailable source detection, run snapshot/task expansion, state transitions, and resolver access gating.
 - 2026-05-10: Completed U2 local verification: workspace typecheck, workspace tests, workspace lint scripts, and workspace builds passed.
 - 2026-05-10: Opened U2 PR #1120 from `codex/runbooks-u2`.
+- 2026-05-10: U2 PR #1120 passed required checks and was squash-merged to `main` at `882586c7`.
+- 2026-05-10: Removed U2 remote/local branch and worktree, synced `main` to `45e81e72`, and started U3 in `.Codex/worktrees/runbooks-u3` on branch `codex/runbooks-u3`.
+- 2026-05-10: Implemented U3 deterministic runbook routing, confirmation/queue message builders, `runbook_execute` task normalization, Computer `sendMessage` routing, and approval-time execution enqueueing.
+- 2026-05-10: Regenerated GraphQL consumers after adding the `RUNBOOK_EXECUTE` Computer task type.
+- 2026-05-10: Completed U3 local verification: package checks, workspace typecheck, workspace tests, workspace lint scripts, workspace build, and touched-file Prettier check passed.
+- 2026-05-10: Opened U3 PR #1121 from `codex/runbooks-u3`.
 
 ## Implementation Units
 
-| Unit                                              | Status    | Branch              | PR      | Notes                                                                                         |
-| ------------------------------------------------- | --------- | ------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| U1 Runbook Source Package                         | merged    | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed.                           |
-| U2 Catalog and Run Data Model                     | in review | `codex/runbooks-u2` | #1120   | Adds persistent runbook catalog, run snapshots, expanded tasks, and GraphQL access/mutations. |
-| U3 Routing and Confirmation API                   | pending   | pending             | pending | Depends on U1 and U2.                                                                         |
-| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                         |
-| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                         |
-| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                         |
-| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                                    |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                                     |
+| Unit                                              | Status    | Branch              | PR      | Notes                                                                                   |
+| ------------------------------------------------- | --------- | ------------------- | ------- | --------------------------------------------------------------------------------------- |
+| U1 Runbook Source Package                         | merged    | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed.                     |
+| U2 Catalog and Run Data Model                     | merged    | `codex/runbooks-u2` | #1120   | Squash-merged to `main` at `882586c7`; branch and worktree removed.                     |
+| U3 Routing and Confirmation API                   | in review | `codex/runbooks-u3` | #1121   | Routes explicit, auto-selected, ambiguous, unavailable, and no-match Computer messages. |
+| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                   |
+| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                   |
+| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                   |
+| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                              |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                               |
 
 ## PRs
 
 | Unit | PR    | Status | Merge Commit | Notes                                       |
 | ---- | ----- | ------ | ------------ | ------------------------------------------- |
 | U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge. |
-| U2   | #1120 | open   | pending      | Waiting for required CI checks.             |
+| U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
+| U3   | #1121 | open   | pending      | Waiting for required CI checks.             |
 
 ## CI / Verification Notes
 
@@ -72,6 +79,19 @@ status: active
 | U2   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                          |
 | U2   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                 |
 | U2   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on authored code, GraphQL schema, package metadata, and status doc. Generated clients/lockfile are intentionally left in codegen/lockfile format.  |
+| U2   | GitHub required checks                           | passed | cla, lint, test, typecheck, and verify passed on PR #1120 before merge.                                                                                   |
+| U3   | `pnpm install`                                   | passed | Linked fresh worktree dependencies.                                                                                                                       |
+| U3   | `pnpm --filter @thinkwork/api typecheck`         | passed | API routing, confirmation, and task changes typecheck cleanly.                                                                                            |
+| U3   | focused API routing/confirmation tests           | passed | 5 files, 26 tests: router, confirmation message builder, task normalization, queue input helper, and approval enqueue resolver behavior.                  |
+| U3   | `pnpm schema:build`                              | passed | Rebuilt AppSync subscription schema after `RUNBOOK_EXECUTE` enum addition.                                                                                |
+| U3   | consumer GraphQL codegen                         | passed | Ran codegen for `apps/admin`, `apps/mobile`, and `apps/cli`; `packages/api` has no codegen script.                                                        |
+| U3   | `pnpm --filter @thinkwork/api build`             | passed | API package build completed cleanly.                                                                                                                      |
+| U3   | package typechecks                               | passed | API, database-pg, and runbooks package typechecks passed.                                                                                                 |
+| U3   | `pnpm -r --if-present typecheck`                 | passed | Workspace typecheck completed across packages.                                                                                                            |
+| U3   | `pnpm -r --if-present test`                      | passed | Workspace tests completed; notable suites included `packages/api` 241 files / 2490 tests and `apps/computer` 52 files / 363 tests.                        |
+| U3   | `pnpm -r --if-present lint`                      | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                          |
+| U3   | `pnpm -r --if-present build`                     | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                         |
+| U3   | `pnpm dlx prettier@3.8.2 --check ...`            | passed | Passed on authored code, GraphQL schema, and status doc. Generated clients are intentionally left in codegen format.                                      |
 
 ## Blockers
 

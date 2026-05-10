@@ -40,6 +40,7 @@ enum ComputerTaskType {
   GOOGLE_CLI_SMOKE
   GOOGLE_WORKSPACE_AUTH_CHECK
   GOOGLE_CALENDAR_UPCOMING
+  RUNBOOK_EXECUTE
 }
 
 enum ComputerEventLevel {

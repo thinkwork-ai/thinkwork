@@ -4,6 +4,7 @@ import {
   confirmRunbookRun as confirmRunbookRunState,
   RunbookRunTransitionError,
 } from "../../../lib/runbooks/runs.js";
+import { queueConfirmedRunbookRun } from "../../../lib/computers/thread-cutover.js";
 import { requireRunbookRunAccess, resolveRunbookCaller } from "./shared.js";
 
 export async function confirmRunbookRun(
@@ -14,11 +15,23 @@ export async function confirmRunbookRun(
   const { tenantId, userId } = await resolveRunbookCaller(ctx);
   await requireRunbookRunAccess(ctx, tenantId, args.id);
   try {
-    return await confirmRunbookRunState({
+    const run = await confirmRunbookRunState({
       tenantId,
       runId: args.id,
       userId,
     });
+    if (run?.threadId) {
+      await queueConfirmedRunbookRun({
+        tenantId,
+        computerId: run.computerId,
+        threadId: run.threadId,
+        runbookRunId: run.id,
+        sourceMessageId: run.selectedByMessageId ?? run.id,
+        actorType: "user",
+        actorId: userId,
+      });
+    }
+    return run;
   } catch (error) {
     throw mapRunbookRunError(error);
   }

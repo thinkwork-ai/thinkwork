@@ -25,6 +25,7 @@ export const COMPUTER_TASK_TYPES = [
   "google_cli_smoke",
   "google_workspace_auth_check",
   "google_calendar_upcoming",
+  "runbook_execute",
 ] as const;
 
 export type ComputerTaskType = (typeof COMPUTER_TASK_TYPES)[number];
@@ -196,6 +197,10 @@ export function normalizeTaskInput(
     return normalizeThreadTurnInput(input);
   }
 
+  if (taskType === "runbook_execute") {
+    return normalizeRunbookExecuteInput(input);
+  }
+
   if (taskType === "workspace_file_write") {
     const payload = coerceObject(input);
     const path = requiredString(payload.path, "path");
@@ -263,6 +268,23 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
       typeof payload.source === "string" && payload.source.trim()
         ? payload.source.trim()
         : "chat_message",
+    actorType:
+      typeof payload.actorType === "string" && payload.actorType.trim()
+        ? payload.actorType.trim()
+        : null,
+    actorId:
+      typeof payload.actorId === "string" && payload.actorId.trim()
+        ? payload.actorId.trim()
+        : null,
+  };
+}
+
+function normalizeRunbookExecuteInput(input: unknown): Record<string, unknown> {
+  const payload = coerceObject(input);
+  return {
+    runbookRunId: requiredString(payload.runbookRunId, "runbookRunId"),
+    threadId: requiredString(payload.threadId, "threadId"),
+    messageId: requiredString(payload.messageId, "messageId"),
     actorType:
       typeof payload.actorType === "string" && payload.actorType.trim()
         ? payload.actorType.trim()

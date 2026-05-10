@@ -962,6 +962,7 @@ export enum ComputerTaskType {
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
   HealthCheck = 'HEALTH_CHECK',
+  RunbookExecute = 'RUNBOOK_EXECUTE',
   ThreadTurn = 'THREAD_TURN',
   WorkspaceFileDelete = 'WORKSPACE_FILE_DELETE',
   WorkspaceFileList = 'WORKSPACE_FILE_LIST',
