@@ -2,6 +2,8 @@
 
 Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard app.
 
+This file is retained as the Artifact Builder compatibility reference. The published `crm-dashboard` runbook owns orchestration and phase sequencing; this reference supplies the dashboard data shape, artifact layout, refresh contract, and `save_app` metadata for legacy prompts or active runbook produce phases.
+
 The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call `save_app` directly.
 
 ## Source Discovery

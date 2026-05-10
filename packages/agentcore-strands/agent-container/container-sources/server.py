@@ -696,9 +696,7 @@ def _publish_initial_runbook_queue_update(ui_message_publisher_instance, runbook
     try:
         from runbook_context import build_runbook_queue_part
 
-        return ui_message_publisher_instance.publish_part(
-            build_runbook_queue_part(runbook_context)
-        )
+        return ui_message_publisher_instance.publish_part(build_runbook_queue_part(runbook_context))
     except Exception as exc:  # noqa: BLE001 - publishing must never crash the turn
         logger.warning("runbook queue update publish failed: %s", exc)
         return None
@@ -886,9 +884,7 @@ def _call_strands_agent(
                             try:
                                 _legacy_callback(*args, **kwargs)
                             except Exception as exc:  # noqa: BLE001
-                                logger.warning(
-                                    "legacy stream callback failed: %s", exc
-                                )
+                                logger.warning("legacy stream callback failed: %s", exc)
 
                         # Bedrock text + reasoning deltas
                         try:
@@ -935,9 +931,7 @@ def _call_strands_agent(
                             )
 
                         for tool_use in tool_uses:
-                            tool_call_id = (
-                                tool_use.get("tool_use_id") or _new_id("tool")
-                            )
+                            tool_call_id = tool_use.get("tool_use_id") or _new_id("tool")
                             tool_name = tool_use.get("tool_name") or "unknown"
                             input_preview = tool_use.get("input_preview") or ""
                             ui_message_publisher_instance.publish_part(
@@ -2531,9 +2525,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             # legacy shape until they explicitly opt in.
             ui_message_emit=bool(computer_id and computer_task_id),
             suppress_app_build_helper_tools=bool(
-                computer_id
-                and computer_task_id
-                and _is_computer_applet_build_request(message)
+                computer_id and computer_task_id and _is_computer_applet_build_request(message)
             ),
             computer_event_context=(
                 {
@@ -2664,6 +2656,11 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "handoff, and do not replace the runbook with a separate plan. When no",
         "runbook context is active and the work is substantial, make progress",
         "visible with an ad hoc task list before diving into execution.",
+        "",
+        "For active runbook tasks with artifact_build or map_build capability,",
+        "treat Artifact Builder as the phase implementation detail. Follow the",
+        "runbook phase guidance first, save the artifact in this parent turn,",
+        "and keep the visible Queue aligned to the runbook tasks.",
         "",
         "When the user asks you to build, create, generate, or make an app,",
         "applet, dashboard, report, briefing, workspace, or other interactive",

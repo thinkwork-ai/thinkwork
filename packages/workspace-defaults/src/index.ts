@@ -600,11 +600,13 @@ description: Builds reusable ThinkWork Computer apps and interactive artifacts f
 
 Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a saved app, not just a prose answer.
 
+This skill is a compatibility shim for the published ThinkWork runbooks. When a Runbook Execution Context is present, the runbook phase guidance is the source of truth and this skill supplies only the artifact-generation and \`save_app\` mechanics for the current phase. Do not replace the active runbook with a separate plan.
+
 ## Contract
 
 1. Research with the available tools and thread context.
 2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Keep the visible app focused on the user's requested output; do not render provenance, source coverage, or recipe/refresh explainers unless the user explicitly asks for them.
-3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path.
+3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts outside an active runbook, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path. During an active runbook, prefer the runbook's current phase guidance and use the reference only as fallback detail.
 4. Keep app generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the app.
 5. Generate TSX using \`@thinkwork/computer-stdlib\` primitives and \`@thinkwork/ui\`.
 6. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
@@ -642,6 +644,16 @@ Pass \`fit\` (one of \`{type: "country", code: "<ISO-3166-1-alpha-2>"}\`, \`{typ
 Missing data is not a reason to stop before creating the artifact. Create a runnable app that handles gaps gracefully, then ask for source setup or approval as a follow-up when needed.
 
 For the LastMile CRM pipeline risk prompt, build an app that covers stale activity, stage exposure, and top risks. If live LastMile CRM records are unavailable, use the canonical LastMile-shaped structure and mention limitations only when they materially affect the displayed result.
+
+## Runbook Bridge
+
+For published runbooks, treat artifact creation as the implementation detail of the active \`produce\` phase:
+
+- CRM Dashboard uses the \`crm-dashboard\` runbook and the \`CrmDashboardData\` shape.
+- Research Dashboard uses the \`research-dashboard\` runbook and should expose findings, evidence, confidence, and caveats.
+- Map Artifact uses the \`map-artifact\` runbook and \`MapView\` from \`@thinkwork/computer-stdlib\`.
+
+Always preserve runbook queue semantics: complete the current task, save the artifact through \`save_app\`, and report the saved \`/artifacts/{appId}\` route only after persistence succeeds.
 `;
 
 /**
@@ -650,6 +662,8 @@ For the LastMile CRM pipeline risk prompt, build an app that covers stale activi
 const ARTIFACT_BUILDER_CRM_DASHBOARD_MD = `# CRM Dashboard Recipe
 
 Use this reference when the user asks for a CRM, sales pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboard app.
+
+This file is retained as the Artifact Builder compatibility reference. The published \`crm-dashboard\` runbook owns orchestration and phase sequencing; this reference supplies the dashboard data shape, artifact layout, refresh contract, and \`save_app\` metadata for legacy prompts or active runbook produce phases.
 
 The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call \`save_app\` directly.
 
@@ -811,7 +825,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 12;
+export const DEFAULTS_VERSION = 13;
 
 // ---------------------------------------------------------------------------
 // Aggregator

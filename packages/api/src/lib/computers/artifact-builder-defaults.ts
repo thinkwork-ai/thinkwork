@@ -1,6 +1,5 @@
 import {
   GetObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -21,13 +20,31 @@ const ARTIFACT_BUILDER_PATHS = [
   "skills/artifact-builder/references/crm-dashboard.md",
 ] as const;
 const ARTIFACT_BUILDER_SKILL_PATH = "skills/artifact-builder/SKILL.md";
+const ARTIFACT_BUILDER_CRM_DASHBOARD_PATH =
+  "skills/artifact-builder/references/crm-dashboard.md";
 
-const UPGRADABLE_ARTIFACT_BUILDER_SKILL_SHA256 = new Set([
-  // PR #1072 default before the CRM dashboard recipe reference was added.
-  "dafec59b0b2befe4ac6ff96899575e01c9c610a0a440b21722e9bb4a0b845584",
-  // PR #1077 default with a relative CRM recipe path and weaker save guidance.
-  "b01af0a1754d0b78a3a96b8627b4c871037f73cbd9a7c3bc4271a4b40a4e29ad",
-]);
+const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
+  [
+    [
+      ARTIFACT_BUILDER_SKILL_PATH,
+      new Set([
+        // PR #1072 default before the CRM dashboard recipe reference was added.
+        "dafec59b0b2befe4ac6ff96899575e01c9c610a0a440b21722e9bb4a0b845584",
+        // PR #1077 default with a relative CRM recipe path and weaker save guidance.
+        "b01af0a1754d0b78a3a96b8627b4c871037f73cbd9a7c3bc4271a4b40a4e29ad",
+        // PR #1124 default before Artifact Builder became a runbook compatibility shim.
+        "d14a7c4af83f83026aa95bc0a6f85ee76e3f2614dd94568a61bfe5a355e3d96e",
+      ]),
+    ],
+    [
+      ARTIFACT_BUILDER_CRM_DASHBOARD_PATH,
+      new Set([
+        // PR #1124 CRM recipe before the CRM recipe moved into runbook phase guidance.
+        "fb32d220a677004b11132e4ff17c1dae4ee129a96a51588532ce5746b0a9e362",
+      ]),
+    ],
+  ],
+);
 
 export type ArtifactBuilderDefaultsResult =
   | {
@@ -60,28 +77,18 @@ export async function ensureArtifactBuilderDefaults(input: {
 
   for (const path of ARTIFACT_BUILDER_PATHS) {
     const key = `${target.prefix}${path}`;
-    if (path === ARTIFACT_BUILDER_SKILL_PATH) {
-      const existingSkill = await readObjectIfExists(key);
-      if (existingSkill === null) {
-        await putDefaultFile(key, defaults[path]);
-        written.push(path);
-        continue;
-      }
-      if (isUpgradableArtifactBuilderSkill(existingSkill)) {
-        await putDefaultFile(key, defaults[path]);
-        updated.push(path);
-        continue;
-      }
-      skipped.push(path);
+    const existing = await readObjectIfExists(key);
+    if (existing === null) {
+      await putDefaultFile(key, defaults[path]);
+      written.push(path);
       continue;
     }
-
-    if (await objectExists(key)) {
-      skipped.push(path);
+    if (isUpgradableArtifactBuilderDefault(path, existing)) {
+      await putDefaultFile(key, defaults[path]);
+      updated.push(path);
       continue;
     }
-    await putDefaultFile(key, defaults[path]);
-    written.push(path);
+    skipped.push(path);
   }
 
   return {
@@ -116,9 +123,11 @@ async function readObjectIfExists(key: string): Promise<string | null> {
   }
 }
 
-function isUpgradableArtifactBuilderSkill(content: string) {
-  return UPGRADABLE_ARTIFACT_BUILDER_SKILL_SHA256.has(
-    createHash("sha256").update(content).digest("hex"),
+function isUpgradableArtifactBuilderDefault(path: string, content: string) {
+  return (
+    UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH.get(path)?.has(
+      createHash("sha256").update(content).digest("hex"),
+    ) === true
   );
 }
 
@@ -165,18 +174,6 @@ async function loadBackingAgentWorkspace(input: {
     agentSlug: row.agent_slug,
     prefix: `tenants/${row.tenant_slug}/agents/${row.agent_slug}/workspace/`,
   };
-}
-
-async function objectExists(key: string) {
-  try {
-    await s3.send(
-      new HeadObjectCommand({ Bucket: workspaceBucket(), Key: key }),
-    );
-    return true;
-  } catch (err) {
-    if (isMissingObjectError(err)) return false;
-    throw err;
-  }
 }
 
 function isMissingObjectError(err: unknown) {
