@@ -30,6 +30,7 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("GOOGLE_CALENDAR_UPCOMING")).toBe(
       "google_calendar_upcoming",
     );
+    expect(parseComputerTaskType("RUNBOOK_EXECUTE")).toBe("runbook_execute");
   });
 
   it("rejects unsupported task types", () => {
@@ -107,6 +108,24 @@ describe("Computer task helpers", () => {
       threadId: "thread-1",
       messageId: "message-1",
       source: "chat_message",
+      actorType: "user",
+      actorId: "user-1",
+    });
+  });
+
+  it("normalizes runbook execution input", () => {
+    expect(
+      normalizeTaskInput("runbook_execute", {
+        runbookRunId: "run-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    ).toEqual({
+      runbookRunId: "run-1",
+      threadId: "thread-1",
+      messageId: "message-1",
       actorType: "user",
       actorId: "user-1",
     });

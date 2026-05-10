@@ -2,7 +2,10 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, messages, threads, messageToCamel } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-import { enqueueComputerThreadTurn } from "../../../lib/computers/thread-cutover.js";
+import {
+  enqueueComputerThreadTurn,
+  routeRunbookForComputerMessage,
+} from "../../../lib/computers/thread-cutover.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -73,6 +76,18 @@ export const sendMessage = async (
   // Computer-owned Threads are picked up exclusively through the durable
   // Computer work queue. Agent fallback is intentionally disabled.
   if (i.role.toLowerCase() === "user" && thread.computer_id) {
+    const handledByRunbook = await routeRunbookForComputerMessage({
+      tenantId: thread.tenant_id,
+      computerId: thread.computer_id,
+      threadId: i.threadId,
+      messageId: row.id,
+      prompt: i.content ?? "",
+      actorType: senderType,
+      actorId: senderId,
+    });
+    if (handledByRunbook) {
+      return messageToCamel(row);
+    }
     await enqueueComputerThreadTurn({
       tenantId: thread.tenant_id,
       computerId: thread.computer_id,
