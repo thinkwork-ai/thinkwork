@@ -36,6 +36,7 @@ import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./rout
 import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_shell/artifacts.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
+import { Route as AuthedShellAguiThreadsIdRouteImport } from "./routes/_authed/_shell/agui.threads.$id";
 
 const SignInRoute = SignInRouteImport.update({
   id: "/sign-in",
@@ -180,6 +181,12 @@ const AuthedShellMemoryKbsKbIdRoute =
     path: "/$kbId",
     getParentRoute: () => AuthedShellMemoryKbsRoute,
   } as any);
+const AuthedShellAguiThreadsIdRoute =
+  AuthedShellAguiThreadsIdRouteImport.update({
+    id: "/agui/threads/$id",
+    path: "/agui/threads/$id",
+    getParentRoute: () => AuthedShellRoute,
+  } as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -206,6 +213,7 @@ export interface FileRoutesByFullPath {
   "/customize/": typeof AuthedShellCustomizeIndexRoute;
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/agui/threads/$id": typeof AuthedShellAguiThreadsIdRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRoutesByTo {
@@ -230,6 +238,7 @@ export interface FileRoutesByTo {
   "/customize": typeof AuthedShellCustomizeIndexRoute;
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/agui/threads/$id": typeof AuthedShellAguiThreadsIdRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRoutesById {
@@ -260,6 +269,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize/": typeof AuthedShellCustomizeIndexRoute;
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/_shell/agui/threads/$id": typeof AuthedShellAguiThreadsIdRoute;
   "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
 }
 export interface FileRouteTypes {
@@ -289,6 +299,7 @@ export interface FileRouteTypes {
     | "/customize/"
     | "/memory/"
     | "/threads/"
+    | "/agui/threads/$id"
     | "/memory/kbs/$kbId";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -313,6 +324,7 @@ export interface FileRouteTypes {
     | "/customize"
     | "/memory"
     | "/threads"
+    | "/agui/threads/$id"
     | "/memory/kbs/$kbId";
   id:
     | "__root__"
@@ -342,6 +354,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/customize/"
     | "/_authed/_shell/memory/"
     | "/_authed/_shell/threads/"
+    | "/_authed/_shell/agui/threads/$id"
     | "/_authed/_shell/memory/kbs/$kbId";
   fileRoutesById: FileRoutesById;
 }
@@ -544,6 +557,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellMemoryKbsKbIdRouteImport;
       parentRoute: typeof AuthedShellMemoryKbsRoute;
     };
+    "/_authed/_shell/agui/threads/$id": {
+      id: "/_authed/_shell/agui/threads/$id";
+      path: "/agui/threads/$id";
+      fullPath: "/agui/threads/$id";
+      preLoaderRoute: typeof AuthedShellAguiThreadsIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
   }
 }
 
@@ -620,6 +640,7 @@ interface AuthedShellRouteChildren {
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
+  AuthedShellAguiThreadsIdRoute: typeof AuthedShellAguiThreadsIdRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -633,6 +654,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
+  AuthedShellAguiThreadsIdRoute: AuthedShellAguiThreadsIdRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
