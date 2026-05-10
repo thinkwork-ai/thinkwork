@@ -12,15 +12,21 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Current Unit
 
-- **Unit:** U5 — Codify sandboxed versus trusted Artifact runtime model
-- **Branch:** `codex/computer-ai-elements-u5-runtime-model`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u5`
+- **Unit:** U6 — Update generated App authoring guidance
+- **Branch:** `codex/computer-ai-elements-u6-authoring-guidance`
+- **Worktree:** `.Codex/worktrees/computer-ai-elements-u6`
 - **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1115
-- **Status:** CI passed; ready to squash merge
+- **PR:** Pending
+- **Status:** Locally verified; preparing PR
 
 ## Progress Log
 
+- 2026-05-10: Squash-merged U5 PR #1115 into `main`, deleted the remote and local U5 branch, removed the U5 worktree, and fast-forwarded local `main`.
+- 2026-05-10: Created isolated U6 worktree from updated `origin/main`.
+- 2026-05-10: Updated Artifact Builder defaults to state that host-provided Artifact chrome owns title/actions/refresh placement, generated TSX should render only body content, and generated Apps run in the sandboxed iframe runtime.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults test`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults typecheck`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults build`.
 - 2026-05-10: Squash-merged U4 PR #1114 into `main`, deleted the remote and local U4 branch, removed the U4 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U5 worktree from updated `origin/main`.
 - 2026-05-10: Started the host-owned Artifact runtime-mode model so generated App metadata cannot select trusted native rendering.
@@ -74,6 +80,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Merged PRs
 
+- PR #1115 — `refactor(computer): codify app artifact runtime trust`
 - PR #1114 — `refactor(computer): align full app canvas with artifact shell`
 - PR #1113 — `refactor(computer): render inline apps through artifact shell`
 - PR #1112 — `feat(computer): define generated app artifact shell`

@@ -75,9 +75,11 @@ Normalize source results into `CrmDashboardData` before writing TSX. Keep this s
 
 Build one responsive app that fits the available horizontal space with `w-full min-w-0 max-w-[1280px]`. Do not create horizontal page scrolling. Prefer stacked or wrapped layouts on narrow widths.
 
+The host already provides Artifact chrome, including the route title, `App` label, full-screen action, refresh action placement, and sandboxed iframe wrapper. Render the dashboard body only; do not add a duplicate app shell, route header, evidence panel, source coverage panel, or refresh recipe unless the user explicitly requests it.
+
 Required sections:
 
-- Header: title, summary, generated time, and source badges.
+- Body intro or context row only when it helps interpret the dashboard.
 - KPIs: total pipeline, high-risk exposure, stale opportunity count, and next-meeting or source-health count when available.
 - Stage exposure: a bar chart from `stageExposure`.
 - Stale activity: a chart or compact table from `staleActivity`.
