@@ -459,6 +459,12 @@ output "appsync_api_key" {
   sensitive   = true
 }
 
+output "mapbox_public_token" {
+  description = "Mapbox public token used by apps/computer MapView. Read by scripts/build-computer.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
+  value       = module.thinkwork.mapbox_public_token
+  sensitive   = true
+}
+
 output "auth_domain" {
   description = "Cognito hosted UI domain"
   value       = module.thinkwork.auth_domain
