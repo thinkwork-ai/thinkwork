@@ -37,12 +37,15 @@ describe("StreamingMessageBuffer", () => {
   it("uses the same tightened prose density modifiers as persisted messages", () => {
     // U1: streaming buffer must visually match the persisted body so the
     // cursor flip from streaming to durable copy doesn't visibly reflow.
+    // Plan-012 U8: prose tokens now live on the inner Response wrapper
+    // (a div with class "ai-response prose ..."); the article element is
+    // a thin landmark container.
     const { container } = render(
       <StreamingMessageBuffer chunks={[{ seq: 1, text: "Hello" }]} />,
     );
-    const article = container.querySelector("article.prose");
-    expect(article).not.toBeNull();
-    const cls = article!.className;
+    const proseHost = container.querySelector("div.ai-response");
+    expect(proseHost).not.toBeNull();
+    const cls = proseHost!.className;
     for (const token of [
       "prose-sm",
       "text-sm",

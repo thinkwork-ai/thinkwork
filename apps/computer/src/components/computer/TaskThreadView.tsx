@@ -20,7 +20,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Streamdown } from "streamdown";
+import { Response } from "@/components/ai-elements/response";
 import { Button, Textarea } from "@thinkwork/ui";
 import {
   GeneratedArtifactCard,
@@ -484,13 +484,19 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
               ))}
             </div>
           ) : null}
-          <div className="prose prose-sm prose-invert max-w-none text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
-            {body ? (
-              <Streamdown>{body}</Streamdown>
-            ) : (
-              <p>(No message content)</p>
-            )}
-          </div>
+          {/* Plan-012 U8 / contract v1 §AE4: assistant markdown renders
+              via <Response>, not raw <Streamdown>. The Response wrapper
+              keeps the prose tokens; the underlying engine is still
+              Streamdown internally. */}
+          {body ? (
+            <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
+              {body}
+            </Response>
+          ) : (
+            <p className="text-sm leading-5 text-foreground">
+              (No message content)
+            </p>
+          )}
           {message.durableArtifact ? (
             <GeneratedArtifactCard artifact={message.durableArtifact} />
           ) : null}

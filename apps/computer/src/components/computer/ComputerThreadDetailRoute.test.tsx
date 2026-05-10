@@ -11,6 +11,10 @@ vi.mock("urql", async (importOriginal) => {
     useMutation: vi.fn(),
     useQuery: vi.fn(),
     useSubscription: vi.fn(),
+    useClient: vi.fn(() => ({
+      mutation: vi.fn(),
+      subscription: vi.fn(),
+    })),
   };
 });
 
