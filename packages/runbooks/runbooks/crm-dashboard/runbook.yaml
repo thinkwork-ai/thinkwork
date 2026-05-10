@@ -1,0 +1,100 @@
+slug: crm-dashboard
+version: 0.1.0
+catalog:
+  displayName: CRM Dashboard
+  description: Build an opinionated CRM dashboard app that surfaces pipeline health, account risk, next actions, and evidence.
+  category: dashboard
+routing:
+  explicitAliases:
+    - crm dashboard
+    - sales dashboard
+    - pipeline dashboard
+  triggerExamples:
+    - Build a CRM pipeline risk dashboard for LastMile opportunities.
+    - Create a sales dashboard showing account health and next actions.
+    - Run the CRM dashboard runbook for this customer list.
+  confidenceHints:
+    - The user asks for a dashboard or app centered on CRM, pipeline, account, opportunity, sales, renewal, or customer-risk data.
+    - The expected output is an interactive dashboard artifact rather than only a written summary.
+inputs:
+  - id: organization
+    label: Organization or segment
+    description: The company, account set, tenant, or sales segment the dashboard should cover.
+    required: false
+    source: user
+  - id: data_sources
+    label: CRM and supporting data sources
+    description: CRM, spreadsheet, connector, or workspace sources that should inform the dashboard.
+    required: false
+    source: context
+approval:
+  title: Build CRM Dashboard
+  summary: Computer will discover CRM-relevant data, analyze pipeline and account risk, produce an interactive dashboard artifact, and validate that the result is grounded in the available evidence.
+  expectedOutputs:
+    - Interactive dashboard artifact
+    - Pipeline/account risk summary
+    - Evidence notes and assumptions
+  likelyTools:
+    - workspace search
+    - connected CRM or spreadsheet sources
+    - artifact builder
+  phaseSummary:
+    - Discover CRM entities, metrics, and available source data.
+    - Analyze pipeline health, risk signals, and account priorities.
+    - Produce the dashboard artifact.
+    - Validate layout, data grounding, and next-action usefulness.
+phases:
+  - id: discover
+    title: Discover CRM context
+    guidance: discover.md
+    capabilityRoles:
+      - research
+    dependsOn: []
+    taskSeeds:
+      - Identify CRM entities, fields, and data freshness.
+      - Inventory account, opportunity, owner, stage, amount, close-date, and risk signal coverage.
+  - id: analyze
+    title: Analyze pipeline and account risk
+    guidance: analyze.md
+    capabilityRoles:
+      - analysis
+    dependsOn:
+      - discover
+    taskSeeds:
+      - Derive dashboard metrics, segments, risks, and priority accounts from discovered data.
+      - Separate evidence-backed findings from assumptions or missing-data caveats.
+  - id: produce
+    title: Produce dashboard artifact
+    guidance: produce.md
+    capabilityRoles:
+      - artifact_build
+    dependsOn:
+      - analyze
+    taskSeeds:
+      - Generate an interactive dashboard with metric cards, entity tables, filters, and drill-in sections.
+      - Persist the dashboard through the Computer artifact save path.
+  - id: validate
+    title: Validate result
+    guidance: validate.md
+    capabilityRoles:
+      - validation
+    dependsOn:
+      - produce
+    taskSeeds:
+      - Verify the dashboard matches the requested CRM scope and source evidence.
+      - Check that all major claims are traceable to data or labeled assumptions.
+outputs:
+  - id: dashboard_artifact
+    title: CRM dashboard artifact
+    type: artifact
+    description: A generated interactive dashboard app for CRM pipeline and account review.
+  - id: evidence_summary
+    title: Evidence and assumptions
+    type: evidence
+    description: Notes summarizing source coverage, assumptions, and data gaps.
+overrides:
+  allowedFields:
+    - catalog.description
+    - approval.summary
+    - approval.expectedOutputs
+    - routing.triggerExamples

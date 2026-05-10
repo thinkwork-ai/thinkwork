@@ -1,97 +1,58 @@
 ---
-title: "Computer AI Elements autopilot status"
-type: status
-status: active
+title: Computer Runbooks Foundation Autopilot Status
 date: 2026-05-10
-plan: docs/plans/2026-05-10-002-refactor-computer-artifact-pattern-plan.md
+plan: docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md
+target_branch: main
+status: active
 ---
 
-# Computer AI Elements autopilot status
+# Computer Runbooks Foundation Autopilot Status
 
-This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor-computer-artifact-pattern-plan.md`.
+## Current State
 
-## Current Unit
-
-- **Unit:** U6 — Update generated App authoring guidance
-- **Branch:** `codex/computer-ai-elements-u6-authoring-guidance`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u6`
-- **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1116
-- **Status:** CI passed; ready to squash merge
+- Active unit: U1 Runbook Source Package
+- Active branch/worktree: `codex/runbooks-u1` at `.Codex/worktrees/runbooks-u1`
+- Latest synced base: `origin/main` at `5dfbd4e6`
+- Overall status: active
 
 ## Progress Log
 
-- 2026-05-10: Squash-merged U5 PR #1115 into `main`, deleted the remote and local U5 branch, removed the U5 worktree, and fast-forwarded local `main`.
-- 2026-05-10: Created isolated U6 worktree from updated `origin/main`.
-- 2026-05-10: Updated Artifact Builder defaults to state that host-provided Artifact chrome owns title/actions/refresh placement, generated TSX should render only body content, and generated Apps run in the sandboxed iframe runtime.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/workspace-defaults build`.
-- 2026-05-10: Opened PR #1116.
-- 2026-05-10: PR #1116 CI passed: CLA, lint, verify, typecheck, and test.
-- 2026-05-10: Squash-merged U4 PR #1114 into `main`, deleted the remote and local U4 branch, removed the U4 worktree, and fast-forwarded local `main`.
-- 2026-05-10: Created isolated U5 worktree from updated `origin/main`.
-- 2026-05-10: Started the host-owned Artifact runtime-mode model so generated App metadata cannot select trusted native rendering.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- src/lib/app-artifacts.test.ts src/components/apps/InlineAppletEmbed.test.tsx src/components/computer/GeneratedArtifactCard.test.tsx src/components/apps/GeneratedAppArtifactShell.test.tsx src/components/apps/AppArtifactSplitShell.test.tsx src/applets/iframe-controller.test.ts`.
-- 2026-05-10: Verification passed: `pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'` from `apps/computer`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
-- 2026-05-10: Opened PR #1115.
-- 2026-05-10: PR #1115 CI passed: CLA, lint, verify, typecheck, and test.
-- 2026-05-10: Squash-merged U3 PR #1113 into `main`, deleted the remote and local U3 branch, removed the U3 worktree, and fast-forwarded local `main`.
-- 2026-05-10: Created isolated U4 worktree from updated `origin/main`.
-- 2026-05-10: Routed full-page generated Apps through the generated App Artifact shell with hidden shell chrome so the route top bar remains primary.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- src/components/apps/GeneratedAppArtifactShell.test.tsx src/components/apps/AppArtifactSplitShell.test.tsx src/test/visual/app-artifact-shell.test.tsx`.
-- 2026-05-10: Verification passed: `pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'` from `apps/computer`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
-- 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
-- 2026-05-10: Opened PR #1114.
-- 2026-05-10: PR #1114 CI passed: CLA, lint, verify, typecheck, and test.
-- 2026-05-10: Squash-merged U2 PR #1112 into `main`, deleted the remote and local U2 branch, removed the U2 worktree, and fast-forwarded local `main`.
-- 2026-05-10: Created isolated U3 worktree from updated `origin/main`.
-- 2026-05-10: Migrated inline generated App artifact cards onto `GeneratedAppArtifactShell` and removed the nested Artifact wrapper from `InlineAppletEmbed`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- GeneratedArtifactCard.test.tsx InlineAppletEmbed.test.tsx TaskThreadView.test.tsx`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
-- 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
-- 2026-05-10: Opened PR #1113.
-- 2026-05-10: PR #1113 CI passed: CLA, lint, verify, typecheck, and test.
-- 2026-05-10: Squash-merged U1 PR #1111 into `main`, deleted the remote and local U1 branch, removed the U1 worktree, and fast-forwarded local `main`.
-- 2026-05-10: Created isolated U2 worktree from updated `origin/main`.
-- 2026-05-10: Added generated App Artifact shell contract around AI Elements Artifact primitives, including runtime mode metadata and isolated tests.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- GeneratedAppArtifactShell.test.tsx`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
-- 2026-05-10: `pnpm --filter @thinkwork/computer lint` reported no lint script for the package.
-- 2026-05-10: Opened PR #1112.
-- 2026-05-10: PR #1112 CI passed: CLA, lint, verify, typecheck, and test.
-- 2026-05-10: Created isolated U1 worktree from `origin/main`.
-- 2026-05-10: Carried the active plan file into the U1 branch because it was created locally before autopilot started.
-- 2026-05-10: Migrated `TaskThreadView` transcript structure to AI Elements `Conversation` and role-aware `Message` primitives while preserving existing stream, Thinking, artifact-card, and composer behavior.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- TaskThreadView.test.tsx`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
-- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
-- 2026-05-10: Opened PR #1111.
-- 2026-05-10: PR #1111 CI passed: CLA, lint, verify, typecheck, and test.
+- 2026-05-10: Autopilot started from `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`.
+- 2026-05-10: U1 selected as the first implementation unit because it has no dependencies and is required by U2/U3.
+- 2026-05-10: Created U1 worktree `.Codex/worktrees/runbooks-u1` on branch `codex/runbooks-u1` from `origin/main`.
+- 2026-05-10: Implemented initial `@thinkwork/runbooks` package, validation/loader/registry tests, and CRM Dashboard, Research Dashboard, and Map Artifact runbook definitions.
+- 2026-05-10: Opened U1 PR #1119.
 
-## Merged PRs
+## Implementation Units
 
-- PR #1115 — `refactor(computer): codify app artifact runtime trust`
-- PR #1114 — `refactor(computer): align full app canvas with artifact shell`
-- PR #1113 — `refactor(computer): render inline apps through artifact shell`
-- PR #1112 — `feat(computer): define generated app artifact shell`
-- PR #1111 — `refactor(computer): adopt Conversation and Message thread shell`
+| Unit                                              | Status    | Branch              | PR      | Notes                                                                                                                              |
+| ------------------------------------------------- | --------- | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Runbook Source Package                         | in review | `codex/runbooks-u1` | #1119   | Create `packages/runbooks` with YAML/Markdown validation and initial CRM Dashboard, Research Dashboard, and Map Artifact runbooks. |
+| U2 Catalog and Run Data Model                     | pending   | pending             | pending | Depends on U1.                                                                                                                     |
+| U3 Routing and Confirmation API                   | pending   | pending             | pending | Depends on U1 and U2.                                                                                                              |
+| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                                                              |
+| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                                                              |
+| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                                                              |
+| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                                                                         |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                                                                          |
 
-## CI Failures
+## PRs
 
-- None yet.
+| Unit | PR    | Status | Merge Commit | Notes                                      |
+| ---- | ----- | ------ | ------------ | ------------------------------------------ |
+| U1   | #1119 | open   | pending      | Waiting for required CI checks and review. |
+
+## CI / Verification Notes
+
+| Unit | Check                                         | Status | Notes                                                                                                                                                     |
+| ---- | --------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1   | `pnpm --filter @thinkwork/runbooks test`      | passed | 3 files, 11 tests.                                                                                                                                        |
+| U1   | `pnpm --filter @thinkwork/runbooks typecheck` | passed | Package typecheck completed cleanly.                                                                                                                      |
+| U1   | `pnpm --filter @thinkwork/runbooks build`     | passed | Package build completed cleanly.                                                                                                                          |
+| U1   | `pnpm dlx prettier@3.8.2 --check ...`         | passed | Root `pnpm format:check` could not run because `prettier` is not installed as a root dependency; used pinned `pnpm dlx prettier@3.8.2` for touched files. |
+| U1   | `pnpm -r --if-present typecheck`              | passed | Workspace typecheck completed across packages.                                                                                                            |
+| U1   | `pnpm -r --if-present test`                   | passed | Workspace tests completed; notable suites included `packages/api` 235 files / 2471 tests and `apps/computer` 52 files / 363 tests.                        |
 
 ## Blockers
 
-- None.
+- None currently.
