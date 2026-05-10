@@ -19,7 +19,9 @@ export function GeneratedArtifactCard({
   artifact,
 }: GeneratedArtifactCardProps) {
   const isAppArtifact =
+    artifact.type === "APPLET" ||
     artifact.type === "DATA_VIEW" ||
+    artifact.metadata?.kind === "computer_applet" ||
     artifact.metadata?.kind === "research_dashboard" ||
     artifact.metadata?.uiSurface === "app";
 

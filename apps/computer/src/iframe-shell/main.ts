@@ -25,6 +25,7 @@ import {
 } from "../applets/host-registry";
 import { rewriteAppletImports } from "../applets/transform/import-shim";
 import "../index.css";
+import { installLeafletCdnCompatibilityBridge } from "./leaflet-cdn-compat";
 import {
 	ALLOWED_PARENT_ORIGINS,
 	assertSafeAllowlist,
@@ -47,10 +48,12 @@ assertSafeAllowlist(ALLOWED_PARENT_ORIGINS);
 // the load proactively at boot so the first init handshake doesn't pay
 // the dynamic-import latency.
 registerAppletHost();
-const registryReady = loadAppletHostExternals().catch((err) => {
+const registryReady = loadAppletHostExternals();
+registryReady.catch((err) => {
 	// eslint-disable-next-line no-console
 	console.warn("[iframe-shell] host externals load failed", err);
 });
+installLeafletCdnCompatibilityBridge(registryReady);
 
 interface IframeShellState {
 	parentWindow: Window | null;

@@ -35,6 +35,24 @@ describe("GeneratedArtifactCard", () => {
     expect(fullScreenLink.getAttribute("href")).toBe("/artifacts/artifact_123");
   });
 
+  it("renders an inline applet embed for generated APPLET artifacts", () => {
+    render(
+      <GeneratedArtifactCard
+        artifact={{
+          id: "artifact_map",
+          title: "Austin Interesting Places Map",
+          type: "APPLET",
+          summary: "Austin map",
+          metadata: { kind: "computer_applet" },
+        }}
+      />,
+    );
+
+    const stub = screen.getByTestId("inline-applet-embed-stub");
+    expect(stub.getAttribute("data-app-id")).toBe("artifact_map");
+    expect(screen.queryByText(/preview unavailable/i)).toBeNull();
+  });
+
   it("shows Preview unavailable for non-app artifacts", () => {
     render(
       <GeneratedArtifactCard
