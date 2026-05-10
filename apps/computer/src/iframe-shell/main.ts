@@ -16,7 +16,7 @@
  *      keyed by msgId.
  */
 
-import { createElement } from "react";
+import { createElement, type ComponentType } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { transform as sucraseTransform } from "sucrase";
 import {
@@ -36,6 +36,7 @@ import {
 	type ReadyWithComponentPayload,
 	type ThemePayload,
 } from "./iframe-protocol";
+import { EmptyRenderGuard } from "./EmptyRenderGuard";
 
 assertSafeAllowlist(ALLOWED_PARENT_ORIGINS);
 
@@ -234,14 +235,18 @@ async function compileAndMount(
 		// container twice produces a console warning.
 		if (state.root && state.rootContainer === rootEl) {
 			state.root.render(
-				createElement(Component as React.ComponentType, {}),
+				createElement(EmptyRenderGuard, {
+					Component: Component as ComponentType,
+				}),
 			);
 		} else {
 			if (state.root) state.root.unmount();
 			state.root = createRoot(rootEl);
 			state.rootContainer = rootEl as HTMLDivElement;
 			state.root.render(
-				createElement(Component as React.ComponentType, {}),
+				createElement(EmptyRenderGuard, {
+					Component: Component as ComponentType,
+				}),
 			);
 		}
 		state.mounted = true;
