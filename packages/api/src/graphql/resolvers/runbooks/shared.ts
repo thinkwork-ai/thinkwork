@@ -49,6 +49,7 @@ export async function requireRunbookRunAccess(
       extensions: { code: "NOT_FOUND" },
     });
   }
+  if (isServiceAuthComputerOwner(ctx, computer)) return run;
   await requireComputerReadAccess(ctx, computer);
   return run;
 }
@@ -70,4 +71,15 @@ export async function requireComputerAccess(
   }
   await requireComputerReadAccess(ctx, computer);
   return computer;
+}
+
+function isServiceAuthComputerOwner(
+  ctx: GraphQLContext,
+  computer: typeof computers.$inferSelect,
+) {
+  return (
+    ctx.auth.authType === "apikey" &&
+    ctx.auth.tenantId === computer.tenant_id &&
+    ctx.auth.principalId === computer.owner_user_id
+  );
 }
