@@ -9,9 +9,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U6 — Optional OSS CopilotKit integration check
-- Branch: `codex/agui-spike-u6`
-- Worktree: `.Codex/worktrees/agui-spike-u6`
+- Unit: U7 — Verdict document and follow-up recommendation
+- Branch: `codex/agui-spike-u7`
+- Worktree: `.Codex/worktrees/agui-spike-u7`
 - Status: in progress
 
 ## Progress Log
@@ -58,18 +58,24 @@ status: active
 - 2026-05-10: Decided not to install CopilotKit React packages during the spike; added a local adapter and architecture note so the integration stays reversible.
 - 2026-05-10: Verified U6 with focused adapter tests, full `@thinkwork/computer` tests, typecheck, and Prettier.
 - 2026-05-10: Opened PR #1107: https://github.com/thinkwork-ai/thinkwork/pull/1107.
+- 2026-05-10: PR #1107 passed CI and was squash-merged to `main`.
+- 2026-05-10: Removed U6 worktree/local branch and synced `main`.
+- 2026-05-10: Created U7 worktree from `origin/main`.
+- 2026-05-10: Started U7 verdict document.
+- 2026-05-10: Wrote U7 verdict recommending a pivot to a ThinkWork-owned AG-UI protocol layer while deferring CopilotKit React package adoption.
+- 2026-05-10: Verified U7 with Prettier on the verdict and status docs.
 
 ## Unit Status
 
-| Unit                                                     | Status  | Branch                | PR    | Notes                                  |
-| -------------------------------------------------------- | ------- | --------------------- | ----- | -------------------------------------- |
-| U1 — Local AG-UI event model and existing-stream adapter | Merged  | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up. |
-| U2 — Server helper for typed spike events                | Merged  | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up. |
-| U3 — Experimental Thread + Canvas route                  | Merged  | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
-| U4 — Registered Canvas component proof                   | Merged  | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
-| U5 — Real scenario smoke path                            | Merged  | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
-| U6 — Optional OSS CopilotKit integration check           | PR open | `codex/agui-spike-u6` | #1107 | Awaiting CI.                           |
-| U7 — Verdict document and follow-up recommendation       | Pending |                       |       | Final unit.                            |
+| Unit                                                     | Status | Branch                | PR    | Notes                                  |
+| -------------------------------------------------------- | ------ | --------------------- | ----- | -------------------------------------- |
+| U1 — Local AG-UI event model and existing-stream adapter | Merged | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up. |
+| U2 — Server helper for typed spike events                | Merged | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up. |
+| U3 — Experimental Thread + Canvas route                  | Merged | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
+| U4 — Registered Canvas component proof                   | Merged | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
+| U5 — Real scenario smoke path                            | Merged | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
+| U6 — Optional OSS CopilotKit integration check           | Merged | `codex/agui-spike-u6` | #1107 | CI passed; branch/worktree cleaned up. |
+| U7 — Verdict document and follow-up recommendation       | Active | `codex/agui-spike-u7` |       | Locally verified; ready for PR.        |
 
 ## CI / Verification Log
 
@@ -103,6 +109,8 @@ status: active
 - 2026-05-10 U6: `pnpm --filter @thinkwork/computer typecheck` passed.
 - 2026-05-10 U6: `pnpm --filter @thinkwork/computer test` passed: 220 tests passed.
 - 2026-05-10 U6: `pnpm dlx prettier --check <touched files>` passed.
+- 2026-05-10 U6 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed on PR #1107.
+- 2026-05-10 U7: `pnpm dlx prettier --check docs/solutions/architecture-patterns/copilotkit-agui-computer-spike-verdict-2026-05-10.md docs/plans/2026-05-10-001-feat-copilotkit-agui-computer-spike-autopilot-status.md` passed.
 
 ## Blockers
 
