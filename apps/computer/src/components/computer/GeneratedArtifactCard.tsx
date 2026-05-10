@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
 import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
 import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
+import { resolveGeneratedAppRuntimeMode } from "@/lib/app-artifacts";
 
 export interface GeneratedArtifact {
   id: string;
@@ -31,7 +32,7 @@ export function GeneratedArtifactCard({
       <GeneratedAppArtifactShell
         title={artifact.title}
         label="App"
-        runtimeMode="sandboxedGenerated"
+        runtimeMode={resolveGeneratedAppRuntimeMode(artifact.metadata)}
         className="border-border/70 bg-background shadow-none"
         headerClassName="border-0 bg-transparent px-1 py-0"
         contentClassName="overflow-visible p-0"

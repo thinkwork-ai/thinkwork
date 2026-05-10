@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { AppCanvasPanel } from "@/components/apps/AppCanvasPanel";
-import type { GeneratedAppRuntimeMode } from "@/components/apps/GeneratedAppArtifactShell";
+import type { AppArtifactRuntimeMode } from "@/lib/app-artifacts";
 
 interface AppArtifactSplitShellProps {
   children: ReactNode;
   title?: string;
-  runtimeMode?: GeneratedAppRuntimeMode;
+  runtimeMode?: AppArtifactRuntimeMode;
 }
 
 export function AppArtifactSplitShell({

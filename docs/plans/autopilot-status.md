@@ -12,15 +12,25 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Current Unit
 
-- **Unit:** U4 — Migrate full artifact route canvas to Artifact shell
-- **Branch:** `codex/computer-ai-elements-u4-full-canvas-shell`
-- **Worktree:** `.Codex/worktrees/computer-ai-elements-u4`
+- **Unit:** U5 — Codify sandboxed versus trusted Artifact runtime model
+- **Branch:** `codex/computer-ai-elements-u5-runtime-model`
+- **Worktree:** `.Codex/worktrees/computer-ai-elements-u5`
 - **Started:** 2026-05-10
-- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1114
+- **PR:** https://github.com/thinkwork-ai/thinkwork/pull/1115
 - **Status:** CI passed; ready to squash merge
 
 ## Progress Log
 
+- 2026-05-10: Squash-merged U4 PR #1114 into `main`, deleted the remote and local U4 branch, removed the U4 worktree, and fast-forwarded local `main`.
+- 2026-05-10: Created isolated U5 worktree from updated `origin/main`.
+- 2026-05-10: Started the host-owned Artifact runtime-mode model so generated App metadata cannot select trusted native rendering.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test -- src/lib/app-artifacts.test.ts src/components/apps/InlineAppletEmbed.test.tsx src/components/computer/GeneratedArtifactCard.test.tsx src/components/apps/GeneratedAppArtifactShell.test.tsx src/components/apps/AppArtifactSplitShell.test.tsx src/applets/iframe-controller.test.ts`.
+- 2026-05-10: Verification passed: `pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'` from `apps/computer`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer typecheck`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer test`.
+- 2026-05-10: Verification passed: `pnpm --filter @thinkwork/computer build`.
+- 2026-05-10: Opened PR #1115.
+- 2026-05-10: PR #1115 CI passed: CLA, lint, verify, typecheck, and test.
 - 2026-05-10: Squash-merged U3 PR #1113 into `main`, deleted the remote and local U3 branch, removed the U3 worktree, and fast-forwarded local `main`.
 - 2026-05-10: Created isolated U4 worktree from updated `origin/main`.
 - 2026-05-10: Routed full-page generated Apps through the generated App Artifact shell with hidden shell chrome so the route top bar remains primary.
@@ -64,6 +74,7 @@ This file records the autopilot execution of `docs/plans/2026-05-10-002-refactor
 
 ## Merged PRs
 
+- PR #1114 — `refactor(computer): align full app canvas with artifact shell`
 - PR #1113 — `refactor(computer): render inline apps through artifact shell`
 - PR #1112 — `feat(computer): define generated app artifact shell`
 - PR #1111 — `refactor(computer): adopt Conversation and Message thread shell`

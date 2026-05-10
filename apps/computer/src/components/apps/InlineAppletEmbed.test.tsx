@@ -172,4 +172,35 @@ describe("InlineAppletEmbed", () => {
     // bypass adversarial review flagged.
     expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
   });
+
+  it("ignores applet metadata that tries to opt into trusted native rendering", async () => {
+    const { transformApplet } = await import(
+      "@/applets/transform/transform"
+    );
+    vi.mocked(transformApplet).mockClear();
+
+    mockUseQuery({
+      data: {
+        applet: {
+          source: "export default function App() { return null; }",
+          files: null,
+          metadata: { runtimeMode: "nativeTrusted" },
+          applet: {
+            appId: "app_untrusted_metadata",
+            version: 1,
+            name: "Untrusted metadata",
+          },
+        },
+      },
+    });
+
+    render(<InlineAppletEmbed appId="app_untrusted_metadata" />);
+
+    const embed = await screen.findByTestId("inline-applet-embed");
+    expect(embed.getAttribute("data-runtime-mode")).toBe(
+      "sandboxedGenerated",
+    );
+    expect(await screen.findByTestId("applet-iframe-host")).toBeTruthy();
+    expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,15 @@
 import { computerArtifactRoute } from "@/lib/computer-routes";
 
+export const GENERATED_APP_RUNTIME_MODE = "sandboxedGenerated" as const;
+
+export const APP_ARTIFACT_RUNTIME_MODES = [
+  GENERATED_APP_RUNTIME_MODE,
+  "nativeTrusted",
+] as const;
+
+export type AppArtifactRuntimeMode =
+  (typeof APP_ARTIFACT_RUNTIME_MODES)[number];
+
 export interface AppArtifactPreview {
   id: string;
   title: string;
@@ -32,6 +42,24 @@ export interface AppletPayload {
   files?: Record<string, string> | null;
   metadata?: unknown;
   applet?: AppletPreviewNode | null;
+}
+
+export function isAppArtifactRuntimeMode(
+  value: unknown,
+): value is AppArtifactRuntimeMode {
+  return (
+    typeof value === "string" &&
+    (APP_ARTIFACT_RUNTIME_MODES as readonly string[]).includes(value)
+  );
+}
+
+export function resolveGeneratedAppRuntimeMode(
+  _metadata?: unknown,
+): typeof GENERATED_APP_RUNTIME_MODE {
+  // The sandbox boundary is selected by the authenticated host, never by
+  // LLM-authored artifact metadata. Future vetted native apps should take a
+  // separate host-owned path instead of reusing generated App metadata.
+  return GENERATED_APP_RUNTIME_MODE;
 }
 
 export function shortModel(value?: string | null, fallback = "—"): string {

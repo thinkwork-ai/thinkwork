@@ -5,13 +5,16 @@ import {
 } from "@/components/ai-elements/artifact";
 import {
   GeneratedAppArtifactShell,
-  type GeneratedAppRuntimeMode,
 } from "@/components/apps/GeneratedAppArtifactShell";
+import {
+  GENERATED_APP_RUNTIME_MODE,
+  type AppArtifactRuntimeMode,
+} from "@/lib/app-artifacts";
 
 interface AppCanvasPanelProps {
   children: ReactNode;
   title?: string;
-  runtimeMode?: GeneratedAppRuntimeMode;
+  runtimeMode?: AppArtifactRuntimeMode;
   /**
    * Optional artifact chrome — when provided, the canvas renders
    * <ArtifactHeader> / <ArtifactActions> ahead of the content.
@@ -24,7 +27,7 @@ interface AppCanvasPanelProps {
 export function AppCanvasPanel({
   children,
   title = "Generated app",
-  runtimeMode = "sandboxedGenerated",
+  runtimeMode = GENERATED_APP_RUNTIME_MODE,
   chrome,
 }: AppCanvasPanelProps) {
   return (

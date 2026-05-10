@@ -8,7 +8,10 @@ import {
   useAppletInstanceId,
   type AppletModuleLoader,
 } from "@/applets/mount";
-import type { AppletPayload } from "@/lib/app-artifacts";
+import {
+  resolveGeneratedAppRuntimeMode,
+  type AppletPayload,
+} from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
 
 interface AppletResult {
@@ -40,6 +43,7 @@ export function InlineAppletEmbed({
   });
   const applet = data?.applet ?? null;
   const source = useMemo(() => appletSource(applet), [applet]);
+  const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
   const version = applet?.applet?.version ?? 1;
   const instanceId = useAppletInstanceId(appId);
 
@@ -68,6 +72,7 @@ export function InlineAppletEmbed({
   return (
     <div
       className="overflow-visible bg-background"
+      data-runtime-mode={runtimeMode}
       data-testid="inline-applet-embed"
       style={{ minHeight: height }}
     >
