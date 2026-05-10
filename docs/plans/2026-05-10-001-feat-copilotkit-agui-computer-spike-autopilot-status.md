@@ -64,18 +64,19 @@ status: active
 - 2026-05-10: Started U7 verdict document.
 - 2026-05-10: Wrote U7 verdict recommending a pivot to a ThinkWork-owned AG-UI protocol layer while deferring CopilotKit React package adoption.
 - 2026-05-10: Verified U7 with Prettier on the verdict and status docs.
+- 2026-05-10: Opened PR #1108: https://github.com/thinkwork-ai/thinkwork/pull/1108.
 
 ## Unit Status
 
-| Unit                                                     | Status | Branch                | PR    | Notes                                  |
-| -------------------------------------------------------- | ------ | --------------------- | ----- | -------------------------------------- |
-| U1 — Local AG-UI event model and existing-stream adapter | Merged | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up. |
-| U2 — Server helper for typed spike events                | Merged | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up. |
-| U3 — Experimental Thread + Canvas route                  | Merged | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
-| U4 — Registered Canvas component proof                   | Merged | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
-| U5 — Real scenario smoke path                            | Merged | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
-| U6 — Optional OSS CopilotKit integration check           | Merged | `codex/agui-spike-u6` | #1107 | CI passed; branch/worktree cleaned up. |
-| U7 — Verdict document and follow-up recommendation       | Active | `codex/agui-spike-u7` |       | Locally verified; ready for PR.        |
+| Unit                                                     | Status  | Branch                | PR    | Notes                                  |
+| -------------------------------------------------------- | ------- | --------------------- | ----- | -------------------------------------- |
+| U1 — Local AG-UI event model and existing-stream adapter | Merged  | `codex/agui-spike-u1` | #1102 | CI passed; branch/worktree cleaned up. |
+| U2 — Server helper for typed spike events                | Merged  | `codex/agui-spike-u2` | #1103 | CI passed; branch/worktree cleaned up. |
+| U3 — Experimental Thread + Canvas route                  | Merged  | `codex/agui-spike-u3` | #1104 | CI passed; branch/worktree cleaned up. |
+| U4 — Registered Canvas component proof                   | Merged  | `codex/agui-spike-u4` | #1105 | CI passed; branch/worktree cleaned up. |
+| U5 — Real scenario smoke path                            | Merged  | `codex/agui-spike-u5` | #1106 | CI passed; branch/worktree cleaned up. |
+| U6 — Optional OSS CopilotKit integration check           | Merged  | `codex/agui-spike-u6` | #1107 | CI passed; branch/worktree cleaned up. |
+| U7 — Verdict document and follow-up recommendation       | PR open | `codex/agui-spike-u7` | #1108 | Awaiting CI.                           |
 
 ## CI / Verification Log
 
