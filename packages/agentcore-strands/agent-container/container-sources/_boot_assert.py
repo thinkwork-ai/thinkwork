@@ -52,6 +52,8 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "hindsight_usage_capture",
     "invocation_env",
     "memory_tools",
+    "runbook_capabilities",
+    "runbook_context",
     "run_skill_dispatch",
     "sandbox_preamble",
     "sandbox_tool",
