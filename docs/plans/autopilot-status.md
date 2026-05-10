@@ -13,7 +13,7 @@ status: active
 - Active unit: U2 Catalog and Run Data Model
 - Active branch/worktree: `codex/runbooks-u2` at `.Codex/worktrees/runbooks-u2`
 - Latest synced base: `origin/main` at `c63d1fa8`
-- Overall status: active
+- Overall status: U2 in review
 
 ## Progress Log
 
@@ -27,26 +27,27 @@ status: active
 - 2026-05-10: Implemented U2 tenant runbook catalog, run snapshot, and expanded task schema; added HTTP GraphQL catalog/run queries and confirm/reject/cancel mutations.
 - 2026-05-10: Added U2 tests for catalog source seeding, unavailable source detection, run snapshot/task expansion, state transitions, and resolver access gating.
 - 2026-05-10: Completed U2 local verification: workspace typecheck, workspace tests, workspace lint scripts, and workspace builds passed.
+- 2026-05-10: Opened U2 PR #1120 from `codex/runbooks-u2`.
 
 ## Implementation Units
 
-| Unit                                              | Status      | Branch              | PR      | Notes                                                                                         |
-| ------------------------------------------------- | ----------- | ------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| U1 Runbook Source Package                         | merged      | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed.                           |
-| U2 Catalog and Run Data Model                     | in progress | `codex/runbooks-u2` | pending | Adds persistent runbook catalog, run snapshots, expanded tasks, and GraphQL access/mutations. |
-| U3 Routing and Confirmation API                   | pending     | pending             | pending | Depends on U1 and U2.                                                                         |
-| U4 Sequential Runbook Executor                    | pending     | pending             | pending | Depends on U2 and U3.                                                                         |
-| U5 Strands Runbook Context and Capability Mapping | pending     | pending             | pending | Depends on U1 and U4.                                                                         |
-| U6 Computer UI Confirmation and Queue             | pending     | pending             | pending | Depends on U2 and U3.                                                                         |
-| U7 Artifact Builder Runbook Bridge                | pending     | pending             | pending | Depends on U1, U5, and U6.                                                                    |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending     | pending             | pending | Depends on U1 through U7.                                                                     |
+| Unit                                              | Status    | Branch              | PR      | Notes                                                                                         |
+| ------------------------------------------------- | --------- | ------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| U1 Runbook Source Package                         | merged    | `codex/runbooks-u1` | #1119   | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed.                           |
+| U2 Catalog and Run Data Model                     | in review | `codex/runbooks-u2` | #1120   | Adds persistent runbook catalog, run snapshots, expanded tasks, and GraphQL access/mutations. |
+| U3 Routing and Confirmation API                   | pending   | pending             | pending | Depends on U1 and U2.                                                                         |
+| U4 Sequential Runbook Executor                    | pending   | pending             | pending | Depends on U2 and U3.                                                                         |
+| U5 Strands Runbook Context and Capability Mapping | pending   | pending             | pending | Depends on U1 and U4.                                                                         |
+| U6 Computer UI Confirmation and Queue             | pending   | pending             | pending | Depends on U2 and U3.                                                                         |
+| U7 Artifact Builder Runbook Bridge                | pending   | pending             | pending | Depends on U1, U5, and U6.                                                                    |
+| U8 Docs, Smoke Coverage, and Rollout Guardrails   | pending   | pending             | pending | Depends on U1 through U7.                                                                     |
 
 ## PRs
 
-| Unit | PR    | Status | Merge Commit | Notes                                              |
-| ---- | ----- | ------ | ------------ | -------------------------------------------------- |
-| U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge.        |
-| U2   | TBD   | local  | pending      | Implementation in progress on `codex/runbooks-u2`. |
+| Unit | PR    | Status | Merge Commit | Notes                                       |
+| ---- | ----- | ------ | ------------ | ------------------------------------------- |
+| U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge. |
+| U2   | #1120 | open   | pending      | Waiting for required CI checks.             |
 
 ## CI / Verification Notes
 
