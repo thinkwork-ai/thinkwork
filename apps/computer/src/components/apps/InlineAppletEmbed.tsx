@@ -21,8 +21,9 @@ interface AppletResult {
 
 interface InlineAppletEmbedProps {
   appId: string;
-  // Pixel height of the embed surface. Default sized to fit a chart or small
-  // dashboard inside a thread message bubble without dominating the transcript.
+  // Initial/minimum pixel height before the iframe reports its content height.
+  // After mount, inline embeds grow to content to avoid nested scroll regions
+  // inside thread transcripts.
   height?: number;
   // Test seam: lets unit tests inject a fake module loader so tests don't have
   // to spin up the real applet transform pipeline. Plan-012 U11.5: this is
@@ -49,7 +50,7 @@ export function InlineAppletEmbed({
   if (error) {
     return (
       <AppletFailure>
-        Failed to load applet: {error.message}
+        Failed to load app: {error.message}
       </AppletFailure>
     );
   }
@@ -77,9 +78,9 @@ export function InlineAppletEmbed({
     <Artifact
       className="overflow-hidden rounded-md border border-border/70 bg-background shadow-none"
       data-testid="inline-applet-embed"
-      style={{ height, maxHeight: "70vh" }}
+      style={{ minHeight: height }}
     >
-      <ArtifactContent className="h-full overflow-auto p-0">
+      <ArtifactContent className="overflow-visible p-0">
         <AppletMount
           appId={appId}
           instanceId={instanceId}
@@ -89,6 +90,7 @@ export function InlineAppletEmbed({
           // undefined so AppletMount routes to the iframe substrate.
           {...(loadModule ? { loadModule } : {})}
           hideRefreshControl
+          fitContentHeight
         />
       </ArtifactContent>
     </Artifact>

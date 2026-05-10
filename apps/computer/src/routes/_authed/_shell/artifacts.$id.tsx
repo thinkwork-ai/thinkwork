@@ -73,6 +73,7 @@ export function AppletRouteContent({
   usePageHeaderActions({
     title,
     backHref: "/artifacts",
+    backBehavior: "history",
     action: headerAction,
     actionKey: headerAction ? "artifact-actions" : "",
   });
@@ -127,9 +128,9 @@ export function AppletRouteContent({
 
   return (
     <AppArtifactSplitShell>
-      <div className="grid min-w-0 gap-4">
+      <div className="grid h-full min-h-0 min-w-0 p-4">
         {hasNewerVersion ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-primary">
               A newer version of this artifact is available.
             </p>

@@ -54,7 +54,15 @@ export function EmptyRenderGuard({ Component }: EmptyRenderGuardProps) {
 		{ className: "min-h-0" },
 		createElement(
 			"div",
-			{ ref: contentRef, "data-thinkwork-applet-content": "" },
+			{
+				ref: contentRef,
+				"data-thinkwork-applet-content": "",
+				className:
+					"min-h-0 [&>*]:rounded-none [&>*>*]:rounded-none",
+				style: {
+					borderRadius: 0,
+				},
+			},
 			createElement(Component),
 		),
 		isEmpty
@@ -64,7 +72,7 @@ export function EmptyRenderGuard({ Component }: EmptyRenderGuardProps) {
 						className:
 							"rounded-lg border border-dashed border-border bg-muted/40 p-6 text-sm text-muted-foreground",
 					},
-					"This applet rendered no visible content.",
+					"This app rendered no visible content.",
 				)
 			: null,
 	);

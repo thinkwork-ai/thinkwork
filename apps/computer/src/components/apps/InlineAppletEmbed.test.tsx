@@ -94,7 +94,7 @@ describe("InlineAppletEmbed", () => {
     ).toBeTruthy();
   });
 
-  it("mounts the applet inside a sized embed container", async () => {
+  it("mounts the applet inside a fit-content embed container", async () => {
     mockUseQuery({
       data: {
         applet: {
@@ -110,7 +110,7 @@ describe("InlineAppletEmbed", () => {
     });
 
     function StubAppletModule() {
-      return <div data-testid="stub-applet-body">applet rendered</div>;
+      return <div data-testid="stub-applet-body">app rendered</div>;
     }
 
     const loadModule = vi.fn(async () => ({ default: StubAppletModule }));
@@ -124,7 +124,8 @@ describe("InlineAppletEmbed", () => {
     );
 
     const embed = await screen.findByTestId("inline-applet-embed");
-    expect(embed.getAttribute("style")).toContain("height: 320px");
+    expect(embed.getAttribute("style")).toContain("min-height: 320px");
+    expect(embed.getAttribute("style")).not.toContain("max-height");
 
     await waitFor(() => {
       expect(screen.getByTestId("stub-applet-body")).toBeTruthy();
@@ -162,6 +163,7 @@ describe("InlineAppletEmbed", () => {
     // iframe host element present (rendered by IframeAppletMount).
     const host = await screen.findByTestId("applet-iframe-host");
     expect(host).toBeTruthy();
+    expect(host.className).not.toContain("h-full");
 
     // Legacy transform path is NOT exercised — that's the
     // load-bearing assertion that this PR closes the production

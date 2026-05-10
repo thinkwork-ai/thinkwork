@@ -42,6 +42,7 @@ function createController(opts?: {
 	srcOverride?: string;
 	theme?: "light" | "dark";
 	themeOverrides?: Record<string, string>;
+	fitContentHeight?: boolean;
 }) {
 	const calls: PostMessageCall[] = [];
 	// Build a fake contentWindow that records every postMessage call.
@@ -211,6 +212,26 @@ describe("IframeAppletController — element + handshake", () => {
 			(init!.envelope as { payload: { themeOverrides?: Record<string, string> } })
 				.payload.themeOverrides?.["--background"],
 		).toBe("oklch(0.145 0 0)");
+		expect(
+			(init!.envelope as { payload: { fitContentHeight?: boolean } }).payload
+				.fitContentHeight,
+		).toBe(false);
+	});
+
+	it("marks init as fit-content when mounting an inline embed", () => {
+		const { controller, calls } = createController({
+			fitContentHeight: true,
+		});
+
+		controller.element.dispatchEvent(new Event("load"));
+
+		const init = calls.find(
+			(c) => (c.envelope as { kind?: string }).kind === "init",
+		);
+		expect(
+			(init!.envelope as { payload: { fitContentHeight?: boolean } }).payload
+				.fitContentHeight,
+		).toBe(true);
 	});
 
 	it("re-posts init defensively on iframe `ready` envelope (legacy/forward-compat)", () => {
@@ -441,11 +462,12 @@ describe("IframeAppletController — dispose", () => {
 describe("IframeAppletController — resize protocol", () => {
 	it("starts with a usable minimum height before the iframe reports its content size", () => {
 		const { controller } = createController();
+		expect(controller.element.style.height).toBe("100%");
 		expect(controller.element.style.minHeight).toBe("480px");
 		expect(controller.element.style.display).toBe("block");
 	});
 
-	it("applies iframe.style.height on resize envelope", () => {
+	it("applies content height on resize envelope when the parent is unbounded", () => {
 		const { controller, fakeWindow } = createController();
 		postFromIframe(controller, fakeWindow, "ready", { ready: true });
 		postFromIframe(controller, fakeWindow, "resize", { height: 480 });
@@ -456,6 +478,96 @@ describe("IframeAppletController — resize protocol", () => {
 		const { controller, fakeWindow } = createController();
 		postFromIframe(controller, fakeWindow, "ready", { ready: true });
 		postFromIframe(controller, fakeWindow, "resize", { height: "tall" });
-		expect(controller.element.style.height).toBe("");
+		expect(controller.element.style.height).toBe("100%");
+	});
+
+	it("keeps the iframe fluid when its parent canvas has a real height", () => {
+		const { controller, fakeWindow } = createController();
+		const parent = document.createElement("div");
+		Object.defineProperty(parent, "clientHeight", {
+			configurable: true,
+			value: 720,
+		});
+		parent.appendChild(controller.element);
+
+		postFromIframe(controller, fakeWindow, "ready", { ready: true });
+		postFromIframe(controller, fakeWindow, "resize", { height: 480 });
+
+		expect(controller.element.style.height).toBe("100%");
+		expect(controller.element.style.minHeight).toBe("0");
+	});
+
+	it("uses reported content height for inline fit-content embeds even when the parent has height", () => {
+		const { controller, fakeWindow } = createController({
+			fitContentHeight: true,
+		});
+		const parent = document.createElement("div");
+		Object.defineProperty(parent, "clientHeight", {
+			configurable: true,
+			value: 720,
+		});
+		parent.appendChild(controller.element);
+
+		postFromIframe(controller, fakeWindow, "ready", { ready: true });
+		postFromIframe(controller, fakeWindow, "resize", { height: 920 });
+
+		expect(controller.element.style.height).toBe("920px");
+		expect(controller.element.style.minHeight).toBe("480px");
+	});
+});
+
+describe("IframeAppletController — inline wheel forwarding", () => {
+	it("scrolls the thread ancestor when an inline fit-content iframe forwards wheel input", () => {
+		const { controller, fakeWindow } = createController({
+			fitContentHeight: true,
+		});
+		const scroller = document.createElement("div");
+		scroller.style.overflowY = "auto";
+		Object.defineProperty(scroller, "clientHeight", {
+			configurable: true,
+			value: 400,
+		});
+		Object.defineProperty(scroller, "scrollHeight", {
+			configurable: true,
+			value: 1200,
+		});
+		scroller.appendChild(controller.element);
+		document.body.appendChild(scroller);
+
+		postFromIframe(controller, fakeWindow, "wheel", {
+			deltaX: 0,
+			deltaY: 120,
+			deltaMode: 0,
+		});
+
+		expect(scroller.scrollTop).toBe(120);
+		scroller.remove();
+	});
+
+	it("ignores iframe wheel messages for full artifact pages", () => {
+		const { controller, fakeWindow } = createController({
+			fitContentHeight: false,
+		});
+		const scroller = document.createElement("div");
+		scroller.style.overflowY = "auto";
+		Object.defineProperty(scroller, "clientHeight", {
+			configurable: true,
+			value: 400,
+		});
+		Object.defineProperty(scroller, "scrollHeight", {
+			configurable: true,
+			value: 1200,
+		});
+		scroller.appendChild(controller.element);
+		document.body.appendChild(scroller);
+
+		postFromIframe(controller, fakeWindow, "wheel", {
+			deltaX: 0,
+			deltaY: 120,
+			deltaMode: 0,
+		});
+
+		expect(scroller.scrollTop).toBe(0);
+		scroller.remove();
 	});
 });

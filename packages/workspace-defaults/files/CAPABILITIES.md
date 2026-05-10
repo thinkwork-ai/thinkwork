@@ -23,13 +23,13 @@ pages, workspace files, knowledge bases, and approved search-safe MCP tools. It 
 and returns cited results plus provider status. Use `query_memory_context` only when you need
 Hindsight memory synthesis; it can be slower than the default Company Brain path.
 
-## Computer Applets
+## Computer Apps
 
 If `save_app`, `load_app`, and `list_apps` are available, use them for interactive
-TSX applets such as dashboards, briefings, or task-specific work surfaces. Generate
-the applet source with `@thinkwork/computer-stdlib` primitives, call `save_app`
+TSX apps such as dashboards, briefings, or task-specific work surfaces. Generate
+the app source with `@thinkwork/computer-stdlib` primitives, call `save_app`
 with one or more TSX files and metadata, use `load_app` before regenerating an
-existing app, and use `list_apps` when you need to reference prior applets. Applet
+existing app, and use `list_apps` when you need to reference prior apps. App
 refreshes must be deterministic `refresh()` exports; do not use refresh to ask the
 user's Computer to reinterpret the original request.
 

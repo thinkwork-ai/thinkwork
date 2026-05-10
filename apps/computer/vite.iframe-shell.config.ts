@@ -18,10 +18,11 @@
  *     intentionally not allowlisted any parent — frame-ancestors 'none'
  *     CSP): when VITE_ALLOWED_PARENT_ORIGINS is set to "" (the
  *     terraform output's empty default), we emit []. When the var is
- *     undefined entirely (local `vite dev` with no env file), we fall
- *     back to ["https://thinkwork.ai"]. This keeps the iframe-side
- *     allowlist in sync with the CSP and prevents silently allowing
- *     thinkwork.ai when the operator has explicitly disabled the
+ *     undefined entirely, local `vite dev` allows the local Computer
+ *     host origins. Production builds still fall back to
+ *     ["https://thinkwork.ai"]. This keeps local smoke runs usable
+ *     without weakening deployed sandbox posture, and prevents silently
+ *     allowing thinkwork.ai when Terraform has explicitly disabled the
  *     sandbox.
  *
  *   - __SANDBOX_IFRAME_SRC__: the URL the parent uses for `iframe.src`.
@@ -55,8 +56,13 @@ export default defineConfig(({ mode }) => {
 
 	const allowedParentOrigins = ((): string[] => {
 		// undefined → operator hasn't supplied a value (typical for
-		// local `vite dev`). Use the dev fallback so smoke runs work.
-		if (rawOrigins === undefined) return ["https://thinkwork.ai"];
+		// local `vite dev`). Use local Computer origins only in dev so
+		// the iframe accepts parent init messages after a server restart.
+		if (rawOrigins === undefined) {
+			return mode === "development"
+				? ["http://localhost:5174", "http://127.0.0.1:5174"]
+				: ["https://thinkwork.ai"];
+		}
 
 		// Defined (Terraform output present, possibly empty). Honor it
 		// exactly. An empty string from Terraform means "no parent
@@ -76,6 +82,7 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [react(), tailwindcss()],
+		envDir: new URL(".", import.meta.url).pathname,
 		root: "src/iframe-shell",
 		publicDir: false,
 		resolve: {

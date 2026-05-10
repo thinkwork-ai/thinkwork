@@ -11,6 +11,17 @@ type MaybeLeafletWindow = Window & {
   L?: unknown;
 };
 
+type LeafletWithTileLayer = {
+  tileLayer?: (url: string, options?: Record<string, unknown>) => unknown;
+  __thinkworkMapboxTileCompat?: true;
+};
+
+const MAPBOX_USERNAME = "ericodom";
+const MAPBOX_STYLES = {
+  dark: "clkeb986f001e01oh4hmn7i0w",
+  light: "cijsn8buv007j8zkqcvbbvkzf",
+} as const;
+
 function isKnownLeafletAsset(url: string): boolean {
   if (!url) return false;
   try {
@@ -29,6 +40,53 @@ function dispatchLoad(element: HTMLElement): void {
   queueMicrotask(() => {
     element.dispatchEvent(new Event("load"));
   });
+}
+
+function isOpenStreetMapTileUrl(url: string): boolean {
+  return url.includes("tile.openstreetmap.org/{z}/{x}/{y}.png");
+}
+
+function readMapboxToken(): string | undefined {
+  return import.meta.env?.VITE_MAPBOX_PUBLIC_TOKEN || undefined;
+}
+
+function buildMapboxTileUrl(token: string): string {
+  const theme =
+    document.documentElement.classList.contains("dark") ||
+    document.documentElement.dataset.theme === "dark"
+      ? "dark"
+      : "light";
+  const styleId = MAPBOX_STYLES[theme];
+  return `https://api.mapbox.com/styles/v1/${MAPBOX_USERNAME}/${styleId}/tiles/256/{z}/{x}/{y}@2x?access_token=${token}`;
+}
+
+function installMapboxTileCompat(leaflet: unknown): void {
+  const token = readMapboxToken();
+  if (!token) return;
+
+  const leafletWithTileLayer = leaflet as LeafletWithTileLayer;
+  if (
+    leafletWithTileLayer.__thinkworkMapboxTileCompat ||
+    typeof leafletWithTileLayer.tileLayer !== "function"
+  ) {
+    return;
+  }
+
+  const originalTileLayer = leafletWithTileLayer.tileLayer.bind(leaflet);
+  leafletWithTileLayer.tileLayer = (url, options = {}) => {
+    if (!isOpenStreetMapTileUrl(url)) {
+      return originalTileLayer(url, options);
+    }
+
+    return originalTileLayer(buildMapboxTileUrl(token), {
+      ...options,
+      attribution:
+        '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      tileSize: 256,
+      zoomOffset: 0,
+    });
+  };
+  leafletWithTileLayer.__thinkworkMapboxTileCompat = true;
 }
 
 /**
@@ -65,7 +123,9 @@ export function installLeafletCdnCompatibilityBridge(
         const leafletModule = registry.leaflet as typeof registry.leaflet & {
           default?: unknown;
         };
-        (window as MaybeLeafletWindow).L = leafletModule.default ?? leafletModule;
+        const leaflet = leafletModule.default ?? leafletModule;
+        installMapboxTileCompat(leaflet);
+        (window as MaybeLeafletWindow).L = leaflet;
         dispatchLoad(node);
       });
       return node;

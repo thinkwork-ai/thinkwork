@@ -56,6 +56,7 @@ import {
 	type StateReadPayload,
 	type StateWriteAckPayload,
 	type StateWritePayload,
+	type WheelPayload,
 } from "@/iframe-shell/iframe-protocol";
 
 export interface IframeControllerOptions {
@@ -86,6 +87,10 @@ export interface IframeControllerOptions {
 	/** Override the inbound source-identity check for tests. Production
 	 * code uses the iframe's contentWindow. */
 	sourceWindowOverride?: Window | null;
+	/** Inline thread embeds should grow to the rendered app height instead
+	 * of creating a nested iframe scrollbar. Full artifact pages leave this
+	 * false so the iframe fills the viewport canvas. */
+	fitContentHeight?: boolean;
 }
 
 export type IframeControllerStatus =
@@ -115,6 +120,68 @@ function iframeSrcForInitialTheme(
 	}
 }
 
+function wheelDeltaToPixels(
+	delta: number,
+	deltaMode: number,
+	viewportSize: number,
+): number {
+	if (deltaMode === 1) return delta * 16;
+	if (deltaMode === 2) return delta * viewportSize;
+	return delta;
+}
+
+function scrollElementBy(
+	element: Element | Window,
+	left: number,
+	top: number,
+): void {
+	if ("scrollBy" in element && typeof element.scrollBy === "function") {
+		element.scrollBy({ left, top, behavior: "auto" });
+		return;
+	}
+	if (element instanceof Window) {
+		element.scrollTo(element.scrollX + left, element.scrollY + top);
+		return;
+	}
+	const htmlElement = element as HTMLElement;
+	htmlElement.scrollLeft += left;
+	htmlElement.scrollTop += top;
+}
+
+function scrollNearestScrollableAncestor(
+	iframe: HTMLIFrameElement,
+	payload: WheelPayload,
+): void {
+	const ownerWindow = iframe.ownerDocument.defaultView ?? window;
+	const deltaX = wheelDeltaToPixels(
+		payload.deltaX,
+		payload.deltaMode,
+		ownerWindow.innerWidth || iframe.clientWidth || 1,
+	);
+	const deltaY = wheelDeltaToPixels(
+		payload.deltaY,
+		payload.deltaMode,
+		ownerWindow.innerHeight || iframe.clientHeight || 1,
+	);
+
+	for (let node = iframe.parentElement; node; node = node.parentElement) {
+		const style = ownerWindow.getComputedStyle(node);
+		const canScrollY =
+			/(auto|scroll|overlay)/.test(style.overflowY) &&
+			node.scrollHeight > node.clientHeight;
+		const canScrollX =
+			/(auto|scroll|overlay)/.test(style.overflowX) &&
+			node.scrollWidth > node.clientWidth;
+
+		if (canScrollY || canScrollX) {
+			scrollElementBy(node, canScrollX ? deltaX : 0, canScrollY ? deltaY : 0);
+			return;
+		}
+	}
+
+	scrollElementBy(ownerWindow, deltaX, deltaY);
+}
+
 export class IframeAppletController {
 	readonly element: HTMLIFrameElement;
 	readonly channelId: string;
@@ -134,11 +201,14 @@ export class IframeAppletController {
 	private messageListener: ((event: MessageEvent) => void) | null = null;
 	private themeOverrides: Record<string, string>;
 	private theme: "light" | "dark" | undefined;
+	private lastReportedContentHeight = 0;
+	private fitContentHeight: boolean;
 
 	constructor(opts: IframeControllerOptions) {
 		this.opts = opts;
 		this.themeOverrides = { ...(opts.themeOverrides ?? {}) };
 		this.theme = opts.theme;
+		this.fitContentHeight = Boolean(opts.fitContentHeight);
 		this.channelId = newChannelId();
 
 		this.element = document.createElement("iframe");
@@ -153,7 +223,9 @@ export class IframeAppletController {
 			this.theme,
 		);
 		this.element.style.border = "0";
+		this.element.style.borderRadius = "0";
 		this.element.style.width = "100%";
+		this.element.style.height = "100%";
 		this.element.style.minHeight = "480px";
 		this.element.style.display = "block";
 		this.element.style.backgroundColor =
@@ -234,7 +306,19 @@ export class IframeAppletController {
 			case "resize": {
 				const payload = envelope.payload as ResizePayload;
 				if (typeof payload?.height === "number") {
-					this.element.style.height = `${payload.height}px`;
+					this.applyReportedSize(payload.height);
+				}
+				return;
+			}
+			case "wheel": {
+				if (!this.fitContentHeight) return;
+				const payload = envelope.payload as WheelPayload;
+				if (
+					typeof payload?.deltaX === "number" &&
+					typeof payload.deltaY === "number" &&
+					typeof payload.deltaMode === "number"
+				) {
+					scrollNearestScrollableAncestor(this.element, payload);
 				}
 				return;
 			}
@@ -339,6 +423,7 @@ export class IframeAppletController {
 			version: this.opts.version,
 			theme: this.theme,
 			themeOverrides: this.themeOverrides,
+			fitContentHeight: this.fitContentHeight,
 		};
 		this.postOutbound("init", payload);
 	}
@@ -382,6 +467,32 @@ export class IframeAppletController {
 		const target = this.element.contentWindow;
 		if (!target) return;
 		target.postMessage(envelope, "*");
+	}
+
+	private applyReportedSize(contentHeight: number): void {
+		this.lastReportedContentHeight = Math.max(0, contentHeight);
+		if (this.fitContentHeight) {
+			this.element.style.height = `${Math.max(
+				this.lastReportedContentHeight,
+				480,
+			)}px`;
+			this.element.style.minHeight = "480px";
+			return;
+		}
+
+		const parentHeight = this.element.parentElement?.clientHeight ?? 0;
+
+		if (parentHeight > 0) {
+			this.element.style.height = "100%";
+			this.element.style.minHeight = "0";
+			return;
+		}
+
+		this.element.style.height = `${Math.max(
+			this.lastReportedContentHeight,
+			480,
+		)}px`;
+		this.element.style.minHeight = "480px";
 	}
 
 	/**

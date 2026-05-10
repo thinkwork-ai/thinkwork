@@ -23,10 +23,8 @@ import {
 import {
   PromptInput,
   PromptInputBody,
-  PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
-  PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
@@ -199,16 +197,16 @@ export function TaskThreadView({
   );
 
   return (
-    <main className="flex h-full w-full flex-col overflow-hidden bg-background">
+    <main className="relative flex h-full w-full flex-col overflow-hidden bg-background">
       <section
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overscroll-contain"
+        className="h-full flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >
         <div
           ref={innerContentRef}
-          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-6 sm:px-6"
+          className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-32 sm:px-6"
         >
           {visibleMessages.length === 0 ? (
             <ThinkingRow
@@ -241,8 +239,8 @@ export function TaskThreadView({
         </div>
       </section>
 
-      <div className="shrink-0 px-4 pb-4 sm:px-6">
-        <div className="mx-auto w-full max-w-[750px]">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-background px-4 pb-4 sm:px-6">
+        <div className="pointer-events-auto mx-auto w-full max-w-[750px]">
           <FollowUpComposer
             disabled={!onSendFollowUp || isSending}
             isSending={isSending}
@@ -580,26 +578,25 @@ function FollowUpComposer({
   return (
     <div className="grid gap-2">
       <PromptInput
-        className="rounded-2xl border border-border/80 bg-background shadow-lg transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 dark:bg-input/95"
+        className="text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:h-14 [&_[data-slot=input-group]]:rounded-full [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:shadow-lg dark:[&_[data-slot=input-group]]:!bg-[#262626]"
         onSubmit={handlePromptSubmit}
       >
         <PromptInputBody>
           <PromptInputTextarea
             aria-label="Follow up"
+            className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
             value={composer.text}
             onChange={(event) => composer.setText(event.target.value)}
             placeholder="Type a command..."
             disabled={disabled}
           />
         </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools />
-          <PromptInputSubmit
-            disabled={!canSubmit}
-            status={isSending ? "submitted" : undefined}
-            aria-label={isSending ? "Sending" : "Send"}
-          />
-        </PromptInputFooter>
+        <PromptInputSubmit
+          className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
+          disabled={!canSubmit}
+          status={isSending ? "submitted" : undefined}
+          aria-label={isSending ? "Sending" : "Send"}
+        />
       </PromptInput>
       {composer.error ? (
         <p className="text-sm text-destructive">{composer.error}</p>

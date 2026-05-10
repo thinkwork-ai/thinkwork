@@ -1,5 +1,5 @@
 import { ArrowLeft, Moon, Sun } from "lucide-react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Button,
   ToggleGroup,
@@ -14,6 +14,7 @@ export function AppTopBar() {
   const { theme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { actions } = usePageHeader();
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const next = theme === "dark" ? "light" : "dark";
 
@@ -26,18 +27,40 @@ export function AppTopBar() {
     [...tabs]
       .reverse()
       .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
+  const handleHistoryBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    if (actions?.backHref) {
+      void navigate({ to: actions.backHref });
+    }
+  };
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-3 pr-4">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-4">
       {actions ? (
         <div className="flex min-w-0 items-center gap-2">
           {actions.backHref ? (
-            <Button asChild variant="ghost" size="icon-sm" className="shrink-0">
-              <Link to={actions.backHref}>
+            actions.backBehavior === "history" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0"
+                onClick={handleHistoryBack}
+              >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="sr-only">Back</span>
-              </Link>
-            </Button>
+              </Button>
+            ) : (
+              <Button asChild variant="ghost" size="icon-sm" className="shrink-0">
+                <Link to={actions.backHref}>
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="sr-only">Back</span>
+                </Link>
+              </Button>
+            )
           ) : null}
           <h1 className="truncate text-sm font-medium">{actions.title}</h1>
           {actions.subtitle ? (

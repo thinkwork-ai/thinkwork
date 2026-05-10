@@ -37,7 +37,7 @@ describe("EmptyRenderGuard", () => {
 
 		await waitFor(() => {
 			expect(
-				screen.getByText("This applet rendered no visible content."),
+				screen.getByText("This app rendered no visible content."),
 			).not.toBeNull();
 		});
 	});
@@ -52,7 +52,7 @@ describe("EmptyRenderGuard", () => {
 		expect(screen.getByText("Pipeline dashboard")).not.toBeNull();
 		await waitFor(() => {
 			expect(
-				screen.queryByText("This applet rendered no visible content."),
+				screen.queryByText("This app rendered no visible content."),
 			).toBeNull();
 		});
 	});

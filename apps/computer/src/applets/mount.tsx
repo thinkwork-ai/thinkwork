@@ -106,6 +106,7 @@ export interface AppletMountProps {
   loadModule?: AppletModuleLoader;
   onHeaderActionChange?: (action: ReactNode | null) => void;
   hideRefreshControl?: boolean;
+  fitContentHeight?: boolean;
 }
 
 export function AppletMount(props: AppletMountProps) {
@@ -132,6 +133,7 @@ function IframeAppletMount({
   version,
   onHeaderActionChange,
   hideRefreshControl = false,
+  fitContentHeight = false,
 }: AppletMountProps) {
   const [theme, setTheme] = useState<"light" | "dark">(readHostTheme);
   const [status, setStatus] = useState<IframeControllerStatus | "loading">(
@@ -171,6 +173,7 @@ function IframeAppletMount({
         setStatus("errored");
         setError(payload.message);
       },
+      fitContentHeight,
     });
     controllerRef.current = controller;
     container.replaceChildren(controller.element);
@@ -205,11 +208,11 @@ function IframeAppletMount({
   }, [onHeaderActionChange]);
 
   return (
-    <div className="grid min-w-0">
+    <div className={fitContentHeight ? "grid min-h-0 min-w-0" : "grid h-full min-h-0 min-w-0"}>
       {!hideRefreshControl && !onHeaderActionChange ? null : null}
       {status === "loading" || status === "pending" ? <AppletLoading /> : null}
       {status === "errored" ? (
-        <AppletFailure>{error ?? "Applet mount failed."}</AppletFailure>
+        <AppletFailure>{error ?? "App mount failed."}</AppletFailure>
       ) : null}
       {/* The iframe element is appended into this div by the
           controller's lifecycle. Always render the host so the
@@ -218,7 +221,11 @@ function IframeAppletMount({
       <div
         ref={containerRef}
         data-testid="applet-iframe-host"
-        className="min-w-0 overflow-x-hidden"
+        className={
+          fitContentHeight
+            ? "min-h-0 min-w-0 overflow-x-hidden"
+            : "h-full min-h-0 min-w-0 overflow-x-hidden"
+        }
       />
     </div>
   );
@@ -269,7 +276,7 @@ function LegacyAppletMount({
       if (typeof module.default !== "function") {
         setState({
           status: "error",
-          message: "Applet module must export a default React component.",
+          message: "App module must export a default React component.",
         });
         return;
       }
@@ -288,7 +295,7 @@ function LegacyAppletMount({
       setState({
         status: "error",
         message:
-          error instanceof Error ? error.message : "Applet mount failed.",
+          error instanceof Error ? error.message : "App mount failed.",
       });
     });
 

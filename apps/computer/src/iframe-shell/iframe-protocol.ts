@@ -28,6 +28,7 @@ export type EnvelopeKind =
 	| "ready-with-component"
 	| "theme"
 	| "resize"
+	| "wheel"
 	| "callback"
 	| "state-read"
 	| "state-read-ack"
@@ -51,6 +52,7 @@ export interface InitPayload {
 	version: string;
 	theme?: "light" | "dark";
 	themeOverrides?: Record<string, string>;
+	fitContentHeight?: boolean;
 }
 
 export interface ReadyPayload {
@@ -69,6 +71,12 @@ export interface ThemePayload {
 
 export interface ResizePayload {
 	height: number;
+}
+
+export interface WheelPayload {
+	deltaX: number;
+	deltaY: number;
+	deltaMode: number;
 }
 
 export interface CallbackPayload {
@@ -176,6 +184,7 @@ export function validateInboundEnvelope(
 		"ready-with-component",
 		"theme",
 		"resize",
+		"wheel",
 		"callback",
 		"state-read",
 		"state-read-ack",
@@ -279,6 +288,28 @@ const ALLOWED_PARENT_ORIGINS_DEFAULT: readonly string[] = Object.freeze([
 	"https://thinkwork.ai",
 ]);
 
+interface ViteRuntimeEnv {
+	DEV?: boolean;
+	MODE?: string;
+	VITE_ALLOWED_PARENT_ORIGINS?: string;
+	VITE_SANDBOX_IFRAME_SRC?: string;
+}
+
+function viteEnv(): ViteRuntimeEnv {
+	return (
+		import.meta as unknown as {
+			env?: ViteRuntimeEnv;
+		}
+	).env ?? {};
+}
+
+function splitOriginList(value: string): string[] {
+	return value
+		.split(",")
+		.map((origin) => origin.trim())
+		.filter(Boolean);
+}
+
 /**
  * Production build-time-substituted iframe URL. Tests can override via
  * `globalThis.__SANDBOX_IFRAME_SRC__` (which only takes effect when
@@ -296,6 +327,10 @@ export function resolveSandboxIframeSrc(): string {
 		) {
 			return __SANDBOX_IFRAME_SRC__;
 		}
+	}
+	const fromViteEnv = viteEnv().VITE_SANDBOX_IFRAME_SRC;
+	if (typeof fromViteEnv === "string" && fromViteEnv.length > 0) {
+		return fromViteEnv;
 	}
 	const fromGlobal = (
 		globalThis as { __SANDBOX_IFRAME_SRC__?: string }
@@ -315,6 +350,16 @@ export function resolveAllowedParentOrigins(): readonly string[] {
 		if (Array.isArray(list) && list.length > 0) {
 			return Object.freeze([...list]);
 		}
+	}
+	const env = viteEnv();
+	if (typeof env.VITE_ALLOWED_PARENT_ORIGINS === "string") {
+		return Object.freeze(splitOriginList(env.VITE_ALLOWED_PARENT_ORIGINS));
+	}
+	if (env.MODE === "development") {
+		return Object.freeze([
+			"http://localhost:5174",
+			"http://127.0.0.1:5174",
+		]);
 	}
 	const fromGlobal = (
 		globalThis as { __ALLOWED_PARENT_ORIGINS__?: string[] }

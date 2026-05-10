@@ -3,27 +3,10 @@ import { crmPipelineRiskData } from "@/test/fixtures/crm-pipeline-risk-applet/so
 export const crmDashboardVisualFixtures = {
   base: cloneData(),
   partialCoverage: cloneData((data) => {
-    data.sources = data.sources.map((source) =>
-      source.id === "email" || source.id === "calendar"
-        ? {
-            ...source,
-            status: "partial",
-            error: `${source.id} returned partial metadata during visual verification.`,
-          }
-        : source,
-    );
+    data.refreshNote = "Some supporting context was unavailable.";
   }),
   failedCrm: cloneData((data) => {
-    data.sources = data.sources.map((source) =>
-      source.id === "crm"
-        ? {
-            ...source,
-            status: "failed",
-            error:
-              "CRM refresh failed; the prior dashboard snapshot remains visible.",
-          }
-        : source,
-    );
+    data.refreshNote = "CRM refresh failed; prior dashboard values remain visible.";
   }),
   denseProducts: cloneData((data) => {
     data.productExposure.push(

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
 import { loadAppletHostExternals } from "@/applets/host-registry";
 import { transformApplet } from "@/applets/transform/transform";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import * as crmPipelineRiskApplet from "@/test/fixtures/crm-pipeline-risk-applet/source";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
@@ -211,6 +212,17 @@ describe("AppletRouteContent", () => {
     expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
     expect(vi.mocked(loadAppletHostExternals)).not.toHaveBeenCalled();
   });
+
+  it("uses browser history for the artifact back button with /artifacts as fallback", () => {
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        backBehavior: "history",
+        backHref: "/artifacts",
+      }),
+    );
+  });
 });
 
 describe("AppletMount", () => {
@@ -226,23 +238,15 @@ describe("AppletMount", () => {
     );
 
     expect(await screen.findByText("LastMile CRM pipeline risk")).toBeTruthy();
-    expect(screen.getByText("Refresh recipe")).toBeTruthy();
     expect(screen.getByText("Open pipeline")).toBeTruthy();
     expect(screen.getByText("Stage exposure")).toBeTruthy();
     expect(screen.getByText("Product-line exposure")).toBeTruthy();
     expect(screen.getByText("Opportunity risk")).toBeTruthy();
-    expect(screen.getByText("Source coverage")).toBeTruthy();
-    expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Refresh recipe")).toBeNull();
+    expect(screen.queryByText("Source coverage")).toBeNull();
+    expect(screen.queryByText("Evidence")).toBeNull();
 
     expect(screen.queryByText("Refresh app")).toBeNull();
-
-    const evidenceSummary = screen.getAllByText("Evidence")[0];
-    const details = evidenceSummary.closest("details");
-    expect(details?.hasAttribute("open")).toBe(false);
-    fireEvent.click(evidenceSummary);
-    expect(details?.hasAttribute("open")).toBe(true);
-    fireEvent.click(evidenceSummary);
-    expect(details?.hasAttribute("open")).toBe(false);
 
     expect(firstOpportunityRow()).toContain("Regional carrier rollout");
     fireEvent.click(screen.getByRole("button", { name: "Amount" }));

@@ -36,6 +36,7 @@ import {
 	type ResizePayload,
 	type ReadyWithComponentPayload,
 	type ThemePayload,
+	type WheelPayload,
 } from "./iframe-protocol";
 import { EmptyRenderGuard } from "./EmptyRenderGuard";
 
@@ -55,12 +56,54 @@ registryReady.catch((err) => {
 });
 installLeafletCdnCompatibilityBridge(registryReady);
 
+function installScrollableShellRoot(): void {
+	if (typeof document === "undefined") return;
+
+	document.documentElement.style.width = "100%";
+	document.documentElement.style.height = "100%";
+	document.documentElement.style.overflow = "hidden";
+	if (document.body) {
+		document.body.style.width = "100%";
+		document.body.style.height = "100%";
+		document.body.style.margin = "0";
+		document.body.style.overflow = "hidden";
+	}
+
+	const root = document.getElementById("thinkwork-iframe-shell-root");
+	if (!root) return;
+	root.style.width = "100%";
+	root.style.height = "100%";
+	root.style.overflowX = "hidden";
+	root.style.overflowY = "auto";
+	root.style.overscrollBehavior = "contain";
+}
+
+function installFullCanvasReset(): void {
+	if (typeof document === "undefined") return;
+	if (document.getElementById("thinkwork-full-canvas-reset")) return;
+
+	const style = document.createElement("style");
+	style.id = "thinkwork-full-canvas-reset";
+	style.textContent = `
+		[data-thinkwork-applet-content],
+		[data-thinkwork-applet-content] > *,
+		[data-thinkwork-applet-content] > * > * {
+			border-radius: 0 !important;
+		}
+	`;
+	document.head.appendChild(style);
+}
+
+installScrollableShellRoot();
+installFullCanvasReset();
+
 interface IframeShellState {
 	parentWindow: Window | null;
 	channelId: string | null;
 	mounted: boolean;
 	root: Root | null;
 	rootContainer: HTMLDivElement | null;
+	fitContentHeight: boolean;
 	pendingStateReplies: Map<
 		string,
 		{ resolve: (value: unknown) => void; reject: (err: Error) => void }
@@ -73,6 +116,7 @@ const state: IframeShellState = {
 	mounted: false,
 	root: null,
 	rootContainer: null,
+	fitContentHeight: false,
 	pendingStateReplies: new Map(),
 };
 
@@ -87,6 +131,25 @@ function postToParent<P>(
 	if (!state.parentWindow || !state.channelId) return;
 	const envelope = buildEnvelope(kind, payload, state.channelId, replyTo);
 	state.parentWindow.postMessage(envelope, "*");
+}
+
+function installInlineWheelForwarding(): void {
+	if (typeof window === "undefined") return;
+	window.addEventListener(
+		"wheel",
+		(event) => {
+			if (!state.fitContentHeight) return;
+			if (!state.parentWindow || !state.channelId) return;
+
+			event.preventDefault();
+			postToParent<WheelPayload>("wheel", {
+				deltaX: event.deltaX,
+				deltaY: event.deltaY,
+				deltaMode: event.deltaMode,
+			});
+		},
+		{ passive: false },
+	);
 }
 
 function measureContentHeight(rootEl: HTMLElement): number {
@@ -219,7 +282,7 @@ async function compileAndMount(
 				{
 					code: "RUNTIME_ERROR",
 					message:
-						"Applet module must export a default React component.",
+						"App module must export a default React component.",
 				},
 				msgId,
 			);
@@ -294,6 +357,7 @@ async function compileAndMount(
 }
 
 function handleInit(payload: InitPayload, msgId: string): void {
+	state.fitContentHeight = Boolean(payload.fitContentHeight);
 	void compileAndMount(payload, msgId);
 }
 
@@ -302,6 +366,8 @@ function handleTheme(payload: ThemePayload): void {
 }
 
 if (typeof window !== "undefined") {
+	installInlineWheelForwarding();
+
 	window.addEventListener("securitypolicyviolation", (event) => {
 		const cspEvent = event as SecurityPolicyViolationEvent;
 		const error: ErrorPayload = {

@@ -32,7 +32,7 @@ type AppletRow = {
 const columns: ColumnDef<AppletRow>[] = [
   {
     accessorKey: "name",
-    header: "Applet",
+    header: "App",
     cell: ({ row }) => (
       <span className="flex min-w-0 items-center gap-2 font-medium">
         <AppWindow className="h-4 w-4 shrink-0 text-primary" />
@@ -77,7 +77,7 @@ function AppletsPage() {
   const [userFilter, setUserFilter] = useState("");
   const trimmedUserFilter = userFilter.trim();
 
-  useBreadcrumbs([{ label: "Applets" }]);
+  useBreadcrumbs([{ label: "Apps" }]);
 
   const [result] = useQuery({
     query: AdminAppletsQuery,
@@ -109,7 +109,7 @@ function AppletsPage() {
   return (
     <PageLayout
       header={
-        <PageHeader title="Applets">
+        <PageHeader title="Apps">
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -125,8 +125,8 @@ function AppletsPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={AppWindow}
-          title="No applets found"
-          description="Applets created by Computer will appear here for read-only support inspection."
+          title="No apps found"
+          description="Apps created by Computer will appear here for read-only support inspection."
         />
       ) : (
         <DataTable
