@@ -1,4 +1,8 @@
-import type { ComputerRuntimeApi, RuntimeTask } from "./api-client.js";
+import type {
+  ComputerRuntimeApi,
+  RunbookAgentStepOutput,
+  RuntimeTask,
+} from "./api-client.js";
 
 export type RunbookTaskStatus =
   | "pending"
@@ -20,6 +24,7 @@ export type RunbookExecutionTask = {
   capabilityRoles: string[];
   sortOrder: number;
   output?: unknown;
+  error?: unknown;
 };
 
 export type RunbookExecutionContext = {
@@ -47,6 +52,9 @@ export type RunbookRuntimeApi = Pick<
   | "completeRunbookRun"
   | "recordRunbookResponse"
 >;
+
+const DEFAULT_STEP_POLL_INTERVAL_MS = 5000;
+const DEFAULT_STEP_POLL_TIMEOUT_MS = 20 * 60 * 1000;
 
 export type RunbookTaskRunner = (
   task: RunbookExecutionTask,
@@ -78,8 +86,11 @@ export async function executeRunbook(
     };
   }
 
-  for (const runbookTask of context.tasks.sort(bySortOrder)) {
+  for (const scheduledTask of context.tasks.sort(bySortOrder)) {
     context = await api.loadRunbookExecutionContext(task.id);
+    const runbookTask =
+      context.tasks.find((candidate) => candidate.id === scheduledTask.id) ??
+      scheduledTask;
     if (isCancelled(context.run.status)) {
       await api.appendTaskEvent(task.id, {
         eventType: "runbook_cancelled",
@@ -129,8 +140,19 @@ export async function executeRunbook(
           previousOutputs: { ...previousOutputs },
         },
       );
-      previousOutputs[runbookTask.taskKey] = output ?? null;
-      await api.completeRunbookTask(task.id, runbookTask.id, output ?? null);
+      const taskAfterRun = await loadCurrentRunbookTask(
+        api,
+        task.id,
+        runbookTask.id,
+      );
+      const completedElsewhere = taskAfterRun?.status === "completed";
+      const finalOutput = completedElsewhere
+        ? (taskAfterRun.output ?? output ?? null)
+        : (output ?? null);
+      previousOutputs[runbookTask.taskKey] = finalOutput;
+      if (!completedElsewhere) {
+        await api.completeRunbookTask(task.id, runbookTask.id, finalOutput);
+      }
       await api.appendTaskEvent(task.id, {
         eventType: "runbook_task_completed",
         level: "info",
@@ -180,10 +202,17 @@ export async function executeRunbook(
 }
 
 export function defaultRunbookTaskRunner(
-  api: Pick<ComputerRuntimeApi, "executeRunbookTask">,
+  api: Pick<
+    ComputerRuntimeApi,
+    "executeRunbookTask" | "loadRunbookExecutionContext"
+  >,
   computerTaskId: string,
 ): RunbookTaskRunner {
-  return async (task) => api.executeRunbookTask(computerTaskId, task.id);
+  return async (task) => {
+    const result = await api.executeRunbookTask(computerTaskId, task.id);
+    if (isRunbookAgentStepOutput(result)) return result;
+    return waitForRunbookTaskCompletion(api, computerTaskId, task.id);
+  };
 }
 
 async function recordFinalRunbookResponse(
@@ -214,6 +243,75 @@ function collectPreviousOutputs(tasks: RunbookExecutionTask[]) {
       outputs[task.taskKey] = task.output ?? null;
   }
   return outputs;
+}
+
+async function waitForRunbookTaskCompletion(
+  api: Pick<ComputerRuntimeApi, "loadRunbookExecutionContext">,
+  computerTaskId: string,
+  runbookTaskId: string,
+) {
+  const startedAt = Date.now();
+  const timeoutMs = positiveNumberFromEnv(
+    "RUNBOOK_STEP_POLL_TIMEOUT_MS",
+    DEFAULT_STEP_POLL_TIMEOUT_MS,
+  );
+  const intervalMs = positiveNumberFromEnv(
+    "RUNBOOK_STEP_POLL_INTERVAL_MS",
+    DEFAULT_STEP_POLL_INTERVAL_MS,
+  );
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const task = await loadCurrentRunbookTask(
+      api,
+      computerTaskId,
+      runbookTaskId,
+    );
+    if (!task) throw new Error(`Runbook task ${runbookTaskId} disappeared`);
+    if (task.status === "completed") return task.output ?? null;
+    if (task.status === "failed") {
+      throw new Error(
+        `Runbook task ${task.taskKey} failed${taskErrorSuffix(task.error)}`,
+      );
+    }
+    if (task.status === "cancelled" || task.status === "skipped") {
+      throw new Error(`Runbook task ${task.taskKey} is ${task.status}`);
+    }
+    await sleep(intervalMs);
+  }
+
+  throw new Error(`Timed out waiting for runbook task ${runbookTaskId}`);
+}
+
+async function loadCurrentRunbookTask(
+  api: Pick<ComputerRuntimeApi, "loadRunbookExecutionContext">,
+  computerTaskId: string,
+  runbookTaskId: string,
+) {
+  const context = await api.loadRunbookExecutionContext(computerTaskId);
+  return context.tasks.find((task) => task.id === runbookTaskId) ?? null;
+}
+
+function isRunbookAgentStepOutput(
+  value: unknown,
+): value is RunbookAgentStepOutput {
+  return isRecord(value) && typeof value.responseText === "string";
+}
+
+function positiveNumberFromEnv(name: string, fallback: number) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function taskErrorSuffix(output: unknown) {
+  if (!isRecord(output)) return "";
+  const message = output.message;
+  return typeof message === "string" && message ? `: ${message}` : "";
 }
 
 function validateRunbookDependencies(tasks: RunbookExecutionTask[]) {

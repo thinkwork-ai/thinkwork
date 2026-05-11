@@ -70,6 +70,7 @@ export type RunbookExecutionContext = {
     capabilityRoles: string[];
     sortOrder: number;
     output?: unknown;
+    error?: unknown;
   }>;
   definitionSnapshot?: unknown;
   inputs?: unknown;
@@ -83,6 +84,13 @@ export type RunbookAgentStepOutput = {
   usage?: unknown;
   toolInvocations?: Array<Record<string, unknown>>;
   durationMs?: number;
+};
+
+export type RunbookAgentStepDispatch = {
+  ok: true;
+  dispatched: true;
+  runbookTaskId: string;
+  status: "running";
 };
 
 export class ComputerRuntimeApi {
@@ -344,7 +352,7 @@ export class ComputerRuntimeApi {
   async executeRunbookTask(
     taskId: string,
     runbookTaskId: string,
-  ): Promise<RunbookAgentStepOutput> {
+  ): Promise<RunbookAgentStepOutput | RunbookAgentStepDispatch> {
     return this.request(
       `/api/computers/runtime/tasks/${taskId}/runbook/tasks/${runbookTaskId}/execute`,
       {
