@@ -83,4 +83,36 @@ describe("TaskDashboard", () => {
 
     expect(screen.getByText("No threads match the current search")).toBeTruthy();
   });
+
+  it("shows a row loading indicator while a thread delete is pending", () => {
+    render(
+      <TaskDashboard
+        threads={[
+          {
+            id: "thread-1",
+            number: 402,
+            identifier: "CHAT-402",
+            title: "Research dashboard",
+            status: "IN_PROGRESS",
+            computerId: "computer-1",
+            channel: "CHAT",
+            updatedAt: "2026-05-08T16:00:00.000Z",
+          },
+        ]}
+        deletingThreadIds={new Set(["thread-1"])}
+        totalCount={1}
+        pageIndex={0}
+        pageSize={50}
+        search=""
+        onPageChange={vi.fn()}
+        onPageSizeChange={vi.fn()}
+        onSearchChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Deleting thread")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /chat-402/i }).getAttribute("aria-busy"),
+    ).toBe("true");
+  });
 });

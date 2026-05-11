@@ -106,4 +106,48 @@ describe("apps/computer Memory in-page tab strip", () => {
     const memoriesTab = screen.getByRole("tab", { name: "Memories" });
     expect(memoriesTab.getAttribute("data-state")).toBe("active");
   });
+
+  it("uses compact 40px table rows for memory records", async () => {
+    useQueryMock.mockReset();
+    useQueryMock
+      .mockReturnValueOnce([
+        {
+          data: {
+            myComputer: {
+              id: "computer-1",
+              tenantId: "tenant-A",
+              ownerUserId: "user-1",
+            },
+          },
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          data: {
+            memoryRecords: [
+              {
+                memoryRecordId: "memory-1",
+                content: { text: "A compact table fact." },
+                createdAt: "2026-05-11T12:00:00.000Z",
+                namespace: "user_user-1",
+                strategy: "semantic",
+              },
+            ],
+          },
+          fetching: false,
+        },
+        vi.fn(),
+      ])
+      .mockReturnValueOnce([{ data: undefined, fetching: false }]);
+
+    render(<BrainPage />);
+
+    const memory = await screen.findByText("A compact table fact.");
+    const row = memory.closest("tr");
+    expect(row?.className).toContain("h-10");
+    for (const cell of row?.querySelectorAll("td") ?? []) {
+      expect(cell.className).toContain("h-10");
+      expect(cell.className).toContain("p-0");
+    }
+  });
 });

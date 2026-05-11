@@ -11,6 +11,10 @@ import {
   ThreadUpdatedSubscription,
   ThreadsPagedQuery,
 } from "@/lib/graphql-queries";
+import {
+  clearMissingThreadDeletes,
+  usePendingThreadDeletes,
+} from "@/lib/pending-thread-deletes";
 
 export const Route = createFileRoute("/_authed/_shell/threads/")({
   component: ThreadsPage,
@@ -55,6 +59,7 @@ function ThreadsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const pendingThreadDeletes = usePendingThreadDeletes();
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -107,9 +112,17 @@ function ThreadsPage() {
     }
   }, [reexecuteQuery, tenantId, turnUpdate?.onThreadTurnUpdated?.tenantId]);
 
+  useEffect(() => {
+    if (!data?.threadsPaged.items) return;
+    clearMissingThreadDeletes(
+      data.threadsPaged.items.map((thread) => thread.id),
+    );
+  }, [data?.threadsPaged.items]);
+
   return (
     <TaskDashboard
       threads={(data?.threadsPaged.items ?? []).map(toThreadSummary)}
+      deletingThreadIds={pendingThreadDeletes}
       totalCount={data?.threadsPaged.totalCount ?? 0}
       pageIndex={pageIndex}
       pageSize={pageSize}

@@ -4,6 +4,8 @@ import { Badge, DataTable } from "@thinkwork/ui";
 import { formatShortDate, shortModel } from "@/lib/app-artifacts";
 import type { ArtifactItem } from "./artifacts-filtering";
 
+const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
 export interface ArtifactsTableProps {
   items: ArtifactItem[];
   emptyMessage?: string;
@@ -23,12 +25,12 @@ export function ArtifactsTable({
         size: 240,
         cell: ({ row }) => (
           <span
-            className="block truncate text-sm font-medium"
+            className={`${COMPACT_TABLE_CELL} text-sm font-medium`}
             data-row-id={row.original.id}
             data-testid="artifacts-table-row"
             title={row.original.title}
           >
-            {row.original.title}
+            <span className="truncate">{row.original.title}</span>
           </span>
         ),
       },
@@ -37,9 +39,11 @@ export function ArtifactsTable({
         header: "Kind",
         size: 100,
         cell: ({ row }) => (
-          <Badge variant="outline" className="uppercase tracking-wide">
-            {row.original.kind}
-          </Badge>
+          <span className={COMPACT_TABLE_CELL}>
+            <Badge variant="outline" className="uppercase tracking-wide">
+              {row.original.kind}
+            </Badge>
+          </span>
         ),
       },
       {
@@ -48,10 +52,10 @@ export function ArtifactsTable({
         size: 160,
         cell: ({ row }) => (
           <span
-            className="block truncate text-xs text-muted-foreground"
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
             title={row.original.modelId ?? undefined}
           >
-            {shortModel(row.original.modelId)}
+            <span className="truncate">{shortModel(row.original.modelId)}</span>
           </span>
         ),
       },
@@ -60,7 +64,7 @@ export function ArtifactsTable({
         header: "Stdlib",
         size: 100,
         cell: ({ row }) => (
-          <span className="block text-xs text-muted-foreground">
+          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
             {row.original.stdlibVersion ?? "—"}
           </span>
         ),
@@ -70,7 +74,7 @@ export function ArtifactsTable({
         header: "Generated",
         size: 120,
         cell: ({ row }) => (
-          <span className="block text-xs text-muted-foreground">
+          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
             {formatShortDate(row.original.generatedAt)}
           </span>
         ),
@@ -81,11 +85,13 @@ export function ArtifactsTable({
         size: 90,
         cell: ({ row }) =>
           row.original.version != null ? (
-            <Badge variant="outline" className="font-normal">
-              v{row.original.version}
-            </Badge>
+            <span className={COMPACT_TABLE_CELL}>
+              <Badge variant="outline" className="font-normal">
+                v{row.original.version}
+              </Badge>
+            </span>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>—</span>
           ),
       },
     ],
@@ -110,10 +116,10 @@ export function ArtifactsTable({
         data={items}
         onRowClick={onRowClick}
         scrollable
+        compact
         pageSize={50}
         tableClassName="table-fixed"
       />
     </div>
   );
 }
-

@@ -116,6 +116,16 @@ describe("ArtifactsListBody", () => {
     expect(bodyRows()).toHaveLength(3);
   });
 
+  it("uses compact 40px table rows", () => {
+    render(<ArtifactsListBody items={items} />);
+    const row = rowFor("Austin Map");
+    expect(row.className).toContain("h-10");
+    for (const cell of row.querySelectorAll("td")) {
+      expect(cell.className).toContain("h-10");
+      expect(cell.className).toContain("p-0");
+    }
+  });
+
   it("filters by title text in the search input", () => {
     render(<ArtifactsListBody items={items} />);
     const search = screen.getByTestId(
