@@ -110,9 +110,50 @@ def build_runbook_queue_part(runbook_context: Any) -> dict[str, Any]:
     normalized = _normalize_context(runbook_context)
     run_id = normalized["run"]["id"]
     return {
-        "type": "data-runbook-queue",
-        "id": f"runbook-queue:{run_id}",
-        "data": build_runbook_queue_data(normalized),
+        "type": "data-task-queue",
+        "id": f"task-queue:{run_id}",
+        "data": build_task_queue_data(normalized),
+    }
+
+
+def build_task_queue_data(runbook_context: Any) -> dict[str, Any]:
+    normalized = _normalize_context(runbook_context)
+    run = normalized["run"]
+    definition = normalized["definition"]
+    legacy_queue = build_runbook_queue_data(normalized)
+    return {
+        "queueId": run["id"],
+        "title": _display_name(definition, run),
+        "status": run["status"],
+        "source": {
+            "type": "runbook",
+            "id": run["id"],
+            "slug": run["runbookSlug"],
+        },
+        "summary": "Working through the approved runbook queue.",
+        "groups": [
+            {
+                "id": phase["id"],
+                "title": phase["title"],
+                "items": [
+                    {
+                        "id": task["id"],
+                        "title": task["title"],
+                        "summary": task.get("summary"),
+                        "status": task["status"],
+                        "metadata": {
+                            "taskKey": task["taskKey"],
+                            "capabilityRoles": task.get("capabilityRoles"),
+                            "runbookSlug": run["runbookSlug"],
+                            "runbookVersion": run["runbookVersion"],
+                            "currentTaskKey": legacy_queue["currentTaskKey"],
+                        },
+                    }
+                    for task in phase["tasks"]
+                ],
+            }
+            for phase in legacy_queue["phases"]
+        ],
     }
 
 

@@ -75,7 +75,7 @@ import {
   completeRunbookExecutionRun,
   loadRunbookExecutionContext,
 } from "./runtime-api.js";
-import { markRunbookRunRunning } from "./runs.js";
+import { failRunbookRunFromThreadTurn, markRunbookRunRunning } from "./runs.js";
 
 const taskRow = {
   id: "task-1",
@@ -197,7 +197,12 @@ describe("runbook runtime API helpers", () => {
     expect(mocks.updates).toHaveLength(0);
   });
 
-  it("marks the run running without marking every task running", async () => {
+  it("marks the run and first pending task running without marking every task running", async () => {
+    const firstTask = {
+      ...completedTask,
+      status: "pending",
+      output: null,
+    };
     const pendingTask = {
       ...completedTask,
       id: "rt-2",
@@ -209,8 +214,11 @@ describe("runbook runtime API helpers", () => {
     };
     mocks.selectQueue.push(
       [],
+      [],
+      [{ id: "rt-1" }],
+      [],
       [{ ...runRow, status: "running" }],
-      [{ ...completedTask, status: "pending" }, pendingTask],
+      [{ ...firstTask, status: "running" }, pendingTask],
     );
 
     const result = await markRunbookRunRunning({
@@ -218,11 +226,61 @@ describe("runbook runtime API helpers", () => {
       runId: "run-1",
     });
 
-    expect(mocks.updates).toHaveLength(1);
+    expect(mocks.updates).toHaveLength(2);
     expect(mocks.updates[0]).toMatchObject({ status: "running" });
+    expect(mocks.updates[1]).toMatchObject({ status: "running" });
     expect(result?.tasks.map((task) => task.status)).toEqual([
+      "RUNNING",
       "PENDING",
-      "PENDING",
+    ]);
+  });
+
+  it("fails only the active task and skips pending tasks when a thread-turn runbook fails", async () => {
+    const runningTask = {
+      ...completedTask,
+      status: "running",
+      output: null,
+    };
+    const pendingTask = {
+      ...completedTask,
+      id: "rt-2",
+      task_key: "discover:2",
+      title: "Inventory evidence",
+      status: "pending",
+      sort_order: 2,
+      output: null,
+    };
+    mocks.selectQueue.push(
+      [{ id: "rt-1" }],
+      [],
+      [],
+      [],
+      [{ ...runRow, status: "failed" }],
+      [
+        { ...runningTask, status: "failed" },
+        { ...pendingTask, status: "skipped" },
+      ],
+    );
+
+    const result = await failRunbookRunFromThreadTurn({
+      tenantId: "tenant-1",
+      runId: "run-1",
+      error: { message: "boom" },
+    });
+
+    expect(mocks.updates).toHaveLength(3);
+    expect(mocks.updates[0]).toMatchObject({
+      status: "failed",
+      error: { message: "boom" },
+    });
+    expect(mocks.updates[1]).toMatchObject({ status: "skipped" });
+    expect(mocks.updates[2]).toMatchObject({
+      status: "failed",
+      error: { message: "boom" },
+    });
+    expect(result?.tasks.map((task) => task.status)).toEqual([
+      "FAILED",
+      "SKIPPED",
     ]);
   });
 });

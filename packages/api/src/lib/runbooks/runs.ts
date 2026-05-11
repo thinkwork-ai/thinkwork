@@ -213,20 +213,64 @@ export async function markRunbookRunRunning(input: {
   runId: string;
 }) {
   const now = new Date();
-  await db
-    .update(computerRunbookRuns)
-    .set({
-      status: "running",
-      started_at: now,
-      updated_at: now,
-    })
-    .where(
-      and(
-        eq(computerRunbookRuns.tenant_id, input.tenantId),
-        eq(computerRunbookRuns.id, input.runId),
-        inArray(computerRunbookRuns.status, ["queued", "running"]),
-      ),
-    );
+  await db.transaction(async (tx) => {
+    await tx
+      .update(computerRunbookRuns)
+      .set({
+        status: "running",
+        started_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookRuns.tenant_id, input.tenantId),
+          eq(computerRunbookRuns.id, input.runId),
+          inArray(computerRunbookRuns.status, ["queued", "running"]),
+        ),
+      );
+
+    const [activeTask] = await tx
+      .select({ id: computerRunbookTasks.id })
+      .from(computerRunbookTasks)
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          eq(computerRunbookTasks.status, "running"),
+        ),
+      )
+      .limit(1);
+    if (activeTask) return;
+
+    const [firstPendingTask] = await tx
+      .select({ id: computerRunbookTasks.id })
+      .from(computerRunbookTasks)
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          eq(computerRunbookTasks.status, "pending"),
+        ),
+      )
+      .orderBy(asc(computerRunbookTasks.sort_order))
+      .limit(1);
+    if (!firstPendingTask) return;
+
+    await tx
+      .update(computerRunbookTasks)
+      .set({
+        status: "running",
+        started_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.id, firstPendingTask.id),
+          eq(computerRunbookTasks.status, "pending"),
+        ),
+      );
+  });
   return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
 }
 
@@ -277,12 +321,59 @@ export async function failRunbookRunFromThreadTurn(input: {
   error: unknown;
 }) {
   const now = new Date();
+  const error = input.error ?? { message: "Runbook run failed" };
   await db.transaction(async (tx) => {
+    const runningTasks = await tx
+      .select({ id: computerRunbookTasks.id })
+      .from(computerRunbookTasks)
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          eq(computerRunbookTasks.status, "running"),
+        ),
+      )
+      .orderBy(asc(computerRunbookTasks.sort_order));
+    const failedTaskIds = runningTasks.map((task) => task.id);
+
+    if (failedTaskIds.length === 0) {
+      const [firstPendingTask] = await tx
+        .select({ id: computerRunbookTasks.id })
+        .from(computerRunbookTasks)
+        .where(
+          and(
+            eq(computerRunbookTasks.tenant_id, input.tenantId),
+            eq(computerRunbookTasks.run_id, input.runId),
+            eq(computerRunbookTasks.status, "pending"),
+          ),
+        )
+        .orderBy(asc(computerRunbookTasks.sort_order))
+        .limit(1);
+      if (firstPendingTask) failedTaskIds.push(firstPendingTask.id);
+    }
+
+    if (failedTaskIds.length > 0) {
+      await tx
+        .update(computerRunbookTasks)
+        .set({
+          status: "failed",
+          error,
+          completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(computerRunbookTasks.tenant_id, input.tenantId),
+            eq(computerRunbookTasks.run_id, input.runId),
+            inArray(computerRunbookTasks.id, failedTaskIds),
+          ),
+        );
+    }
+
     await tx
       .update(computerRunbookTasks)
       .set({
-        status: "failed",
-        error: input.error ?? { message: "Runbook task failed" },
+        status: "skipped",
         completed_at: now,
         updated_at: now,
       })
@@ -290,14 +381,14 @@ export async function failRunbookRunFromThreadTurn(input: {
         and(
           eq(computerRunbookTasks.tenant_id, input.tenantId),
           eq(computerRunbookTasks.run_id, input.runId),
-          inArray(computerRunbookTasks.status, ["pending", "running"]),
+          eq(computerRunbookTasks.status, "pending"),
         ),
       );
     await tx
       .update(computerRunbookRuns)
       .set({
         status: "failed",
-        error: input.error ?? { message: "Runbook run failed" },
+        error,
         completed_at: now,
         updated_at: now,
       })

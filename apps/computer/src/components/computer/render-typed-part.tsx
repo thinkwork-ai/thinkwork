@@ -143,7 +143,7 @@ export function renderTypedPart(
         />
       );
     }
-    if (part.type === "data-runbook-queue") {
+    if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.
       // Rendering it here duplicates the same task list in the transcript.
       return null;
@@ -178,9 +178,8 @@ export function renderTypedParts(
   options: { keyPrefix: string },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
-  let toolBuffer: Array<
-    Extract<AccumulatedPart, { type: `tool-${string}` }>
-  > = [];
+  let toolBuffer: Array<Extract<AccumulatedPart, { type: `tool-${string}` }>> =
+    [];
 
   function flushTools(index: number) {
     if (toolBuffer.length === 0) return;
@@ -285,9 +284,7 @@ function ToolActivityRow({
   );
 }
 
-function toolLabel(
-  tool: Extract<AccumulatedPart, { type: `tool-${string}` }>,
-) {
+function toolLabel(tool: Extract<AccumulatedPart, { type: `tool-${string}` }>) {
   return tool.toolName.replace(/[_-]/g, " ");
 }
 

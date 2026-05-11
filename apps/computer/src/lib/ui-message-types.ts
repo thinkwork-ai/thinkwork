@@ -143,3 +143,61 @@ export interface RunbookQueueData {
   sourceMessageId?: string;
   phases?: RunbookQueuePhase[];
 }
+
+export type TaskQueueStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | string;
+
+export type TaskQueueItemStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "cancelled"
+  | string;
+
+export interface TaskQueueSource {
+  type?:
+    | "runbook"
+    | "deep_research"
+    | "artifact_build"
+    | "map_build"
+    | "connector_work"
+    | "manual_plan"
+    | string;
+  id?: string;
+  slug?: string;
+}
+
+export interface TaskQueueItem {
+  id?: string;
+  title?: string;
+  summary?: string | null;
+  status?: TaskQueueItemStatus;
+  output?: unknown;
+  error?: unknown;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TaskQueueGroup {
+  id?: string;
+  title?: string;
+  items?: TaskQueueItem[];
+}
+
+export interface TaskQueueData {
+  queueId?: string;
+  title?: string;
+  status?: TaskQueueStatus;
+  source?: TaskQueueSource;
+  summary?: string;
+  groups?: TaskQueueGroup[];
+  items?: TaskQueueItem[];
+}
