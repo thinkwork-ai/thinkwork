@@ -748,7 +748,7 @@ const HIDDEN_PROMPT_QUEUE_STATUSES = new Set(["rejected"]);
 
 function isPromptWorthyRunbookQueue(queue: ActiveRunbookQueue) {
   const status = normalizeRunbookQueueStatus(queue.data.status);
-  if (status === "completed" && queue.source !== "stream") return false;
+  if (status === "completed" && queue.source === "persisted") return false;
   return !HIDDEN_PROMPT_QUEUE_STATUSES.has(status);
 }
 
