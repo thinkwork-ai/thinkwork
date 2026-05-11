@@ -64,6 +64,8 @@ async function apiFetch<T>(
   });
 }
 
+const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
 function jobColumns(
   runningIds: Set<string>,
   computerName: string,
@@ -73,10 +75,14 @@ function jobColumns(
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <div className="flex flex-col gap-0.5">
-          <span className="font-medium">{row.original.name}</span>
+        <div
+          className={`${COMPACT_TABLE_CELL} flex-col items-start justify-center gap-0.5 overflow-hidden`}
+        >
+          <span className="max-w-full truncate font-medium leading-4">
+            {row.original.name}
+          </span>
           {row.original.description && (
-            <span className="text-xs text-muted-foreground line-clamp-1">
+            <span className="max-w-full truncate text-xs leading-3 text-muted-foreground">
               {row.original.description}
             </span>
           )}
@@ -87,13 +93,15 @@ function jobColumns(
       id: "owner",
       header: "Type",
       cell: () => (
-        <Badge
-          variant="secondary"
-          className="text-xs gap-1 bg-purple-500/15 text-purple-600 dark:text-purple-400"
-        >
-          <Monitor className="h-3.5 w-3.5" />
-          {computerName || "Computer"}
-        </Badge>
+        <span className={COMPACT_TABLE_CELL}>
+          <Badge
+            variant="secondary"
+            className="text-xs gap-1 bg-purple-500/15 text-purple-600 dark:text-purple-400"
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            {computerName || "Computer"}
+          </Badge>
+        </span>
       ),
       size: 160,
     },
@@ -101,9 +109,9 @@ function jobColumns(
       accessorKey: "schedule_expression",
       header: "Schedule",
       cell: ({ row }) => (
-        <div className="flex items-center gap-1.5">
+        <div className={`${COMPACT_TABLE_CELL} gap-1.5`}>
           <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs">
+          <span className="truncate text-xs">
             {formatSchedule(row.original.schedule_expression)}
           </span>
         </div>
@@ -117,31 +125,37 @@ function jobColumns(
         const isRunning = runningIds.has(row.original.id);
         if (!row.original.enabled) {
           return (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 bg-muted text-muted-foreground"
-            >
-              <Pause className="h-3 w-3" /> Disabled
-            </Badge>
+            <span className={COMPACT_TABLE_CELL}>
+              <Badge
+                variant="secondary"
+                className="text-xs gap-1 bg-muted text-muted-foreground"
+              >
+                <Pause className="h-3 w-3" /> Disabled
+              </Badge>
+            </span>
           );
         }
         if (isRunning) {
           return (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 bg-blue-500/15 text-blue-600 dark:text-blue-400"
-            >
-              <Loader2 className="h-3 w-3 animate-spin" /> Running
-            </Badge>
+            <span className={COMPACT_TABLE_CELL}>
+              <Badge
+                variant="secondary"
+                className="text-xs gap-1 bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              >
+                <Loader2 className="h-3 w-3 animate-spin" /> Running
+              </Badge>
+            </span>
           );
         }
         return (
-          <Badge
-            variant="secondary"
-            className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
-          >
-            <Play className="h-3 w-3 fill-current" /> Idle
-          </Badge>
+          <span className={COMPACT_TABLE_CELL}>
+            <Badge
+              variant="secondary"
+              className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
+            >
+              <Play className="h-3 w-3 fill-current" /> Idle
+            </Badge>
+          </span>
         );
       },
       size: 110,
@@ -150,7 +164,7 @@ function jobColumns(
       accessorKey: "last_run_at",
       header: "Last Run",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
+        <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
           {row.original.last_run_at
             ? relativeTime(row.original.last_run_at)
             : "Never"}
@@ -163,7 +177,7 @@ function jobColumns(
       header: "Next Run",
       cell: ({ row }) => {
         if (!row.original.enabled) {
-          return <span className="text-xs text-muted-foreground">—</span>;
+          return <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>—</span>;
         }
         const nextDb = row.original.next_run_at;
         const estimated = estimateNextRun(
@@ -172,10 +186,10 @@ function jobColumns(
         );
         const nextDate = nextDb ? new Date(nextDb) : estimated;
         if (!nextDate) {
-          return <span className="text-xs text-muted-foreground">—</span>;
+          return <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>—</span>;
         }
         return (
-          <span className="text-xs text-muted-foreground">
+          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
             {relativeTime(nextDate.toISOString())}
           </span>
         );
@@ -389,6 +403,7 @@ function AutomationsPage() {
           filterValue={search}
           filterColumn="name"
           pageSize={10}
+          compact
           onRowClick={(row) =>
             navigate({
               to: "/automations/$scheduledJobId",

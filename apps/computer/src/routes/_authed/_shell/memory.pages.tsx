@@ -37,6 +37,8 @@ import {
 
 type PagesView = "table" | "graph";
 
+const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
 function isPagesView(v: unknown): v is PagesView {
   return v === "table" || v === "graph";
 }
@@ -161,27 +163,37 @@ function PagesPage() {
         size: 140,
         cell: ({ row }) => {
           const d = row.original.lastCompiledAt ?? row.original.updatedAt;
-          return d
-            ? new Date(d).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })
-            : "—";
+          return (
+            <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+              {d
+                ? new Date(d).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </span>
+          );
         },
       },
       {
         accessorKey: "type",
         header: "Type",
         size: 110,
-        cell: ({ row }) => <PageTypeBadge type={row.original.type} />,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <PageTypeBadge type={row.original.type} />
+          </span>
+        ),
       },
       {
         accessorKey: "title",
         header: "Title",
         cell: ({ row }) => (
-          <span className="font-medium truncate block">{row.original.title}</span>
+          <span className={`${COMPACT_TABLE_CELL} font-medium`}>
+            <span className="truncate">{row.original.title}</span>
+          </span>
         ),
       },
     ],
@@ -301,6 +313,7 @@ function PagesPage() {
             data={rows}
             onRowClick={handleRowClick}
             scrollable
+            compact
             pageSize={25}
             tableClassName="table-fixed"
           />

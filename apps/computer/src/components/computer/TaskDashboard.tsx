@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Archive, Lock, Search } from "lucide-react";
+import { Archive, Loader2, Lock, Search } from "lucide-react";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { COMPUTER_NEW_THREAD_ROUTE } from "@/lib/computer-routes";
@@ -35,6 +35,7 @@ interface TaskDashboardProps {
   pageIndex: number;
   pageSize: number;
   search: string;
+  deletingThreadIds?: ReadonlySet<string>;
   isLoading?: boolean;
   error?: string | null;
   onPageChange: (pageIndex: number) => void;
@@ -48,6 +49,7 @@ export function TaskDashboard({
   pageIndex,
   pageSize,
   search,
+  deletingThreadIds = new Set(),
   isLoading = false,
   error,
   onPageChange,
@@ -62,10 +64,15 @@ export function TaskDashboard({
     () => [
       {
         id: "thread",
-        cell: ({ row }) => <ThreadTableRow thread={row.original} />,
+        cell: ({ row }) => (
+          <ThreadTableRow
+            thread={row.original}
+            isDeleting={deletingThreadIds.has(row.original.id)}
+          />
+        ),
       },
     ],
-    [],
+    [deletingThreadIds],
   );
 
   return (
@@ -131,7 +138,13 @@ export function TaskDashboard({
   );
 }
 
-function ThreadTableRow({ thread }: { thread: TaskSummary }) {
+function ThreadTableRow({
+  thread,
+  isDeleting,
+}: {
+  thread: TaskSummary;
+  isDeleting: boolean;
+}) {
   const title = thread.title?.trim() || "Untitled thread";
   const identifier = thread.identifier ?? `#${thread.number ?? "?"}`;
   const owner = ownerLabel(thread);
@@ -141,11 +154,15 @@ function ThreadTableRow({ thread }: { thread: TaskSummary }) {
     <Link
       to="/threads/$id"
       params={{ id: thread.id }}
-      className="flex h-10 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm"
+      aria-busy={isDeleting || undefined}
+      aria-disabled={isDeleting || undefined}
+      className={`flex h-10 min-w-0 items-center gap-3 overflow-hidden px-3 text-sm transition-opacity ${
+        isDeleting ? "pointer-events-none opacity-60" : ""
+      }`}
       onClick={(event) => event.stopPropagation()}
     >
       <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-        <StatusDot status={thread.status} />
+        <StatusDot status={thread.status} isLoading={isDeleting} />
         <span className="w-[82px] shrink-0 truncate font-mono text-xs text-muted-foreground">
           {identifier}
         </span>
@@ -176,7 +193,22 @@ function ThreadTableRow({ thread }: { thread: TaskSummary }) {
   );
 }
 
-function StatusDot({ status }: { status?: string | null }) {
+function StatusDot({
+  status,
+  isLoading = false,
+}: {
+  status?: string | null;
+  isLoading?: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <Loader2
+        className="size-3.5 shrink-0 animate-spin text-blue-500"
+        aria-label="Deleting thread"
+      />
+    );
+  }
+
   const normalized = String(status ?? "").toLowerCase();
   const color =
     normalized === "done"

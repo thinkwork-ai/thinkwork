@@ -178,15 +178,28 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={`max-h-10 [&>td]:max-h-10 [&>td]:overflow-hidden ${onRowClick ? "cursor-pointer" : ""}`.trim()}
+            className={[
+              "max-h-10 [&>td]:max-h-10 [&>td]:overflow-hidden",
+              compact ? "h-10" : undefined,
+              onRowClick ? "cursor-pointer" : undefined,
+            ].filter(Boolean).join(" ")}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id} className={[compact ? "p-0 h-auto" : undefined, tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined].filter(Boolean).join(" ") || undefined}>
-                {flexRender(
-                  cell.column.columnDef.cell,
-                  cell.getContext(),
-                )}
+              <TableCell
+                key={cell.id}
+                className={
+                  [
+                    compact ? "h-10 p-0" : undefined,
+                    tableClassName?.includes("table-fixed")
+                      ? "overflow-hidden"
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
+              >
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </TableCell>
             ))}
           </TableRow>

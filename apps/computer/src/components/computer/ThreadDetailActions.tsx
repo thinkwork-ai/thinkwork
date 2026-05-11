@@ -26,6 +26,7 @@ import {
   DeleteThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import { setThreadDeletePending } from "@/lib/pending-thread-deletes";
 
 export interface AttachedArtifactSummary {
   id: string;
@@ -155,6 +156,7 @@ export function ThreadDeleteDialog({
 
   async function handleConfirmDelete() {
     setWorking(true);
+    setThreadDeletePending(threadId, true);
     try {
       let deletedArtifactCount = 0;
       if (cascadeArtifacts && hasAttached) {
@@ -170,6 +172,7 @@ export function ThreadDeleteDialog({
 
       const result = await deleteThread({ id: threadId });
       if (result.error) {
+        setThreadDeletePending(threadId, false);
         toast.error(`Could not delete thread: ${result.error.message}`);
         return;
       }
@@ -192,6 +195,7 @@ export function ThreadDeleteDialog({
       onOpenChange(false);
       void navigate({ to: onDoneNavigateTo });
     } catch (err) {
+      setThreadDeletePending(threadId, false);
       console.error("[ThreadDetailActions] delete failed", err);
       toast.error(
         `Could not delete thread: ${err instanceof Error ? err.message : "unknown error"}`,

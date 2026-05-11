@@ -46,6 +46,8 @@ import {
 
 type BrainView = "table" | "graph";
 
+const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
 function isBrainView(v: unknown): v is BrainView {
   return v === "table" || v === "graph";
 }
@@ -173,27 +175,36 @@ function BrainPage() {
         accessorKey: "createdAt",
         header: "Date",
         size: 140,
-        cell: ({ row }) =>
-          row.original.createdAt
-            ? new Date(row.original.createdAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })
-            : "—",
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+            {row.original.createdAt
+              ? new Date(row.original.createdAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "—"}
+          </span>
+        ),
       },
       {
         accessorKey: "factType",
         header: "Type",
         size: 90,
-        cell: ({ row }) => <StrategyBadge strategy={row.original.strategy} />,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <StrategyBadge strategy={row.original.strategy} />
+          </span>
+        ),
       },
       {
         accessorKey: "text",
         header: "Memory",
         cell: ({ row }) => (
-          <span className="truncate block">{stripTopicTags(row.original.text)}</span>
+          <span className={COMPACT_TABLE_CELL}>
+            <span className="truncate">{stripTopicTags(row.original.text)}</span>
+          </span>
         ),
       },
     ],
@@ -330,6 +341,7 @@ function BrainPage() {
             data={rows}
             onRowClick={handleRowClick}
             scrollable
+            compact
             pageSize={25}
             tableClassName="table-fixed"
           />

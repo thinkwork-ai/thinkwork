@@ -18,6 +18,8 @@ type KbRow = {
   lastSyncAt: string | null;
 };
 
+const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
 interface KnowledgeBasesResult {
   knowledgeBases?: any[] | null;
 }
@@ -90,9 +92,9 @@ function KbsIndexPage() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <span className="flex items-center gap-1.5 font-medium whitespace-nowrap">
+          <span className={`${COMPACT_TABLE_CELL} gap-1.5 font-medium`}>
             <BookOpen className="h-3.5 w-3.5 shrink-0 text-primary" />
-            {row.original.name}
+            <span className="truncate">{row.original.name}</span>
           </span>
         ),
       },
@@ -100,14 +102,20 @@ function KbsIndexPage() {
         accessorKey: "status",
         header: "Status",
         size: 100,
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <StatusBadge status={row.original.status} />
+          </span>
+        ),
       },
       {
         accessorKey: "documentCount",
         header: "Docs",
         size: 70,
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">{row.original.documentCount}</span>
+          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
+            {row.original.documentCount}
+          </span>
         ),
       },
       {
@@ -115,7 +123,7 @@ function KbsIndexPage() {
         header: "Last Sync",
         size: 120,
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground whitespace-nowrap">
+          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
             {relativeTime(row.original.lastSyncAt)}
           </span>
         ),
@@ -124,8 +132,8 @@ function KbsIndexPage() {
         accessorKey: "description",
         header: "Description",
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
-            {row.original.description || "—"}
+          <span className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}>
+            <span className="truncate">{row.original.description || "—"}</span>
           </span>
         ),
       },
@@ -184,6 +192,7 @@ function KbsIndexPage() {
               navigate({ to: "/memory/kbs/$kbId", params: { kbId: row.id } })
             }
             scrollable
+            compact
             pageSize={25}
           />
         )}
