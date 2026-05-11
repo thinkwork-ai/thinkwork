@@ -90,6 +90,33 @@ describe("renderTypedPart", () => {
 		expect(container.textContent).not.toContain("PARAMETERS");
 	});
 
+	it("does not render runbook queue parts in the transcript renderer", () => {
+		const part: AccumulatedPart = {
+			type: "data-runbook-queue",
+			id: "runbook-queue:run-1",
+			data: {
+				runbookRunId: "run-1",
+				displayName: "CRM Dashboard",
+				status: "RUNNING",
+				phases: [
+					{
+						id: "discover",
+						title: "Discover",
+						tasks: [
+							{
+								id: "task-1",
+								title: "Discover CRM context",
+								status: "PENDING",
+							},
+						],
+					},
+				],
+			},
+		};
+		const { container } = render(<>{renderTypedPart(part, rk())}</>);
+		expect(container.textContent).toBe("");
+	});
+
 	it("renders a source-url part as an anchor", () => {
 		const part: AccumulatedPart = {
 			type: "source-url",

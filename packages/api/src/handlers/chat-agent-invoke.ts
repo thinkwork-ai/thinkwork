@@ -47,6 +47,7 @@ import {
   markConnectorDelegationTurnCompleted,
   markConnectorDelegationTurnFailed,
 } from "../lib/computers/delegation-lifecycle.js";
+import { failRunbookRunFromThreadTurn } from "../lib/runbooks/runs.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -163,6 +164,7 @@ interface InvokeEvent {
   messageId?: string;
   computerId?: string;
   computerTaskId?: string;
+  runbookContext?: unknown;
 }
 
 type ChatInvokeIdentitySource =
@@ -575,6 +577,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
           : undefined,
       browser_automation_enabled:
         runtimeConfig.browserAutomationEnabled || undefined,
+      runbook_context: event.runbookContext || undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
@@ -1071,6 +1074,24 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
+    const runbookRunId = runbookRunIdFromContext(event.runbookContext);
+    if (runbookRunId) {
+      try {
+        await failRunbookRunFromThreadTurn({
+          tenantId,
+          runId: runbookRunId,
+          error: {
+            message: err instanceof Error ? err.message : String(err),
+            code: "chat_agent_invoke_failed",
+          },
+        });
+      } catch (runbookErr) {
+        console.error(
+          `[chat-agent-invoke] Failed to mark runbook failed:`,
+          runbookErr,
+        );
+      }
+    }
     // Best-effort: mark turn as failed
     if (turnId) {
       try {
@@ -1317,4 +1338,12 @@ async function notifyThreadTurnUpdate(payload: {
   } catch (err) {
     console.error(`[chat-agent-invoke] notifyThreadTurnUpdate error:`, err);
   }
+}
+
+function runbookRunIdFromContext(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const run = (value as Record<string, unknown>).run;
+  if (!run || typeof run !== "object" || Array.isArray(run)) return null;
+  const id = (run as Record<string, unknown>).id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
 }

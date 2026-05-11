@@ -19,6 +19,10 @@ import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { runSymphonyPrConnectorWork } from "./symphony-pr-harness.js";
 import { ensureMigratedComputerWorkspaceSeeded } from "./workspace-seed.js";
 import { toGraphqlComputerTask } from "./tasks.js";
+import {
+  completeRunbookRunFromThreadTurn,
+  failRunbookRunFromThreadTurn,
+} from "../runbooks/runs.js";
 
 const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
@@ -740,6 +744,33 @@ export async function recordThreadTurnResponse(input: {
     },
   });
 
+  if (payload.runbookRunId) {
+    const runbookOutput = {
+      responseMessageId: assistantMessage.id,
+      threadId: thread.id,
+      sourceMessageId: message.id,
+      linkedArtifactIds,
+      linkedArtifactCount: linkedArtifactIds.length,
+      artifactSaveMissing,
+    };
+    if (artifactSaveMissing) {
+      await failRunbookRunFromThreadTurn({
+        tenantId: input.tenantId,
+        runId: payload.runbookRunId,
+        error: {
+          message: ARTIFACT_SAVE_MISSING_MESSAGE,
+          ...runbookOutput,
+        },
+      });
+    } else {
+      await completeRunbookRunFromThreadTurn({
+        tenantId: input.tenantId,
+        runId: payload.runbookRunId,
+        output: runbookOutput,
+      });
+    }
+  }
+
   await db
     .update(computerTasks)
     .set({
@@ -1178,6 +1209,10 @@ function threadTurnPayload(input: unknown) {
       typeof payload.source === "string" && payload.source.trim()
         ? payload.source.trim()
         : "chat_message",
+    runbookRunId:
+      typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
+        ? payload.runbookRunId.trim()
+        : null,
   };
 }
 

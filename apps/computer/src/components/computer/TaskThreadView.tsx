@@ -130,6 +130,9 @@ export function TaskThreadView({
   }
 
   const visibleMessages = withTurnResponseFallback(thread);
+  const transcriptMessages = visibleMessages.filter(
+    (message) => !isRunbookQueueAssistantMessage(message),
+  );
   const promptRunbookQueue = selectPromptRunbookQueue(
     visibleMessages,
     runbookQueues,
@@ -141,11 +144,11 @@ export function TaskThreadView({
     !showStreamingBuffer &&
     isAwaitingAssistantResponse(thread, visibleMessages);
   const latestUserIndex = findLastIndex(
-    visibleMessages,
+    transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
   const turnByUserMessageId = mapTurnsToUserMessages(
-    visibleMessages,
+    transcriptMessages,
     thread.turns ?? [],
   );
 
@@ -157,13 +160,13 @@ export function TaskThreadView({
         aria-label="Thread transcript"
       >
         <ConversationContent className="mx-auto grid w-full max-w-[750px] gap-3 px-4 pt-10 pb-32 sm:px-6">
-          {visibleMessages.length === 0 ? (
+          {transcriptMessages.length === 0 ? (
             <ThinkingRow
               title="Thinking"
               detail="Computer is preparing this thread."
             />
           ) : (
-            visibleMessages.map((message, index) => (
+            transcriptMessages.map((message, index) => (
               <TranscriptSegment
                 key={message.id}
                 message={message}
@@ -199,6 +202,16 @@ export function TaskThreadView({
         </div>
       </div>
     </main>
+  );
+}
+
+function isRunbookQueueAssistantMessage(message: TaskThreadMessage) {
+  if (message.role.toUpperCase() === "USER") return false;
+  const metadata = parseRecord(message.metadata);
+  const key = stringValue(metadata.runbookMessageKey);
+  if (key?.startsWith("runbook-queue:")) return true;
+  return (message.parts ?? []).some(
+    (part) => part.type === "data-runbook-queue",
   );
 }
 
@@ -766,10 +779,8 @@ function countRunbookTasks(queue: RunbookQueueData) {
 function queueSummary(counts: ReturnType<typeof countRunbookTasks>) {
   if (counts.total === 0) return "Preparing tasks";
   const taskLabel = counts.total === 1 ? "task" : "tasks";
-  const segments = [
-    `${counts.total} ${taskLabel}`,
-    `${counts.completed} completed`,
-  ];
+  const segments = [`${counts.total} ${taskLabel}`];
+  if (counts.completed > 0) segments.push(`${counts.completed} completed`);
   if (counts.running > 0) segments.push(`${counts.running} running`);
   if (counts.failed > 0) segments.push(`${counts.failed} failed`);
   if (counts.pending > 0) segments.push(`${counts.pending} pending`);

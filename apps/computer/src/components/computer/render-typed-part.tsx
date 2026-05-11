@@ -34,12 +34,8 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
-import { RunbookQueue } from "@/components/runbooks/RunbookQueue";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
-import type {
-  RunbookConfirmationData,
-  RunbookQueueData,
-} from "@/lib/ui-message-types";
+import type { RunbookConfirmationData } from "@/lib/ui-message-types";
 
 export interface RenderTypedPartOptions {
   /** Stable React key prefix (usually the message id). */
@@ -148,12 +144,9 @@ export function renderTypedPart(
       );
     }
     if (part.type === "data-runbook-queue") {
-      return (
-        <RunbookQueue
-          key={key}
-          data={recordData(part.data) as RunbookQueueData}
-        />
-      );
+      // Queue data is projected into the prompt composer by TaskThreadView.
+      // Rendering it here duplicates the same task list in the transcript.
+      return null;
     }
     // Forward-compat: render as a small debug strip so unknown
     // data-${name} parts surface in the UI without crashing.

@@ -290,6 +290,13 @@ export function ComputerThreadDetailRoute({
   const visibleThread = optimisticMessage
     ? withOptimisticUserTurn(thread, optimisticMessage)
     : thread;
+  const runbookQueues = useMemo(
+    () => toRunbookQueues(runbookRunsData?.runbookRuns),
+    [runbookRunsData?.runbookRuns],
+  );
+  const hasActiveRunbookQueue = runbookQueues.some((queue) =>
+    isActiveRunbookQueue(queue.status),
+  );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
 
   useEffect(() => {
@@ -297,6 +304,22 @@ export function ComputerThreadDetailRoute({
       resetStreamingChunks();
     }
   }, [hasDurableAssistant, resetStreamingChunks]);
+
+  useEffect(() => {
+    if (!computerId || !hasActiveRunbookQueue) return;
+    const interval = window.setInterval(() => {
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [
+    computerId,
+    hasActiveRunbookQueue,
+    reexecuteEventsQuery,
+    reexecuteRunbookRunsQuery,
+    reexecuteTasksQuery,
+  ]);
 
   return (
     <TaskThreadView
@@ -325,7 +348,7 @@ export function ComputerThreadDetailRoute({
         reexecuteEventsQuery({ requestPolicy: "network-only" });
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       }}
-      runbookQueues={toRunbookQueues(runbookRunsData?.runbookRuns)}
+      runbookQueues={runbookQueues}
     />
   );
 }
@@ -516,6 +539,16 @@ function toRunbookQueues(runs: RunbookRunsResult["runbookRuns"]) {
       phases: sortedPhases,
     };
   });
+}
+
+function isActiveRunbookQueue(status: unknown) {
+  const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
+  return Boolean(
+    normalized &&
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
+  );
 }
 
 function runbookDisplayName(definitionSnapshot: unknown) {

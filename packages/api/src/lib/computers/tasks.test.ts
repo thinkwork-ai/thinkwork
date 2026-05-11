@@ -110,6 +110,22 @@ describe("Computer task helpers", () => {
       source: "chat_message",
       actorType: "user",
       actorId: "user-1",
+      runbookRunId: null,
+    });
+    expect(
+      normalizeTaskInput("thread_turn", {
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "runbook",
+        runbookRunId: "run-1",
+      }),
+    ).toEqual({
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "runbook",
+      actorType: null,
+      actorId: null,
+      runbookRunId: "run-1",
     });
   });
 
