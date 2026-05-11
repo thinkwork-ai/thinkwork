@@ -49,6 +49,10 @@ import {
   markConnectorDelegationTurnCompleted,
   markConnectorDelegationTurnFailed,
 } from "../lib/computers/delegation-lifecycle.js";
+import {
+  completeRunbookExecutionTask,
+  failRunbookExecutionTask,
+} from "../lib/runbooks/runtime-api.js";
 import { failRunbookRunFromThreadTurn } from "../lib/runbooks/runs.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
@@ -88,6 +92,13 @@ const GENERIC_AGENT_ERROR_MESSAGE =
   "I'm sorry, I encountered an error processing your request. Please try again.";
 const RUNBOOK_AGENT_ERROR_MESSAGE =
   "I hit a runtime error while executing this runbook. I marked the runbook as failed so you can review the task queue and retry after the issue is fixed.";
+
+class RunbookStepPersistenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RunbookStepPersistenceError";
+  }
+}
 
 async function recordConnectorDelegationCompleted(input: {
   tenantId: string;
@@ -171,6 +182,7 @@ interface InvokeEvent {
   messageId?: string;
   computerId?: string;
   computerTaskId?: string;
+  runbookTaskId?: string;
   runbookContext?: unknown;
   responseMode?: "runbook_step";
 }
@@ -1012,7 +1024,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       | undefined;
 
     if (responseOnly) {
-      return {
+      const runbookStepOutput = {
         ok: true,
         responseText,
         model: usage.model || agentModel || null,
@@ -1026,6 +1038,14 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         toolInvocations,
         durationMs,
       };
+      await completeRunbookStepFromChatInvoke({
+        tenantId,
+        computerId: event.computerId,
+        computerTaskId: event.computerTaskId,
+        runbookTaskId: event.runbookTaskId,
+        output: runbookStepOutput,
+      });
+      return runbookStepOutput;
     }
 
     // 3. Insert assistant message into DB (with GenUI tool results if present)
@@ -1141,7 +1161,22 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
-    if (responseOnly) throw err;
+    if (responseOnly) {
+      if (err instanceof RunbookStepPersistenceError) throw err;
+      await failRunbookStepFromChatInvoke({
+        tenantId,
+        computerId: event.computerId,
+        computerTaskId: event.computerTaskId,
+        runbookTaskId: event.runbookTaskId,
+        error: {
+          message: err instanceof Error ? err.message : String(err),
+        },
+      });
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
     await markRunbookFailedFromChatInvokeError({
       tenantId,
       runbookRunId,
@@ -1219,6 +1254,54 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
   }
   return undefined;
+}
+
+async function completeRunbookStepFromChatInvoke(input: {
+  tenantId: string;
+  computerId?: string;
+  computerTaskId?: string;
+  runbookTaskId?: string;
+  output: unknown;
+}) {
+  if (!input.computerId || !input.computerTaskId || !input.runbookTaskId) {
+    return;
+  }
+  try {
+    await completeRunbookExecutionTask({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      taskId: input.computerTaskId,
+      runbookTaskId: input.runbookTaskId,
+      output: input.output,
+    });
+  } catch (err) {
+    throw new RunbookStepPersistenceError(
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+async function failRunbookStepFromChatInvoke(input: {
+  tenantId: string;
+  computerId?: string;
+  computerTaskId?: string;
+  runbookTaskId?: string;
+  error: unknown;
+}) {
+  if (!input.computerId || !input.computerTaskId || !input.runbookTaskId) {
+    return;
+  }
+  try {
+    await failRunbookExecutionTask({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      taskId: input.computerTaskId,
+      runbookTaskId: input.runbookTaskId,
+      error: input.error,
+    });
+  } catch (err) {
+    console.error("[chat-agent-invoke] Failed to fail runbook step:", err);
+  }
 }
 
 function chatInvokeErrorMessage(runbookRunId: string | null) {

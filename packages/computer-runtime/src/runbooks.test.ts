@@ -154,6 +154,43 @@ describe("executeRunbook", () => {
     });
   });
 
+  it("waits for asynchronously dispatched runbook steps to persist completion", async () => {
+    const api = apiWithContext(context());
+    api.executeRunbookTask.mockImplementation(
+      async (_taskId, runbookTaskId) => {
+        const output =
+          runbookTaskId === "rt-1"
+            ? { ok: true, responseText: "Discovery complete", model: "model-1" }
+            : { ok: true, responseText: "Dashboard saved", model: "model-1" };
+        await api.completeRunbookTask("task-1", runbookTaskId, output);
+        return {
+          ok: true,
+          dispatched: true,
+          runbookTaskId,
+          status: "running",
+        };
+      },
+    );
+
+    await executeRunbook(
+      {
+        id: "task-1",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      api,
+    );
+
+    expect(api.executeRunbookTask).toHaveBeenNthCalledWith(1, "task-1", "rt-1");
+    expect(api.executeRunbookTask).toHaveBeenNthCalledWith(2, "task-1", "rt-2");
+    expect(api.completeRunbookTask).toHaveBeenCalledTimes(2);
+    expect(api.recordRunbookResponse).toHaveBeenCalledWith("task-1", {
+      content: "Dashboard saved",
+      model: "model-1",
+      usage: undefined,
+    });
+  });
+
   it("fails the current task and run when a task runner throws", async () => {
     const api = apiWithContext(context());
     const runner = vi

@@ -339,6 +339,8 @@ export async function executeRunbookExecutionTask(input: {
     userMessage: prompt,
     messageId: context.sourceMessage.id,
     computerId: input.computerId,
+    computerTaskId: input.taskId,
+    runbookTaskId: input.runbookTaskId,
     runbookContext,
   });
 
@@ -627,6 +629,8 @@ async function invokeRunbookStepAgent(input: {
   userMessage: string;
   messageId: string;
   computerId: string;
+  computerTaskId: string;
+  runbookTaskId: string;
   runbookContext: unknown;
 }) {
   const fnArn = await getChatAgentInvokeFnArn();
@@ -640,7 +644,7 @@ async function invokeRunbookStepAgent(input: {
   const response = await lambdaClient.send(
     new InvokeCommand({
       FunctionName: fnArn,
-      InvocationType: "RequestResponse",
+      InvocationType: "Event",
       Payload: new TextEncoder().encode(
         JSON.stringify({
           threadId: input.threadId,
@@ -649,52 +653,25 @@ async function invokeRunbookStepAgent(input: {
           userMessage: input.userMessage,
           messageId: input.messageId,
           computerId: input.computerId,
+          computerTaskId: input.computerTaskId,
+          runbookTaskId: input.runbookTaskId,
           runbookContext: input.runbookContext,
           responseMode: "runbook_step",
         }),
       ),
     }),
   );
-  const rawPayload = response.Payload
-    ? new TextDecoder().decode(response.Payload)
-    : "{}";
-  if (response.FunctionError) {
+  if (response.StatusCode && response.StatusCode >= 300) {
     throw new RunbookRuntimeError(
-      `Runbook step agent failed: ${rawPayload.slice(0, 500)}`,
-      502,
-    );
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawPayload);
-  } catch {
-    throw new RunbookRuntimeError(
-      "Runbook step agent returned invalid JSON",
-      502,
-    );
-  }
-  if (!isRecord(parsed) || parsed.ok !== true) {
-    throw new RunbookRuntimeError(
-      `Runbook step agent returned an invalid response: ${rawPayload.slice(0, 500)}`,
-      502,
-    );
-  }
-  if (typeof parsed.responseText !== "string" || !parsed.responseText.trim()) {
-    throw new RunbookRuntimeError(
-      "Runbook step agent returned an empty response",
+      `Runbook step dispatch failed with status ${response.StatusCode}`,
       502,
     );
   }
   return {
     ok: true as const,
-    responseText: parsed.responseText,
-    model: typeof parsed.model === "string" ? parsed.model : null,
-    usage: parsed.usage,
-    toolInvocations: Array.isArray(parsed.toolInvocations)
-      ? parsed.toolInvocations.filter(isRecord)
-      : [],
-    durationMs:
-      typeof parsed.durationMs === "number" ? parsed.durationMs : undefined,
+    dispatched: true as const,
+    runbookTaskId: input.runbookTaskId,
+    status: "running" as const,
   };
 }
 
@@ -796,6 +773,7 @@ function toRuntimeTask(row: typeof computerRunbookTasks.$inferSelect) {
       : [],
     sortOrder: row.sort_order,
     output: row.output ?? null,
+    error: row.error ?? null,
   };
 }
 
