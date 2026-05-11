@@ -295,6 +295,52 @@ locals {
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
 }
 
+resource "aws_acm_certificate" "computer_sandbox" {
+  count = local.www_dns_enabled ? 1 : 0
+
+  domain_name       = local.sandbox_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-computer-sandbox"
+  }
+}
+
+resource "cloudflare_record" "computer_sandbox_acm_validation" {
+  for_each = {
+    for dvo in flatten([
+      for cert in aws_acm_certificate.computer_sandbox : tolist(cert.domain_validation_options)
+      ]) : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.value, ".")
+  type    = each.value.type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${each.key}"
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "computer_sandbox" {
+  count = local.www_dns_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.computer_sandbox[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.computer_sandbox_acm_validation : record.hostname
+  ]
+}
+
 module "thinkwork" {
   source = "../../modules/thinkwork"
 
@@ -332,9 +378,10 @@ module "thinkwork" {
   computer_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # Computer iframe sandbox (derived from www_domain — sandbox.<apex>).
-  # Same ACM cert covers it via the include_computer_sandbox SAN gate.
+  # Uses its own ACM certificate so sandbox bootstrap/rotation cannot replace
+  # the shared apex/www/docs/admin/computer/api certificate.
   computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
-  computer_sandbox_certificate_arn        = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+  computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
   computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.computer_domain}" : ""
 
   # SES inbound email subdomain (delegated Route53 subzone).

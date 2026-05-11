@@ -191,21 +191,32 @@ describe("U3 — sandbox variables", () => {
       /computer_sandbox_domain\s*=\s*local\.www_dns_enabled \? local\.sandbox_domain : ""/,
     );
     expect(source).toMatch(
-      /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? module\.www_dns\[0\]\.certificate_arn : ""/,
+      /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? aws_acm_certificate_validation\.computer_sandbox\[0\]\.certificate_arn : ""/,
     );
     expect(source).toMatch(
       /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.computer_domain\}" : ""/,
     );
   });
 
-  it("www-dns can add sandbox.<apex> to the shared cert and Cloudflare CNAMEs", () => {
+  it("greenfield gives sandbox.<apex> its own certificate", () => {
+    const source = read(GREENFIELD_MAIN);
+    expect(source).toMatch(/resource "aws_acm_certificate" "computer_sandbox"/);
+    expect(source).toMatch(
+      /resource "cloudflare_record" "computer_sandbox_acm_validation"/,
+    );
+    expect(source).toMatch(
+      /resource "aws_acm_certificate_validation" "computer_sandbox"/,
+    );
+  });
+
+  it("www-dns manages the sandbox.<apex> Cloudflare CNAME without adding it to the shared cert", () => {
     const vars = read(WWW_DNS_VARS);
     const source = read(WWW_DNS_MAIN);
     expect(vars).toMatch(/variable "include_computer_sandbox"/);
     expect(vars).toMatch(/variable "computer_sandbox_cloudfront_domain_name"/);
     expect(source).toMatch(/sandbox\s*=\s*"sandbox\.\$\{var\.domain\}"/);
-    expect(source).toMatch(
-      /var\.include_computer_sandbox \? \[local\.sandbox\] : \[\]/,
+    expect(source).not.toMatch(
+      /include_computer_sandbox \? \[local\.sandbox\]/,
     );
     expect(source).toMatch(/resource "cloudflare_record" "computer_sandbox"/);
   });

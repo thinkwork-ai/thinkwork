@@ -39,7 +39,9 @@ locals {
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
-  # sandbox, api.
+  # and api. The Computer iframe sandbox uses its own certificate so adding or
+  # rotating the sandbox host never forces a replacement of this shared
+  # production certificate.
   # Gated on plain bool vars (not on CloudFront/API Gateway outputs) to keep
   # the dependency graph acyclic — distributions / custom domain names
   # depend on the cert, so the cert mustn't depend on those outputs.
@@ -48,7 +50,6 @@ locals {
     var.include_docs ? [local.docs] : [],
     var.include_admin ? [local.admin] : [],
     var.include_computer ? [local.computer] : [],
-    var.include_computer_sandbox ? [local.sandbox] : [],
     var.include_api ? [local.api] : [],
   )
 
