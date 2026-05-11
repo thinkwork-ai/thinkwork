@@ -61,6 +61,30 @@ logger = logging.getLogger(__name__)
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
+DEFAULT_BEDROCK_READ_TIMEOUT_SECONDS = 600
+
+
+def _bedrock_boto_client_config(config_cls=None):
+    """Return a botocore config that can survive long Computer turns."""
+    if config_cls is None:
+        try:
+            from botocore.config import Config as config_cls
+        except Exception as exc:  # pragma: no cover - defensive for slim test envs
+            logger.warning("Bedrock botocore Config unavailable: %s", exc)
+            return None
+
+    raw_timeout = os.environ.get("BEDROCK_READ_TIMEOUT_SECONDS", "").strip()
+    try:
+        read_timeout = int(raw_timeout) if raw_timeout else DEFAULT_BEDROCK_READ_TIMEOUT_SECONDS
+    except ValueError:
+        read_timeout = DEFAULT_BEDROCK_READ_TIMEOUT_SECONDS
+    read_timeout = max(60, min(read_timeout, 900))
+
+    return config_cls(
+        read_timeout=read_timeout,
+        connect_timeout=10,
+        retries={"max_attempts": 3, "mode": "standard"},
+    )
 
 
 def _apply_workspace_bucket_env(bucket: str) -> None:
@@ -765,6 +789,9 @@ def _call_strands_agent(
             guardrail_config["guardrailIdentifier"],
             guardrail_config["guardrailVersion"],
         )
+    boto_client_config = _bedrock_boto_client_config()
+    if boto_client_config is not None:
+        bedrock_kwargs["boto_client_config"] = boto_client_config
 
     bedrock_model = BedrockModel(
         model_id=effective_model,
@@ -1607,11 +1634,17 @@ def _call_strands_agent(
                         _sub_cache = _CC(strategy="auto")
                     except ImportError:
                         _sub_cache = None
+                    _sub_bedrock_kwargs = {}
+                    _sub_boto_config = _bedrock_boto_client_config()
+                    if _sub_boto_config is not None:
+                        _sub_bedrock_kwargs["boto_client_config"] = _sub_boto_config
+                    if _sub_cache:
+                        _sub_bedrock_kwargs["cache_config"] = _sub_cache
                     m = SubBM(
                         model_id=cfg_model,
                         region_name=AWS_REGION,
                         streaming=True,
-                        **({"cache_config": _sub_cache} if _sub_cache else {}),
+                        **_sub_bedrock_kwargs,
                     )
                     a = Agent(
                         model=m, system_prompt=cfg_prompt, tools=cfg_tools, callback_handler=None
@@ -1713,11 +1746,17 @@ def _call_strands_agent(
                 _sub_cache = _CC(strategy="auto")
             except ImportError:
                 _sub_cache = None
+            _sub_bedrock_kwargs = {}
+            _sub_boto_config = _bedrock_boto_client_config()
+            if _sub_boto_config is not None:
+                _sub_bedrock_kwargs["boto_client_config"] = _sub_boto_config
+            if _sub_cache:
+                _sub_bedrock_kwargs["cache_config"] = _sub_cache
             m = SubBM(
                 model_id=cfg_model,
                 region_name=AWS_REGION,
                 streaming=True,
-                **({"cache_config": _sub_cache} if _sub_cache else {}),
+                **_sub_bedrock_kwargs,
             )
             prompt = (
                 context if context else "You are a focused reasoning assistant. Think step by step."

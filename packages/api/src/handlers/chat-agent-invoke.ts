@@ -20,6 +20,8 @@ import {
   threadTurns,
   costEvents,
   guardrailBlocks,
+  computerEvents,
+  computerTasks,
 } from "@thinkwork/database-pg/schema";
 import { randomBytes } from "crypto";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
@@ -632,6 +634,15 @@ export async function handler(event: InvokeEvent): Promise<void> {
         message: errMsgText,
         code: "agentcore_lambda_function_error",
       });
+      await markComputerTaskFailedFromChatInvokeError({
+        tenantId,
+        computerId: event.computerId,
+        taskId: event.computerTaskId,
+        threadId,
+        messageId: event.messageId,
+        message: errMsgText,
+        code: "agentcore_lambda_function_error",
+      });
       if (turnId) {
         try {
           await db
@@ -692,6 +703,15 @@ export async function handler(event: InvokeEvent): Promise<void> {
       await markRunbookFailedFromChatInvokeError({
         tenantId,
         runbookRunId,
+        message: errMsgText,
+        code: "agentcore_adapter_error",
+      });
+      await markComputerTaskFailedFromChatInvokeError({
+        tenantId,
+        computerId: event.computerId,
+        taskId: event.computerTaskId,
+        threadId,
+        messageId: event.messageId,
         message: errMsgText,
         code: "agentcore_adapter_error",
       });
@@ -1096,6 +1116,15 @@ export async function handler(event: InvokeEvent): Promise<void> {
       message: err instanceof Error ? err.message : String(err),
       code: "chat_agent_invoke_failed",
     });
+    await markComputerTaskFailedFromChatInvokeError({
+      tenantId,
+      computerId: event.computerId,
+      taskId: event.computerTaskId,
+      threadId,
+      messageId: event.messageId,
+      message: err instanceof Error ? err.message : String(err),
+      code: "chat_agent_invoke_failed",
+    });
     // Best-effort: mark turn as failed
     if (turnId) {
       try {
@@ -1185,6 +1214,61 @@ async function markRunbookFailedFromChatInvokeError(input: {
     console.error(
       `[chat-agent-invoke] Failed to mark runbook failed:`,
       runbookErr,
+    );
+  }
+}
+
+async function markComputerTaskFailedFromChatInvokeError(input: {
+  tenantId: string;
+  computerId?: string;
+  taskId?: string;
+  threadId: string;
+  messageId?: string;
+  message: string;
+  code: string;
+}) {
+  if (!input.computerId || !input.taskId) return;
+  const error = {
+    message: input.message,
+    code: input.code,
+  };
+  try {
+    const [task] = await db
+      .update(computerTasks)
+      .set({
+        status: "failed",
+        error,
+        completed_at: new Date(),
+        updated_at: new Date(),
+      })
+      .where(
+        and(
+          eq(computerTasks.tenant_id, input.tenantId),
+          eq(computerTasks.computer_id, input.computerId),
+          eq(computerTasks.id, input.taskId),
+        ),
+      )
+      .returning({ id: computerTasks.id });
+
+    if (!task) return;
+
+    await db.insert(computerEvents).values({
+      tenant_id: input.tenantId,
+      computer_id: input.computerId,
+      task_id: input.taskId,
+      event_type: "task_failed",
+      level: "error",
+      payload: {
+        threadId: input.threadId,
+        messageId: input.messageId ?? null,
+        error,
+        source: "chat-agent-invoke",
+      },
+    });
+  } catch (taskErr) {
+    console.error(
+      `[chat-agent-invoke] Failed to mark computer task failed:`,
+      taskErr,
     );
   }
 }

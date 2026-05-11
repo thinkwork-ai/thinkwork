@@ -85,6 +85,25 @@ def test_execute_agent_turn_passes_thread_id_to_strands_streaming(monkeypatch):
     assert server.os.environ["APPSYNC_API_KEY"] == "test-key"
 
 
+def test_bedrock_boto_client_config_uses_long_read_timeout(monkeypatch):
+    captured = {}
+
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setenv("BEDROCK_READ_TIMEOUT_SECONDS", "720")
+
+    config = server._bedrock_boto_client_config(config_cls=FakeConfig)
+
+    assert isinstance(config, FakeConfig)
+    assert captured == {
+        "read_timeout": 720,
+        "connect_timeout": 10,
+        "retries": {"max_attempts": 3, "mode": "standard"},
+    }
+
+
 def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
     captured = {}
 
