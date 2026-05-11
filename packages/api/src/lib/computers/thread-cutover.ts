@@ -23,7 +23,9 @@ import { seedRunbookCatalogForTenant } from "../runbooks/catalog.js";
 import {
   confirmRunbookRun,
   createRunbookRun,
+  failRunbookRunFromThreadTurn,
   getRunbookRun,
+  markRunbookRunRunning,
 } from "../runbooks/runs.js";
 import { routeRunbookPrompt } from "../runbooks/router.js";
 
@@ -82,6 +84,7 @@ export async function enqueueComputerThreadTurn(input: {
   source?: string;
   actorType?: string | null;
   actorId?: string | null;
+  runbookRunId?: string | null;
 }) {
   const taskInput = normalizeTaskInput("thread_turn", {
     threadId: input.threadId,
@@ -89,8 +92,11 @@ export async function enqueueComputerThreadTurn(input: {
     source: input.source ?? "chat_message",
     actorType: input.actorType ?? null,
     actorId: input.actorId ?? null,
+    runbookRunId: input.runbookRunId ?? null,
   });
-  const idempotencyKey = `thread-turn:${input.threadId}:${input.messageId}`;
+  const idempotencyKey = input.runbookRunId
+    ? `runbook-thread-turn:${input.runbookRunId}`
+    : `thread-turn:${input.threadId}:${input.messageId}`;
   const [existing] = await db
     .select({ id: computerTasks.id, status: computerTasks.status })
     .from(computerTasks)
@@ -295,7 +301,16 @@ export async function queueConfirmedRunbookRun(input: {
   });
   if (!run) throw new Error("Runbook run not found");
   const runbook = runbookRegistry.require(run.runbookSlug);
-  const task = await enqueueRunbookExecuteTask(input);
+  const task = await enqueueComputerThreadTurn({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    threadId: input.threadId,
+    messageId: input.sourceMessageId,
+    source: "runbook",
+    actorType: input.actorType ?? null,
+    actorId: input.actorId ?? null,
+    runbookRunId: input.runbookRunId,
+  });
   const message = buildRunbookQueueMessage({
     run,
     runbook,
@@ -462,6 +477,7 @@ async function dispatchComputerThreadTurn(input: {
   threadId: string;
   messageId: string;
   taskId: string;
+  runbookRunId?: string | null;
 }) {
   const [computer] = await db
     .select({
@@ -574,6 +590,15 @@ async function dispatchComputerThreadTurn(input: {
     },
   });
 
+  let runbookContext: unknown;
+  if (input.runbookRunId) {
+    const runningRun = await markRunbookRunRunning({
+      tenantId: input.tenantId,
+      runId: input.runbookRunId,
+    });
+    runbookContext = runningRun ? buildAgentRunbookContext(runningRun) : null;
+  }
+
   const invoked = await invokeChatAgent({
     tenantId: input.tenantId,
     threadId: input.threadId,
@@ -582,9 +607,20 @@ async function dispatchComputerThreadTurn(input: {
     messageId: input.messageId,
     computerId: input.computerId,
     computerTaskId: input.taskId,
+    runbookContext,
   });
 
   if (!invoked) {
+    if (input.runbookRunId) {
+      await failRunbookRunFromThreadTurn({
+        tenantId: input.tenantId,
+        runId: input.runbookRunId,
+        error: {
+          message: "Strands thread turn dispatch failed",
+          code: "dispatch_failed",
+        },
+      });
+    }
     await markDispatchFailed(input, {
       message: "Strands thread turn dispatch failed",
       code: "dispatch_failed",
@@ -592,6 +628,34 @@ async function dispatchComputerThreadTurn(input: {
   }
 
   return invoked;
+}
+
+function buildAgentRunbookContext(run: NonNullable<Awaited<ReturnType<typeof getRunbookRun>>>) {
+  const tasks = [...(run.tasks ?? [])].sort(
+    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+  );
+  const currentTask =
+    tasks.find((task) => String(task.status).toLowerCase() === "running") ??
+    tasks.find((task) => String(task.status).toLowerCase() === "pending") ??
+    tasks[0] ??
+    null;
+  return {
+    run: {
+      id: run.id,
+      status: run.status,
+      runbookSlug: run.runbookSlug,
+      runbookVersion: run.runbookVersion,
+    },
+    definitionSnapshot: run.definitionSnapshot,
+    inputs: run.inputs,
+    previousOutputs: Object.fromEntries(
+      tasks
+        .filter((task) => String(task.status).toLowerCase() === "completed")
+        .map((task) => [task.taskKey, task.output ?? null]),
+    ),
+    currentTask,
+    tasks,
+  };
 }
 
 async function markDispatchFailed(

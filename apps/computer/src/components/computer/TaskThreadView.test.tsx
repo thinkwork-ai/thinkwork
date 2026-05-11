@@ -204,7 +204,7 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Computer is typing")).toBeTruthy();
   });
 
-  it("renders persisted runbook queue parts after reload", () => {
+  it("projects persisted runbook queue parts into the prompt queue after reload", () => {
     render(
       <TaskThreadView
         thread={{
@@ -220,6 +220,7 @@ describe("TaskThreadView", () => {
               id: "message-2",
               role: "ASSISTANT",
               content: "Starting Research Dashboard.",
+              metadata: { runbookMessageKey: "runbook-queue:run-1" },
               parts: [
                 {
                   type: "data-runbook-queue",
@@ -250,11 +251,14 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getAllByText("Research Dashboard").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Discover").length).toBeGreaterThan(0);
+    const promptQueue = screen.getByLabelText("Active runbook queue");
     expect(
-      screen.getAllByText("Gather source material").length,
+      within(promptQueue).getAllByText("Research Dashboard").length,
     ).toBeGreaterThan(0);
+    expect(
+      within(promptQueue).getByText("1 task · 1 pending"),
+    ).toBeTruthy();
+    expect(within(promptQueue).queryByText("Gather source material")).toBeNull();
     expect(screen.queryByText("Starting Research Dashboard.")).toBeNull();
   });
 
@@ -447,7 +451,7 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
-  it("keeps historical completed queues in the transcript without pinning them above the prompt", () => {
+  it("keeps historical completed queues out of the prompt and transcript", () => {
     render(
       <TaskThreadView
         thread={{
@@ -462,6 +466,7 @@ describe("TaskThreadView", () => {
             {
               id: "message-2",
               role: "ASSISTANT",
+              metadata: { runbookMessageKey: "runbook-queue:run-1" },
               parts: [
                 {
                   type: "data-runbook-queue",
@@ -493,8 +498,8 @@ describe("TaskThreadView", () => {
     );
 
     expect(screen.queryByLabelText("Active runbook queue")).toBeNull();
-    expect(screen.getByLabelText("CRM Dashboard queue")).toBeTruthy();
-    expect(screen.getByText("Build dashboard")).toBeTruthy();
+    expect(screen.queryByLabelText("CRM Dashboard queue")).toBeNull();
+    expect(screen.queryByText("Build dashboard")).toBeNull();
   });
 
   it("updates the prompt-area queue from fresher streaming runbook data", () => {

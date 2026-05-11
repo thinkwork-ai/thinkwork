@@ -208,6 +208,126 @@ export async function confirmRunbookRun(input: {
   return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
 }
 
+export async function markRunbookRunRunning(input: {
+  tenantId: string;
+  runId: string;
+}) {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(computerRunbookRuns)
+      .set({
+        status: "running",
+        started_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookRuns.tenant_id, input.tenantId),
+          eq(computerRunbookRuns.id, input.runId),
+          inArray(computerRunbookRuns.status, ["queued", "running"]),
+        ),
+      );
+    await tx
+      .update(computerRunbookTasks)
+      .set({
+        status: "running",
+        started_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          eq(computerRunbookTasks.status, "pending"),
+        ),
+      );
+  });
+  return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
+}
+
+export async function completeRunbookRunFromThreadTurn(input: {
+  tenantId: string;
+  runId: string;
+  output?: unknown;
+}) {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(computerRunbookTasks)
+      .set({
+        status: "completed",
+        output: input.output ?? null,
+        completed_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          inArray(computerRunbookTasks.status, ["pending", "running"]),
+        ),
+      );
+    await tx
+      .update(computerRunbookRuns)
+      .set({
+        status: "completed",
+        output: input.output ?? null,
+        completed_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookRuns.tenant_id, input.tenantId),
+          eq(computerRunbookRuns.id, input.runId),
+          inArray(computerRunbookRuns.status, ["queued", "running"]),
+        ),
+      );
+  });
+  return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
+}
+
+export async function failRunbookRunFromThreadTurn(input: {
+  tenantId: string;
+  runId: string;
+  error: unknown;
+}) {
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(computerRunbookTasks)
+      .set({
+        status: "failed",
+        error: input.error ?? { message: "Runbook task failed" },
+        completed_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookTasks.tenant_id, input.tenantId),
+          eq(computerRunbookTasks.run_id, input.runId),
+          inArray(computerRunbookTasks.status, ["pending", "running"]),
+        ),
+      );
+    await tx
+      .update(computerRunbookRuns)
+      .set({
+        status: "failed",
+        error: input.error ?? { message: "Runbook run failed" },
+        completed_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookRuns.tenant_id, input.tenantId),
+          eq(computerRunbookRuns.id, input.runId),
+          inArray(computerRunbookRuns.status, ["queued", "running"]),
+        ),
+      );
+  });
+  return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
+}
+
 export async function rejectRunbookRun(input: {
   tenantId: string;
   runId: string;

@@ -276,6 +276,10 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
       typeof payload.actorId === "string" && payload.actorId.trim()
         ? payload.actorId.trim()
         : null,
+    runbookRunId:
+      typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
+        ? payload.runbookRunId.trim()
+        : null,
   };
 }
 
