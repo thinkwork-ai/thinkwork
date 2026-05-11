@@ -59,6 +59,11 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
       }
       toast.success("Thread archived.");
       void navigate({ to: props.onDoneNavigateTo ?? "/threads" });
+    } catch (err) {
+      console.error("[ThreadDetailActions] archive failed", err);
+      toast.error(
+        `Could not archive thread: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
     } finally {
       setWorking(false);
     }
@@ -78,26 +83,32 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="min-w-[10rem]">
           <DropdownMenuItem
+            className="whitespace-nowrap"
             data-testid="thread-actions-archive"
             disabled={working}
-            onSelect={(event) => {
-              event.preventDefault();
-              void handleArchive();
-            }}
+            // No event.preventDefault — let Radix close the menu, then
+            // the async work runs. Keeping the menu open during a
+            // network request blocks focus from reaching subsequent
+            // dialog buttons.
+            onSelect={() => void handleArchive()}
           >
             <Archive className="mr-2 h-4 w-4" />
             Archive thread
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
+            className="whitespace-nowrap"
             variant="destructive"
             data-testid="thread-actions-delete"
             disabled={working}
-            onSelect={(event) => {
-              event.preventDefault();
-              setDeleteOpen(true);
+            // Defer the dialog open by one frame so Radix's menu close
+            // doesn't race with the dialog's open animation — otherwise
+            // focus stays trapped in the menu and the dialog's Delete
+            // button doesn't receive clicks.
+            onSelect={() => {
+              window.setTimeout(() => setDeleteOpen(true), 0);
             }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
@@ -180,6 +191,11 @@ export function ThreadDeleteDialog({
       }
       onOpenChange(false);
       void navigate({ to: onDoneNavigateTo });
+    } catch (err) {
+      console.error("[ThreadDetailActions] delete failed", err);
+      toast.error(
+        `Could not delete thread: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
     } finally {
       setWorking(false);
     }

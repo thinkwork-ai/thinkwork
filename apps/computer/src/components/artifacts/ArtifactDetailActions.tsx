@@ -76,6 +76,11 @@ function ArtifactActionsMenu({
       toast.success(
         isFavorited ? "Removed from favorites." : "Added to favorites.",
       );
+    } catch (err) {
+      console.error("[ArtifactDetailActions] favorite toggle failed", err);
+      toast.error(
+        `Could not update favorite: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
     } finally {
       setWorking(false);
     }
@@ -94,14 +99,12 @@ function ArtifactActionsMenu({
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="min-w-[12rem]">
         <DropdownMenuItem
+          className="whitespace-nowrap"
           data-testid="artifact-actions-favorite"
           disabled={working}
-          onSelect={(event) => {
-            event.preventDefault();
-            void handleToggleFavorite();
-          }}
+          onSelect={() => void handleToggleFavorite()}
         >
           {isFavorited ? (
             <>
@@ -117,12 +120,14 @@ function ArtifactActionsMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          className="whitespace-nowrap"
           variant="destructive"
           data-testid="artifact-actions-delete"
           disabled={working}
-          onSelect={(event) => {
-            event.preventDefault();
-            onRequestDelete();
+          // Defer the dialog open one tick so Radix's menu-close
+          // animation doesn't trap focus, blocking the dialog buttons.
+          onSelect={() => {
+            window.setTimeout(() => onRequestDelete(), 0);
           }}
         >
           <Trash2 className="mr-2 h-4 w-4" />
@@ -164,6 +169,11 @@ export function ArtifactDeleteDialog({
       toast.success("Artifact deleted.");
       onOpenChange(false);
       void navigate({ to: onDeleteNavigateTo });
+    } catch (err) {
+      console.error("[ArtifactDetailActions] delete failed", err);
+      toast.error(
+        `Could not delete artifact: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
     } finally {
       setWorking(false);
     }

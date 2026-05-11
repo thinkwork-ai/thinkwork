@@ -55,16 +55,22 @@ afterEach(() => {
 });
 
 describe("_authed/_shell layout", () => {
-  it("renders <PageSkeleton/> with monospace shimmer Loading while tenant resolves", () => {
+  it("renders centered monospace shimmer Loading while tenant resolves", () => {
     tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: true });
-    render(<ShellLayout />);
-    // PageSkeleton wraps LoadingShimmer which renders role="status" and the
-    // "Loading..." text per-character with the .tw-shimmer-char class.
+    const { container } = render(<ShellLayout />);
+    // LoadingShimmer renders role="status" with the "Loading..." text
+    // per-character (.tw-shimmer-char class) — its wrapper must use
+    // viewport-height sizing so the shimmer sits in the middle of the
+    // page at boot, before any shell chrome exists.
     const status = screen.getByRole("status");
     expect(status).toBeTruthy();
     expect(status.textContent).toContain("Loading...");
     const shimmerChars = status.querySelectorAll(".tw-shimmer-char");
     expect(shimmerChars.length).toBeGreaterThan(0);
+    const wrapper = container.querySelector("main");
+    expect(wrapper?.className).toContain("min-h-svh");
+    expect(wrapper?.className).toContain("items-center");
+    expect(wrapper?.className).toContain("justify-center");
   });
 
   it("renders <NoTenantAssigned/> when the user has no tenant", () => {
