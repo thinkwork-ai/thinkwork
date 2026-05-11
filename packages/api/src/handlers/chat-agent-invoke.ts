@@ -82,6 +82,11 @@ const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const db = getDb();
 const lambdaClient = new LambdaClient({});
 
+const GENERIC_AGENT_ERROR_MESSAGE =
+  "I'm sorry, I encountered an error processing your request. Please try again.";
+const RUNBOOK_AGENT_ERROR_MESSAGE =
+  "I hit a runtime error while executing this runbook. I marked the runbook as failed so you can review the task queue and retry after the issue is fixed.";
+
 async function recordConnectorDelegationCompleted(input: {
   tenantId: string;
   agentId: string;
@@ -302,6 +307,7 @@ export async function resolveChatInvokeIdentity(
 
 export async function handler(event: InvokeEvent): Promise<void> {
   const { threadId, tenantId, agentId, userMessage } = event;
+  const runbookRunId = runbookRunIdFromContext(event.runbookContext);
   const traceId = getTraceId();
   console.log(
     `[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`,
@@ -620,6 +626,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
     if (invokeRes.FunctionError) {
       const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
+      await markRunbookFailedFromChatInvokeError({
+        tenantId,
+        runbookRunId,
+        message: errMsgText,
+        code: "agentcore_lambda_function_error",
+      });
       if (turnId) {
         try {
           await db
@@ -653,7 +665,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
         threadId,
         tenantId,
         agentId,
-        `I'm sorry, I encountered an error processing your request. Please try again.`,
+        chatInvokeErrorMessage(runbookRunId),
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -661,8 +673,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
           threadId,
           tenantId,
           role: "assistant",
-          content:
-            "I'm sorry, I encountered an error processing your request. Please try again.",
+          content: chatInvokeErrorMessage(runbookRunId),
           senderType: "agent",
           senderId: agentId,
         });
@@ -678,6 +689,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
     if (adapterStatus < 200 || adapterStatus >= 300) {
       const errMsgText = `AgentCore ${adapterStatus}: ${adapterBodyStr.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
+      await markRunbookFailedFromChatInvokeError({
+        tenantId,
+        runbookRunId,
+        message: errMsgText,
+        code: "agentcore_adapter_error",
+      });
       if (turnId) {
         try {
           await db
@@ -711,7 +728,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
         threadId,
         tenantId,
         agentId,
-        `I'm sorry, I encountered an error processing your request. Please try again.`,
+        chatInvokeErrorMessage(runbookRunId),
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -719,8 +736,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
           threadId,
           tenantId,
           role: "assistant",
-          content:
-            "I'm sorry, I encountered an error processing your request. Please try again.",
+          content: chatInvokeErrorMessage(runbookRunId),
           senderType: "agent",
           senderId: agentId,
         });
@@ -1074,24 +1090,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
-    const runbookRunId = runbookRunIdFromContext(event.runbookContext);
-    if (runbookRunId) {
-      try {
-        await failRunbookRunFromThreadTurn({
-          tenantId,
-          runId: runbookRunId,
-          error: {
-            message: err instanceof Error ? err.message : String(err),
-            code: "chat_agent_invoke_failed",
-          },
-        });
-      } catch (runbookErr) {
-        console.error(
-          `[chat-agent-invoke] Failed to mark runbook failed:`,
-          runbookErr,
-        );
-      }
-    }
+    await markRunbookFailedFromChatInvokeError({
+      tenantId,
+      runbookRunId,
+      message: err instanceof Error ? err.message : String(err),
+      code: "chat_agent_invoke_failed",
+    });
     // Best-effort: mark turn as failed
     if (turnId) {
       try {
@@ -1133,7 +1137,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
         threadId,
         tenantId,
         agentId,
-        `I'm sorry, something went wrong. Please try again.`,
+        chatInvokeErrorMessage(runbookRunId),
       );
       if (errMsg) {
         await notifyNewMessage({
@@ -1141,7 +1145,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
           threadId,
           tenantId,
           role: "assistant",
-          content: "I'm sorry, something went wrong. Please try again.",
+          content: chatInvokeErrorMessage(runbookRunId),
           senderType: "agent",
           senderId: agentId,
         });
@@ -1152,6 +1156,36 @@ export async function handler(event: InvokeEvent): Promise<void> {
         innerErr,
       );
     }
+  }
+}
+
+function chatInvokeErrorMessage(runbookRunId: string | null) {
+  return runbookRunId
+    ? RUNBOOK_AGENT_ERROR_MESSAGE
+    : GENERIC_AGENT_ERROR_MESSAGE;
+}
+
+async function markRunbookFailedFromChatInvokeError(input: {
+  tenantId: string;
+  runbookRunId: string | null;
+  message: string;
+  code: string;
+}) {
+  if (!input.runbookRunId) return;
+  try {
+    await failRunbookRunFromThreadTurn({
+      tenantId: input.tenantId,
+      runId: input.runbookRunId,
+      error: {
+        message: input.message,
+        code: input.code,
+      },
+    });
+  } catch (runbookErr) {
+    console.error(
+      `[chat-agent-invoke] Failed to mark runbook failed:`,
+      runbookErr,
+    );
   }
 }
 
