@@ -50,6 +50,16 @@ jobs:
             lambdas:
               - 'packages/api/**'
               - 'packages/database-pg/**'
+              # packages/lambda/ holds 15 non-api handlers (job-trigger,
+              # compliance-*, agentcore-admin, github-workspace, etc.) that
+              # build-lambdas.sh bundles. Without this entry, edits to any
+              # of those silently skipped terraform-apply under the new gate
+              # and AWS kept running stale code.
+              - 'packages/lambda/**'
+              # graphql-http's zip copies in packages/runbooks/runbooks/**
+              # via scripts/build-lambdas.sh; a runbook YAML edit rebuilds
+              # the zip but needs terraform-apply to actually ship it.
+              - 'packages/runbooks/runbooks/**'
             container:
               - 'packages/agentcore-strands/**'
               - 'packages/agentcore-flue/**'
@@ -454,8 +464,13 @@ jobs:
     # 20-minute queue gap. Instead we gate on the same detect-changes
     # signals that build-container itself uses.
     needs: [detect-changes, build-lambdas]
+    # Require build-lambdas to have succeeded. The pre-PR shape inherited
+    # this implicitly via `needs`; the new `if:` overrides `always()` so
+    # we have to restate the constraint or terraform-apply would proceed
+    # with stale or missing dist/lambdas zips and break filebase64sha256.
     if: >-
       always() && !cancelled()
+      && needs.build-lambdas.result == 'success'
       && (
         needs.detect-changes.outputs.terraform == 'true' ||
         needs.detect-changes.outputs.lambdas == 'true' ||
@@ -604,10 +619,19 @@ jobs:
   update-agentcore-runtimes:
     name: Update AgentCore Runtimes
     needs: [build-container, terraform-apply]
+    # Belt-and-suspenders for the build-container/terraform-apply gate
+    # coupling: when `runtime_container_stale=true` forces a container
+    # rebuild on a docs-only push, terraform-apply's gate fires too (the
+    # OR list above includes runtime_container_stale), so the strict
+    # success-only check works today. Accepting `skipped` keeps this
+    # job firing even if a future edit narrows terraform-apply's gate
+    # without also widening this one. Prevents the silent-pin failure
+    # mode in docs/solutions/workflow-issues/agentcore-runtime-no-auto
+    # -repull-requires-explicit-update-2026-04-24.md.
     if: >-
       always()
       && needs.build-container.result == 'success'
-      && needs.terraform-apply.result == 'success'
+      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -647,7 +671,9 @@ jobs:
     name: Build Computer Runtime
     needs: [detect-changes, terraform-apply]
     # Allow terraform-apply == skipped: ECR repo + ECS services exist
-    # from prior applies; this job only needs to push a new image tag.
+    # from prior applies; this job pushes a new image and force-rolls
+    # ECS. The same `(success || skipped)` pattern is used by
+    # build-admin / build-computer / build-docs / bootstrap.
     if: >-
       always()
       && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
@@ -899,7 +925,6 @@ jobs:
   build-computer:
     name: Build & Deploy Computer
     needs: [terraform-apply]
-    # Allow terraform-apply == skipped: same as build-admin.
     if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -941,7 +966,6 @@ jobs:
   build-docs:
     name: Build & Deploy Docs
     needs: [terraform-apply]
-    # Allow terraform-apply == skipped: same as build-admin.
     if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
