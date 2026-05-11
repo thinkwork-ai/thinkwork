@@ -13,6 +13,7 @@ type Artifact {
   summary: String
   sourceMessageId: ID
   metadata: AWSJSON
+  favoritedAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -99,6 +100,10 @@ input UpdateArtifactInput {
   s3Key: String
   summary: String
   metadata: AWSJSON
+  # Nullable AWSDateTime. Set an ISO 8601 timestamp to mark the artifact
+  # as a favorite (drives the apps/computer sidebar Favorites section);
+  # pass `null` to clear the flag. Other fields are unchanged either way.
+  favoritedAt: AWSDateTime
 }
 
 input SaveAppletInput {
@@ -122,6 +127,10 @@ extend type Query {
     agentId: ID
     type: ArtifactType
     status: ArtifactStatus
+    # When true, return only artifacts with a non-null favoritedAt,
+    # ordered favoritedAt DESC. Drives the apps/computer sidebar
+    # Favorites section.
+    favoritedOnly: Boolean
     limit: Int
     cursor: String
   ): [Artifact!]!

@@ -18,6 +18,7 @@ import {
   type AppletModuleLoader,
 } from "@/applets/mount";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
+import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   resolveGeneratedAppRuntimeMode,
@@ -61,6 +62,8 @@ export function AppletRouteContent({
   const source = useMemo(() => appletSource(applet), [applet]);
   const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
   const latestVersion = applet?.applet?.version ?? null;
+  const artifactId = applet?.applet?.artifact?.id ?? null;
+  const favoritedAt = applet?.applet?.artifact?.favoritedAt ?? null;
   const instanceId = useAppletInstanceId(appId);
   const [mountedSnapshot, setMountedSnapshot] = useState<{
     appId: string;
@@ -74,12 +77,35 @@ export function AppletRouteContent({
     setHeaderAction(action);
   }, []);
 
+  // Compose the page-header action slot: any applet-defined action
+  // (rendered by AppletMount) plus the artifact-management dropdown on
+  // the far right. Hide the dropdown until we know the underlying
+  // artifact id — the favorite/delete mutations need it.
+  const composedHeaderAction = useMemo<ReactNode>(() => {
+    const detailActions = artifactId ? (
+      <ArtifactDetailActions
+        artifactId={artifactId}
+        artifactTitle={title}
+        favoritedAt={favoritedAt}
+      />
+    ) : null;
+    if (!headerAction && !detailActions) return null;
+    return (
+      <div className="flex items-center gap-1">
+        {headerAction}
+        {detailActions}
+      </div>
+    );
+  }, [artifactId, favoritedAt, headerAction, title]);
+
   usePageHeaderActions({
     title,
     backHref: "/artifacts",
     backBehavior: "history",
-    action: headerAction,
-    actionKey: headerAction ? "artifact-actions" : "",
+    action: composedHeaderAction,
+    actionKey: composedHeaderAction
+      ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
+      : "",
   });
 
   useEffect(() => {

@@ -554,6 +554,7 @@ export type Artifact = {
   agentId?: Maybe<Scalars['ID']['output']>;
   content?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
+  favoritedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   s3Key?: Maybe<Scalars['String']['output']>;
@@ -3712,6 +3713,7 @@ export type QueryArtifactArgs = {
 export type QueryArtifactsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
+  favoritedOnly?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];
@@ -5518,6 +5520,7 @@ export type UpdateAgentTemplateInput = {
 
 export type UpdateArtifactInput = {
   content?: InputMaybe<Scalars['String']['input']>;
+  favoritedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   s3Key?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<ArtifactStatus>;

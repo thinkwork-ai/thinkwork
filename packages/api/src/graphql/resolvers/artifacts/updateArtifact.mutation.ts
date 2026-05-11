@@ -56,6 +56,12 @@ export const updateArtifact = async (_parent: any, args: any, ctx: GraphQLContex
 	if (i.summary !== undefined) updates.summary = i.summary;
 	if (i.metadata !== undefined)
 		updates.metadata = i.metadata ? JSON.parse(i.metadata) : null;
+	if (i.favoritedAt !== undefined) {
+		// Explicit null clears the favorite; a non-null string sets it.
+		// `??` rather than `||` so the falsy empty-string case still parses
+		// to a date error rather than silently clearing.
+		updates.favorited_at = i.favoritedAt === null ? null : new Date(i.favoritedAt);
+	}
 	const [row] = await db
 		.update(artifacts)
 		.set(updates)

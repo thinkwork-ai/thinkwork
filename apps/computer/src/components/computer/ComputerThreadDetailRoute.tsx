@@ -5,6 +5,7 @@ import {
   normalizePersistedParts,
   type TaskThread,
 } from "@/components/computer/TaskThreadView";
+import { ThreadDetailActions } from "@/components/computer/ThreadDetailActions";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -13,6 +14,7 @@ import {
   ComputerThreadTasksQuery,
   NewMessageSubscription,
   SendMessageMutation,
+  ThreadArtifactsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
@@ -93,6 +95,26 @@ export function ComputerThreadDetailRoute({
     variables: { id: threadId, messageLimit: 100 },
   });
   const threadTitle = data?.thread?.title?.trim() || "Thread";
+
+  // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
+  // Paused until tenant is known.
+  const [{ data: attachedData }] = useQuery<{
+    artifacts?: Array<{ id: string; title: string; type?: string | null }> | null;
+  }>({
+    query: ThreadArtifactsQuery,
+    variables: { tenantId: tenantId ?? "", threadId },
+    pause: !tenantId || !threadId,
+    requestPolicy: "cache-and-network",
+  });
+  const attachedArtifacts = useMemo(
+    () =>
+      (attachedData?.artifacts ?? []).map((a) => ({
+        id: a.id,
+        title: a.title,
+      })),
+    [attachedData?.artifacts],
+  );
+
   usePageHeaderActions({
     backHref: "/threads",
     title: threadTitle,
@@ -101,6 +123,14 @@ export function ComputerThreadDetailRoute({
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
     documentTitle: `Thread · ${threadTitle}`,
+    action: (
+      <ThreadDetailActions
+        threadId={threadId}
+        threadTitle={threadTitle}
+        attachedArtifacts={attachedArtifacts}
+      />
+    ),
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}`,
   });
   const computerId = data?.thread?.computerId ?? null;
   const [{ data: tasksData }, reexecuteTasksQuery] =

@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider } from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
 import { ComputerSidebar } from "@/components/ComputerSidebar";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useTenant } from "@/context/TenantContext";
 
 export const Route = createFileRoute("/_authed/_shell")({
@@ -17,11 +18,7 @@ function ShellLayout() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

@@ -12,11 +12,17 @@ export type AppArtifactRuntimeMode =
 
 export interface AppArtifactPreview {
   id: string;
+  /**
+   * Stable artifact id (not appId). Required to call
+   * updateArtifact/deleteArtifact for favorite + destructive flows.
+   */
+  artifactId: string | null;
   title: string;
   kind: "applet";
   summary: string;
   href: string;
   generatedAt: string;
+  favoritedAt: string | null;
   version?: number | null;
   prompt?: string | null;
   stdlibVersionAtGeneration?: string | null;
@@ -35,6 +41,10 @@ export interface AppletPreviewNode {
   modelId?: string | null;
   generatedAt?: string | null;
   stdlibVersionAtGeneration?: string | null;
+  artifact?: {
+    id: string;
+    favoritedAt?: string | null;
+  } | null;
 }
 
 export interface AppletPayload {
@@ -84,11 +94,13 @@ export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
   const prompt = applet.prompt?.trim();
   return {
     id: applet.appId,
+    artifactId: applet.artifact?.id ?? null,
     title,
     kind: "applet",
     summary: prompt || `Version ${applet.version ?? 1} generated app.`,
     href: computerArtifactRoute(applet.appId),
     generatedAt: applet.generatedAt ?? "",
+    favoritedAt: applet.artifact?.favoritedAt ?? null,
     version: applet.version ?? null,
     prompt: applet.prompt ?? null,
     stdlibVersionAtGeneration: applet.stdlibVersionAtGeneration ?? null,

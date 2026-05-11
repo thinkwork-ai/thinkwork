@@ -171,4 +171,87 @@ describe("artifact payload resolvers", () => {
       Body: "next",
     });
   });
+
+  it("favoriting an artifact stores favorited_at as a Date", async () => {
+    const { updateArtifact } = await import(
+      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
+    );
+    selectRows.push({
+      id: "artifact-3",
+      tenant_id: "tenant-1",
+      title: "Report",
+      type: "report",
+      status: "final",
+      content: null,
+      s3_key: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await updateArtifact(
+      null,
+      {
+        id: "artifact-3",
+        input: { favoritedAt: "2026-05-10T18:30:00.000Z" },
+      },
+      {} as any,
+    );
+
+    expect(updatedRows[0].favorited_at).toBeInstanceOf(Date);
+    expect((updatedRows[0].favorited_at as Date).toISOString()).toBe(
+      "2026-05-10T18:30:00.000Z",
+    );
+  });
+
+  it("explicit null on favoritedAt clears the field", async () => {
+    const { updateArtifact } = await import(
+      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
+    );
+    selectRows.push({
+      id: "artifact-4",
+      tenant_id: "tenant-1",
+      title: "Report",
+      type: "report",
+      status: "final",
+      content: null,
+      s3_key: null,
+      favorited_at: new Date("2026-05-09T00:00:00.000Z"),
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await updateArtifact(
+      null,
+      { id: "artifact-4", input: { favoritedAt: null } },
+      {} as any,
+    );
+
+    expect(updatedRows[0].favorited_at).toBeNull();
+  });
+
+  it("omitting favoritedAt leaves the existing value untouched", async () => {
+    const { updateArtifact } = await import(
+      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
+    );
+    selectRows.push({
+      id: "artifact-5",
+      tenant_id: "tenant-1",
+      title: "Report",
+      type: "report",
+      status: "final",
+      content: null,
+      s3_key: null,
+      favorited_at: new Date("2026-05-09T00:00:00.000Z"),
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await updateArtifact(
+      null,
+      { id: "artifact-5", input: { title: "Renamed" } },
+      {} as any,
+    );
+
+    expect("favorited_at" in updatedRows[0]).toBe(false);
+  });
 });
