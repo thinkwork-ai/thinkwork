@@ -60,6 +60,10 @@ describe("Computer-owned thread turn routing", () => {
       "await markRunbookFailedFromChatInvokeError",
     );
     expect(chatInvokeSource).toContain(
+      "await markComputerTaskFailedFromChatInvokeError",
+    );
+    expect(chatInvokeSource).toContain("eq(computerTasks.id, input.taskId)");
+    expect(chatInvokeSource).toContain(
       'code: "agentcore_lambda_function_error"',
     );
     expect(chatInvokeSource).toContain('code: "agentcore_adapter_error"');
