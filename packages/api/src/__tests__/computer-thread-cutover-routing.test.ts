@@ -49,4 +49,22 @@ describe("Computer-owned thread turn routing", () => {
       "resolveRuntimeFunctionName(runtimeType)",
     );
   });
+
+  it("fails linked runbook tasks when AgentCore invocation fails before recording a response", () => {
+    const chatInvokeSource = source("../handlers/chat-agent-invoke.ts");
+
+    expect(chatInvokeSource).toContain(
+      "const runbookRunId = runbookRunIdFromContext(event.runbookContext)",
+    );
+    expect(chatInvokeSource).toContain(
+      "await markRunbookFailedFromChatInvokeError",
+    );
+    expect(chatInvokeSource).toContain(
+      'code: "agentcore_lambda_function_error"',
+    );
+    expect(chatInvokeSource).toContain('code: "agentcore_adapter_error"');
+    expect(chatInvokeSource).toContain(
+      "I hit a runtime error while executing this runbook.",
+    );
+  });
 });
