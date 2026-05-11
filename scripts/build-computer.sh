@@ -42,17 +42,26 @@ COMPUTER_SANDBOX_BUCKET="$(tf_output_raw computer_sandbox_bucket_name 2>/dev/nul
 COMPUTER_SANDBOX_CF_ID="$(tf_output_raw computer_sandbox_distribution_id 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_URL="$(tf_output_raw computer_sandbox_url 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_PARENT_ORIGINS="$(tf_output_raw computer_sandbox_allowed_parent_origins 2>/dev/null || echo '')"
-MAPBOX_PUBLIC_TOKEN="$(tf_output_raw mapbox_public_token)"
+MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)}"
 
-# Until a stage provisions the sandbox iframe distribution, applets must use
-# the legacy same-origin loader. Without this fallback, the production bundle
-# points at the default sandbox.thinkwork.ai iframe even when DNS/CSP is absent.
-if [[ -n "${VITE_APPLET_LEGACY_LOADER:-}" ]]; then
-  APPLET_LEGACY_LOADER="$VITE_APPLET_LEGACY_LOADER"
-elif [[ -z "$COMPUTER_SANDBOX_URL" ]]; then
-  APPLET_LEGACY_LOADER="true"
-else
-  APPLET_LEGACY_LOADER="false"
+if [[ -z "$COMPUTER_SANDBOX_URL" || -z "$COMPUTER_SANDBOX_BUCKET" || -z "$COMPUTER_SANDBOX_CF_ID" ]]; then
+  cat >&2 <<EOF
+Computer sandbox infrastructure is required for generated app rendering.
+Missing one or more Terraform outputs:
+  computer_sandbox_url='${COMPUTER_SANDBOX_URL}'
+  computer_sandbox_bucket_name='${COMPUTER_SANDBOX_BUCKET}'
+  computer_sandbox_distribution_id='${COMPUTER_SANDBOX_CF_ID}'
+Provision var.computer_sandbox_domain before deploying apps/computer.
+EOF
+  exit 1
+fi
+
+if [[ -z "$COMPUTER_SANDBOX_PARENT_ORIGINS" ]]; then
+  cat >&2 <<EOF
+Computer sandbox parent-origin allowlist is required.
+Missing Terraform output: computer_sandbox_allowed_parent_origins
+EOF
+  exit 1
 fi
 
 # Construct full Cognito domain URL from the short domain prefix
@@ -82,12 +91,7 @@ VITE_API_URL=${API_ENDPOINT}
 VITE_MAPBOX_PUBLIC_TOKEN=${MAPBOX_PUBLIC_TOKEN}
 VITE_SANDBOX_IFRAME_SRC=${COMPUTER_SANDBOX_URL:+${COMPUTER_SANDBOX_URL%/}/iframe-shell.html}
 VITE_ALLOWED_PARENT_ORIGINS=${COMPUTER_SANDBOX_PARENT_ORIGINS}
-VITE_APPLET_LEGACY_LOADER=${APPLET_LEGACY_LOADER}
 EOF
-
-if [[ "$APPLET_LEGACY_LOADER" == "true" && -z "$COMPUTER_SANDBOX_URL" ]]; then
-  echo "▸ Sandbox URL not provisioned for stage=$STAGE; enabling legacy applet loader."
-fi
 
 pnpm --filter computer build
 
@@ -95,13 +99,13 @@ pnpm --filter computer build
 # the cross-origin React applet substrate at sandbox.thinkwork.ai
 # (or the dev/staging analogue) and is a separate Vite build from
 # the host app. Only sync to the sandbox bucket if Terraform has
-# provisioned it for this stage — older stages without the
-# computer_sandbox_site module skip the upload silently and the
-# host app falls back to the legacy same-origin loader via
-# VITE_APPLET_LEGACY_LOADER.
+# provisioned it for this stage. Sandbox infra is mandatory for generated
+# app rendering; this script fails before building when the sandbox outputs
+# are missing.
 echo "▸ Building iframe-shell bundle ..."
 VITE_SANDBOX_IFRAME_SRC="${COMPUTER_SANDBOX_URL:+${COMPUTER_SANDBOX_URL%/}/iframe-shell.html}" \
 VITE_ALLOWED_PARENT_ORIGINS="${COMPUTER_SANDBOX_PARENT_ORIGINS}" \
+VITE_MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN}" \
   pnpm --filter @thinkwork/computer build:iframe-shell
 
 echo "▸ Syncing to S3 bucket: $COMPUTER_BUCKET ..."
@@ -117,22 +121,17 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-if [[ -n "$COMPUTER_SANDBOX_BUCKET" && -n "$COMPUTER_SANDBOX_CF_ID" ]]; then
-  echo "▸ Syncing iframe-shell to sandbox bucket: $COMPUTER_SANDBOX_BUCKET ..."
-  aws s3 sync apps/computer/dist/iframe-shell/ "s3://${COMPUTER_SANDBOX_BUCKET}/" \
-    --delete \
-    --region "$REGION"
+echo "▸ Syncing iframe-shell to sandbox bucket: $COMPUTER_SANDBOX_BUCKET ..."
+aws s3 sync apps/computer/dist/iframe-shell/ "s3://${COMPUTER_SANDBOX_BUCKET}/" \
+  --delete \
+  --region "$REGION"
 
-  echo "▸ Invalidating sandbox CloudFront cache: $COMPUTER_SANDBOX_CF_ID ..."
-  aws cloudfront create-invalidation \
-    --distribution-id "$COMPUTER_SANDBOX_CF_ID" \
-    --paths "/*" \
-    --region "$REGION" \
-    --output text > /dev/null
-else
-  echo "▸ Sandbox bucket not provisioned for stage=$STAGE — skipping iframe-shell upload."
-  echo "  Provision via terraform var.computer_sandbox_domain to enable the iframe substrate."
-fi
+echo "▸ Invalidating sandbox CloudFront cache: $COMPUTER_SANDBOX_CF_ID ..."
+aws cloudfront create-invalidation \
+  --distribution-id "$COMPUTER_SANDBOX_CF_ID" \
+  --paths "/*" \
+  --region "$REGION" \
+  --output text > /dev/null
 
 COMPUTER_URL="$(cd "$TF_DIR" && tf_output_raw computer_url)"
 echo ""

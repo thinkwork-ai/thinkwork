@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
 
@@ -9,22 +9,6 @@ vi.mock("urql", async (importOriginal) => {
     useQuery: vi.fn(),
   };
 });
-
-vi.mock("@/applets/host-registry", () => ({
-  loadAppletHostExternals: vi.fn(async () => undefined),
-}));
-
-vi.mock("@/applets/host-applet-api", () => ({
-  registerAppletRefreshHandler: vi.fn(),
-}));
-
-vi.mock("@/applets/transform/transform", () => ({
-  transformApplet: vi.fn(async () => ({
-    ok: true,
-    compiledModuleUrl: "stub://applet/main.js",
-    cacheKey: "stub-cache-key",
-  })),
-}));
 
 import { InlineAppletEmbed } from "./InlineAppletEmbed";
 
@@ -89,9 +73,7 @@ describe("InlineAppletEmbed", () => {
 
     render(<InlineAppletEmbed appId="app_no_source" />);
 
-    expect(
-      screen.getByText(/does not include a source file/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/does not include a source file/i)).toBeTruthy();
   });
 
   it("mounts the applet inside a fit-content embed container", async () => {
@@ -109,43 +91,17 @@ describe("InlineAppletEmbed", () => {
       },
     });
 
-    function StubAppletModule() {
-      return <div data-testid="stub-applet-body">app rendered</div>;
-    }
-
-    const loadModule = vi.fn(async () => ({ default: StubAppletModule }));
-
-    render(
-      <InlineAppletEmbed
-        appId="app_ok"
-        height={320}
-        loadModule={loadModule}
-      />,
-    );
+    render(<InlineAppletEmbed appId="app_ok" height={320} />);
 
     const embed = await screen.findByTestId("inline-applet-embed");
     expect(embed.getAttribute("style")).toContain("min-height: 320px");
     expect(embed.getAttribute("style")).not.toContain("max-height");
     expect(embed.className).toContain("overflow-visible");
     expect(embed.className).not.toContain("overflow-auto");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("stub-applet-body")).toBeTruthy();
-    });
-    expect(loadModule).toHaveBeenCalledWith("stub://applet/main.js");
+    expect(await screen.findByTestId("applet-iframe-host")).toBeTruthy();
   });
 
-  it("default production render takes the iframe substrate path (no loadModule prop)", async () => {
-    // Plan-012 U11.5: production InlineAppletEmbed must NOT default
-    // loadModule to defaultAppletModuleLoader. With no loadModule, the
-    // AppletMount routes to IframeAppletMount which appends an iframe
-    // host element. Asserts (a) the iframe host testid is present and
-    // (b) the legacy transformApplet seam was NOT called.
-    const { transformApplet } = await import(
-      "@/applets/transform/transform"
-    );
-    vi.mocked(transformApplet).mockClear();
-
+  it("default production render takes the iframe substrate path", async () => {
     mockUseQuery({
       data: {
         applet: {
@@ -162,23 +118,12 @@ describe("InlineAppletEmbed", () => {
 
     render(<InlineAppletEmbed appId="app_iframe_default" />);
 
-    // iframe host element present (rendered by IframeAppletMount).
     const host = await screen.findByTestId("applet-iframe-host");
     expect(host).toBeTruthy();
     expect(host.className).not.toContain("h-full");
-
-    // Legacy transform path is NOT exercised — that's the
-    // load-bearing assertion that this PR closes the production
-    // bypass adversarial review flagged.
-    expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
   });
 
   it("ignores applet metadata that tries to opt into trusted native rendering", async () => {
-    const { transformApplet } = await import(
-      "@/applets/transform/transform"
-    );
-    vi.mocked(transformApplet).mockClear();
-
     mockUseQuery({
       data: {
         applet: {
@@ -197,10 +142,7 @@ describe("InlineAppletEmbed", () => {
     render(<InlineAppletEmbed appId="app_untrusted_metadata" />);
 
     const embed = await screen.findByTestId("inline-applet-embed");
-    expect(embed.getAttribute("data-runtime-mode")).toBe(
-      "sandboxedGenerated",
-    );
+    expect(embed.getAttribute("data-runtime-mode")).toBe("sandboxedGenerated");
     expect(await screen.findByTestId("applet-iframe-host")).toBeTruthy();
-    expect(vi.mocked(transformApplet)).not.toHaveBeenCalled();
   });
 });

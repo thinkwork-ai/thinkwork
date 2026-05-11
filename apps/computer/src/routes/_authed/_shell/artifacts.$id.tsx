@@ -15,7 +15,6 @@ import {
   AppletMount,
   appletSource,
   useAppletInstanceId,
-  type AppletModuleLoader,
 } from "@/applets/mount";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -38,18 +37,7 @@ function AppArtifactPage() {
   return <AppletRouteContent appId={id} />;
 }
 
-export function AppletRouteContent({
-  appId,
-  loadModule,
-}: {
-  appId: string;
-  // Plan-012 U11.5: do NOT default to defaultAppletModuleLoader. The
-  // production AppletMount routes by `loadModule === undefined` —
-  // defaulting here would force every production render through the
-  // legacy same-origin path and bypass the iframe substrate. Tests
-  // pass an explicit loader to opt into the legacy code path.
-  loadModule?: AppletModuleLoader;
-}) {
+export function AppletRouteContent({ appId }: { appId: string }) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
       query: AppletQuery,
@@ -167,9 +155,6 @@ export function AppletRouteContent({
             instanceId={mountedSnapshot.instanceId}
             source={mountedSnapshot.source}
             version={mountedSnapshot.version}
-            // Forward only when supplied — production renders pass
-            // undefined so AppletMount routes to the iframe path.
-            {...(loadModule ? { loadModule } : {})}
             onHeaderActionChange={handleHeaderActionChange}
           />
         ) : (

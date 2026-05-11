@@ -576,15 +576,13 @@ module "admin_site" {
 
 locals {
   # Host CSP for the Computer SPA (plan-012 U10 / contract v1 §CSP profile).
-  # Once the sandbox distribution is provisioned, sucrase runs in the iframe
-  # scope and the parent can stay on script-src/worker-src 'self'. Stages
-  # without sandbox infra intentionally fall back to the legacy same-origin
-  # loader, which needs blob: for transformed applet modules.
-  computer_host_script_src = local.computer_sandbox_enabled ? "'self'" : "'self' blob:"
-  computer_host_worker_src = local.computer_sandbox_enabled ? "'self'" : "'self' blob:"
+  # Generated apps always execute in the sandbox iframe shell, so the parent
+  # origin never needs blob: script/worker execution for transformed modules.
+  computer_host_script_src = "'self'"
+  computer_host_worker_src = "'self'"
   computer_host_frame_src  = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
 
-  computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+  computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
 }
 
 module "computer_site" {

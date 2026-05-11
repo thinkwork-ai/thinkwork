@@ -21,12 +21,28 @@ const STATIC_SITE_MAIN = resolve(
   REPO_ROOT,
   "terraform/modules/app/static-site/main.tf",
 );
-const THINKWORK_MAIN = resolve(REPO_ROOT, "terraform/modules/thinkwork/main.tf");
+const THINKWORK_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/main.tf",
+);
+const GREENFIELD_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/examples/greenfield/main.tf",
+);
+const WWW_DNS_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/main.tf",
+);
+const WWW_DNS_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/variables.tf",
+);
 const THINKWORK_VARS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/variables.tf",
 );
 const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-computer.sh");
+const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -67,12 +83,12 @@ describe("U3 — static-site response-headers extension", () => {
 });
 
 describe("U3 — computer_sandbox_site instance", () => {
-  it("thinkwork main.tf declares module \"computer_sandbox_site\"", () => {
+  it('thinkwork main.tf declares module "computer_sandbox_site"', () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(/module "computer_sandbox_site"/);
   });
 
-  it("computer_sandbox_site uses the static-site module via source = \"../app/static-site\"", () => {
+  it('computer_sandbox_site uses the static-site module via source = "../app/static-site"', () => {
     const source = read(THINKWORK_MAIN);
     expect(source).toMatch(
       /module "computer_sandbox_site"\s*\{[^}]*source\s*=\s*"\.\.\/app\/static-site"/s,
@@ -109,7 +125,9 @@ describe("U3 — computer_sandbox_site instance", () => {
     expect(source).toMatch(/https:\/\/\*\.tile\.openstreetmap\.org/);
     expect(source).toMatch(/https:\/\/api\.mapbox\.com/);
     expect(source).toMatch(/computer_sandbox_map_frame_src/);
-    expect(source).toMatch(/frame-src \$\{local\.computer_sandbox_map_frame_src\}/);
+    expect(source).toMatch(
+      /frame-src \$\{local\.computer_sandbox_map_frame_src\}/,
+    );
     expect(source).toMatch(/https:\/\/www\.openstreetmap\.org/);
     expect(source).not.toMatch(/frame-src \*/);
   });
@@ -159,7 +177,37 @@ describe("U3 — sandbox variables", () => {
 
   it("thinkwork variables.tf declares computer_sandbox_allowed_parent_origins", () => {
     const source = read(THINKWORK_VARS);
-    expect(source).toMatch(/variable "computer_sandbox_allowed_parent_origins"/);
+    expect(source).toMatch(
+      /variable "computer_sandbox_allowed_parent_origins"/,
+    );
+  });
+
+  it("greenfield derives sandbox.<apex> and passes it to the thinkwork module", () => {
+    const source = read(GREENFIELD_MAIN);
+    expect(source).toMatch(
+      /sandbox_domain\s*=\s*var\.www_domain != "" \? "sandbox\.\$\{var\.www_domain\}" : ""/,
+    );
+    expect(source).toMatch(
+      /computer_sandbox_domain\s*=\s*local\.www_dns_enabled \? local\.sandbox_domain : ""/,
+    );
+    expect(source).toMatch(
+      /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? module\.www_dns\[0\]\.certificate_arn : ""/,
+    );
+    expect(source).toMatch(
+      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.computer_domain\}" : ""/,
+    );
+  });
+
+  it("www-dns can add sandbox.<apex> to the shared cert and Cloudflare CNAMEs", () => {
+    const vars = read(WWW_DNS_VARS);
+    const source = read(WWW_DNS_MAIN);
+    expect(vars).toMatch(/variable "include_computer_sandbox"/);
+    expect(vars).toMatch(/variable "computer_sandbox_cloudfront_domain_name"/);
+    expect(source).toMatch(/sandbox\s*=\s*"sandbox\.\$\{var\.domain\}"/);
+    expect(source).toMatch(
+      /var\.include_computer_sandbox \? \[local\.sandbox\] : \[\]/,
+    );
+    expect(source).toMatch(/resource "cloudflare_record" "computer_sandbox"/);
   });
 });
 
@@ -194,6 +242,12 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(/appsync-api/);
     expect(source).toMatch(/cognito-idp/);
     expect(source).toMatch(/auth\.\$\{var\.region\}\.amazoncognito\.com/);
+    // The parent still allows map tiles so existing same-origin artifact
+    // routes that are not generated-code iframes can render maps, but
+    // LLM-authored generated apps themselves must run through the sandbox.
+    expect(source).toMatch(
+      /img-src 'self' data: blob: \$\{local\.computer_sandbox_map_img_src\}/,
+    );
   });
 
   it("host CSP API Gateway + AppSync + Cognito endpoints are region-parameterized (not hardcoded us-east-1)", () => {
@@ -229,27 +283,47 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(/computer_sandbox_domain/);
   });
 
-  it("host CSP permits legacy blob applet modules only while sandbox is unprovisioned", () => {
+  it("host CSP does not keep a legacy blob execution escape hatch", () => {
     const source = read(THINKWORK_MAIN);
-    expect(source).toMatch(
-      /computer_host_script_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
-    );
-    expect(source).toMatch(
-      /computer_host_worker_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"'self'"\s*:\s*"'self' blob:"/,
-    );
+    expect(source).toMatch(/computer_host_script_src\s*=\s*"'self'"/);
+    expect(source).toMatch(/computer_host_worker_src\s*=\s*"'self'"/);
     expect(source).toMatch(
       /computer_host_frame_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"https:\/\/\$\{var\.computer_sandbox_domain\}"\s*:\s*"'none'"/,
     );
   });
 });
 
-describe("U11.5 — computer deploy script sandbox fallback", () => {
-  it("build-computer enables the legacy applet loader when sandbox outputs are absent", () => {
+describe("U11.5 — computer deploy script sandbox enforcement", () => {
+  it("build-computer requires sandbox outputs and does not emit a legacy loader flag", () => {
     const source = read(BUILD_COMPUTER);
-    expect(source).toMatch(/COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/);
-    expect(source).toMatch(/elif \[\[ -z "\$COMPUTER_SANDBOX_URL" \]\]/);
-    expect(source).toMatch(/APPLET_LEGACY_LOADER="true"/);
-    expect(source).toMatch(/APPLET_LEGACY_LOADER="false"/);
-    expect(source).toMatch(/VITE_APPLET_LEGACY_LOADER=\$\{APPLET_LEGACY_LOADER\}/);
+    expect(source).toMatch(
+      /COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/,
+    );
+    expect(source).toMatch(/Computer sandbox infrastructure is required/);
+    expect(source).toMatch(/exit 1/);
+    expect(source).not.toMatch(/APPLET_LEGACY_LOADER/);
+    expect(source).not.toMatch(/VITE_APPLET_LEGACY_LOADER/);
+  });
+});
+
+describe("Computer Mapbox production wiring", () => {
+  it("deploy passes the Mapbox public token into Terraform and the Computer build", () => {
+    const source = read(DEPLOY_WORKFLOW);
+    expect(source).toMatch(
+      /mapbox_public_token=\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
+    );
+    expect(source).toMatch(
+      /MAPBOX_PUBLIC_TOKEN:\s*\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
+    );
+  });
+
+  it("build-computer allows CI to override the Terraform output token and passes it to the iframe shell", () => {
+    const source = read(BUILD_COMPUTER);
+    expect(source).toContain(
+      'MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)}"',
+    );
+    expect(source).toMatch(
+      /VITE_MAPBOX_PUBLIC_TOKEN="\$\{MAPBOX_PUBLIC_TOKEN\}"/,
+    );
   });
 });
