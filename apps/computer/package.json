@@ -26,6 +26,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
+    "@tabler/icons-react": "^3.40.0",
     "@thinkwork/computer-stdlib": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/ui": "workspace:*",

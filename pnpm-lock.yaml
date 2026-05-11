@@ -328,6 +328,9 @@ importers:
       '@streamdown/mermaid':
         specifier: ^1.0.2
         version: 1.0.2(react@19.1.0)
+      '@tabler/icons-react':
+        specifier: ^3.40.0
+        version: 3.41.1(react@19.1.0)
       '@tanstack/react-router':
         specifier: ^1.154.14
         version: 1.168.10(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -26969,7 +26972,7 @@ snapshots:
       jsonwebtoken: 9.0.3
       load-esm: 1.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.15.0(debug@4.4.3))
+      retry-axios: 2.6.0(axios@1.15.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -30728,7 +30731,7 @@ snapshots:
       retext-stringify: 4.0.0
       unified: 11.0.5
 
-  retry-axios@2.6.0(axios@1.15.0(debug@4.4.3)):
+  retry-axios@2.6.0(axios@1.15.0):
     dependencies:
       axios: 1.15.0(debug@4.4.3)
 

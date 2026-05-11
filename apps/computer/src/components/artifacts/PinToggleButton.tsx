@@ -1,8 +1,8 @@
 import { useState, type MouseEvent } from "react";
 import { useMutation } from "urql";
-import { Pin } from "lucide-react";
+import { IconPin, IconPinFilled } from "@tabler/icons-react";
 import { toast } from "sonner";
-import { Button, cn } from "@thinkwork/ui";
+import { Button } from "@thinkwork/ui";
 import { UpdateArtifactMutation } from "@/lib/graphql-queries";
 
 export interface PinToggleButtonProps {
@@ -79,7 +79,11 @@ export function PinToggleButton({
         void toggle(event);
       }}
     >
-      <Pin className={cn("h-4 w-4", isPinned && "fill-current")} />
+      {isPinned ? (
+        <IconPinFilled className="h-4 w-4" stroke={2} />
+      ) : (
+        <IconPin className="h-4 w-4" stroke={2} />
+      )}
     </Button>
   );
 }
