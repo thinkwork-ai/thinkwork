@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "urql";
-import { MoreHorizontal, Star, StarOff, Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -16,18 +16,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@thinkwork/ui";
-import {
-  DeleteArtifactMutation,
-  UpdateArtifactMutation,
-} from "@/lib/graphql-queries";
+import { DeleteArtifactMutation } from "@/lib/graphql-queries";
 
 export interface ArtifactDetailActionsProps {
   artifactId: string;
   artifactTitle: string;
-  favoritedAt: string | null;
   /** Test seam: override where the user lands after Delete. */
   onDeleteNavigateTo?: string;
 }
@@ -36,7 +31,7 @@ export function ArtifactDetailActions(props: ArtifactDetailActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   return (
     <>
-      <ArtifactActionsMenu {...props} onRequestDelete={() => setDeleteOpen(true)} />
+      <ArtifactActionsMenu onRequestDelete={() => setDeleteOpen(true)} />
       <ArtifactDeleteDialog
         {...props}
         open={deleteOpen}
@@ -46,46 +41,11 @@ export function ArtifactDetailActions(props: ArtifactDetailActionsProps) {
   );
 }
 
-interface ArtifactActionsMenuProps extends ArtifactDetailActionsProps {
-  onRequestDelete: () => void;
-}
-
 function ArtifactActionsMenu({
-  artifactId,
-  favoritedAt,
   onRequestDelete,
-}: ArtifactActionsMenuProps) {
-  const [, updateArtifact] = useMutation(UpdateArtifactMutation);
-  const [working, setWorking] = useState(false);
-  const isFavorited = favoritedAt !== null;
-
-  async function handleToggleFavorite() {
-    setWorking(true);
-    try {
-      const nextValue = isFavorited ? null : new Date().toISOString();
-      const result = await updateArtifact({
-        id: artifactId,
-        input: { favoritedAt: nextValue },
-      });
-      if (result.error) {
-        toast.error(
-          `Could not ${isFavorited ? "remove" : "add"} favorite: ${result.error.message}`,
-        );
-        return;
-      }
-      toast.success(
-        isFavorited ? "Removed from favorites." : "Added to favorites.",
-      );
-    } catch (err) {
-      console.error("[ArtifactDetailActions] favorite toggle failed", err);
-      toast.error(
-        `Could not update favorite: ${err instanceof Error ? err.message : "unknown error"}`,
-      );
-    } finally {
-      setWorking(false);
-    }
-  }
-
+}: {
+  onRequestDelete: () => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -102,28 +62,8 @@ function ArtifactActionsMenu({
       <DropdownMenuContent align="end" className="min-w-[12rem]">
         <DropdownMenuItem
           className="whitespace-nowrap"
-          data-testid="artifact-actions-favorite"
-          disabled={working}
-          onSelect={() => void handleToggleFavorite()}
-        >
-          {isFavorited ? (
-            <>
-              <StarOff className="mr-2 h-4 w-4" />
-              Remove from favorites
-            </>
-          ) : (
-            <>
-              <Star className="mr-2 h-4 w-4" />
-              Add to favorites
-            </>
-          )}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="whitespace-nowrap"
           variant="destructive"
           data-testid="artifact-actions-delete"
-          disabled={working}
           // Defer the dialog open one tick so Radix's menu-close
           // animation doesn't trap focus, blocking the dialog buttons.
           onSelect={() => {

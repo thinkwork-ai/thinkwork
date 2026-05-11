@@ -23,6 +23,13 @@ export interface PageHeaderActions {
   backBehavior?: "href" | "history";
   /** Optional secondary text displayed next to the title (e.g., "216 threads") */
   subtitle?: string;
+  /**
+   * Optional inline content rendered immediately to the right of the
+   * title (before the subtitle). Use for compact title-anchored
+   * affordances like a pin/unpin toggle. The right-side `action` slot is
+   * still available for menus and overflow controls.
+   */
+  titleTrailing?: ReactNode;
   /** When true, hide the AppTopBar entirely on this page (still updates document.title) */
   hideTopBar?: boolean;
   /**
@@ -76,7 +83,7 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const tabsKey =
     actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const key = actions
-    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${actions.actionKey ?? ""}`
+    ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${actions.actionKey ?? ""}|${actions.titleTrailing ? "tt1" : "tt0"}`
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {

@@ -63,6 +63,11 @@ export function AppTopBar() {
             )
           ) : null}
           <h1 className="truncate text-sm font-medium">{actions.title}</h1>
+          {actions.titleTrailing ? (
+            <div className="flex shrink-0 items-center">
+              {actions.titleTrailing}
+            </div>
+          ) : null}
           {actions.subtitle ? (
             <span className="shrink-0 text-xs text-muted-foreground">
               {actions.subtitle}
