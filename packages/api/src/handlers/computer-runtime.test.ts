@@ -20,9 +20,11 @@ const mocks = vi.hoisted(() => {
     failComputerTask: vi.fn(),
     loadRunbookExecutionContext: vi.fn(),
     startRunbookExecutionTask: vi.fn(),
+    executeRunbookExecutionTask: vi.fn(),
     completeRunbookExecutionTask: vi.fn(),
     failRunbookExecutionTask: vi.fn(),
     completeRunbookExecutionRun: vi.fn(),
+    recordRunbookExecutionResponse: vi.fn(),
     ComputerTaskDelegationError: class ComputerTaskDelegationError extends Error {
       statusCode: number;
 
@@ -68,9 +70,11 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
 vi.mock("../lib/runbooks/runtime-api.js", () => ({
   loadRunbookExecutionContext: mocks.loadRunbookExecutionContext,
   startRunbookExecutionTask: mocks.startRunbookExecutionTask,
+  executeRunbookExecutionTask: mocks.executeRunbookExecutionTask,
   completeRunbookExecutionTask: mocks.completeRunbookExecutionTask,
   failRunbookExecutionTask: mocks.failRunbookExecutionTask,
   completeRunbookExecutionRun: mocks.completeRunbookExecutionRun,
+  recordRunbookExecutionResponse: mocks.recordRunbookExecutionResponse,
   RunbookRuntimeError: class RunbookRuntimeError extends Error {
     statusCode: number;
 

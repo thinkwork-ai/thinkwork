@@ -43,7 +43,7 @@ describe("Computer-owned thread turn routing", () => {
     expect(threadCutoverSource).toContain("artifact_builder_defaults_seeded");
     expect(threadCutoverSource).toContain("thread_turn_dispatched");
     expect(chatInvokeSource).toMatch(
-      /event\.computerId && event\.computerTaskId\s+\? "strands"/,
+      /event\.computerId && \(event\.computerTaskId \|\| responseOnly\)\s+\? "strands"/,
     );
     expect(chatInvokeSource).toContain(
       "resolveRuntimeFunctionName(runtimeType)",

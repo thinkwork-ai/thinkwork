@@ -75,6 +75,11 @@ function apiWithContext(initial: RunbookExecutionContext) {
       }),
     failRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
     completeRunbookRun: vi.fn().mockResolvedValue({ ok: true }),
+    executeRunbookTask: vi.fn().mockResolvedValue({
+      ok: true,
+      responseText: "Step completed",
+    }),
+    recordRunbookResponse: vi.fn().mockResolvedValue({ ok: true }),
   };
   return api;
 }
@@ -114,6 +119,38 @@ describe("executeRunbook", () => {
       taskType: "runbook_execute",
       status: "completed",
       runbookRunId: "run-1",
+    });
+  });
+
+  it("uses the runtime API as the default per-task runner", async () => {
+    const api = apiWithContext(context());
+    api.executeRunbookTask
+      .mockResolvedValueOnce({
+        ok: true,
+        responseText: "Discovery complete",
+        model: "model-1",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        responseText: "Dashboard saved",
+        model: "model-1",
+      });
+
+    await executeRunbook(
+      {
+        id: "task-1",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      api,
+    );
+
+    expect(api.executeRunbookTask).toHaveBeenNthCalledWith(1, "task-1", "rt-1");
+    expect(api.executeRunbookTask).toHaveBeenNthCalledWith(2, "task-1", "rt-2");
+    expect(api.recordRunbookResponse).toHaveBeenCalledWith("task-1", {
+      content: "Dashboard saved",
+      model: "model-1",
+      usage: undefined,
     });
   });
 

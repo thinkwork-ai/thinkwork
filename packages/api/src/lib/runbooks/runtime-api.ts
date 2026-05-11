@@ -1,6 +1,8 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  artifacts,
   computerRunbookRuns,
   computerRunbookTasks,
   computers,
@@ -9,7 +11,8 @@ import {
   threads,
   type RunbookTaskStatus,
 } from "@thinkwork/database-pg/schema";
-import { notifyThreadUpdate } from "../../graphql/notify.js";
+import { getChatAgentInvokeFnArn } from "../../graphql/utils.js";
+import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import {
   taskQueuePart,
   taskQueueThreadMetadata,
@@ -18,6 +21,7 @@ import {
 } from "../task-queues/message-parts.js";
 
 const db = getDb();
+const lambdaClient = new LambdaClient({});
 
 export class RunbookRuntimeError extends Error {
   constructor(
@@ -264,6 +268,213 @@ export async function completeRunbookExecutionTask(input: {
   return toRuntimeTask(updated);
 }
 
+export async function executeRunbookExecutionTask(input: {
+  tenantId: string;
+  computerId: string;
+  taskId: string;
+  runbookTaskId: string;
+}) {
+  const context = await loadRunbookExecutionContext(input);
+  const currentTask = context.tasks.find(
+    (task) => task.id === input.runbookTaskId,
+  );
+  if (!currentTask)
+    throw new RunbookRuntimeError("Runbook task not found", 404);
+  if (currentTask.status !== "running" && currentTask.status !== "pending") {
+    throw new RunbookRuntimeError(
+      `Cannot execute runbook task in ${currentTask.status} status`,
+      409,
+    );
+  }
+  if (!context.thread || !context.sourceMessage) {
+    throw new RunbookRuntimeError(
+      "Runbook execution requires a source thread and message",
+      409,
+    );
+  }
+
+  const [computer] = await db
+    .select({
+      id: computers.id,
+      name: computers.name,
+      migrated_from_agent_id: computers.migrated_from_agent_id,
+    })
+    .from(computers)
+    .where(
+      and(
+        eq(computers.tenant_id, input.tenantId),
+        eq(computers.id, input.computerId),
+      ),
+    )
+    .limit(1);
+  if (!computer) throw new RunbookRuntimeError("Computer not found", 404);
+  if (!computer.migrated_from_agent_id) {
+    throw new RunbookRuntimeError(
+      "Computer has no Strands agent configured for runbook execution",
+      409,
+    );
+  }
+
+  const runbookContext = {
+    run: context.run,
+    definitionSnapshot: context.definitionSnapshot,
+    inputs: context.inputs,
+    previousOutputs: context.previousOutputs,
+    currentTask,
+    tasks: context.tasks.map((task) =>
+      task.id === currentTask.id ? { ...task, status: "running" } : task,
+    ),
+  };
+
+  const prompt = buildRunbookStepPrompt({
+    originalPrompt: context.sourceMessage.content,
+    computerName: computer.name,
+    task: currentTask,
+    previousOutputs: context.previousOutputs,
+  });
+  const result = await invokeRunbookStepAgent({
+    tenantId: input.tenantId,
+    threadId: context.thread.id,
+    agentId: computer.migrated_from_agent_id,
+    userMessage: prompt,
+    messageId: context.sourceMessage.id,
+    computerId: input.computerId,
+    runbookContext,
+  });
+
+  await syncRunbookTaskQueueMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: context.run.id,
+  });
+  return result;
+}
+
+export async function recordRunbookExecutionResponse(input: {
+  tenantId: string;
+  computerId: string;
+  taskId: string;
+  content: string;
+  model?: string | null;
+  usage?: unknown;
+}) {
+  const { task, payload } = await loadRunbookExecuteTask(input);
+  const { run } = await loadRunbookRunState({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+  });
+  if (!run.thread_id) {
+    throw new RunbookRuntimeError("Runbook run has no thread", 409);
+  }
+
+  const [thread] = await db
+    .select({ id: threads.id, title: threads.title, status: threads.status })
+    .from(threads)
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, run.thread_id)),
+    )
+    .limit(1);
+  if (!thread) throw new RunbookRuntimeError("Runbook thread not found", 404);
+
+  const [existing] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, thread.id),
+        sql`${messages.metadata}->>'runbookMessageKey' = ${`runbook-response:${run.id}`}`,
+      ),
+    )
+    .limit(1);
+  if (existing) return { responded: false, responseMessageId: existing.id };
+
+  const [assistantMessage] = await db
+    .insert(messages)
+    .values({
+      tenant_id: input.tenantId,
+      thread_id: thread.id,
+      role: "assistant",
+      content: input.content,
+      sender_type: "computer",
+      sender_id: input.computerId,
+      metadata: {
+        runbookMessageKey: `runbook-response:${run.id}`,
+        runbookRunId: run.id,
+        computerTaskId: input.taskId,
+        sourceMessageId: payload.messageId,
+        model: input.model ?? null,
+        usage: input.usage ?? null,
+      },
+    })
+    .returning({ id: messages.id });
+  if (!assistantMessage) {
+    throw new RunbookRuntimeError("Runbook response insert failed", 500);
+  }
+
+  const turnStartedAt =
+    task.claimed_at instanceof Date
+      ? task.claimed_at
+      : task.created_at instanceof Date
+        ? task.created_at
+        : new Date(0);
+  await db
+    .update(artifacts)
+    .set({
+      thread_id: thread.id,
+      source_message_id: assistantMessage.id,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(artifacts.tenant_id, input.tenantId),
+        eq(artifacts.type, "applet"),
+        isNull(artifacts.source_message_id),
+        sql`(${artifacts.thread_id} IS NULL OR ${artifacts.thread_id} = ${thread.id})`,
+        gte(artifacts.created_at, turnStartedAt),
+      ),
+    );
+
+  const preview =
+    input.content.length > 240
+      ? `${input.content.slice(0, 237)}...`
+      : input.content;
+  await db
+    .update(threads)
+    .set({
+      last_turn_completed_at: new Date(),
+      last_response_preview: preview,
+      updated_at: new Date(),
+    })
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, thread.id)),
+    );
+
+  await notifyNewMessage({
+    messageId: assistantMessage.id,
+    threadId: thread.id,
+    tenantId: input.tenantId,
+    role: "assistant",
+    content: input.content,
+    senderType: "computer",
+    senderId: input.computerId,
+  });
+  await notifyThreadUpdate({
+    threadId: thread.id,
+    tenantId: input.tenantId,
+    status: thread.status,
+    title: thread.title,
+  });
+
+  return {
+    responded: true,
+    responseMessageId: assistantMessage.id,
+    threadId: thread.id,
+    runbookRunId: run.id,
+  };
+}
+
 export async function failRunbookExecutionTask(input: {
   tenantId: string;
   computerId: string;
@@ -379,6 +590,114 @@ export async function completeRunbookExecutionRun(input: {
   return toRuntimeRun(updated);
 }
 
+function buildRunbookStepPrompt(input: {
+  originalPrompt: string;
+  computerName: string;
+  task: ReturnType<typeof toRuntimeTask>;
+  previousOutputs: Record<string, unknown>;
+}) {
+  const priorOutputKeys = Object.keys(input.previousOutputs);
+  return [
+    `You are ${input.computerName}, executing one persisted runbook task.`,
+    "",
+    "Execute only the current task from the Runbook Execution Context.",
+    "Do not print the full task list. Do not claim later tasks are complete.",
+    "Use the available Strands tools when the task requires research, browser automation, or applet creation.",
+    "Return a concise task output that the next runbook task can use.",
+    "",
+    "Original user request:",
+    input.originalPrompt,
+    "",
+    "Current task:",
+    `- ${input.task.title}`,
+    input.task.summary ? `- ${input.task.summary}` : "",
+    "",
+    priorOutputKeys.length > 0
+      ? `Prior output keys available: ${priorOutputKeys.join(", ")}`
+      : "No prior task outputs are available yet.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function invokeRunbookStepAgent(input: {
+  tenantId: string;
+  threadId: string;
+  agentId: string;
+  userMessage: string;
+  messageId: string;
+  computerId: string;
+  runbookContext: unknown;
+}) {
+  const fnArn = await getChatAgentInvokeFnArn();
+  if (!fnArn) {
+    throw new RunbookRuntimeError(
+      "chat-agent-invoke Lambda is not configured",
+      502,
+    );
+  }
+
+  const response = await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: fnArn,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(
+        JSON.stringify({
+          threadId: input.threadId,
+          tenantId: input.tenantId,
+          agentId: input.agentId,
+          userMessage: input.userMessage,
+          messageId: input.messageId,
+          computerId: input.computerId,
+          runbookContext: input.runbookContext,
+          responseMode: "runbook_step",
+        }),
+      ),
+    }),
+  );
+  const rawPayload = response.Payload
+    ? new TextDecoder().decode(response.Payload)
+    : "{}";
+  if (response.FunctionError) {
+    throw new RunbookRuntimeError(
+      `Runbook step agent failed: ${rawPayload.slice(0, 500)}`,
+      502,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch {
+    throw new RunbookRuntimeError(
+      "Runbook step agent returned invalid JSON",
+      502,
+    );
+  }
+  if (!isRecord(parsed) || parsed.ok !== true) {
+    throw new RunbookRuntimeError(
+      `Runbook step agent returned an invalid response: ${rawPayload.slice(0, 500)}`,
+      502,
+    );
+  }
+  if (typeof parsed.responseText !== "string" || !parsed.responseText.trim()) {
+    throw new RunbookRuntimeError(
+      "Runbook step agent returned an empty response",
+      502,
+    );
+  }
+  return {
+    ok: true as const,
+    responseText: parsed.responseText,
+    model: typeof parsed.model === "string" ? parsed.model : null,
+    usage: parsed.usage,
+    toolInvocations: Array.isArray(parsed.toolInvocations)
+      ? parsed.toolInvocations.filter(isRecord)
+      : [],
+    durationMs:
+      typeof parsed.durationMs === "number" ? parsed.durationMs : undefined,
+  };
+}
+
 async function loadRunbookExecuteTask(input: {
   tenantId: string;
   computerId: string;
@@ -389,6 +708,8 @@ async function loadRunbookExecuteTask(input: {
       id: computerTasks.id,
       task_type: computerTasks.task_type,
       input: computerTasks.input,
+      claimed_at: computerTasks.claimed_at,
+      created_at: computerTasks.created_at,
     })
     .from(computerTasks)
     .where(
@@ -627,6 +948,10 @@ function recordValue(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function requiredString(value: unknown, name: string) {

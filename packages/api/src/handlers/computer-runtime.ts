@@ -31,8 +31,10 @@ import {
 import {
   completeRunbookExecutionRun,
   completeRunbookExecutionTask,
+  executeRunbookExecutionTask,
   failRunbookExecutionTask,
   loadRunbookExecutionContext,
+  recordRunbookExecutionResponse,
   RunbookRuntimeError,
   startRunbookExecutionTask,
 } from "../lib/runbooks/runtime-api.js";
@@ -264,6 +266,22 @@ async function route(
     );
   }
 
+  const runbookTaskExecuteMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/execute$/,
+  );
+  if (method === "POST" && runbookTaskExecuteMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await executeRunbookExecutionTask({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookTaskExecuteMatch[1], "taskId"),
+        runbookTaskId: validUuid(runbookTaskExecuteMatch[2], "runbookTaskId"),
+      }),
+    );
+  }
+
   const runbookTaskCompleteMatch = path.match(
     /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/tasks\/([^/]+)\/complete$/,
   );
@@ -310,6 +328,24 @@ async function route(
         computerId,
         taskId: validUuid(runbookCompleteMatch[1], "taskId"),
         output: body.output,
+      }),
+    );
+  }
+
+  const runbookResponseMatch = path.match(
+    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/runbook\/response$/,
+  );
+  if (method === "POST" && runbookResponseMatch) {
+    const tenantId = validUuid(body.tenantId, "tenantId");
+    const computerId = validUuid(body.computerId, "computerId");
+    return json(
+      await recordRunbookExecutionResponse({
+        tenantId,
+        computerId,
+        taskId: validUuid(runbookResponseMatch[1], "taskId"),
+        content: bodyString(body.content, "content"),
+        model: optionalString(body.model),
+        usage: body.usage,
       }),
     );
   }

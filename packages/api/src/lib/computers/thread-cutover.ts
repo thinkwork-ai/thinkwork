@@ -302,12 +302,11 @@ export async function queueConfirmedRunbookRun(input: {
   });
   if (!run) throw new Error("Runbook run not found");
   const runbook = runbookRegistry.require(run.runbookSlug);
-  const task = await enqueueComputerThreadTurn({
+  const task = await enqueueRunbookExecuteTask({
     tenantId: input.tenantId,
     computerId: input.computerId,
     threadId: input.threadId,
-    messageId: input.sourceMessageId,
-    source: "runbook",
+    sourceMessageId: input.sourceMessageId,
     actorType: input.actorType ?? null,
     actorId: input.actorId ?? null,
     runbookRunId: input.runbookRunId,

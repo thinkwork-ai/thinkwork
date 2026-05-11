@@ -41,9 +41,11 @@ export type RunbookRuntimeApi = Pick<
   | "appendTaskEvent"
   | "loadRunbookExecutionContext"
   | "startRunbookTask"
+  | "executeRunbookTask"
   | "completeRunbookTask"
   | "failRunbookTask"
   | "completeRunbookRun"
+  | "recordRunbookResponse"
 >;
 
 export type RunbookTaskRunner = (
@@ -54,7 +56,7 @@ export type RunbookTaskRunner = (
 export async function executeRunbook(
   task: RuntimeTask,
   api: RunbookRuntimeApi,
-  runner: RunbookTaskRunner = defaultRunbookTaskRunner,
+  runner?: RunbookTaskRunner,
 ) {
   const input = parseRunbookExecuteInput(task.input);
   let context = await api.loadRunbookExecutionContext(task.id);
@@ -120,10 +122,13 @@ export async function executeRunbook(
     });
 
     try {
-      const output = await runner(runbookTask, {
-        ...context,
-        previousOutputs: { ...previousOutputs },
-      });
+      const output = await (runner ?? defaultRunbookTaskRunner(api, task.id))(
+        runbookTask,
+        {
+          ...context,
+          previousOutputs: { ...previousOutputs },
+        },
+      );
       previousOutputs[runbookTask.taskKey] = output ?? null;
       await api.completeRunbookTask(task.id, runbookTask.id, output ?? null);
       await api.appendTaskEvent(task.id, {
@@ -157,6 +162,7 @@ export async function executeRunbook(
     completedTaskCount: Object.keys(previousOutputs).length,
   };
   await api.completeRunbookRun(task.id, output);
+  await recordFinalRunbookResponse(task.id, api, previousOutputs);
   await api.appendTaskEvent(task.id, {
     eventType: "runbook_completed",
     level: "info",
@@ -173,17 +179,32 @@ export async function executeRunbook(
   };
 }
 
-export async function defaultRunbookTaskRunner(
-  task: RunbookExecutionTask,
-  context: RunbookExecutionContext,
+export function defaultRunbookTaskRunner(
+  api: Pick<ComputerRuntimeApi, "executeRunbookTask">,
+  computerTaskId: string,
+): RunbookTaskRunner {
+  return async (task) => api.executeRunbookTask(computerTaskId, task.id);
+}
+
+async function recordFinalRunbookResponse(
+  computerTaskId: string,
+  api: Pick<ComputerRuntimeApi, "recordRunbookResponse">,
+  outputs: Record<string, unknown>,
 ) {
-  return {
-    taskKey: task.taskKey,
-    phaseId: task.phaseId,
-    capabilityRoles: task.capabilityRoles,
-    title: task.title,
-    priorOutputKeys: Object.keys(context.previousOutputs),
-  };
+  const finalOutput = [...Object.values(outputs)]
+    .reverse()
+    .find(
+      (output) => isRecord(output) && typeof output.responseText === "string",
+    ) as
+    | { responseText?: string; model?: string | null; usage?: unknown }
+    | undefined;
+  const content = finalOutput?.responseText?.trim();
+  if (!content || !finalOutput) return;
+  await api.recordRunbookResponse(computerTaskId, {
+    content,
+    model: finalOutput.model,
+    usage: finalOutput.usage,
+  });
 }
 
 function collectPreviousOutputs(tasks: RunbookExecutionTask[]) {
@@ -255,4 +276,8 @@ function bySortOrder(a: RunbookExecutionTask, b: RunbookExecutionTask) {
 
 function isCancelled(status: string) {
   return status.toLowerCase() === "cancelled";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
