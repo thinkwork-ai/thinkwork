@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { ChevronDown, Pin } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { IconPin } from "@tabler/icons-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -9,10 +10,8 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  cn,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { computerArtifactRoute } from "@/lib/computer-routes";
@@ -88,7 +87,6 @@ function FavoritesSectionView({
               data-testid="sidebar-pinned-trigger"
               aria-label="Toggle Pinned"
             >
-              <Pin className="mr-2 h-4 w-4" />
               <span>Pinned</span>
               <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=closed]/pinned:-rotate-90" />
             </button>
@@ -129,17 +127,8 @@ function PinnedSidebarRow({
   );
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={pathname === href}
-        tooltip={favorite.title}
-      >
-        <Link to={href}>
-          <span className="truncate">{favorite.title}</span>
-        </Link>
-      </SidebarMenuButton>
-      <SidebarMenuAction
-        showOnHover
+      <button
+        type="button"
         aria-label={isPinned ? "Unpin artifact" : "Pin artifact"}
         aria-pressed={isPinned}
         data-testid={`sidebar-pinned-toggle-${favorite.id}`}
@@ -147,9 +136,19 @@ function PinnedSidebarRow({
         onClick={(event) => {
           void toggle(event);
         }}
+        className="absolute left-2 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-sidebar-foreground/70 outline-hidden hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:opacity-50"
       >
-        <Pin className={cn("h-4 w-4", isPinned && "fill-current")} />
-      </SidebarMenuAction>
+        <IconPin className="h-4 w-4" stroke={2} />
+      </button>
+      <SidebarMenuButton
+        asChild
+        isActive={pathname === href}
+        tooltip={favorite.title}
+      >
+        <Link to={href} className="pl-9">
+          <span className="truncate">{favorite.title}</span>
+        </Link>
+      </SidebarMenuButton>
     </SidebarMenuItem>
   );
 }
