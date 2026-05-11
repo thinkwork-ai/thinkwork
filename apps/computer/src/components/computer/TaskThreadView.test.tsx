@@ -502,6 +502,80 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("Build dashboard")).toBeNull();
   });
 
+  it("uses completed durable runbook state instead of a stale persisted pending queue", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              metadata: { runbookMessageKey: "runbook-queue:run-1" },
+              parts: [
+                {
+                  type: "data-runbook-queue",
+                  id: "runbook-queue:run-1",
+                  data: {
+                    runbookRunId: "run-1",
+                    displayName: "CRM Dashboard",
+                    status: "QUEUED",
+                    phases: [
+                      {
+                        id: "produce",
+                        title: "Produce",
+                        tasks: [
+                          {
+                            id: "task-1",
+                            title: "Build dashboard",
+                            status: "PENDING",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+        runbookQueues={[
+          {
+            runbookRunId: "run-1",
+            displayName: "CRM Dashboard",
+            status: "COMPLETED",
+            phases: [
+              {
+                id: "produce",
+                title: "Produce",
+                tasks: [
+                  {
+                    id: "task-1",
+                    title: "Build dashboard",
+                    status: "COMPLETED",
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const promptQueue = screen.getByLabelText("Active runbook queue");
+    expect(within(promptQueue).getByText("1 task · 1 completed")).toBeTruthy();
+    expect(within(promptQueue).getAllByText(/completed/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(within(promptQueue).queryByText("1 task · 1 pending")).toBeNull();
+  });
+
   it("updates the prompt-area queue from fresher streaming runbook data", () => {
     const thread = {
       id: "thread-1",
