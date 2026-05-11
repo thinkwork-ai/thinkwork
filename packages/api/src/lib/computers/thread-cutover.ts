@@ -19,6 +19,7 @@ import {
   buildRunbookUnavailableMessage,
   type RunbookMessagePart,
 } from "../runbooks/confirmation-message.js";
+import { taskQueueThreadMetadata } from "../task-queues/message-parts.js";
 import { seedRunbookCatalogForTenant } from "../runbooks/catalog.js";
 import {
   confirmRunbookRun,
@@ -431,9 +432,34 @@ async function persistRunbookAssistantMessage(input: {
     })
     .returning({ id: messages.id });
 
+  const [existingThread] = await db
+    .select({ metadata: threads.metadata })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.tenant_id, input.tenantId),
+        eq(threads.id, input.threadId),
+      ),
+    )
+    .limit(1);
+  const activeTaskQueueId =
+    input.key.startsWith("runbook-queue:") &&
+    typeof input.metadata.runbookRunId === "string"
+      ? input.metadata.runbookRunId
+      : null;
   const [thread] = await db
     .update(threads)
-    .set({ updated_at: new Date() })
+    .set({
+      updated_at: new Date(),
+      ...(activeTaskQueueId
+        ? {
+            metadata: taskQueueThreadMetadata(
+              existingThread?.metadata,
+              activeTaskQueueId,
+            ),
+          }
+        : {}),
+    })
     .where(
       and(
         eq(threads.tenant_id, input.tenantId),
@@ -630,7 +656,9 @@ async function dispatchComputerThreadTurn(input: {
   return invoked;
 }
 
-function buildAgentRunbookContext(run: NonNullable<Awaited<ReturnType<typeof getRunbookRun>>>) {
+function buildAgentRunbookContext(
+  run: NonNullable<Awaited<ReturnType<typeof getRunbookRun>>>,
+) {
   const tasks = [...(run.tasks ?? [])].sort(
     (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
   );

@@ -105,11 +105,12 @@ def test_unknown_capability_role_fails_with_task_identifier():
     assert "task-produce" in str(exc.value)
 
 
-def test_build_runbook_queue_part_uses_data_runbook_queue_shape():
+def test_build_runbook_queue_part_uses_generic_task_queue_shape():
     part = build_runbook_queue_part(_context())
 
-    assert part["type"] == "data-runbook-queue"
-    assert part["id"] == "runbook-queue:run-1"
-    assert part["data"]["runbookRunId"] == "run-1"
-    assert part["data"]["currentTaskKey"] == "produce:1"
-    assert part["data"]["phases"][1]["tasks"][0]["status"] == "running"
+    assert part["type"] == "data-task-queue"
+    assert part["id"] == "task-queue:run-1"
+    assert part["data"]["queueId"] == "run-1"
+    assert part["data"]["source"]["type"] == "runbook"
+    assert part["data"]["groups"][1]["items"][0]["status"] == "running"
+    assert part["data"]["groups"][1]["items"][0]["metadata"]["taskKey"] == "produce:1"

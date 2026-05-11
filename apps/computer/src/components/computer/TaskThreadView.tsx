@@ -30,12 +30,20 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { renderTypedParts } from "@/components/computer/render-typed-part";
-import { RunbookQueue } from "@/components/runbooks/RunbookQueue";
+import {
+  TaskQueue,
+  taskQueueFromRunbookQueue,
+} from "@/components/runbooks/RunbookQueue";
 import type {
   AccumulatedPart,
   UIMessageStreamState,
 } from "@/lib/ui-message-merge";
-import type { RunbookQueueData } from "@/lib/ui-message-types";
+import type {
+  RunbookQueueData,
+  TaskQueueData,
+  TaskQueueGroup,
+  TaskQueueItem,
+} from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
 import { Button } from "@thinkwork/ui";
@@ -131,9 +139,9 @@ export function TaskThreadView({
 
   const visibleMessages = withTurnResponseFallback(thread);
   const transcriptMessages = visibleMessages.filter(
-    (message) => !isRunbookQueueAssistantMessage(message),
+    (message) => !isTaskQueueAssistantMessage(message),
   );
-  const promptRunbookQueue = selectPromptRunbookQueue(
+  const promptTaskQueue = selectPromptTaskQueue(
     visibleMessages,
     runbookQueues,
     streamState?.parts ?? [],
@@ -194,7 +202,7 @@ export function TaskThreadView({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6">
         <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
           <FollowUpComposer
-            runbookQueue={promptRunbookQueue}
+            taskQueue={promptTaskQueue}
             disabled={!onSendFollowUp || isSending}
             isSending={isSending}
             onSubmit={onSendFollowUp}
@@ -205,13 +213,18 @@ export function TaskThreadView({
   );
 }
 
-function isRunbookQueueAssistantMessage(message: TaskThreadMessage) {
+function isTaskQueueAssistantMessage(message: TaskThreadMessage) {
   if (message.role.toUpperCase() === "USER") return false;
   const metadata = parseRecord(message.metadata);
   const key = stringValue(metadata.runbookMessageKey);
   if (key?.startsWith("runbook-queue:")) return true;
-  return (message.parts ?? []).some(
-    (part) => part.type === "data-runbook-queue",
+  const taskQueueKey = stringValue(metadata.taskQueueMessageKey);
+  if (taskQueueKey?.startsWith("task-queue:")) return true;
+  const parts = message.parts ?? [];
+  if (parts.some((part) => part.type === "data-runbook-queue")) return true;
+  return (
+    !stringValue(message.content) &&
+    parts.some((part) => part.type === "data-task-queue")
   );
 }
 
@@ -469,6 +482,10 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
   const actions = actionRowsForMessage(message);
   const body = message.content?.trim() ?? "";
   const typedParts = !isUser ? (message.parts ?? []) : [];
+  const renderedTypedParts =
+    typedParts.length > 0
+      ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
+      : [];
 
   return (
     <Message
@@ -497,8 +514,8 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
                 ))}
               </div>
             ) : null}
-            {typedParts.length > 0 ? (
-              renderTypedParts(typedParts, { keyPrefix: message.id })
+            {renderedTypedParts.length > 0 ? (
+              renderedTypedParts
             ) : body ? (
               <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
                 {body}
@@ -561,12 +578,12 @@ function toAiMessageRole(role: string): "user" | "assistant" | "system" {
 }
 
 function FollowUpComposer({
-  runbookQueue,
+  taskQueue,
   disabled,
   isSending,
   onSubmit,
 }: {
-  runbookQueue?: ActiveRunbookQueue | null;
+  taskQueue?: ActiveTaskQueue | null;
   disabled?: boolean;
   isSending?: boolean;
   onSubmit?: (content: string) => Promise<void> | void;
@@ -593,23 +610,23 @@ function FollowUpComposer({
     }
   }
 
-  const hasRunbookQueue = Boolean(runbookQueue);
+  const hasTaskQueue = Boolean(taskQueue);
 
   return (
     <div
       className={cn(
         "grid gap-2",
-        hasRunbookQueue &&
+        hasTaskQueue &&
           "overflow-hidden rounded-[28px] border border-white/10 bg-[#262626] text-white shadow-lg",
       )}
     >
-      {runbookQueue ? (
-        <RunbookPromptQueue key={runbookQueue.id} queue={runbookQueue.data} />
+      {taskQueue ? (
+        <PromptTaskQueue key={taskQueue.id} queue={taskQueue.data} />
       ) : null}
       <PromptInput
         className={cn(
           "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
-          hasRunbookQueue
+          hasTaskQueue
             ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
             : "[&_[data-slot=input-group]]:rounded-full [&_[data-slot=input-group]]:shadow-lg",
         )}
@@ -639,17 +656,17 @@ function FollowUpComposer({
   );
 }
 
-function RunbookPromptQueue({ queue }: { queue: RunbookQueueData }) {
+function PromptTaskQueue({ queue }: { queue: TaskQueueData }) {
   const [open, setOpen] = useState(false);
-  const title = stringValue(queue.displayName) ?? "Runbook queue";
-  const status = statusLabel(normalizeRunbookQueueStatus(queue.status));
-  const counts = countRunbookTasks(queue);
-  const panelId = `runbook-prompt-queue-${queue.runbookRunId ?? "active"}`;
+  const title = stringValue(queue.title) ?? "Task queue";
+  const status = statusLabel(normalizeTaskQueueStatus(queue.status));
+  const counts = countTaskQueueItems(queue);
+  const panelId = `task-prompt-queue-${queue.queueId ?? "active"}`;
 
   return (
     <section
       className="overflow-hidden border-b border-white/10 bg-[#262626] text-white"
-      aria-label="Active runbook queue"
+      aria-label="Active task queue"
     >
       <div className="flex min-h-10 items-center gap-3 px-4 py-1.5">
         <ListChecks aria-hidden className="size-4 shrink-0 text-sky-300" />
@@ -665,7 +682,7 @@ function RunbookPromptQueue({ queue }: { queue: RunbookQueueData }) {
         <button
           type="button"
           className="shrink-0 text-xs font-medium text-sky-300 transition-colors hover:text-sky-200"
-          aria-label={open ? "Collapse runbook queue" : "Expand runbook queue"}
+          aria-label={open ? "Collapse task queue" : "Expand task queue"}
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((value) => !value)}
@@ -678,7 +695,7 @@ function RunbookPromptQueue({ queue }: { queue: RunbookQueueData }) {
           id={panelId}
           className="max-h-[34vh] overflow-y-auto border-t border-white/10 p-3"
         >
-          <RunbookQueue
+          <TaskQueue
             data={queue}
             compact
             className="border-white/10 bg-black/20 text-white"
@@ -689,18 +706,18 @@ function RunbookPromptQueue({ queue }: { queue: RunbookQueueData }) {
   );
 }
 
-interface ActiveRunbookQueue {
+interface ActiveTaskQueue {
   id: string;
-  data: RunbookQueueData;
+  data: TaskQueueData;
   source: "persisted" | "run" | "stream";
 }
 
-function selectPromptRunbookQueue(
+function selectPromptTaskQueue(
   messages: TaskThreadMessage[],
   runbookQueues: RunbookQueueData[],
   streamParts: AccumulatedPart[],
-): ActiveRunbookQueue | null {
-  const queues: ActiveRunbookQueue[] = [];
+): ActiveTaskQueue | null {
+  const queues: ActiveTaskQueue[] = [];
 
   for (const message of messages) {
     for (const part of message.parts ?? []) {
@@ -710,11 +727,12 @@ function selectPromptRunbookQueue(
   }
 
   for (const data of runbookQueues) {
+    const taskQueue = taskQueueFromRunbookQueue(data);
     const id =
-      stringValue(data.runbookRunId) ??
+      stringValue(taskQueue.queueId) ??
       stringValue(data.runbookSlug) ??
       `runbook-${queues.length}`;
-    queues.push({ id, data, source: "run" });
+    queues.push({ id, data: taskQueue, source: "run" });
   }
 
   for (const part of streamParts) {
@@ -722,20 +740,20 @@ function selectPromptRunbookQueue(
     if (queue) queues.push(queue);
   }
 
-  const terminalRunQueueById = new Map<string, ActiveRunbookQueue>();
+  const terminalRunQueueById = new Map<string, ActiveTaskQueue>();
   for (const queue of queues) {
     if (queue.source !== "run") continue;
-    if (!isTerminalRunbookQueueStatus(queue.data.status)) continue;
-    terminalRunQueueById.set(runbookQueueIdentity(queue), queue);
+    if (!isTerminalTaskQueueStatus(queue.data.status)) continue;
+    terminalRunQueueById.set(taskQueueIdentity(queue), queue);
   }
 
   for (let index = queues.length - 1; index >= 0; index -= 1) {
     const queue = queues[index];
-    const terminalRunQueue = terminalRunQueueById.get(runbookQueueIdentity(queue));
+    const terminalRunQueue = terminalRunQueueById.get(taskQueueIdentity(queue));
     if (terminalRunQueue && queue.source !== "run") {
       continue;
     }
-    if (isPromptWorthyRunbookQueue(queue)) return queue;
+    if (isPromptWorthyTaskQueue(queue)) return queue;
   }
 
   return null;
@@ -743,65 +761,82 @@ function selectPromptRunbookQueue(
 
 function activeQueueFromPart(
   part: AccumulatedPart,
-  source: ActiveRunbookQueue["source"],
-): ActiveRunbookQueue | null {
-  if (part.type !== "data-runbook-queue") return null;
-  const data = parseRecord(part.data) as RunbookQueueData;
-  const id =
-    stringValue(data.runbookRunId) ??
-    stringValue(part.id) ??
-    stringValue(data.runbookSlug) ??
-    "active";
+  source: ActiveTaskQueue["source"],
+): ActiveTaskQueue | null {
+  if (part.type !== "data-task-queue" && part.type !== "data-runbook-queue") {
+    return null;
+  }
+  const record = parseRecord(part.data);
+  const data =
+    part.type === "data-runbook-queue"
+      ? taskQueueFromRunbookQueue(record as RunbookQueueData)
+      : (record as TaskQueueData);
+  const id = stringValue(data.queueId) ?? stringValue(part.id) ?? "active";
   return { id, data, source };
 }
 
 const HIDDEN_PROMPT_QUEUE_STATUSES = new Set(["rejected"]);
 
-function isPromptWorthyRunbookQueue(queue: ActiveRunbookQueue) {
-  const status = normalizeRunbookQueueStatus(queue.data.status);
+function isPromptWorthyTaskQueue(queue: ActiveTaskQueue) {
+  const status = normalizeTaskQueueStatus(queue.data.status);
   if (status === "completed" && queue.source === "persisted") return false;
   return !HIDDEN_PROMPT_QUEUE_STATUSES.has(status);
 }
 
-function runbookQueueIdentity(queue: ActiveRunbookQueue) {
+function taskQueueIdentity(queue: ActiveTaskQueue) {
   return (
-    stringValue(queue.data.runbookRunId) ??
-    stringValue(queue.data.runbookSlug) ??
+    stringValue(queue.data.queueId) ??
+    stringValue(queue.data.source?.id) ??
+    stringValue(queue.data.source?.slug) ??
     queue.id
   );
 }
 
-function isTerminalRunbookQueueStatus(status: unknown) {
+function isTerminalTaskQueueStatus(status: unknown) {
   return ["completed", "failed", "error", "cancelled"].includes(
-    normalizeRunbookQueueStatus(status),
+    normalizeTaskQueueStatus(status),
   );
 }
 
-function countRunbookTasks(queue: RunbookQueueData) {
+function countTaskQueueItems(queue: TaskQueueData) {
   let total = 0;
   let completed = 0;
   let running = 0;
   let failed = 0;
   let pending = 0;
-  for (const phase of queue.phases ?? []) {
-    for (const task of phase.tasks ?? []) {
-      total += 1;
-      const status = normalizeRunbookQueueStatus(task.status);
-      if (status === "completed") {
-        completed += 1;
-      } else if (status === "running" || status === "in-progress") {
-        running += 1;
-      } else if (status === "failed" || status === "error") {
-        failed += 1;
-      } else {
-        pending += 1;
-      }
+  for (const item of taskQueueItems(queue)) {
+    total += 1;
+    const status = normalizeTaskQueueStatus(item.status);
+    if (status === "completed") {
+      completed += 1;
+    } else if (status === "running" || status === "in-progress") {
+      running += 1;
+    } else if (status === "failed" || status === "error") {
+      failed += 1;
+    } else {
+      pending += 1;
     }
   }
   return { total, completed, running, failed, pending };
 }
 
-function queueSummary(counts: ReturnType<typeof countRunbookTasks>) {
+function taskQueueItems(queue: TaskQueueData): TaskQueueItem[] {
+  const grouped = taskQueueGroups(queue).flatMap((group) => group.items ?? []);
+  if (grouped.length > 0) return grouped;
+  return Array.isArray(queue.items) ? queue.items : [];
+}
+
+function taskQueueGroups(queue: TaskQueueData): TaskQueueGroup[] {
+  if (Array.isArray(queue.groups) && queue.groups.length > 0) {
+    return queue.groups;
+  }
+  if (Array.isArray(queue.items) && queue.items.length > 0) {
+    return [{ id: "tasks", title: "Tasks", items: queue.items }];
+  }
+  return [];
+}
+
+function queueSummary(counts: ReturnType<typeof countTaskQueueItems>) {
   if (counts.total === 0) return "Preparing tasks";
   const taskLabel = counts.total === 1 ? "task" : "tasks";
   const segments = [`${counts.total} ${taskLabel}`];
@@ -812,7 +847,7 @@ function queueSummary(counts: ReturnType<typeof countRunbookTasks>) {
   return segments.join(" · ");
 }
 
-function normalizeRunbookQueueStatus(value: unknown) {
+function normalizeTaskQueueStatus(value: unknown) {
   const raw = stringValue(value)?.toLowerCase().replace(/_/g, "-") ?? "";
   return raw || "pending";
 }

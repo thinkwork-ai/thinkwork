@@ -9,6 +9,13 @@ import {
   threads,
   type RunbookTaskStatus,
 } from "@thinkwork/database-pg/schema";
+import { notifyThreadUpdate } from "../../graphql/notify.js";
+import {
+  taskQueuePart,
+  taskQueueThreadMetadata,
+  upsertTaskQueuePart,
+  type TaskQueueData,
+} from "../task-queues/message-parts.js";
 
 const db = getDb();
 
@@ -106,7 +113,7 @@ export async function startRunbookExecutionTask(input: {
   runbookTaskId: string;
 }) {
   const { payload } = await loadRunbookExecuteTask(input);
-  return db.transaction(async (tx) => {
+  const updatedTask = await db.transaction(async (tx) => {
     const [run] = await tx
       .select()
       .from(computerRunbookRuns)
@@ -208,6 +215,12 @@ export async function startRunbookExecutionTask(input: {
       .returning();
     return toRuntimeTask(updated ?? task);
   });
+  await syncRunbookTaskQueueMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+  });
+  return updatedTask;
 }
 
 export async function completeRunbookExecutionTask(input: {
@@ -243,6 +256,11 @@ export async function completeRunbookExecutionTask(input: {
   if (!updated) {
     throw new RunbookRuntimeError("Runbook task not found or not active", 404);
   }
+  await syncRunbookTaskQueueMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+  });
   return toRuntimeTask(updated);
 }
 
@@ -304,6 +322,11 @@ export async function failRunbookExecutionTask(input: {
         ),
       );
   });
+  await syncRunbookTaskQueueMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+  });
   return { failed: true, runbookRunId: payload.runbookRunId };
 }
 
@@ -348,6 +371,11 @@ export async function completeRunbookExecutionRun(input: {
   if (!updated) {
     throw new RunbookRuntimeError("Runbook run not found or not active", 404);
   }
+  await syncRunbookTaskQueueMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+  });
   return toRuntimeRun(updated);
 }
 
@@ -448,6 +476,157 @@ function toRuntimeTask(row: typeof computerRunbookTasks.$inferSelect) {
     sortOrder: row.sort_order,
     output: row.output ?? null,
   };
+}
+
+async function syncRunbookTaskQueueMessage(input: {
+  tenantId: string;
+  computerId: string;
+  runbookRunId: string;
+}) {
+  const { run, tasks } = await loadRunbookRunState(input);
+  if (!run.thread_id) return;
+
+  const [queueMessage] = await db
+    .select({ id: messages.id, parts: messages.parts })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, run.thread_id),
+        sql`${messages.metadata}->>'runbookMessageKey' = ${`runbook-queue:${run.id}`}`,
+      ),
+    )
+    .limit(1);
+  if (!queueMessage) return;
+
+  const queueData = runbookTaskQueueData(run, tasks);
+  await db
+    .update(messages)
+    .set({
+      parts: upsertTaskQueuePart(
+        queueMessage.parts,
+        taskQueuePart({ queueId: run.id, data: queueData }),
+      ),
+    })
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.id, queueMessage.id),
+      ),
+    );
+
+  const [thread] = await db
+    .select({
+      id: threads.id,
+      title: threads.title,
+      status: threads.status,
+      metadata: threads.metadata,
+    })
+    .from(threads)
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, run.thread_id)),
+    )
+    .limit(1);
+  if (!thread) return;
+
+  await db
+    .update(threads)
+    .set({
+      metadata: taskQueueThreadMetadata(thread.metadata, run.id),
+      updated_at: new Date(),
+    })
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, thread.id)),
+    );
+
+  await notifyThreadUpdate({
+    threadId: thread.id,
+    tenantId: input.tenantId,
+    status: thread.status ?? "in_progress",
+    title: thread.title ?? "Untitled thread",
+  }).catch(() => {});
+}
+
+function runbookTaskQueueData(
+  run: typeof computerRunbookRuns.$inferSelect,
+  tasks: (typeof computerRunbookTasks.$inferSelect)[],
+): TaskQueueData {
+  const definition = recordValue(run.definition_snapshot);
+  const displayName =
+    recordValue(definition.catalog).displayName?.toString().trim() ||
+    run.runbook_slug;
+  const phases = phasesForQueue(definition, tasks);
+  return {
+    queueId: run.id,
+    title: displayName,
+    status: run.status,
+    source: {
+      type: "runbook",
+      id: run.id,
+      slug: run.runbook_slug,
+    },
+    summary: "Working through the approved runbook queue.",
+    groups: phases.map((phase) => ({
+      id: phase.id,
+      title: phase.title,
+      items: tasks
+        .filter((task) => task.phase_id === phase.id)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((task) => ({
+          id: task.id,
+          title: task.title,
+          summary: task.summary,
+          status: task.status,
+          output: task.output ?? undefined,
+          error: task.error ?? undefined,
+          startedAt: task.started_at?.toISOString() ?? null,
+          completedAt: task.completed_at?.toISOString() ?? null,
+          metadata: {
+            taskKey: task.task_key,
+            dependsOn: Array.isArray(task.depends_on) ? task.depends_on : [],
+            capabilityRoles: Array.isArray(task.capability_roles)
+              ? task.capability_roles
+              : [],
+            sortOrder: task.sort_order,
+            runbookSlug: run.runbook_slug,
+            runbookVersion: run.runbook_version,
+          },
+        })),
+    })),
+  };
+}
+
+function phasesForQueue(
+  definition: Record<string, unknown>,
+  tasks: (typeof computerRunbookTasks.$inferSelect)[],
+) {
+  const phases = Array.isArray(definition.phases) ? definition.phases : [];
+  const declared = phases
+    .map(recordValue)
+    .map((phase) => ({
+      id: stringValue(phase.id),
+      title: stringValue(phase.title) ?? stringValue(phase.id),
+    }))
+    .filter((phase): phase is { id: string; title: string } =>
+      Boolean(phase.id && phase.title),
+    );
+  if (declared.length > 0) return declared;
+
+  const seen = new Map<string, string>();
+  for (const task of tasks.sort((a, b) => a.sort_order - b.sort_order)) {
+    seen.set(task.phase_id, task.phase_title);
+  }
+  return [...seen].map(([id, title]) => ({ id, title }));
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function requiredString(value: unknown, name: string) {

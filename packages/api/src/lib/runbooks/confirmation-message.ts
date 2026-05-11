@@ -1,4 +1,8 @@
 import type { RunbookDefinition } from "@thinkwork/runbooks";
+import {
+  taskQueuePart,
+  type TaskQueueData,
+} from "../task-queues/message-parts.js";
 
 type RunbookRunForMessage = {
   id: string;
@@ -18,7 +22,7 @@ type RunbookRunForMessage = {
 };
 
 export type RunbookMessagePart = {
-  type: "text" | "data-runbook-confirmation" | "data-runbook-queue";
+  type: "text" | "data-runbook-confirmation" | "data-task-queue";
   id: string;
   text?: string;
   data?: Record<string, unknown>;
@@ -87,17 +91,62 @@ export function buildRunbookQueueMessage(input: {
     content,
     parts: [
       textPart("runbook-queue-intro", content),
-      dataPart("runbook-queue", input.run.id, {
-        runbookRunId: input.run.id,
-        runbookSlug: input.runbook.slug,
-        runbookVersion: input.runbook.version,
-        displayName: input.runbook.catalog.displayName,
-        status: input.run.status,
+      buildRunbookTaskQueuePart({
+        run: input.run,
+        runbook: input.runbook,
         sourceMessageId: input.sourceMessageId,
-        phases: groupedPhases,
+        groupedPhases,
       }),
     ],
   };
+}
+
+function buildRunbookTaskQueuePart(input: {
+  run: RunbookRunForMessage;
+  runbook: RunbookDefinition;
+  sourceMessageId: string;
+  groupedPhases: Array<{
+    id: string;
+    title: string;
+    tasks: Array<{
+      id: string;
+      key: string;
+      title: string;
+      status: string;
+      dependsOn: unknown;
+      sortOrder: number;
+    }>;
+  }>;
+}): RunbookMessagePart {
+  const data: TaskQueueData = {
+    queueId: input.run.id,
+    title: input.runbook.catalog.displayName,
+    status: input.run.status,
+    source: {
+      type: "runbook",
+      id: input.run.id,
+      slug: input.runbook.slug,
+    },
+    summary: "Working through the approved runbook queue.",
+    groups: input.groupedPhases.map((phase) => ({
+      id: phase.id,
+      title: phase.title,
+      items: phase.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        metadata: {
+          taskKey: task.key,
+          dependsOn: task.dependsOn,
+          sortOrder: task.sortOrder,
+          runbookSlug: input.runbook.slug,
+          runbookVersion: input.runbook.version,
+          sourceMessageId: input.sourceMessageId,
+        },
+      })),
+    })),
+  };
+  return taskQueuePart({ queueId: input.run.id, data }) as RunbookMessagePart;
 }
 
 export function buildRunbookAmbiguityMessage(input: {
@@ -139,7 +188,7 @@ function textPart(id: string, text: string): RunbookMessagePart {
 }
 
 function dataPart(
-  channel: "runbook-confirmation" | "runbook-queue",
+  channel: "runbook-confirmation",
   id: string,
   data: Record<string, unknown>,
 ): RunbookMessagePart {

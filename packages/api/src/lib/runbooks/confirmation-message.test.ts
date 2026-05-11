@@ -57,17 +57,24 @@ describe("runbook assistant messages", () => {
       sourceMessageId: "message-1",
     });
 
-    const queue = message.parts.find(
-      (part) => part.type === "data-runbook-queue",
-    );
+    const queue = message.parts.find((part) => part.type === "data-task-queue");
     expect(queue?.data).toEqual(
       expect.objectContaining({
-        runbookRunId: "run-1",
+        queueId: "run-1",
         status: "QUEUED",
-        phases: expect.arrayContaining([
+        source: expect.objectContaining({
+          type: "runbook",
+          id: "run-1",
+          slug: "map-artifact",
+        }),
+        groups: expect.arrayContaining([
           expect.objectContaining({
             id: "discover",
-            tasks: [expect.objectContaining({ key: "discover:1" })],
+            items: [
+              expect.objectContaining({
+                metadata: expect.objectContaining({ taskKey: "discover:1" }),
+              }),
+            ],
           }),
         ]),
       }),

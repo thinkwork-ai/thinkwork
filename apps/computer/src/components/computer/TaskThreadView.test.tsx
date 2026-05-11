@@ -251,15 +251,62 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     expect(
       within(promptQueue).getAllByText("Research Dashboard").length,
     ).toBeGreaterThan(0);
+    expect(within(promptQueue).getByText("1 task · 1 pending")).toBeTruthy();
     expect(
-      within(promptQueue).getByText("1 task · 1 pending"),
-    ).toBeTruthy();
-    expect(within(promptQueue).queryByText("Gather source material")).toBeNull();
+      within(promptQueue).queryByText("Gather source material"),
+    ).toBeNull();
     expect(screen.queryByText("Starting Research Dashboard.")).toBeNull();
+  });
+
+  it("projects generic task queue parts without hiding assistant prose", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Research thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Research the market",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "I drafted the research plan.",
+              parts: [
+                {
+                  type: "data-task-queue",
+                  id: "task-queue:research-1",
+                  data: {
+                    queueId: "research-1",
+                    title: "Research plan",
+                    status: "RUNNING",
+                    source: { type: "deep_research", id: "research-1" },
+                    items: [
+                      {
+                        id: "task-1",
+                        title: "Collect source evidence",
+                        status: "RUNNING",
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("I drafted the research plan.")).toBeTruthy();
+    const promptQueue = screen.getByLabelText("Active task queue");
+    expect(within(promptQueue).getByText("Research plan")).toBeTruthy();
+    expect(within(promptQueue).getByText("1 task · 1 running")).toBeTruthy();
   });
 
   it("renders the active runbook queue above the prompt input", () => {
@@ -312,7 +359,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     expect(
       within(promptQueue).getAllByText("Research Dashboard").length,
     ).toBeGreaterThan(0);
@@ -321,7 +368,7 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
     expect(within(promptQueue).queryByText("Summarize evidence")).toBeNull();
     fireEvent.click(
-      within(promptQueue).getByRole("button", { name: "Expand runbook queue" }),
+      within(promptQueue).getByRole("button", { name: "Expand task queue" }),
     );
     expect(within(promptQueue).getByText("Summarize evidence")).toBeTruthy();
     expect(screen.getByLabelText("Follow up")).toBeTruthy();
@@ -372,9 +419,9 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     const expand = within(promptQueue).getByRole("button", {
-      name: "Expand runbook queue",
+      name: "Expand task queue",
     });
     expect(expand.getAttribute("aria-expanded")).toBe("false");
     expect(within(promptQueue).getByText("Review tasks")).toBeTruthy();
@@ -383,7 +430,7 @@ describe("TaskThreadView", () => {
     fireEvent.click(expand);
 
     const collapse = within(promptQueue).getByRole("button", {
-      name: "Collapse runbook queue",
+      name: "Collapse task queue",
     });
     expect(collapse.getAttribute("aria-expanded")).toBe("true");
     expect(within(promptQueue).getByText("Hide tasks")).toBeTruthy();
@@ -396,7 +443,7 @@ describe("TaskThreadView", () => {
 
     expect(
       within(promptQueue)
-        .getByRole("button", { name: "Expand runbook queue" })
+        .getByRole("button", { name: "Expand task queue" })
         .getAttribute("aria-expanded"),
     ).toBe("false");
     expect(within(promptQueue).queryByText("Build dashboard")).toBeNull();
@@ -444,7 +491,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     expect(within(promptQueue).getByText("Research Dashboard")).toBeTruthy();
     expect(
       within(promptQueue).getByText("2 tasks · 1 completed · 1 pending"),
@@ -497,7 +544,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("Active runbook queue")).toBeNull();
+    expect(screen.queryByLabelText("Active task queue")).toBeNull();
     expect(screen.queryByLabelText("CRM Dashboard queue")).toBeNull();
     expect(screen.queryByText("Build dashboard")).toBeNull();
   });
@@ -568,11 +615,11 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     expect(within(promptQueue).getByText("1 task · 1 completed")).toBeTruthy();
-    expect(within(promptQueue).getAllByText(/completed/i).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      within(promptQueue).getAllByText(/completed/i).length,
+    ).toBeGreaterThan(0);
     expect(within(promptQueue).queryByText("1 task · 1 pending")).toBeNull();
   });
 
@@ -641,7 +688,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const promptQueue = screen.getByLabelText("Active task queue");
     expect(within(promptQueue).getByText("1 task · 1 completed")).toBeTruthy();
     expect(within(promptQueue).queryByText("1 task · 1 pending")).toBeNull();
   });
@@ -721,7 +768,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    let promptQueue = screen.getByLabelText("Active runbook queue");
+    let promptQueue = screen.getByLabelText("Active task queue");
     expect(within(promptQueue).getAllByText(/running/i).length).toBeGreaterThan(
       0,
     );
@@ -760,7 +807,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    promptQueue = screen.getByLabelText("Active runbook queue");
+    promptQueue = screen.getByLabelText("Active task queue");
     expect(within(promptQueue).getByText("1 task · 1 completed")).toBeTruthy();
     expect(
       within(promptQueue).getAllByText(/completed/i).length,

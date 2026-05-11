@@ -386,5 +386,5 @@ def test_initial_runbook_queue_update_uses_typed_ui_message_shape():
     )
 
     assert dispatch == {"ok": True, "validated": True}
-    assert published[0]["type"] == "data-runbook-queue"
-    assert published[0]["data"]["phases"][0]["tasks"][0]["taskKey"] == "discover:1"
+    assert published[0]["type"] == "data-task-queue"
+    assert published[0]["data"]["groups"][0]["items"][0]["metadata"]["taskKey"] == "discover:1"

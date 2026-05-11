@@ -23,24 +23,29 @@ import type {
   RunbookQueueData,
   RunbookQueuePhase,
   RunbookQueueTask,
+  TaskQueueData,
+  TaskQueueGroup,
+  TaskQueueItem,
 } from "@/lib/ui-message-types";
 import { cn } from "@/lib/utils";
 
-export function RunbookQueue({
+export function TaskQueue({
   data,
   className,
   compact = false,
 }: {
-  data: RunbookQueueData;
+  data: TaskQueueData;
   className?: string;
   compact?: boolean;
 }) {
-  const phases = Array.isArray(data.phases) ? data.phases : [];
-  const title = stringValue(data.displayName) ?? "Runbook plan";
+  const groups = normalizeTaskQueueGroups(data);
+  const title = stringValue(data.title) ?? "Task queue";
   const status = normalizeStatus(data.status);
-  const description = data.runbookRunId
-    ? "Working through the approved runbook queue."
-    : "Visible plan for this request.";
+  const description =
+    stringValue(data.summary) ??
+    (data.source?.type
+      ? `Visible ${data.source.type.replace(/_/g, " ")} progress.`
+      : "Visible plan for this request.");
 
   return (
     <Queue
@@ -55,11 +60,11 @@ export function RunbookQueue({
         <QueueDescription>{description}</QueueDescription>
       </QueueHeader>
       <QueueList className={compact ? "gap-3" : undefined}>
-        {phases.length > 0 ? (
-          phases.map((phase, index) => (
-            <PhaseGroup
-              key={stringValue(phase.id) ?? `phase-${index}`}
-              phase={phase}
+        {groups.length > 0 ? (
+          groups.map((group, index) => (
+            <TaskQueueGroupView
+              key={stringValue(group.id) ?? `group-${index}`}
+              group={group}
               compact={compact}
             />
           ))
@@ -73,31 +78,49 @@ export function RunbookQueue({
   );
 }
 
-function PhaseGroup({
-  phase,
-  compact,
+export function RunbookQueue({
+  data,
+  className,
+  compact = false,
 }: {
-  phase: RunbookQueuePhase;
+  data: RunbookQueueData;
+  className?: string;
   compact?: boolean;
 }) {
-  const tasks = Array.isArray(phase.tasks) ? phase.tasks : [];
+  return (
+    <TaskQueue
+      data={taskQueueFromRunbookQueue(data)}
+      className={className}
+      compact={compact}
+    />
+  );
+}
+
+function TaskQueueGroupView({
+  group,
+  compact,
+}: {
+  group: TaskQueueGroup;
+  compact?: boolean;
+}) {
+  const items = Array.isArray(group.items) ? group.items : [];
   return (
     <QueueGroup className={compact ? "gap-1.5" : undefined}>
       <QueueGroupTitle>
-        {stringValue(phase.title) ?? stringValue(phase.id) ?? "Phase"}
+        {stringValue(group.title) ?? stringValue(group.id) ?? "Tasks"}
       </QueueGroupTitle>
       <div className="grid gap-2">
-        {tasks.length > 0 ? (
-          tasks.map((task, index) => (
+        {items.length > 0 ? (
+          items.map((item, index) => (
             <TaskRow
-              key={stringValue(task.id) ?? `task-${index}`}
-              task={task}
+              key={stringValue(item.id) ?? `task-${index}`}
+              task={item}
               compact={compact}
             />
           ))
         ) : (
           <p className="text-muted-foreground text-sm">
-            No tasks in this phase.
+            No tasks in this group.
           </p>
         )}
       </div>
@@ -109,7 +132,7 @@ function TaskRow({
   task,
   compact,
 }: {
-  task: RunbookQueueTask;
+  task: RunbookQueueTask | TaskQueueItem;
   compact?: boolean;
 }) {
   const status = normalizeStatus(task.status);
@@ -129,6 +152,72 @@ function TaskRow({
       <StatusBadge status={status} />
     </QueueItem>
   );
+}
+
+function normalizeTaskQueueGroups(data: TaskQueueData): TaskQueueGroup[] {
+  if (Array.isArray(data.groups) && data.groups.length > 0) {
+    return data.groups;
+  }
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    return [{ id: "tasks", title: "Tasks", items: data.items }];
+  }
+  return [];
+}
+
+export function taskQueueFromRunbookQueue(
+  data: RunbookQueueData,
+): TaskQueueData {
+  return {
+    queueId:
+      stringValue(data.runbookRunId) ??
+      stringValue(data.runbookSlug) ??
+      undefined,
+    title: stringValue(data.displayName) ?? "Runbook plan",
+    status: data.status,
+    source: {
+      type: "runbook",
+      id: stringValue(data.runbookRunId) ?? undefined,
+      slug: stringValue(data.runbookSlug) ?? undefined,
+    },
+    summary: data.runbookRunId
+      ? "Working through the approved runbook queue."
+      : "Visible plan for this request.",
+    groups: (Array.isArray(data.phases) ? data.phases : []).map(
+      runbookPhaseToTaskQueueGroup,
+    ),
+  };
+}
+
+function runbookPhaseToTaskQueueGroup(
+  phase: RunbookQueuePhase,
+): TaskQueueGroup {
+  return {
+    id: stringValue(phase.id) ?? undefined,
+    title: stringValue(phase.title) ?? stringValue(phase.id) ?? "Phase",
+    items: (Array.isArray(phase.tasks) ? phase.tasks : []).map(
+      runbookTaskToTaskQueueItem,
+    ),
+  };
+}
+
+function runbookTaskToTaskQueueItem(task: RunbookQueueTask): TaskQueueItem {
+  const taskKey = stringValue(task.taskKey) ?? stringValue(task.key);
+  return {
+    id: stringValue(task.id) ?? taskKey ?? undefined,
+    title:
+      stringValue(task.title) ??
+      stringValue(task.summary) ??
+      taskKey ??
+      undefined,
+    summary: stringValue(task.summary),
+    status: task.status,
+    metadata: {
+      taskKey,
+      dependsOn: task.dependsOn,
+      capabilityRoles: task.capabilityRoles,
+      sortOrder: task.sortOrder,
+    },
+  };
 }
 
 function StatusBadge({ status }: { status: string }) {

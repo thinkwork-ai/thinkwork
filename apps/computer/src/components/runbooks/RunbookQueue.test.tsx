@@ -1,10 +1,46 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { RunbookQueue } from "./RunbookQueue";
+import { RunbookQueue, TaskQueue } from "./RunbookQueue";
 
 afterEach(cleanup);
 
 describe("RunbookQueue", () => {
+  it("renders generic task queues without runbook-shaped data", () => {
+    render(
+      <TaskQueue
+        data={{
+          queueId: "research-1",
+          title: "Research plan",
+          status: "running",
+          source: { type: "deep_research", id: "research-1" },
+          groups: [
+            {
+              id: "plan",
+              title: "Plan",
+              items: [
+                {
+                  id: "task-1",
+                  title: "Identify source clusters",
+                  status: "completed",
+                },
+                {
+                  id: "task-2",
+                  title: "Synthesize findings",
+                  status: "running",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Research plan" })).toBeTruthy();
+    expect(screen.getByText("Plan")).toBeTruthy();
+    expect(screen.getByText("Identify source clusters")).toBeTruthy();
+    expect(screen.getByText("Synthesize findings")).toBeTruthy();
+  });
+
   it("renders tasks grouped under phases by status", () => {
     render(
       <RunbookQueue
