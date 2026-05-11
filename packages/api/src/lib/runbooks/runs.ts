@@ -213,36 +213,20 @@ export async function markRunbookRunRunning(input: {
   runId: string;
 }) {
   const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(computerRunbookRuns)
-      .set({
-        status: "running",
-        started_at: now,
-        updated_at: now,
-      })
-      .where(
-        and(
-          eq(computerRunbookRuns.tenant_id, input.tenantId),
-          eq(computerRunbookRuns.id, input.runId),
-          inArray(computerRunbookRuns.status, ["queued", "running"]),
-        ),
-      );
-    await tx
-      .update(computerRunbookTasks)
-      .set({
-        status: "running",
-        started_at: now,
-        updated_at: now,
-      })
-      .where(
-        and(
-          eq(computerRunbookTasks.tenant_id, input.tenantId),
-          eq(computerRunbookTasks.run_id, input.runId),
-          eq(computerRunbookTasks.status, "pending"),
-        ),
-      );
-  });
+  await db
+    .update(computerRunbookRuns)
+    .set({
+      status: "running",
+      started_at: now,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(computerRunbookRuns.tenant_id, input.tenantId),
+        eq(computerRunbookRuns.id, input.runId),
+        inArray(computerRunbookRuns.status, ["queued", "running"]),
+      ),
+    );
   return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
 }
 
