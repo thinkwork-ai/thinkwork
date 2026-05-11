@@ -52,14 +52,14 @@ locals {
     var.include_api ? [local.api] : [],
   )
 
-  # CNAME records can only be created when we have the target domain to
-  # point at. Those inputs come after the cert is done, so they don't
-  # participate in the cert's dependency graph.
-  create_docs_record             = var.include_docs && var.docs_cloudfront_domain_name != ""
-  create_admin_record            = var.include_admin && var.admin_cloudfront_domain_name != ""
-  create_computer_record         = var.include_computer && var.computer_cloudfront_domain_name != ""
-  create_computer_sandbox_record = var.include_computer_sandbox && var.computer_sandbox_cloudfront_domain_name != ""
-  create_api_record              = var.include_api && var.api_gateway_id != ""
+  # Existing CNAME records stay gated on non-empty targets because their target
+  # outputs are already known in the deployed stack. Newly bootstrapped records
+  # such as the sandbox CNAME must gate only on an explicit boolean so Terraform
+  # can plan the resource count before the new CloudFront distribution exists.
+  create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
+  create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
+  create_computer_record = var.include_computer && var.computer_cloudfront_domain_name != ""
+  create_api_record      = var.include_api && var.api_gateway_id != ""
 }
 
 ################################################################################
@@ -286,7 +286,7 @@ resource "cloudflare_record" "computer" {
 ################################################################################
 
 resource "cloudflare_record" "computer_sandbox" {
-  count = local.create_computer_sandbox_record ? 1 : 0
+  count = var.include_computer_sandbox ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = local.sandbox
