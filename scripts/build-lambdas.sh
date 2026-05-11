@@ -93,8 +93,20 @@ build_handler() {
     cp -R "$REPO_ROOT/packages/runbooks/runbooks/." "$out_dir/runbooks/"
   fi
 
-  # Create zip (exclude source maps to keep bundle small)
-  (cd "$out_dir" && zip -qr "$DIST/$name.zip" . -x '*.map' -x '__MACOSX/*')
+  # Build a byte-identical zip when contents are byte-identical so
+  # terraform's filebase64sha256 on source_code_hash no-ops unchanged
+  # Lambdas. Without this every push reuploaded all 89 handlers because
+  # esbuild stamps current-time mtimes and `zip` embeds them.
+  #   touch -t : pin every entry's mtime to a fixed 1980-01-01 epoch
+  #   sort     : entry order independent of filesystem traversal
+  #   zip -X   : drop OS-specific extra fields (mac/linux differ)
+  find "$out_dir" -exec touch -t 198001010000 {} +
+  (cd "$out_dir" && find . -type f \
+    ! -name '*.map' \
+    ! -path './__MACOSX/*' \
+    -print0 \
+    | LC_ALL=C sort -z \
+    | xargs -0 zip -qX "$DIST/$name.zip")
   rm -rf "$out_dir"
 
   echo "  ✓ $name"
