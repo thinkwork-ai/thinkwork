@@ -1,35 +1,9 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from "react";
-import type { AppletRefreshResult } from "@thinkwork/computer-stdlib";
-import { registerAppletRefreshHandler } from "@/applets/host-applet-api";
-import { loadAppletHostExternals } from "@/applets/host-registry";
-import { transformApplet } from "@/applets/transform/transform";
-import { AppRefreshControl } from "@/components/apps/AppRefreshControl";
-import { AppletErrorBoundary } from "@/components/apps/AppletErrorBoundary";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   IframeAppletController,
   type IframeControllerStatus,
 } from "@/applets/iframe-controller";
-import { isLegacyLoaderEnabled } from "@/applets/_testing/legacy-loader";
 import type { AppletPayload } from "@/lib/app-artifacts";
-
-export type AppletModule = {
-  default?: ComponentType<AppletComponentProps>;
-  refresh?: () => Promise<AppletRefreshResult>;
-};
-
-export type AppletModuleLoader = (moduleUrl: string) => Promise<AppletModule>;
-
-export interface AppletComponentProps {
-  appId: string;
-  instanceId: string;
-  refreshData?: unknown;
-}
 
 const THEME_VARIABLES = [
   "--background",
@@ -83,43 +57,23 @@ function readHostTheme(): "light" | "dark" {
 }
 
 /**
- * Plan-012 U11.5: production AppletMount uses IframeAppletController
- * by default. The legacy same-origin module loader stays available
- * behind `VITE_APPLET_LEGACY_LOADER === "true"` for emergency
- * rollback. After Phase 2 stabilizes ≥1 week, a follow-up cleanup PR
- * removes the legacy path, the same-origin host registry, and the
- * transform/ directory.
- *
- * The `loadModule` prop on AppletMountProps survives only as a test
- * seam for the legacy path. Iframe-mode does not consume it.
+ * Generated app artifacts always mount through the iframe substrate.
+ * There is intentionally no same-origin generated-code fallback: if
+ * sandbox infrastructure is missing, rendering should fail closed
+ * instead of executing LLM-authored code inside computer.thinkwork.ai.
  */
-export const defaultAppletModuleLoader: AppletModuleLoader = (moduleUrl) =>
-  import(/* @vite-ignore */ moduleUrl) as Promise<AppletModule>;
-
 export interface AppletMountProps {
   appId: string;
   instanceId: string;
   source: string;
   version: number;
-  /** Legacy same-origin loader override (test seam; production uses
-   * the iframe substrate). */
-  loadModule?: AppletModuleLoader;
   onHeaderActionChange?: (action: ReactNode | null) => void;
   hideRefreshControl?: boolean;
   fitContentHeight?: boolean;
 }
 
 export function AppletMount(props: AppletMountProps) {
-  // Production cutover: iframe is the default, legacy is the rollback
-  // flag. Test runs that explicitly pass loadModule still hit the
-  // legacy code path so the existing applet test suite keeps working
-  // without an iframe in JSDOM.
-  const useIframe = !isLegacyLoaderEnabled() && props.loadModule === undefined;
-  return useIframe ? (
-    <IframeAppletMount {...props} />
-  ) : (
-    <LegacyAppletMount {...props} />
-  );
+  return <IframeAppletMount {...props} />;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -132,7 +86,6 @@ function IframeAppletMount({
   source,
   version,
   onHeaderActionChange,
-  hideRefreshControl = false,
   fitContentHeight = false,
 }: AppletMountProps) {
   const [theme, setTheme] = useState<"light" | "dark">(readHostTheme);
@@ -208,8 +161,13 @@ function IframeAppletMount({
   }, [onHeaderActionChange]);
 
   return (
-    <div className={fitContentHeight ? "grid min-h-0 min-w-0" : "grid h-full min-h-0 min-w-0"}>
-      {!hideRefreshControl && !onHeaderActionChange ? null : null}
+    <div
+      className={
+        fitContentHeight
+          ? "grid min-h-0 min-w-0"
+          : "grid h-full min-h-0 min-w-0"
+      }
+    >
       {status === "loading" || status === "pending" ? <AppletLoading /> : null}
       {status === "errored" ? (
         <AppletFailure>{error ?? "App mount failed."}</AppletFailure>
@@ -227,120 +185,6 @@ function IframeAppletMount({
             : "h-full min-h-0 min-w-0 overflow-x-hidden"
         }
       />
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────
- * Legacy same-origin path (rollback flag)
- * ───────────────────────────────────────────────────────────────── */
-
-function LegacyAppletMount({
-  appId,
-  instanceId,
-  source,
-  version,
-  loadModule = defaultAppletModuleLoader,
-  onHeaderActionChange,
-  hideRefreshControl = false,
-}: AppletMountProps) {
-  const [state, setState] = useState<
-    | { status: "loading" }
-    | {
-        status: "ready";
-        Component: ComponentType<AppletComponentProps>;
-        resetKey: string;
-        refresh?: () => Promise<AppletRefreshResult>;
-      }
-    | { status: "error"; message: string }
-  >({ status: "loading" });
-  const [refreshData, setRefreshData] = useState<unknown>();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function mount() {
-      setState({ status: "loading" });
-      setRefreshData(undefined);
-      registerAppletRefreshHandler(appId, instanceId, null);
-      await loadAppletHostExternals();
-      const transformed = await transformApplet(source, version, { appId });
-      if (cancelled) return;
-      if (!transformed.ok) {
-        setState({ status: "error", message: transformed.error.message });
-        return;
-      }
-
-      const module = await loadModule(transformed.compiledModuleUrl);
-      if (cancelled) return;
-      if (typeof module.default !== "function") {
-        setState({
-          status: "error",
-          message: "App module must export a default React component.",
-        });
-        return;
-      }
-
-      setState({
-        status: "ready",
-        Component: module.default,
-        resetKey: transformed.cacheKey,
-        refresh: module.refresh,
-      });
-      registerAppletRefreshHandler(appId, instanceId, module.refresh ?? null);
-    }
-
-    mount().catch((error: unknown) => {
-      if (cancelled) return;
-      setState({
-        status: "error",
-        message:
-          error instanceof Error ? error.message : "App mount failed.",
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      registerAppletRefreshHandler(appId, instanceId, null);
-    };
-  }, [appId, instanceId, loadModule, source, version]);
-
-  useEffect(() => {
-    if (!onHeaderActionChange) return;
-    if (state.status !== "ready" || !state.refresh) {
-      onHeaderActionChange(null);
-      return;
-    }
-
-    onHeaderActionChange(
-      <AppRefreshControl onRefresh={state.refresh} onData={setRefreshData} />,
-    );
-    return () => onHeaderActionChange(null);
-  }, [onHeaderActionChange, state]);
-
-  if (state.status === "loading") {
-    return <AppletLoading />;
-  }
-
-  if (state.status === "error") {
-    return <AppletFailure>{state.message}</AppletFailure>;
-  }
-
-  const MountedApplet = state.Component;
-  return (
-    <div className="grid min-w-0">
-      {state.refresh && !hideRefreshControl && !onHeaderActionChange ? (
-        <AppRefreshControl onRefresh={state.refresh} onData={setRefreshData} />
-      ) : null}
-      <AppletErrorBoundary resetKey={state.resetKey}>
-        <div className="min-w-0 overflow-x-hidden">
-          <MountedApplet
-            appId={appId}
-            instanceId={instanceId}
-            refreshData={refreshData}
-          />
-        </div>
-      </AppletErrorBoundary>
     </div>
   );
 }

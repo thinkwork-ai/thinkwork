@@ -6,7 +6,6 @@ import {
   AppletMount,
   appletSource,
   useAppletInstanceId,
-  type AppletModuleLoader,
 } from "@/applets/mount";
 import {
   resolveGeneratedAppRuntimeMode,
@@ -24,17 +23,11 @@ interface InlineAppletEmbedProps {
   // After mount, inline embeds grow to content to avoid nested scroll regions
   // inside thread transcripts.
   height?: number;
-  // Test seam: lets unit tests inject a fake module loader so tests don't have
-  // to spin up the real applet transform pipeline. Plan-012 U11.5: this is
-  // intentionally NOT defaulted to defaultAppletModuleLoader — production
-  // renders MUST pass undefined so AppletMount routes to the iframe substrate.
-  loadModule?: AppletModuleLoader;
 }
 
 export function InlineAppletEmbed({
   appId,
   height = 480,
-  loadModule,
 }: InlineAppletEmbedProps) {
   const [{ data, fetching, error }] = useQuery<AppletResult>({
     query: AppletQuery,
@@ -48,11 +41,7 @@ export function InlineAppletEmbed({
   const instanceId = useAppletInstanceId(appId);
 
   if (error) {
-    return (
-      <AppletFailure>
-        Failed to load app: {error.message}
-      </AppletFailure>
-    );
+    return <AppletFailure>Failed to load app: {error.message}</AppletFailure>;
   }
   if (!applet) {
     return fetching ? (
@@ -81,9 +70,6 @@ export function InlineAppletEmbed({
         instanceId={instanceId}
         source={source}
         version={version}
-        // Forward only when supplied — production renders pass
-        // undefined so AppletMount routes to the iframe substrate.
-        {...(loadModule ? { loadModule } : {})}
         hideRefreshControl
         fitContentHeight
       />

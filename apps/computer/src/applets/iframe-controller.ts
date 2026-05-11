@@ -33,11 +33,9 @@
  *   await controller.setState("foo", "bar");
  *   controller.dispose();
  *
- * The legacy same-origin loader (`defaultAppletModuleLoader` from
- * `mount.tsx`) is preserved at `_testing/legacy-loader.ts` and gated
- * behind the parent-only Vite build-time env `VITE_APPLET_LEGACY_LOADER`
- * for emergency rollback only. After Phase 2 stability ≥1 week, a
- * cleanup follow-up deletes both files.
+ * There is no same-origin generated-code fallback. If the sandbox
+ * iframe shell is unavailable, generated app rendering fails closed
+ * instead of executing LLM-authored code in the parent origin.
  */
 
 import {

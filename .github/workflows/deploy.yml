@@ -551,6 +551,7 @@ jobs:
             -var "enable_hindsight=true" \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
+            -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
             -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR" \
@@ -1054,6 +1055,8 @@ jobs:
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
       - name: Build & deploy
+        env:
+          MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
         run: bash scripts/build-computer.sh ${{ env.STAGE }}
         # Same API_AUTH_SECRET hygiene as build-admin: the computer SPA
         # authenticates REST calls with the user's Cognito id token (via

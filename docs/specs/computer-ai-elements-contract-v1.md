@@ -33,14 +33,14 @@ This contract assumes the following plan-001 artifacts are present and behave
 as plan-001 specified. Implementation units must verify presence before
 proceeding; any miss pauses adoption work until plan-001 ships.
 
-- `apps/computer/src/applets/mount.tsx` (`AppletMount`, same-origin loader)
+- `apps/computer/src/applets/mount.tsx` (`AppletMount`, iframe-only generated app mount)
 - `apps/computer/src/applets/host-registry.ts` (single-owner symbol guard)
 - `apps/computer/src/applets/transform/transform.ts` + `sucrase-worker.ts`
 - `apps/computer/src/applets/transform/import-shim.ts` (acorn AST walk +
   `ALLOWED_APPLET_IMPORTS` allowlist)
 - `apps/computer/src/applets/host-applet-api.ts`
   (`createHostAppletAPI` returning `{useAppletState, useAppletQuery,
-  useAppletMutation, refresh}`)
+useAppletMutation, refresh}`)
 - `packages/computer-stdlib/` (workspace package, source-as-published)
 - `packages/api/src/lib/applets/`,
   `packages/api/src/graphql/resolvers/applets/` (GraphQL applet surface)
@@ -372,22 +372,21 @@ object as the public surface:
 ```ts
 interface IframeAppletController {
   element: HTMLIFrameElement;
-  ready: Promise<void>;        // resolves on `kind: "ready-with-component"` (matching channelId)
+  ready: Promise<void>; // resolves on `kind: "ready-with-component"` (matching channelId)
   dispose: () => void;
   sendCallback: (name: string, payload: unknown) => void;
   applyTheme: (overrides: Record<string, string>) => void;
   getState: (key: string) => Promise<unknown>;
   setState: (key: string, value: unknown) => Promise<void>;
-  channelId: string;           // exposed for tests / smoke
-  status: 'pending' | 'ready' | 'errored' | 'disposed';
+  channelId: string; // exposed for tests / smoke
+  status: "pending" | "ready" | "errored" | "disposed";
 }
 ```
 
-The legacy same-origin loader is preserved at
-`apps/computer/src/applets/_testing/legacy-loader.ts` and gated behind the
-parent-only Vite build-time env `VITE_APPLET_LEGACY_LOADER`. The flag is
-**off by default**. After Phase 2 of plan-012 stabilizes for ≥1 week, a
-follow-up cleanup PR removes the flag and the `_testing/` namespace.
+Generated app artifacts have no same-origin loader. `AppletMount` always
+creates the sandbox iframe controller; missing sandbox configuration is a
+deployment failure and rendering fails closed rather than executing
+LLM-authored code in the parent origin.
 
 ## Parent ↔ iframe `postMessage` protocol
 
@@ -397,7 +396,7 @@ iframe document's effective origin is therefore opaque, serialized as the
 string `"null"` by the browser. Two browser-API consequences fall out of
 this and dictate the protocol design:
 
-1. **Inbound to parent:** `event.origin` on a message *from* the iframe is
+1. **Inbound to parent:** `event.origin` on a message _from_ the iframe is
    `"null"`. Origin-equality checks on the parent side cannot validate the
    sender. Trust on parent inbound comes from
    `event.source === iframeWindow` (the specific
@@ -406,13 +405,13 @@ this and dictate the protocol design:
    iframe construction, sent down via `init`, and required on every
    subsequent envelope).
 2. **Outbound from parent:** the parent CANNOT use `targetOrigin:
-   "https://sandbox.thinkwork.ai"`. The browser checks `targetOrigin`
-   against the iframe document's *effective* origin, which under
+"https://sandbox.thinkwork.ai"`. The browser checks `targetOrigin`
+   against the iframe document's _effective_ origin, which under
    `sandbox="allow-scripts"` (no `allow-same-origin`) is opaque/`"null"` —
    the message would be silently dropped. The parent therefore MUST send
    with `targetOrigin: "*"`. This is the single most-likely
    misunderstanding in code review; see `Anti-pattern: tightening
-   targetOrigin` below.
+targetOrigin` below.
 
 Trust on parent → iframe outbound is layered:
 
@@ -454,21 +453,21 @@ Trust on parent → iframe outbound is layered:
 interface Envelope<P = unknown> {
   v: 1;
   kind:
-    | "init"                     // parent → iframe: TSX + version + theme overrides + channelId
-    | "ready"                    // iframe → parent: handshake ack pre-render
-    | "ready-with-component"     // iframe → parent: render mounted, channelId echoed
-    | "theme"                    // parent → iframe: dynamic theme overrides only
-    | "resize"                   // iframe → parent: { height: number }
-    | "callback"                 // parent → iframe: { name, payload } for declared callbacks
-    | "state-read"               // iframe → parent: { key } (request)
-    | "state-read-ack"           // parent → iframe: { value } (reply, replyTo set)
-    | "state-write"              // iframe → parent: { key, value } (request)
-    | "state-write-ack"          // parent → iframe: { ok } (reply, replyTo set)
-    | "error";                   // either direction: { code, message, detail }
+    | "init" // parent → iframe: TSX + version + theme overrides + channelId
+    | "ready" // iframe → parent: handshake ack pre-render
+    | "ready-with-component" // iframe → parent: render mounted, channelId echoed
+    | "theme" // parent → iframe: dynamic theme overrides only
+    | "resize" // iframe → parent: { height: number }
+    | "callback" // parent → iframe: { name, payload } for declared callbacks
+    | "state-read" // iframe → parent: { key } (request)
+    | "state-read-ack" // parent → iframe: { value } (reply, replyTo set)
+    | "state-write" // iframe → parent: { key, value } (request)
+    | "state-write-ack" // parent → iframe: { ok } (reply, replyTo set)
+    | "error"; // either direction: { code, message, detail }
   payload: P;
-  msgId: string;                 // crypto.randomUUID() per envelope
-  replyTo?: string;              // matches msgId of the request being acked
-  channelId: string;             // per-iframe nonce
+  msgId: string; // crypto.randomUUID() per envelope
+  replyTo?: string; // matches msgId of the request being acked
+  channelId: string; // per-iframe nonce
 }
 ```
 
@@ -639,12 +638,12 @@ Notes:
   iframe's `connect-src 'none'` blocks fetch/exfiltration inside the
   iframe boundary.
 - `frame-ancestors` allowlists the Computer parent origins (production
-  + staging/dev analogues) so that hostile pages cannot frame the
-  iframe-shell standalone. The exact origin list is wired in the
-  CloudFront response-headers policy from Terraform per stage and MUST
-  match the iframe-shell's `__ALLOWED_PARENT_ORIGINS__` Vite `define`
-  list — they are the same trust set, expressed at two layers (CSP
-  network gate + JS message gate).
+  - staging/dev analogues) so that hostile pages cannot frame the
+    iframe-shell standalone. The exact origin list is wired in the
+    CloudFront response-headers policy from Terraform per stage and MUST
+    match the iframe-shell's `__ALLOWED_PARENT_ORIGINS__` Vite `define`
+    list — they are the same trust set, expressed at two layers (CSP
+    network gate + JS message gate).
 - `X-Frame-Options` is **omitted** on this distribution because it must
   be framed by `apps/computer`; CSP `frame-ancestors` is the canonical
   modern equivalent and avoids the legacy header's binary
@@ -662,7 +661,7 @@ smoke is layered:
    `content-security-policy`.
 2. **Layer 2 — JSDOM/Vitest protocol tests** verify envelope parsing,
    channelId nonce checks, source-identity checks, and the `targetOrigin:
-   "*"` invariant. No browser dependency.
+"*"` invariant. No browser dependency.
 3. **Layer 3 — Playwright browser-level violation gate**
    (`scripts/smoke-csp-violation.mjs`): loads a known-bad fragment in a
    headless Chromium. The iframe-shell installs a `securitypolicyviolation`

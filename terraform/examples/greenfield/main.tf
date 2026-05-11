@@ -291,6 +291,7 @@ locals {
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
   admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
   computer_domain = var.www_domain != "" ? "computer.${var.www_domain}" : ""
+  sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
 }
 
@@ -329,6 +330,12 @@ module "thinkwork" {
   # Same ACM cert covers it via the include_computer SAN gate on www_dns.
   computer_domain          = local.www_dns_enabled ? local.computer_domain : ""
   computer_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
+  # Computer iframe sandbox (derived from www_domain — sandbox.<apex>).
+  # Same ACM cert covers it via the include_computer_sandbox SAN gate.
+  computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
+  computer_sandbox_certificate_arn        = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.computer_domain}" : ""
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
@@ -395,6 +402,10 @@ module "www_dns" {
   # on this apply.
   include_computer                = true
   computer_cloudfront_domain_name = module.thinkwork.computer_distribution_domain
+
+  # Computer iframe sandbox: same cycle-avoidance pattern as computer.
+  include_computer_sandbox                = true
+  computer_sandbox_cloudfront_domain_name = module.thinkwork.computer_sandbox_distribution_domain
 
   # API custom domain (api.<apex>). Same cycle-avoidance — the ACM cert SAN
   # list is gated on include_api (a plain bool), while api_gateway_id (which
@@ -553,6 +564,26 @@ output "computer_distribution_id" {
 output "computer_bucket_name" {
   description = "S3 bucket for computer app assets"
   value       = module.thinkwork.computer_bucket_name
+}
+
+output "computer_sandbox_distribution_id" {
+  description = "CloudFront distribution ID for the Computer iframe sandbox (for cache invalidation)"
+  value       = module.thinkwork.computer_sandbox_distribution_id
+}
+
+output "computer_sandbox_bucket_name" {
+  description = "S3 bucket for the Computer iframe sandbox shell assets"
+  value       = module.thinkwork.computer_sandbox_bucket_name
+}
+
+output "computer_sandbox_url" {
+  description = "Computer iframe sandbox URL"
+  value       = module.thinkwork.computer_sandbox_url
+}
+
+output "computer_sandbox_allowed_parent_origins" {
+  description = "Trusted parent origins for the Computer iframe sandbox"
+  value       = module.thinkwork.computer_sandbox_allowed_parent_origins
 }
 
 output "docs_url" {
