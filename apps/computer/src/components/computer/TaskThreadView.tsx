@@ -722,8 +722,19 @@ function selectPromptRunbookQueue(
     if (queue) queues.push(queue);
   }
 
+  const terminalRunQueueById = new Map<string, ActiveRunbookQueue>();
+  for (const queue of queues) {
+    if (queue.source !== "run") continue;
+    if (!isTerminalRunbookQueueStatus(queue.data.status)) continue;
+    terminalRunQueueById.set(runbookQueueIdentity(queue), queue);
+  }
+
   for (let index = queues.length - 1; index >= 0; index -= 1) {
     const queue = queues[index];
+    const terminalRunQueue = terminalRunQueueById.get(runbookQueueIdentity(queue));
+    if (terminalRunQueue && queue.source !== "run") {
+      continue;
+    }
     if (isPromptWorthyRunbookQueue(queue)) return queue;
   }
 
@@ -750,6 +761,20 @@ function isPromptWorthyRunbookQueue(queue: ActiveRunbookQueue) {
   const status = normalizeRunbookQueueStatus(queue.data.status);
   if (status === "completed" && queue.source === "persisted") return false;
   return !HIDDEN_PROMPT_QUEUE_STATUSES.has(status);
+}
+
+function runbookQueueIdentity(queue: ActiveRunbookQueue) {
+  return (
+    stringValue(queue.data.runbookRunId) ??
+    stringValue(queue.data.runbookSlug) ??
+    queue.id
+  );
+}
+
+function isTerminalRunbookQueueStatus(status: unknown) {
+  return ["completed", "failed", "error", "cancelled"].includes(
+    normalizeRunbookQueueStatus(status),
+  );
 }
 
 function countRunbookTasks(queue: RunbookQueueData) {
