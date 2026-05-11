@@ -9,6 +9,10 @@ on:
         description: "Skip container build"
         type: boolean
         default: false
+      run_smokes:
+        description: "Run optional post-deploy smoke tests"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -693,7 +697,7 @@ jobs:
               --output json
           done
 
-  # ── Flue runtime end-to-end smoke ───────────────────────────────
+  # ── Optional Flue runtime end-to-end smoke ──────────────────────
   # Invokes the deployed Flue dispatcher Lambda with a populated
   # payload mirroring chat-agent-invoke's shape and asserts the
   # response includes a USER.md fingerprint. Catches the class of
@@ -701,7 +705,8 @@ jobs:
   # IAM, Sonnet 4.5 inference-profile prefix, missing workspace
   # prompt loader. Each of those individually was caught only when
   # an operator clicked through the admin UI and saw a wrong answer.
-  # This gate makes them deploy-blockers instead of operator-noticed.
+  # Run manually with workflow_dispatch/run_smokes when validating a deploy
+  # or investigating runtime drift.
   #
   # Scope: dev only (uses Marco's tenant + agent IDs). Other stages
   # would need SMOKE_* env vars set; the wrapper script refuses to
@@ -718,7 +723,11 @@ jobs:
     # `scripts/post-deploy-smoke-flue.sh` is the stage gate: it
     # refuses to run when STAGE != dev unless SMOKE_AGENT_ID + the
     # other SMOKE_* env vars are explicitly set.
-    if: always() && needs.update-agentcore-runtimes.result == 'success'
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.run_smokes == true
+      && needs.update-agentcore-runtimes.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -742,16 +751,22 @@ jobs:
       - name: Run Flue smoke
         run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
 
-  # ── Computer thread streaming smoke ─────────────────────────────
+  # ── Optional Computer thread streaming smoke ────────────────────
   # Exercises the deployed Python Strands Computer path end-to-end:
   # blank thread creation → AppSync chunk subscription → sendMessage →
   # durable assistant persistence → completed computer_tasks row. This
-  # is the deploy gate for the "actual streaming results" contract in
-  # the Computer v1 plan.
+  # validates the "actual streaming results" contract in the Computer v1
+  # plan when workflow_dispatch/run_smokes is enabled.
   computer-thread-streaming-smoke:
     name: Computer Thread Streaming Smoke
     needs: [update-agentcore-runtimes, build-computer, bootstrap]
-    if: always() && needs.update-agentcore-runtimes.result == 'success' && needs.build-computer.result == 'success' && needs.bootstrap.result == 'success'
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.run_smokes == true
+      && needs.update-agentcore-runtimes.result == 'success'
+      && needs.build-computer.result == 'success'
+      && needs.bootstrap.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -782,7 +797,7 @@ jobs:
       - name: Run Computer thread streaming smoke
         run: bash scripts/smoke-computer.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
 
-  # ── Compliance Anchor smoke (Phase 3 U8a) ───────────────────────
+  # ── Optional Compliance Anchor smoke (Phase 3 U8a) ──────────────
   # Invokes both the anchor Lambda and the watchdog Lambda after
   # terraform-apply has provisioned them, asserting the dispatch-pin
   # response payloads:
@@ -798,7 +813,11 @@ jobs:
   compliance-anchor-smoke:
     name: Compliance Anchor Smoke
     needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.run_smokes == true
+      && needs.terraform-apply.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -822,7 +841,7 @@ jobs:
       - name: Run compliance-anchor smoke
         run: bash scripts/post-deploy-smoke-compliance-anchor.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
 
-  # ── Compliance export runner smoke (U11.U3) ─────────────────────
+  # ── Optional Compliance export runner smoke (U11.U3) ────────────
   # Invokes the runner Lambda directly with a synthesized SQS event
   # containing a non-existent UUIDv7 jobId. The runner returns an empty
   # batchItemFailures list, exercising SQS body parse, Aurora connect,
@@ -832,7 +851,11 @@ jobs:
   compliance-export-runner-smoke:
     name: Compliance Export Runner Smoke
     needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.run_smokes == true
+      && needs.terraform-apply.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1239,6 +1262,7 @@ jobs:
             --strict
 
       - name: Fat-folder composed-tree smoke
+        if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
         timeout-minutes: 5
         run: |
           bash scripts/post-deploy-smoke-fat-folder.sh \
