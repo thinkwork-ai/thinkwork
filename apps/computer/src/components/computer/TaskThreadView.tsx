@@ -651,11 +651,11 @@ function RunbookPromptQueue({ queue }: { queue: RunbookQueueData }) {
       className="overflow-hidden border-b border-white/10 bg-[#262626] text-white"
       aria-label="Active runbook queue"
     >
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div className="flex min-h-10 items-center gap-3 px-4 py-1.5">
         <ListChecks aria-hidden className="size-4 shrink-0 text-sky-300" />
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <p className="truncate text-xs font-medium text-white">{title}</p>
-          <p className="truncate text-[11px] text-white/60">
+          <p className="shrink-0 truncate text-[11px] text-white/60">
             {queueSummary(counts)}
           </p>
         </div>
