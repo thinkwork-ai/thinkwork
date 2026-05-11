@@ -330,6 +330,15 @@ export const RunbookRunQuery = gql`
   ${RunbookRunFields}
 `;
 
+export const RunbookRunsQuery = gql`
+  query RunbookRuns($computerId: ID!, $threadId: ID, $limit: Int) {
+    runbookRuns(computerId: $computerId, threadId: $threadId, limit: $limit) {
+      ...RunbookRunFields
+    }
+  }
+  ${RunbookRunFields}
+`;
+
 export const ConfirmRunbookRunMutation = gql`
   mutation ConfirmRunbookRun($id: ID!) {
     confirmRunbookRun(id: $id) {

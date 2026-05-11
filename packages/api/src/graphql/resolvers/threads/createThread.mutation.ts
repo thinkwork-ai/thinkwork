@@ -15,6 +15,7 @@ import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   enqueueComputerThreadTurn,
   resolveThreadComputer,
+  routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
 
 export const createThread = async (
@@ -146,6 +147,18 @@ export const createThread = async (
   }).catch(() => {});
 
   if (firstMessageId && row.computer_id) {
+    const handledByRunbook = await routeRunbookForComputerMessage({
+      tenantId: row.tenant_id,
+      computerId: row.computer_id,
+      threadId: row.id,
+      messageId: firstMessageId,
+      prompt: i.firstMessage ?? "",
+      actorType: createdByType,
+      actorId: createdById,
+    });
+    if (handledByRunbook) {
+      return threadToCamel(row);
+    }
     await enqueueComputerThreadTurn({
       tenantId: row.tenant_id,
       computerId: row.computer_id,

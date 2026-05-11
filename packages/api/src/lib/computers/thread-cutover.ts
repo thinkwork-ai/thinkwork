@@ -204,7 +204,7 @@ export async function routeRunbookForComputerMessage(input: {
         unavailable: true,
       },
     });
-    return false;
+    return true;
   }
   if (!catalogItem) return false;
 

@@ -94,6 +94,12 @@ export interface UIMessageStreamState {
    * Last error text from an `error`-type chunk, surfaced to the renderer.
    */
   errorText?: string;
+  /**
+   * AppSync can replay subscription payloads after reconnects. The typed
+   * merge receives the transport sequence when available and uses this hidden
+   * cursor to keep text/reasoning deltas idempotent.
+   */
+  seenChunkSeqs?: number[];
 }
 
 export function emptyState(): UIMessageStreamState {
@@ -111,19 +117,30 @@ export function emptyState(): UIMessageStreamState {
 export function mergeUIMessageChunk(
   state: UIMessageStreamState,
   chunk: unknown,
+  deliverySeq?: number | null,
 ): UIMessageStreamState {
+  if (typeof deliverySeq === "number") {
+    if ((state.seenChunkSeqs ?? []).includes(deliverySeq)) return state;
+  }
   const parsed: ParsedChunk = parseChunkPayload(chunk);
+  const withSeq = (next: UIMessageStreamState): UIMessageStreamState => {
+    if (typeof deliverySeq !== "number" || next === state) return next;
+    return {
+      ...next,
+      seenChunkSeqs: [...(state.seenChunkSeqs ?? []), deliverySeq].slice(-500),
+    };
+  };
   switch (parsed.kind) {
     case "drop":
       return state;
     case "legacy":
-      return {
+      return withSeq({
         ...state,
         legacyText: state.legacyText + parsed.chunk.text,
         status: state.status === "idle" ? "streaming" : state.status,
-      };
+      });
     case "protocol":
-      return applyProtocolChunk(state, parsed.chunk);
+      return withSeq(applyProtocolChunk(state, parsed.chunk));
     default:
       return state;
   }

@@ -67,7 +67,9 @@ export function useComputerThreadChunks(threadId: string | null | undefined) {
 			// Feed the raw chunk payload into the typed merge — its parser
 			// detects legacy {text} envelopes by shape and routes them to
 			// streamState.legacyText, leaving streamState.parts untouched.
-			setStreamState((current) => mergeUIMessageChunk(current, eventChunk.chunk));
+			setStreamState((current) =>
+				mergeUIMessageChunk(current, eventChunk.chunk, eventChunk.seq),
+			);
 
 			// Legacy accumulator: keep populating for the pre-U8 thread surface.
 			const next = toComputerThreadChunk(eventChunk);

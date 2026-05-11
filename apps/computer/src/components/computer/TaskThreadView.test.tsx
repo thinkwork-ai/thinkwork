@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -249,10 +250,372 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(screen.getByText("Research Dashboard")).toBeTruthy();
-    expect(screen.getByText("Discover")).toBeTruthy();
-    expect(screen.getByText("Gather source material")).toBeTruthy();
+    expect(screen.getAllByText("Research Dashboard").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Discover").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Gather source material").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("Starting Research Dashboard.")).toBeNull();
+  });
+
+  it("renders the active runbook queue above the prompt input", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the research dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              parts: [
+                {
+                  type: "data-runbook-queue",
+                  id: "runbook-queue:run-1",
+                  data: {
+                    runbookRunId: "run-1",
+                    displayName: "Research Dashboard",
+                    status: "RUNNING",
+                    phases: [
+                      {
+                        id: "discover",
+                        title: "Discover",
+                        tasks: [
+                          {
+                            id: "task-1",
+                            title: "Gather source material",
+                            status: "COMPLETED",
+                          },
+                          {
+                            id: "task-2",
+                            title: "Summarize evidence",
+                            status: "RUNNING",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    const promptQueue = screen.getByLabelText("Active runbook queue");
+    expect(
+      within(promptQueue).getAllByText("Research Dashboard").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(promptQueue).getByText("2 tasks · 1 completed · 1 running"),
+    ).toBeTruthy();
+    expect(within(promptQueue).queryByText("Summarize evidence")).toBeNull();
+    fireEvent.click(
+      within(promptQueue).getByRole("button", { name: "Expand runbook queue" }),
+    );
+    expect(within(promptQueue).getByText("Summarize evidence")).toBeTruthy();
+    expect(screen.getByLabelText("Follow up")).toBeTruthy();
+  });
+
+  it("collapses and expands the prompt-area runbook queue", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              parts: [
+                {
+                  type: "data-runbook-queue",
+                  id: "runbook-queue:run-1",
+                  data: {
+                    runbookRunId: "run-1",
+                    displayName: "CRM Dashboard",
+                    status: "RUNNING",
+                    phases: [
+                      {
+                        id: "produce",
+                        title: "Produce",
+                        tasks: [
+                          {
+                            id: "task-1",
+                            title: "Build dashboard",
+                            status: "RUNNING",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    const promptQueue = screen.getByLabelText("Active runbook queue");
+    const expand = within(promptQueue).getByRole("button", {
+      name: "Expand runbook queue",
+    });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(within(promptQueue).getByText("Review tasks")).toBeTruthy();
+    expect(within(promptQueue).queryByText("Build dashboard")).toBeNull();
+
+    fireEvent.click(expand);
+
+    const collapse = within(promptQueue).getByRole("button", {
+      name: "Collapse runbook queue",
+    });
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    expect(within(promptQueue).getByText("Hide tasks")).toBeTruthy();
+    expect(within(promptQueue).getByText("Build dashboard")).toBeTruthy();
+    expect(
+      within(promptQueue).getAllByText("CRM Dashboard").length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(collapse);
+
+    expect(
+      within(promptQueue)
+        .getByRole("button", { name: "Expand runbook queue" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(within(promptQueue).queryByText("Build dashboard")).toBeNull();
+  });
+
+  it("renders the prompt queue from durable runbook run data when message parts are missing", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the research dashboard",
+            },
+          ],
+        }}
+        runbookQueues={[
+          {
+            runbookRunId: "run-1",
+            displayName: "Research Dashboard",
+            status: "RUNNING",
+            phases: [
+              {
+                id: "discover",
+                title: "Discover",
+                tasks: [
+                  {
+                    id: "task-1",
+                    title: "Gather source material",
+                    status: "COMPLETED",
+                  },
+                  {
+                    id: "task-2",
+                    title: "Build dashboard",
+                    status: "PENDING",
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const promptQueue = screen.getByLabelText("Active runbook queue");
+    expect(within(promptQueue).getByText("Research Dashboard")).toBeTruthy();
+    expect(
+      within(promptQueue).getByText("2 tasks · 1 completed · 1 pending"),
+    ).toBeTruthy();
+  });
+
+  it("keeps historical completed queues in the transcript without pinning them above the prompt", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Completed runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              parts: [
+                {
+                  type: "data-runbook-queue",
+                  id: "runbook-queue:run-1",
+                  data: {
+                    runbookRunId: "run-1",
+                    displayName: "CRM Dashboard",
+                    status: "COMPLETED",
+                    phases: [
+                      {
+                        id: "produce",
+                        title: "Produce",
+                        tasks: [
+                          {
+                            id: "task-1",
+                            title: "Build dashboard",
+                            status: "COMPLETED",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Active runbook queue")).toBeNull();
+    expect(screen.getByLabelText("CRM Dashboard queue")).toBeTruthy();
+    expect(screen.getByText("Build dashboard")).toBeTruthy();
+  });
+
+  it("updates the prompt-area queue from fresher streaming runbook data", () => {
+    const thread = {
+      id: "thread-1",
+      title: "Runbook thread",
+      messages: [
+        {
+          id: "message-1",
+          role: "USER",
+          content: "Run the map artifact runbook",
+        },
+        {
+          id: "message-2",
+          role: "ASSISTANT",
+          parts: [
+            {
+              type: "data-runbook-queue" as const,
+              id: "runbook-queue:run-1",
+              data: {
+                runbookRunId: "run-1",
+                displayName: "Map Artifact",
+                status: "QUEUED",
+                phases: [
+                  {
+                    id: "produce",
+                    title: "Produce",
+                    tasks: [
+                      {
+                        id: "task-1",
+                        title: "Render map",
+                        status: "PENDING",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const { rerender } = render(
+      <TaskThreadView
+        thread={thread}
+        streamState={{
+          status: "streaming",
+          legacyText: "",
+          parts: [
+            {
+              type: "data-runbook-queue",
+              id: "runbook-queue:run-1",
+              data: {
+                runbookRunId: "run-1",
+                displayName: "Map Artifact",
+                status: "RUNNING",
+                phases: [
+                  {
+                    id: "produce",
+                    title: "Produce",
+                    tasks: [
+                      {
+                        id: "task-1",
+                        title: "Render map",
+                        status: "RUNNING",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    let promptQueue = screen.getByLabelText("Active runbook queue");
+    expect(within(promptQueue).getAllByText(/running/i).length).toBeGreaterThan(
+      0,
+    );
+
+    rerender(
+      <TaskThreadView
+        thread={thread}
+        streamState={{
+          status: "streaming",
+          legacyText: "",
+          parts: [
+            {
+              type: "data-runbook-queue",
+              id: "runbook-queue:run-1",
+              data: {
+                runbookRunId: "run-1",
+                displayName: "Map Artifact",
+                status: "COMPLETED",
+                phases: [
+                  {
+                    id: "produce",
+                    title: "Produce",
+                    tasks: [
+                      {
+                        id: "task-1",
+                        title: "Render map",
+                        status: "COMPLETED",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    promptQueue = screen.getByLabelText("Active runbook queue");
+    expect(within(promptQueue).getByText("1 task · 1 completed")).toBeTruthy();
+    expect(
+      within(promptQueue).getAllByText(/completed/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders a completed turn response when the assistant message has not refetched yet", () => {

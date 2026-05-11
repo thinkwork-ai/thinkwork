@@ -16,6 +16,9 @@ describe("Computer-owned thread turn routing", () => {
   it("routes new Computer-owned chat threads through computer_tasks without Agent wakeups", () => {
     expect(createThreadSource).toContain("resolveThreadComputer");
     expect(createThreadSource).toContain("computer_id: threadComputer?.id");
+    expect(createThreadSource).toContain(
+      "await routeRunbookForComputerMessage",
+    );
     expect(createThreadSource).toContain("await enqueueComputerThreadTurn");
     expect(createThreadSource).not.toContain("agentWakeupRequests");
   });

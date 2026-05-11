@@ -13,6 +13,7 @@ import {
   ComputerThreadQuery,
   ComputerThreadTasksQuery,
   NewMessageSubscription,
+  RunbookRunsQuery,
   SendMessageMutation,
   ThreadArtifactsQuery,
   ThreadUpdatedSubscription,
@@ -83,6 +84,29 @@ interface ThreadEventsResult {
   }> | null;
 }
 
+interface RunbookRunsResult {
+  runbookRuns?: Array<{
+    id: string;
+    runbookSlug?: string | null;
+    runbookVersion?: string | null;
+    status?: string | null;
+    tasks?: Array<{
+      id: string;
+      phaseId?: string | null;
+      phaseTitle?: string | null;
+      taskKey?: string | null;
+      title?: string | null;
+      summary?: string | null;
+      status?: string | null;
+      dependsOn?: unknown;
+      capabilityRoles?: unknown;
+      sortOrder?: number | null;
+    }> | null;
+    definitionSnapshot?: unknown;
+    updatedAt?: string | null;
+  }> | null;
+}
+
 export function ComputerThreadDetailRoute({
   threadId,
 }: ComputerThreadDetailRouteProps) {
@@ -145,6 +169,13 @@ export function ComputerThreadDetailRoute({
       variables: { computerId, limit: 100 },
       pause: !computerId,
     });
+  const [{ data: runbookRunsData }, reexecuteRunbookRunsQuery] =
+    useQuery<RunbookRunsResult>({
+      query: RunbookRunsQuery,
+      variables: { computerId, threadId, limit: 5 },
+      pause: !computerId,
+      requestPolicy: "cache-and-network",
+    });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const {
     chunks,
@@ -196,10 +227,12 @@ export function ComputerThreadDetailRoute({
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
     reexecuteQuery,
+    reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,
     turnUpdate?.onThreadTurnUpdated?.threadId,
@@ -210,10 +243,12 @@ export function ComputerThreadDetailRoute({
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
     reexecuteQuery,
+    reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,
     threadUpdate?.onThreadUpdated?.threadId,
@@ -224,12 +259,14 @@ export function ComputerThreadDetailRoute({
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
     messageUpdate?.onNewMessage?.threadId,
     reexecuteEventsQuery,
     reexecuteQuery,
+    reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,
   ]);
@@ -286,7 +323,9 @@ export function ComputerThreadDetailRoute({
         reexecuteQuery({ requestPolicy: "network-only" });
         reexecuteTasksQuery({ requestPolicy: "network-only" });
         reexecuteEventsQuery({ requestPolicy: "network-only" });
+        reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       }}
+      runbookQueues={toRunbookQueues(runbookRunsData?.runbookRuns)}
     />
   );
 }
@@ -409,6 +448,80 @@ function toTaskThreadTurns(
       })),
     };
   });
+}
+
+function toRunbookQueues(runs: RunbookRunsResult["runbookRuns"]) {
+  return (runs ?? []).map((run) => {
+    const displayName =
+      runbookDisplayName(run.definitionSnapshot) ??
+      stringValue(run.runbookSlug)?.replace(/-/g, " ") ??
+      "Runbook";
+    const phaseOrder = new Map<string, number>();
+    const phases = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        tasks: Array<{
+          id: string;
+          key?: string;
+          taskKey?: string;
+          title?: string;
+          summary?: string;
+          status?: string;
+          dependsOn?: unknown;
+          capabilityRoles?: unknown;
+          sortOrder?: number;
+        }>;
+      }
+    >();
+
+    for (const task of run.tasks ?? []) {
+      const phaseId = stringValue(task.phaseId) ?? "runbook";
+      if (!phaseOrder.has(phaseId)) phaseOrder.set(phaseId, phaseOrder.size);
+      const phase = phases.get(phaseId) ?? {
+        id: phaseId,
+        title: stringValue(task.phaseTitle) ?? "Runbook",
+        tasks: [],
+      };
+      phase.tasks.push({
+        id: task.id,
+        key: stringValue(task.taskKey) ?? undefined,
+        taskKey: stringValue(task.taskKey) ?? undefined,
+        title: stringValue(task.title) ?? undefined,
+        summary: stringValue(task.summary) ?? undefined,
+        status: stringValue(task.status) ?? undefined,
+        dependsOn: task.dependsOn,
+        capabilityRoles: task.capabilityRoles,
+        sortOrder: task.sortOrder ?? undefined,
+      });
+      phases.set(phaseId, phase);
+    }
+
+    const sortedPhases = [...phases.values()]
+      .sort((a, b) => (phaseOrder.get(a.id) ?? 0) - (phaseOrder.get(b.id) ?? 0))
+      .map((phase) => ({
+        ...phase,
+        tasks: phase.tasks.sort(
+          (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+        ),
+      }));
+
+    return {
+      runbookRunId: run.id,
+      runbookSlug: stringValue(run.runbookSlug) ?? undefined,
+      runbookVersion: stringValue(run.runbookVersion) ?? undefined,
+      displayName,
+      status: stringValue(run.status) ?? undefined,
+      phases: sortedPhases,
+    };
+  });
+}
+
+function runbookDisplayName(definitionSnapshot: unknown) {
+  const definition = metadataObject(definitionSnapshot);
+  const catalog = metadataObject(definition?.catalog);
+  return stringValue(catalog?.displayName);
 }
 
 function taskErrorMessage(value: unknown): string | null {
