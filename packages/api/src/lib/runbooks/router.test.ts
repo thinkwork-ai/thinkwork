@@ -16,6 +16,20 @@ describe("runbook router", () => {
     }
   });
 
+  it("routes a new-thread CRM dashboard prompt as an explicit runbook invocation", () => {
+    const match = routeRunbookPrompt({
+      prompt:
+        "Create a CRM dashboard for a B2B SaaS sales pipeline from LastMile CRM data. Use the CRM Dashboard runbook. Include pipeline stages, top accounts, stuck deals, forecast risk, and recommended follow-ups.",
+      runbooks: runbookRegistry.all,
+    });
+
+    expect(match.kind).toBe("explicit");
+    if (match.kind === "explicit") {
+      expect(match.runbook.slug).toBe("crm-dashboard");
+      expect(match.confidence).toBe(1);
+    }
+  });
+
   it("auto-selects the map runbook for a high-confidence map request", () => {
     const match = routeRunbookPrompt({
       prompt: "build me a map of supplier risk",

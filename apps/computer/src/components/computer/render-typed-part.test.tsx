@@ -6,10 +6,10 @@
  * that each part type renders the expected primitive.
  */
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
-import { renderTypedPart } from "./render-typed-part";
+import { renderTypedPart, renderTypedParts } from "./render-typed-part";
 
 afterEach(cleanup);
 
@@ -56,6 +56,38 @@ describe("renderTypedPart", () => {
 		// Tool renders some structural elements; we just assert the
 		// container has children and didn't throw.
 		expect(container.firstChild).not.toBeNull();
+	});
+
+	it("groups tool parts into one collapsed tool activity section", () => {
+		const parts: AccumulatedPart[] = [
+			{
+				type: "text",
+				id: "p1",
+				text: "Working",
+				state: "done",
+			},
+			{
+				type: "tool-web_search",
+				toolCallId: "t1",
+				toolName: "web_search",
+				input: { preview: "{}" },
+				state: "input-available",
+			},
+			{
+				type: "tool-browser_automation",
+				toolCallId: "t2",
+				toolName: "browser_automation",
+				state: "input-available",
+			},
+		];
+
+		const { container } = render(
+			<>{renderTypedParts(parts, { keyPrefix: "msg-1" })}</>,
+		);
+
+		expect(screen.getByLabelText("Tool activity")).toBeTruthy();
+		expect(screen.getByText(/2 tool calls/)).toBeTruthy();
+		expect(container.textContent).not.toContain("PARAMETERS");
 	});
 
 	it("renders a source-url part as an anchor", () => {

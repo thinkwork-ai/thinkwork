@@ -24,8 +24,17 @@ import type {
   RunbookQueuePhase,
   RunbookQueueTask,
 } from "@/lib/ui-message-types";
+import { cn } from "@/lib/utils";
 
-export function RunbookQueue({ data }: { data: RunbookQueueData }) {
+export function RunbookQueue({
+  data,
+  className,
+  compact = false,
+}: {
+  data: RunbookQueueData;
+  className?: string;
+  compact?: boolean;
+}) {
   const phases = Array.isArray(data.phases) ? data.phases : [];
   const title = stringValue(data.displayName) ?? "Runbook plan";
   const status = normalizeStatus(data.status);
@@ -34,20 +43,24 @@ export function RunbookQueue({ data }: { data: RunbookQueueData }) {
     : "Visible plan for this request.";
 
   return (
-    <Queue aria-label={`${title} queue`}>
-      <QueueHeader>
+    <Queue
+      aria-label={`${title} queue`}
+      className={cn(compact ? "gap-3 p-3 shadow-none" : undefined, className)}
+    >
+      <QueueHeader className={compact ? "gap-1" : undefined}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <QueueTitle>{title}</QueueTitle>
           {status ? <StatusBadge status={status} /> : null}
         </div>
         <QueueDescription>{description}</QueueDescription>
       </QueueHeader>
-      <QueueList>
+      <QueueList className={compact ? "gap-3" : undefined}>
         {phases.length > 0 ? (
           phases.map((phase, index) => (
             <PhaseGroup
               key={stringValue(phase.id) ?? `phase-${index}`}
               phase={phase}
+              compact={compact}
             />
           ))
         ) : (
@@ -60,10 +73,16 @@ export function RunbookQueue({ data }: { data: RunbookQueueData }) {
   );
 }
 
-function PhaseGroup({ phase }: { phase: RunbookQueuePhase }) {
+function PhaseGroup({
+  phase,
+  compact,
+}: {
+  phase: RunbookQueuePhase;
+  compact?: boolean;
+}) {
   const tasks = Array.isArray(phase.tasks) ? phase.tasks : [];
   return (
-    <QueueGroup>
+    <QueueGroup className={compact ? "gap-1.5" : undefined}>
       <QueueGroupTitle>
         {stringValue(phase.title) ?? stringValue(phase.id) ?? "Phase"}
       </QueueGroupTitle>
@@ -73,6 +92,7 @@ function PhaseGroup({ phase }: { phase: RunbookQueuePhase }) {
             <TaskRow
               key={stringValue(task.id) ?? `task-${index}`}
               task={task}
+              compact={compact}
             />
           ))
         ) : (
@@ -85,12 +105,18 @@ function PhaseGroup({ phase }: { phase: RunbookQueuePhase }) {
   );
 }
 
-function TaskRow({ task }: { task: RunbookQueueTask }) {
+function TaskRow({
+  task,
+  compact,
+}: {
+  task: RunbookQueueTask;
+  compact?: boolean;
+}) {
   const status = normalizeStatus(task.status);
   const title =
     stringValue(task.title) ?? stringValue(task.summary) ?? "Untitled task";
   return (
-    <QueueItem>
+    <QueueItem className={compact ? "px-2.5 py-2" : undefined}>
       <StatusIcon status={status} />
       <div className="grid min-w-0 gap-1">
         <p className="text-pretty break-words text-sm leading-5">{title}</p>
@@ -127,6 +153,7 @@ function StatusIcon({ status }: { status: string }) {
     case "running":
       return <CircleDot aria-hidden className={`${className} text-sky-500`} />;
     case "failed":
+    case "error":
       return (
         <CircleAlert aria-hidden className={`${className} text-destructive`} />
       );
@@ -161,7 +188,7 @@ function statusLabel(status: string) {
 }
 
 function statusTone(status: string) {
-  return status === "failed" ? "error" : "neutral";
+  return status === "failed" || status === "error" ? "error" : "neutral";
 }
 
 function stringValue(value: unknown): string | null {

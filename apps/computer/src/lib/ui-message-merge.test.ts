@@ -157,6 +157,28 @@ describe("mergeUIMessageChunk — per-part-id append cursor", () => {
     ]);
     expect(out.parts).toEqual([]);
   });
+
+  it("deduplicates replayed subscription chunks by delivery seq", () => {
+    let state = emptyState();
+    state = mergeUIMessageChunk(state, { type: "text-start", id: "p1" }, 1);
+    state = mergeUIMessageChunk(
+      state,
+      { type: "text-delta", id: "p1", delta: "Now " },
+      2,
+    );
+    state = mergeUIMessageChunk(
+      state,
+      { type: "text-delta", id: "p1", delta: "Now " },
+      2,
+    );
+    state = mergeUIMessageChunk(
+      state,
+      { type: "text-delta", id: "p1", delta: "research" },
+      3,
+    );
+
+    expect((state.parts[0] as any).text).toBe("Now research");
+  });
 });
 
 describe("mergeUIMessageChunk — lifecycle markers", () => {

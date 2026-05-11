@@ -184,10 +184,133 @@ export function renderTypedParts(
   parts: AccumulatedPart[],
   options: { keyPrefix: string },
 ): ReactNode[] {
-  return parts.map((part, index) =>
-    renderTypedPart(part, {
-      keyPrefix: options.keyPrefix,
-      index,
-    }),
+  const nodes: ReactNode[] = [];
+  let toolBuffer: Array<
+    Extract<AccumulatedPart, { type: `tool-${string}` }>
+  > = [];
+
+  function flushTools(index: number) {
+    if (toolBuffer.length === 0) return;
+    nodes.push(
+      <ToolActivityGroup
+        key={`${options.keyPrefix}::tools::${index}`}
+        tools={toolBuffer}
+      />,
+    );
+    toolBuffer = [];
+  }
+
+  parts.forEach((part, index) => {
+    if (part.type.startsWith("tool-")) {
+      toolBuffer.push(
+        part as Extract<AccumulatedPart, { type: `tool-${string}` }>,
+      );
+      return;
+    }
+    flushTools(index);
+    nodes.push(
+      renderTypedPart(part, {
+        keyPrefix: options.keyPrefix,
+        index,
+      }),
+    );
+  });
+
+  flushTools(parts.length);
+  return nodes;
+}
+
+function ToolActivityGroup({
+  tools,
+}: {
+  tools: Array<Extract<AccumulatedPart, { type: `tool-${string}` }>>;
+}) {
+  const running = tools.filter((tool) =>
+    ["input-streaming", "input-available"].includes(tool.state),
+  ).length;
+  const failed = tools.filter((tool) => tool.state === "output-error").length;
+  const completed = tools.filter(
+    (tool) => tool.state === "output-available",
+  ).length;
+  const summary = [
+    `${tools.length} tool ${tools.length === 1 ? "call" : "calls"}`,
+    running > 0 ? `${running} running` : null,
+    completed > 0 ? `${completed} completed` : null,
+    failed > 0 ? `${failed} failed` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Reasoning
+      defaultOpen={false}
+      className="mb-0 w-full text-muted-foreground"
+      aria-label="Tool activity"
+    >
+      <ReasoningTrigger
+        className="gap-3 text-base"
+        getThinkingMessage={() => (
+          <span>
+            Tool activity
+            <span className="ml-2 text-sm text-muted-foreground/80">
+              {summary}
+            </span>
+          </span>
+        )}
+      />
+      <ReasoningContent className="ml-7 mt-3 max-w-none">
+        <div className="grid gap-2">
+          {tools.map((tool) => (
+            <ToolActivityRow key={tool.toolCallId} tool={tool} />
+          ))}
+        </div>
+      </ReasoningContent>
+    </Reasoning>
   );
+}
+
+function ToolActivityRow({
+  tool,
+}: {
+  tool: Extract<AccumulatedPart, { type: `tool-${string}` }>;
+}) {
+  const detail = toolDetail(tool);
+  return (
+    <details className="group/tool rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-sm text-foreground">
+        <span className="min-w-0 flex-1 truncate">{toolLabel(tool)}</span>
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">
+          {toolStatus(tool.state)}
+        </span>
+      </summary>
+      {detail ? (
+        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 text-xs leading-5 text-muted-foreground">
+          {detail}
+        </pre>
+      ) : null}
+    </details>
+  );
+}
+
+function toolLabel(
+  tool: Extract<AccumulatedPart, { type: `tool-${string}` }>,
+) {
+  return tool.toolName.replace(/[_-]/g, " ");
+}
+
+function toolStatus(status: string) {
+  if (status === "output-available") return "completed";
+  if (status === "output-error") return "error";
+  return "running";
+}
+
+function toolDetail(
+  tool: Extract<AccumulatedPart, { type: `tool-${string}` }>,
+) {
+  const detail = {
+    input: tool.input,
+    output: tool.output,
+    error: tool.errorText,
+  };
+  return JSON.stringify(detail, null, 2);
 }
