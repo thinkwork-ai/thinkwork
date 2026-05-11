@@ -19,9 +19,11 @@ type RunbookApiMethods = Pick<
   ComputerRuntimeApi,
   | "loadRunbookExecutionContext"
   | "startRunbookTask"
+  | "executeRunbookTask"
   | "completeRunbookTask"
   | "failRunbookTask"
   | "completeRunbookRun"
+  | "recordRunbookResponse"
 >;
 
 export type TaskLoopOptions = {
@@ -306,9 +308,9 @@ function requiredString(value: unknown, name: string): string {
 function isCancelledOutput(value: unknown): value is { cancelled: true } {
   return Boolean(
     value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as Record<string, unknown>).cancelled === true,
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      (value as Record<string, unknown>).cancelled === true,
   );
 }
 
@@ -318,9 +320,11 @@ function assertRunbookApi(
   const required: Array<keyof RunbookApiMethods> = [
     "loadRunbookExecutionContext",
     "startRunbookTask",
+    "executeRunbookTask",
     "completeRunbookTask",
     "failRunbookTask",
     "completeRunbookRun",
+    "recordRunbookResponse",
   ];
   for (const key of required) {
     if (typeof api[key] !== "function") {

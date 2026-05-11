@@ -172,6 +172,7 @@ interface InvokeEvent {
   computerId?: string;
   computerTaskId?: string;
   runbookContext?: unknown;
+  responseMode?: "runbook_step";
 }
 
 type ChatInvokeIdentitySource =
@@ -307,8 +308,9 @@ export async function resolveChatInvokeIdentity(
   };
 }
 
-export async function handler(event: InvokeEvent): Promise<void> {
+export async function handler(event: InvokeEvent): Promise<unknown | void> {
   const { threadId, tenantId, agentId, userMessage } = event;
+  const responseOnly = event.responseMode === "runbook_step";
   const runbookRunId = runbookRunIdFromContext(event.runbookContext);
   const traceId = getTraceId();
   console.log(
@@ -368,7 +370,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     const runtimeType: AgentRuntimeType =
-      event.computerId && event.computerTaskId
+      event.computerId && (event.computerTaskId || responseOnly)
         ? "strands"
         : runtimeConfig.runtimeType;
     const agentModel = runtimeConfig.templateModel;
@@ -402,51 +404,56 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // retired the parallel skill.yaml). No sub_agents payload needed —
     // removed DB-based sub-agent query.
 
-    // 2a. Create a thread_turn record so the UI shows this invocation
-    try {
-      const [countRow] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(threadTurns)
-        .where(eq(threadTurns.thread_id, threadId));
-      const turnNumber = (countRow?.count || 0) + 1;
+    // 2a. Create a thread_turn record so the UI shows normal chat invocations.
+    // Runbook substeps are response-only calls owned by the durable
+    // computer_tasks/runbook task state, so they intentionally avoid extra
+    // thread_turn rows.
+    if (!responseOnly) {
+      try {
+        const [countRow] = await db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(threadTurns)
+          .where(eq(threadTurns.thread_id, threadId));
+        const turnNumber = (countRow?.count || 0) + 1;
 
-      const [turnRow] = await db
-        .insert(threadTurns)
-        .values({
-          tenant_id: tenantId,
-          agent_id: agentId,
-          thread_id: threadId,
-          invocation_source: "chat_message",
+        const [turnRow] = await db
+          .insert(threadTurns)
+          .values({
+            tenant_id: tenantId,
+            agent_id: agentId,
+            thread_id: threadId,
+            invocation_source: "chat_message",
+            status: "running",
+            started_at: new Date(),
+            last_activity_at: new Date(),
+            turn_number: turnNumber,
+          })
+          .returning({ id: threadTurns.id });
+        turnId = turnRow?.id;
+
+        // Set wakeup_request_id = turn ID so cost lookup works
+        if (turnId) {
+          await db
+            .update(threadTurns)
+            .set({ wakeup_request_id: turnId })
+            .where(eq(threadTurns.id, turnId));
+        }
+
+        // Notify subscribers that a turn started
+        await notifyThreadTurnUpdate({
+          runId: turnId!,
+          tenantId,
+          threadId,
+          agentId,
           status: "running",
-          started_at: new Date(),
-          last_activity_at: new Date(),
-          turn_number: turnNumber,
-        })
-        .returning({ id: threadTurns.id });
-      turnId = turnRow?.id;
-
-      // Set wakeup_request_id = turn ID so cost lookup works
-      if (turnId) {
-        await db
-          .update(threadTurns)
-          .set({ wakeup_request_id: turnId })
-          .where(eq(threadTurns.id, turnId));
+          triggerName: "Chat",
+        });
+      } catch (turnErr) {
+        console.error(
+          `[chat-agent-invoke] Failed to create thread_turn:`,
+          turnErr,
+        );
       }
-
-      // Notify subscribers that a turn started
-      await notifyThreadTurnUpdate({
-        runId: turnId!,
-        tenantId,
-        threadId,
-        agentId,
-        status: "running",
-        triggerName: "Chat",
-      });
-    } catch (turnErr) {
-      console.error(
-        `[chat-agent-invoke] Failed to create thread_turn:`,
-        turnErr,
-      );
     }
 
     // 2c. Load prior conversation history for this thread from Aurora.
@@ -628,6 +635,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     if (invokeRes.FunctionError) {
       const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
+      if (responseOnly) throw new Error(errMsgText);
       await markRunbookFailedFromChatInvokeError({
         tenantId,
         runbookRunId,
@@ -700,6 +708,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     if (adapterStatus < 200 || adapterStatus >= 300) {
       const errMsgText = `AgentCore ${adapterStatus}: ${adapterBodyStr.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
+      if (responseOnly) throw new Error(errMsgText);
       await markRunbookFailedFromChatInvokeError({
         tenantId,
         runbookRunId,
@@ -865,8 +874,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } =
-          await import("../lib/hindsight-cost.js");
+        const { recordHindsightCost } = await import(
+          "../lib/hindsight-cost.js"
+        );
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -982,6 +992,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     if (!responseText || responseText === "{}") {
       console.warn(`[chat-agent-invoke] Empty response from AgentCore`);
+      if (responseOnly) {
+        throw new Error("AgentCore returned an empty runbook step response");
+      }
       return;
     }
 
@@ -997,6 +1010,23 @@ export async function handler(event: InvokeEvent): Promise<void> {
         ?.computer_thread_response) as
       | { responseMessageId?: string; threadId?: string; messageId?: string }
       | undefined;
+
+    if (responseOnly) {
+      return {
+        ok: true,
+        responseText,
+        model: usage.model || agentModel || null,
+        usage: {
+          duration_ms: durationMs,
+          input_tokens: usage.inputTokens,
+          output_tokens: usage.outputTokens,
+          cached_read_tokens: usage.cachedReadTokens,
+          tool_invocations: toolInvocations,
+        },
+        toolInvocations,
+        durationMs,
+      };
+    }
 
     // 3. Insert assistant message into DB (with GenUI tool results if present)
     const assistantMsg = computerThreadResponse?.responseMessageId
@@ -1095,8 +1125,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // 4c. Send push notification to user devices
     if (!computerThreadResponse?.responseMessageId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId,
           tenantId,
@@ -1110,6 +1141,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
+    if (responseOnly) throw err;
     await markRunbookFailedFromChatInvokeError({
       tenantId,
       runbookRunId,
@@ -1186,6 +1218,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       );
     }
   }
+  return undefined;
 }
 
 function chatInvokeErrorMessage(runbookRunId: string | null) {

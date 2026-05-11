@@ -76,6 +76,15 @@ export type RunbookExecutionContext = {
   previousOutputs: Record<string, unknown>;
 };
 
+export type RunbookAgentStepOutput = {
+  ok: true;
+  responseText: string;
+  model?: string | null;
+  usage?: unknown;
+  toolInvocations?: Array<Record<string, unknown>>;
+  durationMs?: number;
+};
+
 export class ComputerRuntimeApi {
   constructor(private readonly config: RuntimeApiConfig) {}
 
@@ -327,6 +336,43 @@ export class ComputerRuntimeApi {
           tenantId: this.config.tenantId,
           computerId: this.config.computerId,
           output,
+        }),
+      },
+    );
+  }
+
+  async executeRunbookTask(
+    taskId: string,
+    runbookTaskId: string,
+  ): Promise<RunbookAgentStepOutput> {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/tasks/${runbookTaskId}/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+        }),
+      },
+    );
+  }
+
+  async recordRunbookResponse(
+    taskId: string,
+    input: {
+      content: string;
+      model?: string | null;
+      usage?: unknown;
+    },
+  ) {
+    return this.request(
+      `/api/computers/runtime/tasks/${taskId}/runbook/response`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenantId: this.config.tenantId,
+          computerId: this.config.computerId,
+          ...input,
         }),
       },
     );

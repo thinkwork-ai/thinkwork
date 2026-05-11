@@ -168,9 +168,14 @@ describe("Computer task loop", () => {
         previousOutputs: {},
       }),
       startRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
+      executeRunbookTask: vi.fn().mockResolvedValue({
+        ok: true,
+        responseText: "Step completed",
+      }),
       completeRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
       failRunbookTask: vi.fn().mockResolvedValue({ ok: true }),
       completeRunbookRun: vi.fn().mockResolvedValue({ ok: true }),
+      recordRunbookResponse: vi.fn().mockResolvedValue({ ok: true }),
     };
     const runbookTaskRunner = vi.fn().mockResolvedValue({ done: true });
 
@@ -234,9 +239,11 @@ describe("Computer task loop", () => {
         previousOutputs: {},
       }),
       startRunbookTask: vi.fn(),
+      executeRunbookTask: vi.fn(),
       completeRunbookTask: vi.fn(),
       failRunbookTask: vi.fn(),
       completeRunbookRun: vi.fn(),
+      recordRunbookResponse: vi.fn(),
     };
 
     const result = await runTaskLoopOnce({
