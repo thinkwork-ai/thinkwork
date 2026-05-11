@@ -32,6 +32,7 @@ import {
   COMPUTER_THREADS_ROUTE,
 } from "@/lib/computer-routes";
 import { ThreadsPagedQuery } from "@/lib/graphql-queries";
+import { FavoritesSection } from "@/components/sidebar/FavoritesSection";
 
 interface NavItem {
   href: FileRouteTypes["to"];
@@ -127,6 +128,7 @@ export function ComputerSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        <FavoritesSection />
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">

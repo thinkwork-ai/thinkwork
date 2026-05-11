@@ -48,6 +48,11 @@ export const artifacts = pgTable(
 		source_message_id: uuid("source_message_id").references(() => messages.id),
 		metadata: jsonb("metadata"),
 
+		// Favorites: nullable timestamp. Set when the user stars the
+		// artifact; cleared to un-favorite. Drives the apps/computer
+		// sidebar Favorites section.
+		favorited_at: timestamp("favorited_at", { withTimezone: true }),
+
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.default(sql`now()`),
@@ -60,6 +65,16 @@ export const artifacts = pgTable(
 		index("idx_artifacts_thread_id").on(table.thread_id),
 		index("idx_artifacts_agent_id").on(table.agent_id),
 		index("idx_artifacts_type").on(table.tenant_id, table.type),
+		// The matching DB index is a partial
+		// (`WHERE favorited_at IS NOT NULL`) declared in
+		// drizzle/0084_artifacts_favorited_at.sql; drizzle's index() helper
+		// doesn't model partial predicates, so we record the column-only
+		// form here for type-graph completeness and rely on the
+		// hand-rolled SQL for the real partial index in production.
+		index("idx_artifacts_favorited_at").on(
+			table.tenant_id,
+			table.favorited_at,
+		),
 	],
 );
 

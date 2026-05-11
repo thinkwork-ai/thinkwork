@@ -44,7 +44,12 @@ export function ComputerComposer({
   return (
     <div className="grid gap-2">
       <PromptInput
-        className="rounded-2xl border border-border/80 bg-background/40 shadow-sm dark:bg-input/30"
+        // Override the shared InputGroup focus styling so the empty-thread
+        // composer reads as borderless when focused — no background shift,
+        // no inner ring, no border-color flip. Border stays at
+        // border-border/80 in every state. Other PromptInput consumers
+        // (in-thread FollowUpComposer) keep the default InputGroup look.
+        className="rounded-2xl border border-border/80 bg-transparent shadow-none dark:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:border-border/80 has-[[data-slot=input-group-control]:focus-visible]:ring-0"
         onSubmit={handlePromptSubmit}
       >
         <PromptInputBody>

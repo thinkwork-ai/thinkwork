@@ -219,6 +219,13 @@ const AppletPreviewFields = gql`
     modelId
     generatedAt
     stdlibVersionAtGeneration
+    # Surface the underlying Artifact id + favoritedAt so the artifact
+    # detail page can wire favorite/delete actions without a second
+    # round-trip to fetch the artifact by appId.
+    artifact {
+      id
+      favoritedAt
+    }
   }
 `;
 
@@ -733,5 +740,61 @@ export const EnableWorkflowMutation = gql`
 export const DisableWorkflowMutation = gql`
   mutation DisableWorkflow($input: DisableWorkflowInput!) {
     disableWorkflow(input: $input)
+  }
+`;
+
+// --- Thread + Artifact destructive / favorite mutations ------------------
+
+export const UpdateThreadMutation = gql`
+  mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
+    updateThread(id: $id, input: $input) {
+      id
+      archivedAt
+      updatedAt
+    }
+  }
+`;
+
+export const DeleteThreadMutation = gql`
+  mutation DeleteThread($id: ID!) {
+    deleteThread(id: $id)
+  }
+`;
+
+export const ThreadArtifactsQuery = gql`
+  query ThreadArtifacts($tenantId: ID!, $threadId: ID!) {
+    artifacts(tenantId: $tenantId, threadId: $threadId) {
+      id
+      title
+      type
+    }
+  }
+`;
+
+export const UpdateArtifactMutation = gql`
+  mutation UpdateArtifact($id: ID!, $input: UpdateArtifactInput!) {
+    updateArtifact(id: $id, input: $input) {
+      id
+      title
+      favoritedAt
+      updatedAt
+    }
+  }
+`;
+
+export const DeleteArtifactMutation = gql`
+  mutation DeleteArtifact($id: ID!) {
+    deleteArtifact(id: $id)
+  }
+`;
+
+export const FavoriteArtifactsQuery = gql`
+  query FavoriteArtifacts($tenantId: ID!, $limit: Int) {
+    artifacts(tenantId: $tenantId, favoritedOnly: true, limit: $limit) {
+      id
+      title
+      type
+      favoritedAt
+    }
   }
 `;

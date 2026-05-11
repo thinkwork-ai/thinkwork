@@ -10,7 +10,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@thinkwork/ui";
-import { ALL_KINDS, TAB_ALL } from "./artifacts-filtering";
+import {
+  ALL_KINDS,
+  SORT_GENERATED,
+  SORT_NAME,
+  TAB_ALL,
+  type ArtifactSortBy,
+} from "./artifacts-filtering";
 
 export const ARTIFACT_TABS = [
   { value: TAB_ALL, label: "All" },
@@ -27,6 +33,8 @@ export interface ArtifactsToolbarProps {
   kind: string;
   kinds: string[];
   onKindChange: (value: string) => void;
+  sortBy: ArtifactSortBy;
+  onSortByChange: (value: ArtifactSortBy) => void;
   searchPlaceholder?: string;
 }
 
@@ -41,6 +49,8 @@ export function ArtifactsToolbar({
   kind,
   kinds,
   onKindChange,
+  sortBy,
+  onSortByChange,
   searchPlaceholder = "Search artifacts…",
 }: ArtifactsToolbarProps) {
   return (
@@ -78,9 +88,25 @@ export function ArtifactsToolbar({
         </div>
       </div>
 
-      <Select value={kind} onValueChange={onKindChange}>
+      <Select
+        value={sortBy}
+        onValueChange={(value) => onSortByChange(value as ArtifactSortBy)}
+      >
         <SelectTrigger
           className="ml-auto h-8 min-w-[10rem]"
+          data-testid="artifacts-sort"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SORT_GENERATED}>Generated (newest)</SelectItem>
+          <SelectItem value={SORT_NAME}>Name (A–Z)</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select value={kind} onValueChange={onKindChange}>
+        <SelectTrigger
+          className="h-8 min-w-[10rem]"
           data-testid="artifacts-kind"
         >
           <SelectValue placeholder="All kinds" />

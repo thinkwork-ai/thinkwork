@@ -10,6 +10,9 @@ export const TAB_ALL = "all" as const;
  */
 export interface ArtifactItem {
   id: string;
+  /** Underlying Artifact id (different from `id`, which is the App id).
+   * Required for favorite/delete mutations on rows. */
+  artifactId: string | null;
   title: string;
   /** "applet" today; future kinds (chart, document) extend without code change. */
   kind: string;
@@ -17,17 +20,20 @@ export interface ArtifactItem {
   stdlibVersion: string | null;
   /** ISO timestamp; may be empty when the upstream payload is missing it. */
   generatedAt: string;
+  favoritedAt: string | null;
   version: number | null;
 }
 
 export function toArtifactItem(preview: AppArtifactPreview): ArtifactItem {
   return {
     id: preview.id,
+    artifactId: preview.artifactId ?? null,
     title: preview.title,
     kind: preview.kind,
     modelId: preview.modelId ?? null,
     stdlibVersion: preview.stdlibVersionAtGeneration ?? null,
     generatedAt: preview.generatedAt ?? "",
+    favoritedAt: preview.favoritedAt ?? null,
     version: preview.version ?? null,
   };
 }
@@ -66,4 +72,45 @@ export function uniqueKinds(items: ArtifactItem[]): string[] {
     if (item.kind) set.add(item.kind);
   }
   return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// --- Sort ----------------------------------------------------------------
+
+export const SORT_GENERATED = "generatedAt" as const;
+export const SORT_NAME = "name" as const;
+export type ArtifactSortBy = typeof SORT_GENERATED | typeof SORT_NAME;
+
+export const DEFAULT_SORT_BY: ArtifactSortBy = SORT_GENERATED;
+
+/**
+ * Sort artifacts client-side. Two modes:
+ *  - "name": title ascending, case-insensitive via localeCompare.
+ *  - "generatedAt": full ISO timestamp descending (newest first), so two
+ *    items created on the same calendar date are ordered by time-of-day
+ *    even though the column only shows the date. Items with empty
+ *    generatedAt sort last in both modes.
+ */
+export function sortArtifactItems(
+  items: ArtifactItem[],
+  sortBy: ArtifactSortBy,
+): ArtifactItem[] {
+  const sorted = items.slice();
+  if (sortBy === SORT_NAME) {
+    sorted.sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+    );
+    return sorted;
+  }
+  // SORT_GENERATED — descending, empty timestamps last.
+  sorted.sort((a, b) => {
+    if (!a.generatedAt && !b.generatedAt) return 0;
+    if (!a.generatedAt) return 1;
+    if (!b.generatedAt) return -1;
+    // ISO 8601 strings sort lexicographically the same way they sort as
+    // dates, so plain string compare is correct here.
+    if (a.generatedAt > b.generatedAt) return -1;
+    if (a.generatedAt < b.generatedAt) return 1;
+    return 0;
+  });
+  return sorted;
 }

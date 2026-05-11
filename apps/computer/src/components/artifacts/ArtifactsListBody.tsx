@@ -12,11 +12,14 @@ import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
   ALL_KINDS,
+  DEFAULT_SORT_BY,
   TAB_ALL,
   filterArtifactItems,
+  sortArtifactItems,
   toArtifactItem,
   uniqueKinds,
   type ArtifactItem,
+  type ArtifactSortBy,
 } from "./artifacts-filtering";
 
 interface AppletsResult {
@@ -84,11 +87,12 @@ function ArtifactsListBodyView({
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<string>(TAB_ALL);
   const [kind, setKind] = useState<string>(ALL_KINDS);
+  const [sortBy, setSortBy] = useState<ArtifactSortBy>(DEFAULT_SORT_BY);
 
   const kinds = useMemo(() => uniqueKinds(items), [items]);
   const sortedItems = useMemo(
-    () => items.slice().sort((a, b) => a.title.localeCompare(b.title)),
-    [items],
+    () => sortArtifactItems(items, sortBy),
+    [items, sortBy],
   );
   const filtered = useMemo(
     () => filterArtifactItems({ items: sortedItems, search, kind, tab }),
@@ -123,6 +127,8 @@ function ArtifactsListBodyView({
         kind={kind}
         kinds={kinds}
         onKindChange={setKind}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
         {showLoadingShell ? (

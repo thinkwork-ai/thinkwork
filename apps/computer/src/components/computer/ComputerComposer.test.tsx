@@ -10,6 +10,35 @@ import { ComputerComposer } from "./ComputerComposer";
 
 afterEach(cleanup);
 
+describe("ComputerComposer focus styling", () => {
+  // Plan U2: the empty-thread composer must not show a darker "well" or
+  // ring when its textarea is focused. We assert on the className the
+  // component passes to PromptInput so the override classes don't drift.
+  it("omits the dark:bg-input/30 wrapper background", () => {
+    const { container } = render(
+      <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+    );
+    const form = container.querySelector("form");
+    expect(form).toBeTruthy();
+    const cls = form?.className ?? "";
+    expect(cls).not.toContain("bg-background/40");
+    expect(cls).not.toContain("dark:bg-input/30");
+  });
+
+  it("neutralizes the InputGroup focus ring and border flip", () => {
+    const { container } = render(
+      <ComputerComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+    );
+    const cls = container.querySelector("form")?.className ?? "";
+    expect(cls).toContain(
+      "has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+    );
+    expect(cls).toContain(
+      "has-[[data-slot=input-group-control]:focus-visible]:border-border/80",
+    );
+  });
+});
+
 describe("ComputerComposer", () => {
   it("disables submit for empty prompts", () => {
     render(
