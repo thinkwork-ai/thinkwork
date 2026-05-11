@@ -1,0 +1,259 @@
+name: Verify
+
+# Manual + scheduled verification of the deployed dev stack. Split out
+# of deploy.yml so push-to-main does not create dev threads or run
+# smokes implicitly. Trigger via `gh workflow run verify.yml -f run_smokes=true`
+# or wait for the nightly drift-check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_smokes:
+        description: "Run the four smoke jobs against dev"
+        type: boolean
+        default: true
+  schedule:
+    # 06:00 UTC daily — drift-check only; smokes do not run on schedule.
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STAGE: dev
+
+jobs:
+  # ── Flue agent smoke ────────────────────────────────────────────
+  # End-to-end check that the Flue AgentCore runtime responds to a real
+  # invoke and the response includes a USER.md fingerprint. Catches LWA
+  # routing, Bedrock IAM, Sonnet 4.5 inference-profile prefix, and the
+  # missing workspace prompt loader class of bugs.
+  #
+  # Scope: dev only (uses Marco's tenant + agent IDs). Other stages
+  # would need SMOKE_* env vars set; the wrapper script refuses to
+  # run when STAGE != dev without those overrides.
+  flue-smoke-test:
+    name: Flue Smoke Test
+    # Stage gating lives in the wrapper script, not the job conditional —
+    # per feedback_gha_env_context_job_if, `if: env.X` at job-level silently
+    # fails the entire workflow.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run Flue smoke
+        run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
+
+  # ── Computer thread streaming smoke ─────────────────────────────
+  # Exercises the deployed Python Strands Computer path end-to-end:
+  # blank thread creation → AppSync chunk subscription → sendMessage →
+  # durable assistant persistence → completed computer_tasks row.
+  computer-thread-streaming-smoke:
+    name: Computer Thread Streaming Smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install psql + jq
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client jq
+
+      - name: Run Computer thread streaming smoke
+        run: bash scripts/smoke-computer.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
+  # ── Compliance Anchor smoke ─────────────────────────────────────
+  # Invokes both the anchor Lambda and the watchdog Lambda, asserting
+  # the dispatch-pin response payloads:
+  #   compliance-anchor          → {dispatched: true, anchored: false, ...}
+  #   compliance-anchor-watchdog → {mode: "inert", ...}
+  compliance-anchor-smoke:
+    name: Compliance Anchor Smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run compliance-anchor smoke
+        run: bash scripts/post-deploy-smoke-compliance-anchor.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
+  # ── Compliance export runner smoke ──────────────────────────────
+  # Invokes the runner Lambda directly with a synthesized SQS event
+  # containing a non-existent UUIDv7 jobId. Exercises SQS body parse,
+  # Aurora connect, and the CAS-guard SELECT/UPDATE without depending
+  # on a queued job. Catches deploy regressions on env vars, IAM role
+  # wiring, and the Secrets Manager fetch at boot.
+  compliance-export-runner-smoke:
+    name: Compliance Export Runner Smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run compliance-export-runner smoke
+        run: bash scripts/post-deploy-smoke-compliance-export-runner.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+
+  # ── Terraform drift-check (nightly only) ────────────────────────
+  # The push-time `terraform apply` runs with `-refresh=false` to skip
+  # ~30s of AWS-API polling per deploy. This job is the safety net: it
+  # runs once daily, refreshes state, and reports any unexpected diff
+  # to $GITHUB_STEP_SUMMARY. Exits 0 even on drift — surfaces it,
+  # doesn't fail the workflow.
+  drift-check:
+    name: Terraform Drift Check
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+
+      - name: Plan with refresh and report drift
+        working-directory: terraform/examples/greenfield
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
+        run: |
+          # -detailed-exitcode: 0=no changes, 1=error, 2=changes detected.
+          # We treat 2 (drift) as a soft signal and write a summary instead
+          # of failing — operators triage manually rather than getting
+          # paged by every benign drift.
+          set +e
+          terraform plan \
+            -refresh=true \
+            -detailed-exitcode \
+            -no-color \
+            -var "stage=${{ env.STAGE }}" \
+            -var "region=${{ env.AWS_REGION }}" \
+            -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
+            -var "db_password=${{ secrets.DB_PASSWORD }}" \
+            -var "database_engine=aurora-serverless" \
+            -var "enable_hindsight=true" \
+            -var "enable_workspace_orchestration=true" \
+            -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
+            -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \
+            -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
+            -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
+            -var "www_domain=${{ vars.WWW_DOMAIN }}" \
+            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
+            -var "ses_inbound_domain=agents.thinkwork.ai" \
+            -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
+            -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}" \
+            -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
+            -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}" \
+            > /tmp/plan.txt 2>&1
+          rc=$?
+          set -e
+          {
+            echo "## Terraform drift check"
+            echo ""
+            case $rc in
+              0)
+                echo "✅ No drift detected — state matches AWS."
+                ;;
+              2)
+                echo "⚠️  Drift detected. Operators: review and reconcile."
+                echo ""
+                echo "<details><summary>Plan output</summary>"
+                echo ""
+                echo '```'
+                tail -c 60000 /tmp/plan.txt
+                echo '```'
+                echo "</details>"
+                ;;
+              *)
+                echo "❌ Plan failed with exit code $rc — investigate."
+                echo ""
+                echo '```'
+                tail -c 60000 /tmp/plan.txt
+                echo '```'
+                ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Exit 0 on drift (2); fail on real errors.
+          if [ "$rc" = "1" ]; then exit 1; fi
+          exit 0
