@@ -128,7 +128,6 @@ export function ComputerSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <FavoritesSection />
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
@@ -176,6 +175,7 @@ export function ComputerSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <FavoritesSection />
       </SidebarContent>
     </Sidebar>
   );

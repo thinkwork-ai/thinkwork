@@ -18,6 +18,7 @@ import {
 } from "@/applets/mount";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
+import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   resolveGeneratedAppRuntimeMode,
@@ -68,13 +69,12 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   // Compose the page-header action slot: any applet-defined action
   // (rendered by AppletMount) plus the artifact-management dropdown on
   // the far right. Hide the dropdown until we know the underlying
-  // artifact id — the favorite/delete mutations need it.
+  // artifact id — the delete mutation needs it.
   const composedHeaderAction = useMemo<ReactNode>(() => {
     const detailActions = artifactId ? (
       <ArtifactDetailActions
         artifactId={artifactId}
         artifactTitle={title}
-        favoritedAt={favoritedAt}
       />
     ) : null;
     if (!headerAction && !detailActions) return null;
@@ -84,13 +84,25 @@ export function AppletRouteContent({ appId }: { appId: string }) {
         {detailActions}
       </div>
     );
-  }, [artifactId, favoritedAt, headerAction, title]);
+  }, [artifactId, headerAction, title]);
+
+  const titleTrailing = useMemo<ReactNode>(() => {
+    if (!artifactId) return null;
+    return (
+      <PinToggleButton
+        artifactId={artifactId}
+        favoritedAt={favoritedAt}
+        testId="artifact-header-pin-toggle"
+      />
+    );
+  }, [artifactId, favoritedAt]);
 
   usePageHeaderActions({
     title,
     backHref: "/artifacts",
     backBehavior: "history",
     action: composedHeaderAction,
+    titleTrailing,
     actionKey: composedHeaderAction
       ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
       : "",
