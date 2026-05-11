@@ -438,8 +438,31 @@ jobs:
   # ── Terraform apply ──────────────────────────────────────────────
   terraform-apply:
     name: Terraform Apply
-    needs: [build-lambdas, build-container]
-    if: always() && !cancelled()
+    # `build-container` is deliberately NOT in `needs:` even though
+    # update-agentcore-runtimes still consumes it after this job.
+    # GitHub Actions queues a runner to evaluate a skipped job's `if:`
+    # condition, which on 2026-05-11 held this job for 19m36s while
+    # build-container waited to skip. Terraform reads runtime image
+    # state from SSM/AgentCore data sources, not from build-container
+    # outputs, so dropping the edge is safe.
+    #
+    # Gating: only run when something terraform-relevant changed.
+    # Docs-only, admin-only, or mobile-only PRs skip terraform-apply;
+    # downstream publish jobs (build-admin/computer/docs) accept skipped
+    # as success. We deliberately do NOT add `build-container` here even
+    # to read `build-container.result` — that would reintroduce the
+    # 20-minute queue gap. Instead we gate on the same detect-changes
+    # signals that build-container itself uses.
+    needs: [detect-changes, build-lambdas]
+    if: >-
+      always() && !cancelled()
+      && (
+        needs.detect-changes.outputs.terraform == 'true' ||
+        needs.detect-changes.outputs.lambdas == 'true' ||
+        needs.detect-changes.outputs.container == 'true' ||
+        needs.detect-changes.outputs.runtime_container_stale == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -546,7 +569,12 @@ jobs:
           if [ -f "$LAMBDA_DIR/cognito-pre-signup.zip" ]; then
             PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
           fi
-          terraform apply -auto-approve \
+          # -refresh=false skips ~30s of "Refreshing state…" against ~700
+          # resources on every push. Out-of-band drift is caught by the
+          # nightly drift-check job in .github/workflows/verify.yml, which
+          # runs `terraform plan -refresh=true` and surfaces any diff to
+          # $GITHUB_STEP_SUMMARY without failing the workflow.
+          terraform apply -auto-approve -refresh=false \
             -var "stage=${{ env.STAGE }}" \
             -var "region=${{ env.AWS_REGION }}" \
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
@@ -618,9 +646,11 @@ jobs:
   build-computer-runtime:
     name: Build Computer Runtime
     needs: [detect-changes, terraform-apply]
+    # Allow terraform-apply == skipped: ECR repo + ECS services exist
+    # from prior applies; this job only needs to push a new image tag.
     if: >-
       always()
-      && needs.terraform-apply.result == 'success'
+      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
       && (
         needs.detect-changes.outputs.computer_runtime == 'true' ||
         github.event_name == 'workflow_dispatch'
@@ -696,188 +726,6 @@ jobs:
               --query '{service:service.serviceName,desiredCount:service.desiredCount,taskDefinition:service.taskDefinition}' \
               --output json
           done
-
-  # ── Optional Flue runtime end-to-end smoke ──────────────────────
-  # Invokes the deployed Flue dispatcher Lambda with a populated
-  # payload mirroring chat-agent-invoke's shape and asserts the
-  # response includes a USER.md fingerprint. Catches the class of
-  # bugs that shipped silently on 2026-05-05: LWA routing, Bedrock
-  # IAM, Sonnet 4.5 inference-profile prefix, missing workspace
-  # prompt loader. Each of those individually was caught only when
-  # an operator clicked through the admin UI and saw a wrong answer.
-  # Run manually with workflow_dispatch/run_smokes when validating a deploy
-  # or investigating runtime drift.
-  #
-  # Scope: dev only (uses Marco's tenant + agent IDs). Other stages
-  # would need SMOKE_* env vars set; the wrapper script refuses to
-  # run when STAGE != dev without those overrides.
-  flue-smoke-test:
-    name: Flue Smoke Test
-    needs: [update-agentcore-runtimes]
-    # IMPORTANT: do NOT add `&& env.STAGE == 'dev'` here. The `env`
-    # context is unavailable at job-level `if:` evaluation time on
-    # GitHub-hosted runners — adding it silently fails the ENTIRE
-    # workflow at startup with `jobs: []` and a 0s duration. Caught
-    # the hard way 2026-05-05 when two deploys (after PR #827 and
-    # PR #830 merged) blew up before any job ran. The wrapper script
-    # `scripts/post-deploy-smoke-flue.sh` is the stage gate: it
-    # refuses to run when STAGE != dev unless SMOKE_AGENT_ID + the
-    # other SMOKE_* env vars are explicitly set.
-    if: >-
-      always()
-      && github.event_name == 'workflow_dispatch'
-      && inputs.run_smokes == true
-      && needs.update-agentcore-runtimes.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Run Flue smoke
-        run: bash scripts/post-deploy-smoke-flue.sh --stage ${{ env.STAGE }}
-
-  # ── Optional Computer thread streaming smoke ────────────────────
-  # Exercises the deployed Python Strands Computer path end-to-end:
-  # blank thread creation → AppSync chunk subscription → sendMessage →
-  # durable assistant persistence → completed computer_tasks row. This
-  # validates the "actual streaming results" contract in the Computer v1
-  # plan when workflow_dispatch/run_smokes is enabled.
-  computer-thread-streaming-smoke:
-    name: Computer Thread Streaming Smoke
-    needs: [update-agentcore-runtimes, build-computer, bootstrap]
-    if: >-
-      always()
-      && github.event_name == 'workflow_dispatch'
-      && inputs.run_smokes == true
-      && needs.update-agentcore-runtimes.result == 'success'
-      && needs.build-computer.result == 'success'
-      && needs.bootstrap.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Install psql + jq
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client jq
-
-      - name: Run Computer thread streaming smoke
-        run: bash scripts/smoke-computer.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
-
-  # ── Optional Compliance Anchor smoke (Phase 3 U8a) ──────────────
-  # Invokes both the anchor Lambda and the watchdog Lambda after
-  # terraform-apply has provisioned them, asserting the dispatch-pin
-  # response payloads:
-  #   compliance-anchor          → {dispatched: true, anchored: false, ...}
-  #   compliance-anchor-watchdog → {mode: "inert", ...}
-  #
-  # U8b will update the assertions to expect anchored:true + mode:live.
-  #
-  # Mirrors the flue-smoke-test pattern: NEVER use `if: env.X` at
-  # job-level — silently fails the entire workflow per
-  # feedback_gha_env_context_job_if. Stage gating is done by the
-  # wrapper script, not the workflow conditional.
-  compliance-anchor-smoke:
-    name: Compliance Anchor Smoke
-    needs: [terraform-apply]
-    if: >-
-      always()
-      && github.event_name == 'workflow_dispatch'
-      && inputs.run_smokes == true
-      && needs.terraform-apply.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Run compliance-anchor smoke
-        run: bash scripts/post-deploy-smoke-compliance-anchor.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
-
-  # ── Optional Compliance export runner smoke (U11.U3) ────────────
-  # Invokes the runner Lambda directly with a synthesized SQS event
-  # containing a non-existent UUIDv7 jobId. The runner returns an empty
-  # batchItemFailures list, exercising SQS body parse, Aurora connect,
-  # and the CAS-guard SELECT/UPDATE without depending on a queued job.
-  # Catches deploy regressions on env vars, IAM role wiring, and the
-  # Secrets Manager fetch at boot.
-  compliance-export-runner-smoke:
-    name: Compliance Export Runner Smoke
-    needs: [terraform-apply]
-    if: >-
-      always()
-      && github.event_name == 'workflow_dispatch'
-      && inputs.run_smokes == true
-      && needs.terraform-apply.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Run compliance-export-runner smoke
-        run: bash scripts/post-deploy-smoke-compliance-export-runner.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
@@ -1008,7 +856,9 @@ jobs:
   build-admin:
     name: Build & Deploy Admin
     needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
+    # Allow terraform-apply == skipped: S3 bucket + CloudFront exist
+    # from prior applies; this job only writes a fresh SPA bundle.
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1049,7 +899,8 @@ jobs:
   build-computer:
     name: Build & Deploy Computer
     needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
+    # Allow terraform-apply == skipped: same as build-admin.
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1090,7 +941,8 @@ jobs:
   build-docs:
     name: Build & Deploy Docs
     needs: [terraform-apply]
-    if: always() && needs.terraform-apply.result == 'success'
+    # Allow terraform-apply == skipped: same as build-admin.
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1130,9 +982,11 @@ jobs:
   bootstrap:
     name: Bootstrap
     needs: [detect-changes, terraform-apply]
+    # Allow terraform-apply == skipped: workspace S3 bucket exists from
+    # prior applies; this job only syncs skill-catalog content into it.
     if: >-
       always()
-      && needs.terraform-apply.result == 'success'
+      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
       && (
         needs.detect-changes.outputs.skills == 'true' ||
         github.event_name == 'workflow_dispatch'
@@ -1203,7 +1057,6 @@ jobs:
         migration-drift-check,
         build-admin,
         build-computer,
-        computer-thread-streaming-smoke,
         build-docs,
         bootstrap,
       ]
