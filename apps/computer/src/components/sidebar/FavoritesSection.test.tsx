@@ -127,6 +127,28 @@ describe("FavoritesSection (Pinned)", () => {
     expect(screen.getByText("Customer overview")).toBeTruthy();
   });
 
+  it("renders rows sorted alphabetically by title (case-insensitive)", () => {
+    renderInSidebar(
+      <FavoritesSection
+        favorites={[
+          { id: "art-3", title: "zebra report" },
+          { id: "art-1", title: "Alpha overview" },
+          { id: "art-2", title: "Bravo dashboard" },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("sidebar-pinned-trigger"));
+    const list = screen.getByTestId("sidebar-pinned-list");
+    const renderedTitles = Array.from(
+      list.querySelectorAll("[data-testid^='sidebar-pinned-toggle-']"),
+    ).map((btn) => btn.getAttribute("data-testid"));
+    expect(renderedTitles).toEqual([
+      "sidebar-pinned-toggle-art-1", // Alpha
+      "sidebar-pinned-toggle-art-2", // Bravo
+      "sidebar-pinned-toggle-art-3", // zebra (case-insensitive)
+    ]);
+  });
+
   it("each pinned row renders as a link to the artifact detail route", () => {
     renderInSidebar(
       <FavoritesSection

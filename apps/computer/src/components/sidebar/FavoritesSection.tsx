@@ -71,6 +71,10 @@ function FavoritesSectionView({
     return null;
   }
 
+  const sortedFavorites = [...favorites].sort((a, b) =>
+    a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+  );
+
   return (
     <Collapsible defaultOpen={false} className="group/pinned">
       <SidebarGroup
@@ -98,7 +102,7 @@ function FavoritesSectionView({
               className="gap-0.5"
               data-testid="sidebar-pinned-list"
             >
-              {favorites.map((favorite) => (
+              {sortedFavorites.map((favorite) => (
                 <PinnedSidebarRow
                   key={favorite.id}
                   favorite={favorite}
