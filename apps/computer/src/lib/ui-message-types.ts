@@ -106,6 +106,7 @@ export interface RunbookConfirmationData {
   displayName?: string;
   description?: string;
   summary?: string;
+  status?: string;
   expectedOutputs?: unknown;
   likelyTools?: unknown;
   phaseSummary?: unknown;

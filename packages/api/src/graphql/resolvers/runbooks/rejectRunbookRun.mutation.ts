@@ -4,6 +4,7 @@ import {
   rejectRunbookRun as rejectRunbookRunState,
   RunbookRunTransitionError,
 } from "../../../lib/runbooks/runs.js";
+import { markRunbookConfirmationDecision } from "../../../lib/computers/thread-cutover.js";
 import { requireRunbookRunAccess, resolveRunbookCaller } from "./shared.js";
 
 export async function rejectRunbookRun(
@@ -14,11 +15,20 @@ export async function rejectRunbookRun(
   const { tenantId, userId } = await resolveRunbookCaller(ctx);
   await requireRunbookRunAccess(ctx, tenantId, args.id);
   try {
-    return await rejectRunbookRunState({
+    const run = await rejectRunbookRunState({
       tenantId,
       runId: args.id,
       userId,
     });
+    if (run?.threadId) {
+      await markRunbookConfirmationDecision({
+        tenantId,
+        threadId: run.threadId,
+        runbookRunId: run.id,
+        decision: "rejected",
+      });
+    }
+    return run;
   } catch (error) {
     throw mapRunbookRunError(error);
   }

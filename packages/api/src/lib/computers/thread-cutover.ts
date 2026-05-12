@@ -301,6 +301,12 @@ export async function queueConfirmedRunbookRun(input: {
     runId: input.runbookRunId,
   });
   if (!run) throw new Error("Runbook run not found");
+  await markRunbookConfirmationDecision({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    runbookRunId: input.runbookRunId,
+    decision: "confirmed",
+  });
   const runbook = runbookRegistry.require(run.runbookSlug);
   const task = await enqueueRunbookExecuteTask({
     tenantId: input.tenantId,
@@ -332,6 +338,99 @@ export async function queueConfirmedRunbookRun(input: {
     },
   });
   return task;
+}
+
+export async function markRunbookConfirmationDecision(input: {
+  tenantId: string;
+  threadId: string;
+  runbookRunId: string;
+  decision: "confirmed" | "rejected";
+}) {
+  const [message] = await db
+    .select({ id: messages.id, parts: messages.parts })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, input.threadId),
+        sql`${messages.metadata}->>'runbookMessageKey' = ${`runbook-confirmation:${input.runbookRunId}`}`,
+      ),
+    )
+    .limit(1);
+  if (!message) return null;
+
+  const decisionMessage = buildRunbookConfirmationDecisionMessage({
+    parts: message.parts,
+    runbookRunId: input.runbookRunId,
+    decision: input.decision,
+  });
+
+  await db
+    .update(messages)
+    .set({
+      content: decisionMessage.summary,
+      parts: decisionMessage.parts,
+    })
+    .where(
+      and(eq(messages.tenant_id, input.tenantId), eq(messages.id, message.id)),
+    );
+
+  const [thread] = await db
+    .update(threads)
+    .set({
+      last_response_preview:
+        decisionMessage.summary.length > 240
+          ? `${decisionMessage.summary.slice(0, 237)}...`
+          : decisionMessage.summary,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(threads.tenant_id, input.tenantId),
+        eq(threads.id, input.threadId),
+      ),
+    )
+    .returning({ status: threads.status, title: threads.title });
+
+  if (thread) {
+    await notifyThreadUpdate({
+      threadId: input.threadId,
+      tenantId: input.tenantId,
+      status: thread.status ?? "in_progress",
+      title: thread.title ?? "Untitled thread",
+    }).catch(() => {});
+  }
+  return { id: message.id };
+}
+
+export function buildRunbookConfirmationDecisionMessage(input: {
+  parts: unknown;
+  runbookRunId: string;
+  decision: "confirmed" | "rejected";
+}) {
+  const summary = runbookDecisionSummary({
+    parts: input.parts,
+    runbookRunId: input.runbookRunId,
+    decision: input.decision,
+  });
+  const parts = Array.isArray(input.parts) ? input.parts : [];
+  return {
+    summary,
+    parts: [
+      {
+        type: "text",
+        id: `runbook-confirmation-decision:${input.runbookRunId}`,
+        text: summary,
+      },
+      ...parts.filter((part) => {
+        const record = recordValue(part);
+        if (record.type === "text") return false;
+        if (record.type !== "data-runbook-confirmation") return true;
+        const data = recordValue(record.data);
+        return data.runbookRunId !== input.runbookRunId;
+      }),
+    ],
+  };
 }
 
 async function enqueueRunbookExecuteTask(input: {
@@ -494,6 +593,49 @@ function isCatalogItemAvailable(
     | undefined,
 ) {
   return Boolean(item?.enabled && item.status === "ACTIVE" && item.definition);
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function runbookDecisionSummary(input: {
+  parts: unknown;
+  runbookRunId: string;
+  decision: "confirmed" | "rejected";
+}) {
+  const displayName = runbookDisplayNameFromConfirmationParts(
+    input.parts,
+    input.runbookRunId,
+  );
+  const action = input.decision === "confirmed" ? "approved" : "rejected";
+  return `User ${action} the ${displayName} runbook workflow.`;
+}
+
+function runbookDisplayNameFromConfirmationParts(
+  parts: unknown,
+  runbookRunId: string,
+) {
+  if (Array.isArray(parts)) {
+    for (const part of parts) {
+      const record = recordValue(part);
+      if (record.type !== "data-runbook-confirmation") continue;
+      const data = recordValue(record.data);
+      if (data.runbookRunId !== runbookRunId) continue;
+      const displayName =
+        stringValue(data.displayName) ??
+        stringValue(data.title) ??
+        stringValue(data.runbookSlug);
+      if (displayName) return displayName;
+    }
+  }
+  return "selected";
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function dispatchComputerThreadTurn(input: {

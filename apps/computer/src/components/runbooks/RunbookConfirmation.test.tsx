@@ -73,6 +73,24 @@ describe("RunbookConfirmation", () => {
     expect(screen.getByRole("button", { name: /approve/i })).toBeTruthy();
   });
 
+  it("renders an already-approved runbook without decision actions", () => {
+    render(
+      <RunbookConfirmation
+        data={{
+          mode: "approval",
+          runbookRunId: "run-1",
+          displayName: "CRM Dashboard",
+          summary: "Build the dashboard.",
+          status: "QUEUED",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("confirmed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
+  });
+
   it("renders ambiguous candidates without approval actions", () => {
     render(
       <RunbookConfirmation

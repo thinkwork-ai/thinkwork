@@ -123,7 +123,11 @@ export function ComputerThreadDetailRoute({
   // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
   // Paused until tenant is known.
   const [{ data: attachedData }] = useQuery<{
-    artifacts?: Array<{ id: string; title: string; type?: string | null }> | null;
+    artifacts?: Array<{
+      id: string;
+      title: string;
+      type?: string | null;
+    }> | null;
   }>({
     query: ThreadArtifactsQuery,
     variables: { tenantId: tenantId ?? "", threadId },
@@ -279,6 +283,30 @@ export function ComputerThreadDetailRoute({
       setOptimisticMessage(null);
     }
   }, [data?.thread?.messages?.edges, optimisticMessage]);
+
+  useEffect(() => {
+    function handleRunbookDecision() {
+      reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
+    }
+
+    window.addEventListener(
+      "thinkwork:runbook-decision",
+      handleRunbookDecision,
+    );
+    return () =>
+      window.removeEventListener(
+        "thinkwork:runbook-decision",
+        handleRunbookDecision,
+      );
+  }, [
+    reexecuteEventsQuery,
+    reexecuteQuery,
+    reexecuteRunbookRunsQuery,
+    reexecuteTasksQuery,
+  ]);
 
   const thread = data?.thread ? toTaskThread(data.thread) : null;
   if (thread) {
@@ -545,9 +573,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 
