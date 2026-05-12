@@ -179,6 +179,96 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
     }
 
 
+def test_execute_agent_turn_suppresses_thread_response_for_runbook_steps(monkeypatch):
+    captured = {}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "eval_span_attrs",
+        SimpleNamespace(
+            attach_eval_context=lambda **_kwargs: object(),
+            detach_eval_context=lambda _token: None,
+        ),
+    )
+
+    def fail_record_thread_turn_response(**_kwargs):
+        raise AssertionError("runbook steps must not record thread-turn responses")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "computer_thread_response",
+        SimpleNamespace(
+            record_thread_turn_response=fail_record_thread_turn_response,
+        ),
+    )
+    monkeypatch.setattr(server, "_ensure_workspace_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
+    monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
+
+    def fake_call_strands_agent(system_prompt, _messages, **kwargs):
+        captured["system_prompt"] = system_prompt
+        captured.update(kwargs)
+        return "Step output", {"input_tokens": 3}
+
+    monkeypatch.setattr(server, "_call_strands_agent", fake_call_strands_agent)
+
+    runbook_context = {
+        "run": {
+            "id": "run-1",
+            "status": "running",
+            "runbookSlug": "crm-dashboard",
+            "runbookVersion": "0.1.0",
+        },
+        "definitionSnapshot": {
+            "catalog": {"displayName": "CRM Dashboard"},
+            "phases": [{"id": "discover", "title": "Discover CRM context"}],
+            "outputs": [],
+        },
+        "tasks": [
+            {
+                "id": "runbook-task-1",
+                "phaseId": "discover",
+                "phaseTitle": "Discover CRM context",
+                "taskKey": "discover:1",
+                "title": "Identify CRM entities, fields, and data freshness.",
+                "status": "running",
+                "dependsOn": [],
+                "capabilityRoles": ["research"],
+                "sortOrder": 1,
+            }
+        ],
+        "previousOutputs": {},
+    }
+
+    result = server._execute_agent_turn(
+        {
+            "workspace_tenant_id": "tenant-1",
+            "assistant_id": "agent-1",
+            "tenant_slug": "tenant",
+            "instance_id": "agent-1",
+            "agent_name": "Marco",
+            "human_name": "Eric",
+            "message": "Execute the first runbook task",
+            "thread_id": "thread-1",
+            "computer_id": "computer-1",
+            "computer_task_id": "task-1",
+            "computer_response_mode": "runbook_step",
+            "thinkwork_api_url": "https://api.example.test",
+            "thinkwork_api_secret": "service-secret",
+            "messages_history": [],
+            "runbook_context": runbook_context,
+        }
+    )
+
+    assert result["response_text"] == "Step output"
+    assert result["computer_thread_response"] is None
+    assert captured["ui_message_emit"] is False
+    assert captured["computer_event_context"] is None
+    assert "## Computer Thread Contract" not in captured["system_prompt"]
+    assert captured["runbook_context"] == runbook_context
+
+
 def test_save_app_tool_summary_preserves_artifact_persistence_evidence():
     assert server._save_app_tool_summary(
         {

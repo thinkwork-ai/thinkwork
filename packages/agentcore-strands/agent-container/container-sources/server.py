@@ -2446,6 +2446,12 @@ def _execute_agent_turn(payload: dict) -> dict:
         os.environ["_ASSISTANT_ID"] = assistant_id
     computer_id = payload.get("computer_id") or payload.get("computerId") or ""
     computer_task_id = payload.get("computer_task_id") or payload.get("computerTaskId") or ""
+    computer_response_mode = payload.get("computer_response_mode") or payload.get(
+        "computerResponseMode"
+    )
+    is_computer_thread_turn = bool(
+        computer_id and computer_task_id and computer_response_mode != "runbook_step"
+    )
 
     # Sync workspace from S3.
     _ensure_workspace_ready(
@@ -2532,7 +2538,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             except Exception as e:
                 logger.warning("KB retrieval failed: %s", e)
 
-        if computer_id and computer_task_id:
+        if is_computer_thread_turn:
             system_prompt += "\n\n---\n\n" + _computer_thread_contract(
                 thread_id=ticket_id,
                 prompt=message,
@@ -2562,9 +2568,9 @@ def _execute_agent_turn(payload: dict) -> dict:
             # callers that happen to pass a ticket_id (e.g. legacy
             # streaming threads outside the Computer surface) keep the
             # legacy shape until they explicitly opt in.
-            ui_message_emit=bool(computer_id and computer_task_id),
+            ui_message_emit=is_computer_thread_turn,
             suppress_app_build_helper_tools=bool(
-                computer_id and computer_task_id and _is_computer_applet_build_request(message)
+                is_computer_thread_turn and _is_computer_applet_build_request(message)
             ),
             computer_event_context=(
                 {
@@ -2574,14 +2580,14 @@ def _execute_agent_turn(payload: dict) -> dict:
                     "api_url": thinkwork_api_url,
                     "api_secret": thinkwork_api_secret,
                 }
-                if computer_id and computer_task_id
+                if is_computer_thread_turn
                 else None
             ),
             runbook_context=runbook_context if isinstance(runbook_context, dict) else None,
         )
         duration_ms = int(time.time() * 1000) - start_ms
         computer_thread_response = None
-        if computer_id and computer_task_id:
+        if is_computer_thread_turn:
             from computer_thread_response import record_thread_turn_response
 
             computer_thread_response = record_thread_turn_response(
