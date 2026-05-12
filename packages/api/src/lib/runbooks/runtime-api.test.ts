@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
+  schema: { tenants: {} },
   getDb: () => ({
     select: () => {
       const rows = () => Promise.resolve(mocks.selectQueue.shift() ?? []);

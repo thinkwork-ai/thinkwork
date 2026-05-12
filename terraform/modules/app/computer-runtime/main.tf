@@ -203,6 +203,27 @@ resource "aws_iam_role_policy" "task_bedrock" {
   })
 }
 
+resource "aws_iam_role_policy" "task_agentcore" {
+  name = "computer-runtime-agentcore"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:runtime/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "task_appsync" {
   count = var.appsync_api_arn != "" ? 1 : 0
   name  = "computer-runtime-appsync"

@@ -88,9 +88,17 @@ export type RunbookAgentStepOutput = {
 
 export type RunbookAgentStepDispatch = {
   ok: true;
-  dispatched: true;
+  dispatched?: true;
+  invocation?: RunbookAgentCoreInvocation;
   runbookTaskId: string;
   status: "running";
+};
+
+export type RunbookAgentCoreInvocation = {
+  provider: "bedrock-agentcore";
+  runtimeArn: string;
+  runtimeSessionId: string;
+  payload: Record<string, unknown>;
 };
 
 export class ComputerRuntimeApi {

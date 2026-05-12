@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeRunbook, type RunbookExecutionContext } from "./runbooks.js";
+import { invokeRunbookAgentCoreStep } from "./agentcore-runbook-step.js";
+
+vi.mock("./agentcore-runbook-step.js", () => ({
+  invokeRunbookAgentCoreStep: vi.fn(async () => ({
+    ok: true,
+    responseText: "Direct AgentCore step complete",
+    model: "model-1",
+  })),
+}));
 
 function context(
   overrides: Partial<RunbookExecutionContext> = {},
@@ -189,6 +198,51 @@ describe("executeRunbook", () => {
       model: "model-1",
       usage: undefined,
     });
+  });
+
+  it("invokes AgentCore directly when the runtime API returns an invocation plan", async () => {
+    const api = apiWithContext(context());
+    api.executeRunbookTask
+      .mockResolvedValueOnce({
+        ok: true,
+        invocation: {
+          provider: "bedrock-agentcore",
+          runtimeArn: "arn:aws:bedrock-agentcore:us-east-1:123:runtime/abc",
+          runtimeSessionId: "session-1",
+          payload: { message: "discover" },
+        },
+        runbookTaskId: "rt-1",
+        status: "running",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        responseText: "Dashboard saved",
+        model: "model-1",
+      });
+
+    await executeRunbook(
+      {
+        id: "task-1",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      api,
+    );
+
+    expect(invokeRunbookAgentCoreStep).toHaveBeenCalledWith({
+      provider: "bedrock-agentcore",
+      runtimeArn: "arn:aws:bedrock-agentcore:us-east-1:123:runtime/abc",
+      runtimeSessionId: "session-1",
+      payload: { message: "discover" },
+    });
+    expect(api.completeRunbookTask).toHaveBeenNthCalledWith(
+      1,
+      "task-1",
+      "rt-1",
+      expect.objectContaining({
+        responseText: "Direct AgentCore step complete",
+      }),
+    );
   });
 
   it("fails the current task and run when a task runner throws", async () => {

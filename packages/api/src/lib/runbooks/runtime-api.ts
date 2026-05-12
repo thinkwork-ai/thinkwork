@@ -1,7 +1,9 @@
-import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { createHash } from "crypto";
+import { and, asc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  agents,
   artifacts,
   computerRunbookRuns,
   computerRunbookTasks,
@@ -9,10 +11,20 @@ import {
   computerTasks,
   messages,
   threads,
+  users,
   type RunbookTaskStatus,
 } from "@thinkwork/database-pg/schema";
-import { getChatAgentInvokeFnArn } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
+import {
+  applySandboxPayloadFields,
+  checkSandboxPreflight,
+  type SandboxPreflightResult,
+} from "../sandbox-preflight.js";
+import {
+  AgentNotFoundError,
+  AgentTemplateNotFoundError,
+  resolveAgentRuntimeConfig,
+} from "../resolve-agent-runtime-config.js";
 import {
   taskQueuePart,
   taskQueueThreadMetadata,
@@ -21,7 +33,22 @@ import {
 } from "../task-queues/message-parts.js";
 
 const db = getDb();
-const lambdaClient = new LambdaClient({});
+const ssmClient = new SSMClient({});
+const AWS_REGION = process.env.AWS_REGION || "us-east-1";
+const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID || "";
+const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
+const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
+const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_URL =
+  process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
+const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
+const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+const AGENTCORE_RUNTIME_SSM_STRANDS =
+  process.env.AGENTCORE_RUNTIME_SSM_STRANDS ||
+  `/thinkwork/${STAGE}/agentcore/runtime-id-strands`;
+
+let cachedStrandsRuntimeId: string | null = null;
 
 export class RunbookRuntimeError extends Error {
   constructor(
@@ -332,7 +359,7 @@ export async function executeRunbookExecutionTask(input: {
     task: currentTask,
     previousOutputs: context.previousOutputs,
   });
-  const result = await invokeRunbookStepAgent({
+  const result = await prepareRunbookStepAgentInvocation({
     tenantId: input.tenantId,
     threadId: context.thread.id,
     agentId: computer.migrated_from_agent_id,
@@ -622,7 +649,7 @@ function buildRunbookStepPrompt(input: {
     .join("\n");
 }
 
-async function invokeRunbookStepAgent(input: {
+async function prepareRunbookStepAgentInvocation(input: {
   tenantId: string;
   threadId: string;
   agentId: string;
@@ -633,46 +660,279 @@ async function invokeRunbookStepAgent(input: {
   runbookTaskId: string;
   runbookContext: unknown;
 }) {
-  const fnArn = await getChatAgentInvokeFnArn();
-  if (!fnArn) {
+  const identity = await resolveRunbookStepIdentity({
+    tenantId: input.tenantId,
+    agentId: input.agentId,
+    threadId: input.threadId,
+    messageId: input.messageId,
+  });
+  const runtimeConfig = await resolveRunbookStepRuntimeConfig({
+    tenantId: input.tenantId,
+    agentId: input.agentId,
+    currentUserId: identity.currentUserId,
+    currentUserEmail: identity.currentUserEmail,
+  });
+  const runtimeId = await loadStrandsRuntimeId();
+  if (!AWS_ACCOUNT_ID) {
     throw new RunbookRuntimeError(
-      "chat-agent-invoke Lambda is not configured",
+      "AWS_ACCOUNT_ID is not configured for AgentCore invocation",
       502,
     );
+  }
+  const runtimeArn = `arn:aws:bedrock-agentcore:${AWS_REGION}:${AWS_ACCOUNT_ID}:runtime/${runtimeId}`;
+  const model = runtimeConfig.templateModel;
+  const messagesHistory = await loadThreadMessageHistory({
+    threadId: input.threadId,
+    excludeMessageId: input.messageId,
+  });
+
+  let sandboxPreflight: SandboxPreflightResult | null = null;
+  if (identity.currentUserId && runtimeConfig.sandboxTemplate) {
+    try {
+      sandboxPreflight = await checkSandboxPreflight({
+        stage: STAGE,
+        tenantId: input.tenantId,
+        agentId: input.agentId,
+        userId: identity.currentUserId,
+        templateSandbox: runtimeConfig.sandboxTemplate,
+      });
+    } catch (err) {
+      console.error("[runbook-runtime] sandbox pre-flight failed:", err);
+      sandboxPreflight = null;
+    }
   }
 
-  const response = await lambdaClient.send(
-    new InvokeCommand({
-      FunctionName: fnArn,
-      InvocationType: "Event",
-      Payload: new TextEncoder().encode(
-        JSON.stringify({
-          threadId: input.threadId,
-          tenantId: input.tenantId,
-          agentId: input.agentId,
-          userMessage: input.userMessage,
-          messageId: input.messageId,
-          computerId: input.computerId,
-          computerTaskId: input.computerTaskId,
-          runbookTaskId: input.runbookTaskId,
-          runbookContext: input.runbookContext,
-          responseMode: "runbook_step",
-        }),
-      ),
-    }),
-  );
-  if (response.StatusCode && response.StatusCode >= 300) {
-    throw new RunbookRuntimeError(
-      `Runbook step dispatch failed with status ${response.StatusCode}`,
-      502,
-    );
+  const payload: Record<string, unknown> = {
+    tenant_id: input.tenantId,
+    workspace_tenant_id: input.tenantId,
+    assistant_id: input.agentId,
+    thread_id: input.threadId,
+    user_id: identity.currentUserId || undefined,
+    trace_id: `runbook-${input.runbookTaskId}`,
+    message: input.userMessage,
+    messages_history: messagesHistory,
+    use_memory: true,
+    tenant_slug: runtimeConfig.tenantSlug || undefined,
+    instance_id: runtimeConfig.agentSlug || undefined,
+    agent_name: runtimeConfig.agentName,
+    system_prompt: runtimeConfig.agentSystemPrompt || undefined,
+    human_name: runtimeConfig.humanName || undefined,
+    workspace_bucket: WORKSPACE_BUCKET || undefined,
+    thinkwork_api_url: THINKWORK_API_URL || undefined,
+    thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
+    appsync_endpoint: APPSYNC_ENDPOINT || undefined,
+    appsync_api_key: APPSYNC_API_KEY || undefined,
+    computer_id: input.computerId,
+    computer_task_id: input.computerTaskId,
+    computer_response_mode: "runbook_step",
+    hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+    web_search_config: runtimeConfig.webSearchConfig,
+    send_email_config: runtimeConfig.sendEmailConfig
+      ? { ...runtimeConfig.sendEmailConfig, threadId: input.threadId }
+      : undefined,
+    context_engine_enabled: runtimeConfig.contextEngineEnabled || undefined,
+    context_engine_config: runtimeConfig.contextEngineConfig,
+    runtime_type: "strands",
+    model,
+    skills:
+      runtimeConfig.skillsConfig.length > 0
+        ? runtimeConfig.skillsConfig
+        : undefined,
+    knowledge_bases: runtimeConfig.knowledgeBasesConfig,
+    trigger_channel: "runbook",
+    guardrail_config: runtimeConfig.guardrailConfig || undefined,
+    mcp_configs:
+      runtimeConfig.mcpConfigs.length > 0
+        ? runtimeConfig.mcpConfigs
+        : undefined,
+    blocked_tools:
+      runtimeConfig.blockedTools.length > 0
+        ? runtimeConfig.blockedTools
+        : undefined,
+    browser_automation_enabled:
+      runtimeConfig.browserAutomationEnabled || undefined,
+    runbook_context: input.runbookContext,
+  };
+
+  if (sandboxPreflight && identity.currentUserId) {
+    payload.sandbox_status = sandboxPreflight.status;
+    payload.sandbox_reason =
+      "reason" in sandboxPreflight ? sandboxPreflight.reason : undefined;
+    applySandboxPayloadFields(payload, sandboxPreflight);
   }
+
   return {
     ok: true as const,
-    dispatched: true as const,
+    invocation: {
+      provider: "bedrock-agentcore" as const,
+      runtimeArn,
+      runtimeSessionId: deriveRunbookRuntimeSessionId({
+        tenantId: input.tenantId,
+        agentId: input.agentId,
+        threadId: input.threadId,
+        runbookTaskId: input.runbookTaskId,
+        model: model || "",
+      }),
+      payload,
+    },
     runbookTaskId: input.runbookTaskId,
     status: "running" as const,
   };
+}
+
+async function resolveRunbookStepRuntimeConfig(input: {
+  tenantId: string;
+  agentId: string;
+  currentUserId: string;
+  currentUserEmail: string;
+}) {
+  try {
+    return await resolveAgentRuntimeConfig({
+      tenantId: input.tenantId,
+      agentId: input.agentId,
+      currentUserId: input.currentUserId || undefined,
+      currentUserEmail: input.currentUserEmail || undefined,
+      allowHumanPairEmailFallback: true,
+      logPrefix: "[runbook-runtime]",
+      thinkworkApiUrl: THINKWORK_API_URL,
+      thinkworkApiSecret: THINKWORK_API_SECRET,
+      appsyncApiKey: APPSYNC_API_KEY,
+    });
+  } catch (err) {
+    if (
+      err instanceof AgentNotFoundError ||
+      err instanceof AgentTemplateNotFoundError
+    ) {
+      throw new RunbookRuntimeError(err.message, 404);
+    }
+    throw err;
+  }
+}
+
+async function resolveRunbookStepIdentity(input: {
+  tenantId: string;
+  agentId: string;
+  threadId: string;
+  messageId: string;
+}) {
+  const [msg] = await db
+    .select({
+      sender_id: messages.sender_id,
+      sender_type: messages.sender_type,
+    })
+    .from(messages)
+    .where(eq(messages.id, input.messageId))
+    .limit(1);
+  if (
+    (msg?.sender_type === "human" || msg?.sender_type === "user") &&
+    msg.sender_id
+  ) {
+    return {
+      currentUserId: msg.sender_id,
+      currentUserEmail: await loadUserEmail(msg.sender_id),
+    };
+  }
+
+  const [thread] = await db
+    .select({
+      created_by_id: threads.created_by_id,
+      created_by_type: threads.created_by_type,
+    })
+    .from(threads)
+    .where(eq(threads.id, input.threadId))
+    .limit(1);
+  if (thread?.created_by_type === "user" && thread.created_by_id) {
+    return {
+      currentUserId: thread.created_by_id,
+      currentUserEmail: await loadUserEmail(thread.created_by_id),
+    };
+  }
+
+  const [agent] = await db
+    .select({ human_pair_id: agents.human_pair_id })
+    .from(agents)
+    .where(
+      and(eq(agents.id, input.agentId), eq(agents.tenant_id, input.tenantId)),
+    )
+    .limit(1);
+  if (agent?.human_pair_id) {
+    return {
+      currentUserId: agent.human_pair_id,
+      currentUserEmail: await loadUserEmail(agent.human_pair_id),
+    };
+  }
+
+  return { currentUserId: "", currentUserEmail: "" };
+}
+
+async function loadUserEmail(userId: string) {
+  const [user] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.email || "";
+}
+
+async function loadThreadMessageHistory(input: {
+  threadId: string;
+  excludeMessageId?: string;
+}) {
+  const historyConditions = [eq(messages.thread_id, input.threadId)];
+  if (input.excludeMessageId) {
+    historyConditions.push(ne(messages.id, input.excludeMessageId));
+  }
+  const rows = await db
+    .select({ role: messages.role, content: messages.content })
+    .from(messages)
+    .where(and(...historyConditions))
+    .orderBy(sql`${messages.created_at} desc`)
+    .limit(30);
+  return rows
+    .reverse()
+    .filter(
+      (row) =>
+        (row.role === "user" || row.role === "assistant") &&
+        typeof row.content === "string" &&
+        row.content.length > 0,
+    )
+    .map((row) => ({
+      role: row.role as "user" | "assistant",
+      content: row.content as string,
+    }));
+}
+
+async function loadStrandsRuntimeId() {
+  if (cachedStrandsRuntimeId) return cachedStrandsRuntimeId;
+  const response = await ssmClient.send(
+    new GetParameterCommand({ Name: AGENTCORE_RUNTIME_SSM_STRANDS }),
+  );
+  if (!response.Parameter?.Value) {
+    throw new RunbookRuntimeError(
+      `SSM parameter ${AGENTCORE_RUNTIME_SSM_STRANDS} is empty`,
+      502,
+    );
+  }
+  cachedStrandsRuntimeId = response.Parameter.Value;
+  return cachedStrandsRuntimeId;
+}
+
+function deriveRunbookRuntimeSessionId(input: {
+  tenantId: string;
+  agentId: string;
+  threadId: string;
+  runbookTaskId: string;
+  model: string;
+}) {
+  const raw = [
+    "runbook",
+    input.tenantId,
+    input.agentId,
+    input.threadId,
+    input.model,
+    input.runbookTaskId,
+  ].join(":");
+  return createHash("sha256").update(raw).digest("hex").slice(0, 64);
 }
 
 async function loadRunbookExecuteTask(input: {
