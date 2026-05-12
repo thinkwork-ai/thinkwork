@@ -1,30 +1,43 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "urql";
-import { ArrowLeft, DollarSign, Monitor, Server, User } from "lucide-react";
+import { useMutation, useQuery } from "urql";
+import {
+  Archive,
+  ArrowLeft,
+  DollarSign,
+  Loader2,
+  Monitor,
+  Server,
+  User,
+} from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   ComputerDetailQuery,
   ComputerEventsQuery,
   ComputerTasksQuery,
   ComputerThreadsQuery,
+  UpdateComputerMutation,
 } from "@/lib/graphql-queries";
-import { formatDateTime, formatUsd } from "@/lib/utils";
-import { type Computer } from "@/gql/graphql";
+import { formatUsd } from "@/lib/utils";
+import { ComputerStatus, type Computer } from "@/gql/graphql";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
@@ -32,6 +45,7 @@ import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
 import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
 import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
 import { ComputerDashboardActivity } from "./-components/ComputerDashboardActivity";
+import { ComputerIdentityEditPanel } from "./-components/ComputerIdentityEditPanel";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
@@ -204,6 +218,18 @@ function ComputerDetailPage() {
               <DollarSign className="h-3 w-3" />
               {centsToUsd(computer.spentMonthlyCents)}
             </Badge>
+            {computer.status === ComputerStatus.Archived ? (
+              <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300">
+                <Archive className="h-3 w-3" />
+                Archived
+              </Badge>
+            ) : (
+              <ArchiveAction
+                computerId={computer.id}
+                computerName={computer.name}
+                onArchived={() => navigate({ to: "/computers" })}
+              />
+            )}
           </div>
         </div>
       }
@@ -222,13 +248,16 @@ function ComputerDetailPage() {
             computer={computer}
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}
           />
+          <ComputerIdentityEditPanel
+            computer={computer}
+            onUpdated={() => reexecute({ requestPolicy: "network-only" })}
+          />
           <ComputerRuntimePanel computer={computer} />
           <ComputerEventsPanel
             computer={computer}
             refreshKey={activityRefreshKey}
           />
           <ComputerMigrationPanel computer={computer} />
-          <IdentityCard computer={computer} ownerLabel={ownerLabel} />
         </div>
       ) : null}
     </PageLayout>
@@ -315,73 +344,82 @@ function ComputerWorkspaceTab({ computerId }: { computerId: string }) {
   );
 }
 
-function IdentityCard({
-  computer,
-  ownerLabel,
+function ArchiveAction({
+  computerId,
+  computerName,
+  onArchived,
 }: {
-  computer: {
-    slug: string;
-    createdAt: string;
-    updatedAt: string;
-    template?: { name: string } | null;
-  };
-  ownerLabel: string;
+  computerId: string;
+  computerName: string;
+  onArchived: () => void;
 }) {
+  const [{ fetching }, updateComputer] = useMutation(UpdateComputerMutation);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function archive() {
+    setError(null);
+    const result = await updateComputer({
+      id: computerId,
+      input: { status: ComputerStatus.Archived },
+    });
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+    setOpen(false);
+    onArchived();
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Identity</CardTitle>
-        <CardDescription>
-          Owner, template, and creation metadata.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">Owner</dt>
-            <dd className="mt-1 flex min-w-0 items-center gap-2 text-sm">
-              <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{ownerLabel}</span>
-            </dd>
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive ml-auto h-6 gap-1 px-2 text-xs"
+        >
+          <Archive className="h-3 w-3" />
+          Archive
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Archive this Computer?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Archiving "{computerName}" hides it from the default Computers list
+            and frees the owner's active-Computer slot, so they become eligible
+            for a new Computer. Toggle "Show archived" on the list to view it
+            again. This action cannot be reversed in-place — re-provisioning
+            the owner creates a new Computer record.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
           </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              Base Template
-            </dt>
-            <dd className="mt-1">
-              {computer.template ? (
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {computer.template.name}
-                  </Badge>
-                </div>
-              ) : (
-                <span className="text-sm text-muted-foreground">—</span>
-              )}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">Slug</dt>
-            <dd className="mt-1 break-all text-sm">{computer.slug}</dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              Created
-            </dt>
-            <dd className="mt-1 text-sm">
-              {formatDateTime(computer.createdAt)}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-xs font-medium text-muted-foreground">
-              Updated
-            </dt>
-            <dd className="mt-1 text-sm">
-              {formatDateTime(computer.updatedAt)}
-            </dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={fetching}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault();
+              void archive();
+            }}
+            disabled={fetching}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {fetching ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Archiving...
+              </>
+            ) : (
+              "Archive"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

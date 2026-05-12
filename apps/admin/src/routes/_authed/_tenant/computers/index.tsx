@@ -15,11 +15,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  FilterBarPopover,
   FilterBarSearch,
   FilterBarSort,
 } from "@/components/ui/data-table-filter-bar";
+import { Archive } from "lucide-react";
 import { ComputersListQuery } from "@/lib/graphql-queries";
 import { formatUsd, relativeTime } from "@/lib/utils";
+import { ComputerStatus } from "@/gql/graphql";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/")({
   component: ComputersPage,
@@ -171,6 +174,7 @@ function ComputersPage() {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [createOpen, setCreateOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   useBreadcrumbs([{ label: "Computers" }]);
 
   const [result, reexecute] = useQuery({
@@ -181,8 +185,15 @@ function ComputersPage() {
   });
 
   const computers = result.data?.computers ?? [];
+  const visibleComputers = useMemo(
+    () =>
+      showArchived
+        ? computers
+        : computers.filter((c) => c.status !== ComputerStatus.Archived),
+    [computers, showArchived],
+  );
   const rows: ComputerRow[] = useMemo(() => {
-    const mapped = computers.map((computer) => ({
+    const mapped = visibleComputers.map((computer) => ({
       id: computer.id,
       name: computer.name,
       ownerName: computer.owner?.name ?? null,
@@ -204,7 +215,12 @@ function ComputersPage() {
       return dir * String(av).localeCompare(String(bv));
     });
     return mapped;
-  }, [computers, sortField, sortDir]);
+  }, [visibleComputers, sortField, sortDir]);
+
+  const archivedCount = useMemo(
+    () => computers.filter((c) => c.status === ComputerStatus.Archived).length,
+    [computers],
+  );
 
   if (!tenantId) return <PageSkeleton />;
   const isLoading = result.fetching && !result.data;
@@ -240,6 +256,37 @@ function ComputersPage() {
               placeholder="Search computers..."
               className="w-56"
             />
+            <FilterBarPopover
+              activeCount={showArchived ? 1 : 0}
+              onClearAll={() => setShowArchived(false)}
+            >
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Archive className="h-3.5 w-3.5" />
+                  Show archived
+                  {archivedCount > 0 && (
+                    <span className="text-[10px] text-muted-foreground/70">
+                      ({archivedCount})
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showArchived}
+                  onClick={() => setShowArchived((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    showArchived ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background shadow transition-transform ${
+                      showArchived ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </label>
+            </FilterBarPopover>
             <div className="ml-auto">
               <FilterBarSort
                 options={[
