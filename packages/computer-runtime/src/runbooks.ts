@@ -87,6 +87,7 @@ export async function executeRunbook(
     };
   }
 
+  let runbookResponseRecorded = false;
   for (const scheduledTask of context.tasks.sort(bySortOrder)) {
     context = await api.loadRunbookExecutionContext(task.id);
     const runbookTask =
@@ -154,6 +155,17 @@ export async function executeRunbook(
       if (!completedElsewhere) {
         await api.completeRunbookTask(task.id, runbookTask.id, finalOutput);
       }
+      await completeArtifactPersistenceTaskIfSatisfied({
+        api,
+        computerTaskId: task.id,
+        tasks: context.tasks,
+        completedTask: runbookTask,
+        output: finalOutput,
+        previousOutputs,
+      });
+      runbookResponseRecorded =
+        (await recordArtifactRunbookResponseIfReady(task.id, api, finalOutput)) ||
+        runbookResponseRecorded;
       await api.appendTaskEvent(task.id, {
         eventType: "runbook_task_completed",
         level: "info",
@@ -185,7 +197,9 @@ export async function executeRunbook(
     completedTaskCount: Object.keys(previousOutputs).length,
   };
   await api.completeRunbookRun(task.id, output);
-  await recordFinalRunbookResponse(task.id, api, previousOutputs);
+  if (!runbookResponseRecorded) {
+    await recordFinalRunbookResponse(task.id, api, previousOutputs);
+  }
   await api.appendTaskEvent(task.id, {
     eventType: "runbook_completed",
     level: "info",
@@ -215,6 +229,56 @@ export function defaultRunbookTaskRunner(
     if (result.invocation) return invokeRunbookAgentCoreStep(result.invocation);
     return waitForRunbookTaskCompletion(api, computerTaskId, task.id);
   };
+}
+
+async function completeArtifactPersistenceTaskIfSatisfied(input: {
+  api: Pick<ComputerRuntimeApi, "completeRunbookTask">;
+  computerTaskId: string;
+  tasks: RunbookExecutionTask[];
+  completedTask: RunbookExecutionTask;
+  output: unknown;
+  previousOutputs: Record<string, unknown>;
+}) {
+  if (!hasSuccessfulSaveAppEvidence(input.output)) return;
+  if (!isArtifactBuildTask(input.completedTask)) return;
+
+  const persistenceTask = input.tasks.find(
+    (task) =>
+      task.id !== input.completedTask.id &&
+      task.phaseId === input.completedTask.phaseId &&
+      isArtifactBuildTask(task) &&
+      isPendingLike(task.status) &&
+      isSaveAppPersistenceTask(task),
+  );
+  if (!persistenceTask) return;
+
+  const output = {
+    satisfiedByTaskKey: input.completedTask.taskKey,
+    ...saveAppEvidenceSummary(input.output),
+  };
+  await input.api.completeRunbookTask(
+    input.computerTaskId,
+    persistenceTask.id,
+    output,
+  );
+  input.previousOutputs[persistenceTask.taskKey] = output;
+}
+
+async function recordArtifactRunbookResponseIfReady(
+  computerTaskId: string,
+  api: Pick<ComputerRuntimeApi, "recordRunbookResponse">,
+  output: unknown,
+) {
+  if (!hasSuccessfulSaveAppEvidence(output)) return false;
+  if (!isRecord(output) || typeof output.responseText !== "string") return false;
+  const content = output.responseText.trim();
+  if (!content) return false;
+  await api.recordRunbookResponse(computerTaskId, {
+    content,
+    model: typeof output.model === "string" ? output.model : undefined,
+    usage: output.usage,
+  });
+  return true;
 }
 
 async function recordFinalRunbookResponse(
@@ -297,6 +361,64 @@ function isRunbookAgentStepOutput(
   value: unknown,
 ): value is RunbookAgentStepOutput {
   return isRecord(value) && typeof value.responseText === "string";
+}
+
+function hasSuccessfulSaveAppEvidence(output: unknown) {
+  return saveAppEvidenceSummary(output) !== null;
+}
+
+function saveAppEvidenceSummary(output: unknown) {
+  if (!isRecord(output)) return null;
+  const usage = isRecord(output.usage) ? output.usage : {};
+  const invocations = Array.isArray(usage.tool_invocations)
+    ? usage.tool_invocations
+    : [];
+  for (const invocation of invocations) {
+    if (!isRecord(invocation)) continue;
+    if (invocation.tool_name !== "save_app") continue;
+    const toolOutput = isRecord(invocation.output_json)
+      ? invocation.output_json
+      : parseJsonRecord(invocation.output_preview);
+    if (!toolOutput) continue;
+    if (toolOutput.ok !== true || toolOutput.persisted !== true) continue;
+    const appId =
+      typeof toolOutput.appId === "string" && toolOutput.appId.trim()
+        ? toolOutput.appId.trim()
+        : null;
+    return {
+      ok: true,
+      persisted: true,
+      appId,
+      validated: toolOutput.validated === true,
+    };
+  }
+  return null;
+}
+
+function parseJsonRecord(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isArtifactBuildTask(task: RunbookExecutionTask) {
+  return (
+    task.capabilityRoles.includes("artifact_build") ||
+    task.capabilityRoles.includes("map_build")
+  );
+}
+
+function isPendingLike(status: RunbookTaskStatus) {
+  return status === "pending" || status === "running";
+}
+
+function isSaveAppPersistenceTask(task: RunbookExecutionTask) {
+  const text = `${task.title} ${task.summary ?? ""}`.toLowerCase();
+  return text.includes("save_app") && text.includes("persist");
 }
 
 function positiveNumberFromEnv(name: string, fallback: number) {
