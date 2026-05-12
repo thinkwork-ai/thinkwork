@@ -15,6 +15,7 @@ import {
   validateRunbookDefinition,
   type RunbookDefinition,
 } from "./definition.js";
+import { ensureDefaultComputerRunbookSkillsMaterialized } from "../computers/workspace-seed.js";
 import { parseSkillMdInternal } from "../skill-md-parser.js";
 
 const db = getDb();
@@ -44,6 +45,18 @@ export async function listAssignedComputerRunbookSkills(input: {
   tenantId: string;
   computerId: string;
 }): Promise<ComputerRunbookSkill[]> {
+  try {
+    await ensureDefaultComputerRunbookSkillsMaterialized(input);
+  } catch (err) {
+    console.error(
+      "[runbook-skill-discovery] failed to materialize default runbook skills",
+      {
+        tenantId: input.tenantId,
+        computerId: input.computerId,
+        message: err instanceof Error ? err.message : String(err),
+      },
+    );
+  }
   const workspace = await resolveComputerTemplateWorkspace(input);
   const skillMarkers = await listWorkspaceSkillMarkers(workspace.prefix);
   const runbooks: ComputerRunbookSkill[] = [];

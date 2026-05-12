@@ -1,10 +1,16 @@
 import {
+  CopyObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { and, eq } from "drizzle-orm";
-import { agents, computers, tenants } from "@thinkwork/database-pg/schema";
+import {
+  agents,
+  agentTemplates,
+  computers,
+  tenants,
+} from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 import { isBuiltinToolWorkspacePath } from "../builtin-tool-slugs.js";
 import { enqueueComputerTask } from "./tasks.js";
@@ -16,6 +22,16 @@ const s3 = new S3Client({
 });
 
 const MAX_SEED_FILE_BYTES = 256 * 1024;
+const CATALOG_SKILL_PREFIX = "skills/catalog";
+
+export const PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG =
+  "thinkwork-computer-default";
+
+export const DEFAULT_COMPUTER_RUNBOOK_SKILL_SLUGS = [
+  "crm-dashboard",
+  "research-dashboard",
+  "map-artifact",
+] as const;
 
 type ComputerSeedRow = {
   id: string;
@@ -29,6 +45,16 @@ type SourceWorkspaceFile = {
   key: string;
   etag: string | null;
   size: number;
+};
+
+type DefaultRunbookSkillRow = {
+  id: string;
+  tenant_id: string;
+  tenant_slug: string | null;
+  template_tenant_id: string | null;
+  template_slug: string | null;
+  template_source: string | null;
+  template_kind: string | null;
 };
 
 export async function ensureMigratedComputerWorkspaceSeeded(input: {
@@ -97,6 +123,72 @@ export async function ensureMigratedComputerWorkspaceSeeded(input: {
   return { seeded: true, enqueued, skipped };
 }
 
+export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
+  tenantId: string;
+  computerId: string;
+}) {
+  const target = await loadDefaultRunbookSkillTarget(
+    input.tenantId,
+    input.computerId,
+  );
+  if (!target) return { seeded: false, reason: "computer_missing" };
+  if (
+    target.template_slug !== PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG ||
+    target.template_tenant_id !== null ||
+    target.template_source !== "system" ||
+    target.template_kind !== "computer" ||
+    !target.tenant_slug
+  ) {
+    return { seeded: false, reason: "non_default_template" };
+  }
+
+  let copied = 0;
+  let enqueued = 0;
+  let skipped = 0;
+
+  for (const skillSlug of DEFAULT_COMPUTER_RUNBOOK_SKILL_SLUGS) {
+    const sourcePrefix = `${CATALOG_SKILL_PREFIX}/${skillSlug}/`;
+    const templatePrefix = `tenants/${target.tenant_slug}/agents/_catalog/${PLATFORM_DEFAULT_COMPUTER_TEMPLATE_SLUG}/workspace/skills/${skillSlug}/`;
+    const files = await listWorkspaceFiles(sourcePrefix);
+
+    for (const file of files) {
+      if (file.size === 0 || file.size > MAX_SEED_FILE_BYTES) {
+        skipped++;
+        continue;
+      }
+      const content = await readWorkspaceFile(file.key);
+      if (!content.trim()) {
+        skipped++;
+        continue;
+      }
+
+      const destinationKey = `${templatePrefix}${file.path}`;
+      await copyWorkspaceFile(file.key, destinationKey);
+      copied++;
+
+      await enqueueComputerTask({
+        tenantId: input.tenantId,
+        computerId: input.computerId,
+        taskType: "workspace_file_write",
+        taskInput: {
+          path: `skills/${skillSlug}/${file.path}`,
+          content,
+        },
+        idempotencyKey: [
+          "computer_default_runbook_skill",
+          input.computerId,
+          skillSlug,
+          file.path,
+          file.etag ?? "no-etag",
+        ].join(":"),
+      });
+      enqueued++;
+    }
+  }
+
+  return { seeded: true, copied, enqueued, skipped };
+}
+
 async function loadComputer(tenantId: string, computerId: string) {
   const [computer] = await db
     .select({
@@ -106,9 +198,7 @@ async function loadComputer(tenantId: string, computerId: string) {
       migration_metadata: computers.migration_metadata,
     })
     .from(computers)
-    .where(
-      and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)),
-    )
+    .where(and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)))
     .limit(1);
   return computer;
 }
@@ -134,6 +224,28 @@ async function loadSourceAgentWorkspace(input: {
     agentSlug: row.agent_slug,
     prefix: `tenants/${row.tenant_slug}/agents/${row.agent_slug}/workspace/`,
   };
+}
+
+async function loadDefaultRunbookSkillTarget(
+  tenantId: string,
+  computerId: string,
+): Promise<DefaultRunbookSkillRow | undefined> {
+  const [row] = await db
+    .select({
+      id: computers.id,
+      tenant_id: computers.tenant_id,
+      tenant_slug: tenants.slug,
+      template_tenant_id: agentTemplates.tenant_id,
+      template_slug: agentTemplates.slug,
+      template_source: agentTemplates.source,
+      template_kind: agentTemplates.template_kind,
+    })
+    .from(computers)
+    .leftJoin(tenants, eq(tenants.id, computers.tenant_id))
+    .leftJoin(agentTemplates, eq(agentTemplates.id, computers.template_id))
+    .where(and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)))
+    .limit(1);
+  return row;
 }
 
 async function listWorkspaceFiles(
@@ -182,6 +294,17 @@ async function readWorkspaceFile(key: string) {
     new GetObjectCommand({ Bucket: workspaceBucket(), Key: key }),
   );
   return (await response.Body?.transformToString("utf-8")) ?? "";
+}
+
+async function copyWorkspaceFile(sourceKey: string, destinationKey: string) {
+  const bucket = workspaceBucket();
+  await s3.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      CopySource: `${bucket}/${sourceKey}`,
+      Key: destinationKey,
+    }),
+  );
 }
 
 async function markSeeded(

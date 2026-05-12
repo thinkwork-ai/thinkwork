@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   ensureWorkspace,
+  listWorkspaceFiles,
   readWorkspaceSystemPrompt,
   validateWorkspaceRelativePath,
   writeHealthCheck,
@@ -37,6 +38,23 @@ describe("Computer runtime workspace", () => {
     await expect(readFile(join(root, "drafts/today.md"), "utf8")).resolves.toBe(
       "# Today\n",
     );
+  });
+
+  it("lists materialized skill files nested under the workspace skills folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    await writeWorkspaceFile(root, {
+      path: "skills/crm-dashboard/references/thinkwork-runbook.json",
+      content: '{"slug":"crm-dashboard"}\n',
+    });
+
+    const result = await listWorkspaceFiles(root);
+
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "skills/crm-dashboard/references/thinkwork-runbook.json",
+        bytes: 25,
+      }),
+    ]);
   });
 
   it("builds a system prompt from durable workspace files", async () => {

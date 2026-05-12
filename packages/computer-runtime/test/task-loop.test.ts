@@ -84,6 +84,45 @@ describe("Computer runtime task loop", () => {
     ).resolves.toBe("hello computer\n");
   });
 
+  it("writes materialized runbook skill files under the workspace skills folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const output = await handleTask(
+      {
+        id: "task-skill-write",
+        taskType: "workspace_file_write",
+        input: {
+          path: "skills/crm-dashboard/SKILL.md",
+          content: "---\nname: crm-dashboard\n---\n",
+        },
+      },
+      root,
+    );
+
+    expect(output).toMatchObject({
+      ok: true,
+      taskType: "workspace_file_write",
+      relativePath: "skills/crm-dashboard/SKILL.md",
+      bytes: 28,
+    });
+    await expect(
+      readFile(join(root, "skills/crm-dashboard/SKILL.md"), "utf8"),
+    ).resolves.toBe("---\nname: crm-dashboard\n---\n");
+
+    const listOutput = await handleTask(
+      { id: "task-skill-list", taskType: "workspace_file_list" },
+      root,
+    );
+    expect(listOutput).toMatchObject({
+      ok: true,
+      files: [
+        expect.objectContaining({
+          path: "skills/crm-dashboard/SKILL.md",
+          bytes: 28,
+        }),
+      ],
+    });
+  });
+
   it("lists, reads, and deletes workspace files under the workspace root", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
     await writeFile(join(root, "USER.md"), "Name: Eric\n", "utf8");

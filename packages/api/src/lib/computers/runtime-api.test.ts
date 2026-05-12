@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   runSymphonyPrConnectorWork: vi.fn(),
   notifyNewMessage: vi.fn(),
   notifyThreadUpdate: vi.fn(),
+  ensureMigratedComputerWorkspaceSeeded: vi.fn(),
+  ensureDefaultComputerRunbookSkillsMaterialized: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -92,11 +94,19 @@ vi.mock("./symphony-pr-harness.js", () => ({
   runSymphonyPrConnectorWork: mocks.runSymphonyPrConnectorWork,
 }));
 
+vi.mock("./workspace-seed.js", () => ({
+  ensureMigratedComputerWorkspaceSeeded:
+    mocks.ensureMigratedComputerWorkspaceSeeded,
+  ensureDefaultComputerRunbookSkillsMaterialized:
+    mocks.ensureDefaultComputerRunbookSkillsMaterialized,
+}));
+
 import {
   checkGoogleWorkspaceConnection,
   delegateConnectorWorkTask,
   executeThreadTurnTask,
   loadThreadTurnContext,
+  recordComputerHeartbeat,
   recordThreadTurnResponse,
   resolveGoogleWorkspaceCliToken,
 } from "./runtime-api.js";
@@ -125,6 +135,12 @@ describe("Computer runtime API Google Workspace status", () => {
     });
     mocks.notifyNewMessage.mockResolvedValue(undefined);
     mocks.notifyThreadUpdate.mockResolvedValue(undefined);
+    mocks.ensureMigratedComputerWorkspaceSeeded.mockResolvedValue({
+      seeded: false,
+    });
+    mocks.ensureDefaultComputerRunbookSkillsMaterialized.mockResolvedValue({
+      seeded: false,
+    });
   });
 
   it("reports no active Google Workspace connection for the Computer owner", async () => {
@@ -259,6 +275,60 @@ describe("Computer runtime API Google Workspace status", () => {
       reason: "token_unavailable_or_expired",
     });
     expect(JSON.stringify(result)).not.toContain("accessToken");
+  });
+});
+
+describe("Computer runtime API heartbeat workspace materialization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateRows = [
+      [
+        {
+          id: "computer-1",
+          runtime_status: "running",
+          live_workspace_root: "/workspace",
+          last_heartbeat_at: new Date("2026-05-12T12:00:00.000Z"),
+          last_active_at: new Date("2026-05-12T12:00:00.000Z"),
+        },
+      ],
+    ];
+    mocks.updates = [];
+    mocks.ensureMigratedComputerWorkspaceSeeded.mockResolvedValue({
+      seeded: false,
+    });
+    mocks.ensureDefaultComputerRunbookSkillsMaterialized.mockResolvedValue({
+      seeded: true,
+      copied: 3,
+      enqueued: 3,
+      skipped: 0,
+    });
+  });
+
+  it("materializes default runbook skills after recording heartbeat", async () => {
+    const result = await recordComputerHeartbeat({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      runtimeStatus: "running",
+      runtimeVersion: "runtime-1",
+      workspaceRoot: "/workspace",
+    });
+
+    expect(result).toMatchObject({
+      computerId: "computer-1",
+      runtimeStatus: "running",
+      liveWorkspaceRoot: "/workspace",
+      runtimeVersion: "runtime-1",
+    });
+    expect(mocks.ensureMigratedComputerWorkspaceSeeded).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
+    expect(
+      mocks.ensureDefaultComputerRunbookSkillsMaterialized,
+    ).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
   });
 });
 
