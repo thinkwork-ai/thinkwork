@@ -94,8 +94,7 @@
       "capabilityRoles": ["validation"],
       "dependsOn": ["produce"],
       "taskSeeds": [
-        "Verify the dashboard matches the requested CRM scope and source evidence.",
-        "Check that all major claims are traceable to data or labeled assumptions."
+        "Verify the dashboard matches the requested CRM scope and source evidence."
       ]
     }
   ],

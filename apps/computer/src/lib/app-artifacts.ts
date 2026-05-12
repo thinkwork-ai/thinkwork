@@ -89,6 +89,27 @@ export function formatShortDate(
   return date.toLocaleDateString(undefined, options);
 }
 
+export function formatShortDateTime(
+  value?: string | null,
+  fallback = "—",
+): string {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  const day = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const time = date
+    .toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(/\s+/g, "");
+  return `${day}, ${time}`;
+}
+
 export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
   const title = applet.name?.trim() || "Generated app";
   const prompt = applet.prompt?.trim();

@@ -35,7 +35,7 @@ function ShellLayout() {
       <ComputerSidebar />
       <SidebarInset className="min-h-0 min-w-0 h-svh flex flex-col">
         <AppTopBar />
-        <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-auto">
+        <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
         </main>
       </SidebarInset>

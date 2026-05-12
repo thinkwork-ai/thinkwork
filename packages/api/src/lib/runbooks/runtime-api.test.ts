@@ -73,6 +73,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 import {
+  compactRunbookPreviousOutputs,
   completeRunbookExecutionRun,
   loadRunbookExecutionContext,
   runbookProgressContent,
@@ -181,6 +182,27 @@ describe("runbook runtime API helpers", () => {
         "discover:1": { evidence: ["a"] },
       },
     });
+  });
+
+  it("compacts prior runbook outputs before handing them to later steps", () => {
+    const compacted = compactRunbookPreviousOutputs({
+      "discover:1": {
+        ok: true,
+        responseText: "x".repeat(3_000),
+        toolInvocations: [{ name: "web_search", args: { q: "crm" } }],
+        usage: { input_tokens: 100 },
+      },
+    });
+
+    expect(compacted["discover:1"]).toMatchObject({
+      ok: true,
+      usage: { input_tokens: 100 },
+    });
+    expect(JSON.stringify(compacted)).not.toContain("web_search");
+    expect(
+      String((compacted["discover:1"] as { responseText: string }).responseText)
+        .length,
+    ).toBeLessThan(1_600);
   });
 
   it("formats completed runbook progress without dumping raw task markdown", () => {

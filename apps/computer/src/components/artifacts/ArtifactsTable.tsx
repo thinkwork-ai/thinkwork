@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge, DataTable } from "@thinkwork/ui";
-import { formatShortDate, shortModel } from "@/lib/app-artifacts";
+import { formatShortDateTime, shortModel } from "@/lib/app-artifacts";
 import type { ArtifactItem } from "./artifacts-filtering";
 
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
@@ -64,7 +64,9 @@ export function ArtifactsTable({
         header: "Stdlib",
         size: 100,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+          >
             {row.original.stdlibVersion ?? "—"}
           </span>
         ),
@@ -72,10 +74,12 @@ export function ArtifactsTable({
       {
         accessorKey: "generatedAt",
         header: "Generated",
-        size: 120,
+        size: 140,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
-            {formatShortDate(row.original.generatedAt)}
+          <span
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+          >
+            {formatShortDateTime(row.original.generatedAt)}
           </span>
         ),
       },
@@ -91,7 +95,9 @@ export function ArtifactsTable({
               </Badge>
             </span>
           ) : (
-            <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>—</span>
+            <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+              —
+            </span>
           ),
       },
     ],
