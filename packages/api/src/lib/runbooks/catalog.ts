@@ -1,7 +1,7 @@
 import { and, asc, eq, ne, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { tenantRunbookCatalog } from "@thinkwork/database-pg/schema";
-import type { RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "./definition.js";
 
 const db = getDb();
 

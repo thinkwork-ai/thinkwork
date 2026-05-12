@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { and, asc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { getDb } from "@thinkwork/database-pg";
-import { isAllowedCapabilityRole } from "@thinkwork/runbooks";
+import { isAllowedCapabilityRole } from "./definition.js";
 import {
   agents,
   artifacts,

@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { loadRunbooks } from "@thinkwork/runbooks";
 import {
   buildRunbookDefinitionSnapshot,
   buildRunbookRunRecords,
   transitionRunbookRunStatus,
 } from "./runs.js";
+import { loadCatalogRunbookSkills } from "./test-fixtures.js";
+
+const runbooks = await loadCatalogRunbookSkills();
 
 describe("runbook run helpers", () => {
-  const runbooks = loadRunbooks();
   const requireRunbook = (slug: string) => {
     const runbook = runbooks.find((candidate) => candidate.slug === slug);
     if (!runbook) throw new Error(`Missing test runbook ${slug}`);
@@ -41,7 +42,14 @@ describe("runbook run helpers", () => {
         idempotency_key: "runbook:message-1",
       }),
     );
-    expect(records.run.definition_snapshot).toEqual(runbook);
+    expect(records.run.definition_snapshot).toMatchObject(runbook);
+    expect(records.run.definition_snapshot).toMatchObject({
+      skill: {
+        skillMdSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        contractSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        assetRefs: ["assets/research-dashboard-layout.json"],
+      },
+    });
     expect(records.tasks).toHaveLength(
       runbook.phases.reduce(
         (total, phase) => total + phase.taskSeeds.length,

@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { loadRunbooks } from "@thinkwork/runbooks";
 import {
   buildRunbookCatalogSeedRows,
   getUnavailableCatalogSlugs,
 } from "./catalog.js";
+import { loadCatalogRunbookSkills } from "./test-fixtures.js";
+
+const runbooks = await loadCatalogRunbookSkills();
 
 describe("runbook catalog helpers", () => {
   it("builds one active tenant-scoped catalog row per source runbook", () => {
     const rows = buildRunbookCatalogSeedRows({
       tenantId: "tenant-1",
-      definitions: loadRunbooks(),
+      definitions: runbooks,
     });
 
     const slugs = rows.map((row) => row.slug);
