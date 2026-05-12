@@ -54,7 +54,13 @@ interface CrmDashboardData {
 
 Build the app body only. The Computer host provides Artifact chrome, route title, app label, open-full action, refresh action placement, and iframe wrapper. Do not duplicate that shell inside `App.tsx`.
 
+Use shadcn-compatible primitives from `@thinkwork/ui` for layout and controls: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `Badge`, `Button`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `ScrollArea`, and `Separator` where applicable.
+
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`. At minimum, include KPI cards, stage exposure, stale activity, top risks, and an opportunity table or list. Keep missing-source notes proportional and close to affected metrics.
+
+Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`.
+
+Do not use emoji icons. Use `lucide-react` icons when an icon is needed.
 
 Export `refresh()` when the dashboard can be refreshed. It must rerun saved source queries or deterministic transforms and return data shaped like `CrmDashboardData`; it must not reinterpret the whole prompt or create a different app.
 

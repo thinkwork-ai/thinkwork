@@ -736,6 +736,32 @@ def _save_app_tool_summary(payload: object) -> dict | None:
     return summary or None
 
 
+def _normalize_append_only_stream_delta(state: dict, text: str) -> str | None:
+    """Convert provider full-buffer repeats into append-only deltas.
+
+    Some Strands/Bedrock callbacks send a full accumulated text buffer while
+    others send only the latest delta. The legacy AppSync publisher normalizes
+    that shape before publishing. Typed UIMessage emission uses this same rule
+    so replayed/full-buffer frames do not render duplicated words.
+    """
+    if not text:
+        return None
+    if text == state.get("last_raw_text"):
+        return None
+    state["last_raw_text"] = text
+
+    emitted_text = str(state.get("emitted_text") or "")
+    if emitted_text and text.startswith(emitted_text):
+        suffix = text[len(emitted_text) :]
+        if not suffix:
+            return None
+        state["emitted_text"] = text
+        return suffix
+
+    state["emitted_text"] = emitted_text + text
+    return text
+
+
 def _call_strands_agent(
     system_prompt: str,
     messages: list,
@@ -895,6 +921,8 @@ def _call_strands_agent(
                         "text_part_id": "",
                         "text_started": False,
                         "text_done": False,
+                        "emitted_text": "",
+                        "last_raw_text": "",
                         "reasoning_part_id": "",
                         "reasoning_started": False,
                         "reasoning_done": False,
@@ -931,7 +959,11 @@ def _call_strands_agent(
                         # in U14 once we route reasoning vs text
                         # explicitly upstream.
                         for delta in deltas:
-                            if not delta:
+                            normalized_delta = _normalize_append_only_stream_delta(
+                                typed_state,
+                                delta,
+                            )
+                            if not normalized_delta:
                                 continue
                             if not typed_state["text_started"]:
                                 typed_state["text_part_id"] = _new_id("text")
@@ -940,7 +972,10 @@ def _call_strands_agent(
                                 )
                                 typed_state["text_started"] = True
                             ui_message_publisher_instance.publish_part(
-                                text_delta(typed_state["text_part_id"], delta)
+                                text_delta(
+                                    typed_state["text_part_id"],
+                                    normalized_delta,
+                                )
                             )
 
                         # Tool-use starts

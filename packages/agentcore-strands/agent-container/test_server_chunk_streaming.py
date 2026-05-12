@@ -286,6 +286,20 @@ def test_save_app_tool_summary_preserves_artifact_persistence_evidence():
     }
 
 
+def test_typed_stream_delta_normalizer_handles_full_buffer_replays():
+    state = {}
+
+    assert server._normalize_append_only_stream_delta(state, "Good") == "Good"
+    assert server._normalize_append_only_stream_delta(state, "Good") is None
+    assert server._normalize_append_only_stream_delta(state, "Good morning") == " morning"
+    assert server._normalize_append_only_stream_delta(state, " — ") == " — "
+    assert server._normalize_append_only_stream_delta(state, " — ") is None
+    assert (
+        server._normalize_append_only_stream_delta(state, "new unrelated chunk")
+        == "new unrelated chunk"
+    )
+
+
 def test_computer_applet_build_request_classifier():
     assert server._is_computer_applet_build_request(
         "Build a CRM pipeline risk dashboard for LastMile opportunities"

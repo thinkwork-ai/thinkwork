@@ -228,14 +228,12 @@ export function ComputerThreadDetailRoute({
 
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
-      reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
-    reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     threadId,

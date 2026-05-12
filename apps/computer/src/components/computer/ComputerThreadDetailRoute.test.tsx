@@ -128,6 +128,35 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ComputerThreadDetailRoute", () => {
+  it("does not refetch the full thread for turn-only status updates", () => {
+    let subscriptionCall = 0;
+    vi.mocked(useSubscription).mockImplementation(() => {
+      subscriptionCall += 1;
+      if (subscriptionCall === 1) {
+        return [
+          {
+            data: {
+              onThreadTurnUpdated: {
+                threadId: "thread-1",
+              },
+            },
+            fetching: false,
+            stale: false,
+          },
+          () => {},
+        ];
+      }
+      return [{ data: null, fetching: false, stale: false }, () => {}];
+    });
+
+    render(<ComputerThreadDetailRoute threadId="thread-1" />);
+
+    expect(reexecuteThreadQuery).not.toHaveBeenCalled();
+    expect(reexecuteTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
   it("passes live AppSync chunks into the thread detail while a turn is running", () => {
     streamingChunks = [{ seq: 1, text: "Streaming through the route" }];
     eventData = {
