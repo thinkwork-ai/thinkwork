@@ -57,6 +57,7 @@ status: in_progress
 - 2026-05-12: Began U6 by folding the remaining `@thinkwork/runbooks` validation/type surface into API internals, switching API tests to skill-catalog fixtures, removing the compatibility package, and updating current docs/comments away from the retired package.
 - 2026-05-12: U6 focused verification passed: API runbook tests/typecheck/build, skill-catalog tests, docs build, package-reference searches, `bash -n scripts/build-lambdas.sh`, and touched-file Prettier.
 - 2026-05-12: U6 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, and a clean rerun of `pnpm -r --if-present test`. An earlier full workspace test attempt, run in parallel with typecheck, hit a transient `applets-resolvers.test.ts` timeout; the file passed alone and the full API/workspace reruns passed.
+- 2026-05-12: Opened U6 PR #1176 from `codex/runbook-skill-cleanup-u6`; awaiting required checks.
 
 ## Current Implementation Units
 
@@ -67,7 +68,7 @@ status: in_progress
 | U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.          |
 | U4 Make admin assignment skill-native                                        | merged | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed.          |
 | U5 Adapt execution snapshots and runtime context                             | merged | `codex/runbook-skill-runtime-u5`   | #1172 | Squash-merged to `main` at `185c31cf`; remote branch and worktree removed.          |
-| U6 Clean up compatibility package and naming                                 | active | `codex/runbook-skill-cleanup-u6`   | TBD   | Removed compatibility package and moved live API/test imports to skill-backed code. |
+| U6 Clean up compatibility package and naming                                 | active | `codex/runbook-skill-cleanup-u6`   | #1176 | Removed compatibility package and moved live API/test imports to skill-backed code. |
 
 ## Current CI / Verification Notes
 
