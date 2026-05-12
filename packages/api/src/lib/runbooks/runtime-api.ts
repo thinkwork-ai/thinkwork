@@ -367,6 +367,7 @@ export async function executeRunbookExecutionTask(input: {
     messageId: context.sourceMessage.id,
     computerId: input.computerId,
     computerTaskId: input.taskId,
+    runbookRunId: context.run.id,
     runbookTaskId: input.runbookTaskId,
     runbookContext,
   });
@@ -657,6 +658,7 @@ async function prepareRunbookStepAgentInvocation(input: {
   messageId: string;
   computerId: string;
   computerTaskId: string;
+  runbookRunId: string;
   runbookTaskId: string;
   runbookContext: unknown;
 }) {
@@ -770,7 +772,7 @@ async function prepareRunbookStepAgentInvocation(input: {
         tenantId: input.tenantId,
         agentId: input.agentId,
         threadId: input.threadId,
-        runbookTaskId: input.runbookTaskId,
+        runbookRunId: input.runbookRunId,
         model: model || "",
       }),
       payload,
@@ -921,7 +923,7 @@ function deriveRunbookRuntimeSessionId(input: {
   tenantId: string;
   agentId: string;
   threadId: string;
-  runbookTaskId: string;
+  runbookRunId: string;
   model: string;
 }) {
   const raw = [
@@ -930,7 +932,7 @@ function deriveRunbookRuntimeSessionId(input: {
     input.agentId,
     input.threadId,
     input.model,
-    input.runbookTaskId,
+    input.runbookRunId,
   ].join(":");
   return createHash("sha256").update(raw).digest("hex").slice(0, 64);
 }
