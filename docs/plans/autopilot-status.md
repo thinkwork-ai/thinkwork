@@ -10,9 +10,9 @@ status: in_progress
 
 ## Current State
 
-- Active unit: U4 — Make admin assignment skill-native
-- Active branch/worktree: `codex/runbook-skill-admin-u4` at `.Codex/worktrees/runbook-skill-u4`
-- Latest synced base: `origin/main` at `3d356154`
+- Active unit: U5 — Adapt execution snapshots and runtime context
+- Active branch/worktree: `codex/runbook-skill-runtime-u5` at `.Codex/worktrees/runbook-skill-u5`
+- Latest synced base: `origin/main` at `bc61526e`
 - Overall status: in progress
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
@@ -47,17 +47,34 @@ status: in_progress
 - 2026-05-12: Began U4 by adding a runbook-aware admin skill scaffold plus catalog filtering so Computer templates assign runbook-capable skills through the existing workspace `skills/<slug>/` install/remove flow.
 - 2026-05-12: U4 focused verification passed: `pnpm --filter @thinkwork/admin test -- skill-authoring-templates skills-api WorkspaceEditor.target`, `pnpm --filter @thinkwork/admin test`, `pnpm --filter @thinkwork/admin build`, touched-file Prettier check, and `git diff --check`.
 - 2026-05-12: U4 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
+- 2026-05-12: Opened U4 PR #1171 from `codex/runbook-skill-admin-u4`; required checks passed and the PR was squash-merged to `main` at `bc61526e`.
+- 2026-05-12: Removed U4 remote branch and local worktree, synced `origin/main`, and started U5 in `.Codex/worktrees/runbook-skill-u5` on branch `codex/runbook-skill-runtime-u5`.
+- 2026-05-12: Began U5 by making run snapshots preserve activated skill source metadata, SKILL.md checksums/content, contract checksums, asset references, and Strands skill-instruction context.
+- 2026-05-12: U5 local verification passed: focused API runtime/run snapshot tests, focused Strands runbook context/capability tests, API typecheck/build, API runbook suite, Python ruff checks, workspace typecheck/test/lint/build, touched-file Prettier check, and `git diff --check`.
+- 2026-05-12: Opened U5 PR #1172 from `codex/runbook-skill-runtime-u5`; awaiting required checks.
 
 ## Current Implementation Units
 
-| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                    |
-| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ---------------------------------------------------------------------------------------- |
-| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.               |
-| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.               |
-| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged  | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.               |
-| U4 Make admin assignment skill-native                                        | active  | `codex/runbook-skill-admin-u4`     | TBD   | Admin workspace now treats Computer template runbook assignment as skill install/remove. |
-| U5 Adapt execution snapshots and runtime context                             | pending | TBD                                | TBD   | Starts after U3/U4 establish skill discovery.                                            |
-| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                     |
+| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                |
+| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ------------------------------------------------------------------------------------ |
+| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.           |
+| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.           |
+| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged  | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.           |
+| U4 Make admin assignment skill-native                                        | merged  | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed.           |
+| U5 Adapt execution snapshots and runtime context                             | active  | `codex/runbook-skill-runtime-u5`   | #1172 | Runtime snapshots now preserve activated skill source context for Strands execution. |
+| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                 |
+
+## Current CI / Verification Notes
+
+| Unit | Check                                                                                                                                                      | Status | Notes                                                                                           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| U5   | `pnpm --filter @thinkwork/api test -- runbooks/runs runbooks/runtime-api`                                                                                  | passed | Snapshot and runtime capability helper tests passed.                                            |
+| U5   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed after snapshot and runtime changes.                                    |
+| U5   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                              |
+| U5   | `uv run pytest packages/agentcore-strands/agent-container/test_runbook_context.py packages/agentcore-strands/agent-container/test_runbook_capabilities.py` | passed | Focused Strands context and capability tests passed.                                            |
+| U5   | `uv run ruff format --check ...` / `uv run ruff check ...`                                                                                                 | passed | Focused Python formatting and lint checks passed.                                               |
+| U5   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only. |
+| U5   | `pnpm dlx prettier@3.8.2 --check ...` / `git diff --check`                                                                                                 | passed | Touched-file Prettier check and whitespace check passed.                                        |
 
 ## Previous Autopilot Archive
 

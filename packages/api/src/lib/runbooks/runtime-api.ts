@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { and, asc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { getDb } from "@thinkwork/database-pg";
+import { isAllowedCapabilityRole } from "@thinkwork/runbooks";
 import {
   agents,
   artifacts,
@@ -334,6 +335,17 @@ export async function executeRunbookExecutionTask(input: {
       409,
     );
   }
+  const capabilityError = unsupportedCapabilityError(currentTask);
+  if (capabilityError) {
+    await failRunbookExecutionTask({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      taskId: input.taskId,
+      runbookTaskId: input.runbookTaskId,
+      error: capabilityError,
+    });
+    throw new RunbookRuntimeError(capabilityError.message, 400);
+  }
 
   const [computer] = await db
     .select({
@@ -393,6 +405,24 @@ export async function executeRunbookExecutionTask(input: {
     runbookRunId: context.run.id,
   });
   return result;
+}
+
+export function unsupportedCapabilityError(task: {
+  id: string;
+  taskKey: string;
+  capabilityRoles: string[];
+}) {
+  const unsupported = task.capabilityRoles.filter(
+    (role) => !isAllowedCapabilityRole(role),
+  );
+  if (unsupported.length === 0) return null;
+  return {
+    code: "UNSUPPORTED_RUNBOOK_CAPABILITY",
+    message: `Runbook task ${task.taskKey} requests unsupported capability role(s): ${unsupported.join(", ")}`,
+    taskId: task.id,
+    taskKey: task.taskKey,
+    capabilityRoles: unsupported,
+  };
 }
 
 export async function recordRunbookExecutionResponse(input: {

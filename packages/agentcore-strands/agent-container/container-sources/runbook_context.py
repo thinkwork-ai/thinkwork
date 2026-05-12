@@ -29,6 +29,7 @@ def format_runbook_context(runbook_context: Any) -> str:
     current_phase = normalized["currentPhase"]
     run = normalized["run"]
     definition = normalized["definition"]
+    skill = _skill_snapshot(definition)
     previous_outputs = normalized["previousOutputs"]
     capability_mappings = resolve_task_capabilities(current_task)
 
@@ -51,9 +52,26 @@ def format_runbook_context(runbook_context: Any) -> str:
         f"- **Task status:** `{current_task['status']}`",
         f"- **Capability roles:** {', '.join(current_task['capabilityRoles'])}",
         "",
-        "### Capability Mapping",
+        "### Skill Source Snapshot",
         "",
     ]
+
+    if skill:
+        lines.append(f"- **Skill source:** `{skill['skillMdPath']}`")
+        lines.append(f"- **SKILL.md SHA-256:** `{skill['skillMdSha256']}`")
+        lines.append(f"- **Contract:** `{skill['contractPath']}`")
+        lines.append(f"- **Contract SHA-256:** `{skill['contractSha256']}`")
+        if skill["assetRefs"]:
+            lines.append(f"- **Asset references:** {_format_list(skill['assetRefs'])}")
+        else:
+            lines.append("- **Asset references:** None")
+    else:
+        lines.append("- Skill source metadata was not included in this legacy snapshot.")
+
+    if skill and skill["skillBody"]:
+        lines.extend(["", "### Skill Instructions", "", skill["skillBody"]])
+
+    lines.extend(["", "### Capability Mapping", ""])
 
     for mapping in capability_mappings:
         tools = ", ".join(mapping.get("preferredTools") or [])
@@ -331,6 +349,27 @@ def _queue_task(task: dict[str, Any]) -> dict[str, Any]:
         "summary": task.get("summary"),
         "status": task["status"],
         "capabilityRoles": task["capabilityRoles"],
+    }
+
+
+def _skill_snapshot(definition: dict[str, Any]) -> dict[str, Any] | None:
+    skill = definition.get("skill") if isinstance(definition, dict) else None
+    if not isinstance(skill, dict):
+        return None
+    asset_refs = skill.get("assetRefs") or skill.get("asset_refs") or []
+    if not isinstance(asset_refs, list):
+        asset_refs = []
+    return {
+        "skillMdPath": str(skill.get("skillMdPath") or skill.get("skill_md_path") or "SKILL.md"),
+        "skillMdSha256": str(skill.get("skillMdSha256") or skill.get("skill_md_sha256") or ""),
+        "skillBody": str(skill.get("skillBody") or skill.get("skill_body") or "").strip(),
+        "contractPath": str(
+            skill.get("contractPath")
+            or skill.get("contract_path")
+            or "references/thinkwork-runbook.json"
+        ),
+        "contractSha256": str(skill.get("contractSha256") or skill.get("contract_sha256") or ""),
+        "assetRefs": [str(ref) for ref in asset_refs if str(ref).strip()],
     }
 
 

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { GraphQLError } from "graphql";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -55,7 +56,7 @@ export function buildRunbookRunRecords(input: {
       runbook_version: input.runbook.version,
       status: "awaiting_confirmation" as RunbookRunStatus,
       invocation_mode: input.invocationMode ?? "auto",
-      definition_snapshot: input.runbook,
+      definition_snapshot: buildRunbookDefinitionSnapshot(input.runbook),
       inputs: input.inputs ?? {},
       idempotency_key: input.idempotencyKey ?? null,
     },
@@ -72,6 +73,33 @@ export function buildRunbookRunRecords(input: {
       sort_order: task.sortOrder,
     })),
   };
+}
+
+export function buildRunbookDefinitionSnapshot(
+  runbook: RunbookDefinition,
+): Record<string, unknown> {
+  const snapshot = jsonClone(runbook);
+  const skill = recordValue((runbook as { skill?: unknown }).skill);
+  if (!skill) return snapshot;
+
+  const skillMd = stringValue(skill.skillMd);
+  const contract = recordValue(skill.contract) ?? {};
+  const contractJson = stableJson(contract);
+  snapshot.skill = {
+    slug: stringValue(skill.slug) || runbook.slug,
+    source: stringValue(skill.source) || "template-workspace",
+    skillMdPath: stringValue(skill.skillMdPath) || "SKILL.md",
+    skillMd,
+    skillMdSha256: sha256(skillMd),
+    skillBody: stringValue(skill.skillBody),
+    frontmatter: recordValue(skill.frontmatter) ?? {},
+    contractPath:
+      stringValue(skill.contractPath) || "references/thinkwork-runbook.json",
+    contract,
+    contractSha256: sha256(contractJson),
+    assetRefs: collectAssetRefs(contract),
+  };
+  return snapshot;
 }
 
 export async function createRunbookRun(input: {
@@ -670,6 +698,60 @@ function staleTransitionError() {
     "Runbook run status changed before the transition completed",
     "CONFLICT",
   );
+}
+
+function jsonClone(value: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function sha256(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function collectAssetRefs(contract: Record<string, unknown>) {
+  const refs = new Set<string>();
+  const assets = contract.assets;
+  if (Array.isArray(assets)) {
+    for (const asset of assets) {
+      if (typeof asset === "string" && asset.trim()) refs.add(asset);
+    }
+  }
+
+  const outputs = contract.outputs;
+  if (Array.isArray(outputs)) {
+    for (const output of outputs) {
+      const record = recordValue(output);
+      const asset = record ? stringValue(record.asset) : "";
+      if (asset) refs.add(asset);
+    }
+  }
+  return [...refs].sort();
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function enumToGraphql(value: string) {
