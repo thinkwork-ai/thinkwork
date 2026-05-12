@@ -77,6 +77,7 @@ import {
   loadRunbookExecutionContext,
   runbookProgressContent,
   shouldIncludeRunbookHistoryMessage,
+  unsupportedCapabilityError,
 } from "./runtime-api.js";
 import { failRunbookRunFromThreadTurn, markRunbookRunRunning } from "./runs.js";
 
@@ -238,6 +239,28 @@ describe("runbook runtime API helpers", () => {
       }),
     ).toBe(true);
     expect(shouldIncludeRunbookHistoryMessage({})).toBe(true);
+  });
+
+  it("rejects unsupported capability roles before AgentCore dispatch", () => {
+    expect(
+      unsupportedCapabilityError({
+        id: "rt-1",
+        taskKey: "discover:1",
+        capabilityRoles: ["research", "warehouse_magic"],
+      }),
+    ).toMatchObject({
+      code: "UNSUPPORTED_RUNBOOK_CAPABILITY",
+      taskId: "rt-1",
+      taskKey: "discover:1",
+      capabilityRoles: ["warehouse_magic"],
+    });
+    expect(
+      unsupportedCapabilityError({
+        id: "rt-1",
+        taskKey: "discover:1",
+        capabilityRoles: ["experimental:tenant-tool"],
+      }),
+    ).toBeNull();
   });
 
   it("refuses to complete a run while tasks are still incomplete", async () => {

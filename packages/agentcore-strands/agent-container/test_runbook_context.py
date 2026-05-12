@@ -19,6 +19,14 @@ def _context():
         },
         "definitionSnapshot": {
             "catalog": {"displayName": "Research Dashboard"},
+            "skill": {
+                "skillMdPath": "skills/research-dashboard/SKILL.md",
+                "skillMdSha256": "a" * 64,
+                "skillBody": "Use this skill to build a research dashboard from evidence.",
+                "contractPath": "references/thinkwork-runbook.json",
+                "contractSha256": "b" * 64,
+                "assetRefs": ["assets/research-dashboard.schema.json"],
+            },
             "phases": [
                 {
                     "id": "discover",
@@ -76,8 +84,13 @@ def test_format_runbook_context_includes_task_handoff_and_output_contract():
 
     assert "## Runbook Execution Context" in rendered
     assert "Research Dashboard" in rendered
+    assert "skills/research-dashboard/SKILL.md" in rendered
+    assert "`" + "a" * 64 + "`" in rendered
+    assert "Use this skill to build a research dashboard from evidence." in rendered
+    assert "`assets/research-dashboard.schema.json`" in rendered
     assert "Create the dashboard" in rendered
     assert "Build and save the dashboard artifact." in rendered
+    assert "Find sources and capture confidence." not in rendered
     assert '"discover:1"' in rendered
     assert "Dashboard artifact" in rendered
     assert "`artifact_build` -> `main_computer_agent`" in rendered

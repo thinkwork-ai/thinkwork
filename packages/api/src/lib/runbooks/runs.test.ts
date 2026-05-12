@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadRunbooks } from "@thinkwork/runbooks";
-import { buildRunbookRunRecords, transitionRunbookRunStatus } from "./runs.js";
+import {
+  buildRunbookDefinitionSnapshot,
+  buildRunbookRunRecords,
+  transitionRunbookRunStatus,
+} from "./runs.js";
 
 describe("runbook run helpers", () => {
   const runbooks = loadRunbooks();
@@ -47,6 +51,58 @@ describe("runbook run helpers", () => {
     expect(records.tasks.map((task) => task.sort_order)).toEqual(
       records.tasks.map((_, index) => index + 1),
     );
+  });
+
+  it("snapshots activated skill source, contract, and asset references", () => {
+    const baseRunbook = requireRunbook("crm-dashboard");
+    const runbook = {
+      ...baseRunbook,
+      skill: {
+        slug: "crm-dashboard",
+        source: "template-workspace",
+        skillMdPath: "skills/crm-dashboard/SKILL.md",
+        skillMd:
+          "---\nname: crm-dashboard\n---\n\n# CRM Dashboard\n\nFollow the dashboard skill.",
+        skillBody: "# CRM Dashboard\n\nFollow the dashboard skill.",
+        frontmatter: {
+          name: "crm-dashboard",
+          metadata: { thinkwork_kind: "computer-runbook" },
+        },
+        contractPath: "references/thinkwork-runbook.json",
+        contract: {
+          assets: ["assets/crm-dashboard-data.schema.json"],
+          outputs: [
+            {
+              id: "dashboard",
+              asset: "assets/dashboard-layout.json",
+            },
+          ],
+        },
+      },
+    };
+
+    const snapshot = buildRunbookDefinitionSnapshot(runbook);
+
+    expect(snapshot.slug).toBe("crm-dashboard");
+    expect(snapshot.phases).toEqual(baseRunbook.phases);
+    expect(snapshot.skill).toMatchObject({
+      slug: "crm-dashboard",
+      source: "template-workspace",
+      skillMdPath: "skills/crm-dashboard/SKILL.md",
+      skillMd: expect.stringContaining("# CRM Dashboard"),
+      skillBody: expect.stringContaining("Follow the dashboard skill."),
+      contractPath: "references/thinkwork-runbook.json",
+      assetRefs: [
+        "assets/crm-dashboard-data.schema.json",
+        "assets/dashboard-layout.json",
+      ],
+    });
+    expect((snapshot.skill as { skillMdSha256: string }).skillMdSha256).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(
+      (snapshot.skill as { contractSha256: string }).contractSha256,
+    ).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("preserves declared phase ids and dependency order in expanded tasks", () => {
