@@ -122,6 +122,10 @@ export const agentTemplates = pgTable(
       table.tenant_id,
       table.slug,
     ),
+    uniqueIndex("uq_agent_templates_tenant_id_id").on(
+      table.tenant_id,
+      table.id,
+    ),
     index("idx_agent_templates_tenant").on(table.tenant_id),
     index("idx_agent_templates_category").on(table.category),
     index("idx_agent_templates_source").on(table.source),

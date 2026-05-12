@@ -84,6 +84,10 @@ export const tenantRunbookCatalog = pgTable(
       table.tenant_id,
       table.slug,
     ),
+    uniqueIndex("tenant_runbook_catalog_tenant_id_id_uq").on(
+      table.tenant_id,
+      table.id,
+    ),
     index("idx_tenant_runbook_catalog_tenant_status").on(
       table.tenant_id,
       table.status,
