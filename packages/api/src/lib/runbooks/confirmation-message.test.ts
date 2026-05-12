@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { runbookRegistry } from "@thinkwork/runbooks";
+import { loadRunbooks } from "@thinkwork/runbooks";
 import {
   buildRunbookAmbiguityMessage,
   buildRunbookConfirmationMessage,
   buildRunbookQueueMessage,
 } from "./confirmation-message.js";
 
-const runbook = runbookRegistry.require("map-artifact");
+const runbooks = loadRunbooks();
+const requireRunbook = (slug: string) => {
+  const runbook = runbooks.find((candidate) => candidate.slug === slug);
+  if (!runbook) throw new Error(`Missing test runbook ${slug}`);
+  return runbook;
+};
+const runbook = requireRunbook("map-artifact");
 const run = {
   id: "run-1",
   status: "AWAITING_CONFIRMATION",
@@ -86,7 +92,7 @@ describe("runbook assistant messages", () => {
       candidates: [
         { runbook, confidence: 0.7 },
         {
-          runbook: runbookRegistry.require("research-dashboard"),
+          runbook: requireRunbook("research-dashboard"),
           confidence: 0.68,
         },
       ],

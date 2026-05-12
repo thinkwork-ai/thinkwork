@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { runbookRegistry } from "@thinkwork/runbooks";
+import { loadRunbooks } from "@thinkwork/runbooks";
 import { buildRunbookRunRecords } from "./runs.js";
 
 describe("artifact runbook bridge", () => {
+  const runbooks = loadRunbooks();
+  const requireRunbook = (slug: string) => {
+    const runbook = runbooks.find((candidate) => candidate.slug === slug);
+    if (!runbook) throw new Error(`Missing test runbook ${slug}`);
+    return runbook;
+  };
+
   it("keeps CRM dashboard artifact production inside the runbook phase contract", () => {
-    const runbook = runbookRegistry.require("crm-dashboard");
+    const runbook = requireRunbook("crm-dashboard");
     const produce = runbook.phases.find((phase) => phase.id === "produce");
 
     expect(produce?.capabilityRoles).toEqual(["artifact_build"]);
@@ -50,7 +57,7 @@ describe("artifact runbook bridge", () => {
   });
 
   it("uses the same artifact machinery for generic research dashboards", () => {
-    const runbook = runbookRegistry.require("research-dashboard");
+    const runbook = requireRunbook("research-dashboard");
     const produce = runbook.phases.find((phase) => phase.id === "produce");
 
     expect(produce?.capabilityRoles).toEqual(["artifact_build"]);
@@ -62,7 +69,7 @@ describe("artifact runbook bridge", () => {
   });
 
   it("keeps map artifacts on the MapView-backed artifact path", () => {
-    const runbook = runbookRegistry.require("map-artifact");
+    const runbook = requireRunbook("map-artifact");
     const produce = runbook.phases.find((phase) => phase.id === "produce");
 
     expect(produce?.capabilityRoles).toEqual(["artifact_build", "map_build"]);

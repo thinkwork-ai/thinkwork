@@ -10,9 +10,9 @@ status: in_progress
 
 ## Current State
 
-- Active unit: U2 — Convert existing packaged runbooks into skills
-- Active branch/worktree: `codex/runbook-skills-convert-u2` at `.Codex/worktrees/runbook-skills-u2`
-- Latest synced base: `origin/main` at `32ecce5d`
+- Active unit: U3 — Replace `@thinkwork/runbooks` registry usage with skill catalog discovery
+- Active branch/worktree: `codex/runbook-skill-discovery-u3` at `.Codex/worktrees/runbook-skill-u3`
+- Latest synced base: `origin/main` at `914aee77`
 - Overall status: in progress
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
@@ -36,17 +36,24 @@ status: in_progress
 - 2026-05-12: U2 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, touched-file Prettier check, and `git diff --check`.
 - 2026-05-12: Compound review/autofix pass found two compatibility hardening cleanups before PR: wrap malformed skill YAML/JSON as `RunbookValidationError` and simplify the smoke dry-run phase reader. Re-ran focused checks.
 - 2026-05-12: Rebasing U2 onto `origin/main` brought in PR #1168 (`32ecce5d`) and preserved the CRM dashboard artifact quality-bar updates in `packages/skill-catalog/crm-dashboard/references/produce.md`; re-ran focused checks after the rebase.
+- 2026-05-12: Opened U2 PR #1169 from `codex/runbook-skills-convert-u2`; required checks passed and the PR was squash-merged to `main` at `914aee77`.
+- 2026-05-12: Removed U2 remote branch and local worktree, synced `origin/main`, and started U3 in `.Codex/worktrees/runbook-skill-u3` on branch `codex/runbook-skill-discovery-u3`.
+- 2026-05-12: Began U3 by adding a workspace skill discovery adapter that converts assigned `workspace/skills/<slug>/SKILL.md` plus `references/thinkwork-runbook.json` into the existing Computer run execution shape.
+- 2026-05-12: Removed production API usage of `runbookRegistry.all`/`runbookRegistry.require`; Computer routing now discovers runbook-capable skills from the active template workspace and queues confirmed runs from the stored definition snapshot.
+- 2026-05-12: U3 focused verification passed: `pnpm --filter @thinkwork/api test -- runbooks`, `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/api build`, `pnpm --filter @thinkwork/api test -- computer-thread-cutover-routing`, touched-file Prettier check, and `git diff --check`.
+- 2026-05-12: U3 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
+- 2026-05-12: Opened U3 PR #1170 from `codex/runbook-skill-discovery-u3`; CI monitoring in progress.
 
 ## Current Implementation Units
 
-| Unit                                                                         | Status           | Branch                            | PR    | Notes                                                                                           |
-| ---------------------------------------------------------------------------- | ---------------- | --------------------------------- | ----- | ----------------------------------------------------------------------------------------------- |
-| U1 Define runbook-capable skill contract                                     | merged           | `codex/runbook-skill-contract-u1` | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.                      |
-| U2 Convert existing packaged runbooks into skills                            | locally verified | `codex/runbook-skills-convert-u2` | TBD   | Converts the three starters into catalog skills and keeps compatibility registry reads working. |
-| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | pending          | TBD                               | TBD   | Starts after U2 merges.                                                                         |
-| U4 Make admin assignment skill-native                                        | pending          | TBD                               | TBD   | Starts after U3 merges unless dependency scan says otherwise.                                   |
-| U5 Adapt execution snapshots and runtime context                             | pending          | TBD                               | TBD   | Starts after U3/U4 establish skill discovery.                                                   |
-| U6 Clean up compatibility package and naming                                 | pending          | TBD                               | TBD   | Final cleanup after all production imports are gone.                                            |
+| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                       |
+| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ------------------------------------------------------------------------------------------- |
+| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.                  |
+| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.                  |
+| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | PR open | `codex/runbook-skill-discovery-u3` | #1170 | Routing now uses assigned template workspace skills instead of the global runbook registry. |
+| U4 Make admin assignment skill-native                                        | pending | TBD                                | TBD   | Starts after U3 merges unless dependency scan says otherwise.                               |
+| U5 Adapt execution snapshots and runtime context                             | pending | TBD                                | TBD   | Starts after U3/U4 establish skill discovery.                                               |
+| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                        |
 
 ## Previous Autopilot Archive
 

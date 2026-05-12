@@ -7,7 +7,7 @@ import {
   messages,
   threads,
 } from "@thinkwork/database-pg/schema";
-import { runbookRegistry, type RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "@thinkwork/runbooks";
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { ensureArtifactBuilderDefaults } from "./artifact-builder-defaults.js";
@@ -29,6 +29,10 @@ import {
   markRunbookRunRunning,
 } from "../runbooks/runs.js";
 import { routeRunbookPrompt } from "../runbooks/router.js";
+import {
+  listAssignedComputerRunbookSkills,
+  type ComputerRunbookSkill,
+} from "../runbooks/skill-discovery.js";
 
 const db = getDb();
 
@@ -160,13 +164,20 @@ export async function routeRunbookForComputerMessage(input: {
   prompt: string;
   actorType?: string | null;
   actorId?: string | null;
+  discoverRunbookSkills?: (input: {
+    tenantId: string;
+    computerId: string;
+  }) => Promise<ComputerRunbookSkill[]>;
 }) {
-  const catalog = await seedRunbookCatalogForTenant({
+  const runbooks = await (
+    input.discoverRunbookSkills ?? listAssignedComputerRunbookSkills
+  )({
     tenantId: input.tenantId,
+    computerId: input.computerId,
   });
   const route = routeRunbookPrompt({
     prompt: input.prompt,
-    runbooks: runbookRegistry.all,
+    runbooks,
   });
 
   if (route.kind === "no_match") return false;
@@ -194,6 +205,10 @@ export async function routeRunbookForComputerMessage(input: {
     return true;
   }
 
+  const catalog = await seedRunbookCatalogForTenant({
+    tenantId: input.tenantId,
+    definitions: runbooks,
+  });
   const catalogItem = catalog.find((item) => item.slug === route.runbook.slug);
   if (!isCatalogItemAvailable(catalogItem)) {
     const message = buildRunbookUnavailableMessage({ runbook: route.runbook });
@@ -307,7 +322,7 @@ export async function queueConfirmedRunbookRun(input: {
     runbookRunId: input.runbookRunId,
     decision: "confirmed",
   });
-  const runbook = runbookRegistry.require(run.runbookSlug);
+  const runbook = runbookFromSnapshot(run.definitionSnapshot, run.runbookSlug);
   const task = await enqueueRunbookExecuteTask({
     tenantId: input.tenantId,
     computerId: input.computerId,
@@ -338,6 +353,22 @@ export async function queueConfirmedRunbookRun(input: {
     },
   });
   return task;
+}
+
+function runbookFromSnapshot(
+  snapshot: unknown,
+  expectedSlug: string,
+): RunbookDefinition {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new Error(`Runbook run ${expectedSlug} has no definition snapshot`);
+  }
+  const runbook = snapshot as RunbookDefinition;
+  if (runbook.slug !== expectedSlug) {
+    throw new Error(
+      `Runbook snapshot slug mismatch: expected ${expectedSlug}, got ${runbook.slug}`,
+    );
+  }
+  return runbook;
 }
 
 export async function markRunbookConfirmationDecision(input: {

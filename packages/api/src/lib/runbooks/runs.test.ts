@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { runbookRegistry } from "@thinkwork/runbooks";
+import { loadRunbooks } from "@thinkwork/runbooks";
 import { buildRunbookRunRecords, transitionRunbookRunStatus } from "./runs.js";
 
 describe("runbook run helpers", () => {
+  const runbooks = loadRunbooks();
+  const requireRunbook = (slug: string) => {
+    const runbook = runbooks.find((candidate) => candidate.slug === slug);
+    if (!runbook) throw new Error(`Missing test runbook ${slug}`);
+    return runbook;
+  };
+
   it("creates a run snapshot with the selected source version and task skeleton", () => {
-    const runbook = runbookRegistry.require("research-dashboard");
+    const runbook = requireRunbook("research-dashboard");
     const records = buildRunbookRunRecords({
       tenantId: "tenant-1",
       computerId: "computer-1",
@@ -43,7 +50,7 @@ describe("runbook run helpers", () => {
   });
 
   it("preserves declared phase ids and dependency order in expanded tasks", () => {
-    const runbook = runbookRegistry.require("crm-dashboard");
+    const runbook = requireRunbook("crm-dashboard");
     const records = buildRunbookRunRecords({
       tenantId: "tenant-1",
       computerId: "computer-1",
