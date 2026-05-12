@@ -337,6 +337,25 @@ export const MyComputerQuery = graphql(`
   }
 `);
 
+export const CreateComputerMutation = graphql(`
+  mutation CreateComputer($input: CreateComputerInput!) {
+    createComputer(input: $input) {
+      id
+      name
+      slug
+      status
+      desiredRuntimeStatus
+      runtimeStatus
+      tenantId
+      ownerUserId
+      templateId
+      budgetMonthlyCents
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const UpdateComputerMutation = graphql(`
   mutation UpdateComputer($id: ID!, $input: UpdateComputerInput!) {
     updateComputer(id: $id, input: $input) {
