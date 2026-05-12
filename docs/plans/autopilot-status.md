@@ -51,6 +51,7 @@ status: in_progress
 - 2026-05-12: Removed U4 remote branch and local worktree, synced `origin/main`, and started U5 in `.Codex/worktrees/runbook-skill-u5` on branch `codex/runbook-skill-runtime-u5`.
 - 2026-05-12: Began U5 by making run snapshots preserve activated skill source metadata, SKILL.md checksums/content, contract checksums, asset references, and Strands skill-instruction context.
 - 2026-05-12: U5 local verification passed: focused API runtime/run snapshot tests, focused Strands runbook context/capability tests, API typecheck/build, API runbook suite, Python ruff checks, workspace typecheck/test/lint/build, touched-file Prettier check, and `git diff --check`.
+- 2026-05-12: Opened U5 PR #1172 from `codex/runbook-skill-runtime-u5`; awaiting required checks.
 
 ## Current Implementation Units
 
@@ -60,7 +61,7 @@ status: in_progress
 | U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.           |
 | U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged  | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.           |
 | U4 Make admin assignment skill-native                                        | merged  | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed.           |
-| U5 Adapt execution snapshots and runtime context                             | active  | `codex/runbook-skill-runtime-u5`   | TBD   | Runtime snapshots now preserve activated skill source context for Strands execution. |
+| U5 Adapt execution snapshots and runtime context                             | active  | `codex/runbook-skill-runtime-u5`   | #1172 | Runtime snapshots now preserve activated skill source context for Strands execution. |
 | U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                 |
 
 ## Current CI / Verification Notes
