@@ -48,6 +48,8 @@ const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 const AGENTCORE_RUNTIME_SSM_STRANDS =
   process.env.AGENTCORE_RUNTIME_SSM_STRANDS ||
   `/thinkwork/${STAGE}/agentcore/runtime-id-strands`;
+const MAX_PREVIOUS_OUTPUT_TEXT_CHARS = 1_500;
+const MAX_PREVIOUS_OUTPUT_JSON_CHARS = 4_000;
 
 let cachedStrandsRuntimeId: string | null = null;
 
@@ -130,10 +132,12 @@ export async function loadRunbookExecutionContext(input: {
       : null,
     definitionSnapshot: run.definition_snapshot,
     inputs: run.inputs,
-    previousOutputs: Object.fromEntries(
-      tasks
-        .filter((task) => task.status === "completed")
-        .map((task) => [task.task_key, task.output ?? null]),
+    previousOutputs: compactRunbookPreviousOutputs(
+      Object.fromEntries(
+        tasks
+          .filter((task) => task.status === "completed")
+          .map((task) => [task.task_key, task.output ?? null]),
+      ),
     ),
   };
 }
@@ -879,7 +883,8 @@ function buildRunbookStepPrompt(input: {
     "Execute only the current task from the Runbook Execution Context.",
     "Do not print the full task list. Do not claim later tasks are complete.",
     "Use the available Strands tools when the task requires research, browser automation, or applet creation.",
-    "Return a concise task output that the next runbook task can use.",
+    "Return a concise task output that the next runbook task can use. Do not include full source code, full tables, or raw tool dumps unless the current task explicitly requires that exact artifact.",
+    "This step must finish quickly; prefer a useful bounded result over exhaustive analysis.",
     "",
     "Original user request:",
     input.originalPrompt,
@@ -929,10 +934,10 @@ async function prepareRunbookStepAgentInvocation(input: {
   }
   const runtimeArn = `arn:aws:bedrock-agentcore:${AWS_REGION}:${AWS_ACCOUNT_ID}:runtime/${runtimeId}`;
   const model = runtimeConfig.templateModel;
-  const messagesHistory = await loadThreadMessageHistory({
-    threadId: input.threadId,
-    excludeMessageId: input.messageId,
-  });
+  const messagesHistory: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }> = [];
 
   let sandboxPreflight: SandboxPreflightResult | null = null;
   if (identity.currentUserId && runtimeConfig.sandboxTemplate) {
@@ -1449,6 +1454,55 @@ function recordValue(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function compactRunbookPreviousOutputs(
+  outputs: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(outputs).map(([key, value]) => [
+      key,
+      compactRunbookOutputValue(value),
+    ]),
+  );
+}
+
+function compactRunbookOutputValue(value: unknown): unknown {
+  if (value == null) return value;
+  if (typeof value === "string") {
+    return truncateText(value, MAX_PREVIOUS_OUTPUT_TEXT_CHARS);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 8).map(compactRunbookOutputValue);
+  }
+  if (!isRecord(value)) return value;
+
+  const compact: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "responseText" || key === "outputText" || key === "content") {
+      compact[key] =
+        typeof nested === "string"
+          ? truncateText(nested, MAX_PREVIOUS_OUTPUT_TEXT_CHARS)
+          : compactRunbookOutputValue(nested);
+      continue;
+    }
+    if (key === "toolInvocations" || key === "inputText") {
+      continue;
+    }
+    compact[key] = compactRunbookOutputValue(nested);
+  }
+
+  const json = JSON.stringify(compact);
+  if (json.length <= MAX_PREVIOUS_OUTPUT_JSON_CHARS) return compact;
+  return {
+    summary: truncateText(json, MAX_PREVIOUS_OUTPUT_JSON_CHARS),
+    truncated: true,
+  };
+}
+
+function truncateText(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 14)).trimEnd()}... [truncated]`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

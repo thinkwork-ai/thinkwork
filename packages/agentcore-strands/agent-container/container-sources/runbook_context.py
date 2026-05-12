@@ -7,6 +7,9 @@ from typing import Any
 
 from runbook_capabilities import resolve_task_capabilities
 
+MAX_PREVIOUS_OUTPUT_TEXT_CHARS = 1500
+MAX_PREVIOUS_OUTPUT_JSON_CHARS = 4000
+
 
 class RunbookContextError(ValueError):
     """Raised when runtime-supplied runbook context is incomplete or unsafe."""
@@ -99,7 +102,14 @@ def format_runbook_context(runbook_context: Any) -> str:
     )
     if previous_outputs:
         lines.append("```json")
-        lines.append(json.dumps(previous_outputs, indent=2, ensure_ascii=False, sort_keys=True))
+        lines.append(
+            json.dumps(
+                _compact_previous_outputs(previous_outputs),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         lines.append("```")
     else:
         lines.append("No prior task outputs are available for this task.")
@@ -401,6 +411,41 @@ def _string_at(value: dict[str, Any], key: str, *, fallback_key: str = "") -> st
     if not isinstance(result, str) or not result.strip():
         raise RunbookContextError(f"Runbook context missing {key}")
     return result.strip()
+
+
+def _compact_previous_outputs(value: Any) -> Any:
+    if value is None:
+        return value
+    if isinstance(value, str):
+        return _truncate_text(value, MAX_PREVIOUS_OUTPUT_TEXT_CHARS)
+    if isinstance(value, list):
+        return [_compact_previous_outputs(item) for item in value[:8]]
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for key, nested in value.items():
+            if key in {"toolInvocations", "inputText"}:
+                continue
+            if key in {"responseText", "outputText", "content"} and isinstance(nested, str):
+                compact[key] = _truncate_text(nested, MAX_PREVIOUS_OUTPUT_TEXT_CHARS)
+            else:
+                compact[key] = _compact_previous_outputs(nested)
+        try:
+            serialized = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        except TypeError:
+            return str(compact)[:MAX_PREVIOUS_OUTPUT_JSON_CHARS]
+        if len(serialized) <= MAX_PREVIOUS_OUTPUT_JSON_CHARS:
+            return compact
+        return {
+            "summary": _truncate_text(serialized, MAX_PREVIOUS_OUTPUT_JSON_CHARS),
+            "truncated": True,
+        }
+    return value
+
+
+def _truncate_text(value: str, max_chars: int) -> str:
+    if len(value) <= max_chars:
+        return value
+    return value[: max(0, max_chars - 14)].rstrip() + "... [truncated]"
 
 
 def _format_list(values: list[str]) -> str:
