@@ -10,9 +10,9 @@ status: in_progress
 
 ## Current State
 
-- Active unit: U3 — Replace `@thinkwork/runbooks` registry usage with skill catalog discovery
-- Active branch/worktree: `codex/runbook-skill-discovery-u3` at `.Codex/worktrees/runbook-skill-u3`
-- Latest synced base: `origin/main` at `914aee77`
+- Active unit: U4 — Make admin assignment skill-native
+- Active branch/worktree: `codex/runbook-skill-admin-u4` at `.Codex/worktrees/runbook-skill-u4`
+- Latest synced base: `origin/main` at `3d356154`
 - Overall status: in progress
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
@@ -42,18 +42,22 @@ status: in_progress
 - 2026-05-12: Removed production API usage of `runbookRegistry.all`/`runbookRegistry.require`; Computer routing now discovers runbook-capable skills from the active template workspace and queues confirmed runs from the stored definition snapshot.
 - 2026-05-12: U3 focused verification passed: `pnpm --filter @thinkwork/api test -- runbooks`, `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/api build`, `pnpm --filter @thinkwork/api test -- computer-thread-cutover-routing`, touched-file Prettier check, and `git diff --check`.
 - 2026-05-12: U3 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
-- 2026-05-12: Opened U3 PR #1170 from `codex/runbook-skill-discovery-u3`; CI monitoring in progress.
+- 2026-05-12: Opened U3 PR #1170 from `codex/runbook-skill-discovery-u3`; required checks passed and the PR was squash-merged to `main` at `3d356154`.
+- 2026-05-12: Removed U3 remote branch and local worktree, synced `origin/main`, and started U4 in `.Codex/worktrees/runbook-skill-u4` on branch `codex/runbook-skill-admin-u4`.
+- 2026-05-12: Began U4 by adding a runbook-aware admin skill scaffold plus catalog filtering so Computer templates assign runbook-capable skills through the existing workspace `skills/<slug>/` install/remove flow.
+- 2026-05-12: U4 focused verification passed: `pnpm --filter @thinkwork/admin test -- skill-authoring-templates skills-api WorkspaceEditor.target`, `pnpm --filter @thinkwork/admin test`, `pnpm --filter @thinkwork/admin build`, touched-file Prettier check, and `git diff --check`.
+- 2026-05-12: U4 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
 
 ## Current Implementation Units
 
-| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                       |
-| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ------------------------------------------------------------------------------------------- |
-| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.                  |
-| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.                  |
-| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | PR open | `codex/runbook-skill-discovery-u3` | #1170 | Routing now uses assigned template workspace skills instead of the global runbook registry. |
-| U4 Make admin assignment skill-native                                        | pending | TBD                                | TBD   | Starts after U3 merges unless dependency scan says otherwise.                               |
-| U5 Adapt execution snapshots and runtime context                             | pending | TBD                                | TBD   | Starts after U3/U4 establish skill discovery.                                               |
-| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                        |
+| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                    |
+| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ---------------------------------------------------------------------------------------- |
+| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.               |
+| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.               |
+| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged  | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.               |
+| U4 Make admin assignment skill-native                                        | active  | `codex/runbook-skill-admin-u4`     | TBD   | Admin workspace now treats Computer template runbook assignment as skill install/remove. |
+| U5 Adapt execution snapshots and runtime context                             | pending | TBD                                | TBD   | Starts after U3/U4 establish skill discovery.                                            |
+| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                     |
 
 ## Previous Autopilot Archive
 

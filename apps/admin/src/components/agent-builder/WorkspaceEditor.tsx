@@ -5,6 +5,7 @@ import {
   FilePlus,
   Folder,
   FolderPlus,
+  ListChecks,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -53,7 +54,9 @@ import {
 import {
   installSkillToAgent,
   installSkillToTemplate,
+  filterCatalogSkills,
   listCatalog,
+  type CatalogSkillFilter,
   type CatalogSkill,
 } from "@/lib/skills-api";
 import { cn } from "@/lib/utils";
@@ -187,6 +190,7 @@ export interface WorkspaceEditorProps {
   initialFolder?: string;
   bootstrapFiles?: Record<string, string>;
   bootstrapLabel?: string;
+  preferRunbookSkills?: boolean;
   className?: string;
 }
 
@@ -286,12 +290,20 @@ export function WorkspaceEditor({
   initialFolder,
   bootstrapFiles,
   bootstrapLabel = "Create Default Files",
+  preferRunbookSkills = false,
   className,
 }: WorkspaceEditorProps) {
   const { tenant } = useTenant();
   const capabilities = workspaceEditorCapabilities(mode);
   const key = workspaceEditorTargetKey(target);
   const stableTarget = useMemo(() => target, [key]);
+  const defaultSkillTemplate: SkillTemplateKey = preferRunbookSkills
+    ? "runbook"
+    : "knowledge";
+  const defaultSkillCategory = preferRunbookSkills ? "artifact" : "custom";
+  const defaultCatalogSkillFilter: CatalogSkillFilter = preferRunbookSkills
+    ? "runbooks"
+    : "all";
   const [files, setFiles] = useState<string[]>([]);
   const [fileSources, setFileSources] = useState<Record<string, ComposeSource>>(
     {},
@@ -332,11 +344,14 @@ export function WorkspaceEditor({
     null,
   );
   const [newSkillTemplate, setNewSkillTemplate] =
-    useState<SkillTemplateKey>("knowledge");
+    useState<SkillTemplateKey>(defaultSkillTemplate);
   const [newSkillName, setNewSkillName] = useState("");
   const [newSkillDescription, setNewSkillDescription] = useState("");
-  const [newSkillCategory, setNewSkillCategory] = useState("custom");
+  const [newSkillCategory, setNewSkillCategory] =
+    useState(defaultSkillCategory);
   const [newSkillTags, setNewSkillTags] = useState("");
+  const [catalogSkillFilter, setCatalogSkillFilter] =
+    useState<CatalogSkillFilter>(defaultCatalogSkillFilter);
   const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -418,7 +433,20 @@ export function WorkspaceEditor({
     setRoutingRows([]);
     setShowAddSubAgentDialog(false);
     setSubAgentCreateError(null);
-  }, [key]);
+    setShowCatalogSkillDialog(false);
+    setCatalogInstallError(null);
+    setCatalogSkillFilter(defaultCatalogSkillFilter);
+    setNewSkillTemplate(defaultSkillTemplate);
+    setNewSkillCategory(defaultSkillCategory);
+    setNewSkillName("");
+    setNewSkillDescription("");
+    setNewSkillTags("");
+  }, [
+    key,
+    defaultCatalogSkillFilter,
+    defaultSkillCategory,
+    defaultSkillTemplate,
+  ]);
 
   useEffect(() => {
     fetchFiles({ showLoading: true });
@@ -439,12 +467,17 @@ export function WorkspaceEditor({
     [files],
   );
 
-  const availableCatalogSkills = useMemo(
+  const uninstalledCatalogSkills = useMemo(
     () =>
       catalogSkills.filter(
         (skill) => !installedWorkspaceSkillSlugs.has(skill.slug),
       ),
     [catalogSkills, installedWorkspaceSkillSlugs],
+  );
+
+  const availableCatalogSkills = useMemo(
+    () => filterCatalogSkills(uninstalledCatalogSkills, catalogSkillFilter),
+    [catalogSkillFilter, uninstalledCatalogSkills],
   );
 
   useEffect(() => {
@@ -627,12 +660,33 @@ export function WorkspaceEditor({
     }
   };
 
-  const resetNewSkillDialog = () => {
-    setNewSkillTemplate("knowledge");
+  const resetNewSkillDialog = useCallback(() => {
+    setNewSkillTemplate(defaultSkillTemplate);
     setNewSkillName("");
     setNewSkillDescription("");
-    setNewSkillCategory("custom");
+    setNewSkillCategory(defaultSkillCategory);
     setNewSkillTags("");
+  }, [defaultSkillCategory, defaultSkillTemplate]);
+
+  const openNewSkillDialog = useCallback(() => {
+    resetNewSkillDialog();
+    setShowNewSkillDialog(true);
+  }, [resetNewSkillDialog]);
+
+  const openCatalogSkillDialog = useCallback(
+    (filter: CatalogSkillFilter = defaultCatalogSkillFilter) => {
+      setCatalogSkillFilter(filter);
+      setCatalogInstallError(null);
+      setShowCatalogSkillDialog(true);
+    },
+    [defaultCatalogSkillFilter],
+  );
+
+  const handleNewSkillTemplateChange = (template: SkillTemplateKey) => {
+    setNewSkillTemplate(template);
+    if (template === "runbook") {
+      setNewSkillCategory("artifact");
+    }
   };
 
   const newSkillSlug = slugifySkillName(newSkillName);
@@ -901,22 +955,27 @@ export function WorkspaceEditor({
         {capabilities.canCreateLocalSkill ? (
           <DropdownMenuItem
             className="whitespace-nowrap"
-            onClick={() => setShowNewSkillDialog(true)}
+            onClick={openNewSkillDialog}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            New Skill
+            {preferRunbookSkills ? (
+              <ListChecks className="mr-2 h-4 w-4" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            {preferRunbookSkills ? "New Runbook Skill" : "New Skill"}
           </DropdownMenuItem>
         ) : null}
         {capabilities.canAddCatalogSkill ? (
           <DropdownMenuItem
             className="whitespace-nowrap"
-            onClick={() => {
-              setCatalogInstallError(null);
-              setShowCatalogSkillDialog(true);
-            }}
+            onClick={() => openCatalogSkillDialog()}
           >
-            <Search className="mr-2 h-4 w-4" />
-            Add from catalog
+            {preferRunbookSkills ? (
+              <ListChecks className="mr-2 h-4 w-4" />
+            ) : (
+              <Search className="mr-2 h-4 w-4" />
+            )}
+            {preferRunbookSkills ? "Add Runbook Skill" : "Add from catalog"}
           </DropdownMenuItem>
         ) : null}
         {(capabilities.canAddSubAgent ||
@@ -1059,11 +1118,9 @@ export function WorkspaceEditor({
                 onDelete={handleDeletePath}
                 onConfirmDelete={handleConfirmDelete}
                 onCancelDeleteConfirm={handleCancelDeleteConfirm}
-                onCreateSkill={() => setShowNewSkillDialog(true)}
-                onAddSkillFromCatalog={() => {
-                  setCatalogInstallError(null);
-                  setShowCatalogSkillDialog(true);
-                }}
+                onCreateSkill={openNewSkillDialog}
+                onAddSkillFromCatalog={() => openCatalogSkillDialog()}
+                preferRunbookSkills={preferRunbookSkills}
               />
             </div>
           </div>
@@ -1177,9 +1234,14 @@ export function WorkspaceEditor({
         >
           <DialogContent style={{ maxWidth: 520 }}>
             <DialogHeader>
-              <DialogTitle>Add from catalog</DialogTitle>
+              <DialogTitle>
+                {catalogSkillFilter === "runbooks"
+                  ? "Add Runbook Skill"
+                  : "Add from catalog"}
+              </DialogTitle>
               <DialogDescription>
-                Install a catalog skill into this workspace.
+                Install a catalog skill into this workspace. Runbook skills are
+                activated by their folder under <code>skills/</code>.
               </DialogDescription>
             </DialogHeader>
             {catalogInstallError ? (
@@ -1187,6 +1249,28 @@ export function WorkspaceEditor({
                 {catalogInstallError}
               </div>
             ) : null}
+            <div className="flex items-center gap-1 rounded-md border bg-muted/30 p-1">
+              <Button
+                type="button"
+                variant={catalogSkillFilter === "all" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 flex-1"
+                onClick={() => setCatalogSkillFilter("all")}
+              >
+                All skills
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  catalogSkillFilter === "runbooks" ? "secondary" : "ghost"
+                }
+                size="sm"
+                className="h-7 flex-1"
+                onClick={() => setCatalogSkillFilter("runbooks")}
+              >
+                Runbook skills
+              </Button>
+            </div>
             <div className="-mx-2 max-h-[420px] overflow-y-auto">
               {loadingCatalogSkills ? (
                 <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
@@ -1195,7 +1279,9 @@ export function WorkspaceEditor({
                 </div>
               ) : availableCatalogSkills.length === 0 ? (
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  All catalog skills are already installed.
+                  {catalogSkillFilter === "runbooks"
+                    ? "All runbook skills are already installed."
+                    : "All catalog skills are already installed."}
                 </p>
               ) : (
                 availableCatalogSkills.map((skill) => (
@@ -1231,10 +1317,15 @@ export function WorkspaceEditor({
         <Dialog open={showNewSkillDialog} onOpenChange={setShowNewSkillDialog}>
           <DialogContent style={{ maxWidth: 520 }}>
             <DialogHeader>
-              <DialogTitle>New Local Skill</DialogTitle>
+              <DialogTitle>
+                {newSkillTemplate === "runbook"
+                  ? "New Runbook Skill"
+                  : "New Local Skill"}
+              </DialogTitle>
               <DialogDescription>
                 Create a local skill under{" "}
-                <code>skills/{newSkillSlug || "skill-slug"}/</code>.
+                <code>skills/{newSkillSlug || "skill-slug"}/</code>. Runbook
+                skills use standard Agent Skill files plus a reference contract.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4">
@@ -1243,7 +1334,7 @@ export function WorkspaceEditor({
                 <Select
                   value={newSkillTemplate}
                   onValueChange={(value) =>
-                    setNewSkillTemplate(value as SkillTemplateKey)
+                    handleNewSkillTemplateChange(value as SkillTemplateKey)
                   }
                 >
                   <SelectTrigger>

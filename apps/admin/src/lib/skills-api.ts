@@ -5,7 +5,11 @@ import { apiFetch, ApiError } from "@/lib/api-fetch";
 // surfaces the best-effort error body; we just re-throw as a plain Error.
 async function request<T>(
   path: string,
-  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    body?: string;
+    extraHeaders?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   try {
     return await apiFetch<T>(path, options);
@@ -55,6 +59,20 @@ export type CatalogSkill = {
     default_enabled?: boolean;
   }>;
 };
+
+export type CatalogSkillFilter = "all" | "runbooks";
+
+export function isRunbookCatalogSkill(skill: CatalogSkill): boolean {
+  return skill.tags.some((tag) => tag.toLowerCase() === "computer-runbook");
+}
+
+export function filterCatalogSkills(
+  skills: CatalogSkill[],
+  filter: CatalogSkillFilter,
+): CatalogSkill[] {
+  if (filter === "runbooks") return skills.filter(isRunbookCatalogSkill);
+  return skills;
+}
 
 export type InstalledSkill = {
   slug: string;
