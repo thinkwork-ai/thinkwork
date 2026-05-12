@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useAuth } from "@/context/AuthContext";
@@ -8,8 +8,21 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { EmptyState } from "@/components/EmptyState";
-import { Users } from "lucide-react";
-import { TenantMembersListQuery } from "@/lib/graphql-queries";
+import { Monitor, Plus, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  ComputersListQuery,
+  TenantMembersListQuery,
+} from "@/lib/graphql-queries";
+import { ComputerStatus } from "@/gql/graphql";
+import { ComputerFormDialog } from "@/components/computers/ComputerFormDialog";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
 import { HumanMembershipSection } from "@/components/humans/HumanMembershipSection";
 
@@ -22,9 +35,17 @@ function HumanDetailPage() {
   const { tenantId } = useTenant();
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
+  const [provisionOpen, setProvisionOpen] = useState(false);
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+
+  const [computersResult, reexecuteComputers] = useQuery({
+    query: ComputersListQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
     requestPolicy: "cache-and-network",
@@ -36,6 +57,28 @@ function HumanDetailPage() {
   );
 
   const humanName = member?.user?.name ?? member?.user?.email ?? "Person";
+
+  const hasActiveComputer = useMemo(() => {
+    const userId = member?.user?.id;
+    if (!userId) return false;
+    const computers = computersResult.data?.computers ?? [];
+    return computers.some(
+      (c) =>
+        c.ownerUserId === userId &&
+        c.status !== ComputerStatus.Archived,
+    );
+  }, [computersResult.data, member]);
+
+  // The CTA stays hidden until the computers fetch has fresh data — not just
+  // any data. With urql's cache-and-network policy, `data != null` is true
+  // immediately when a cached snapshot exists, but `stale` stays true until
+  // the network leg confirms. Without the stale guard the CTA flashes for
+  // users whose stale cache says "no Computer" while the network is still
+  // proving they actually have one.
+  const computersQueryFresh =
+    computersResult.data != null && !computersResult.stale;
+  const showProvisionCta =
+    !!member?.user?.id && computersQueryFresh && !hasActiveComputer;
 
   useBreadcrumbs([
     { label: "People", href: "/people" },
@@ -90,6 +133,33 @@ function HumanDetailPage() {
             image: member.user.image,
           }}
         />
+        {showProvisionCta && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Monitor className="h-4 w-4 text-cyan-600" />
+                    Computer
+                  </CardTitle>
+                  <CardDescription>
+                    {humanName} doesn&apos;t have a Computer yet. Provisioning
+                    creates their durable AWS workplace.
+                  </CardDescription>
+                </div>
+                <Button onClick={() => setProvisionOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Provision Computer
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs text-muted-foreground">
+              New tenant members are auto-provisioned on join. This affordance
+              exists for backfill cases — members who pre-date auto-provision,
+              or whose Computer was archived.
+            </CardContent>
+          </Card>
+        )}
         <HumanMembershipSection
           memberId={member.id}
           currentRole={member.role}
@@ -103,6 +173,23 @@ function HumanDetailPage() {
           }}
         />
       </div>
+      <ComputerFormDialog
+        open={provisionOpen}
+        onOpenChange={setProvisionOpen}
+        initial={{
+          ownerUserId: member.user.id,
+          name: `${humanName}'s Computer`,
+        }}
+        ownerLocked
+        onCreated={(computerId) => {
+          reexecuteComputers({ requestPolicy: "network-only" });
+          navigate({
+            to: "/computers/$computerId",
+            params: { computerId },
+            search: { tab: "dashboard" },
+          });
+        }}
+      />
     </PageLayout>
   );
 }

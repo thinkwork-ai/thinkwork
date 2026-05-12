@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Monitor, RefreshCw, User } from "lucide-react";
+import { Monitor, Plus, RefreshCw, User } from "lucide-react";
+import { ComputerFormDialog } from "@/components/computers/ComputerFormDialog";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
@@ -169,6 +170,7 @@ function ComputersPage() {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [createOpen, setCreateOpen] = useState(false);
   useBreadcrumbs([{ label: "Computers" }]);
 
   const [result, reexecute] = useQuery({
@@ -215,14 +217,20 @@ function ComputersPage() {
             title="Computers"
             description="One durable AWS-native workplace per user, with live runtime state and migration provenance."
             actions={
-              <Button
-                variant="outline"
-                onClick={() => reexecute({ requestPolicy: "network-only" })}
-                disabled={result.fetching}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => reexecute({ requestPolicy: "network-only" })}
+                  disabled={result.fetching}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  New Computer
+                </Button>
+              </>
             }
           />
           <div className="mt-4 flex items-center gap-2">
@@ -261,10 +269,10 @@ function ComputersPage() {
         <EmptyState
           icon={Monitor}
           title="No Computers yet"
-          description="Run the Agent-to-Computer migration or provision users to create their durable workspaces."
+          description="Provision the first Computer for a tenant member, or wait for auto-provision to fire on the next membership add."
           action={{
-            label: "View People",
-            onClick: () => navigate({ to: "/people" }),
+            label: "New Computer",
+            onClick: () => setCreateOpen(true),
           }}
         />
       ) : (
@@ -282,6 +290,18 @@ function ComputersPage() {
           }
         />
       )}
+      <ComputerFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(computerId) => {
+          reexecute({ requestPolicy: "network-only" });
+          navigate({
+            to: "/computers/$computerId",
+            params: { computerId },
+            search: { tab: "dashboard" },
+          });
+        }}
+      />
     </PageLayout>
   );
 }
