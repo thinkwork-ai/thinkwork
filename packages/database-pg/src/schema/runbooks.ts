@@ -1,8 +1,9 @@
 /**
  * Computer runbook catalog and execution state.
  *
- * Source runbooks live in packages/runbooks. These tables materialize the
- * tenant-visible catalog and preserve immutable run snapshots for auditability.
+ * Runbook-capable Computer skills live in workspace/skills/<slug>/ and the
+ * packaged skill catalog. These compatibility tables preserve catalog/run
+ * state and immutable skill snapshots for auditability.
  */
 
 import {

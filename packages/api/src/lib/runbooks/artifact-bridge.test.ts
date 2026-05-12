@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { loadRunbooks } from "@thinkwork/runbooks";
 import { buildRunbookRunRecords } from "./runs.js";
+import { loadCatalogRunbookSkills } from "./test-fixtures.js";
+
+const runbooks = await loadCatalogRunbookSkills();
 
 describe("artifact runbook bridge", () => {
-  const runbooks = loadRunbooks();
   const requireRunbook = (slug: string) => {
     const runbook = runbooks.find((candidate) => candidate.slug === slug);
     if (!runbook) throw new Error(`Missing test runbook ${slug}`);

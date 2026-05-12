@@ -10,7 +10,7 @@ import {
   type RunbookInvocationMode,
   type RunbookRunStatus,
 } from "@thinkwork/database-pg/schema";
-import type { RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "./definition.js";
 import {
   assertExpandedTasksReferenceDeclaredPhases,
   expandRunbookTasks,

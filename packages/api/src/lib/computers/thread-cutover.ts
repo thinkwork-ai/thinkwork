@@ -7,7 +7,7 @@ import {
   messages,
   threads,
 } from "@thinkwork/database-pg/schema";
-import type { RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "../runbooks/definition.js";
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { ensureArtifactBuilderDefaults } from "./artifact-builder-defaults.js";

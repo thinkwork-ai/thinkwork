@@ -10,9 +10,9 @@ status: in_progress
 
 ## Current State
 
-- Active unit: U5 — Adapt execution snapshots and runtime context
-- Active branch/worktree: `codex/runbook-skill-runtime-u5` at `.Codex/worktrees/runbook-skill-u5`
-- Latest synced base: `origin/main` at `bc61526e`
+- Active unit: U6 — Clean up compatibility package and naming
+- Active branch/worktree: `codex/runbook-skill-cleanup-u6` at `.Codex/worktrees/runbook-skill-u6`
+- Latest synced base: `origin/main` at `185c31cf`
 - Overall status: in progress
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
@@ -51,30 +51,41 @@ status: in_progress
 - 2026-05-12: Removed U4 remote branch and local worktree, synced `origin/main`, and started U5 in `.Codex/worktrees/runbook-skill-u5` on branch `codex/runbook-skill-runtime-u5`.
 - 2026-05-12: Began U5 by making run snapshots preserve activated skill source metadata, SKILL.md checksums/content, contract checksums, asset references, and Strands skill-instruction context.
 - 2026-05-12: U5 local verification passed: focused API runtime/run snapshot tests, focused Strands runbook context/capability tests, API typecheck/build, API runbook suite, Python ruff checks, workspace typecheck/test/lint/build, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: Opened U5 PR #1172 from `codex/runbook-skill-runtime-u5`; awaiting required checks.
+- 2026-05-12: Opened U5 PR #1172 from `codex/runbook-skill-runtime-u5`.
+- 2026-05-12: U5 PR #1172 passed required checks and was squash-merged to `main` at `185c31cf`.
+- 2026-05-12: Removed U5 remote branch and local worktree, synced `origin/main`, and started U6 in `.Codex/worktrees/runbook-skill-u6` on branch `codex/runbook-skill-cleanup-u6`.
+- 2026-05-12: Began U6 by folding the remaining `@thinkwork/runbooks` validation/type surface into API internals, switching API tests to skill-catalog fixtures, removing the compatibility package, and updating current docs/comments away from the retired package.
+- 2026-05-12: U6 focused verification passed: API runbook tests/typecheck/build, skill-catalog tests, docs build, package-reference searches, `bash -n scripts/build-lambdas.sh`, and touched-file Prettier.
+- 2026-05-12: U6 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, and a clean rerun of `pnpm -r --if-present test`. An earlier full workspace test attempt, run in parallel with typecheck, hit a transient `applets-resolvers.test.ts` timeout; the file passed alone and the full API/workspace reruns passed.
 
 ## Current Implementation Units
 
-| Unit                                                                         | Status  | Branch                             | PR    | Notes                                                                                |
-| ---------------------------------------------------------------------------- | ------- | ---------------------------------- | ----- | ------------------------------------------------------------------------------------ |
-| U1 Define runbook-capable skill contract                                     | merged  | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.           |
-| U2 Convert existing packaged runbooks into skills                            | merged  | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.           |
-| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged  | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.           |
-| U4 Make admin assignment skill-native                                        | merged  | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed.           |
-| U5 Adapt execution snapshots and runtime context                             | active  | `codex/runbook-skill-runtime-u5`   | #1172 | Runtime snapshots now preserve activated skill source context for Strands execution. |
-| U6 Clean up compatibility package and naming                                 | pending | TBD                                | TBD   | Final cleanup after all production imports are gone.                                 |
+| Unit                                                                         | Status | Branch                             | PR    | Notes                                                                               |
+| ---------------------------------------------------------------------------- | ------ | ---------------------------------- | ----- | ----------------------------------------------------------------------------------- |
+| U1 Define runbook-capable skill contract                                     | merged | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed.          |
+| U2 Convert existing packaged runbooks into skills                            | merged | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed.          |
+| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed.          |
+| U4 Make admin assignment skill-native                                        | merged | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed.          |
+| U5 Adapt execution snapshots and runtime context                             | merged | `codex/runbook-skill-runtime-u5`   | #1172 | Squash-merged to `main` at `185c31cf`; remote branch and worktree removed.          |
+| U6 Clean up compatibility package and naming                                 | active | `codex/runbook-skill-cleanup-u6`   | TBD   | Removed compatibility package and moved live API/test imports to skill-backed code. |
 
 ## Current CI / Verification Notes
 
-| Unit | Check                                                                                                                                                      | Status | Notes                                                                                           |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
-| U5   | `pnpm --filter @thinkwork/api test -- runbooks/runs runbooks/runtime-api`                                                                                  | passed | Snapshot and runtime capability helper tests passed.                                            |
-| U5   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed after snapshot and runtime changes.                                    |
-| U5   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                              |
-| U5   | `uv run pytest packages/agentcore-strands/agent-container/test_runbook_context.py packages/agentcore-strands/agent-container/test_runbook_capabilities.py` | passed | Focused Strands context and capability tests passed.                                            |
-| U5   | `uv run ruff format --check ...` / `uv run ruff check ...`                                                                                                 | passed | Focused Python formatting and lint checks passed.                                               |
-| U5   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only. |
-| U5   | `pnpm dlx prettier@3.8.2 --check ...` / `git diff --check`                                                                                                 | passed | Touched-file Prettier check and whitespace check passed.                                        |
+| Unit | Check                                                                                                                                                      | Status | Notes                                                                                                                                                                                |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| U5   | `pnpm --filter @thinkwork/api test -- runbooks/runs runbooks/runtime-api`                                                                                  | passed | Snapshot and runtime capability helper tests passed.                                                                                                                                 |
+| U5   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed after snapshot and runtime changes.                                                                                                                         |
+| U5   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                                                                                                                   |
+| U5   | `uv run pytest packages/agentcore-strands/agent-container/test_runbook_context.py packages/agentcore-strands/agent-container/test_runbook_capabilities.py` | passed | Focused Strands context and capability tests passed.                                                                                                                                 |
+| U5   | `uv run ruff format --check ...` / `uv run ruff check ...`                                                                                                 | passed | Focused Python formatting and lint checks passed.                                                                                                                                    |
+| U5   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                      |
+| U5   | `pnpm dlx prettier@3.8.2 --check ...` / `git diff --check`                                                                                                 | passed | Touched-file Prettier check and whitespace check passed.                                                                                                                             |
+| U6   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed against skill-catalog fixtures after package removal.                                                                                                       |
+| U6   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                                                                                                                   |
+| U6   | `pnpm --filter @thinkwork/skill-catalog test` / `pnpm --filter @thinkwork/docs build`                                                                      | passed | Skill contract/catalog coverage and docs build completed cleanly.                                                                                                                    |
+| U6   | package-reference searches                                                                                                                                 | passed | Live `packages`, `apps`, `scripts`, and `docs/src` contain no `@thinkwork/runbooks` or `packages/runbooks` references; remaining `runbook.yaml` hits are negative tests/docs guards. |
+| U6   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                      |
+| U6   | `bash -n scripts/build-lambdas.sh`, `pnpm dlx prettier@3.8.2 --check ...`, `git diff --check`                                                              | passed | Shell syntax, touched-file formatting, and whitespace checks passed.                                                                                                                 |
 
 ## Previous Autopilot Archive
 

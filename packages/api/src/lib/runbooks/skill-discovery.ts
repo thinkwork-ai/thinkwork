@@ -14,7 +14,7 @@ import {
   RunbookValidationError,
   validateRunbookDefinition,
   type RunbookDefinition,
-} from "@thinkwork/runbooks";
+} from "./definition.js";
 import { parseSkillMdInternal } from "../skill-md-parser.js";
 
 const db = getDb();

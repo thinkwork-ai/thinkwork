@@ -8,6 +8,8 @@ origin: docs/brainstorms/2026-05-10-computer-runbooks-foundation-requirements.md
 
 # feat: Add Computer Runbooks Foundation
 
+> Superseded on 2026-05-12 by `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`. The lifecycle, confirmation, Queue UI, and audit concepts remain, but the proprietary `packages/runbooks` YAML/Markdown source package was removed. Runbook-capable work is now authored as standard Agent Skill directories in `packages/skill-catalog` or template workspaces.
+
 ## Overview
 
 Computer runbooks become the foundation contract for substantial repeatable Computer work. Instead of hiding application-specific behavior inside one-off skills such as Artifact Builder, ThinkWork will publish versioned YAML plus Markdown runbooks that define routing hints, approval copy, phases, expected outputs, capability roles, and progress semantics. The runtime can then execute those definitions sequentially in v1 while preserving a dependency-ready model for later Strands agents-as-tools, Strands workflow, or state-machine execution.

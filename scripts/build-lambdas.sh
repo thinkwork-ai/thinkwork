@@ -85,9 +85,8 @@ build_handler() {
     cp "$REPO_ROOT/packages/database-pg/graphql/schema.graphql" "$out_dir/packages/database-pg/graphql/"
     cp "$REPO_ROOT/packages/database-pg/graphql/types/"*.graphql "$out_dir/packages/database-pg/graphql/types/"
 
-    # The bundled @thinkwork/runbooks compatibility loader resolves
-    # runbook-capable Agent Skills from the skill catalog. Place those skill
-    # directories at /var/task/skill-catalog in the deployed zip.
+    # Runbook-capable Agent Skills resolve from the skill catalog at runtime.
+    # Place those skill directories at /var/task/skill-catalog in the zip.
     rm -rf "$out_dir/skill-catalog"
     mkdir -p "$out_dir/skill-catalog"
     for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*; do

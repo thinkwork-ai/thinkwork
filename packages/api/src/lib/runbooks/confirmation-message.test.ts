@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { loadRunbooks } from "@thinkwork/runbooks";
 import {
   buildRunbookAmbiguityMessage,
   buildRunbookConfirmationMessage,
   buildRunbookQueueMessage,
 } from "./confirmation-message.js";
+import { loadCatalogRunbookSkills } from "./test-fixtures.js";
 
-const runbooks = loadRunbooks();
+const runbooks = await loadCatalogRunbookSkills();
 const requireRunbook = (slug: string) => {
   const runbook = runbooks.find((candidate) => candidate.slug === slug);
   if (!runbook) throw new Error(`Missing test runbook ${slug}`);

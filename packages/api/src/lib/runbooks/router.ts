@@ -1,4 +1,4 @@
-import type { RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "./definition.js";
 
 export type RunbookRouteMatch =
   | {

@@ -5,7 +5,7 @@ description: Published Computer runbooks define repeatable, confirmable work suc
 
 Computer runbooks are the product contract for substantial repeatable Computer work. A runbook tells Computer how to recognize a kind of work, what the user should approve, which phases must appear in the Queue, and what outputs should exist at the end.
 
-Runbooks are not workspace skills, Customize workflows, or Strands workflow definitions. They are ThinkWork-published YAML plus Markdown artifacts under `packages/runbooks`, surfaced through the tenant runbook catalog and executed by Computer.
+Runbooks are standard Agent Skills with an extra Computer contract. ThinkWork-published starters live in `packages/skill-catalog/<slug>/` with `SKILL.md`, `references/thinkwork-runbook.json`, phase guidance under `references/`, and output-shaping files under `assets/`. Installing one of those skills into a Computer template workspace is the activation signal.
 
 ## What runbooks solve
 
@@ -13,26 +13,27 @@ Before runbooks, dashboard and app generation lived mostly inside the Artifact B
 
 Runbooks make the recipe explicit:
 
-| Layer              | Responsibility                                                             |
-| ------------------ | -------------------------------------------------------------------------- |
-| YAML definition    | catalog metadata, routing hints, inputs, phases, outputs, approval copy    |
-| Phase Markdown     | task guidance for discovery, analysis, artifact production, and validation |
-| Catalog rows       | tenant-visible published runbooks and future operator override boundaries  |
-| Run/task rows      | approval state, expanded phase tasks, dependencies, outputs, cancellation  |
-| Strands context    | current task, phase guidance, prior outputs, and capability-role mapping   |
-| Computer thread UI | `data-runbook-confirmation` and `data-runbook-queue` typed message parts   |
+| Layer              | Responsibility                                                                |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `SKILL.md`         | skill metadata, discovery copy, and main agent instructions                   |
+| Reference contract | routing hints, inputs, phases, outputs, approval copy, and asset references   |
+| Phase references   | task guidance for discovery, analysis, artifact production, and validation    |
+| Workspace install  | template assignment through `workspace/skills/<slug>/SKILL.md` activation     |
+| Run/task rows      | approval state, expanded phase tasks, dependencies, outputs, and cancellation |
+| Strands context    | skill snapshot, current phase guidance, prior outputs, and capability policy  |
+| Computer thread UI | `data-runbook-confirmation` and `data-runbook-queue` typed message parts      |
 
 ## User lifecycle
 
 ### Auto-selected work
 
-When Computer confidently matches a prompt to a published runbook, it creates an `awaiting_confirmation` run and replies with a Confirmation card. The run does not execute until the user approves.
+When Computer confidently matches a prompt to an installed runbook-capable skill, it creates an `awaiting_confirmation` run and replies with a Confirmation card. The run does not execute until the user approves.
 
 Example: "Build me a map of supplier risk" should select `map-artifact`, show what will be produced, and wait for approval.
 
 ### Explicit invocation
 
-When the user names a runbook, Computer starts directly and shows a Queue. Explicit invocation does not ask for a second approval.
+When the user names an installed runbook-capable skill, Computer starts directly and shows a Queue. Explicit invocation does not ask for a second approval.
 
 Example: "Run the CRM dashboard runbook for LastMile" starts `crm-dashboard`, expands declared phases into tasks, and queues `runbook_execute`.
 
@@ -53,11 +54,11 @@ Cancelling a run marks the run and any unfinished tasks cancelled. Runtime cance
 
 ### No confident match
 
-If no published runbook matches confidently, Computer should not pretend one applies. It falls back to normal Computer work and can still show an ad hoc visible task plan using `data-runbook-queue` without a catalog run id.
+If no installed runbook-capable skill matches confidently, Computer should not pretend one applies. It falls back to normal Computer work and can still show an ad hoc visible task plan using `data-runbook-queue` without a catalog run id.
 
 ## V1 execution model
 
-V1 execution is sequential. Dependency fields are still part of the data model so the same authored runbook can later compile to richer Strands agents-as-tools, Strands workflow, or state-machine execution.
+V1 execution is sequential. Dependency fields are still part of the data model so the same authored skill contract can later compile to richer Strands agents-as-tools, Strands workflow, or state-machine execution.
 
 Runbooks declare capability roles, not concrete specialist agent names:
 
@@ -77,16 +78,16 @@ Runbooks declare capability roles, not concrete specialist agent names:
 | `research-dashboard` | generic evidence-backed dashboard for comparisons, findings, and caveats  |
 | `map-artifact`       | map-centered artifact for locations, regions, routes, and spatial risk    |
 
-Artifact Builder still exists as a compatibility shim. The runbook phase guidance is the source of truth; the skill supplies artifact-generation mechanics and the `save_app` path during rollout.
+Artifact Builder still exists as a compatibility shim. The runbook-capable skill's phase guidance is the source of truth; Artifact Builder supplies artifact-generation mechanics and the `save_app` path during rollout.
 
 ## Rollout boundaries
 
-V1 is for ThinkWork-published runbooks only. Tenant operator authoring and editing are deferred, but the definition shape already names allowed override fields so future admin UI can safely expose them.
+V1 starts with ThinkWork-published runbook-capable skills. Tenant operator authoring now uses the normal skill workspace model: create or install a skill directory, then keep the Computer-specific contract in `references/`.
 
 Keep rollout conservative:
 
-- publish runbooks from repo-reviewed YAML and Markdown only
-- seed catalog rows from the package source
+- publish starters as repo-reviewed Agent Skill directories only
+- activate runbook-capable skills through template workspace installation
 - preserve historical `definitionSnapshot` on every run
 - require confirmation for auto-selected runs
 - keep explicit invocation direct
