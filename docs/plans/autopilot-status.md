@@ -3,17 +3,17 @@ title: Computer Runbooks as Agent Skills Autopilot Status
 date: 2026-05-12
 plan: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
 target_branch: main
-status: in_progress
+status: complete
 ---
 
 # Computer Runbooks as Agent Skills Autopilot Status
 
 ## Current State
 
-- Active unit: U6 — Clean up compatibility package and naming
-- Active branch/worktree: `codex/runbook-skill-cleanup-u6` at `.Codex/worktrees/runbook-skill-u6`
-- Latest synced base: `origin/main` at `185c31cf`
-- Overall status: in progress
+- Active unit: none — all implementation units are merged
+- Active branch/worktree: none
+- Latest synced base: `origin/main` at `6020c015`
+- Overall status: complete
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
 ## Progress Log
@@ -57,7 +57,9 @@ status: in_progress
 - 2026-05-12: Began U6 by folding the remaining `@thinkwork/runbooks` validation/type surface into API internals, switching API tests to skill-catalog fixtures, removing the compatibility package, and updating current docs/comments away from the retired package.
 - 2026-05-12: U6 focused verification passed: API runbook tests/typecheck/build, skill-catalog tests, docs build, package-reference searches, `bash -n scripts/build-lambdas.sh`, and touched-file Prettier.
 - 2026-05-12: U6 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, and a clean rerun of `pnpm -r --if-present test`. An earlier full workspace test attempt, run in parallel with typecheck, hit a transient `applets-resolvers.test.ts` timeout; the file passed alone and the full API/workspace reruns passed.
-- 2026-05-12: Opened U6 PR #1176 from `codex/runbook-skill-cleanup-u6`; required checks passed after local verification and the PR is ready for final squash merge.
+- 2026-05-12: Opened U6 PR #1176 from `codex/runbook-skill-cleanup-u6`; required checks passed after local verification.
+- 2026-05-12: U6 PR #1176 passed required checks and was squash-merged to `main` at `6020c015`.
+- 2026-05-12: Removed U6 remote branch and local worktree, synced `origin/main`, and completed all implementation units for the Agent Skills runbook refactor.
 
 ## Current Implementation Units
 
@@ -68,7 +70,7 @@ status: in_progress
 | U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed. |
 | U4 Make admin assignment skill-native                                        | merged | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed. |
 | U5 Adapt execution snapshots and runtime context                             | merged | `codex/runbook-skill-runtime-u5`   | #1172 | Squash-merged to `main` at `185c31cf`; remote branch and worktree removed. |
-| U6 Clean up compatibility package and naming                                 | ready  | `codex/runbook-skill-cleanup-u6`   | #1176 | Required checks passed; ready for final squash merge.                      |
+| U6 Clean up compatibility package and naming                                 | merged | `codex/runbook-skill-cleanup-u6`   | #1176 | Squash-merged to `main` at `6020c015`; remote branch and worktree removed. |
 
 ## Current CI / Verification Notes
 
@@ -87,6 +89,7 @@ status: in_progress
 | U6   | package-reference searches                                                                                                                                 | passed | Live `packages`, `apps`, `scripts`, and `docs/src` contain no `@thinkwork/runbooks` or `packages/runbooks` references; remaining `runbook.yaml` hits are negative tests/docs guards. |
 | U6   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                      |
 | U6   | `bash -n scripts/build-lambdas.sh`, `pnpm dlx prettier@3.8.2 --check ...`, `git diff --check`                                                              | passed | Shell syntax, touched-file formatting, and whitespace checks passed.                                                                                                                 |
+| U6   | GitHub required checks                                                                                                                                     | passed | cla, lint, test, typecheck, and verify passed on PR #1176 before merge.                                                                                                              |
 
 ## Previous Autopilot Archive
 
