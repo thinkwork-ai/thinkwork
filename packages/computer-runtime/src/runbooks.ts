@@ -3,6 +3,7 @@ import type {
   RunbookAgentStepOutput,
   RuntimeTask,
 } from "./api-client.js";
+import { invokeRunbookAgentCoreStep } from "./agentcore-runbook-step.js";
 
 export type RunbookTaskStatus =
   | "pending"
@@ -211,6 +212,7 @@ export function defaultRunbookTaskRunner(
   return async (task) => {
     const result = await api.executeRunbookTask(computerTaskId, task.id);
     if (isRunbookAgentStepOutput(result)) return result;
+    if (result.invocation) return invokeRunbookAgentCoreStep(result.invocation);
     return waitForRunbookTaskCompletion(api, computerTaskId, task.id);
   };
 }

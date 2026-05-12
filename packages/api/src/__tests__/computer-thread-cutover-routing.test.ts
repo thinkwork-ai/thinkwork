@@ -83,4 +83,20 @@ describe("Computer-owned thread turn routing", () => {
       "await completeRunbookStepFromChatInvoke",
     );
   });
+
+  it("prepares runbook step AgentCore invocations without dispatching chat-agent-invoke", () => {
+    const runbookRuntimeSource = source("../lib/runbooks/runtime-api.ts");
+
+    expect(runbookRuntimeSource).toContain(
+      "prepareRunbookStepAgentInvocation",
+    );
+    expect(runbookRuntimeSource).toContain(
+      'provider: "bedrock-agentcore" as const',
+    );
+    expect(runbookRuntimeSource).toContain(
+      'computer_response_mode: "runbook_step"',
+    );
+    expect(runbookRuntimeSource).not.toContain("getChatAgentInvokeFnArn");
+    expect(runbookRuntimeSource).not.toContain("InvocationType: \"Event\"");
+  });
 });
