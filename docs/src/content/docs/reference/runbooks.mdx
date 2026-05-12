@@ -3,53 +3,67 @@ title: Runbooks reference
 description: Authoring and execution reference for ThinkWork-published Computer runbooks.
 ---
 
-Runbooks live in `packages/runbooks/runbooks/<slug>/`. Each runbook has one `runbook.yaml` file and one Markdown file per phase.
+Computer runbooks are standard Agent Skill directories. ThinkWork-published starters live in `packages/skill-catalog/<slug>/` and are marked with `metadata.thinkwork_kind: computer-runbook` in `SKILL.md`.
 
 ```text
-packages/runbooks/runbooks/crm-dashboard/
-  runbook.yaml
-  phases/
+packages/skill-catalog/crm-dashboard/
+  SKILL.md
+  references/
+    thinkwork-runbook.json
     discover.md
     analyze.md
     produce.md
     validate.md
+  assets/
+    crm-dashboard-data.schema.json
 ```
 
-## YAML shape
+## Skill shape
 
-`runbook.yaml` is the durable product definition. It must include:
+`SKILL.md` is the skill entrypoint and discovery surface. A Computer-runbook-capable skill must include:
 
-| Field       | Purpose                                                                 |
-| ----------- | ----------------------------------------------------------------------- |
-| `slug`      | stable unique id, used in routing, catalog rows, runs, and smoke checks |
-| `version`   | source version copied into catalog rows and historical run snapshots    |
-| `catalog`   | display name, description, and category                                 |
-| `routing`   | explicit aliases, trigger examples, and confidence hints                |
-| `inputs`    | user, context, or system inputs expected by the runbook                 |
-| `approval`  | Confirmation-card copy for auto-selected runs                           |
-| `phases`    | ordered phase ids, titles, guidance file names, roles, dependencies     |
-| `outputs`   | expected artifacts, summaries, evidence, datasets, or maps              |
-| `overrides` | fields future operators may safely edit                                 |
+```yaml
+---
+name: crm-dashboard
+description: Build an opinionated CRM dashboard app.
+execution: context
+metadata:
+  thinkwork_kind: computer-runbook
+  thinkwork_runbook_contract: references/thinkwork-runbook.json
+---
+```
+
+`references/thinkwork-runbook.json` is the machine-readable contract Computer needs before loading every skill file:
+
+| Field          | Purpose                                                        |
+| -------------- | -------------------------------------------------------------- |
+| `routing`      | explicit aliases, trigger examples, and confidence hints       |
+| `inputs`       | user, context, or system inputs expected by the runbook        |
+| `confirmation` | Confirmation-card copy for auto-selected runs                  |
+| `phases`       | ordered phase ids, titles, guidance paths, roles, dependencies |
+| `outputs`      | expected artifacts, summaries, evidence, datasets, or maps     |
+| `assets`       | schemas, layout recipes, examples, or validation fixtures      |
+| `overrides`    | fields future operators may safely edit                        |
 
 Minimal phase example:
 
-```yaml
-phases:
-  - id: produce
-    title: Produce dashboard artifact
-    guidance: produce.md
-    capabilityRoles:
-      - artifact_build
-    dependsOn:
-      - analyze
-    taskSeeds:
-      - Generate an interactive dashboard using the runbook phase guidance.
-      - Persist the dashboard through save_app with runbook metadata.
+```json
+{
+  "id": "produce",
+  "title": "Produce dashboard artifact",
+  "guidance": "references/produce.md",
+  "capabilityRoles": ["artifact_build"],
+  "dependsOn": ["analyze"],
+  "taskSeeds": [
+    "Generate an interactive dashboard using the runbook phase guidance.",
+    "Persist the dashboard through save_app with runbook metadata."
+  ]
+}
 ```
 
-## Phase Markdown
+## References and Assets
 
-Phase Markdown is execution guidance. It should be specific enough for the runtime to execute one task at a time without inventing a new plan.
+Phase Markdown under `references/` is execution guidance. It should be specific enough for the runtime to execute one task at a time without inventing a new plan.
 
 Good phase Markdown includes:
 
@@ -60,6 +74,8 @@ Good phase Markdown includes:
 - what to do with missing or partial data
 
 Do not put secrets, tenant-specific credentials, or concrete specialist agent names in phase Markdown.
+
+Use `assets/` for output-shaping material such as JSON schemas, example payloads, layout recipes, and validation fixtures. Artifact-producing runbooks should keep these contracts outside `SKILL.md` so agents can progressively load only the detail needed for the current phase.
 
 ## Routing rules
 
@@ -101,7 +117,7 @@ node scripts/smoke/computer-runbook-smoke.mjs
 SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/computer-runbook-smoke.mjs
 ```
 
-Dry-run mode validates the repo-authored runbooks and expected part names. Live mode exercises:
+Dry-run mode validates the repo-authored runbook-capable skills and expected part names. Live mode exercises:
 
 - auto-selected `map-artifact` confirmation before execution
 - explicit `crm-dashboard` Queue without confirmation

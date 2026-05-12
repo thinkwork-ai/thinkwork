@@ -1,0 +1,126 @@
+{
+  "version": "1.0.0",
+  "sourceVersion": "0.1.0",
+  "routing": {
+    "explicitAliases": [
+      "research dashboard",
+      "evidence dashboard",
+      "analysis dashboard"
+    ],
+    "triggerExamples": [
+      "Build a research dashboard comparing these vendors.",
+      "Create an evidence dashboard for supplier risk.",
+      "Turn this research into a dashboard I can inspect."
+    ],
+    "confidenceHints": [
+      "The user asks for a dashboard or app based on research, comparison, evidence, sources, or synthesis.",
+      "The request is broader than a CRM-specific dashboard but still asks for an inspectable artifact."
+    ]
+  },
+  "inputs": [
+    {
+      "id": "topic",
+      "label": "Research topic",
+      "description": "The subject, market, vendor set, entity set, or question the dashboard should cover.",
+      "required": false,
+      "source": "user"
+    },
+    {
+      "id": "evidence_sources",
+      "label": "Evidence sources",
+      "description": "Workspace files, connectors, web references, or user-provided material that should ground the dashboard.",
+      "required": false,
+      "source": "context"
+    }
+  ],
+  "confirmation": {
+    "title": "Build Research Dashboard",
+    "summary": "Computer will gather and organize evidence, synthesize the findings, produce an inspectable dashboard artifact, and validate source coverage.",
+    "expectedOutputs": [
+      "Interactive research dashboard artifact",
+      "Evidence map or source summary",
+      "Findings and caveats"
+    ],
+    "likelyTools": [
+      "workspace search",
+      "connected knowledge sources",
+      "artifact builder"
+    ],
+    "phaseSummary": [
+      "Discover the topic, evidence sources, entities, and comparison dimensions.",
+      "Analyze patterns, tradeoffs, and confidence levels.",
+      "Produce a dashboard artifact for inspection.",
+      "Validate evidence coverage and unsupported claims."
+    ]
+  },
+  "phases": [
+    {
+      "id": "discover",
+      "title": "Discover research evidence",
+      "guidance": "references/discover.md",
+      "capabilityRoles": ["research"],
+      "dependsOn": [],
+      "taskSeeds": [
+        "Identify relevant sources, entities, dimensions, and source-quality concerns.",
+        "Capture source citations, timestamps, gaps, and confidence signals."
+      ]
+    },
+    {
+      "id": "analyze",
+      "title": "Synthesize findings",
+      "guidance": "references/analyze.md",
+      "capabilityRoles": ["analysis"],
+      "dependsOn": ["discover"],
+      "taskSeeds": [
+        "Cluster evidence into themes, comparisons, risks, and decision criteria.",
+        "Preserve uncertainty and distinguish observed facts from inference."
+      ]
+    },
+    {
+      "id": "produce",
+      "title": "Produce research dashboard artifact",
+      "guidance": "references/produce.md",
+      "capabilityRoles": ["artifact_build"],
+      "dependsOn": ["analyze"],
+      "taskSeeds": [
+        "Generate an inspectable research dashboard with findings, source evidence, confidence/caveats, comparisons, and filters.",
+        "Persist the dashboard through `save_app` with research runbook metadata and the current thread id."
+      ]
+    },
+    {
+      "id": "validate",
+      "title": "Validate evidence and caveats",
+      "guidance": "references/validate.md",
+      "capabilityRoles": ["validation"],
+      "dependsOn": ["produce"],
+      "taskSeeds": [
+        "Verify that claims are grounded in cited evidence or marked as inference.",
+        "Confirm that source gaps and confidence limits are visible."
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "dashboard_artifact",
+      "title": "Research dashboard artifact",
+      "type": "artifact",
+      "description": "A generated dashboard app for exploring synthesized research findings.",
+      "asset": "assets/research-dashboard-layout.json"
+    },
+    {
+      "id": "evidence_summary",
+      "title": "Evidence map",
+      "type": "evidence",
+      "description": "A summary of sources, gaps, confidence, and caveats."
+    }
+  ],
+  "assets": ["assets/research-dashboard-layout.json"],
+  "overrides": {
+    "allowedFields": [
+      "catalog.description",
+      "approval.summary",
+      "approval.expectedOutputs",
+      "routing.triggerExamples"
+    ]
+  }
+}

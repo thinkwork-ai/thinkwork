@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CrmDashboardData",
+  "type": "object",
+  "required": [
+    "snapshot",
+    "kpis",
+    "stageExposure",
+    "staleActivity",
+    "topRisks",
+    "opportunities"
+  ],
+  "properties": {
+    "snapshot": {
+      "type": "object",
+      "required": ["title", "summary", "generatedAt"],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "accountFilter": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "value"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "tone": {
+            "enum": ["default", "risk", "success"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stageExposure": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/labeledCountValue"
+      }
+    },
+    "staleActivity": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/labeledCountValue"
+      }
+    },
+    "topRisks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "opportunity",
+          "account",
+          "stage",
+          "amount",
+          "risk",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "opportunity": {
+            "type": "string"
+          },
+          "account": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "lastActivity": {
+            "type": "string"
+          },
+          "risk": {
+            "$ref": "#/$defs/riskLevel"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "nextStep": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "opportunities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["opportunity", "account", "stage", "amount"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "opportunity": {
+            "type": "string"
+          },
+          "account": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "closeDate": {
+            "type": "string"
+          },
+          "lastActivity": {
+            "type": "string"
+          },
+          "risk": {
+            "$ref": "#/$defs/riskLevel"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "refreshNote": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "riskLevel": {
+      "enum": ["high", "medium", "low"]
+    },
+    "labeledCountValue": {
+      "type": "object",
+      "required": ["label", "value", "count"],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "count": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,16 @@
+{
+  "title": "Research dashboard layout guidance",
+  "requiredSections": [
+    "summary",
+    "findings",
+    "evidence",
+    "comparison_or_filters",
+    "caveats"
+  ],
+  "claimRules": [
+    "Show source-backed claims near evidence.",
+    "Mark inference and low-confidence findings visibly.",
+    "Keep empty, partial, and failed-source states proportional."
+  ],
+  "hostChrome": "The Computer artifact host provides route title, app label, open-full action, refresh action placement, and iframe wrapper."
+}

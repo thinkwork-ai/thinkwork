@@ -1,6 +1,7 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -8,6 +9,15 @@ import {
   RUNBOOK_SKILL_CONTRACT_PATH,
   validateRunbookSkillContract,
 } from "../scripts/runbook-skill-contract.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const catalogRoot = resolve(__dirname, "..");
+const repoRoot = resolve(catalogRoot, "..", "..");
+const convertedRunbookSlugs = [
+  "crm-dashboard",
+  "map-artifact",
+  "research-dashboard",
+] as const;
 
 function makeSkill(files: Record<string, string>) {
   const root = mkdtempSync(join(tmpdir(), "runbook-skill-contract-"));
@@ -213,5 +223,36 @@ metadata:
         message: 'unknown runbook capability role "terraform_apply"',
       }),
     ]);
+  });
+
+  it.each(convertedRunbookSlugs)(
+    "%s catalog skill carries a valid runbook contract",
+    (slug) => {
+      const result = validateRunbookSkillContract(join(catalogRoot, slug));
+
+      expect(result).toMatchObject({
+        slug,
+        isRunbookSkill: true,
+        contractPath: RUNBOOK_SKILL_CONTRACT_PATH,
+        issues: [],
+      });
+    },
+  );
+
+  it("does not leave source runbook.yaml files for converted starters", () => {
+    for (const slug of convertedRunbookSlugs) {
+      expect(
+        existsSync(
+          join(
+            repoRoot,
+            "packages",
+            "runbooks",
+            "runbooks",
+            slug,
+            "runbook.yaml",
+          ),
+        ),
+      ).toBe(false);
+    }
   });
 });

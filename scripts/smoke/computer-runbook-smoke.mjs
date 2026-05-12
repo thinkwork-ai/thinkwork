@@ -489,85 +489,47 @@ function runDryRun() {
 }
 
 function loadRunbook(slug) {
-  const root = path.join("packages", "runbooks", "runbooks", slug);
-  const yaml = fs.readFileSync(path.join(root, "runbook.yaml"), "utf8");
-  const phases = ["discover", "analyze", "produce", "validate"].map((id) => ({
-    id,
-    guidanceMarkdown: fs.readFileSync(
-      path.join(root, "phases", `${id}.md`),
+  const root = path.join("packages", "skill-catalog", slug);
+  const contract = parseJsonObject(
+    fs.readFileSync(
+      path.join(root, "references", "thinkwork-runbook.json"),
       "utf8",
     ),
-  }));
+  );
+  const phases = Array.isArray(contract.phases)
+    ? contract.phases.map((phase) => ({
+        ...phase,
+        guidanceMarkdown: fs.readFileSync(
+          path.join(root, phase.guidance),
+          "utf8",
+        ),
+      }))
+    : [];
   return {
-    slug: readScalar(yaml, "slug"),
-    yaml,
+    slug,
+    contract,
     phases,
   };
 }
 
 function assertRunbook(runbook, { slug, explicitAlias, produceContains }) {
   if (runbook.slug !== slug) throw new Error(`Expected runbook ${slug}.`);
-  if (!yamlListIncludes(runbook.yaml, "explicitAliases", explicitAlias)) {
+  if (!runbook.contract.routing?.explicitAliases?.includes(explicitAlias)) {
     throw new Error(`${slug} missing explicit alias ${explicitAlias}.`);
   }
-  const phaseIds = phaseIdsFromYaml(runbook.yaml).join(",");
+  const phaseIds = runbook.phases.map((phase) => phase.id).join(",");
   if (phaseIds !== "discover,analyze,produce,validate") {
     throw new Error(`${slug} phase order drifted: ${phaseIds}.`);
   }
-  const produceYaml = phaseBlock(runbook.yaml, "produce");
   const produce = runbook.phases.find((phase) => phase.id === "produce");
-  if (!yamlListIncludes(produceYaml, "capabilityRoles", "artifact_build")) {
+  if (!produce?.capabilityRoles?.includes("artifact_build")) {
     throw new Error(`${slug} produce phase must declare artifact_build.`);
   }
   for (const token of produceContains) {
-    if (!produce.guidanceMarkdown.includes(token)) {
+    if (!produce?.guidanceMarkdown.includes(token)) {
       throw new Error(`${slug} produce guidance missing ${token}.`);
     }
   }
-}
-
-function readScalar(yaml, key) {
-  const match = yaml.match(new RegExp(`^${escapeRegex(key)}:\\s*(.+)$`, "m"));
-  return match?.[1]?.trim();
-}
-
-function yamlListIncludes(yaml, key, value) {
-  const block = yamlSection(yaml, key);
-  return block.split(/\r?\n/).some((line) => line.trim() === `- ${value}`);
-}
-
-function yamlSection(yaml, key) {
-  const match = yaml.match(
-    new RegExp(
-      `(^|\\n)\\s*${escapeRegex(key)}:\\s*\\n([\\s\\S]*?)(?=\\n\\S|$)`,
-    ),
-  );
-  return match?.[2] || "";
-}
-
-function phaseIdsFromYaml(yaml) {
-  return [
-    ...yamlSection(yaml, "phases").matchAll(/^\s{2}- id: ([^\n]+)$/gm),
-  ].map((match) => match[1].trim());
-}
-
-function phaseBlock(yaml, phaseId) {
-  const phases = yamlSection(yaml, "phases");
-  const match = yaml.match(
-    new RegExp(
-      `(^|\\n)\\s{2}- id: ${escapeRegex(phaseId)}\\s*\\n([\\s\\S]*?)(?=\\n\\s{2}- id: |$)`,
-    ),
-  );
-  const phaseMatch = phases.match(
-    new RegExp(
-      `(^|\\n)\\s{2}- id: ${escapeRegex(phaseId)}\\s*\\n([\\s\\S]*?)(?=\\n\\s{2}- id: |$)`,
-    ),
-  );
-  return phaseMatch?.[0] || match?.[0] || "";
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function psql(sql) {
