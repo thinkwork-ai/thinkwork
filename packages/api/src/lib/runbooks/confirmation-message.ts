@@ -177,10 +177,26 @@ export function buildRunbookAmbiguityMessage(input: {
 export function buildRunbookUnavailableMessage(input: {
   runbook: RunbookDefinition;
 }) {
-  const content = `${input.runbook.catalog.displayName} is published but not currently available for this workspace. I will continue with the normal Computer flow instead.`;
+  const content = `${input.runbook.catalog.displayName} is published but not currently available for this workspace. Install that skill on this Computer template, then try again.`;
   return {
     content,
     parts: [textPart("runbook-unavailable", content)],
+  };
+}
+
+export function buildUnmatchedRunbookSkillMessage(input: {
+  assignedRunbooks: RunbookDefinition[];
+}) {
+  const assignedNames = input.assignedRunbooks
+    .map((runbook) => runbook.catalog.displayName)
+    .filter(Boolean);
+  const content =
+    assignedNames.length === 0
+      ? "I could not find any runbook skills installed on this Computer template. Install the CRM Dashboard skill or another runbook-capable skill, then try again."
+      : `I could not find an installed runbook skill that matches this request. Installed runbook skills: ${assignedNames.join(", ")}.`;
+  return {
+    content,
+    parts: [textPart("runbook-unmatched-skill", content)],
   };
 }
 

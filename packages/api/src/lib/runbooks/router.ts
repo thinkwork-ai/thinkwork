@@ -90,12 +90,16 @@ export function routeRunbookPrompt(input: {
   };
 }
 
+export function mentionsRunbook(prompt: string) {
+  return normalizeText(prompt).includes("runbook");
+}
+
 function findExplicitRunbook(input: {
   prompt: string;
   normalizedPrompt: string;
   runbooks: RunbookDefinition[];
 }): Extract<RunbookRouteMatch, { kind: "explicit" }> | null {
-  const asksForRunbook = input.normalizedPrompt.includes("runbook");
+  const asksForRunbook = mentionsRunbook(input.prompt);
   const commandLike = EXPLICIT_VERBS.test(input.prompt);
   if (!asksForRunbook && !commandLike) return null;
 

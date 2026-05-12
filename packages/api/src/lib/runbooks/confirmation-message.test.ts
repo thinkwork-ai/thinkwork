@@ -3,6 +3,7 @@ import {
   buildRunbookAmbiguityMessage,
   buildRunbookConfirmationMessage,
   buildRunbookQueueMessage,
+  buildUnmatchedRunbookSkillMessage,
 } from "./confirmation-message.js";
 import { loadCatalogRunbookSkills } from "./test-fixtures.js";
 
@@ -104,5 +105,21 @@ describe("runbook assistant messages", () => {
         data: expect.objectContaining({ mode: "choice" }),
       }),
     );
+  });
+
+  it("builds a blocking message when an explicit runbook request has no assigned skill match", () => {
+    const message = buildUnmatchedRunbookSkillMessage({
+      assignedRunbooks: [],
+    });
+
+    expect(message.content).toContain("could not find any runbook skills");
+    expect(message.content).toContain("Install the CRM Dashboard skill");
+    expect(message.parts).toEqual([
+      {
+        type: "text",
+        id: "runbook-unmatched-skill",
+        text: message.content,
+      },
+    ]);
   });
 });
