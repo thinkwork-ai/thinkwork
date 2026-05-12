@@ -163,6 +163,173 @@ describe("executeRunbook", () => {
     });
   });
 
+  it("treats a successful save_app artifact build as satisfying the persistence task", async () => {
+    const api = apiWithContext(
+      context({
+        tasks: [
+          {
+            id: "rt-1",
+            phaseId: "produce",
+            phaseTitle: "Produce dashboard artifact",
+            taskKey: "produce:1",
+            title: "Generate an interactive CRM dashboard",
+            status: "pending",
+            dependsOn: [],
+            capabilityRoles: ["artifact_build"],
+            sortOrder: 1,
+          },
+          {
+            id: "rt-2",
+            phaseId: "produce",
+            phaseTitle: "Produce dashboard artifact",
+            taskKey: "produce:2",
+            title:
+              "Persist the dashboard through `save_app` with CRM runbook metadata and the current thread id.",
+            status: "pending",
+            dependsOn: ["produce:1"],
+            capabilityRoles: ["artifact_build"],
+            sortOrder: 2,
+          },
+          {
+            id: "rt-3",
+            phaseId: "validate",
+            phaseTitle: "Validate result",
+            taskKey: "validate:1",
+            title: "Verify the dashboard matches the requested CRM scope.",
+            status: "pending",
+            dependsOn: ["produce:2"],
+            capabilityRoles: ["validation"],
+            sortOrder: 3,
+          },
+        ],
+      }),
+    );
+    const saveAppUsage = {
+      tool_invocations: [
+        {
+          tool_name: "save_app",
+          status: "success",
+          output_json: {
+            ok: true,
+            persisted: true,
+            appId: "app-1",
+            validated: true,
+          },
+        },
+      ],
+    };
+    const runner = vi.fn().mockImplementation(async (task) => {
+      if (task.id === "rt-1") {
+        return {
+          ok: true,
+          responseText: "Dashboard saved. /artifacts/app-1",
+          model: "model-1",
+          usage: saveAppUsage,
+        };
+      }
+      return {
+        ok: true,
+        responseText: "Validation complete",
+        model: "model-1",
+      };
+    });
+
+    const result = await executeRunbook(
+      {
+        id: "task-1",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      api,
+      runner,
+    );
+
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner.mock.calls.map(([task]) => task.id)).toEqual([
+      "rt-1",
+      "rt-3",
+    ]);
+    expect(api.startRunbookTask).not.toHaveBeenCalledWith("task-1", "rt-2");
+    expect(api.completeRunbookTask).toHaveBeenCalledWith(
+      "task-1",
+      "rt-2",
+      {
+        satisfiedByTaskKey: "produce:1",
+        ok: true,
+        persisted: true,
+        appId: "app-1",
+        validated: true,
+      },
+    );
+    expect(api.recordRunbookResponse).toHaveBeenCalledTimes(1);
+    expect(api.recordRunbookResponse).toHaveBeenCalledWith("task-1", {
+      content: "Dashboard saved. /artifacts/app-1",
+      model: "model-1",
+      usage: saveAppUsage,
+    });
+    expect(api.completeRunbookRun).toHaveBeenCalledWith(
+      "task-1",
+      expect.objectContaining({
+        completedTaskCount: 3,
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      status: "completed",
+      completedTaskCount: 3,
+    });
+  });
+
+  it("still runs the persistence task when save_app evidence is absent", async () => {
+    const api = apiWithContext(
+      context({
+        tasks: [
+          {
+            id: "rt-1",
+            phaseId: "produce",
+            phaseTitle: "Produce dashboard artifact",
+            taskKey: "produce:1",
+            title: "Generate an interactive CRM dashboard",
+            status: "pending",
+            dependsOn: [],
+            capabilityRoles: ["artifact_build"],
+            sortOrder: 1,
+          },
+          {
+            id: "rt-2",
+            phaseId: "produce",
+            phaseTitle: "Produce dashboard artifact",
+            taskKey: "produce:2",
+            title:
+              "Persist the dashboard through `save_app` with CRM runbook metadata and the current thread id.",
+            status: "pending",
+            dependsOn: ["produce:1"],
+            capabilityRoles: ["artifact_build"],
+            sortOrder: 2,
+          },
+        ],
+      }),
+    );
+    const runner = vi.fn().mockResolvedValue({
+      ok: true,
+      responseText: "Step complete",
+      model: "model-1",
+    });
+
+    await executeRunbook(
+      {
+        id: "task-1",
+        taskType: "runbook_execute",
+        input: { runbookRunId: "run-1" },
+      },
+      api,
+      runner,
+    );
+
+    expect(runner.mock.calls.map(([task]) => task.id)).toEqual(["rt-1", "rt-2"]);
+    expect(api.startRunbookTask).toHaveBeenCalledWith("task-1", "rt-2");
+  });
+
   it("waits for asynchronously dispatched runbook steps to persist completion", async () => {
     const api = apiWithContext(context());
     api.executeRunbookTask.mockImplementation(
