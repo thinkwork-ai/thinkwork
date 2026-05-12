@@ -14,6 +14,19 @@ describe("artifact runbook bridge", () => {
     );
     expect(produce?.guidanceMarkdown).toContain("metadata.runbookSlug");
     expect(produce?.guidanceMarkdown).toContain("save_app");
+    expect(produce?.guidanceMarkdown).toContain(
+      "must look and behave like a dashboard app",
+    );
+    expect(produce?.guidanceMarkdown).toContain("not a markdown report");
+    expect(produce?.guidanceMarkdown).toContain("Do not use emoji as icons");
+    expect(produce?.guidanceMarkdown).toContain("lucide-react");
+
+    const validate = runbook.phases.find((phase) => phase.id === "validate");
+    expect(validate?.guidanceMarkdown).toContain("visual dashboard");
+    expect(validate?.guidanceMarkdown).toContain("text-only cards");
+    expect(validate?.guidanceMarkdown).toContain(
+      "Icons must come from `lucide-react` or `@tabler/icons-react`",
+    );
 
     const records = buildRunbookRunRecords({
       tenantId: "tenant-1",

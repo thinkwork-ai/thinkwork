@@ -20,6 +20,7 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 7. Call `save_app` directly before responding. Pass at least `name`, `files`, and `metadata`.
 8. Include `threadId`, `prompt`, `agentVersion`, and `modelId` in metadata when available.
 9. After `save_app` returns `ok`, answer concisely with what was created and the `/artifacts/{appId}` route.
+10. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use `lucide-react` or `@tabler/icons-react` when an icon helps; otherwise use plain text or styled badges.
 
 ## Host Chrome And Runtime
 
@@ -39,6 +40,8 @@ Good apps include:
 - KPI strip for key totals.
 - Charts or tables that make comparison easy.
 - Empty, partial, and failed-source states proportional to the requested task.
+
+Dashboard apps must be dashboard-shaped, not prose-only markdown reports. Do not save a dashboard artifact that is primarily a prose report, markdown summary, or stack of text-only cards. A useful dashboard should show at least one meaningful visual comparison through a chart, table, map, timeline, or other structured UI surface.
 
 ## Maps
 

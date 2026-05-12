@@ -229,7 +229,12 @@ def make_save_app_fn(
         source files, structured metadata, and an optional app_id. Omitting
         app_id creates a new applet; providing app_id regenerates that stable
         applet. Include a deterministic refresh() export in the TSX source
-        whenever the result should be refreshable.
+        whenever the result should be refreshable. Dashboard applets should
+        render real visual UI such as KPI strips, charts, tables, maps, or
+        timelines, not prose-only markdown reports. Do not use emoji as icons,
+        status markers, bullets, tabs, headings, empty states, or data labels;
+        use lucide-react or @tabler/icons-react icons when iconography is
+        needed.
         """
 
         return await _call_seam(

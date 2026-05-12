@@ -34,6 +34,8 @@ const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
         "b01af0a1754d0b78a3a96b8627b4c871037f73cbd9a7c3bc4271a4b40a4e29ad",
         // PR #1124 default before Artifact Builder became a runbook compatibility shim.
         "d14a7c4af83f83026aa95bc0a6f85ee76e3f2614dd94568a61bfe5a355e3d96e",
+        // PR #1166 default before dashboard visual quality and no-emoji icon rules.
+        "a29ce8d2efb38b5e138022d541f0b9213703c3696b5941f8da047c750156ae1f",
       ]),
     ],
     [
@@ -41,6 +43,8 @@ const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
       new Set([
         // PR #1124 CRM recipe before the CRM recipe moved into runbook phase guidance.
         "fb32d220a677004b11132e4ff17c1dae4ee129a96a51588532ce5746b0a9e362",
+        // PR #1166 CRM recipe before dashboard visual quality and no-emoji icon rules.
+        "d666dab7ae4e6420d07f3ad78b73eb7c0d4a140f87e414b7185d17f894b2655e",
       ]),
     ],
   ],
