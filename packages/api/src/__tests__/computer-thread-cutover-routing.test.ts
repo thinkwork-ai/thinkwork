@@ -71,4 +71,16 @@ describe("Computer-owned thread turn routing", () => {
       "I hit a runtime error while executing this runbook.",
     );
   });
+
+  it("marks response-only runbook steps so AgentCore does not persist them as thread turns", () => {
+    const chatInvokeSource = source("../handlers/chat-agent-invoke.ts");
+
+    expect(chatInvokeSource).toContain(
+      'computer_response_mode: responseOnly ? "runbook_step" : "thread_turn"',
+    );
+    expect(chatInvokeSource).toContain('responseMode?: "runbook_step"');
+    expect(chatInvokeSource).toContain(
+      "await completeRunbookStepFromChatInvoke",
+    );
+  });
 });

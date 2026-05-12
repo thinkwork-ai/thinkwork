@@ -583,6 +583,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       appsync_api_key: APPSYNC_API_KEY || undefined,
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
+      computer_response_mode: responseOnly ? "runbook_step" : "thread_turn",
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: runtimeConfig.webSearchConfig,
       send_email_config: runtimeConfig.sendEmailConfig
