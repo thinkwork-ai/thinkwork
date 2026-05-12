@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeRunbookPrompt } from "./router.js";
+import { mentionsRunbook, routeRunbookPrompt } from "./router.js";
 import { loadCatalogRunbookSkills } from "./test-fixtures.js";
 
 const runbooks = await loadCatalogRunbookSkills();
@@ -67,6 +67,13 @@ describe("runbook router", () => {
         runbooks: [requireRunbook("map-artifact")],
       }),
     ).toEqual({ kind: "no_match" });
+  });
+
+  it("detects explicit runbook intent even when no assigned skill matches", () => {
+    expect(
+      mentionsRunbook("Use the CRM Dashboard runbook for this request"),
+    ).toBe(true);
+    expect(mentionsRunbook("Create a dense CRM dashboard")).toBe(false);
   });
 
   it("returns ambiguous when top candidates are too close", () => {

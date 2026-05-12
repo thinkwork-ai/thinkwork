@@ -17,6 +17,7 @@ import {
   buildRunbookConfirmationMessage,
   buildRunbookQueueMessage,
   buildRunbookUnavailableMessage,
+  buildUnmatchedRunbookSkillMessage,
   type RunbookMessagePart,
 } from "../runbooks/confirmation-message.js";
 import { taskQueueThreadMetadata } from "../task-queues/message-parts.js";
@@ -28,7 +29,7 @@ import {
   getRunbookRun,
   markRunbookRunRunning,
 } from "../runbooks/runs.js";
-import { routeRunbookPrompt } from "../runbooks/router.js";
+import { mentionsRunbook, routeRunbookPrompt } from "../runbooks/router.js";
 import {
   listAssignedComputerRunbookSkills,
   type ComputerRunbookSkill,
@@ -180,7 +181,28 @@ export async function routeRunbookForComputerMessage(input: {
     runbooks,
   });
 
-  if (route.kind === "no_match") return false;
+  if (route.kind === "no_match") {
+    if (!mentionsRunbook(input.prompt)) return false;
+
+    const message = buildUnmatchedRunbookSkillMessage({
+      assignedRunbooks: runbooks,
+    });
+    await persistRunbookAssistantMessage({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      computerId: input.computerId,
+      key: `runbook-unmatched:${input.messageId}`,
+      content: message.content,
+      parts: message.parts,
+      metadata: {
+        routeKind: "no_match",
+        sourceMessageId: input.messageId,
+        explicitRunbookIntent: true,
+        assignedRunbookSlugs: runbooks.map((runbook) => runbook.slug),
+      },
+    });
+    return true;
+  }
 
   if (route.kind === "ambiguous") {
     const message = buildRunbookAmbiguityMessage({
