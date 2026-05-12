@@ -83,8 +83,32 @@ describe("workspace editor target capabilities", () => {
       .join("\n");
 
     expect(routeSource).toContain("WorkspaceEditor");
+    expect(routeSource).toContain(
+      "preferRunbookSkills={templateKind === TemplateKind.Computer}",
+    );
     expect(routeSource).not.toMatch(
       /CodeMirror|WsTreeItem|buildTree|wsSelectedFile|wsContent|markdownLanguage|vscodeDark/,
     );
+  });
+
+  it("keeps runbook assignment on template workspace skill folders", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    const treeSource = readFileSync(
+      new URL("../FolderTree.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(workspaceEditorCapabilities("template")).toMatchObject({
+      canAddCatalogSkill: true,
+      canCreateLocalSkill: true,
+    });
+    expect(workspaceEditorActions("template")).toContain("add-catalog-skill");
+    expect(editorSource).toContain("activated by their folder under");
+    expect(editorSource).toContain("filterCatalogSkills");
+    expect(treeSource).toContain("New Runbook Skill");
+    expect(treeSource).toContain("Add Runbook Skill");
   });
 });

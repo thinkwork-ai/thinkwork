@@ -165,6 +165,7 @@ export interface FolderTreeProps {
   onCancelDeleteConfirm: (path: string) => void;
   onCreateSkill?: () => void;
   onAddSkillFromCatalog?: () => void;
+  preferRunbookSkills?: boolean;
 }
 
 export function FolderTree(props: FolderTreeProps) {
@@ -224,7 +225,7 @@ export function FolderTree(props: FolderTreeProps) {
               }}
             >
               <Plus className="h-4 w-4" />
-              New Skill
+              {props.preferRunbookSkills ? "New Runbook Skill" : "New Skill"}
             </button>
             <button
               type="button"
@@ -235,7 +236,9 @@ export function FolderTree(props: FolderTreeProps) {
               }}
             >
               <Plus className="h-4 w-4" />
-              Add from catalog
+              {props.preferRunbookSkills
+                ? "Add Runbook Skill"
+                : "Add from catalog"}
             </button>
             <button
               type="button"
