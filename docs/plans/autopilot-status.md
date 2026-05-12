@@ -1,21 +1,46 @@
 ---
-title: Computer Runbooks Foundation Autopilot Status
-date: 2026-05-10
-plan: docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md
+title: Computer Runbooks as Agent Skills Autopilot Status
+date: 2026-05-12
+plan: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
 target_branch: main
-status: complete
+status: in_progress
 ---
 
-# Computer Runbooks Foundation Autopilot Status
+# Computer Runbooks as Agent Skills Autopilot Status
 
 ## Current State
 
-- Active unit: none
-- Active branch/worktree: none
-- Latest synced base: `origin/main` at `069d0a5c`
-- Overall status: all implementation units are complete and merged
+- Active unit: U1 — Define the runbook-capable skill contract
+- Active branch/worktree: `codex/runbook-skill-contract-u1` at `.Codex/worktrees/runbook-skill-u1`
+- Latest synced base: `origin/main` at `ae892363`
+- Overall status: in progress
+- Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
 ## Progress Log
+
+- 2026-05-12: Autopilot started from `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`.
+- 2026-05-12: Closed and deleted the superseded `codex/runbook-template-assignments` remote branch/PR path before starting implementation.
+- 2026-05-12: Created U1 worktree `.Codex/worktrees/runbook-skill-u1` on branch `codex/runbook-skill-contract-u1` from `origin/main`.
+- 2026-05-12: U1 selected as the first implementation unit because U2 conversion depends on a stable runbook-capable skill contract and validator.
+- 2026-05-12: Implemented U1 runbook-capable skill validator, tests, skill-catalog README guidance, and landed the skill-native plan/superseded-doc markers in this unit branch.
+- 2026-05-12: U1 focused verification passed: `pnpm --filter @thinkwork/skill-catalog test -- runbook-skill-contract`, `pnpm --filter @thinkwork/skill-catalog typecheck`, `pnpm --filter @thinkwork/skill-catalog test`, and `git diff --check`.
+- 2026-05-12: Compound review/autofix pass found one safe hardening fix before PR: validate custom runbook contract paths as skill-local before reading them. Added coverage and reran focused checks.
+- 2026-05-12: U1 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, touched-file Prettier check, and `git diff --check`.
+
+## Current Implementation Units
+
+| Unit                                                                         | Status           | Branch                            | PR  | Notes                                                                          |
+| ---------------------------------------------------------------------------- | ---------------- | --------------------------------- | --- | ------------------------------------------------------------------------------ |
+| U1 Define runbook-capable skill contract                                     | locally verified | `codex/runbook-skill-contract-u1` | TBD | Adds validator, tests, README convention, and lands the skill-native plan doc. |
+| U2 Convert existing packaged runbooks into skills                            | pending          | TBD                               | TBD | Starts after U1 merges and main is synced.                                     |
+| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | pending          | TBD                               | TBD | Starts after U2 merges.                                                        |
+| U4 Make admin assignment skill-native                                        | pending          | TBD                               | TBD | Starts after U3 merges unless dependency scan says otherwise.                  |
+| U5 Adapt execution snapshots and runtime context                             | pending          | TBD                               | TBD | Starts after U3/U4 establish skill discovery.                                  |
+| U6 Clean up compatibility package and naming                                 | pending          | TBD                               | TBD | Final cleanup after all production imports are gone.                           |
+
+## Previous Autopilot Archive
+
+The history below belongs to the earlier Computer Runbooks Foundation autopilot run for `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`. It is retained for continuity but is not the active run.
 
 - 2026-05-10: Autopilot started from `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`.
 - 2026-05-10: Post-merge live smoke found deployed `runbookCatalog` returning no rows because the GraphQL Lambda artifact did not include the source-authored runbook YAML/Markdown assets. Started `codex/fix-runbook-lambda-assets` to include those assets in the `graphql-http` zip before rerunning live end-to-end validation.

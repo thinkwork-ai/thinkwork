@@ -30,6 +30,44 @@ Any other `execution:` value is treated as a catalog regression —
 `scripts/u8-status.ts` reports a non-empty `regressed` bucket, and
 `scripts/validate-skill-catalog.sh` rejects the slug at CI time.
 
+## Computer runbook-capable skills
+
+Some context skills are also routable by Thinkwork Computer as
+substantial-work runbooks. They are still normal Agent Skills: `SKILL.md`
+is the required entrypoint, with optional `references/`, `assets/`, and
+`scripts/` folders. The Computer-specific contract is deliberately small
+and lives in standard skill extension space instead of a parallel
+`runbook.yaml` file.
+
+Mark a skill as Computer-runbook-capable with:
+
+```yaml
+metadata:
+  thinkwork_kind: computer-runbook
+```
+
+The marker requires a machine-readable contract at
+`references/thinkwork-runbook.json` unless
+`metadata.thinkwork_runbook_contract` points at another relative path.
+That contract contains only the fields Computer needs before loading the
+whole skill: routing aliases/examples, confirmation copy, phase ids and
+titles, phase guidance references, task seeds, expected outputs,
+capability roles, and optional output-shaping asset references.
+
+Detailed instructions stay out of the JSON contract. Put phase prose in
+focused files such as `references/discover.md`,
+`references/analyze.md`, `references/produce.md`, and
+`references/validate.md`. Put output schemas, example payloads,
+templates, screenshots, or other shaping material under `assets/`.
+
+Validate the contract with `validateRunbookSkillContract` from
+`scripts/runbook-skill-contract.ts`. The validator fails closed when the
+marker is present but the contract is missing, references files outside
+the skill directory, references missing phase/assets files, or requests a
+capability role outside the platform registry. `allowed-tools` remains
+advisory; runtime capability enforcement is owned by the Computer
+execution path.
+
 ## Authoring a new skill
 
 1. Pick the shape. If the skill's behavior is deterministic code,
