@@ -1101,7 +1101,11 @@ async function loadThreadMessageHistory(input: {
     historyConditions.push(ne(messages.id, input.excludeMessageId));
   }
   const rows = await db
-    .select({ role: messages.role, content: messages.content })
+    .select({
+      role: messages.role,
+      content: messages.content,
+      metadata: messages.metadata,
+    })
     .from(messages)
     .where(and(...historyConditions))
     .orderBy(sql`${messages.created_at} desc`)
@@ -1112,12 +1116,23 @@ async function loadThreadMessageHistory(input: {
       (row) =>
         (row.role === "user" || row.role === "assistant") &&
         typeof row.content === "string" &&
-        row.content.length > 0,
+        row.content.length > 0 &&
+        shouldIncludeRunbookHistoryMessage(row.metadata),
     )
     .map((row) => ({
       role: row.role as "user" | "assistant",
       content: row.content as string,
     }));
+}
+
+export function shouldIncludeRunbookHistoryMessage(metadata: unknown) {
+  const key = stringValue(recordValue(metadata).runbookMessageKey);
+  if (!key) return true;
+  return !(
+    key.startsWith("runbook-progress:") ||
+    key.startsWith("runbook-queue:") ||
+    key.startsWith("runbook-confirmation:")
+  );
 }
 
 async function loadStrandsRuntimeId() {
