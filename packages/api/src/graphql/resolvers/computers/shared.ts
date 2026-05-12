@@ -12,9 +12,75 @@ import {
   agentTemplates,
   users,
   computerToCamel,
+  generateSlug,
 } from "../../utils.js";
 import { requireTenantAdmin, requireTenantMember } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+
+export type CreateComputerCoreInput = {
+  tenantId: string;
+  ownerUserId: string;
+  templateId: string;
+  name: string;
+  slug?: string | null;
+  runtimeConfig?: unknown;
+  budgetMonthlyCents?: number | null;
+  migratedFromAgentId?: string | null;
+  migrationMetadata?: unknown;
+  /**
+   * The user id to record on `computers.created_by`. Pass `null` (or omit) when
+   * the call site has no caller user — for example, the server-side auto-provision
+   * helper firing inside `bootstrapUser`, where the new user is mid-creation and
+   * the resolver's `ctx.auth` has not yet been resolved to a tenant member.
+   */
+  createdBy?: string | null;
+};
+
+/**
+ * Insert a Computer after validating ownership, template kind, optional source
+ * agent linkage, and the one-active-Computer-per-(tenant, user) invariant. Used
+ * by the `createComputer` GraphQL resolver (after its `requireTenantAdmin` gate)
+ * AND by the server-side `provisionComputerForMember` helper which fires inside
+ * membership-creation paths and must NOT call `requireTenantAdmin` — the new
+ * user is not yet tenant-admin-resolvable at the moment auto-provisioning runs.
+ *
+ * Throws on validation failure or on the `assertNoActiveComputer` conflict.
+ * Callers that need idempotency wrap the call and catch the `CONFLICT`
+ * GraphQLError (and the Postgres 23505 race-loss path) themselves.
+ */
+export async function createComputerCore(
+  input: CreateComputerCoreInput,
+): Promise<typeof computers.$inferSelect> {
+  await requireTenantUser(input.tenantId, input.ownerUserId);
+  await requireComputerTemplate(input.tenantId, input.templateId);
+  if (input.migratedFromAgentId) {
+    await requireTenantAgent(input.tenantId, input.migratedFromAgentId);
+  }
+  await assertNoActiveComputer(input.tenantId, input.ownerUserId);
+
+  const [row] = await db
+    .insert(computers)
+    .values({
+      tenant_id: input.tenantId,
+      owner_user_id: input.ownerUserId,
+      template_id: input.templateId,
+      name: input.name,
+      slug: input.slug ?? generateSlug(),
+      runtime_config:
+        input.runtimeConfig === undefined
+          ? undefined
+          : parseJsonInput(input.runtimeConfig),
+      budget_monthly_cents: input.budgetMonthlyCents,
+      migrated_from_agent_id: input.migratedFromAgentId,
+      migration_metadata:
+        input.migrationMetadata === undefined
+          ? undefined
+          : parseJsonInput(input.migrationMetadata),
+      created_by: input.createdBy ?? null,
+    })
+    .returning();
+  return row;
+}
 
 export function parseComputerStatus(value: unknown): string | undefined {
   return parseEnum(value, ["active", "provisioning", "failed", "archived"]);

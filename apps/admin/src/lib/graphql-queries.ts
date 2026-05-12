@@ -2358,6 +2358,31 @@ export const AgentTemplatesListQuery = graphql(`
   }
 `);
 
+// Returns tenant-scoped + platform-shipped (tenant_id IS NULL) Computer
+// templates so the admin Computer create-dialog can surface the platform
+// default alongside any tenant-authored templates. Distinct from
+// AgentTemplatesListQuery which filters strictly by tenant_id.
+export const ComputerTemplatesListQuery = graphql(`
+  query ComputerTemplatesList($tenantId: ID!) {
+    computerTemplates(tenantId: $tenantId) {
+      id
+      tenantId
+      name
+      slug
+      description
+      category
+      icon
+      templateKind
+      source
+      runtime
+      model
+      isPublished
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const AgentTemplateDetailQuery = graphql(`
   query AgentTemplateDetail($id: ID!) {
     agentTemplate(id: $id) {

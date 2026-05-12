@@ -267,6 +267,16 @@ type AcceptTemplateUpdateBulkResult {
 
 extend type Query {
   agentTemplates(tenantId: ID!): [AgentTemplate!]!
+  """
+  Computer templates available to a tenant. Returns the union of
+  tenant-scoped templates (tenant_id = $tenantId) and platform-shipped
+  templates (tenant_id IS NULL), both filtered to template_kind = 'computer'.
+  Used by admin's Computer create-dialog template picker so the
+  platform-default template is visible alongside any tenant-authored
+  Computer templates. The existing `agentTemplates` query filters
+  strictly by tenant_id and never returns NULL-tenant rows.
+  """
+  computerTemplates(tenantId: ID!): [AgentTemplate!]!
   agentTemplate(id: ID!): AgentTemplate
   agentVersions(agentId: ID!, limit: Int): [AgentVersion!]!
   linkedAgentsForTemplate(templateId: ID!): [Agent!]!
