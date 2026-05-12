@@ -6,6 +6,10 @@ This file is retained as the Artifact Builder compatibility reference. The publi
 
 The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call `save_app` directly.
 
+The quality bar is an operational CRM dashboard, not a formatted report. The app should resemble a dense LastMile-style sales dashboard: compact header and source/status badges, KPI strip, visual pipeline/risk comparisons, sortable or scannable entity rows, and restrained color accents for value, risk, stale activity, and success.
+
+Do not use emoji as icons, status markers, bullets, tab labels, headings, empty states, or data values. When an icon is useful, import it from `lucide-react` or `@tabler/icons-react`; otherwise use plain text or styled badges.
+
 ## Source Discovery
 
 Use the best sources available in this order:
@@ -83,9 +87,10 @@ Required sections:
 
 - Body intro or context row only when it helps interpret the dashboard.
 - KPIs: total pipeline, high-risk exposure, stale opportunity count, and next-meeting or source-health count when available.
-- Stage exposure: a bar chart from `stageExposure`.
+- Stage exposure: a bar chart or stacked bar chart from `stageExposure`.
 - Stale activity: a chart or compact table from `staleActivity`.
-- Top risks: a ranked table or list from `topRisks`, sorted by risk and exposure.
+- Top risks: a ranked table or compact list from `topRisks`, sorted by risk and exposure.
+- Opportunities: a sortable/scannable table from `opportunities`.
 
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
@@ -94,6 +99,14 @@ Use the stdlib prop names directly:
 - `KpiStrip` receives `cards={data.kpis}`.
 - `DataTable` receives `columns={...}` and `rows={data.opportunities}`.
 - `BarChart` receives `data={data.stageExposure}` or `data={data.staleActivity}`.
+
+Before saving, reject the draft and revise it if any of these are true:
+
+- The app reads like a markdown report or prose summary.
+- Core metrics are shown as paragraphs instead of visual comparisons.
+- It lacks a KPI strip, chart, or table.
+- It uses emoji characters for icons or labels.
+- It duplicates host chrome such as an outer artifact frame, `App` badge, open-full control, or refresh controls supplied by the host.
 
 ## Empty And Partial States
 

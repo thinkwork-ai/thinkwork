@@ -23,6 +23,10 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("host-provided Artifact chrome");
     expect(skill).toContain("sandboxed iframe runtime");
     expect(skill).toContain("Your TSX should render only the app body");
+    expect(skill).toContain("Never use emoji as icons");
+    expect(skill).toContain("lucide-react");
+    expect(skill).toContain("@tabler/icons-react");
+    expect(skill).toContain("not prose-only markdown reports");
   });
 
   it("defines the CRM dashboard applet contract", () => {
@@ -41,6 +45,11 @@ describe("Artifact Builder defaults", () => {
     expect(crmRecipe).toContain("do not add a duplicate app shell");
     expect(crmRecipe).toContain("source coverage panel");
     expect(crmRecipe).toContain("unless the user explicitly requests it");
+    expect(crmRecipe).toContain("operational CRM dashboard");
+    expect(crmRecipe).toContain("dense LastMile-style sales dashboard");
+    expect(crmRecipe).toContain("Do not use emoji as icons");
+    expect(crmRecipe).toContain("sortable/scannable table");
+    expect(crmRecipe).toContain("reject the draft and revise it");
   });
 
   it("keeps host chrome and provenance guidance out of default app bodies", () => {

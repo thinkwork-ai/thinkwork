@@ -180,6 +180,16 @@ def test_save_app_returns_api_validation_errors_verbatim(monkeypatch):
     assert result["persisted"] is False
 
 
+def test_save_app_tool_description_sets_dashboard_quality_floor():
+    save_app = applet_tool.make_save_app_fn(**RUNTIME)
+
+    description = save_app.__doc__ or ""
+
+    assert "not prose-only markdown reports" in description
+    assert "Do not use emoji as icons" in description
+    assert "lucide-react or @tabler/icons-react" in description
+
+
 def test_load_and_list_apps_call_graphql(monkeypatch):
     calls: list[dict[str, Any]] = []
 

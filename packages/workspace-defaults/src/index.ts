@@ -613,6 +613,7 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 7. Call \`save_app\` directly before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
 8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
 9. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
+10. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use \`lucide-react\` or \`@tabler/icons-react\` when an icon helps; otherwise use plain text or styled badges.
 
 ## Host Chrome And Runtime
 
@@ -632,6 +633,8 @@ Good apps include:
 - KPI strip for key totals.
 - Charts or tables that make comparison easy.
 - Empty, partial, and failed-source states proportional to the requested task.
+
+Dashboard apps must be dashboard-shaped, not prose-only markdown reports. Do not save a dashboard artifact that is primarily a prose report, markdown summary, or stack of text-only cards. A useful dashboard should show at least one meaningful visual comparison through a chart, table, map, timeline, or other structured UI surface.
 
 ## Maps
 
@@ -666,6 +669,10 @@ Use this reference when the user asks for a CRM, sales pipeline, opportunity, ac
 This file is retained as the Artifact Builder compatibility reference. The published \`crm-dashboard\` runbook owns orchestration and phase sequencing; this reference supplies the dashboard data shape, artifact layout, refresh contract, and \`save_app\` metadata for legacy prompts or active runbook produce phases.
 
 The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the available data first, generate the app source second, then call \`save_app\` directly.
+
+The quality bar is an operational CRM dashboard, not a formatted report. The app should resemble a dense LastMile-style sales dashboard: compact header and source/status badges, KPI strip, visual pipeline/risk comparisons, sortable or scannable entity rows, and restrained color accents for value, risk, stale activity, and success.
+
+Do not use emoji as icons, status markers, bullets, tab labels, headings, empty states, or data values. When an icon is useful, import it from \`lucide-react\` or \`@tabler/icons-react\`; otherwise use plain text or styled badges.
 
 ## Source Discovery
 
@@ -744,9 +751,10 @@ Required sections:
 
 - Body intro or context row only when it helps interpret the dashboard.
 - KPIs: total pipeline, high-risk exposure, stale opportunity count, and next-meeting or source-health count when available.
-- Stage exposure: a bar chart from \`stageExposure\`.
+- Stage exposure: a bar chart or stacked bar chart from \`stageExposure\`.
 - Stale activity: a chart or compact table from \`staleActivity\`.
-- Top risks: a ranked table or list from \`topRisks\`, sorted by risk and exposure.
+- Top risks: a ranked table or compact list from \`topRisks\`, sorted by risk and exposure.
+- Opportunities: a sortable/scannable table from \`opportunities\`.
 
 Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, and formatters such as \`formatCurrency\`.
 
@@ -755,6 +763,14 @@ Use the stdlib prop names directly:
 - \`KpiStrip\` receives \`cards={data.kpis}\`.
 - \`DataTable\` receives \`columns={...}\` and \`rows={data.opportunities}\`.
 - \`BarChart\` receives \`data={data.stageExposure}\` or \`data={data.staleActivity}\`.
+
+Before saving, reject the draft and revise it if any of these are true:
+
+- The app reads like a markdown report or prose summary.
+- Core metrics are shown as paragraphs instead of visual comparisons.
+- It lacks a KPI strip, chart, or table.
+- It uses emoji characters for icons or labels.
+- It duplicates host chrome such as an outer artifact frame, \`App\` badge, open-full control, or refresh controls supplied by the host.
 
 ## Empty And Partial States
 
@@ -825,7 +841,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 13;
+export const DEFAULTS_VERSION = 14;
 
 // ---------------------------------------------------------------------------
 // Aggregator
