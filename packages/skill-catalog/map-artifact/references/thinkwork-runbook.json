@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "sourceVersion": "0.1.0",
+  "routing": {
+    "explicitAliases": ["map artifact", "spatial dashboard", "territory map"],
+    "triggerExamples": [
+      "Build me a map of supplier risk.",
+      "Create a territory map for these accounts.",
+      "Show these locations on an interactive map artifact."
+    ],
+    "confidenceHints": [
+      "The user asks for a map, geography, territory, route, supplier location, region, or spatial risk view.",
+      "The expected output is an interactive map or map-centered artifact."
+    ]
+  },
+  "inputs": [
+    {
+      "id": "geography_scope",
+      "label": "Geography or territory scope",
+      "description": "The regions, locations, addresses, entities, or territories to map.",
+      "required": false,
+      "source": "user"
+    },
+    {
+      "id": "map_data_sources",
+      "label": "Map data sources",
+      "description": "Files, connectors, or user-provided data that contain location or territory fields.",
+      "required": false,
+      "source": "context"
+    }
+  ],
+  "confirmation": {
+    "title": "Build Map Artifact",
+    "summary": "Computer will discover location data, analyze spatial groupings or risks, produce an interactive map artifact, and validate that mapped points and regions match the evidence.",
+    "expectedOutputs": [
+      "Interactive map artifact",
+      "Location/entity summary",
+      "Evidence notes and unmapped-data caveats"
+    ],
+    "likelyTools": [
+      "workspace search",
+      "connected data sources",
+      "artifact builder"
+    ],
+    "phaseSummary": [
+      "Discover entities, location fields, regions, and source quality.",
+      "Analyze spatial groupings, risk signals, or territory patterns.",
+      "Produce a map-centered artifact.",
+      "Validate mapped entities, caveats, and unsupported locations."
+    ]
+  },
+  "phases": [
+    {
+      "id": "discover",
+      "title": "Discover map data",
+      "guidance": "references/discover.md",
+      "capabilityRoles": ["research"],
+      "dependsOn": [],
+      "taskSeeds": [
+        "Identify location-bearing entities, fields, and source quality.",
+        "Capture unmappable, ambiguous, missing, or low-confidence locations."
+      ]
+    },
+    {
+      "id": "analyze",
+      "title": "Analyze spatial patterns",
+      "guidance": "references/analyze.md",
+      "capabilityRoles": ["analysis", "map_build"],
+      "dependsOn": ["discover"],
+      "taskSeeds": [
+        "Derive useful groupings, layers, risk categories, and map controls.",
+        "Decide how to represent ambiguous or missing location evidence."
+      ]
+    },
+    {
+      "id": "produce",
+      "title": "Produce map artifact",
+      "guidance": "references/produce.md",
+      "capabilityRoles": ["artifact_build", "map_build"],
+      "dependsOn": ["analyze"],
+      "taskSeeds": [
+        "Generate an interactive map artifact with `MapView`, layers, filters, entity details, and proportional location caveats.",
+        "Persist the map artifact through `save_app` with map runbook metadata and the current thread id."
+      ]
+    },
+    {
+      "id": "validate",
+      "title": "Validate map result",
+      "guidance": "references/validate.md",
+      "capabilityRoles": ["validation"],
+      "dependsOn": ["produce"],
+      "taskSeeds": [
+        "Verify mapped entities against source evidence.",
+        "Confirm caveats for missing, approximate, or inferred locations are visible."
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "map_artifact",
+      "title": "Map artifact",
+      "type": "map",
+      "description": "A generated interactive map or map-centered dashboard artifact.",
+      "asset": "assets/map-artifact-data.schema.json"
+    },
+    {
+      "id": "location_evidence",
+      "title": "Location evidence and caveats",
+      "type": "evidence",
+      "description": "Notes about mapped, unmapped, ambiguous, and inferred locations."
+    }
+  ],
+  "assets": ["assets/map-artifact-data.schema.json"],
+  "overrides": {
+    "allowedFields": [
+      "catalog.description",
+      "approval.summary",
+      "approval.expectedOutputs",
+      "routing.triggerExamples"
+    ]
+  }
+}

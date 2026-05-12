@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MapArtifactData",
+  "type": "object",
+  "required": ["markers", "fit"],
+  "properties": {
+    "fit": {
+      "oneOf": [
+        {
+          "const": "auto"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        }
+      ]
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "latitude", "longitude"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "risk": {
+            "enum": ["high", "medium", "low"]
+          },
+          "confidence": {
+            "enum": ["exact", "approximate", "inferred"]
+          },
+          "detail": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "polylines": {
+      "type": "array"
+    },
+    "geojson": {
+      "type": "object"
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

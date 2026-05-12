@@ -85,12 +85,16 @@ build_handler() {
     cp "$REPO_ROOT/packages/database-pg/graphql/schema.graphql" "$out_dir/packages/database-pg/graphql/"
     cp "$REPO_ROOT/packages/database-pg/graphql/types/"*.graphql "$out_dir/packages/database-pg/graphql/types/"
 
-    # The bundled @thinkwork/runbooks loader resolves ../runbooks from the
-    # Lambda entrypoint, so these source-authored YAML/Markdown files must live
-    # at /var/task/runbooks in the deployed zip.
-    rm -rf "$out_dir/runbooks"
-    mkdir -p "$out_dir/runbooks"
-    cp -R "$REPO_ROOT/packages/runbooks/runbooks/." "$out_dir/runbooks/"
+    # The bundled @thinkwork/runbooks compatibility loader resolves
+    # runbook-capable Agent Skills from the skill catalog. Place those skill
+    # directories at /var/task/skill-catalog in the deployed zip.
+    rm -rf "$out_dir/skill-catalog"
+    mkdir -p "$out_dir/skill-catalog"
+    for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*; do
+      [ -d "$skill_dir" ] || continue
+      [ -f "$skill_dir/SKILL.md" ] || continue
+      cp -R "$skill_dir" "$out_dir/skill-catalog/"
+    done
   fi
 
   # Build a byte-identical zip when contents are byte-identical so
