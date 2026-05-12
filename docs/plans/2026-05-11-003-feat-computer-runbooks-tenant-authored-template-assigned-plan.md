@@ -1,13 +1,16 @@
 ---
 title: "feat: Tenant-authored, template-assigned Computer Runbooks"
 type: feat
-status: active
+status: superseded
 date: 2026-05-11
 origin: docs/brainstorms/2026-05-11-computer-runbooks-tenant-authored-template-assigned-requirements.md
 supersedes: docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md
+superseded_by: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
 ---
 
 # feat: Tenant-authored, template-assigned Computer Runbooks
+
+> Superseded on 2026-05-12 by `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`. The M:N template-assignment table and proprietary tenant runbook source format are withdrawn; runbooks are now planned as standard Agent Skills installed into Computer template workspaces.
 
 ## Overview
 
@@ -139,7 +142,7 @@ Additionally, the S3-event orchestration substrate from `docs/brainstorms/2026-0
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ### Storage layout (hybrid: structured index + S3 bodies)
 
@@ -202,10 +205,10 @@ Phase A and B may land in any order relative to each other; A is a prerequisite 
 
 ### Pin-class vs live-class field policy
 
-| Class | Fields | Edit gate | Audit |
-|---|---|---|---|
-| Pin | `capability_roles`, `triggers`, `auto_select_threshold`, template assignments | Elevated role server-side check | Row in `tenant_runbook_catalog_events` |
-| Live | `display_name`, `description`, `category`, `confirmation copy`, per-phase markdown | Tenant admin role | No audit row (manifest version captures change) |
+| Class | Fields                                                                             | Edit gate                       | Audit                                           |
+| ----- | ---------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------- |
+| Pin   | `capability_roles`, `triggers`, `auto_select_threshold`, template assignments      | Elevated role server-side check | Row in `tenant_runbook_catalog_events`          |
+| Live  | `display_name`, `description`, `category`, `confirmation copy`, per-phase markdown | Tenant admin role               | No audit row (manifest version captures change) |
 
 ---
 
@@ -352,6 +355,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none.
 
 **Files:**
+
 - `packages/database-pg/src/schema/runbook-assignments.ts` (new)
 - `packages/database-pg/src/schema/index.ts` (export new schema)
 - `packages/database-pg/drizzle/NNNN_agent_template_runbook_assignments.sql` (generated)
@@ -362,6 +366,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/database-pg/src/schema/mcp-servers.ts` `agentTemplateMcpServers`.
 
 **Test scenarios:**
+
 - Schema row inserts with valid `template_id` + `catalog_id`; duplicate pair raises unique-violation.
 - Deleting the parent template cascades the assignment row.
 - Deleting the catalog row cascades the assignment row.
@@ -381,6 +386,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none.
 
 **Files:**
+
 - `packages/database-pg/drizzle/NNNN_runbook_run_concurrency.sql` (new, hand-rolled with `-- creates:` markers)
 - `packages/database-pg/src/schema/__tests__/runbook-run-concurrency.test.ts` (new)
 
@@ -391,6 +397,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/database-pg/drizzle/0083_computer_runbooks.sql` for hand-rolled marker conventions.
 
 **Test scenarios:**
+
 - Inserting a second `awaiting_confirmation` row for the same `computer_id` raises a unique-violation.
 - Inserting a `queued` row when an `awaiting_confirmation` row exists on the same Computer raises a unique-violation.
 - Transitioning the first row to `completed` then inserting a new `queued` row succeeds.
@@ -409,6 +416,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none.
 
 **Files:**
+
 - `packages/database-pg/src/schema/runbook-audit-events.ts` (new)
 - `packages/database-pg/src/schema/index.ts` (export)
 - `packages/database-pg/drizzle/NNNN_runbook_audit_events.sql` (new, hand-rolled — append-only trigger)
@@ -419,6 +427,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/database-pg/src/schema/tenant-policy-events.ts`.
 
 **Test scenarios:**
+
 - Insert succeeds with valid `event_type`; invalid `event_type` raises CHECK violation.
 - `UPDATE tenant_runbook_catalog_events SET ...` raises a trigger exception.
 - `DELETE FROM tenant_runbook_catalog_events ...` raises a trigger exception.
@@ -437,6 +446,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none.
 
 **Files:**
+
 - `packages/database-pg/src/schema/runbooks.ts` (extend `tenantRunbookCatalog`)
 - `packages/database-pg/drizzle/NNNN_tenant_runbook_catalog_source.sql` (new, generated)
 - `packages/database-pg/src/schema/__tests__/runbooks.test.ts` (extend)
@@ -444,6 +454,7 @@ docs/src/content/docs/computer/
 **Approach:** Add columns: `source_kind text NOT NULL DEFAULT 'tenant_authored' CHECK (source_kind IN ('platform_starter','tenant_authored'))`, `last_rebuilt_at timestamptz NULL`, `starter_version text NULL` (for seed-reconciliation per U10). Generated via Drizzle.
 
 **Test scenarios:**
+
 - New rows default `source_kind='tenant_authored'`.
 - Migration backfills existing rows to `source_kind='platform_starter'` (since current rows derive from `packages/runbooks/`).
 - CHECK rejects unknown `source_kind`.
@@ -461,6 +472,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none (lands inert; no caller yet).
 
 **Files:**
+
 - `packages/api/src/handlers/runbook-files.ts` (new)
 - `packages/api/src/handlers/__tests__/runbook-files.test.ts` (new)
 - `terraform/modules/app/lambda-api/handlers.tf` (extend with `runbook-files` handler definition + route)
@@ -473,6 +485,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/api/src/handlers/skills.ts` `saveTenantFile` (L1453) + `tenantSkillsPrefix` (L1146).
 
 **Test scenarios:**
+
 - PUT to `tenants/T1/runbooks/foo/runbook.yaml` writes the S3 object at the constructed key.
 - Cross-tenant PUT (caller tenant != path tenant) returns 403.
 - Disallowed `filePath` (e.g., `../../etc/passwd`) returns 400.
@@ -493,6 +506,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U5.
 
 **Files:**
+
 - `packages/runbooks/src/loader.ts` (extend)
 - `packages/runbooks/src/__tests__/loader.test.ts` (extend)
 
@@ -501,6 +515,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing `packages/runbooks/src/loader.ts` package-path resolution + `packages/api/src/lib/workspace-manifest.ts` for tenant S3 read patterns.
 
 **Test scenarios:**
+
 - Loader with `tenantSlug='T1'` and tenant-S3 content present returns tenant content.
 - Loader with `tenantSlug='T1'` and no tenant S3 falls back to packaged starter.
 - Loader without `tenantSlug` reads from packaged starter (backward compat).
@@ -520,6 +535,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U3, U4, U5, U6.
 
 **Files:**
+
 - `packages/api/src/lib/runbooks/catalog-indexer.ts` (new)
 - `packages/api/src/lib/runbooks/authoring.ts` (new)
 - `packages/api/src/lib/runbooks/__tests__/catalog-indexer.test.ts` (new)
@@ -539,6 +555,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/api/src/graphql/resolvers/runbooks/confirmRunbookRun.mutation.ts` for resolver shape; `packages/api/src/lib/compliance/emit.ts` for in-tx audit-event pattern; `packages/api/src/graphql/resolvers/customize/enableSkill.mutation.ts` for the admin-mutation shape.
 
 **Test scenarios:**
+
 - **Happy path:** `createRunbook(slug='bug-triage', display_name='Bug Triage', category='engineering')` writes `runbook.yaml` to S3, inserts a catalog row with `source_kind='tenant_authored'`, returns the row.
 - **Frontmatter update:** updating `description` (live-class) writes S3 + rebuilds index but does NOT write an audit event.
 - **Pin-class edit:** updating `capability_roles` writes S3 + rebuilds index + writes `tenant_runbook_catalog_events` row with `before_value`, `after_value`, `actor_user_id`.
@@ -565,6 +582,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U1, U3, U7.
 
 **Files:**
+
 - `packages/api/src/lib/runbooks/assignments.ts` (new)
 - `packages/api/src/lib/runbooks/__tests__/assignments.test.ts` (new)
 - `packages/api/src/graphql/resolvers/runbooks/assignRunbookToTemplate.mutation.ts` (new)
@@ -580,6 +598,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `packages/api/src/graphql/resolvers/customize/enableSkill.mutation.ts` for the assignment-shaped mutation; `packages/api/src/lib/runbooks/catalog.ts` for the query shape.
 
 **Test scenarios:**
+
 - **Happy path:** assign runbook A to template T, retrieve via `listTenantRunbooks`, see assignment with `enabled=true`.
 - **Idempotent assignment:** re-assigning A→T returns the existing row (no error).
 - **Cross-tenant template:** assigning runbook A in tenant T1 to template T2 in tenant T2 returns 403.
@@ -603,6 +622,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U2, U3, U7 (audit table exists), existing `runs.ts`.
 
 **Files:**
+
 - `packages/api/src/lib/runbooks/runs.ts` (extend)
 - `packages/api/src/lib/runbooks/audit.ts` (new — shared writer used by U7, U8, U9)
 - `packages/api/src/lib/runbooks/__tests__/runs.test.ts` (extend)
@@ -617,6 +637,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing `packages/api/src/lib/runbooks/runs.ts` transition functions; `packages/api/src/lib/compliance/emit.ts` for in-tx audit writes.
 
 **Test scenarios:**
+
 - **Each legal transition** in the state diagram: `awaiting_confirmation → queued` (approve), `awaiting_confirmation → rejected`, `awaiting_confirmation → cancelled` (timeout), `queued → running` (claim), `queued → cancelled` (user cancel), `running → completed`, `running → failed`, `running → cancelled`.
 - **Each illegal transition** rejected with `RunbookRunTransitionError`: `completed → running`, `rejected → queued`, `cancelled → running`, etc.
 - **Idempotent approve:** `confirmRunbookRun(id)` called twice on the same `awaiting_confirmation` run returns the same result; called twice across rapid network retries does not create two `queued` rows.
@@ -642,6 +663,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U4 (`source_kind`, `starter_version` columns), U5 (runbook-files Lambda), U7 (indexer).
 
 **Files:**
+
 - `packages/api/src/lib/tenants/seed-runbook-starters.ts` (new — creates the `lib/tenants/` directory)
 - `packages/api/src/lib/tenants/__tests__/seed-runbook-starters.test.ts` (new)
 - `packages/api/src/lib/stripe-provision-tenant.ts` (extend — this is the existing tenant-provisioning entry point; the seed step hooks in here, not in a separate seed module that doesn't yet exist)
@@ -651,6 +673,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing tenant-creation seed code (look under `packages/api/src/lib/tenants/`); `packages/api/src/handlers/skills.ts` for the equivalent skill seed pattern.
 
 **Test scenarios:**
+
 - **New tenant:** all 3 starters (crm-dashboard, map-artifact, research-dashboard) materialize as tenant catalog rows + S3 files.
 - **Idempotent reseed:** running the seed twice does not create duplicate rows.
 - **Tenant-edited starter preserved:** tenant edits `runbook.yaml`; reseed leaves the edited row + S3 content alone.
@@ -672,6 +695,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U7.
 
 **Files:**
+
 - `apps/admin/src/routes/_authed/_tenant/capabilities/runbooks/index.tsx` (new)
 - `apps/admin/src/routes/_authed/_tenant/capabilities/runbooks/new.tsx` (new)
 - `apps/admin/src/lib/runbooks-api.ts` (new — client wrapper for GraphQL mutations + queries from U7/U8)
@@ -683,6 +707,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `apps/admin/src/routes/_authed/_tenant/capabilities/skills/index.tsx` for list layout; `apps/admin/src/routes/_authed/_tenant/capabilities/skills/builder.tsx` for create-flow shape; `apps/admin/src/lib/skills-api.ts` for the API client wrapper.
 
 **Test scenarios:**
+
 - List loads with tenant's runbooks (after U10 seeds 3 starters).
 - Empty state renders with prompt to create or seed.
 - Search/filter by category or status.
@@ -703,6 +728,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U6, U7, U8, U11.
 
 **Files:**
+
 - `apps/admin/src/routes/_authed/_tenant/capabilities/runbooks/$slug.$tab.tsx` (new — mirrors `agent-templates/$templateId.$tab.tsx`)
 - `apps/admin/src/components/runbook-editor/RunbookEditor.tsx` (new)
 - `apps/admin/src/components/runbook-editor/FrontmatterForm.tsx` (new)
@@ -717,6 +743,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** `apps/admin/src/components/agent-builder/WorkspaceEditor.tsx` (composition shape); `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx` (route + tab shape); `apps/admin/src/components/skills/SkillFileTree.tsx` (file tree shape); `@uiw/react-codemirror` + `@codemirror/lang-markdown` (already used in skill builder).
 
 **Test scenarios:**
+
 - Configuration tab loads, frontmatter fields render, live-class edits save via `updateRunbookFrontmatter`.
 - Pin-class fields render with lock icon for non-elevated users; edit attempts surface the elevated-role requirement.
 - Phase tab loads file tree from tenant S3; opening a phase loads markdown into CodeMirror; save persists via `updateRunbookPhase`.
@@ -739,6 +766,7 @@ docs/src/content/docs/computer/
 **Dependencies:** none (lands inert until U15 wires the field into `skills_config`).
 
 **Files:**
+
 - `packages/agentcore-strands/agent-container/container-sources/skill_runner.py` (extend `register_skill_tools`)
 - `packages/agentcore-strands/agent-container/container-sources/invocation_env.py` (extend subset-dict)
 - `packages/agentcore-strands/agent-container/container-sources/server.py` (extend `_call_strands_agent` to pass `capability_roles`)
@@ -752,6 +780,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing `blocked_tools` filtering in `builtin_tool_filter.py` and `skill_meta_tool.py` (where the platform-level allow/deny logic already lives — not `skill_runner.py`); `packages/agentcore-strands/agent-container/test_delegate_to_workspace_tool.py` for the test shape.
 
 **Test scenarios:**
+
 - **No capability_roles:** registration matches today's behavior exactly (regression characterization).
 - **capability_roles=['research', 'web_search']:** only skills declaring at least one of these roles register.
 - **Workspace-discovered skill outside allowlist:** filter applies — skill is not registered even though its folder is present.
@@ -773,6 +802,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U1, U8, U9, U13.
 
 **Files:**
+
 - `packages/api/src/lib/computers/thread-cutover.ts` (extend)
 - `packages/api/src/lib/runbooks/router.ts` (extend or add `assignment-aware-router.ts`)
 - `packages/api/src/handlers/chat-agent-invoke.ts` (extend `skills_config` payload to include `capability_roles` from snapshot)
@@ -786,6 +816,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing `packages/api/src/lib/runbooks/router.ts`; `packages/api/src/handlers/chat-agent-invoke.ts` L566 for the skills payload shape.
 
 **Test scenarios:**
+
 - **AE1 / AE3:** runbook A assigned to engineering-template only; Computer on engineering template auto-selects A; Computer on sales template never sees A (no auto-select, explicit invocation creates a `blocked` run).
 - **AE4:** prompt with no confident match creates an `ad_hoc` run row and renders the visible task plan.
 - **AE6:** disable assignment between auto-select and approve — in-flight `awaiting_confirmation` run continues to resolve; new prompts no longer match.
@@ -808,6 +839,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U9.
 
 **Files:**
+
 - `apps/computer/src/components/runbooks/RunbookQueue.tsx` (extend with cancel button)
 - `apps/computer/src/lib/graphql-queries.ts` (verify `CancelRunbookRunMutation` exists; extend if not)
 - `apps/computer/src/components/runbooks/__tests__/RunbookQueue.test.tsx` (extend)
@@ -821,6 +853,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Existing scheduled-job entries under `packages/lambda/`; `feedback_avoid_fire_and_forget_lambda_invokes` (use `RequestResponse` if any sub-invokes are required).
 
 **Test scenarios:**
+
 - Cancel button visible for queued/running runs only.
 - Click cancel → mutation succeeds → Queue UI re-renders with `status='cancelled'`.
 - Cancel of completed run shows a clear "already completed" error (state-machine enforced).
@@ -841,6 +874,7 @@ docs/src/content/docs/computer/
 **Dependencies:** U10.
 
 **Files:**
+
 - `packages/runbooks/runbooks/crm-dashboard/runbook.yaml` (extend YAML to declare `source_kind: platform_starter` + `starter_version`)
 - `packages/runbooks/runbooks/map-artifact/runbook.yaml` (same)
 - `packages/runbooks/runbooks/research-dashboard/runbook.yaml` (same)
@@ -853,6 +887,7 @@ docs/src/content/docs/computer/
 **Patterns to follow:** Workspace-defaults byte-parity test pattern at `packages/workspace-defaults/src/__tests__/artifact-builder.test.ts`.
 
 **Test scenarios:**
+
 - Loader (U6) parses the new `starter_version` field without breaking.
 - Workspace-defaults byte-parity tests pass with the updated SKILL.md.
 - Manual smoke: an artifact-producing runbook (after U14 lands) still successfully invokes the artifact-builder skill end-to-end.
@@ -870,13 +905,15 @@ docs/src/content/docs/computer/
 **Dependencies:** U11–U14 shipped.
 
 **Files:**
+
 - `docs/src/content/docs/computer/runbooks-authoring.md` (new)
 - `docs/src/content/docs/computer/runbooks-execution.md` (new — separate from authoring)
 
 **Approach:** Walk through: authoring a runbook (slug, frontmatter, phases), the pin/live field model, template assignment, run lifecycle (Confirmation → Queue → audit), and the capability_roles allowlist. Include screenshots once U11–U14 land.
 
 **Test scenarios:**
-- *Test expectation: none — documentation only.*
+
+- _Test expectation: none — documentation only._
 
 **Verification:** Manual review; docs build cleanly via the existing Starlight build.
 
@@ -884,19 +921,19 @@ docs/src/content/docs/computer/
 
 ## Risk Analysis & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| `capability_roles` filter silently drops in `apply_invocation_env` subset-dict | Medium | High (security boundary fails open) | U13 has an explicit subset-dict passthrough test; reference learning `apply-invocation-env-field-passthrough-2026-04-24.md` |
-| AgentCore container deploy stale — `capability_roles` enforcement not live after merge | Medium | High | U13 verification step checks `lastUpdatedAt` on `get-agent-runtime`; rely on 15-min reconciler (`agentcore-runtime-no-auto-repull` learning) |
-| Hand-rolled SQL not applied to dev → deploy gate fails | High | Medium | U2, U3 carry explicit "apply via psql -f to dev" execution notes; `db:migrate-manual` runs in CI |
-| Per-Computer concurrency partial unique index masks application bugs | Low | Medium | U9 state-machine tests assert application-layer rejection BEFORE the DB raises unique-violation; DB index is defense in depth |
-| Snapshot timing at claim breaks the `definition_changed` UX expectation | Low | Low | U9 explicit test for snapshot timing; data part exposes `definition_changed` boolean |
-| Tenant slug collision on seed reseed silently overwrites tenant content | Low | High (data loss) | U10 explicitly tests tenant-edited preservation; reseed never overwrites, only inserts new |
-| GraphQL Lambda deploy bypass (`aws lambda update-function-code`) for hotfix during rollout | Medium | Medium (drift, schema mismatch) | `feedback_graphql_deploy_via_pr`: PR-only deploy path; document in U7 unit |
-| Cross-tenant template assignment via API bypass of admin UI | Low | High (privilege escalation) | U8 server-side `template.tenant_id === catalog.tenant_id` validation + explicit test |
-| Confirmation card stale across two browser sessions | Low | Medium | Existing subscription mirror for run-state updates (RunbookConfirmation + Queue components subscribe to live status); add an integration test |
-| Phase failure halt policy too strict for some runbook patterns | Medium | Low | v1 is intentional; retry policy is future work documented in Scope Boundaries |
-| Confidence threshold (auto-selection) too aggressive or too conservative | Medium | Low (UX) | Conservative default (e.g., 0.8); tune from production observations; not a security boundary |
+| Risk                                                                                       | Likelihood | Impact                              | Mitigation                                                                                                                                    |
+| ------------------------------------------------------------------------------------------ | ---------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capability_roles` filter silently drops in `apply_invocation_env` subset-dict             | Medium     | High (security boundary fails open) | U13 has an explicit subset-dict passthrough test; reference learning `apply-invocation-env-field-passthrough-2026-04-24.md`                   |
+| AgentCore container deploy stale — `capability_roles` enforcement not live after merge     | Medium     | High                                | U13 verification step checks `lastUpdatedAt` on `get-agent-runtime`; rely on 15-min reconciler (`agentcore-runtime-no-auto-repull` learning)  |
+| Hand-rolled SQL not applied to dev → deploy gate fails                                     | High       | Medium                              | U2, U3 carry explicit "apply via psql -f to dev" execution notes; `db:migrate-manual` runs in CI                                              |
+| Per-Computer concurrency partial unique index masks application bugs                       | Low        | Medium                              | U9 state-machine tests assert application-layer rejection BEFORE the DB raises unique-violation; DB index is defense in depth                 |
+| Snapshot timing at claim breaks the `definition_changed` UX expectation                    | Low        | Low                                 | U9 explicit test for snapshot timing; data part exposes `definition_changed` boolean                                                          |
+| Tenant slug collision on seed reseed silently overwrites tenant content                    | Low        | High (data loss)                    | U10 explicitly tests tenant-edited preservation; reseed never overwrites, only inserts new                                                    |
+| GraphQL Lambda deploy bypass (`aws lambda update-function-code`) for hotfix during rollout | Medium     | Medium (drift, schema mismatch)     | `feedback_graphql_deploy_via_pr`: PR-only deploy path; document in U7 unit                                                                    |
+| Cross-tenant template assignment via API bypass of admin UI                                | Low        | High (privilege escalation)         | U8 server-side `template.tenant_id === catalog.tenant_id` validation + explicit test                                                          |
+| Confirmation card stale across two browser sessions                                        | Low        | Medium                              | Existing subscription mirror for run-state updates (RunbookConfirmation + Queue components subscribe to live status); add an integration test |
+| Phase failure halt policy too strict for some runbook patterns                             | Medium     | Low                                 | v1 is intentional; retry policy is future work documented in Scope Boundaries                                                                 |
+| Confidence threshold (auto-selection) too aggressive or too conservative                   | Medium     | Low (UX)                            | Conservative default (e.g., 0.8); tune from production observations; not a security boundary                                                  |
 
 ---
 

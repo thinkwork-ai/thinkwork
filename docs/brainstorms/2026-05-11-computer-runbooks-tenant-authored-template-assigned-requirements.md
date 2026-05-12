@@ -1,9 +1,12 @@
 ---
 date: 2026-05-11
 topic: computer-runbooks-tenant-authored-template-assigned
+superseded_by: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
 ---
 
 # Computer Runbooks: Tenant-Authored and Template-Assigned
+
+> Superseded on 2026-05-12 by `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`. The decision that "runbooks reference skills as capabilities; they are not skills themselves" is withdrawn. Runbooks are now framed as complex Agent Skills using `SKILL.md`, `references/`, `assets/`, and optional `scripts/`.
 
 ## Summary
 
