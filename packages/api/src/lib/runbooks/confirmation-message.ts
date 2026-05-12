@@ -40,6 +40,7 @@ export function buildRunbookConfirmationMessage(input: {
     runbookRunId: input.run.id,
     runbookSlug: input.runbook.slug,
     runbookVersion: input.runbook.version,
+    status: input.run.status,
     title: input.runbook.approval.title,
     displayName: input.runbook.catalog.displayName,
     description: input.runbook.catalog.description,

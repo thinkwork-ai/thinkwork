@@ -3,7 +3,7 @@
 import { Badge } from "@thinkwork/ui/badge";
 import { Button } from "@thinkwork/ui/button";
 import { Check, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation } from "urql";
 import {
   Confirmation,
@@ -32,6 +32,7 @@ export function RunbookConfirmation({
 }: RunbookConfirmationProps) {
   const runbookRunId = stringValue(data.runbookRunId);
   const mode = stringValue(data.mode) ?? "approval";
+  const persistedDecision = decisionFromStatus(data.status);
   const [, confirmRunbookRun] = useMutation(ConfirmRunbookRunMutation);
   const [, rejectRunbookRun] = useMutation(RejectRunbookRunMutation);
   const [pendingAction, setPendingAction] = useState<
@@ -51,10 +52,16 @@ export function RunbookConfirmation({
     stringValue(data.description) ??
     "Confirm before Computer starts this runbook.";
   const isApproval = mode === "approval" && Boolean(runbookRunId);
+  const effectiveDecision = decision ?? persistedDecision;
+  const canDecide = isApproval && !effectiveDecision;
   const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  const eventDetail = useMemo(
+    () => ({ runbookRunId: runbookRunId ?? null }),
+    [runbookRunId],
+  );
 
   async function handleConfirm() {
-    if (!runbookRunId || pendingAction || decision) return;
+    if (!runbookRunId || pendingAction || effectiveDecision) return;
     setPendingAction("confirm");
     setError(null);
     try {
@@ -65,6 +72,11 @@ export function RunbookConfirmation({
         if (result.error) throw result.error;
       }
       setDecision("confirmed");
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:runbook-decision", {
+          detail: { ...eventDetail, decision: "confirmed" },
+        }),
+      );
     } catch (err) {
       setError(errorMessage(err, "Could not approve this runbook."));
     } finally {
@@ -73,7 +85,7 @@ export function RunbookConfirmation({
   }
 
   async function handleReject() {
-    if (!runbookRunId || pendingAction || decision) return;
+    if (!runbookRunId || pendingAction || effectiveDecision) return;
     setPendingAction("reject");
     setError(null);
     try {
@@ -84,6 +96,11 @@ export function RunbookConfirmation({
         if (result.error) throw result.error;
       }
       setDecision("rejected");
+      window.dispatchEvent(
+        new CustomEvent("thinkwork:runbook-decision", {
+          detail: { ...eventDetail, decision: "rejected" },
+        }),
+      );
     } catch (err) {
       setError(errorMessage(err, "Could not reject this runbook."));
     } finally {
@@ -96,9 +113,9 @@ export function RunbookConfirmation({
       <ConfirmationHeader>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ConfirmationTitle>{title}</ConfirmationTitle>
-          {decision ? (
+          {effectiveDecision ? (
             <Badge variant="secondary" className="capitalize">
-              {decision}
+              {effectiveDecision}
             </Badge>
           ) : null}
         </div>
@@ -128,13 +145,13 @@ export function RunbookConfirmation({
         ) : null}
       </ConfirmationContent>
 
-      {isApproval ? (
+      {canDecide ? (
         <ConfirmationActions>
           <Button
             type="button"
             size="sm"
             onClick={handleConfirm}
-            disabled={Boolean(pendingAction || decision)}
+            disabled={Boolean(pendingAction)}
           >
             <Check className="size-4" />
             {pendingAction === "confirm" ? "Approving" : "Approve"}
@@ -144,7 +161,7 @@ export function RunbookConfirmation({
             size="sm"
             variant="outline"
             onClick={handleReject}
-            disabled={Boolean(pendingAction || decision)}
+            disabled={Boolean(pendingAction)}
           >
             <X className="size-4" />
             {pendingAction === "reject" ? "Rejecting" : "Reject"}
@@ -215,6 +232,21 @@ function stringArray(value: unknown): string[] {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function decisionFromStatus(value: unknown): "confirmed" | "rejected" | null {
+  const status = stringValue(value)?.toLowerCase().replace(/_/g, "-");
+  if (!status || status === "awaiting-confirmation") return null;
+  if (status === "rejected" || status === "cancelled") return "rejected";
+  if (
+    status === "queued" ||
+    status === "running" ||
+    status === "completed" ||
+    status === "failed"
+  ) {
+    return "confirmed";
+  }
+  return null;
 }
 
 function errorMessage(error: unknown, fallback: string) {

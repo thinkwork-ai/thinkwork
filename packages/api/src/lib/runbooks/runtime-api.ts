@@ -251,6 +251,13 @@ export async function startRunbookExecutionTask(input: {
     computerId: input.computerId,
     runbookRunId: payload.runbookRunId,
   });
+  await persistRunbookProgressMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+    runbookTaskId: input.runbookTaskId,
+    kind: "started",
+  });
   return updatedTask;
 }
 
@@ -291,6 +298,14 @@ export async function completeRunbookExecutionTask(input: {
     tenantId: input.tenantId,
     computerId: input.computerId,
     runbookRunId: payload.runbookRunId,
+  });
+  await persistRunbookProgressMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+    runbookTaskId: input.runbookTaskId,
+    kind: "completed",
+    output: input.output,
   });
   return toRuntimeTask(updated);
 }
@@ -505,6 +520,108 @@ export async function recordRunbookExecutionResponse(input: {
   };
 }
 
+async function persistRunbookProgressMessage(input: {
+  tenantId: string;
+  computerId: string;
+  runbookRunId: string;
+  runbookTaskId: string;
+  kind: "started" | "completed" | "failed";
+  output?: unknown;
+  error?: unknown;
+}) {
+  const { run, tasks } = await loadRunbookRunState({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: input.runbookRunId,
+  });
+  if (!run.thread_id) return null;
+
+  const task = tasks.find((candidate) => candidate.id === input.runbookTaskId);
+  if (!task) return null;
+
+  const key = `runbook-progress:${run.id}:${task.task_key}:${input.kind}`;
+  const [existing] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, run.thread_id),
+        sql`${messages.metadata}->>'runbookMessageKey' = ${key}`,
+      ),
+    )
+    .limit(1);
+  if (existing) return existing;
+
+  const nextTask = nextPendingTask(tasks, task.sort_order);
+  const content = runbookProgressContent({
+    kind: input.kind,
+    task,
+    nextTask,
+    output: input.output,
+    error: input.error,
+  });
+  const [assistantMessage] = await db
+    .insert(messages)
+    .values({
+      tenant_id: input.tenantId,
+      thread_id: run.thread_id,
+      role: "assistant",
+      content,
+      parts: [
+        {
+          type: "text",
+          id: key,
+          text: content,
+        },
+      ],
+      sender_type: "computer",
+      sender_id: input.computerId,
+      metadata: {
+        runbookMessageKey: key,
+        runbookRunId: run.id,
+        runbookSlug: run.runbook_slug,
+        runbookTaskId: task.id,
+        runbookTaskKey: task.task_key,
+        runbookProgressKind: input.kind,
+      },
+    })
+    .returning({ id: messages.id });
+  if (!assistantMessage) return null;
+
+  const [thread] = await db
+    .update(threads)
+    .set({
+      last_response_preview:
+        content.length > 240 ? `${content.slice(0, 237)}...` : content,
+      updated_at: new Date(),
+    })
+    .where(
+      and(eq(threads.tenant_id, input.tenantId), eq(threads.id, run.thread_id)),
+    )
+    .returning({ status: threads.status, title: threads.title });
+
+  await notifyNewMessage({
+    messageId: assistantMessage.id,
+    threadId: run.thread_id,
+    tenantId: input.tenantId,
+    role: "assistant",
+    content,
+    senderType: "computer",
+    senderId: input.computerId,
+  }).catch(() => {});
+  if (thread) {
+    await notifyThreadUpdate({
+      threadId: run.thread_id,
+      tenantId: input.tenantId,
+      status: thread.status ?? "in_progress",
+      title: thread.title ?? "Untitled thread",
+    }).catch(() => {});
+  }
+
+  return assistantMessage;
+}
+
 export async function failRunbookExecutionTask(input: {
   tenantId: string;
   computerId: string;
@@ -568,6 +685,14 @@ export async function failRunbookExecutionTask(input: {
     computerId: input.computerId,
     runbookRunId: payload.runbookRunId,
   });
+  await persistRunbookProgressMessage({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    runbookRunId: payload.runbookRunId,
+    runbookTaskId: input.runbookTaskId,
+    kind: "failed",
+    error: input.error,
+  });
   return { failed: true, runbookRunId: payload.runbookRunId };
 }
 
@@ -618,6 +743,68 @@ export async function completeRunbookExecutionRun(input: {
     runbookRunId: payload.runbookRunId,
   });
   return toRuntimeRun(updated);
+}
+
+function nextPendingTask(
+  tasks: (typeof computerRunbookTasks.$inferSelect)[],
+  afterSortOrder: number,
+) {
+  return (
+    tasks
+      .filter(
+        (task) =>
+          task.sort_order > afterSortOrder &&
+          ["pending", "running"].includes(task.status),
+      )
+      .sort((a, b) => a.sort_order - b.sort_order)[0] ?? null
+  );
+}
+
+function runbookProgressContent(input: {
+  kind: "started" | "completed" | "failed";
+  task: typeof computerRunbookTasks.$inferSelect;
+  nextTask: typeof computerRunbookTasks.$inferSelect | null;
+  output?: unknown;
+  error?: unknown;
+}) {
+  const title = input.task.title;
+  if (input.kind === "started") {
+    return `Starting ${title}.`;
+  }
+  if (input.kind === "failed") {
+    return `Stopped on ${title}: ${errorSummary(input.error)}.`;
+  }
+  const output = outputSummary(input.output);
+  const next = input.nextTask
+    ? ` Next I'll start ${input.nextTask.title}.`
+    : " This was the final runbook task.";
+  return `Completed ${title}.${output ? ` ${output}` : ""}${next}`;
+}
+
+function outputSummary(output: unknown) {
+  const record = recordValue(output);
+  const responseText = stringValue(record.responseText);
+  if (responseText) return truncateSentence(responseText, 220);
+  const content = stringValue(record.content) ?? stringValue(record.summary);
+  if (content) return truncateSentence(content, 220);
+  if (Object.keys(record).length > 0)
+    return "Saved the task output for the next step.";
+  return "";
+}
+
+function errorSummary(error: unknown) {
+  const record = recordValue(error);
+  return (
+    stringValue(record.message) ??
+    stringValue(record.code) ??
+    (typeof error === "string" && error.trim() ? error.trim() : "task failed")
+  );
+}
+
+function truncateSentence(value: string, maxLength: number) {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  if (singleLine.length <= maxLength) return singleLine;
+  return `${singleLine.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function buildRunbookStepPrompt(input: {

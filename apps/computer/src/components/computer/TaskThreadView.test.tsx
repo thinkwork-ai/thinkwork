@@ -439,7 +439,24 @@ describe("TaskThreadView", () => {
       within(promptQueue).getAllByText("CRM Dashboard").length,
     ).toBeGreaterThan(0);
 
-    fireEvent.click(collapse);
+    fireEvent.pointerDown(document.body);
+
+    expect(
+      within(promptQueue)
+        .getByRole("button", { name: "Expand task queue" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(within(promptQueue).queryByText("Build dashboard")).toBeNull();
+
+    fireEvent.click(
+      within(promptQueue).getByRole("button", { name: "Expand task queue" }),
+    );
+    expect(within(promptQueue).getByText("Build dashboard")).toBeTruthy();
+
+    const collapseAfterOutsideClick = within(promptQueue).getByRole("button", {
+      name: "Collapse task queue",
+    });
+    fireEvent.click(collapseAfterOutsideClick);
 
     expect(
       within(promptQueue)

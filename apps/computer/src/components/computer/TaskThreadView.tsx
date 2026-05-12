@@ -10,7 +10,14 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { Children, useState, type FormEvent, type ReactNode } from "react";
+import {
+  Children,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   Conversation,
   ConversationContent,
@@ -658,13 +665,31 @@ function FollowUpComposer({
 
 function PromptTaskQueue({ queue }: { queue: TaskQueueData }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLElement | null>(null);
   const title = stringValue(queue.title) ?? "Task queue";
   const status = statusLabel(normalizeTaskQueueStatus(queue.status));
   const counts = countTaskQueueItems(queue);
   const panelId = `task-prompt-queue-${queue.queueId ?? "active"}`;
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && containerRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [open]);
+
   return (
     <section
+      ref={containerRef}
       className="overflow-hidden border-b border-white/10 bg-[#262626] text-white"
       aria-label="Active task queue"
     >
