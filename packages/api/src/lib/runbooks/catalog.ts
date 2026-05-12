@@ -1,7 +1,7 @@
 import { and, asc, eq, ne, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { tenantRunbookCatalog } from "@thinkwork/database-pg/schema";
-import { runbookRegistry, type RunbookDefinition } from "@thinkwork/runbooks";
+import type { RunbookDefinition } from "@thinkwork/runbooks";
 
 const db = getDb();
 
@@ -23,7 +23,7 @@ export function buildRunbookCatalogSeedRows(input: {
   tenantId: string;
   definitions?: RunbookDefinition[];
 }): RunbookCatalogSeedRow[] {
-  return [...(input.definitions ?? runbookRegistry.all)]
+  return [...(input.definitions ?? [])]
     .sort((a, b) => a.slug.localeCompare(b.slug))
     .map((definition) => ({
       tenant_id: input.tenantId,
@@ -51,6 +51,7 @@ export function getUnavailableCatalogSlugs(input: {
 export async function seedRunbookCatalogForTenant(input: {
   tenantId: string;
   definitions?: RunbookDefinition[];
+  markUnavailable?: boolean;
 }) {
   const rows = buildRunbookCatalogSeedRows(input);
   if (rows.length > 0) {
@@ -72,22 +73,24 @@ export async function seedRunbookCatalogForTenant(input: {
       });
   }
 
-  const activeSlugs = rows.map((row) => row.slug);
-  const unavailableWhere =
-    activeSlugs.length === 0
-      ? and(
-          eq(tenantRunbookCatalog.tenant_id, input.tenantId),
-          ne(tenantRunbookCatalog.status, "archived"),
-        )
-      : and(
-          eq(tenantRunbookCatalog.tenant_id, input.tenantId),
-          ne(tenantRunbookCatalog.status, "archived"),
-          notInArray(tenantRunbookCatalog.slug, activeSlugs),
-        );
-  await db
-    .update(tenantRunbookCatalog)
-    .set({ status: "unavailable", enabled: false, updated_at: new Date() })
-    .where(unavailableWhere);
+  if (input.markUnavailable) {
+    const activeSlugs = rows.map((row) => row.slug);
+    const unavailableWhere =
+      activeSlugs.length === 0
+        ? and(
+            eq(tenantRunbookCatalog.tenant_id, input.tenantId),
+            ne(tenantRunbookCatalog.status, "archived"),
+          )
+        : and(
+            eq(tenantRunbookCatalog.tenant_id, input.tenantId),
+            ne(tenantRunbookCatalog.status, "archived"),
+            notInArray(tenantRunbookCatalog.slug, activeSlugs),
+          );
+    await db
+      .update(tenantRunbookCatalog)
+      .set({ status: "unavailable", enabled: false, updated_at: new Date() })
+      .where(unavailableWhere);
+  }
 
   return listRunbookCatalog({ tenantId: input.tenantId });
 }

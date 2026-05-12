@@ -159,6 +159,7 @@ function buildWeightedKeywords(runbook: RunbookDefinition) {
   const weighted = new Map<string, number>();
   addWeightedText(weighted, runbook.slug.replace(/-/g, " "), 3);
   addWeightedText(weighted, runbook.catalog.displayName, 3);
+  addWeightedText(weighted, runbook.catalog.description, 1);
   for (const alias of runbook.routing.explicitAliases) {
     addWeightedText(weighted, alias, 3);
   }

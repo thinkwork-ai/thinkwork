@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { seedRunbookCatalogForTenant } from "../../../lib/runbooks/catalog.js";
+import { listRunbookCatalog } from "../../../lib/runbooks/catalog.js";
 import { resolveRunbookCaller } from "./shared.js";
 
 export async function runbookCatalog(
@@ -8,5 +8,5 @@ export async function runbookCatalog(
   ctx: GraphQLContext,
 ) {
   const { tenantId } = await resolveRunbookCaller(ctx);
-  return seedRunbookCatalogForTenant({ tenantId });
+  return listRunbookCatalog({ tenantId });
 }

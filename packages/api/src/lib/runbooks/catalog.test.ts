@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runbookRegistry } from "@thinkwork/runbooks";
+import { loadRunbooks } from "@thinkwork/runbooks";
 import {
   buildRunbookCatalogSeedRows,
   getUnavailableCatalogSlugs,
@@ -9,7 +9,7 @@ describe("runbook catalog helpers", () => {
   it("builds one active tenant-scoped catalog row per source runbook", () => {
     const rows = buildRunbookCatalogSeedRows({
       tenantId: "tenant-1",
-      definitions: runbookRegistry.all,
+      definitions: loadRunbooks(),
     });
 
     const slugs = rows.map((row) => row.slug);
@@ -24,6 +24,10 @@ describe("runbook catalog helpers", () => {
         enabled: true,
       }),
     );
+  });
+
+  it("does not seed a global catalog when no assigned skill definitions are provided", () => {
+    expect(buildRunbookCatalogSeedRows({ tenantId: "tenant-1" })).toEqual([]);
   });
 
   it("marks removed source runbooks unavailable without deleting history", () => {

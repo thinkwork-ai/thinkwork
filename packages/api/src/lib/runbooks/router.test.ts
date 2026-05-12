@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { runbookRegistry } from "@thinkwork/runbooks";
+import { loadRunbooks } from "@thinkwork/runbooks";
 import { routeRunbookPrompt } from "./router.js";
 
 describe("runbook router", () => {
+  const runbooks = loadRunbooks();
+  const requireRunbook = (slug: string) => {
+    const runbook = runbooks.find((candidate) => candidate.slug === slug);
+    if (!runbook) throw new Error(`Missing test runbook ${slug}`);
+    return runbook;
+  };
+
   it("routes explicit named runbook invocation without confirmation", () => {
     const match = routeRunbookPrompt({
       prompt: "run the CRM dashboard runbook for LastMile",
-      runbooks: runbookRegistry.all,
+      runbooks,
     });
 
     expect(match.kind).toBe("explicit");
@@ -20,7 +27,7 @@ describe("runbook router", () => {
     const match = routeRunbookPrompt({
       prompt:
         "Create a CRM dashboard for a B2B SaaS sales pipeline from LastMile CRM data. Use the CRM Dashboard runbook. Include pipeline stages, top accounts, stuck deals, forecast risk, and recommended follow-ups.",
-      runbooks: runbookRegistry.all,
+      runbooks,
     });
 
     expect(match.kind).toBe("explicit");
@@ -33,7 +40,7 @@ describe("runbook router", () => {
   it("auto-selects the map runbook for a high-confidence map request", () => {
     const match = routeRunbookPrompt({
       prompt: "build me a map of supplier risk",
-      runbooks: runbookRegistry.all,
+      runbooks,
     });
 
     expect(match.kind).toBe("auto");
@@ -47,7 +54,16 @@ describe("runbook router", () => {
     expect(
       routeRunbookPrompt({
         prompt: "help me rewrite this onboarding email",
-        runbooks: runbookRegistry.all,
+        runbooks,
+      }),
+    ).toEqual({ kind: "no_match" });
+  });
+
+  it("does not route explicit named runbooks that are not assigned", () => {
+    expect(
+      routeRunbookPrompt({
+        prompt: "run the CRM dashboard runbook for LastMile",
+        runbooks: [requireRunbook("map-artifact")],
       }),
     ).toEqual({ kind: "no_match" });
   });
@@ -55,7 +71,7 @@ describe("runbook router", () => {
   it("returns ambiguous when top candidates are too close", () => {
     const match = routeRunbookPrompt({
       prompt: "build an evidence dashboard map for supplier risk",
-      runbooks: runbookRegistry.all,
+      runbooks,
     });
 
     expect(match.kind).toBe("ambiguous");
