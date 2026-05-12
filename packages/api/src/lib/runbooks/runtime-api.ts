@@ -760,7 +760,7 @@ function nextPendingTask(
   );
 }
 
-function runbookProgressContent(input: {
+export function runbookProgressContent(input: {
   kind: "started" | "completed" | "failed";
   task: typeof computerRunbookTasks.$inferSelect;
   nextTask: typeof computerRunbookTasks.$inferSelect | null;
@@ -769,26 +769,33 @@ function runbookProgressContent(input: {
 }) {
   const title = input.task.title;
   if (input.kind === "started") {
-    return `Starting ${title}.`;
+    return `**Starting:** ${title}`;
   }
   if (input.kind === "failed") {
-    return `Stopped on ${title}: ${errorSummary(input.error)}.`;
+    return `**Stopped:** ${title}\n\n${errorSummary(input.error)}.`;
   }
   const output = outputSummary(input.output);
   const next = input.nextTask
-    ? ` Next I'll start ${input.nextTask.title}.`
-    : " This was the final runbook task.";
-  return `Completed ${title}.${output ? ` ${output}` : ""}${next}`;
+    ? `**Next:** ${input.nextTask.title}`
+    : "**Next:** Finalizing the runbook.";
+  return [
+    `**Completed:** ${title}`,
+    output ? `**Summary:** ${output}` : null,
+    next,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function outputSummary(output: unknown) {
   const record = recordValue(output);
-  const responseText = stringValue(record.responseText);
-  if (responseText) return truncateSentence(responseText, 220);
-  const content = stringValue(record.content) ?? stringValue(record.summary);
-  if (content) return truncateSentence(content, 220);
+  const explicitSummary = stringValue(record.summary);
+  if (explicitSummary) return sanitizeTaskOutputSummary(explicitSummary);
+  const responseText =
+    stringValue(record.responseText) ?? stringValue(record.content);
+  if (responseText) return sanitizeTaskOutputSummary(responseText);
   if (Object.keys(record).length > 0)
-    return "Saved the task output for the next step.";
+    return "Captured task output for the next step.";
   return "";
 }
 
@@ -799,6 +806,28 @@ function errorSummary(error: unknown) {
     stringValue(record.code) ??
     (typeof error === "string" && error.trim() ? error.trim() : "task failed")
   );
+}
+
+function sanitizeTaskOutputSummary(value: string) {
+  const taskOutputIndex = value.search(/task output/i);
+  const relevant = taskOutputIndex >= 0 ? value.slice(taskOutputIndex) : value;
+  const withoutMarkdown = relevant
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/#{1,6}\s*/g, " ")
+    .replace(/\|[-:\s|]+\|/g, " ")
+    .replace(/[|*_]/g, " ")
+    .replace(/\bTask Output\b\s*[-–—:]?\s*/i, " ")
+    .replace(/^[\s\-–—:]+/g, "")
+    .replace(/^[a-z][\w-]*:\d+\s*:?\s*/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutBoilerplate = withoutMarkdown
+    .replace(/^solid\.?\s*/i, "")
+    .replace(/^here'?s\s+(the\s+)?(complete\s+)?/i, "")
+    .trim();
+  if (!withoutBoilerplate) return "Captured task output for the next step.";
+  return truncateSentence(withoutBoilerplate, 150);
 }
 
 function truncateSentence(value: string, maxLength: number) {
