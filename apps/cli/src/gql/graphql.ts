@@ -554,6 +554,7 @@ export type Artifact = {
   agentId?: Maybe<Scalars['ID']['output']>;
   content?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
+  favoritedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   s3Key?: Maybe<Scalars['String']['output']>;
@@ -3402,6 +3403,16 @@ export type Query = {
   computer?: Maybe<Computer>;
   computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
+  /**
+   * Computer templates available to a tenant. Returns the union of
+   * tenant-scoped templates (tenant_id = $tenantId) and platform-shipped
+   * templates (tenant_id IS NULL), both filtered to template_kind = 'computer'.
+   * Used by admin's Computer create-dialog template picker so the
+   * platform-default template is visible alongside any tenant-authored
+   * Computer templates. The existing `agentTemplates` query filters
+   * strictly by tenant_id and never returns NULL-tenant rows.
+   */
+  computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   connector?: Maybe<Connector>;
@@ -3712,6 +3723,7 @@ export type QueryArtifactArgs = {
 export type QueryArtifactsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
+  favoritedOnly?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];
@@ -3776,6 +3788,11 @@ export type QueryComputerTasksArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ComputerTaskStatus>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryComputerTemplatesArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -5518,6 +5535,7 @@ export type UpdateAgentTemplateInput = {
 
 export type UpdateArtifactInput = {
   content?: InputMaybe<Scalars['String']['input']>;
+  favoritedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   s3Key?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<ArtifactStatus>;

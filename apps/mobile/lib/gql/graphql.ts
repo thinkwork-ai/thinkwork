@@ -3403,6 +3403,16 @@ export type Query = {
   computer?: Maybe<Computer>;
   computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
+  /**
+   * Computer templates available to a tenant. Returns the union of
+   * tenant-scoped templates (tenant_id = $tenantId) and platform-shipped
+   * templates (tenant_id IS NULL), both filtered to template_kind = 'computer'.
+   * Used by admin's Computer create-dialog template picker so the
+   * platform-default template is visible alongside any tenant-authored
+   * Computer templates. The existing `agentTemplates` query filters
+   * strictly by tenant_id and never returns NULL-tenant rows.
+   */
+  computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
   connector?: Maybe<Connector>;
@@ -3778,6 +3788,11 @@ export type QueryComputerTasksArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ComputerTaskStatus>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryComputerTemplatesArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 

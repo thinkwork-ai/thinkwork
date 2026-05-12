@@ -1,6 +1,7 @@
 // Queries
 import { agentTemplates_query } from "./agentTemplates.query.js";
 import { agentTemplate } from "./agentTemplate.query.js";
+import { computerTemplates_query } from "./computerTemplates.query.js";
 import { linkedAgentsForTemplate } from "./linkedAgentsForTemplate.query.js";
 import { templateSyncDiff } from "./templateSyncDiff.query.js";
 import { agentVersionsList } from "./agentVersions.query.js";
@@ -18,6 +19,7 @@ import { acceptTemplateUpdateBulk } from "./acceptTemplateUpdateBulk.mutation.js
 export const templateQueries = {
 	agentTemplates: agentTemplates_query,
 	agentTemplate,
+	computerTemplates: computerTemplates_query,
 	linkedAgentsForTemplate,
 	templateSyncDiff,
 	agentVersions: agentVersionsList,

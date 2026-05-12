@@ -17,6 +17,7 @@ import {
 	tenants, users, tenantMembers, tenantSettings, agentTemplates,
 } from "../../utils.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
+import { provisionComputerForMember } from "../../../lib/computers/provision.js";
 
 export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: GraphQLContext) => {
 	if (!ctx.auth.principalId || !ctx.auth.email) {
@@ -84,6 +85,24 @@ export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: Graph
 				role: "owner",
 				status: "active",
 			});
+
+		// Best-effort Computer auto-provision for the claimed tenant's new owner.
+		// Bypasses requireTenantAdmin via createComputerCore — the new user is
+		// the tenant owner but the admin gate resolves through tenant_members
+		// which we *just* inserted; the helper's bypass keeps this race-free.
+		try {
+			await provisionComputerForMember({
+				tenantId: pendingTenant.id,
+				userId: user.id,
+				principalType: "user",
+				callSite: "bootstrapUser",
+			});
+		} catch (err) {
+			console.error(
+				"[bootstrapUser:claim] unexpected provisioning throw (suppressed):",
+				err,
+			);
+		}
 
 		const [claimedTenant] = await db
 			.update(tenants)
@@ -155,6 +174,22 @@ export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: Graph
 			role: "owner",
 			status: "active",
 		});
+
+	// Best-effort Computer auto-provision for the fresh tenant's owner. Failure
+	// must not block first-sign-in; the helper itself never throws.
+	try {
+		await provisionComputerForMember({
+			tenantId: tenant.id,
+			userId: user.id,
+			principalType: "user",
+			callSite: "bootstrapUser",
+		});
+	} catch (err) {
+		console.error(
+			"[bootstrapUser:default] unexpected provisioning throw (suppressed):",
+			err,
+		);
+	}
 
 	// Create default agent template
 	await db

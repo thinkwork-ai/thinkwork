@@ -15,6 +15,7 @@ import { handleCors, json, error, notFound, unauthorized } from "../lib/response
 import { resolveTenantId } from "../lib/tenants.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
+import { provisionComputerForMember } from "../lib/computers/provision.js";
 
 const { tenants, tenantMembers, tenantSettings, users } = schema;
 
@@ -72,7 +73,7 @@ export async function handler(
 		if (inviteMatch && method === "POST") {
 			const verdict = await gate(inviteMatch[1]);
 			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return inviteMember(verdict.tenantId, event);
+			return inviteMember(verdict.tenantId, event, verdict.userId ?? null);
 		}
 
 		// Routes with /api/tenants/:id/members/:memberId
@@ -95,7 +96,8 @@ export async function handler(
 			const verdict = await gate(membersMatch[1]);
 			if (!verdict.ok) return error(verdict.reason, verdict.status);
 			if (method === "GET") return listMembers(verdict.tenantId);
-			if (method === "POST") return addMember(verdict.tenantId, event);
+			if (method === "POST")
+				return addMember(verdict.tenantId, event, verdict.userId ?? null);
 			return error("Method not allowed", 405);
 		}
 
@@ -184,6 +186,7 @@ async function listTenants(
 async function inviteMember(
 	tenantId: string,
 	event: APIGatewayProxyEventV2,
+	adminUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (!COGNITO_USER_POOL_ID) {
 		return error("COGNITO_USER_POOL_ID not configured on this Lambda", 500);
@@ -291,6 +294,24 @@ async function inviteMember(
 		})
 		.returning();
 
+	// Best-effort Computer auto-provision for the newly-invited member.
+	// Failure must NOT block the invite response; the helper itself never
+	// throws and the catch here is defense-in-depth.
+	try {
+		await provisionComputerForMember({
+			tenantId,
+			userId: cognitoSub,
+			principalType: "USER",
+			callSite: "restInvite",
+			adminUserId,
+		});
+	} catch (err) {
+		console.error(
+			"[tenants.ts:inviteMember] unexpected provisioning throw (suppressed):",
+			err,
+		);
+	}
+
 	return json(
 		{
 			alreadyMember: false,
@@ -359,6 +380,7 @@ async function listMembers(
 async function addMember(
 	tenantId: string,
 	event: APIGatewayProxyEventV2,
+	adminUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const body = JSON.parse(event.body || "{}");
 	if (!body.principal_type || !body.principal_id) {
@@ -375,6 +397,27 @@ async function addMember(
 			status: body.status || "active",
 		})
 		.returning();
+
+	// Best-effort Computer auto-provision when an ACTIVE member is added.
+	// Non-active members (pending, inactive, suspended) shouldn't be
+	// provisioned yet — they can't use the Computer. The helper additionally
+	// skips when principal_type is not USER.
+	if (member.status === "active") {
+		try {
+			await provisionComputerForMember({
+				tenantId,
+				userId: body.principal_id,
+				principalType: body.principal_type,
+				callSite: "restAddMember",
+				adminUserId,
+			});
+		} catch (err) {
+			console.error(
+				"[tenants.ts:addMember] unexpected provisioning throw (suppressed):",
+				err,
+			);
+		}
+	}
 
 	return json(member, 201);
 }

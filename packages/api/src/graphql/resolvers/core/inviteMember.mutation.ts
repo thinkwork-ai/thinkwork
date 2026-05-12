@@ -15,6 +15,7 @@ import {
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { provisionComputerForMember } from "../../../lib/computers/provision.js";
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
@@ -49,13 +50,14 @@ export const inviteMember = async (
     mutationName: "inviteMember",
     inputs: args.input,
     clientKey: args.input?.idempotencyKey ?? null,
-    fn: () => inviteMemberCore(tenantId, args.input),
+    fn: () => inviteMemberCore(tenantId, args.input, invokerUserId),
   });
 };
 
 async function inviteMemberCore(
   tenantId: string,
   input: { email: string; name?: string; role?: string },
+  invokerUserId: string | null,
 ) {
   const { email, name, role } = input;
 
@@ -138,6 +140,24 @@ async function inviteMemberCore(
       status: "active",
     })
     .returning();
+
+  // Best-effort Computer auto-provision for the newly-added member. Failure
+  // MUST NOT block the invite — the helper itself never throws, and this
+  // catch is defense-in-depth.
+  try {
+    await provisionComputerForMember({
+      tenantId,
+      userId: cognitoSub,
+      principalType: "USER",
+      callSite: "inviteMember",
+      adminUserId: invokerUserId,
+    });
+  } catch (err) {
+    console.error(
+      "[inviteMember] unexpected provisioning throw (suppressed):",
+      err,
+    );
+  }
 
   return snakeToCamel(row);
 }
