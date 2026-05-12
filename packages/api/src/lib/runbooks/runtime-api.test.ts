@@ -76,6 +76,7 @@ import {
   completeRunbookExecutionRun,
   loadRunbookExecutionContext,
   runbookProgressContent,
+  shouldIncludeRunbookHistoryMessage,
 } from "./runtime-api.js";
 import { failRunbookRunFromThreadTurn, markRunbookRunRunning } from "./runs.js";
 
@@ -213,6 +214,30 @@ describe("runbook runtime API helpers", () => {
     expect(content).not.toContain("discover:1");
     expect(content).not.toContain("`discover:1`");
     expect(content).not.toContain("| Field |");
+  });
+
+  it("excludes runbook chrome messages from AgentCore step history", () => {
+    expect(
+      shouldIncludeRunbookHistoryMessage({
+        runbookMessageKey: "runbook-progress:run-1:discover:1:completed",
+      }),
+    ).toBe(false);
+    expect(
+      shouldIncludeRunbookHistoryMessage({
+        runbookMessageKey: "runbook-queue:run-1",
+      }),
+    ).toBe(false);
+    expect(
+      shouldIncludeRunbookHistoryMessage({
+        runbookMessageKey: "runbook-confirmation:run-1",
+      }),
+    ).toBe(false);
+    expect(
+      shouldIncludeRunbookHistoryMessage({
+        runbookMessageKey: "runbook-response:run-1",
+      }),
+    ).toBe(true);
+    expect(shouldIncludeRunbookHistoryMessage({})).toBe(true);
   });
 
   it("refuses to complete a run while tasks are still incomplete", async () => {
