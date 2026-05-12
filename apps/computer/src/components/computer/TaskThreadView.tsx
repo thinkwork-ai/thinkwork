@@ -158,6 +158,12 @@ export function TaskThreadView({
   const showProcessingShimmer =
     !showStreamingBuffer &&
     isAwaitingAssistantResponse(thread, visibleMessages);
+  const showTaskQueueProcessingShimmer = Boolean(
+    promptTaskQueue &&
+    isActiveTaskQueueStatus(promptTaskQueue.data.status) &&
+    !showStreamingBuffer &&
+    !showProcessingShimmer,
+  );
   const latestUserIndex = findLastIndex(
     transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",
@@ -203,6 +209,7 @@ export function TaskThreadView({
               />
             ))
           )}
+          {showTaskQueueProcessingShimmer ? <ProcessingShimmer /> : null}
         </ConversationContent>
       </Conversation>
 
@@ -456,6 +463,11 @@ function isAwaitingAssistantResponse(
   return (thread.turns ?? []).some((turn) =>
     ["pending", "running"].includes(String(turn.status ?? "").toLowerCase()),
   );
+}
+
+function isActiveTaskQueueStatus(status: unknown) {
+  const normalized = normalizeTaskQueueStatus(status);
+  return !["completed", "failed", "cancelled", "rejected"].includes(normalized);
 }
 
 function ProcessingShimmer() {

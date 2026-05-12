@@ -75,6 +75,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 import {
   completeRunbookExecutionRun,
   loadRunbookExecutionContext,
+  runbookProgressContent,
 } from "./runtime-api.js";
 import { failRunbookRunFromThreadTurn, markRunbookRunRunning } from "./runs.js";
 
@@ -178,6 +179,40 @@ describe("runbook runtime API helpers", () => {
         "discover:1": { evidence: ["a"] },
       },
     });
+  });
+
+  it("formats completed runbook progress without dumping raw task markdown", () => {
+    const content = runbookProgressContent({
+      kind: "completed",
+      task: {
+        ...completedTask,
+        title: "Identify CRM entities, fields, and data freshness.",
+      } as never,
+      nextTask: {
+        ...completedTask,
+        id: "rt-2",
+        task_key: "discover:2",
+        title: "Inventory account and opportunity fields.",
+        sort_order: 2,
+      } as never,
+      output: {
+        responseText:
+          "Solid. Here's the complete discovery output for task `discover:1`: --- ## Task Output — `discover:1`: CRM Entity & Field Inventory ### Pipeline - Single pipeline: `Opportunities` | Field | Coverage | Notes |",
+      },
+    });
+
+    expect(content).toContain(
+      "**Completed:** Identify CRM entities, fields, and data freshness.",
+    );
+    expect(content).toContain("**Summary:**");
+    expect(content).toContain("CRM Entity & Field Inventory");
+    expect(content).toContain(
+      "**Next:** Inventory account and opportunity fields.",
+    );
+    expect(content).not.toContain("```");
+    expect(content).not.toContain("discover:1");
+    expect(content).not.toContain("`discover:1`");
+    expect(content).not.toContain("| Field |");
   });
 
   it("refuses to complete a run while tasks are still incomplete", async () => {

@@ -515,6 +515,61 @@ describe("TaskThreadView", () => {
     ).toBeTruthy();
   });
 
+  it("keeps a processing shimmer visible while an active runbook queue is working", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Runbook thread",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Run the CRM dashboard",
+            },
+            {
+              id: "message-2",
+              role: "ASSISTANT",
+              content: "User approved the CRM Dashboard runbook workflow.",
+            },
+            {
+              id: "message-3",
+              role: "ASSISTANT",
+              content: "**Completed:** Discover CRM context",
+            },
+          ],
+        }}
+        runbookQueues={[
+          {
+            runbookRunId: "run-1",
+            displayName: "CRM Dashboard",
+            status: "RUNNING",
+            phases: [
+              {
+                id: "discover",
+                title: "Discover",
+                tasks: [
+                  {
+                    id: "task-1",
+                    title: "Discover CRM context",
+                    status: "COMPLETED",
+                  },
+                  {
+                    id: "task-2",
+                    title: "Analyze pipeline",
+                    status: "RUNNING",
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByLabelText("Processing request")).toBeTruthy();
+  });
+
   it("keeps historical completed queues out of the prompt and transcript", () => {
     render(
       <TaskThreadView
