@@ -17,7 +17,10 @@ import {
 import { invokeChatAgent } from "../../graphql/utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { runSymphonyPrConnectorWork } from "./symphony-pr-harness.js";
-import { ensureMigratedComputerWorkspaceSeeded } from "./workspace-seed.js";
+import {
+  ensureDefaultComputerRunbookSkillsMaterialized,
+  ensureMigratedComputerWorkspaceSeeded,
+} from "./workspace-seed.js";
 import { toGraphqlComputerTask } from "./tasks.js";
 import {
   completeRunbookRunFromThreadTurn,
@@ -118,6 +121,21 @@ export async function recordComputerHeartbeat(input: {
       computerId: input.computerId,
       message: err instanceof Error ? err.message : String(err),
     });
+  }
+  try {
+    await ensureDefaultComputerRunbookSkillsMaterialized({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+    });
+  } catch (err) {
+    console.error(
+      "[computer-runtime] failed to materialize default runbook skills",
+      {
+        tenantId: input.tenantId,
+        computerId: input.computerId,
+        message: err instanceof Error ? err.message : String(err),
+      },
+    );
   }
   return {
     computerId: row.id,
