@@ -128,15 +128,6 @@ export function TaskThreadView({
   isSending = false,
   onSendFollowUp,
 }: TaskThreadViewProps) {
-  const messages = thread?.messages ?? [];
-  let latestUserMessageId: string | undefined;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role.toUpperCase() === "USER") {
-      latestUserMessageId = messages[i].id;
-      break;
-    }
-  }
-
   if (isLoading) {
     return <TaskThreadState label="Loading thread" />;
   }
@@ -176,7 +167,6 @@ export function TaskThreadView({
   return (
     <main className="relative flex h-full w-full flex-col overflow-hidden bg-background">
       <Conversation
-        key={latestUserMessageId ?? thread.id}
         className="h-full flex-1 overflow-y-auto overscroll-contain"
         aria-label="Thread transcript"
       >

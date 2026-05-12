@@ -608,7 +608,7 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Keep the visible app focused on the user's requested output; do not render provenance, source coverage, or recipe/refresh explainers unless the user explicitly asks for them.
 3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts outside an active runbook, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path. During an active runbook, prefer the runbook's current phase guidance and use the reference only as fallback detail.
 4. Keep app generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the app.
-5. Generate TSX using \`@thinkwork/computer-stdlib\` primitives and \`@thinkwork/ui\`.
+5. Generate TSX using shadcn-compatible primitives from \`@thinkwork/ui\` plus domain primitives from \`@thinkwork/computer-stdlib\`. Do not hand-roll cards, tabs, badges, buttons, tables, separators, or scroll containers when a local primitive exists.
 6. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
 7. Call \`save_app\` directly before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
 8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
@@ -626,6 +626,16 @@ Generated Apps run in the sandboxed iframe runtime. Do not assume access to pare
 ## App Shape
 
 Use \`App.tsx\` as the main file. Export one default React component. Prefer concise component-local data transforms over large abstractions. Do not use network calls, browser globals, dynamic imports, \`eval\`, or raw HTML injection.
+
+## Component System
+
+Generated dashboards must look like ThinkWork product UI, not raw HTML. Import structure and controls from \`@thinkwork/ui\`: \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardDescription\`, \`CardContent\`, \`Badge\`, \`Button\`, \`Tabs\`, \`TabsList\`, \`TabsTrigger\`, \`TabsContent\`, \`Table\`, \`TableHeader\`, \`TableBody\`, \`TableRow\`, \`TableHead\`, \`TableCell\`, \`ScrollArea\`, and \`Separator\` where applicable.
+
+Use \`@thinkwork/computer-stdlib\` for semantic dashboard primitives such as \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`MapView\`, and formatters. It is fine to combine stdlib charts with \`@thinkwork/ui\` layout chrome.
+
+Do not use emoji icons. Import icons from \`lucide-react\` only when an icon is needed.
+
+Do not create adjacent plain text tabs, raw \`<table>\` layouts for tabular data, inline-pill badges, or bespoke card CSS. Tabs must use \`Tabs\`/\`TabsList\`/\`TabsTrigger\`; data grids must use \`DataTable\` or \`Table\`; status labels must use \`Badge\`; metric panels must use \`Card\` or \`KpiStrip\`.
 
 Good apps include:
 
@@ -756,7 +766,13 @@ Required sections:
 - Top risks: a ranked table or compact list from \`topRisks\`, sorted by risk and exposure.
 - Opportunities: a sortable/scannable table from \`opportunities\`.
 
+Use shadcn-compatible primitives from \`@thinkwork/ui\` for layout and controls: \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardDescription\`, \`CardContent\`, \`Badge\`, \`Button\`, \`Tabs\`, \`TabsList\`, \`TabsTrigger\`, \`TabsContent\`, \`Table\`, \`TableHeader\`, \`TableBody\`, \`TableRow\`, \`TableHead\`, \`TableCell\`, \`ScrollArea\`, and \`Separator\` where applicable.
+
 Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, and formatters such as \`formatCurrency\`.
+
+Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use \`Tabs\`/\`TabsList\`/\`TabsTrigger\`; tabular data must use \`DataTable\` or \`Table\`; status labels must use \`Badge\`; metric panels must use \`Card\` or \`KpiStrip\`.
+
+Do not use emoji icons. Use \`lucide-react\` icons when an icon is needed.
 
 Use the stdlib prop names directly:
 

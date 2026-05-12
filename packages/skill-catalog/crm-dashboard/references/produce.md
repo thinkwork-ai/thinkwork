@@ -56,10 +56,13 @@ interface CrmDashboardData {
 
 Build the app body only. The Computer host provides Artifact chrome, route title, app label, open-full action, refresh action placement, and iframe wrapper. Do not duplicate that shell inside `App.tsx`.
 
+Use shadcn-compatible primitives from `@thinkwork/ui` for layout and controls: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `Badge`, `Button`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `ScrollArea`, and `Separator` where applicable.
+
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`. At minimum, include KPI cards, stage exposure, stale activity, top risks, and an opportunity table or list. Keep missing-source notes proportional and close to affected metrics.
 
 Visual contract for CRM dashboards:
 
+- Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`.
 - Use at least two visual/data primitives from `@thinkwork/computer-stdlib`, normally `KpiStrip` plus `BarChart`, `StackedBarChart`, or `DataTable`.
 - Use real chart or table components for comparisons; do not render stage exposure, stale activity, rep concentration, or opportunities as plain paragraphs.
 - Start with a compact dashboard header/status row and KPI strip, then place charts and tables in a responsive grid. Keep the first viewport useful.
