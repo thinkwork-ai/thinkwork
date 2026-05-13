@@ -3,18 +3,18 @@ title: "Fast TSX artifact preview autopilot status"
 date: 2026-05-13
 plan: docs/plans/2026-05-13-001-feat-fast-tsx-artifact-preview-plan.md
 target_branch: main
-status: active
+status: completed
 ---
 
 # Fast TSX Artifact Preview Autopilot Status
 
 ## Current Unit
 
-- Unit: U6 - Relax runtime success accounting for preview-first turns
-- Branch: `codex/fast-tsx-u6-preview-success`
-- Worktree: `.Codex/worktrees/fast-tsx-u6-preview-success`
+- Unit: all implementation units complete
+- Branch: `main`
+- Worktree: n/a
 - Started: 2026-05-13
-- State: in progress
+- State: completed
 
 ## Progress Log
 
@@ -51,6 +51,8 @@ status: active
 - 2026-05-13: Began U6 by making successful validated `preview_app` output count as preview-first artifact output while keeping save claims strict.
 - 2026-05-13: U6 focused verification passed: API runtime tests and typecheck, Python server streaming tests, `ruff check --select F` for touched Python files, root `pnpm lint`, targeted Prettier check for touched TS/MD files, and `git diff --check`.
 - 2026-05-13: Opened U6 PR #1189 from `codex/fast-tsx-u6-preview-success`.
+- 2026-05-13: U6 PR #1189 passed required checks and was squash-merged to `main` at `d357ebb5`.
+- 2026-05-13: Confirmed the plan has no implementation units beyond U6; fast TSX artifact preview autopilot implementation is complete.
 
 ## Pull Requests
 
