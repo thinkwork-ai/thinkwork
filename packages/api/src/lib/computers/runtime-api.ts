@@ -175,9 +175,13 @@ async function reconcileStaleComputerRunbookTasks(input: {
   const result = await db.execute(sql`
     SELECT
       task.id AS task_id,
-      run.id AS run_id
+      task.title AS task_title,
+      run.id AS run_id,
+      run.thread_id,
+      thread.title AS thread_title
     FROM ${computerRunbookTasks} task
     JOIN ${computerRunbookRuns} run ON run.id = task.run_id
+    LEFT JOIN ${threads} thread ON thread.id = run.thread_id
     WHERE task.tenant_id = ${input.tenantId}::uuid
       AND run.computer_id = ${input.computerId}::uuid
       AND task.status = 'running'
@@ -189,7 +193,10 @@ async function reconcileStaleComputerRunbookTasks(input: {
 
   const rows = (result.rows || []) as Array<{
     task_id: string;
+    task_title: string;
     run_id: string;
+    thread_id: string | null;
+    thread_title: string | null;
   }>;
   if (rows.length === 0) return 0;
 
@@ -257,6 +264,70 @@ async function reconcileStaleComputerRunbookTasks(input: {
         AND status IN ('pending', 'running')
         AND input->>'runbookRunId' = ${row.run_id}
     `);
+
+    if (row.thread_id) {
+      const content = `**Stopped:** ${row.task_title}\n\n${message}`;
+      const preview =
+        content.length > 240 ? `${content.slice(0, 237)}...` : content;
+      const [assistantMessage] = await db
+        .insert(messages)
+        .values({
+          tenant_id: input.tenantId,
+          thread_id: row.thread_id,
+          role: "assistant",
+          content,
+          parts: [
+            {
+              type: "text",
+              id: `runbook-timeout:${row.run_id}:${row.task_id}`,
+              text: content,
+            },
+          ],
+          sender_type: "computer",
+          sender_id: input.computerId,
+          metadata: {
+            runbookMessageKey: `runbook-timeout:${row.run_id}:${row.task_id}`,
+            runbookRunId: row.run_id,
+            runbookTaskId: row.task_id,
+            runbookProgressKind: "failed",
+            source: "computer_heartbeat",
+          },
+        })
+        .returning({ id: messages.id });
+
+      const [thread] = await db
+        .update(threads)
+        .set({
+          status: "blocked",
+          last_response_preview: preview,
+          updated_at: new Date(),
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, row.thread_id),
+          ),
+        )
+        .returning({ status: threads.status, title: threads.title });
+
+      if (assistantMessage) {
+        await notifyNewMessage({
+          messageId: assistantMessage.id,
+          threadId: row.thread_id,
+          tenantId: input.tenantId,
+          role: "assistant",
+          content,
+          senderType: "computer",
+          senderId: input.computerId,
+        }).catch(() => {});
+      }
+      await notifyThreadUpdate({
+        threadId: row.thread_id,
+        tenantId: input.tenantId,
+        status: thread?.status ?? "blocked",
+        title: thread?.title ?? row.thread_title ?? "Untitled thread",
+      }).catch(() => {});
+    }
 
     processed++;
   }

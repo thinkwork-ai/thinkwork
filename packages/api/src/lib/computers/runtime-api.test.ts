@@ -356,6 +356,73 @@ describe("Computer runtime API heartbeat workspace materialization", () => {
     expect(result).toMatchObject({ staleRunbookTasksReconciled: 1 });
     expect(mocks.execute).toHaveBeenCalledTimes(5);
   });
+
+  it("marks the thread blocked and posts a message when a stale runbook task times out", async () => {
+    mocks.updateRows = [
+      [
+        {
+          id: "computer-1",
+          runtime_status: "running",
+          live_workspace_root: "/workspace",
+          last_heartbeat_at: new Date("2026-05-12T12:00:00.000Z"),
+          last_active_at: new Date("2026-05-12T12:00:00.000Z"),
+        },
+      ],
+      [{ status: "blocked", title: "CRM dashboard" }],
+    ];
+    mocks.insertRows = [{ id: "message-1" }];
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            task_id: "runbook-task-1",
+            task_title: "Generate and save artifact",
+            run_id: "run-1",
+            thread_id: "thread-1",
+            thread_title: "CRM dashboard",
+          },
+        ],
+      })
+      .mockResolvedValue({ rows: [] });
+
+    const result = await recordComputerHeartbeat({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      runtimeStatus: "running",
+      runtimeVersion: "runtime-1",
+      workspaceRoot: "/workspace",
+    });
+
+    expect(result).toMatchObject({ staleRunbookTasksReconciled: 1 });
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        thread_id: "thread-1",
+        role: "assistant",
+        content: expect.stringContaining(
+          "**Stopped:** Generate and save artifact",
+        ),
+      }),
+    );
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        status: "blocked",
+        last_response_preview: expect.stringContaining("**Stopped:**"),
+      }),
+    );
+    expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: "message-1",
+        threadId: "thread-1",
+        role: "assistant",
+      }),
+    );
+    expect(mocks.notifyThreadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: "thread-1",
+        status: "blocked",
+      }),
+    );
+  });
 });
 
 describe("Computer runtime API connector work delegation", () => {
