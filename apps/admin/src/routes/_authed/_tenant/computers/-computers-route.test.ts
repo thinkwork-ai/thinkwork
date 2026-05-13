@@ -12,9 +12,6 @@ describe("Computers admin routes", () => {
   );
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$computerId.tsx");
-  const liveTasksPanelSource = readSource(
-    "./-components/ComputerLiveTasksPanel.tsx",
-  );
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
 
   it("exposes Computers as a primary admin surface", () => {
@@ -32,78 +29,74 @@ describe("Computers admin routes", () => {
     expect(listRouteSource).toContain('to: "/computers/$computerId"');
   });
 
-  it("renders detail panels for status, runtime, migration, and identity", () => {
+  it("renders the post-cleanup Detail page (Dashboard | Workspace | Terminal | Config)", () => {
     expect(detailRouteSource).toContain("WorkspaceEditor");
     expect(detailRouteSource).toContain("ComputerWorkspaceTab");
     expect(detailRouteSource).toContain("useMemo(() => ({ computerId })");
     expect(detailRouteSource).toContain('mode="computer"');
     expect(detailRouteSource).not.toContain("target={{ agentId:");
+    // Tab order: Dashboard | Workspace | Terminal | Config (plan U3).
     expect(detailRouteSource).toContain(
-      'type ComputerDetailTab = "dashboard" | "workspace" | "config" | "terminal"',
+      'type ComputerDetailTab = "dashboard" | "workspace" | "terminal" | "config"',
     );
     expect(detailRouteSource).toContain('value="dashboard"');
     expect(detailRouteSource).toContain('value="workspace"');
-    expect(detailRouteSource).toContain('value="config"');
     expect(detailRouteSource).toContain('value="terminal"');
+    expect(detailRouteSource).toContain('value="config"');
     expect(detailRouteSource).toContain("ComputerTerminal");
     expect(detailRouteSource).toContain("ComputerStatusPanel");
     expect(detailRouteSource).toContain("ComputerDashboardMetrics");
-    expect(detailRouteSource).toContain("ComputerDashboardActivity");
-    expect(detailRouteSource).toContain("ComputerLiveTasksPanel");
-    expect(detailRouteSource).toContain("ComputerEventsPanel");
-    expect(detailRouteSource).toContain("activityRefreshKey");
     expect(detailRouteSource).toContain("ComputerRuntimePanel");
-    expect(detailRouteSource).toContain("ComputerMigrationPanel");
     expect(detailRouteSource).toContain("Identity");
+    // Panels removed by plan U2 must not have crept back in.
+    expect(detailRouteSource).not.toContain("ComputerDashboardActivity");
+    expect(detailRouteSource).not.toContain("ComputerLiveTasksPanel");
+    expect(detailRouteSource).not.toContain("ComputerEventsPanel");
+    expect(detailRouteSource).not.toContain("ComputerMigrationPanel");
     expect(detailRouteSource).not.toContain(
       "xl:grid-cols-[minmax(0,1fr)_420px]",
     );
   });
 
-  it("offers browser-triggered runtime actions", () => {
-    expect(liveTasksPanelSource).toContain("ComputerTaskType.HealthCheck");
-    expect(liveTasksPanelSource).toContain(
-      "ComputerTaskType.WorkspaceFileWrite",
+  it("wires the shared ThreadsTable on the Computer Dashboard (plan U7)", () => {
+    expect(detailRouteSource).toContain(
+      'from "@/components/threads/ThreadsTable"',
     );
-    expect(liveTasksPanelSource).toContain("ComputerTaskType.GoogleCliSmoke");
-    expect(liveTasksPanelSource).toContain(
-      "ComputerTaskType.GoogleWorkspaceAuthCheck",
-    );
-    expect(liveTasksPanelSource).toContain(
-      "ComputerTaskType.GoogleCalendarUpcoming",
-    );
-    expect(liveTasksPanelSource).toContain("Google Calendar token unavailable");
-    expect(liveTasksPanelSource).toContain(
-      "Google Calendar API disabled for project",
-    );
-    expect(liveTasksPanelSource).toContain("Reconnect Google");
-    expect(liveTasksPanelSource).toContain("GOOGLE_WORKSPACE_SCOPES");
-    expect(liveTasksPanelSource).toContain(
-      "tasks.find(taskHasGoogleWorkspaceSignal)",
-    );
-    expect(liveTasksPanelSource).toContain("ComputerThreadsQuery");
-    expect(liveTasksPanelSource).toContain("threadTurnContext");
-    expect(liveTasksPanelSource).toContain("Response worker");
-    expect(liveTasksPanelSource).toContain("Assistant response pending");
-    expect(liveTasksPanelSource).not.toContain(
-      "tasks.some(taskHasMissingGoogleCalendarScope)",
-    );
-    expect(liveTasksPanelSource).toContain(".thinkwork/runtime-checks/");
-    expect(liveTasksPanelSource).not.toContain("CardAction");
-    expect(liveTasksPanelSource).not.toContain("GOOGLE_WORKSPACE_CLI_TOKEN");
-    expect(liveTasksPanelSource).not.toContain("accessToken");
+    expect(detailRouteSource).toContain("ThreadsPagedQuery");
+    expect(detailRouteSource).toContain("computerId: computer.id");
+    expect(detailRouteSource).toContain('scope="computer"');
   });
 
-  it("defines typed GraphQL documents for Computer reads and updates", () => {
+  it("Workspace tab is height-capped (plan U8: no double-scroll)", () => {
+    expect(detailRouteSource).toContain("ComputerWorkspaceTab");
+    expect(detailRouteSource).toContain("h-[calc(100vh-220px)]");
+    // No remaining bare min-h-[650px] for the Workspace container.
+    expect(detailRouteSource).not.toMatch(
+      /ComputerWorkspaceTab[\s\S]{0,400}min-h-\[650px\]/,
+    );
+  });
+
+  it("Archive lives in Config → Computer Status, not in the page header (plan U4)", () => {
+    const statusPanelSource = readSource(
+      "./-components/ComputerStatusPanel.tsx",
+    );
+    expect(statusPanelSource).toContain("Archive");
+    expect(statusPanelSource).toContain("ComputerStatus.Archived");
+    // The page-header ArchiveAction was deleted; only the Computer Status
+    // panel hosts it now. The detail route imports may reference
+    // ComputerStatus enum for other purposes, so we only assert the
+    // ArchiveAction symbol does not appear at the route level.
+    expect(detailRouteSource).not.toContain("function ArchiveAction");
+  });
+
+  it("retires the queries that backed the deleted panels (plan U2)", () => {
     expect(queriesSource).toContain("query ComputersList");
     expect(queriesSource).toContain("query ComputerDetail");
-    expect(queriesSource).toContain("sourceAgent");
-    expect(queriesSource).toContain("query MyComputer");
-    expect(queriesSource).toContain("query ComputerEvents");
-    expect(queriesSource).toContain("query ComputerThreads");
-    expect(queriesSource).toContain("costSummary");
-    expect(queriesSource).toContain("channel");
-    expect(queriesSource).toContain("lastResponsePreview");
     expect(queriesSource).toContain("mutation UpdateComputer");
+    // ComputerTasksQuery / ComputerThreadsQuery / ComputerEventsQuery were
+    // the panels' only consumers and are retired alongside them.
+    expect(queriesSource).not.toContain("export const ComputerTasksQuery");
+    expect(queriesSource).not.toContain("export const ComputerThreadsQuery");
+    expect(queriesSource).not.toContain("export const ComputerEventsQuery");
   });
 });

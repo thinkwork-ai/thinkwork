@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import {
   Archive,
   ArrowLeft,
   DollarSign,
-  Loader2,
   Monitor,
   Server,
   User,
@@ -19,32 +18,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
+  AgentsListQuery,
   ComputerDetailQuery,
-  ComputerEventsQuery,
-  ComputerTasksQuery,
-  ComputerThreadsQuery,
-  UpdateComputerMutation,
+  ThreadsPagedQuery,
+  UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import {
+  ThreadsTable,
+  computeThreadInboxStatus,
+  type ThreadsTableItem,
+} from "@/components/threads/ThreadsTable";
+import { useActiveTurnsStore } from "@/stores/active-turns-store";
 import { formatUsd } from "@/lib/utils";
 import { ComputerStatus, type Computer } from "@/gql/graphql";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
-import { ComputerMigrationPanel } from "./-components/ComputerMigrationPanel";
-import { ComputerLiveTasksPanel } from "./-components/ComputerLiveTasksPanel";
-import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
 import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
-import { ComputerDashboardActivity } from "./-components/ComputerDashboardActivity";
 import { ComputerIdentityEditPanel } from "./-components/ComputerIdentityEditPanel";
 import { ComputerTerminal } from "./-components/ComputerTerminal";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
@@ -56,10 +45,10 @@ export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
   }),
 });
 
-type ComputerDetailTab = "dashboard" | "workspace" | "config" | "terminal";
+type ComputerDetailTab = "dashboard" | "workspace" | "terminal" | "config";
 
 function parseComputerTab(value: unknown): ComputerDetailTab {
-  if (value === "workspace" || value === "config" || value === "terminal") {
+  if (value === "workspace" || value === "terminal" || value === "config") {
     return value;
   }
   return "dashboard";
@@ -79,7 +68,6 @@ function ComputerDetailPage() {
   const { computerId } = Route.useParams();
   const { tab } = Route.useSearch();
   const navigate = useNavigate();
-  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
   const [result, reexecute] = useQuery({
     query: ComputerDetailQuery,
     variables: { id: computerId },
@@ -151,10 +139,6 @@ function ComputerDetailPage() {
   }
 
   const ownerLabel = computer.owner?.name ?? computer.owner?.email ?? "—";
-  const refreshActivity = () => {
-    reexecute({ requestPolicy: "network-only" });
-    setActivityRefreshKey((key) => key + 1);
-  };
 
   return (
     <PageLayout
@@ -186,15 +170,6 @@ function ComputerDetailPage() {
                       Workspace
                     </Link>
                   </TabsTrigger>
-                  <TabsTrigger value="config" asChild className="px-4">
-                    <Link
-                      to="/computers/$computerId"
-                      params={{ computerId }}
-                      search={{ tab: "config" }}
-                    >
-                      Config
-                    </Link>
-                  </TabsTrigger>
                   <TabsTrigger value="terminal" asChild className="px-4">
                     <Link
                       to="/computers/$computerId"
@@ -202,6 +177,15 @@ function ComputerDetailPage() {
                       search={{ tab: "terminal" }}
                     >
                       Terminal
+                    </Link>
+                  </TabsTrigger>
+                  <TabsTrigger value="config" asChild className="px-4">
+                    <Link
+                      to="/computers/$computerId"
+                      params={{ computerId }}
+                      search={{ tab: "config" }}
+                    >
+                      Config
                     </Link>
                   </TabsTrigger>
                 </TabsList>
@@ -235,19 +219,17 @@ function ComputerDetailPage() {
                 <Archive className="h-3 w-3" />
                 Archived
               </Badge>
-            ) : (
-              <ArchiveAction
-                computerId={computer.id}
-                computerName={computer.name}
-                onArchived={() => navigate({ to: "/computers" })}
-              />
-            )}
+            ) : null}
+            {/* Archive control moved to Config → Computer Status (plan U4). */}
           </div>
         </div>
       }
     >
       {tab === "dashboard" ? (
-        <ComputerDashboardTab computer={computer} onChanged={refreshActivity} />
+        <ComputerDashboardTab
+          computer={computer}
+          onChanged={() => reexecute({ requestPolicy: "network-only" })}
+        />
       ) : null}
 
       {tab === "workspace" ? (
@@ -265,11 +247,6 @@ function ComputerDetailPage() {
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}
           />
           <ComputerRuntimePanel computer={computer} />
-          <ComputerEventsPanel
-            computer={computer}
-            refreshKey={activityRefreshKey}
-          />
-          <ComputerMigrationPanel computer={computer} />
         </div>
       ) : null}
 
@@ -296,7 +273,7 @@ function ComputerTerminalTab({ computerId }: { computerId: string }) {
 
 function ComputerDashboardTab({
   computer,
-  onChanged,
+  onChanged: _onChanged,
 }: {
   computer: Pick<
     Computer,
@@ -304,59 +281,103 @@ function ComputerDashboardTab({
   >;
   onChanged: () => void;
 }) {
-  const [tasksResult, reexecuteTasks] = useQuery({
-    query: ComputerTasksQuery,
-    variables: { computerId: computer.id, limit: 50 },
-    requestPolicy: "cache-and-network",
-  });
-  const [threadsResult, reexecuteThreads] = useQuery({
-    query: ComputerThreadsQuery,
+  const navigate = useNavigate();
+  const PAGE_SIZE = 50;
+  const [pageIndex, setPageIndex] = useState(0);
+
+  // Threads scoped to this Computer via the new computerId filter on
+  // threadsPaged (plan U1). Same paginated path /threads uses.
+  const [threadsResult] = useQuery({
+    query: ThreadsPagedQuery,
     variables: {
       tenantId: computer.tenantId,
       computerId: computer.id,
-      limit: 50,
+      limit: PAGE_SIZE,
+      offset: pageIndex * PAGE_SIZE,
+      showArchived: false,
+      sortField: "updated",
+      sortDir: "desc",
     },
     requestPolicy: "cache-and-network",
   });
-  const [eventsResult, reexecuteEvents] = useQuery({
-    query: ComputerEventsQuery,
-    variables: { computerId: computer.id, limit: 24 },
+  const [agentsResult] = useQuery({
+    query: AgentsListQuery,
+    variables: { tenantId: computer.tenantId },
     requestPolicy: "cache-and-network",
   });
+  const [, updateThread] = useMutation(UpdateThreadMutation);
 
-  const tasks = tasksResult.data?.computerTasks ?? [];
-  const threads = threadsResult.data?.threads ?? [];
-  const events = eventsResult.data?.computerEvents ?? [];
+  const threadItems: ThreadsTableItem[] = useMemo(
+    () =>
+      ((threadsResult.data?.threadsPaged?.items ?? []) as ThreadsTableItem[]).map(
+        (t) => ({ ...t, status: (t.status ?? "").toString().toLowerCase() }),
+      ),
+    [threadsResult.data],
+  );
+  const totalCount = threadsResult.data?.threadsPaged?.totalCount ?? 0;
+  const agents = agentsResult.data?.agents ?? [];
 
-  function refreshDashboard() {
-    reexecuteTasks({ requestPolicy: "network-only" });
-    reexecuteThreads({ requestPolicy: "network-only" });
-    reexecuteEvents({ requestPolicy: "network-only" });
-    onChanged();
-  }
+  const activeThreadIds = useActiveTurnsStore((s) => s._activeThreadIds);
+  const inboxStatusFor = useCallback(
+    (thread: ThreadsTableItem) =>
+      computeThreadInboxStatus(
+        thread.id,
+        thread.lastTurnCompletedAt,
+        thread.lastReadAt,
+        activeThreadIds,
+      ),
+    [activeThreadIds],
+  );
 
+  const handleUpdateThread = useCallback(
+    (id: string, data: Record<string, unknown>) => {
+      const input: Record<string, unknown> = {};
+      if (data.status) input.status = (data.status as string).toUpperCase();
+      if (data.assigneeId !== undefined) input.assigneeId = data.assigneeId;
+      if (data.assigneeType !== undefined)
+        input.assigneeType = data.assigneeType;
+      if (data.agentId !== undefined) {
+        input.assigneeType = data.agentId ? "AGENT" : null;
+        input.assigneeId = data.agentId || null;
+      }
+      updateThread({ id, input });
+    },
+    [updateThread],
+  );
+
+  const goToThread = useCallback(
+    (threadId: string) =>
+      navigate({ to: "/threads/$threadId", params: { threadId } }),
+    [navigate],
+  );
+
+  // KPI strip pulls tasks/threads counts; both are no-ops post-U2 since
+  // the queries are retired. Pass empty arrays — the metrics component
+  // already handles that gracefully.
   return (
     <div className="space-y-4">
       <ComputerDashboardMetrics
         computer={computer}
-        tasks={tasks}
-        threads={threads}
+        tasks={[]}
+        threads={threadItems as never}
       />
-      <ComputerDashboardActivity
-        tasks={tasks}
-        threads={threads}
-        events={events}
-        onRefresh={refreshDashboard}
+      <ThreadsTable
+        items={threadItems}
+        agents={agents}
+        inboxStatusFor={inboxStatusFor}
+        onUpdateThread={handleUpdateThread}
+        onRowClick={goToThread}
+        scope="computer"
+        pagination={{
+          totalCount,
+          pageSize: PAGE_SIZE,
+          pageIndex,
+          onPageChange: setPageIndex,
+        }}
       />
-      <ComputerLiveTasksPanel
-        computer={computer}
-        onChanged={refreshDashboard}
-      />
-      {tasksResult.error || threadsResult.error || eventsResult.error ? (
+      {threadsResult.error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-          {tasksResult.error?.message ??
-            threadsResult.error?.message ??
-            eventsResult.error?.message}
+          {threadsResult.error.message}
         </div>
       ) : null}
     </div>
@@ -365,91 +386,18 @@ function ComputerDashboardTab({
 
 function ComputerWorkspaceTab({ computerId }: { computerId: string }) {
   const target = useMemo(() => ({ computerId }), [computerId]);
+  // Pin to viewport height so the editor's internal scrollback handles
+  // overflow, not the outer page. Matches the Terminal tab fix shipped
+  // earlier today. Plan 2026-05-13-005 U8.
   return (
     <WorkspaceEditor
       target={target}
       mode="computer"
-      className="min-h-[650px]"
+      className="h-[calc(100vh-220px)] min-h-[420px]"
     />
   );
 }
 
-function ArchiveAction({
-  computerId,
-  computerName,
-  onArchived,
-}: {
-  computerId: string;
-  computerName: string;
-  onArchived: () => void;
-}) {
-  const [{ fetching }, updateComputer] = useMutation(UpdateComputerMutation);
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function archive() {
-    setError(null);
-    const result = await updateComputer({
-      id: computerId,
-      input: { status: ComputerStatus.Archived },
-    });
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
-    setOpen(false);
-    onArchived();
-  }
-
-  return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive ml-auto h-6 gap-1 px-2 text-xs"
-        >
-          <Archive className="h-3 w-3" />
-          Archive
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Archive this Computer?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Archiving "{computerName}" hides it from the default Computers list
-            and frees the owner's active-Computer slot, so they become eligible
-            for a new Computer. Toggle "Show archived" on the list to view it
-            again. This action cannot be reversed in-place — re-provisioning
-            the owner creates a new Computer record.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={fetching}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              void archive();
-            }}
-            disabled={fetching}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {fetching ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Archiving...
-              </>
-            ) : (
-              "Archive"
-            )}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
+// ArchiveAction was moved into ComputerStatusPanel (plan U4) so the
+// destructive action lives next to the Computer status data, not in the
+// page header where it competed with the title.
