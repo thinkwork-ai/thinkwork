@@ -1,11 +1,13 @@
 locals {
   workspace_event_enabled = var.enable_workspace_orchestration && local.use_local_zips
   # EventBridge rejects the more precise per-folder S3 wildcard rules as too
-  # complex. Route every workspace object mutation through one queue and let the
+  # complex. Keep broad workspace/catalog families in separate rules and let the
   # dispatcher keep the canonical allowlist in code.
   workspace_event_patterns = {
     workspace = [
       "tenants/*/agents/*/workspace/*",
+    ]
+    catalog_skills = [
       "tenants/*/agents/_catalog/*/workspace/skills/*",
     ]
   }
