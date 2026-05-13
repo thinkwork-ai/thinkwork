@@ -271,6 +271,7 @@ resource "aws_lambda_function" "handler" {
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
+    "stall-monitor",
     "webhook-crm-opportunity",
     "webhook-task-event",
     "workspace-files",
@@ -1057,7 +1058,7 @@ resource "aws_scheduler_schedule" "stall_monitor" {
   }
 
   target {
-    arn      = aws_lambda_function.handler["cron-stall-monitor"].arn
+    arn      = aws_lambda_function.handler["stall-monitor"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
