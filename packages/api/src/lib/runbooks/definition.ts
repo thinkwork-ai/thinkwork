@@ -50,6 +50,10 @@ export type RunbookPhaseDefinition = {
   capabilityRoles: string[];
   dependsOn: string[];
   taskSeeds: string[];
+  supervision?: {
+    staleAfterMinutes?: number;
+    progressExpectation?: string;
+  };
 };
 
 export type RunbookOutputDefinition = {
@@ -201,6 +205,11 @@ export function validateRunbookDefinition(value: unknown): RunbookDefinition {
           );
         }
       }
+      const supervision = optionalSupervisionAt(
+        item.supervision,
+        `${prefix}.supervision`,
+        issues,
+      );
       return {
         id: stringAt(item.id, `${prefix}.id`, issues),
         title: stringAt(item.title, `${prefix}.title`, issues),
@@ -213,6 +222,7 @@ export function validateRunbookDefinition(value: unknown): RunbookDefinition {
           `${prefix}.taskSeeds`,
           issues,
         ),
+        ...(supervision ? { supervision } : {}),
       };
     },
   );
@@ -330,6 +340,39 @@ function optionalStringAt(value: unknown, path: string, issues: string[]) {
   if (typeof value === "string") return value;
   issues.push(`${path} must be a string when provided`);
   return undefined;
+}
+
+function optionalSupervisionAt(value: unknown, path: string, issues: string[]) {
+  if (value === undefined) return undefined;
+  const item = objectAt(value, path, issues);
+  const supervision: {
+    staleAfterMinutes?: number;
+    progressExpectation?: string;
+  } = {};
+
+  if (item.staleAfterMinutes !== undefined) {
+    if (
+      typeof item.staleAfterMinutes === "number" &&
+      Number.isInteger(item.staleAfterMinutes) &&
+      item.staleAfterMinutes >= 1 &&
+      item.staleAfterMinutes <= 120
+    ) {
+      supervision.staleAfterMinutes = item.staleAfterMinutes;
+    } else {
+      issues.push(`${path}.staleAfterMinutes must be an integer from 1 to 120`);
+    }
+  }
+
+  const progressExpectation = optionalStringAt(
+    item.progressExpectation,
+    `${path}.progressExpectation`,
+    issues,
+  );
+  if (progressExpectation) {
+    supervision.progressExpectation = progressExpectation;
+  }
+
+  return supervision;
 }
 
 function booleanAt(value: unknown, path: string, issues: string[]) {

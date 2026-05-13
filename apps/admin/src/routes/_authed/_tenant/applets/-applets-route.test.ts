@@ -14,7 +14,7 @@ describe("Apps admin routes", () => {
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$appId.tsx");
 
-  it("exposes Artifacts as a read-only admin surface", () => {
+  it("exposes Artifacts as an admin surface", () => {
     expect(sidebarSource).toContain('label: "Artifacts"');
     expect(sidebarSource).toContain('to: "/applets"');
     expect(commandPaletteSource).toContain('label: "Artifacts"');
@@ -30,8 +30,11 @@ describe("Apps admin routes", () => {
     expect(detailRouteSource).toContain("AdminAppletQuery");
   });
 
-  it("keeps the route read-only and source/metadata focused", () => {
+  it("adds tenant app style controls without making applets editable", () => {
     expect(listRouteSource).toContain("Filter by user ID");
+    expect(listRouteSource).toContain("Set App Style");
+    expect(listRouteSource).toContain("UpdateTenantArtifactStyleMutation");
+    expect(listRouteSource).toContain("artifactStyle");
     expect(listRouteSource).toContain('to: "/applets/$appId"');
     expect(detailRouteSource).toContain("payload.source");
     expect(detailRouteSource).toContain("formatJson(payload.metadata)");

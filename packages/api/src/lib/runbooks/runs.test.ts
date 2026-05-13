@@ -131,6 +131,12 @@ describe("runbook run helpers", () => {
     }
     expect(records.tasks[0]?.depends_on).toEqual([]);
     expect(records.tasks.at(-1)?.sort_order).toBe(records.tasks.length);
+    expect(records.tasks[0]?.details).toMatchObject({
+      supervision: { staleAfterMinutes: 5 },
+    });
+    expect(records.tasks.at(-1)?.details).toMatchObject({
+      supervision: { staleAfterMinutes: 15 },
+    });
   });
 
   it("confirms awaiting runs and treats queued confirmation as idempotent", () => {

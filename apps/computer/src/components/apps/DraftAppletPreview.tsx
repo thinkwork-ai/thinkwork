@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { ExternalLink, Loader2, Save } from "lucide-react";
+import { ExternalLink, Loader2, Palette, Save, Upload } from "lucide-react";
 import { useMutation } from "urql";
-import { Badge, Button } from "@thinkwork/ui";
+import { Badge, Button, Textarea } from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletMount,
   useAppletInstanceId,
 } from "@/applets/mount";
+import {
+  appletThemeCssFromMetadata,
+  buildAppletTheme,
+} from "@/applets/theme-tokens";
 import {
   WebPreview,
   WebPreviewBody,
@@ -53,6 +57,12 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
   const [saving, setSaving] = useState(false);
   const [savedAppId, setSavedAppId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [themeEditorOpen, setThemeEditorOpen] = useState(false);
+  const [themeInput, setThemeInput] = useState("");
+  const [themeError, setThemeError] = useState<string | null>(null);
+  const [uploadedThemeCss, setUploadedThemeCss] = useState<string | null>(null);
+  const metadataThemeCss = appletThemeCssFromMetadata(draft?.metadata);
+  const activeThemeCss = uploadedThemeCss ?? metadataThemeCss;
   const source =
     draft?.files && typeof draft.files["App.tsx"] === "string"
       ? draft.files["App.tsx"]
@@ -83,6 +93,9 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
 
   async function handleSave() {
     if (!draft || !canPromote) return;
+    const appletTheme = activeThemeCss
+      ? buildAppletTheme(activeThemeCss)
+      : null;
     setSaving(true);
     setSaveError(null);
     try {
@@ -97,6 +110,7 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
             ...draft.metadata,
             dataProvenance: draft.dataProvenance,
             shadcnProvenance: draft.shadcnProvenance,
+            ...(appletTheme ? { appletTheme } : {}),
           },
           sourceDigest: draft.sourceDigest,
           promotionProof: draft.promotionProof,
@@ -119,6 +133,28 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  function applyThemeCss(nextCss: string) {
+    const appletTheme = buildAppletTheme(nextCss);
+    if (!appletTheme) {
+      setThemeError(
+        "Paste the globals.css theme block from shadcn Create, including :root or .dark variables.",
+      );
+      return;
+    }
+    setUploadedThemeCss(appletTheme.css);
+    setThemeInput(appletTheme.css);
+    setThemeError(null);
+  }
+
+  async function handleThemeFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      applyThemeCss(await file.text());
+    } catch {
+      setThemeError("Could not read that theme file.");
     }
   }
 
@@ -146,6 +182,16 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
           </span>
         ) : null}
         <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={activeThemeCss ? "secondary" : "ghost"}
+            className="gap-2"
+            onClick={() => setThemeEditorOpen((value) => !value)}
+          >
+            <Palette className="size-4" />
+            Theme
+          </Button>
           {savedAppId ? (
             <Button asChild size="sm" variant="secondary" className="gap-2">
               <a href={`/artifacts/${savedAppId}`}>
@@ -176,6 +222,68 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
           {draft.dataProvenance.notes.slice(0, 2).join(" ")}
         </div>
       ) : null}
+      {themeEditorOpen ? (
+        <div className="space-y-3 border-b bg-background px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              Paste or upload the Theme code copied from shadcn Create.
+            </div>
+            <label>
+              <input
+                type="file"
+                accept=".css,text/css,text/plain"
+                className="sr-only"
+                onChange={(event) =>
+                  void handleThemeFile(event.currentTarget.files?.[0])
+                }
+              />
+              <span className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent hover:text-accent-foreground">
+                <Upload className="size-3.5" />
+                Upload CSS
+              </span>
+            </label>
+          </div>
+          <Textarea
+            value={themeInput}
+            onChange={(event) => setThemeInput(event.currentTarget.value)}
+            placeholder=":root { --background: oklch(...); --chart-1: oklch(...); }"
+            className="min-h-32 font-mono text-xs"
+          />
+          {themeError ? (
+            <div className="text-xs text-destructive" role="alert">
+              {themeError}
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              {activeThemeCss
+                ? "Theme tokens are applied to this preview."
+                : ""}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setUploadedThemeCss(null);
+                  setThemeInput("");
+                  setThemeError(null);
+                }}
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => applyThemeCss(themeInput)}
+              >
+                Apply Theme
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {saveError ? (
         <div
           className="border-b bg-destructive/10 px-3 py-2 text-xs text-destructive"
@@ -193,6 +301,7 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
             version={1}
             hideRefreshControl
             fitContentHeight
+            themeCss={activeThemeCss}
           />
         ) : (
           <AppletFailure>

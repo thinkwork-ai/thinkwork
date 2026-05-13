@@ -64,6 +64,13 @@ Use shadcn-compatible primitives from `@thinkwork/ui` for dashboard layout and c
 
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
+Theme requirements:
+
+- Prefer user-provided shadcn Create theme tokens when available. Users may paste or upload the Theme CSS copied from `ui.shadcn.com/create`; preserve that CSS in `metadata.appletTheme = { source: "shadcn-create", css: "..." }` for both preview and save so the host can inject the tokens into the rendered iframe.
+- Write component classes against shadcn semantic tokens: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, `text-primary`, `text-destructive`, and `bg-accent`.
+- Use chart colors from CSS variables (`var(--chart-1)` through `var(--chart-5)`) or `ChartContainer` config. Never set bars, lines, or tooltip text to black on dark surfaces.
+- Do not invent a one-off palette in TSX. Avoid raw hex colors unless the value comes directly from validated theme tokens.
+
 Hard UI requirements:
 
 - Import `@thinkwork/ui`.
@@ -71,11 +78,14 @@ Hard UI requirements:
 - Use `Tabs` for multiple dashboard views when useful.
 - Use `Badge` for status/risk labels.
 - Use `DataTable` or `Table` for tabular data.
+- Use a compact, dense dashboard layout: KPI strip in a 2-4 column grid, charts side-by-side on desktop, and a single ranked table/list for the action surface.
 - Do not hand-roll cards, tabs, badges, buttons, tables, or status pills from raw HTML plus custom classes.
 - Do not use raw `<table>` or raw `<button>`.
 - Do not use emoji anywhere.
 - Import icons from `lucide-react` only if useful; otherwise use text labels and badges.
 - Avoid duplicate host chrome and avoid horizontal page scrolling.
+- Do not create a vertical stack of full-width KPI cards. That layout is a failed draft.
+- Do not render Recharts primitives directly on a black canvas without shadcn chart tokens; the tooltip, axis labels, bars, and grid must remain readable in dark mode.
 
 Validation should be bounded to compile/save correctness. Inspect the generated TSX once before `save_app`. If it obviously violates the hard UI requirements, revise once. Do not loop on subjective polish.
 
@@ -90,5 +100,6 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.recipeVersion`: `2`.
 - `metadata.runbookSlug`: `crm-dashboard`.
 - `metadata.dataShape`: `CrmDashboardData`.
+- `metadata.appletTheme`: user-provided shadcn Create theme CSS when available.
 
 Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`. If `save_app` fails once, return the concrete error and stop instead of regenerating repeatedly.

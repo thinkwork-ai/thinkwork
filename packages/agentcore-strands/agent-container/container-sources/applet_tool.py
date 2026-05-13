@@ -242,8 +242,12 @@ def make_save_app_fn(
         prose-only markdown reports. Do not use emoji as icons, status markers,
         bullets, tabs, headings, empty states, or data labels. Generated source
         must use approved shadcn/@thinkwork/ui and @thinkwork/computer-stdlib
-        primitives from the shadcn registry guidance; raw lucide-react, raw map
+        primitives from the shadcn registry guidance; named lucide-react icon
+        imports are allowed when they improve scannability, but raw map
         libraries, raw controls/tables, and bespoke visual styling are rejected.
+        When the user provides shadcn Create Theme CSS, include it as
+        metadata.appletTheme = {"source": "shadcn-create", "css": "..."} so the
+        host can apply those tokens inside the preview and saved iframe.
         Metadata must preserve uiRegistryVersion, uiRegistryDigest, and
         shadcnMcpToolCalls from the preview when available.
         """
@@ -298,9 +302,12 @@ def make_preview_app_fn(
         proof for the exact source. Pass only real available data, partial real
         data, or honest empty states; include metadata.dataProvenance and
         metadata.shadcnMcpToolCalls / metadata.uiRegistryDigest when available.
-        Generated source must use approved shadcn/@thinkwork/ui primitives and
-        must not use lucide-react, raw map libraries, raw controls/tables, or
-        bespoke visual styling. Consult shadcn MCP tools or the local
+        If the user pasted or uploaded shadcn Create Theme CSS, pass it as
+        metadata.appletTheme = {"source": "shadcn-create", "css": "..."}.
+        Generated source must use approved shadcn/@thinkwork/ui primitives.
+        Named lucide-react icon imports are allowed when they improve
+        scannability, but raw map libraries, raw controls/tables, and bespoke
+        visual styling are rejected. Consult shadcn MCP tools or the local
         shadcn_registry fallback before emitting TSX.
         """
 

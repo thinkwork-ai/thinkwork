@@ -23,6 +23,10 @@ export interface AppletMetadataV1 {
   };
   dataProvenance?: Record<string, unknown>;
   shadcnProvenance?: Record<string, unknown>;
+  appletTheme?: {
+    source?: string;
+    css: string;
+  };
 }
 
 export class AppletMetadataValidationError extends Error {
@@ -80,6 +84,15 @@ const appletMetadataSchema = {
     shadcnProvenance: {
       type: "object",
       additionalProperties: true,
+    },
+    appletTheme: {
+      type: "object",
+      additionalProperties: false,
+      required: ["css"],
+      properties: {
+        source: { type: "string", minLength: 1 },
+        css: { type: "string", minLength: 1, maxLength: 20000 },
+      },
     },
   },
 } as const;

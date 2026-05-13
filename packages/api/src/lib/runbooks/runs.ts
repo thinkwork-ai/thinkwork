@@ -71,6 +71,7 @@ export function buildRunbookRunRecords(input: {
       depends_on: task.dependsOn,
       capability_roles: task.capabilityRoles,
       sort_order: task.sortOrder,
+      details: task.details,
     })),
   };
 }

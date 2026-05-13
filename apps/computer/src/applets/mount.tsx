@@ -3,6 +3,7 @@ import {
   IframeAppletController,
   type IframeControllerStatus,
 } from "@/applets/iframe-controller";
+import { parseShadcnThemeCss } from "@/applets/theme-tokens";
 import type { AppletPayload } from "@/lib/app-artifacts";
 
 const THEME_VARIABLES = [
@@ -56,6 +57,16 @@ function readHostTheme(): "light" | "dark" {
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
+function readAppletThemeOverrides(
+  themeCss: string | null | undefined,
+  theme: "light" | "dark",
+): Record<string, string> {
+  return {
+    ...readHostThemeOverrides(),
+    ...parseShadcnThemeCss(themeCss, theme),
+  };
+}
+
 /**
  * Generated app artifacts always mount through the iframe substrate.
  * There is intentionally no same-origin generated-code fallback: if
@@ -70,6 +81,7 @@ export interface AppletMountProps {
   onHeaderActionChange?: (action: ReactNode | null) => void;
   hideRefreshControl?: boolean;
   fitContentHeight?: boolean;
+  themeCss?: string | null;
 }
 
 export function AppletMount(props: AppletMountProps) {
@@ -87,6 +99,7 @@ function IframeAppletMount({
   version,
   onHeaderActionChange,
   fitContentHeight = false,
+  themeCss,
 }: AppletMountProps) {
   const [theme, setTheme] = useState<"light" | "dark">(readHostTheme);
   const [status, setStatus] = useState<IframeControllerStatus | "loading">(
@@ -120,7 +133,7 @@ function IframeAppletMount({
       tsx: source,
       version: String(version),
       theme: themeRef.current,
-      themeOverrides: readHostThemeOverrides(),
+      themeOverrides: readAppletThemeOverrides(themeCss, themeRef.current),
       onError: (payload) => {
         if (cancelled) return;
         setStatus("errored");
@@ -148,11 +161,14 @@ function IframeAppletMount({
       controllerRef.current = null;
       if (container) container.replaceChildren();
     };
-  }, [appId, instanceId, source, version]);
+  }, [appId, instanceId, source, version, themeCss]);
 
   useEffect(() => {
-    controllerRef.current?.applyTheme(readHostThemeOverrides(), theme);
-  }, [theme]);
+    controllerRef.current?.applyTheme(
+      readAppletThemeOverrides(themeCss, theme),
+      theme,
+    );
+  }, [theme, themeCss]);
 
   useEffect(() => {
     if (!onHeaderActionChange) return;

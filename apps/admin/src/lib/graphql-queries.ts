@@ -2228,6 +2228,19 @@ export const AdminAppletsQuery = graphql(`
   }
 `);
 
+export const UpdateTenantArtifactStyleMutation = gql`
+  mutation UpdateTenantArtifactStyle(
+    $tenantId: ID!
+    $input: UpdateTenantSettingsInput!
+  ) {
+    updateTenantSettings(tenantId: $tenantId, input: $input) {
+      id
+      features
+      updatedAt
+    }
+  }
+`;
+
 export const AdminAppletQuery = graphql(`
   query AdminApplet($appId: ID!) {
     adminApplet(appId: $appId) {

@@ -189,7 +189,7 @@ def test_save_app_tool_description_sets_dashboard_quality_floor():
     assert "Do not use emoji as icons" in description
     assert "after a preview when the user explicitly asks to save" in description
     assert "uiRegistryDigest" in description
-    assert "raw lucide-react" in description
+    assert "named lucide-react icon" in description
 
 
 def test_preview_app_returns_unsaved_draft_payload_with_digest_and_proof():
@@ -263,7 +263,7 @@ def test_preview_app_tool_description_requires_real_data_and_shadcn_policy():
     assert "unsaved draft preview" in description
     assert "Pass only real available data" in description
     assert "metadata.dataProvenance" in description
-    assert "must not use lucide-react" in description
+    assert "Named lucide-react icon imports are allowed" in description
 
 
 def test_load_and_list_apps_call_graphql(monkeypatch):

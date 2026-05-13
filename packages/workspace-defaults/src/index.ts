@@ -610,11 +610,12 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 4. Keep app generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the app.
 5. Before writing TSX, consult the shadcn registry source for generated apps. Use the shadcn MCP tools when available: \`list_components\`, \`search_registry\`, \`get_component_source\`, and \`get_block\`. If MCP is unavailable, use the compact local registry generated from \`packages/ui/registry/generated-app-components.json\` or the runtime \`shadcn_registry\` helper. If neither source is available, stop with a structured guidance error instead of emitting TSX.
 6. Generate TSX using approved shadcn-compatible primitives from \`@thinkwork/ui\` plus approved domain primitives from \`@thinkwork/computer-stdlib\`. You must use approved shadcn primitives for their roles. Hand-rolled replacements for cards, tabs, badges, buttons, tables, selects, form controls, dialogs, sheets, separators, tooltips, scroll areas, charts, or maps are rejected.
-7. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
-8. Call \`preview_app\` before responding. Pass at least \`name\`, \`files\`, and \`metadata\`. Metadata must include \`threadId\`, \`prompt\`, \`agentVersion\`, \`modelId\`, \`uiRegistryVersion\`, \`uiRegistryDigest\`, and \`shadcnMcpToolCalls\` when available. Use \`["local_registry_fallback"]\` for \`shadcnMcpToolCalls\` when MCP was unavailable but the local registry was consulted.
-9. Call \`save_app\` only after the user explicitly asks to save/keep the preview, or when an active runbook phase explicitly requires a durable saved artifact. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, and model metadata.
-10. After \`preview_app\` returns \`ok\`, answer concisely with what is ready to inspect. After \`save_app\` returns \`ok\`, answer concisely with what was saved and the \`/artifacts/{appId}\` route.
-11. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use \`lucide-react\` named icon imports only when an icon materially improves scannability; otherwise use plain text, \`Badge\`, or approved registry components.
+7. If the user pasted or uploaded Theme CSS from shadcn Create, preserve it as \`metadata.appletTheme = { source: "shadcn-create", css: "..." }\` on both \`preview_app\` and \`save_app\`. Build with semantic shadcn token classes and chart variables so the uploaded CSS controls the rendered iframe.
+8. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
+9. Call \`preview_app\` before responding. Pass at least \`name\`, \`files\`, and \`metadata\`. Metadata must include \`threadId\`, \`prompt\`, \`agentVersion\`, \`modelId\`, \`uiRegistryVersion\`, \`uiRegistryDigest\`, and \`shadcnMcpToolCalls\` when available. Use \`["local_registry_fallback"]\` for \`shadcnMcpToolCalls\` when MCP was unavailable but the local registry was consulted.
+10. Call \`save_app\` only after the user explicitly asks to save/keep the preview, or when an active runbook phase explicitly requires a durable saved artifact. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, model, and \`appletTheme\` metadata.
+11. After \`preview_app\` returns \`ok\`, answer concisely with what is ready to inspect. After \`save_app\` returns \`ok\`, answer concisely with what was saved and the \`/artifacts/{appId}\` route.
+12. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use \`lucide-react\` named icon imports only when an icon materially improves scannability; otherwise use plain text, \`Badge\`, or approved registry components.
 
 ## Host Chrome And Runtime
 
@@ -633,6 +634,8 @@ Use \`App.tsx\` as the main file. Export one default React component. Prefer con
 Generated dashboards must look like ThinkWork product UI, not raw HTML. The shadcn registry is the source of truth for approved generated-app components, examples, roles, and substitutions. Import structure and controls from \`@thinkwork/ui\`: \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardDescription\`, \`CardContent\`, \`Badge\`, \`Button\`, \`Tabs\`, \`TabsList\`, \`TabsTrigger\`, \`TabsContent\`, \`Table\`, \`TableHeader\`, \`TableBody\`, \`TableRow\`, \`TableHead\`, \`TableCell\`, \`Select\`, \`Checkbox\`, \`Switch\`, \`Tooltip\`, \`Dialog\`, \`Sheet\`, \`ScrollArea\`, \`Separator\`, \`ChartContainer\`, \`Combobox\`, and \`DropdownMenu\` where applicable.
 
 Use \`@thinkwork/computer-stdlib\` for semantic dashboard primitives such as \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`MapView\`, and formatters. It is fine to combine stdlib charts with \`@thinkwork/ui\` layout chrome.
+
+Use shadcn semantic tokens, not one-off colors: \`bg-background\`, \`text-foreground\`, \`bg-card\`, \`text-card-foreground\`, \`border-border\`, \`text-muted-foreground\`, \`bg-muted\`, \`text-primary\`, \`text-destructive\`, and chart colors from \`var(--chart-1)\` through \`var(--chart-5)\`. User-uploaded shadcn Create Theme CSS is injected by the host from \`metadata.appletTheme\`; do not paste a \`<style>\` tag into \`App.tsx\`.
 
 Do not use emoji icons. Use \`lucide-react\` named icon imports only when an icon materially improves scannability; otherwise use plain text, \`Badge\`, or approved registry components.
 
@@ -779,6 +782,12 @@ Use shadcn-compatible primitives from \`@thinkwork/ui\` for layout and controls:
 
 Use \`@thinkwork/computer-stdlib\` primitives where they fit: \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, and formatters such as \`formatCurrency\`.
 
+Theme requirements:
+
+- If the user provides Theme CSS from shadcn Create, preserve it in \`metadata.appletTheme = { source: "shadcn-create", css: "..." }\` on \`preview_app\` and \`save_app\`.
+- Use semantic shadcn token classes and chart variables: \`bg-background\`, \`text-foreground\`, \`bg-card\`, \`text-card-foreground\`, \`border-border\`, \`text-muted-foreground\`, \`bg-muted\`, and \`var(--chart-1)\` through \`var(--chart-5)\`.
+- Do not paste a \`<style>\` tag into \`App.tsx\`, hard-code black chart marks on dark surfaces, or invent a separate palette that fights the uploaded theme.
+
 Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use \`Tabs\`/\`TabsList\`/\`TabsTrigger\`; tabular data must use \`DataTable\` or \`Table\`; status labels must use \`Badge\`; metric panels must use \`Card\` or \`KpiStrip\`.
 
 Do not use emoji icons. Use \`lucide-react\` icons when an icon is needed.
@@ -834,6 +843,7 @@ Use:
 - \`metadata.recipe\`: \`crm-dashboard\`.
 - \`metadata.recipeVersion\`: \`1\`.
 - \`metadata.dataShape\`: \`CrmDashboardData\`.
+- \`metadata.appletTheme\`: user-provided shadcn Create theme CSS when available.
 
 Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`persisted\`, and an \`appId\`. Link to \`/artifacts/{appId}\`.
 `;
@@ -866,7 +876,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 14;
+export const DEFAULTS_VERSION = 15;
 
 // ---------------------------------------------------------------------------
 // Aggregator

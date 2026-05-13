@@ -40,10 +40,7 @@
       "Interactive dashboard artifact",
       "Compact source/data note"
     ],
-    "likelyTools": [
-      "connected CRM or spreadsheet sources",
-      "artifact builder"
-    ],
+    "likelyTools": ["connected CRM or spreadsheet sources", "artifact builder"],
     "phaseSummary": [
       "Fetch a compact CRM dashboard dataset.",
       "Generate and save the dashboard artifact."
@@ -56,6 +53,10 @@
       "guidance": "references/discover.md",
       "capabilityRoles": ["research"],
       "dependsOn": [],
+      "supervision": {
+        "staleAfterMinutes": 5,
+        "progressExpectation": "Fetch the compact CRM dataset quickly. This phase should finish after enough real records and field coverage exist for the dashboard; do not run exhaustive validation."
+      },
       "taskSeeds": [
         "Fetch the minimum CRM records and field coverage needed to build the requested dashboard."
       ]
@@ -66,6 +67,10 @@
       "guidance": "references/produce.md",
       "capabilityRoles": ["artifact_build"],
       "dependsOn": ["discover"],
+      "supervision": {
+        "staleAfterMinutes": 15,
+        "progressExpectation": "Generate TSX, preview or save the artifact, and stop after one bounded compile/save correction. Long UI generation is allowed, but repeated redesign or discovery loops are not."
+      },
       "taskSeeds": [
         "Generate and save the CRM dashboard artifact from the fetched dashboard dataset."
       ]
