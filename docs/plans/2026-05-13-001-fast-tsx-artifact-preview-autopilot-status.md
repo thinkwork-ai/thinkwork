@@ -37,12 +37,14 @@ status: active
 - 2026-05-13: Removed the completed U3 worktree, fetched `origin/main`, and started U4 in `.Codex/worktrees/fast-tsx-u4-promote-draft` on branch `codex/fast-tsx-u4-promote-draft`.
 - 2026-05-13: Began U4 by adding the `promoteDraftApplet` schema/resolver path, draft promotion proof verification, user-auth promotion boundary, deterministic draft app IDs, and a Save action in `DraftAppletPreview`.
 - 2026-05-13: U4 focused verification passed: API applet resolver/access/runtime proof tests, Computer draft preview/query tests, Python applet tool tests, GraphQL contract test, API/Computer typechecks, API/Computer builds, CLI typecheck, root lint, Python ruff check for touched files, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
+- 2026-05-13: Opened U4 PR #1187 from `codex/fast-tsx-u4-promote-draft`.
 
 ## Pull Requests
 
 - U1: #1184 - <https://github.com/thinkwork-ai/thinkwork/pull/1184>
 - U2: #1185 - <https://github.com/thinkwork-ai/thinkwork/pull/1185>
 - U3: #1186 - <https://github.com/thinkwork-ai/thinkwork/pull/1186>
+- U4: #1187 - <https://github.com/thinkwork-ai/thinkwork/pull/1187>
 
 ## CI Failures
 
