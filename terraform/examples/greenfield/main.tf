@@ -382,7 +382,7 @@ module "thinkwork" {
   # the shared apex/www/docs/admin/computer/api certificate.
   computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
   computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
-  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.computer_domain}" : ""
+  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.computer_domain},https://${local.admin_domain}" : ""
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
