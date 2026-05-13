@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertAppletArtifactAccess,
+  assertCanPromoteDraftApplet,
   assertCanWriteApplet,
 } from "../lib/applets/access.js";
 import {
@@ -14,6 +15,29 @@ describe("applet metadata and access", () => {
       appId: "pipeline-risk",
       tenantId: "tenant-A",
       kind: "computer_applet",
+    });
+  });
+
+  it("preserves draft preview provenance metadata", () => {
+    expect(
+      parseAppletMetadataV1(
+        validAppletMetadata({
+          sourceDigest:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          draftPreview: {
+            draftId: "draft_123",
+            sourceDigest:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            promotedAt: "2026-05-13T12:00:00.000Z",
+            promotionProofExpiresAt: "2026-05-13T18:00:00.000Z",
+          },
+          dataProvenance: { status: "real" },
+          shadcnProvenance: { registryDigest: "sha256:registry" },
+        }),
+      ),
+    ).toMatchObject({
+      draftPreview: { draftId: "draft_123" },
+      dataProvenance: { status: "real" },
     });
   });
 
@@ -56,6 +80,50 @@ describe("applet metadata and access", () => {
       assertCanWriteApplet(
         { auth: { authType: "apikey", tenantId: "tenant-A" } } as any,
         "tenant-A",
+      ),
+    ).not.toThrow();
+  });
+
+  it("allows user auth only for draft applet promotion", () => {
+    expect(() =>
+      assertCanPromoteDraftApplet(
+        {
+          auth: {
+            authType: "cognito",
+            tenantId: "tenant-A",
+            principalId: "user-1",
+          },
+        } as any,
+        "tenant-A",
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      assertCanPromoteDraftApplet(
+        {
+          auth: {
+            authType: "apikey",
+            tenantId: "tenant-A",
+            principalId: "service",
+          },
+        } as any,
+        "tenant-A",
+      ),
+    ).toThrow("Draft applet promotion requires user authentication");
+  });
+
+  it("allows draft promotion for OAuth callers after tenant resolution", () => {
+    expect(() =>
+      assertCanPromoteDraftApplet(
+        {
+          auth: {
+            authType: "cognito",
+            tenantId: null,
+            principalId: "google-sub",
+          },
+        } as any,
+        "tenant-A",
+        { tenantId: "tenant-A", userId: "user-1" },
       ),
     ).not.toThrow();
   });

@@ -16,6 +16,7 @@ import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import {
   assertAppletArtifactAccess,
+  assertCanPromoteDraftApplet,
   assertCanWriteApplet,
   type AppletArtifactRow,
 } from "../../../lib/applets/access.js";
@@ -260,8 +261,11 @@ export async function saveAppletInner(args: {
   ctx: GraphQLContext;
   input: SaveAppletInput;
   regenerate: boolean;
+  writeMode?: "service" | "draft_promotion";
+  tenantId?: string;
+  promotionCaller?: { tenantId: string | null; userId: string | null };
 }): Promise<SaveAppletPayload> {
-  const tenantId = args.ctx.auth.tenantId;
+  const tenantId = args.tenantId ?? args.ctx.auth.tenantId;
   if (!tenantId) {
     return failurePayload({
       appId: normalizeAppId(args.input.appId) ?? null,
@@ -274,7 +278,11 @@ export async function saveAppletInner(args: {
       },
     });
   }
-  assertCanWriteApplet(args.ctx, tenantId);
+  if (args.writeMode === "draft_promotion") {
+    assertCanPromoteDraftApplet(args.ctx, tenantId, args.promotionCaller);
+  } else {
+    assertCanWriteApplet(args.ctx, tenantId);
+  }
 
   const filesResult = parseAppletFiles(args.input.files);
   if (!filesResult.ok) {
@@ -600,7 +608,10 @@ async function findAppletStateArtifact(args: {
   );
 }
 
-async function toAppletState(row: AppletStateArtifactRow, valueOverride?: unknown) {
+async function toAppletState(
+  row: AppletStateArtifactRow,
+  valueOverride?: unknown,
+) {
   const metadata = parseAppletStateMetadata(row.metadata);
   if (!metadata) {
     throw new GraphQLError("Applet state artifact metadata is invalid", {
@@ -737,6 +748,13 @@ function buildAppletMetadata(args: {
     typeof input[key] === "string" && input[key].trim()
       ? String(input[key])
       : fallback;
+  const objectField = (
+    key: string,
+    fallback?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined => {
+    const value = parseJsonObject(input[key]);
+    return value ?? fallback;
+  };
 
   const metadata: AppletMetadataV1 = {
     schemaVersion: 1,
@@ -754,11 +772,49 @@ function buildAppletMetadata(args: {
       "stdlibVersionAtGeneration",
       args.fallback?.stdlibVersionAtGeneration ?? DEFAULT_STDLIB_VERSION,
     )!,
+    sourceDigest: stringField("sourceDigest", args.fallback?.sourceDigest),
+    draftPreview:
+      parseDraftPreviewMetadata(input.draftPreview) ??
+      args.fallback?.draftPreview,
+    dataProvenance: objectField(
+      "dataProvenance",
+      args.fallback?.dataProvenance,
+    ),
+    shadcnProvenance: objectField(
+      "shadcnProvenance",
+      args.fallback?.shadcnProvenance,
+    ),
   };
 
   return Object.fromEntries(
     Object.entries(metadata).filter(([, value]) => value !== undefined),
   ) as AppletMetadataV1;
+}
+
+function parseDraftPreviewMetadata(
+  input: unknown,
+): AppletMetadataV1["draftPreview"] | undefined {
+  const value = parseJsonObject(input);
+  if (!value) return undefined;
+  if (typeof value.draftId !== "string" || !value.draftId.trim()) {
+    return undefined;
+  }
+  if (typeof value.sourceDigest !== "string" || !value.sourceDigest.trim()) {
+    return undefined;
+  }
+  if (typeof value.promotedAt !== "string" || !value.promotedAt.trim()) {
+    return undefined;
+  }
+  return {
+    draftId: value.draftId,
+    sourceDigest: value.sourceDigest,
+    promotedAt: value.promotedAt,
+    promotionProofExpiresAt:
+      typeof value.promotionProofExpiresAt === "string" &&
+      value.promotionProofExpiresAt.trim()
+        ? value.promotionProofExpiresAt
+        : undefined,
+  };
 }
 
 function parseJsonObject(input: unknown): Record<string, unknown> | null {

@@ -2203,6 +2203,7 @@ export type Mutation = {
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   pauseConnector: Connector;
   planRoutineDraft: RoutineDraft;
+  promoteDraftApplet: SaveAppletPayload;
   publishComputerThreadChunk: ComputerThreadChunkEvent;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
@@ -2834,6 +2835,11 @@ export type MutationPlanRoutineDraftArgs = {
 };
 
 
+export type MutationPromoteDraftAppletArgs = {
+  input: PromoteDraftAppletInput;
+};
+
+
 export type MutationPublishComputerThreadChunkArgs = {
   chunk: Scalars['AWSJSON']['input'];
   seq: Scalars['Int']['input'];
@@ -3322,6 +3328,18 @@ export type PlanRoutineDraftInput = {
   name: Scalars['String']['input'];
   steps?: InputMaybe<Array<RoutineDefinitionStepConfigInput>>;
   tenantId: Scalars['ID']['input'];
+};
+
+export type PromoteDraftAppletInput = {
+  computerId: Scalars['ID']['input'];
+  draftId: Scalars['ID']['input'];
+  files: Scalars['AWSJSON']['input'];
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  name: Scalars['String']['input'];
+  promotionProof: Scalars['String']['input'];
+  promotionProofExpiresAt: Scalars['AWSDateTime']['input'];
+  sourceDigest: Scalars['String']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 export type PublishRoutineVersionInput = {

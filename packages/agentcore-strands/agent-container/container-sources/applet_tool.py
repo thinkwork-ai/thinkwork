@@ -442,6 +442,7 @@ async def _live_preview_app(
         "draft": {
             "draftId": draft_id,
             "unsaved": True,
+            "computerId": runtime.computer_id,
             "name": name,
             "files": files,
             "metadata": metadata_payload,

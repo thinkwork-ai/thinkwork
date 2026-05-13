@@ -113,6 +113,18 @@ input SaveAppletInput {
   metadata: AWSJSON
 }
 
+input PromoteDraftAppletInput {
+  draftId: ID!
+  computerId: ID!
+  threadId: ID!
+  name: String!
+  files: AWSJSON!
+  metadata: AWSJSON
+  sourceDigest: String!
+  promotionProof: String!
+  promotionProofExpiresAt: AWSDateTime!
+}
+
 input SaveAppletStateInput {
   appId: ID!
   instanceId: ID!
@@ -152,6 +164,7 @@ extend type Mutation {
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
+  promoteDraftApplet(input: PromoteDraftAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

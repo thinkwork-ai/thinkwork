@@ -217,6 +217,7 @@ def test_preview_app_returns_unsaved_draft_payload_with_digest_and_proof():
     assert result["type"] == "draft_app_preview"
     draft = result["draft"]
     assert draft["unsaved"] is True
+    assert draft["computerId"] == "computer-1"
     assert draft["draftId"].startswith("draft_")
     assert draft["sourceDigest"].startswith("sha256:")
     assert draft["promotionProof"].startswith("draft-app-preview-v1:")

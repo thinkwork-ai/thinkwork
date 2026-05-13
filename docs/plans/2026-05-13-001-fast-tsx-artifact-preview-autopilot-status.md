@@ -10,9 +10,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U3 - Render unsaved TSX previews in Computer
-- Branch: `codex/fast-tsx-u3-draft-render`
-- Worktree: `.Codex/worktrees/fast-tsx-u3-draft-render`
+- Unit: U4 - Promote draft preview to saved artifact
+- Branch: `codex/fast-tsx-u4-promote-draft`
+- Worktree: `.Codex/worktrees/fast-tsx-u4-promote-draft`
 - Started: 2026-05-13
 - State: in progress
 
@@ -33,6 +33,10 @@ status: active
 - 2026-05-13: Began U3 by adding the iframe-backed `DraftAppletPreview` renderer inside AI Elements `WebPreview` chrome and routing `tool-preview_app` output to it.
 - 2026-05-13: U3 focused verification passed: DraftAppletPreview/render typed-part tests, GeneratedArtifactCard/AppSync transport regression tests, Computer typecheck, Computer build, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
 - 2026-05-13: Opened U3 PR #1186 from `codex/fast-tsx-u3-draft-render`.
+- 2026-05-13: U3 PR #1186 passed required checks and was squash-merged to `main` at `3e4ee371`.
+- 2026-05-13: Removed the completed U3 worktree, fetched `origin/main`, and started U4 in `.Codex/worktrees/fast-tsx-u4-promote-draft` on branch `codex/fast-tsx-u4-promote-draft`.
+- 2026-05-13: Began U4 by adding the `promoteDraftApplet` schema/resolver path, draft promotion proof verification, user-auth promotion boundary, deterministic draft app IDs, and a Save action in `DraftAppletPreview`.
+- 2026-05-13: U4 focused verification passed: API applet resolver/access/runtime proof tests, Computer draft preview/query tests, Python applet tool tests, GraphQL contract test, API/Computer typechecks, API/Computer builds, CLI typecheck, root lint, Python ruff check for touched files, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
 
 ## Pull Requests
 

@@ -255,6 +255,19 @@ export const AppletsQuery = gql`
   ${AppletPreviewFields}
 `;
 
+export const PromoteDraftAppletMutation = gql`
+  mutation PromoteDraftApplet($input: PromoteDraftAppletInput!) {
+    promoteDraftApplet(input: $input) {
+      ok
+      appId
+      version
+      validated
+      persisted
+      errors
+    }
+  }
+`;
+
 export const CreateThreadMutation = gql`
   mutation CreateThread($input: CreateThreadInput!) {
     createThread(input: $input) {

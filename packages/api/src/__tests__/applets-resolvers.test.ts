@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -6,6 +7,7 @@ import {
 import { mockClient } from "aws-sdk-client-mock";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppletMetadataV1 } from "../lib/applets/metadata.js";
+import { buildDraftAppletSourceDigest } from "../lib/applets/draft-promotion.js";
 
 const {
   mockDb,
@@ -86,6 +88,7 @@ describe("applet GraphQL resolvers", () => {
     vi.clearAllMocks();
     mockRequireTenantAdmin.mockResolvedValue("admin");
     process.env.WORKSPACE_BUCKET = "workspace-bucket";
+    process.env.API_AUTH_SECRET = "secret";
   });
 
   it("saves a valid applet source and metadata before inserting the artifact row", async () => {
@@ -256,6 +259,65 @@ describe("applet GraphQL resolvers", () => {
       errors: [expect.objectContaining({ code: "NOT_FOUND" })],
     });
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("promotes a verified draft preview through the applet save path", async () => {
+    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+    s3Mock.on(PutObjectCommand).resolves({});
+    const input = validPromoteInput();
+
+    const result = await mutationResolvers.promoteDraftApplet(
+      null,
+      { input },
+      userCtx(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      version: 1,
+      validated: true,
+      persisted: true,
+      errors: [],
+    });
+    expect(result.appId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(insertedRows[0]).toMatchObject({
+      id: result.appId,
+      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      thread_id: "11111111-1111-4111-8111-111111111111",
+      title: "Pipeline Risk Draft",
+      type: "applet",
+    });
+    expect(insertedRows[0].metadata).toMatchObject({
+      sourceDigest: input.sourceDigest,
+      draftPreview: {
+        draftId: "draft_123",
+        sourceDigest: input.sourceDigest,
+      },
+      dataProvenance: { status: "real" },
+    });
+  }, 15000);
+
+  it("rejects forged draft promotion proofs without writing artifacts", async () => {
+    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+    const input = validPromoteInput({
+      promotionProof: "draft-app-preview-v1:forged",
+    });
+
+    const result = await mutationResolvers.promoteDraftApplet(
+      null,
+      { input },
+      userCtx(),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      persisted: false,
+      errors: [expect.objectContaining({ code: "FORBIDDEN" })],
+    });
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(insertedRows).toHaveLength(0);
   });
 
   it("loads an applet payload with source and reconstructed files", async () => {
@@ -494,6 +556,62 @@ function validSaveInput(overrides: Record<string, unknown> = {}) {
     metadata: { stdlibVersionAtGeneration: "0.1.0" },
     ...overrides,
   };
+}
+
+function validPromoteInput(overrides: Record<string, unknown> = {}) {
+  const files = {
+    "App.tsx": "export default function Applet() { return null; }",
+  };
+  const sourceDigest = buildDraftAppletSourceDigest(files);
+  const expiresAt = "2099-05-13T18:00:00.000Z";
+  const base = {
+    draftId: "draft_123",
+    computerId: "computer-1",
+    threadId: "11111111-1111-4111-8111-111111111111",
+    name: "Pipeline Risk Draft",
+    files,
+    metadata: {
+      threadId: "11111111-1111-4111-8111-111111111111",
+      prompt: "Show risk",
+      stdlibVersionAtGeneration: "0.1.0",
+      dataProvenance: { status: "real" },
+    },
+    sourceDigest,
+    promotionProof: draftPromotionProof({
+      tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      computerId: "computer-1",
+      threadId: "11111111-1111-4111-8111-111111111111",
+      draftId: "draft_123",
+      sourceDigest,
+      expiresAt,
+      secret: "secret",
+    }),
+    promotionProofExpiresAt: expiresAt,
+  };
+  return { ...base, ...overrides };
+}
+
+function draftPromotionProof(input: {
+  tenantId: string;
+  computerId: string;
+  threadId: string;
+  draftId: string;
+  sourceDigest: string;
+  expiresAt: string;
+  secret: string;
+}) {
+  const payload = [
+    "draft-app-preview-v1",
+    input.tenantId,
+    input.computerId,
+    input.threadId,
+    input.draftId,
+    input.sourceDigest,
+    input.expiresAt,
+  ].join("\n");
+  return `draft-app-preview-v1:${createHmac("sha256", input.secret)
+    .update(payload)
+    .digest("hex")}`;
 }
 
 function serviceCtx() {
