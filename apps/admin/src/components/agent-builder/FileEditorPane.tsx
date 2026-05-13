@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { languages } from "@codemirror/language-data";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
 import ReactMarkdown from "react-markdown";
@@ -10,6 +8,7 @@ import { Eye, File, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RoutingTableEditor } from "./RoutingTableEditor";
 import { parseRoutingTable } from "./routing-table";
+import { languageForFile } from "@/lib/codemirror-language";
 
 export interface FileEditorPaneProps {
   openFile: string | null;
@@ -164,10 +163,7 @@ export function FileEditorPane({
             onChange={onChange}
             height="100%"
             theme={vscodeDark}
-            extensions={[
-              markdown({ base: markdownLanguage, codeLanguages: languages }),
-              EditorView.lineWrapping,
-            ]}
+            extensions={[...languageForFile(openFile), EditorView.lineWrapping]}
             style={{ fontSize: "12px", backgroundColor: "black" }}
             className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
             basicSetup={{
