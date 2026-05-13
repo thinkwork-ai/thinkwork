@@ -21,7 +21,7 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 8. Call `preview_app` before responding. Pass at least `name`, `files`, and `metadata`. Metadata must include `threadId`, `prompt`, `agentVersion`, `modelId`, `uiRegistryVersion`, `uiRegistryDigest`, and `shadcnMcpToolCalls` when available. Use `["local_registry_fallback"]` for `shadcnMcpToolCalls` when MCP was unavailable but the local registry was consulted.
 9. Call `save_app` only after the user explicitly asks to save/keep the preview, or when an active runbook phase explicitly requires a durable saved artifact. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, and model metadata.
 10. After `preview_app` returns `ok`, answer concisely with what is ready to inspect. After `save_app` returns `ok`, answer concisely with what was saved and the `/artifacts/{appId}` route.
-11. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Do not import general icon packs such as `lucide-react` or `@tabler/icons-react`; icon use must come through approved registry components or a specific host allowlist export.
+11. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use `lucide-react` named icon imports only when an icon materially improves scannability; otherwise use plain text, `Badge`, or approved registry components.
 
 ## Host Chrome And Runtime
 
@@ -41,7 +41,7 @@ Generated dashboards must look like ThinkWork product UI, not raw HTML. The shad
 
 Use `@thinkwork/computer-stdlib` for semantic dashboard primitives such as `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, `MapView`, and formatters. It is fine to combine stdlib charts with `@thinkwork/ui` layout chrome.
 
-Do not use emoji icons. Do not import raw icon packs. Use plain text, `Badge`, or an approved registry component unless a host allowlist export explicitly provides the needed icon.
+Do not use emoji icons. Use `lucide-react` named icon imports only when an icon materially improves scannability; otherwise use plain text, `Badge`, or approved registry components.
 
 Do not create adjacent plain text tabs, raw `<button>` controls, raw `<table>` layouts for tabular data, raw form controls, inline-pill badges, chart wrappers outside `ChartContainer`, or bespoke card CSS. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; data grids must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`; charts must use the approved chart surface; maps must use `MapView`.
 

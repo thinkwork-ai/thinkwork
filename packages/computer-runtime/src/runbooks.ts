@@ -55,7 +55,7 @@ export type RunbookRuntimeApi = Pick<
 >;
 
 const DEFAULT_STEP_POLL_INTERVAL_MS = 5000;
-const DEFAULT_STEP_POLL_TIMEOUT_MS = 20 * 60 * 1000;
+const DEFAULT_STEP_POLL_TIMEOUT_MS = 8 * 60 * 1000;
 
 export type RunbookTaskRunner = (
   task: RunbookExecutionTask,

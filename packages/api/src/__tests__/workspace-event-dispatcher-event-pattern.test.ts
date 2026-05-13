@@ -3,9 +3,17 @@ import { mockClient } from "aws-sdk-client-mock";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const persistWorkspaceEventMock = vi.hoisted(() => vi.fn());
+const syncComputerTemplateSkillObjectToLiveComputersMock = vi.hoisted(() =>
+  vi.fn(),
+);
 
 vi.mock("../lib/workspace-events/processor.js", () => ({
   persistWorkspaceEvent: persistWorkspaceEventMock,
+}));
+
+vi.mock("../lib/computers/workspace-seed.js", () => ({
+  syncComputerTemplateSkillObjectToLiveComputers:
+    syncComputerTemplateSkillObjectToLiveComputersMock,
 }));
 
 import {
@@ -42,11 +50,19 @@ beforeEach(() => {
     status: "processed",
     eventId: 1,
   });
+  syncComputerTemplateSkillObjectToLiveComputersMock.mockResolvedValue({
+    matched: true,
+    enqueued: 1,
+    skipped: 0,
+  });
   s3Mock.reset();
 });
 
 describe("workspace event dispatcher candidate handling", () => {
   it("declares wildcard patterns for root and nested eventful prefixes", () => {
+    expect(WORKSPACE_EVENT_PREFIX_PATTERNS).toContain(
+      "tenants/*/agents/_catalog/*/workspace/skills/*",
+    );
     expect(WORKSPACE_EVENT_PREFIX_PATTERNS).toContain(
       "tenants/*/agents/*/workspace/work/inbox/*.md",
     );
@@ -77,6 +93,32 @@ describe("workspace event dispatcher candidate handling", () => {
         sequencer: "001",
       }),
       expect.anything(),
+    );
+  });
+
+  it("fans out Computer template skill updates to live Computer workspaces", async () => {
+    s3Mock.on(HeadObjectCommand).resolves({
+      ETag: '"etag-skill"',
+      VersionId: "version-1",
+      Metadata: {},
+    });
+
+    const result = await handler(
+      sqsEvent(
+        "tenants/acme/agents/_catalog/thinkwork-computer-default/workspace/skills/crm-dashboard/SKILL.md",
+      ),
+    );
+
+    expect(result.batchItemFailures).toEqual([]);
+    expect(persistWorkspaceEventMock).not.toHaveBeenCalled();
+    expect(syncComputerTemplateSkillObjectToLiveComputersMock).toHaveBeenCalledWith(
+      {
+        key: "tenants/acme/agents/_catalog/thinkwork-computer-default/workspace/skills/crm-dashboard/SKILL.md",
+        detailType: "Object Created",
+        objectEtag: '"etag-skill"',
+        objectVersionId: "version-1",
+        sequencer: "001",
+      },
     );
   });
 

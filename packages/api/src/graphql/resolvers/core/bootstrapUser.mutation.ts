@@ -198,7 +198,7 @@ export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: Graph
 			tenant_id: tenant.id,
 			name: "Default",
 			slug: "default",
-			model: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+			model: "us.anthropic.claude-sonnet-4-6",
 			config: {},
 		})
 		.onConflictDoNothing();

@@ -84,13 +84,13 @@ describe("applet source validation", () => {
     ).toThrow(AppletImportError);
   });
 
-  it("rejects lucide-react imports for generated applets", () => {
-    expect(() =>
+  it("accepts lucide-react named icon imports for generated applets", () => {
+    expect(
       validateAppletSource(`
         import { Calendar } from "lucide-react";
         export default function Applet() { return <Calendar />; }
       `),
-    ).toThrow(AppletImportError);
+    ).toEqual({ ok: true });
   });
 
   it("rejects dynamic imports outside the contract allowlist", () => {

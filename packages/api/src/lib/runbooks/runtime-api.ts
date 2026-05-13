@@ -32,6 +32,12 @@ import {
   upsertTaskQueuePart,
   type TaskQueueData,
 } from "../task-queues/message-parts.js";
+import {
+  checkBudgetAndPause,
+  extractUsage,
+  recordCostEvents,
+  type RecordCostResult,
+} from "../cost-recording.js";
 
 const db = getDb();
 const ssmClient = new SSMClient({});
@@ -50,6 +56,9 @@ const AGENTCORE_RUNTIME_SSM_STRANDS =
   `/thinkwork/${STAGE}/agentcore/runtime-id-strands`;
 const MAX_PREVIOUS_OUTPUT_TEXT_CHARS = 1_500;
 const MAX_PREVIOUS_OUTPUT_JSON_CHARS = 4_000;
+const DEFAULT_RUNBOOK_FAST_STEP_MODEL = "moonshotai.kimi-k2.5";
+const DEFAULT_RUNBOOK_ARTIFACT_STEP_MODEL =
+  "us.anthropic.claude-sonnet-4-6";
 
 let cachedStrandsRuntimeId: string | null = null;
 
@@ -274,16 +283,26 @@ export async function completeRunbookExecutionTask(input: {
   output?: unknown;
 }) {
   const { payload } = await loadRunbookExecuteTask(input);
-  await loadRunbookRunState({
+  const { run, tasks } = await loadRunbookRunState({
     tenantId: input.tenantId,
     computerId: input.computerId,
     runbookRunId: payload.runbookRunId,
   });
+  const currentTask =
+    tasks.find((task) => task.id === input.runbookTaskId) ?? null;
+  const accounting = await recordRunbookStepCost({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    run,
+    task: currentTask,
+    output: input.output,
+  });
+  const output = withRunbookStepAccounting(input.output, accounting);
   const [updated] = await db
     .update(computerRunbookTasks)
     .set({
       status: "completed",
-      output: input.output ?? null,
+      output,
       completed_at: new Date(),
       updated_at: new Date(),
     })
@@ -310,7 +329,7 @@ export async function completeRunbookExecutionTask(input: {
     runbookRunId: payload.runbookRunId,
     runbookTaskId: input.runbookTaskId,
     kind: "completed",
-    output: input.output,
+    output,
   });
   return toRuntimeTask(updated);
 }
@@ -400,6 +419,7 @@ export async function executeRunbookExecutionTask(input: {
     computerTaskId: input.taskId,
     runbookRunId: context.run.id,
     runbookTaskId: input.runbookTaskId,
+    capabilityRoles: currentTask.capabilityRoles,
     runbookContext,
   });
 
@@ -794,6 +814,120 @@ function nextPendingTask(
   );
 }
 
+type RunbookStepAccounting = {
+  requestId: string;
+  traceId: string;
+  source: "computer_runbook_step";
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  durationMs: number;
+  estimatedCostUsd: number;
+  llmCostUsd: number;
+  computeCostUsd: number;
+};
+
+async function recordRunbookStepCost(input: {
+  tenantId: string;
+  computerId: string;
+  run: typeof computerRunbookRuns.$inferSelect;
+  task: typeof computerRunbookTasks.$inferSelect | null;
+  output?: unknown;
+}): Promise<RunbookStepAccounting | null> {
+  if (!input.task) return null;
+  const outputRecord = recordValue(input.output);
+  const usage = extractUsage(outputRecord);
+  const requestId = `runbook:${input.run.id}:${input.task.id}`;
+  const traceId = `runbook:${input.run.id}:${input.task.task_key}`;
+  const durationMs =
+    numberValue(outputRecord.durationMs) ??
+    durationBetweenMs(input.task.started_at, new Date());
+  const model = stringValue(outputRecord.model) ?? usage.model;
+
+  let result: RecordCostResult = { totalUsd: 0, llmUsd: 0, computeUsd: 0 };
+  try {
+    const [computer] = await db
+      .select({
+        primary_agent_id: computers.primary_agent_id,
+        migrated_from_agent_id: computers.migrated_from_agent_id,
+      })
+      .from(computers)
+      .where(
+        and(
+          eq(computers.tenant_id, input.tenantId),
+          eq(computers.id, input.computerId),
+        ),
+      )
+      .limit(1);
+    const agentId =
+      computer?.primary_agent_id ?? computer?.migrated_from_agent_id ?? null;
+    result = await recordCostEvents({
+      tenantId: input.tenantId,
+      agentId,
+      requestId,
+      model,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedReadTokens: usage.cachedReadTokens,
+      durationMs,
+      inputText: input.task.title,
+      outputText:
+        stringValue(outputRecord.responseText) ??
+        stringValue(outputRecord.content) ??
+        stringValue(outputRecord.summary) ??
+        undefined,
+      threadId: input.run.thread_id ?? undefined,
+      traceId,
+      bedrockRequestIds: stringArrayValue(outputRecord.bedrockRequestIds),
+      source: "computer_runbook_step",
+    });
+    if (agentId) {
+      await checkBudgetAndPause(input.tenantId, agentId);
+    }
+  } catch (error) {
+    console.warn("[runbook] Failed to record step cost", {
+      tenantId: input.tenantId,
+      runId: input.run.id,
+      taskId: input.task.id,
+      error,
+    });
+  }
+
+  return {
+    requestId,
+    traceId,
+    source: "computer_runbook_step",
+    model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cachedReadTokens: usage.cachedReadTokens,
+    durationMs,
+    estimatedCostUsd: result.totalUsd,
+    llmCostUsd: result.llmUsd,
+    computeCostUsd: result.computeUsd,
+  };
+}
+
+function withRunbookStepAccounting(
+  output: unknown,
+  accounting: RunbookStepAccounting | null,
+) {
+  if (!accounting) return output ?? null;
+  const record = recordValue(output);
+  if (Object.keys(record).length === 0) return output ?? null;
+  return {
+    ...record,
+    usage: {
+      ...recordValue(record.usage),
+      input_tokens: accounting.inputTokens,
+      output_tokens: accounting.outputTokens,
+      cached_read_tokens: accounting.cachedReadTokens,
+    },
+    cost: accounting,
+  };
+}
+
 export function runbookProgressContent(input: {
   kind: "started" | "completed" | "failed";
   task: typeof computerRunbookTasks.$inferSelect;
@@ -911,6 +1045,7 @@ async function prepareRunbookStepAgentInvocation(input: {
   computerTaskId: string;
   runbookRunId: string;
   runbookTaskId: string;
+  capabilityRoles: string[];
   runbookContext: unknown;
 }) {
   const identity = await resolveRunbookStepIdentity({
@@ -933,7 +1068,10 @@ async function prepareRunbookStepAgentInvocation(input: {
     );
   }
   const runtimeArn = `arn:aws:bedrock-agentcore:${AWS_REGION}:${AWS_ACCOUNT_ID}:runtime/${runtimeId}`;
-  const model = runtimeConfig.templateModel;
+  const model = resolveRunbookStepModel({
+    templateModel: runtimeConfig.templateModel,
+    capabilityRoles: input.capabilityRoles,
+  });
   const messagesHistory: Array<{
     role: "user" | "assistant";
     content: string;
@@ -1456,6 +1594,23 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringArrayValue(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const values = value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+  return values.length > 0 ? values : undefined;
+}
+
+function durationBetweenMs(start: Date | null, end: Date) {
+  if (!start) return 0;
+  return Math.max(0, end.getTime() - start.getTime());
+}
+
 export function compactRunbookPreviousOutputs(
   outputs: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -1465,6 +1620,21 @@ export function compactRunbookPreviousOutputs(
       compactRunbookOutputValue(value),
     ]),
   );
+}
+
+export function resolveRunbookStepModel(input: {
+  templateModel?: string | null;
+  capabilityRoles: string[];
+}) {
+  const artifactModel =
+    stringFromEnv("RUNBOOK_ARTIFACT_STEP_MODEL") ??
+    DEFAULT_RUNBOOK_ARTIFACT_STEP_MODEL;
+  const fastModel =
+    stringFromEnv("RUNBOOK_FAST_STEP_MODEL") ?? DEFAULT_RUNBOOK_FAST_STEP_MODEL;
+  if (input.capabilityRoles.includes("artifact_build")) {
+    return artifactModel;
+  }
+  return fastModel || input.templateModel || null;
 }
 
 function compactRunbookOutputValue(value: unknown): unknown {
@@ -1503,6 +1673,11 @@ function compactRunbookOutputValue(value: unknown): unknown {
 function truncateText(value: string, maxChars: number) {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, Math.max(0, maxChars - 14)).trimEnd()}... [truncated]`;
+}
+
+function stringFromEnv(name: string) {
+  const raw = process.env[name];
+  return raw && raw.trim() ? raw.trim() : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

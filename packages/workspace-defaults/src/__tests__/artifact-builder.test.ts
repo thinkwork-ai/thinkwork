@@ -49,11 +49,11 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("same generated-app policy");
   });
 
-  it("does not allow generated apps to import raw icon packs", () => {
-    expect(skill).toContain("Do not import general icon packs");
-    expect(skill).toContain("specific host allowlist export");
+  it("allows bounded lucide-react icon imports for generated apps", () => {
+    expect(skill).toContain("lucide-react");
+    expect(skill).toContain("named icon imports");
     expect(skill).not.toContain("Import icons from `lucide-react`");
-    expect(skill).not.toContain("when an icon helps");
+    expect(skill).not.toContain("@tabler/icons-react");
   });
 
   it("defines the CRM dashboard applet contract", () => {

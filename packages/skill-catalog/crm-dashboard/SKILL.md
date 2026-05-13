@@ -2,10 +2,10 @@
 name: crm-dashboard
 display_name: "CRM Dashboard"
 description: >
-  Build an opinionated CRM dashboard app that surfaces pipeline health, account risk, next actions, and evidence.
+  Quickly build an opinionated CRM dashboard app from available CRM data.
 license: Proprietary
 category: dashboard
-version: "0.1.0"
+version: "0.2.0"
 author: thinkwork
 icon: layout-dashboard
 tags: [computer-runbook, crm, dashboard, sales]
@@ -16,7 +16,7 @@ allowed-tools:
   - artifact builder
 metadata:
   author: thinkwork
-  version: "0.1.0"
+  version: "0.2.0"
   thinkwork_kind: computer-runbook
   thinkwork_runbook_contract: references/thinkwork-runbook.json
 triggers:
@@ -31,7 +31,7 @@ Use this skill when the user wants an inspectable CRM, sales, pipeline, renewal,
 
 Start by reading `references/thinkwork-runbook.json` for routing, confirmation, phase, output, and asset contracts. Then load only the phase guidance needed for the current phase.
 
-Follow the phase order unless the active run snapshot tells you otherwise: discover CRM context, analyze pipeline and account risk, produce the dashboard artifact, then validate the result. Keep claims grounded in source data or label them as assumptions.
+Follow the active run snapshot. The default flow is intentionally short: fetch a compact CRM dataset, then produce and save the dashboard artifact. Keep claims grounded in source data or label them as unavailable, but do not create separate prose analysis or validation reports.
 
 ## Artifact UI Contract
 
@@ -43,8 +43,8 @@ Use `@thinkwork/computer-stdlib` for semantic app primitives and data visualizat
 
 Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`; tabular data must use `DataTable` or `Table`. Use real chart or table components for stage exposure, stale activity, risks, rep concentration, and opportunities.
 
-Do not use emoji as icons, status markers, bullets, tab labels, headings, or decorative text. If an icon is useful, import it from `lucide-react` or `@tabler/icons-react`; otherwise use text labels and badges.
+Do not use emoji as icons, status markers, bullets, tab labels, headings, or decorative text. If an icon is useful, import it from `lucide-react`; otherwise use text labels and badges.
 
 Before calling `save_app`, inspect the generated TSX. If it does not import `@thinkwork/ui`, use real dashboard components, include meaningful KPI/chart/table sections, and avoid emoji, revise it before saving.
 
-Use `assets/crm-dashboard-data.schema.json` and the produce-phase guidance to shape the saved app.
+Use `assets/crm-dashboard-data.schema.json` and the produce-phase guidance to shape the saved app. If `save_app` fails once, report the concrete error and stop instead of regenerating repeatedly.

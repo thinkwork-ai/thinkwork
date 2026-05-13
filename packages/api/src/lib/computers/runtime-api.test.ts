@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   updateRows: [] as Array<Array<Record<string, unknown>>>,
   inserts: [] as Array<Record<string, unknown>>,
   updates: [] as Array<Record<string, unknown>>,
+  execute: vi.fn(),
   resolveConnectionForUser: vi.fn(),
   resolveOAuthToken: vi.fn(),
   resolveOAuthTokenDetails: vi.fn(),
@@ -72,6 +73,7 @@ vi.mock("@thinkwork/database-pg", () => ({
         };
       },
     }),
+    execute: mocks.execute,
   }),
 }));
 
@@ -131,6 +133,7 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.updateRows = [];
     mocks.inserts = [];
     mocks.updates = [];
+    mocks.execute.mockResolvedValue({ rows: [] });
     mocks.invokeChatAgent.mockResolvedValue(true);
     mocks.runSymphonyPrConnectorWork.mockResolvedValue({
       handled: false,
@@ -296,6 +299,7 @@ describe("Computer runtime API heartbeat workspace materialization", () => {
       ],
     ];
     mocks.updates = [];
+    mocks.execute.mockResolvedValue({ rows: [] });
     mocks.ensureMigratedComputerWorkspaceSeeded.mockResolvedValue({
       seeded: false,
     });
@@ -332,6 +336,25 @@ describe("Computer runtime API heartbeat workspace materialization", () => {
       tenantId: "tenant-1",
       computerId: "computer-1",
     });
+  });
+
+  it("reconciles stale runbook tasks on heartbeat", async () => {
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ task_id: "runbook-task-1", run_id: "run-1" }],
+      })
+      .mockResolvedValue({ rows: [] });
+
+    const result = await recordComputerHeartbeat({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      runtimeStatus: "running",
+      runtimeVersion: "runtime-1",
+      workspaceRoot: "/workspace",
+    });
+
+    expect(result).toMatchObject({ staleRunbookTasksReconciled: 1 });
+    expect(mocks.execute).toHaveBeenCalledTimes(5);
   });
 });
 

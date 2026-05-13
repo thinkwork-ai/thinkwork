@@ -63,7 +63,11 @@ export function validateGeneratedAppImports(imports: ImportDeclaration[]) {
           `Applet namespace imports from ${declaration.specifier} bypass the generated-app allowlist.`,
         );
       }
-      if (binding.kind === "named" && !namedExports.has(binding.imported)) {
+      if (
+        binding.kind === "named" &&
+        !packagePolicy.allowAnyNamedExport &&
+        !namedExports.has(binding.imported)
+      ) {
         throw new AppletSourcePolicyError(
           "APPLET_IMPORT_EXPORT_DISALLOWED",
           `${binding.imported} is not an approved generated-app export from ${declaration.specifier}.`,
