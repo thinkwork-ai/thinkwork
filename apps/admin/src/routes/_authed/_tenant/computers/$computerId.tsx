@@ -282,7 +282,7 @@ function ComputerDashboardTab({
   onChanged: () => void;
 }) {
   const navigate = useNavigate();
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 10;
   const [pageIndex, setPageIndex] = useState(0);
 
   // Threads scoped to this Computer via the new computerId filter on
@@ -361,20 +361,25 @@ function ComputerDashboardTab({
         tasks={[]}
         threads={threadItems as never}
       />
-      <ThreadsTable
-        items={threadItems}
-        agents={agents}
-        inboxStatusFor={inboxStatusFor}
-        onUpdateThread={handleUpdateThread}
-        onRowClick={goToThread}
-        scope="computer"
-        pagination={{
-          totalCount,
-          pageSize: PAGE_SIZE,
-          pageIndex,
-          onPageChange: setPageIndex,
-        }}
-      />
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-foreground">
+          Recent Threads
+        </h2>
+        <ThreadsTable
+          items={threadItems}
+          agents={agents}
+          inboxStatusFor={inboxStatusFor}
+          onUpdateThread={handleUpdateThread}
+          onRowClick={goToThread}
+          scope="computer"
+          pagination={{
+            totalCount,
+            pageSize: PAGE_SIZE,
+            pageIndex,
+            onPageChange: setPageIndex,
+          }}
+        />
+      </div>
       {threadsResult.error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
           {threadsResult.error.message}

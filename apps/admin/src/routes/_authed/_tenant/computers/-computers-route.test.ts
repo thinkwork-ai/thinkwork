@@ -21,12 +21,13 @@ describe("Computers admin routes", () => {
     expect(commandPaletteSource).toContain('to: "/computers"');
   });
 
-  it("renders a Computer list with runtime and migration columns", () => {
+  it("renders a Computer list that links to detail pages", () => {
     expect(listRouteSource).toContain("ComputersListQuery");
-    expect(listRouteSource).toContain("desiredRuntimeStatus");
-    expect(listRouteSource).toContain("runtimeStatus");
-    expect(listRouteSource).toContain("migratedFromAgentId");
     expect(listRouteSource).toContain('to: "/computers/$computerId"');
+    // Runtime + Migration columns were dropped from the list view; they
+    // remain on the Computer Detail page where they have room to breathe.
+    expect(listRouteSource).not.toContain('header: "Runtime"');
+    expect(listRouteSource).not.toContain('header: "Migration"');
   });
 
   it("renders the post-cleanup Detail page (Dashboard | Workspace | Terminal | Config)", () => {
@@ -65,6 +66,8 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain("ThreadsPagedQuery");
     expect(detailRouteSource).toContain("computerId: computer.id");
     expect(detailRouteSource).toContain('scope="computer"');
+    expect(detailRouteSource).toContain("PAGE_SIZE = 10");
+    expect(detailRouteSource).toContain("Recent Threads");
   });
 
   it("Workspace tab is height-capped (plan U8: no double-scroll)", () => {
