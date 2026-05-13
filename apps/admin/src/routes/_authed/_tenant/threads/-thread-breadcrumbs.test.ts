@@ -8,21 +8,9 @@ const baseThread = {
 };
 
 describe("buildThreadBreadcrumbs", () => {
-  it("routes Computer-owned threads through /computers/$computerId", () => {
+  it("uses the Agent breadcrumb when fromAgentId is set", () => {
     const crumbs = buildThreadBreadcrumbs({
-      thread: { ...baseThread, computerId: "comp-1" },
-    });
-
-    expect(crumbs).toEqual([
-      { label: "Computers", href: "/computers" },
-      { label: "Computer", href: "/computers/comp-1" },
-      { label: "TW-7 Investigate the bug" },
-    ]);
-  });
-
-  it("preserves the Agent breadcrumb when fromAgentId is set and the thread is not Computer-owned", () => {
-    const crumbs = buildThreadBreadcrumbs({
-      thread: { ...baseThread, computerId: null },
+      thread: baseThread,
       fromAgentId: "agent-42",
       fromAgentName: "Marco",
     });
@@ -36,17 +24,15 @@ describe("buildThreadBreadcrumbs", () => {
 
   it("falls back to a literal 'Agent' label when fromAgentName is missing", () => {
     const crumbs = buildThreadBreadcrumbs({
-      thread: { ...baseThread, computerId: null },
+      thread: baseThread,
       fromAgentId: "agent-42",
     });
 
     expect(crumbs[1]).toEqual({ label: "Agent", href: "/agents/agent-42" });
   });
 
-  it("uses the default Threads breadcrumb when there is neither Computer ownership nor an Agent provenance", () => {
-    const crumbs = buildThreadBreadcrumbs({
-      thread: { ...baseThread, computerId: null },
-    });
+  it("uses the default Threads breadcrumb when there is no Agent provenance", () => {
+    const crumbs = buildThreadBreadcrumbs({ thread: baseThread });
 
     expect(crumbs).toEqual([
       { label: "Threads", href: "/threads" },
@@ -54,15 +40,15 @@ describe("buildThreadBreadcrumbs", () => {
     ]);
   });
 
-  it("prefers Computer ownership over an Agent provenance query param", () => {
+  it("uses the Threads breadcrumb for Computer-owned threads (computerId is ignored)", () => {
     const crumbs = buildThreadBreadcrumbs({
       thread: { ...baseThread, computerId: "comp-1" },
-      fromAgentId: "agent-42",
-      fromAgentName: "Marco",
     });
 
-    expect(crumbs[0]).toEqual({ label: "Computers", href: "/computers" });
-    expect(crumbs[1]?.href).toBe("/computers/comp-1");
+    expect(crumbs).toEqual([
+      { label: "Threads", href: "/threads" },
+      { label: "TW-7 Investigate the bug" },
+    ]);
   });
 
   it("renders 'Loading...' as the tail crumb when the thread payload has not arrived", () => {

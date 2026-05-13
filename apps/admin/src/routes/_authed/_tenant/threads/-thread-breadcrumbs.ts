@@ -22,11 +22,9 @@ export type Breadcrumb = {
 };
 
 // Decision order:
-//   1. Computer ownership (`thread.computerId`) — Computer-owned threads route
-//      through /computers, regardless of any `?fromAgent` query param.
-//   2. Explicit Agent provenance via `?fromAgent=...` — preserve the existing
-//      Agent breadcrumb behavior.
-//   3. Default — Threads root.
+//   1. Explicit Agent provenance via `?fromAgent=...` — preserve the Agent
+//      breadcrumb when arriving from an agent page.
+//   2. Default — Threads root.
 export function buildThreadBreadcrumbs(input: ThreadBreadcrumbInput): Breadcrumb[] {
   const { thread, fromAgentId, fromAgentName } = input;
 
@@ -35,17 +33,6 @@ export function buildThreadBreadcrumbs(input: ThreadBreadcrumbInput): Breadcrumb
       ? `${thread.identifier ?? `#${thread.number}`} ${thread.title}`
       : "Loading...",
   };
-
-  if (thread?.computerId) {
-    return [
-      { label: "Computers", href: "/computers" },
-      {
-        label: "Computer",
-        href: `/computers/${thread.computerId}`,
-      },
-      tail,
-    ];
-  }
 
   if (fromAgentId) {
     return [
