@@ -6,7 +6,6 @@ import { useQuery, useMutation } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
-import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +56,9 @@ function AgentTemplatesPage() {
   useBreadcrumbs([{ label: "Templates" }]);
 
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<"all" | TemplateKind>("all");
+  const [kindFilter, setKindFilter] = useState<TemplateKind>(
+    TemplateKind.Computer,
+  );
   const [useDialogOpen, setUseDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(
     null,
@@ -89,8 +90,7 @@ function AgentTemplatesPage() {
   ).length;
 
   const rows = templates.filter((template) => {
-    const matchesKind =
-      kindFilter === "all" || template.templateKind === kindFilter;
+    const matchesKind = template.templateKind === kindFilter;
     const matchesSearch =
       !search ||
       template.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -268,55 +268,43 @@ function AgentTemplatesPage() {
   return (
     <PageLayout
       header={
-        <>
-          <PageHeader
-            title="Templates"
-            description="Define Computer workplaces and delegated Agent capabilities from typed templates."
-            actions={
-              <>
-                <Button
-                  onClick={() => navigate({ to: "/agent-templates/new" })}
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Template
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => navigate({ to: "/agent-templates/defaults" })}
-                >
-                  <FileText className="h-4 w-4" />
-                  Default Workspace
-                </Button>
-              </>
-            }
-          />
-          <div className="flex items-center gap-4 mt-4">
-            <Tabs
-              value={kindFilter}
-              onValueChange={(value) =>
-                setKindFilter(value as "all" | TemplateKind)
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value={TemplateKind.Computer}>
-                  Computer Templates
-                  {computerTemplateCount ? (
-                    <Badge variant="outline" className="ml-2 text-[10px]">
-                      {computerTemplateCount}
-                    </Badge>
-                  ) : null}
-                </TabsTrigger>
-                <TabsTrigger value={TemplateKind.Agent}>
-                  Agent Templates
-                  {agentTemplateCount ? (
-                    <Badge variant="outline" className="ml-2 text-[10px]">
-                      {agentTemplateCount}
-                    </Badge>
-                  ) : null}
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 items-center">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold tracking-tight leading-tight text-foreground">
+                Templates
+              </h1>
+            </div>
+            <div className="flex justify-center">
+              <Tabs
+                value={kindFilter}
+                onValueChange={(value) =>
+                  setKindFilter(value as TemplateKind)
+                }
+              >
+                <TabsList>
+                  <TabsTrigger value={TemplateKind.Computer} className="px-2">
+                    Computer
+                    {computerTemplateCount ? (
+                      <Badge variant="outline" className="ml-2 text-[10px]">
+                        {computerTemplateCount}
+                      </Badge>
+                    ) : null}
+                  </TabsTrigger>
+                  <TabsTrigger value={TemplateKind.Agent} className="px-2">
+                    Agents
+                    {agentTemplateCount ? (
+                      <Badge variant="outline" className="ml-2 text-[10px]">
+                        {agentTemplateCount}
+                      </Badge>
+                    ) : null}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <div />
+          </div>
+          <div className="flex items-center gap-2">
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -326,8 +314,21 @@ function AgentTemplatesPage() {
                 className="pl-9"
               />
             </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Button onClick={() => navigate({ to: "/agent-templates/new" })}>
+                <Plus className="h-4 w-4" />
+                Create Template
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: "/agent-templates/defaults" })}
+              >
+                <FileText className="h-4 w-4" />
+                Default Workspace
+              </Button>
+            </div>
           </div>
-        </>
+        </div>
       }
     >
       <DataTable

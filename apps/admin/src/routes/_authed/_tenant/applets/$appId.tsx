@@ -27,8 +27,8 @@ function AppletDetailPage() {
   const applet = payload?.applet;
 
   useBreadcrumbs([
-    { label: "Apps", href: "/applets" },
-    { label: applet?.name ?? "App" },
+    { label: "Artifacts", href: "/applets" },
+    { label: applet?.name ?? "Artifact" },
   ]);
 
   if (result.fetching && !result.data) return <PageSkeleton />;
