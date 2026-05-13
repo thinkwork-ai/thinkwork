@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { EditorView } from "@codemirror/view";
 import { ArrowLeft, Braces, Code2, ExternalLink, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
@@ -10,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { AdminAppletPreview } from "@/components/applets/AdminAppletPreview";
 import { Button } from "@/components/ui/button";
 import {
   AdminAppletQuery,
@@ -93,6 +93,11 @@ function AppletDetailPage() {
 
   return (
     <PageLayout
+      contentClassName={
+        activeTab === "app" || activeTab === "source"
+          ? "!overflow-hidden !pb-4"
+          : undefined
+      }
       header={
         <PageHeader
           title={applet.name}
@@ -110,9 +115,9 @@ function AppletDetailPage() {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="min-h-0 gap-4"
+        className="h-full min-h-0 gap-4"
       >
-        <div className="relative flex min-h-9 items-center justify-center gap-3">
+        <div className="relative flex min-h-9 shrink-0 items-center justify-center gap-3">
           <TabsList>
             <TabsTrigger value="app" className="px-6">
               App
@@ -135,7 +140,9 @@ function AppletDetailPage() {
               ) : null}
               <Button
                 type="button"
+                variant="link"
                 size="sm"
+                className="h-auto px-0 text-muted-foreground hover:text-foreground"
                 disabled={!sourceDirty || saveResult.fetching}
                 onClick={() =>
                   void saveSource({
@@ -149,25 +156,23 @@ function AppletDetailPage() {
                 }
               >
                 <Save className="h-4 w-4" />
-                Save Source
+                Save
               </Button>
             </div>
           ) : null}
         </div>
 
-        <TabsContent value="app" className="min-h-0">
-          <section className="h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-md border bg-background">
-            <iframe
-              title={`${applet.name} live app`}
-              src={appUrl}
-              className="h-full w-full bg-background"
-            />
-          </section>
+        <TabsContent value="app" className="min-h-0 overflow-hidden">
+          <AdminAppletPreview
+            source={source}
+            version={applet.version ?? 1}
+            title={applet.name}
+          />
         </TabsContent>
 
-        <TabsContent value="source" className="min-h-0">
-          <section className="min-h-0">
-            <div className="h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
+        <TabsContent value="source" className="min-h-0 overflow-hidden">
+          <section className="h-full min-h-0">
+            <div className="h-full min-h-0 overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
               <CodeMirror
                 value={source}
                 onChange={(value) => {
@@ -177,10 +182,7 @@ function AppletDetailPage() {
                 }}
                 height="100%"
                 theme={vscodeDark}
-                extensions={[
-                  ...languageForFile("App.tsx"),
-                  EditorView.lineWrapping,
-                ]}
+                extensions={languageForFile("App.tsx")}
                 style={{ fontSize: "13px", backgroundColor: "black" }}
                 className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
                 basicSetup={{
