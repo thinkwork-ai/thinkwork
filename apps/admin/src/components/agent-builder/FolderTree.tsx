@@ -1,14 +1,11 @@
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import {
-  ChevronDown,
-  ChevronRight,
-  File,
-  Folder,
-  FolderOpen,
-  Loader2,
-  Plus,
-  Trash2,
-} from "lucide-react";
-import { useEffect, useState, type MouseEvent } from "react";
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,6 +13,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  FileTree,
+  FileTreeActions,
+  FileTreeFile,
+  FileTreeFolder,
+} from "@/components/ai-elements/file-tree";
 import { cn } from "@/lib/utils";
 import { InheritanceIndicator } from "./InheritanceIndicator";
 import type { ComposeSource } from "@/lib/agent-builder-api";
@@ -32,9 +35,6 @@ export type TreeNode = {
 
 const SUB_AGENTS_NODE_PATH = "__synthetic__/sub-agents";
 const RESERVED_ROUTING_FOLDERS = new Set(["memory", "skills"]);
-const TREE_ROW_INDENT_PX = 16;
-const TREE_ROW_LEFT_PADDING_PX = 8;
-const TREE_ROW_ICON_COLUMN_PX = 38;
 
 // Reserved root folders that should render in the tree even when empty.
 // Per docs/plans/2026-04-27-004 U2 / U8: skills/ should be visible to
@@ -169,6 +169,18 @@ export interface FolderTreeProps {
 }
 
 export function FolderTree(props: FolderTreeProps) {
+  const {
+    nodes,
+    selectedPath,
+    expandedFolders,
+    onSelect,
+    onToggle,
+    onCreateSkill,
+    onAddSkillFromCatalog,
+    onConfirmDelete,
+    preferRunbookSkills,
+  } = props;
+
   const [skillsMenu, setSkillsMenu] = useState<{
     x: number;
     y: number;
@@ -186,7 +198,12 @@ export function FolderTree(props: FolderTreeProps) {
     };
   }, [skillsMenu]);
 
-  if (props.nodes.length === 0) {
+  // Collect the set of folder paths so the AI Elements onSelect callback
+  // can route folder-name clicks into onToggle (matching the existing UX
+  // where clicking a folder row expands/collapses it).
+  const folderPaths = useMemo(() => collectFolderPaths(nodes), [nodes]);
+
+  if (nodes.length === 0) {
     return (
       <div className="px-3 py-6 text-center text-xs text-muted-foreground">
         No files
@@ -194,81 +211,103 @@ export function FolderTree(props: FolderTreeProps) {
     );
   }
 
+  const openSkillsMenu = (event: MouseEvent, path: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSkillsMenu({ x: event.clientX, y: event.clientY, path });
+  };
+
+  const handleExpandedChange = (next: Set<string>) => {
+    // Diff against current to translate Set updates into single-path toggle
+    // calls — the parent owns expandedFolders state and expects per-path
+    // notifications.
+    for (const path of next) {
+      if (!expandedFolders.has(path)) onToggle(path);
+    }
+    for (const path of expandedFolders) {
+      if (!next.has(path)) onToggle(path);
+    }
+  };
+
+  const handleSelect = (path: string) => {
+    if (folderPaths.has(path)) {
+      onToggle(path);
+    } else {
+      onSelect(path);
+    }
+  };
+
   return (
     <TooltipProvider delayDuration={2000} skipDelayDuration={0}>
-      <div className="py-1">
-        {props.nodes.map((node) => (
+      <FileTree
+        expanded={expandedFolders}
+        onExpandedChange={handleExpandedChange}
+        selectedPath={selectedPath ?? undefined}
+        onSelect={handleSelect}
+        className="rounded-none border-0 bg-transparent text-sm"
+      >
+        {nodes.map((node) => (
           <FolderTreeItem
             key={node.path}
             node={node}
-            depth={0}
-            onOpenSkillsMenu={(event, path) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setSkillsMenu({ x: event.clientX, y: event.clientY, path });
-            }}
+            onOpenSkillsMenu={openSkillsMenu}
             {...props}
           />
         ))}
-        {skillsMenu ? (
-          <div
-            className="fixed z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-            style={{ left: skillsMenu.x, top: skillsMenu.y }}
-            onClick={(event) => event.stopPropagation()}
+      </FileTree>
+      {skillsMenu ? (
+        <div
+          className="fixed z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{ left: skillsMenu.x, top: skillsMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            onClick={() => {
+              setSkillsMenu(null);
+              onCreateSkill?.();
+            }}
           >
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-              onClick={() => {
-                setSkillsMenu(null);
-                props.onCreateSkill?.();
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              {props.preferRunbookSkills ? "New Runbook Skill" : "New Skill"}
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-              onClick={() => {
-                setSkillsMenu(null);
-                props.onAddSkillFromCatalog?.();
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              {props.preferRunbookSkills
-                ? "Add Runbook Skill"
-                : "Add from catalog"}
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
-              onClick={() => {
-                setSkillsMenu(null);
-                props.onConfirmDelete(skillsMenu.path);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
-          </div>
-        ) : null}
-      </div>
+            <Plus className="h-4 w-4" />
+            {preferRunbookSkills ? "New Runbook Skill" : "New Skill"}
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+            onClick={() => {
+              setSkillsMenu(null);
+              onAddSkillFromCatalog?.();
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            {preferRunbookSkills ? "Add Runbook Skill" : "Add from catalog"}
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
+            onClick={() => {
+              setSkillsMenu(null);
+              onConfirmDelete(skillsMenu.path);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      ) : null}
     </TooltipProvider>
   );
 }
 
 function FolderTreeItem({
   node,
-  depth,
   selectedPath,
   expandedFolders,
   sourceFor,
   updateAvailableFor,
   deletingPath,
   confirmingDeletePath,
-  onSelect,
-  onToggle,
   onAcceptUpdate,
   onDelete,
   onConfirmDelete,
@@ -276,185 +315,214 @@ function FolderTreeItem({
   onOpenSkillsMenu,
 }: FolderTreeProps & {
   node: TreeNode;
-  depth: number;
   onOpenSkillsMenu: (event: MouseEvent, path: string) => void;
 }) {
-  const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
   const isDeleting = deletingPath === node.path;
   const isConfirmingDelete = confirmingDeletePath === node.path;
 
-  return (
-    <>
-      <div
-        className={cn(
-          "group/tree-row mx-1 flex cursor-pointer items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 py-0.5 text-sm transition-colors hover:bg-accent",
-          isSelected && "border-sky-500 bg-accent dark:border-sky-400",
-        )}
-        style={{
-          paddingLeft: `${depth * TREE_ROW_INDENT_PX + TREE_ROW_LEFT_PADDING_PX}px`,
-        }}
-        onClick={() => {
-          if (node.isFolder) onToggle(node.path);
-          else onSelect(node.path);
-        }}
+  const deleteButton = !node.synthetic ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size={isConfirmingDelete ? "sm" : "icon-xs"}
+          className={
+            isConfirmingDelete
+              ? "h-6 rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
+              : cn(
+                  "text-muted-foreground/65 transition-none hover:text-foreground",
+                  !(isSelected || isDeleting || isConfirmingDelete) &&
+                    "opacity-0 group-hover/file-tree-folder:opacity-100 group-hover/file-tree-file:opacity-100",
+                  (isSelected || isDeleting || isConfirmingDelete) &&
+                    "opacity-100",
+                )
+          }
+          aria-label={
+            isConfirmingDelete
+              ? `Confirm delete ${node.name}`
+              : `Delete ${node.name}`
+          }
+          disabled={isDeleting}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (isConfirmingDelete) onDelete(node.path, node.isFolder);
+            else onConfirmDelete(node.path);
+          }}
+        >
+          {isDeleting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          ) : isConfirmingDelete ? (
+            "Confirm"
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      {!isConfirmingDelete && !isDeleting && (
+        <TooltipContent side="right" sideOffset={6}>
+          Delete
+        </TooltipContent>
+      )}
+    </Tooltip>
+  ) : null;
+
+  if (node.isFolder) {
+    const trailingActions =
+      deleteButton !== null ? (
+        <FileTreeActions>{deleteButton}</FileTreeActions>
+      ) : null;
+
+    return (
+      <FileTreeFolder
+        path={node.path}
+        name={renderNodeLabel(node)}
+        trailing={trailingActions}
         onContextMenu={(event) => {
-          if (node.isFolder && isSkillsFolderPath(node.path)) {
+          if (isSkillsFolderPath(node.path)) {
             onOpenSkillsMenu(event, node.path);
           }
         }}
         onMouseLeave={() => onCancelDeleteConfirm(node.path)}
       >
-        {node.isFolder ? (
+        {node.children.map((child) => (
+          <FolderTreeItem
+            key={child.path}
+            node={child}
+            selectedPath={selectedPath}
+            expandedFolders={expandedFolders}
+            sourceFor={sourceFor}
+            updateAvailableFor={updateAvailableFor}
+            deletingPath={deletingPath}
+            confirmingDeletePath={confirmingDeletePath}
+            onSelect={() => {}}
+            onToggle={() => {}}
+            onAcceptUpdate={onAcceptUpdate}
+            onDelete={onDelete}
+            onConfirmDelete={onConfirmDelete}
+            onCancelDeleteConfirm={onCancelDeleteConfirm}
+            nodes={[]}
+            onOpenSkillsMenu={onOpenSkillsMenu}
+          />
+        ))}
+        {node.synthetic && node.children.length === 0 ? (
+          <div className="px-2 py-2 text-xs text-muted-foreground">
+            Route specialist folders from AGENTS.md.
+          </div>
+        ) : node.children.length === 0 ? (
+          <div className="px-2 py-1 text-xs italic text-muted-foreground">
+            Empty folder
+          </div>
+        ) : null}
+      </FileTreeFolder>
+    );
+  }
+
+  // File row.
+  const updateAvailable = updateAvailableFor(node.path);
+
+  return (
+    <FileTreeFile
+      path={node.path}
+      name={node.name}
+      onMouseLeave={() => onCancelDeleteConfirm(node.path)}
+    >
+      <span className="size-4 shrink-0" />
+      <FileGlyph />
+      <FileTreeNameWithMissing name={node.name} missing={node.missing} />
+      <FileTreeActions>
+        {updateAvailable && (
           <>
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
-            {isExpanded ? (
-              <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-          </>
-        ) : (
-          <>
-            <span className="w-3.5" />
-            <File className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <InheritanceIndicator
+              source={sourceFor(node.path)}
+              updateAvailable={updateAvailable}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-1.5 text-[10px] text-amber-500"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAcceptUpdate(node.path);
+              }}
+            >
+              Review
+            </Button>
           </>
         )}
-        <span className="min-w-0 flex-1 truncate">
-          {node.name}
-          {node.missing ? (
-            <span className="ml-1 text-[10px] text-amber-500">no files</span>
-          ) : null}
-        </span>
-        <span
-          className="ml-auto flex items-center gap-1"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {!node.isFolder && updateAvailableFor(node.path) && (
-            <>
-              <InheritanceIndicator
-                source={sourceFor(node.path)}
-                updateAvailable={updateAvailableFor(node.path)}
-              />
-              {updateAvailableFor(node.path) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 px-1.5 text-[10px] text-amber-500"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAcceptUpdate(node.path);
-                  }}
-                >
-                  Review
-                </Button>
-              )}
-            </>
-          )}
-          {!node.synthetic && (
-            <span
-              className={`transition-opacity ${
-                isSelected || isDeleting || isConfirmingDelete
-                  ? "opacity-100"
-                  : "opacity-0 group-hover/tree-row:opacity-100"
-              }`}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size={isConfirmingDelete ? "sm" : "icon-xs"}
-                    className={
-                      isConfirmingDelete
-                        ? "h-6 rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
-                        : "text-muted-foreground/65 transition-none hover:text-foreground"
-                    }
-                    aria-label={
-                      isConfirmingDelete
-                        ? `Confirm delete ${node.name}`
-                        : `Delete ${node.name}`
-                    }
-                    disabled={isDeleting}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (isConfirmingDelete)
-                        onDelete(node.path, node.isFolder);
-                      else onConfirmDelete(node.path);
-                    }}
-                  >
-                    {isDeleting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    ) : isConfirmingDelete ? (
-                      "Confirm"
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                {!isConfirmingDelete && !isDeleting && (
-                  <TooltipContent side="right" sideOffset={6}>
-                    Delete
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </span>
-          )}
-        </span>
-      </div>
-      {node.isFolder && isExpanded && (
-        <>
-          {node.children.map((child) => (
-            <FolderTreeItem
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              selectedPath={selectedPath}
-              expandedFolders={expandedFolders}
-              sourceFor={sourceFor}
-              updateAvailableFor={updateAvailableFor}
-              deletingPath={deletingPath}
-              confirmingDeletePath={confirmingDeletePath}
-              onSelect={onSelect}
-              onToggle={onToggle}
-              onAcceptUpdate={onAcceptUpdate}
-              onDelete={onDelete}
-              onConfirmDelete={onConfirmDelete}
-              onCancelDeleteConfirm={onCancelDeleteConfirm}
-              nodes={[]}
-              onOpenSkillsMenu={onOpenSkillsMenu}
-            />
-          ))}
-          {node.synthetic && node.children.length === 0 ? (
-            <div
-              className="px-2 py-2 text-xs text-muted-foreground"
-              style={{
-                paddingLeft: `${(depth + 1) * TREE_ROW_INDENT_PX + TREE_ROW_LEFT_PADDING_PX}px`,
-              }}
-            >
-              Route specialist folders from AGENTS.md.
-            </div>
-          ) : node.children.length === 0 ? (
-            <div
-              className="px-2 py-1 text-xs italic text-muted-foreground"
-              style={{
-                paddingLeft: `${
-                  depth * TREE_ROW_INDENT_PX +
-                  TREE_ROW_LEFT_PADDING_PX +
-                  TREE_ROW_ICON_COLUMN_PX
-                }px`,
-              }}
-            >
-              Empty folder
-            </div>
-          ) : null}
-        </>
-      )}
-    </>
+        {deleteButton}
+      </FileTreeActions>
+    </FileTreeFile>
   );
+}
+
+function renderNodeLabel(node: TreeNode): ReactNode {
+  if (node.missing) {
+    return (
+      <>
+        {node.name}
+        <span className="ml-1 text-[10px] text-amber-500">no files</span>
+      </>
+    );
+  }
+  return node.name;
+}
+
+function FileGlyph() {
+  // Small inline icon to keep visual parity with the existing file row.
+  // The AI Elements FileTreeIcon component is reused for folders inside
+  // FileTreeFolder; here we just render a plain file glyph.
+  return (
+    <span className="shrink-0 text-muted-foreground">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="size-4"
+        aria-hidden="true"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
+    </span>
+  );
+}
+
+function FileTreeNameWithMissing({
+  name,
+  missing,
+}: {
+  name: string;
+  missing?: boolean;
+}) {
+  return (
+    <span className="min-w-0 flex-1 truncate">
+      {name}
+      {missing ? (
+        <span className="ml-1 text-[10px] text-amber-500">no files</span>
+      ) : null}
+    </span>
+  );
+}
+
+function collectFolderPaths(nodes: TreeNode[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (list: TreeNode[]) => {
+    for (const node of list) {
+      if (node.isFolder) {
+        out.add(node.path);
+        walk(node.children);
+      }
+    }
+  };
+  walk(nodes);
+  return out;
 }
 
 export function subAgentsNodePath(): string {

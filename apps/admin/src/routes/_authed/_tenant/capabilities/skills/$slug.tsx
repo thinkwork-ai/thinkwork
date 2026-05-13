@@ -20,12 +20,9 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CodeMirror from "@uiw/react-codemirror";
-import { markdown as markdownLang, markdownLanguage } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { yaml } from "@codemirror/lang-yaml";
-import { languages } from "@codemirror/language-data";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
+import { languageForFile } from "@/lib/codemirror-language";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -60,7 +57,9 @@ import {
   type InstalledSkill,
 } from "@/lib/skills-api";
 
-export const Route = createFileRoute("/_authed/_tenant/capabilities/skills/$slug")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/capabilities/skills/$slug",
+)({
   component: SkillDetailPage,
 });
 
@@ -203,7 +202,6 @@ function TreeItem({
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
@@ -229,9 +227,14 @@ function SkillDetailPage() {
   const [fileLoading, setFileLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [markdownPreview, setMarkdownPreview] = useState(false);
-  const [upgradeInfo, setUpgradeInfo] = useState<{ upgradeable: boolean; latestVersion: string } | null>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<{
+    upgradeable: boolean;
+    latestVersion: string;
+  } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
-  const [dependencies, setDependencies] = useState<{ slug: string; name: string; installed: boolean }[]>([]);
+  const [dependencies, setDependencies] = useState<
+    { slug: string; name: string; installed: boolean }[]
+  >([]);
 
   useBreadcrumbs([
     { label: "Skills and Tools", href: "/capabilities" },
@@ -245,7 +248,9 @@ function SkillDetailPage() {
 
   const tree = useMemo(() => buildTree(files), [files]);
 
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     // Start with folders collapsed
@@ -302,10 +307,13 @@ function SkillDetailPage() {
           try {
             const tenantFiles = await listTenantSkillFiles(tenantSlug, slug);
             if (tenantFiles.length > 0) fileList = tenantFiles;
-          } catch { /* fall back to catalog files */ }
+          } catch {
+            /* fall back to catalog files */
+          }
         }
         setFiles(fileList);
-        const defaultFile = fileList.find((p) => p === "SKILL.md") || fileList[0];
+        const defaultFile =
+          fileList.find((p) => p === "SKILL.md") || fileList[0];
         if (defaultFile) setSelectedFile(defaultFile);
       })
       .catch(console.error)
@@ -314,9 +322,20 @@ function SkillDetailPage() {
 
   // Check upgradeable status for installed catalog skills
   useEffect(() => {
-    if (!tenantSlug || !isInstalled || skillSource === "tenant" || skillSource === "builtin") return;
+    if (
+      !tenantSlug ||
+      !isInstalled ||
+      skillSource === "tenant" ||
+      skillSource === "builtin"
+    )
+      return;
     checkUpgradeable(tenantSlug, slug)
-      .then((res) => setUpgradeInfo({ upgradeable: res.upgradeable, latestVersion: res.latestVersion }))
+      .then((res) =>
+        setUpgradeInfo({
+          upgradeable: res.upgradeable,
+          latestVersion: res.latestVersion,
+        }),
+      )
       .catch(() => setUpgradeInfo(null));
   }, [tenantSlug, slug, isInstalled, skillSource]);
 
@@ -332,9 +351,17 @@ function SkillDetailPage() {
       Promise.all(
         skill.dependencies!.map((depSlug) =>
           getCatalogSkill(depSlug)
-            .then((cat) => ({ slug: depSlug, name: cat.name, installed: installedSlugs.has(depSlug) }))
-            .catch(() => ({ slug: depSlug, name: depSlug, installed: installedSlugs.has(depSlug) }))
-        )
+            .then((cat) => ({
+              slug: depSlug,
+              name: cat.name,
+              installed: installedSlugs.has(depSlug),
+            }))
+            .catch(() => ({
+              slug: depSlug,
+              name: depSlug,
+              installed: installedSlugs.has(depSlug),
+            })),
+        ),
       ).then(setDependencies);
     });
   }, [tenantSlug, skill?.dependencies]);
@@ -426,7 +453,10 @@ function SkillDetailPage() {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <p>Skill not found.</p>
-        <Link to="/capabilities/skills" className="text-sm underline mt-2 inline-block">
+        <Link
+          to="/capabilities/skills"
+          className="text-sm underline mt-2 inline-block"
+        >
           Back to Skills
         </Link>
       </div>
@@ -434,8 +464,6 @@ function SkillDetailPage() {
   }
 
   const isMarkdown = selectedFile?.endsWith(".md") ?? false;
-  const isPython = selectedFile?.endsWith(".py") ?? false;
-  const isYaml = selectedFile?.endsWith(".yaml") || selectedFile?.endsWith(".yml") || false;
   const fileName = selectedFile?.split("/").pop() ?? selectedFile;
   // Built-in skills are read-only. Catalog/tenant installed skills are editable.
   const isEditable = isInstalled && skillSource !== "builtin";
@@ -455,34 +483,39 @@ function SkillDetailPage() {
 
         <div className="flex items-center gap-2">
           {/* Upgrade button — only for installed catalog skills with available update */}
-          {isInstalled && skillSource !== "tenant" && skillSource !== "builtin" && upgradeInfo?.upgradeable && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={upgrading}>
-                  {upgrading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ) : (
-                    <ArrowUpCircle className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Update to v{upgradeInfo.latestVersion}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Update {skill.name}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will update from v{skill.version} to v{upgradeInfo.latestVersion}. Your customizations will be reset to the new catalog defaults.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleUpgrade(true)}>
-                    Update
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
+          {isInstalled &&
+            skillSource !== "tenant" &&
+            skillSource !== "builtin" &&
+            upgradeInfo?.upgradeable && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={upgrading}>
+                    {upgrading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    ) : (
+                      <ArrowUpCircle className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Update to v{upgradeInfo.latestVersion}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Update {skill.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will update from v{skill.version} to v
+                      {upgradeInfo.latestVersion}. Your customizations will be
+                      reset to the new catalog defaults.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleUpgrade(true)}>
+                      Update
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
 
           {isInstalled && !isBuiltin ? (
             <AlertDialog>
@@ -500,7 +533,9 @@ function SkillDetailPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Uninstall {skill.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will remove the skill and any customizations from your tenant. Agents using this skill will no longer have access to it.
+                    This will remove the skill and any customizations from your
+                    tenant. Agents using this skill will no longer have access
+                    to it.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -528,7 +563,11 @@ function SkillDetailPage() {
       <div className="flex items-center gap-2 flex-wrap pb-4 shrink-0">
         {isBuiltin && <Badge variant="secondary">Built-in</Badge>}
         {skillSource === "catalog" && <Badge variant="outline">Catalog</Badge>}
-        {isTenantSkill && <Badge variant="outline" className="border-primary text-primary">Custom</Badge>}
+        {isTenantSkill && (
+          <Badge variant="outline" className="border-primary text-primary">
+            Custom
+          </Badge>
+        )}
         <Badge variant="outline">{skill.category}</Badge>
         <Badge variant="secondary">v{skill.version}</Badge>
         {skill.tags?.map((tag) => (
@@ -538,16 +577,24 @@ function SkillDetailPage() {
           </Badge>
         ))}
         {isBuiltin && (
-          <Badge variant="secondary" className="text-muted-foreground">Read-only</Badge>
+          <Badge variant="secondary" className="text-muted-foreground">
+            Read-only
+          </Badge>
         )}
       </div>
 
       {/* Dependencies section */}
       {dependencies.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap pb-3 shrink-0">
-          <span className="text-xs font-medium text-muted-foreground mr-1">Dependencies:</span>
+          <span className="text-xs font-medium text-muted-foreground mr-1">
+            Dependencies:
+          </span>
           {dependencies.map((dep) => (
-            <Link key={dep.slug} to="/capabilities/skills/$slug" params={{ slug: dep.slug }}>
+            <Link
+              key={dep.slug}
+              to="/capabilities/skills/$slug"
+              params={{ slug: dep.slug }}
+            >
               <Badge
                 variant="outline"
                 className={`gap-1 text-[10px] cursor-pointer hover:bg-accent ${
@@ -596,7 +643,12 @@ function SkillDetailPage() {
                 onChange={(e) => setNewFilePath(e.target.value)}
                 onKeyDown={async (e) => {
                   if (e.key === "Enter" && newFilePath.trim() && tenantSlug) {
-                    await createTenantFile(tenantSlug, slug, newFilePath.trim(), "");
+                    await createTenantFile(
+                      tenantSlug,
+                      slug,
+                      newFilePath.trim(),
+                      "",
+                    );
                     setFiles((prev) => [...prev, newFilePath.trim()]);
                     setSelectedFile(newFilePath.trim());
                     setShowNewFile(false);
@@ -633,9 +685,13 @@ function SkillDetailPage() {
               <div className="h-9 px-3 border-b bg-muted/50 flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="text-xs font-medium truncate">{fileName}</span>
+                  <span className="text-xs font-medium truncate">
+                    {fileName}
+                  </span>
                   {selectedFile.includes("/") && (
-                    <span className="text-[10px] text-muted-foreground truncate">{selectedFile}</span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {selectedFile}
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -659,22 +715,35 @@ function SkillDetailPage() {
                       )}
                     </Button>
                   )}
-                  {isTenantSkill && selectedFile && selectedFile !== "SKILL.md" && !fileLoading && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[11px] px-2 text-destructive"
-                      onClick={async () => {
-                        if (!tenantSlug || !selectedFile) return;
-                        await deleteTenantFile(tenantSlug, slug, selectedFile);
-                        setFiles((prev) => prev.filter((f) => f !== selectedFile));
-                        setSelectedFile(files.find((f) => f === "SKILL.md") || files[0] || null);
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Delete
-                    </Button>
-                  )}
+                  {isTenantSkill &&
+                    selectedFile &&
+                    selectedFile !== "SKILL.md" &&
+                    !fileLoading && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] px-2 text-destructive"
+                        onClick={async () => {
+                          if (!tenantSlug || !selectedFile) return;
+                          await deleteTenantFile(
+                            tenantSlug,
+                            slug,
+                            selectedFile,
+                          );
+                          setFiles((prev) =>
+                            prev.filter((f) => f !== selectedFile),
+                          );
+                          setSelectedFile(
+                            files.find((f) => f === "SKILL.md") ||
+                              files[0] ||
+                              null,
+                          );
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    )}
                   {isEditable && !fileLoading && !markdownPreview && (
                     <>
                       <Button
@@ -692,7 +761,9 @@ function SkillDetailPage() {
                         onClick={handleSave}
                         disabled={saving || editValue === fileContent}
                       >
-                        {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        {saving ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : null}
                         Save
                       </Button>
                     </>
@@ -709,18 +780,22 @@ function SkillDetailPage() {
                 ) : isMarkdown && markdownPreview ? (
                   <div className="h-full overflow-y-auto p-5 bg-background">
                     <div className="prose prose-sm prose-invert max-w-none [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:break-words [&_table]:table-fixed [&_table]:w-full">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileContent}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {fileContent}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 ) : (
                   <CodeMirror
                     value={isEditable ? editValue : fileContent}
-                    onChange={isEditable ? (val) => setEditValue(val) : undefined}
+                    onChange={
+                      isEditable ? (val) => setEditValue(val) : undefined
+                    }
                     readOnly={!isEditable}
                     height="100%"
                     theme={vscodeDark}
                     extensions={[
-                      isPython ? python() : isYaml ? yaml() : markdownLang({ base: markdownLanguage, codeLanguages: languages }),
+                      ...languageForFile(selectedFile),
                       EditorView.lineWrapping,
                     ]}
                     style={{ fontSize: "14px", backgroundColor: "black" }}
