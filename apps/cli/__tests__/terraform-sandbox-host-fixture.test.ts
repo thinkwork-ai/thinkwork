@@ -194,7 +194,7 @@ describe("U3 — sandbox variables", () => {
       /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? aws_acm_certificate_validation\.computer_sandbox\[0\]\.certificate_arn : ""/,
     );
     expect(source).toMatch(
-      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.computer_domain\}" : ""/,
+      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.computer_domain\},https:\/\/\$\{local\.admin_domain\}" : ""/,
     );
   });
 
