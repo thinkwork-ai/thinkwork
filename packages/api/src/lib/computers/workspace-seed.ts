@@ -57,6 +57,11 @@ type DefaultRunbookSkillRow = {
   template_kind: string | null;
 };
 
+type TemplateWorkspaceSyncTarget = {
+  computer_id: string;
+  tenant_id: string;
+};
+
 export async function ensureMigratedComputerWorkspaceSeeded(input: {
   tenantId: string;
   computerId: string;
@@ -189,6 +194,78 @@ export async function ensureDefaultComputerRunbookSkillsMaterialized(input: {
   return { seeded: true, copied, enqueued, skipped };
 }
 
+export async function syncComputerTemplateSkillObjectToLiveComputers(input: {
+  key: string;
+  detailType: string;
+  objectEtag?: string | null;
+  objectVersionId?: string | null;
+  sequencer?: string | null;
+}) {
+  const parsed = parseComputerTemplateSkillObjectKey(input.key);
+  if (!parsed) return { matched: false, reason: "not_computer_template_skill" };
+
+  const targets = await loadComputerTemplateSyncTargets(parsed);
+  if (targets.length === 0) {
+    return {
+      matched: true,
+      enqueued: 0,
+      skipped: 0,
+      reason: "no_live_computers",
+    };
+  }
+
+  let content: string | null = null;
+  if (input.detailType !== "Object Deleted") {
+    const read = await readWorkspaceFile(input.key);
+    if (Buffer.byteLength(read, "utf8") > MAX_SEED_FILE_BYTES) {
+      return {
+        matched: true,
+        enqueued: 0,
+        skipped: targets.length,
+        reason: "too_large",
+      };
+    }
+    if (!read.trim()) {
+      return {
+        matched: true,
+        enqueued: 0,
+        skipped: targets.length,
+        reason: "empty",
+      };
+    }
+    content = read;
+  }
+
+  const idempotencyTail =
+    input.objectVersionId ?? input.objectEtag ?? input.sequencer ?? "unknown";
+  let enqueued = 0;
+
+  for (const target of targets) {
+    await enqueueComputerTask({
+      tenantId: target.tenant_id,
+      computerId: target.computer_id,
+      taskType:
+        input.detailType === "Object Deleted"
+          ? "workspace_file_delete"
+          : "workspace_file_write",
+      taskInput:
+        input.detailType === "Object Deleted"
+          ? { path: parsed.relativePath }
+          : { path: parsed.relativePath, content },
+      idempotencyKey: [
+        "computer_template_skill_sync",
+        target.computer_id,
+        input.detailType === "Object Deleted" ? "delete" : "write",
+        parsed.relativePath,
+        idempotencyTail,
+      ].join(":"),
+    });
+    enqueued++;
+  }
+
+  return { matched: true, enqueued, skipped: 0 };
+}
+
 async function loadComputer(tenantId: string, computerId: string) {
   const [computer] = await db
     .select({
@@ -246,6 +323,45 @@ async function loadDefaultRunbookSkillTarget(
     .where(and(eq(computers.tenant_id, tenantId), eq(computers.id, computerId)))
     .limit(1);
   return row;
+}
+
+function parseComputerTemplateSkillObjectKey(key: string):
+  | {
+      tenantSlug: string;
+      templateSlug: string;
+      relativePath: string;
+    }
+  | null {
+  const match = key.match(
+    /^tenants\/([^/]+)\/agents\/_catalog\/([^/]+)\/workspace\/(skills\/.+)$/,
+  );
+  if (!match) return null;
+  return {
+    tenantSlug: match[1]!,
+    templateSlug: match[2]!,
+    relativePath: match[3]!,
+  };
+}
+
+async function loadComputerTemplateSyncTargets(input: {
+  tenantSlug: string;
+  templateSlug: string;
+}): Promise<TemplateWorkspaceSyncTarget[]> {
+  return db
+    .select({
+      computer_id: computers.id,
+      tenant_id: computers.tenant_id,
+    })
+    .from(computers)
+    .innerJoin(tenants, eq(tenants.id, computers.tenant_id))
+    .innerJoin(agentTemplates, eq(agentTemplates.id, computers.template_id))
+    .where(
+      and(
+        eq(tenants.slug, input.tenantSlug),
+        eq(agentTemplates.slug, input.templateSlug),
+        eq(agentTemplates.template_kind, "computer"),
+      ),
+    );
 }
 
 async function listWorkspaceFiles(

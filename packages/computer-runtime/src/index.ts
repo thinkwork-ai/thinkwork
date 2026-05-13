@@ -31,7 +31,7 @@ export function readRuntimeEnv(env = process.env): RuntimeEnv {
     COMPUTER_ID: env.COMPUTER_ID!,
     WORKSPACE_ROOT: env.WORKSPACE_ROOT || "/workspace",
     RUNTIME_VERSION: env.RUNTIME_VERSION || "phase2-skeleton",
-    HEARTBEAT_INTERVAL_MS: Number(env.HEARTBEAT_INTERVAL_MS || 30_000),
+    HEARTBEAT_INTERVAL_MS: Number(env.HEARTBEAT_INTERVAL_MS || 300_000),
     TASK_IDLE_DELAY_MS: Number(env.TASK_IDLE_DELAY_MS || 5_000),
   };
 }
@@ -52,6 +52,7 @@ export async function main() {
     runtimeVersion: env.RUNTIME_VERSION,
     workspaceRoot: env.WORKSPACE_ROOT,
   });
+  startHeartbeatLoop(api, env);
   console.log(
     JSON.stringify({
       level: "info",
@@ -61,22 +62,41 @@ export async function main() {
     }),
   );
 
-  let lastHeartbeat = Date.now();
   for (;;) {
     await runTaskLoopOnce({
       api,
       workspaceRoot: env.WORKSPACE_ROOT,
       idleDelayMs: env.TASK_IDLE_DELAY_MS,
     });
-    if (Date.now() - lastHeartbeat >= env.HEARTBEAT_INTERVAL_MS) {
-      await api.heartbeat({
+  }
+}
+
+export function startHeartbeatLoop(api: ComputerRuntimeApi, env: RuntimeEnv) {
+  let inFlight = false;
+  const timer = setInterval(() => {
+    if (inFlight) return;
+    inFlight = true;
+    api
+      .heartbeat({
         runtimeStatus: "running",
         runtimeVersion: env.RUNTIME_VERSION,
         workspaceRoot: env.WORKSPACE_ROOT,
+      })
+      .catch((err) => {
+        console.error(
+          JSON.stringify({
+            level: "warn",
+            event: "computer_runtime_heartbeat_failed",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      })
+      .finally(() => {
+        inFlight = false;
       });
-      lastHeartbeat = Date.now();
-    }
-  }
+  }, env.HEARTBEAT_INTERVAL_MS);
+  timer.unref?.();
+  return timer;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

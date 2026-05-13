@@ -6,6 +6,8 @@ import {
   computerDelegations,
   computers,
   computerEvents,
+  computerRunbookRuns,
+  computerRunbookTasks,
   computerTasks,
   messages,
   threads,
@@ -35,6 +37,7 @@ const db = getDb();
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 const ARTIFACT_SAVE_MISSING_MESSAGE =
   "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.";
+const RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES = 5;
 
 const BUILD_INTENT_ACTION_RE =
   /\b(build|create|generate|make|produce|assemble|compose)\b/i;
@@ -114,6 +117,19 @@ export async function recordComputerHeartbeat(input: {
       last_active_at: computers.last_active_at,
     });
   if (!row) throw new ComputerNotFoundError(input.computerId);
+  let staleRunbookTasksReconciled = 0;
+  try {
+    staleRunbookTasksReconciled = await reconcileStaleComputerRunbookTasks({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+    });
+  } catch (err) {
+    console.error("[computer-runtime] failed to reconcile stale runbook tasks", {
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
   try {
     await ensureMigratedComputerWorkspaceSeeded({
       tenantId: input.tenantId,
@@ -148,7 +164,104 @@ export async function recordComputerHeartbeat(input: {
     lastHeartbeatAt: row.last_heartbeat_at,
     lastActiveAt: row.last_active_at,
     runtimeVersion: input.runtimeVersion ?? null,
+    staleRunbookTasksReconciled,
   };
+}
+
+async function reconcileStaleComputerRunbookTasks(input: {
+  tenantId: string;
+  computerId: string;
+}) {
+  const result = await db.execute(sql`
+    SELECT
+      task.id AS task_id,
+      run.id AS run_id
+    FROM ${computerRunbookTasks} task
+    JOIN ${computerRunbookRuns} run ON run.id = task.run_id
+    WHERE task.tenant_id = ${input.tenantId}::uuid
+      AND run.computer_id = ${input.computerId}::uuid
+      AND task.status = 'running'
+      AND run.status IN ('queued', 'running')
+      AND COALESCE(task.started_at, task.updated_at, task.created_at)
+        <= NOW() - INTERVAL '${sql.raw(String(RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES))} minutes'
+    LIMIT 25
+  `);
+
+  const rows = (result.rows || []) as Array<{
+    task_id: string;
+    run_id: string;
+  }>;
+  if (rows.length === 0) return 0;
+
+  const message = `Runbook task exceeded the ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES} minute execution budget.`;
+  let processed = 0;
+  for (const row of rows) {
+    await db.execute(sql`
+      UPDATE ${computerRunbookTasks}
+      SET
+        status = 'failed',
+        error = jsonb_build_object(
+          'code', 'runbook_step_timed_out',
+          'message', ${message},
+          'source', 'computer_heartbeat',
+          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}
+        ),
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${row.task_id}::uuid
+        AND status = 'running'
+    `);
+
+    await db.execute(sql`
+      UPDATE ${computerRunbookTasks}
+      SET
+        status = 'skipped',
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE run_id = ${row.run_id}::uuid
+        AND status = 'pending'
+    `);
+
+    await db.execute(sql`
+      UPDATE ${computerRunbookRuns}
+      SET
+        status = 'failed',
+        error = jsonb_build_object(
+          'code', 'runbook_step_timed_out',
+          'message', ${message},
+          'source', 'computer_heartbeat',
+          'taskId', ${row.task_id},
+          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}
+        ),
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${row.run_id}::uuid
+        AND status IN ('queued', 'running')
+    `);
+
+    await db.execute(sql`
+      UPDATE ${computerTasks}
+      SET
+        status = 'failed',
+        error = jsonb_build_object(
+          'code', 'runbook_step_timed_out',
+          'message', ${message},
+          'source', 'computer_heartbeat',
+          'runbookRunId', ${row.run_id}
+        ),
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE tenant_id = ${input.tenantId}::uuid
+        AND computer_id = ${input.computerId}::uuid
+        AND task_type = 'runbook_execute'
+        AND status IN ('pending', 'running')
+        AND input->>'runbookRunId' = ${row.run_id}
+    `);
+
+    processed++;
+  }
+
+  return processed;
 }
 
 export async function claimNextComputerTask(input: {

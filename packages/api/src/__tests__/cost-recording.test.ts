@@ -26,9 +26,14 @@ function extractUsage(
 		number
 	>;
 	return {
-		inputTokens: usage.inputTokens || usage.prompt_tokens || 0,
-		outputTokens: usage.outputTokens || usage.completion_tokens || 0,
-		cachedReadTokens: usage.cacheReadInputTokens || 0,
+		inputTokens: usage.inputTokens || usage.input_tokens || usage.prompt_tokens || 0,
+		outputTokens: usage.outputTokens || usage.output_tokens || usage.completion_tokens || 0,
+		cachedReadTokens:
+			usage.cacheReadInputTokens ||
+			usage.cachedReadTokens ||
+			usage.cached_read_tokens ||
+			usage.cache_read_input_tokens ||
+			0,
 		model:
 			(invokeResult.model as string) ||
 			(response.model as string) ||
@@ -105,6 +110,23 @@ describe("extractUsage", () => {
 			outputTokens: 200,
 			cachedReadTokens: 0,
 			model: "claude-code",
+		});
+	});
+
+	it("extracts usage from AgentCore snake_case runbook step output", () => {
+		const result = extractUsage({
+			model: "us.anthropic.claude-sonnet-4-6",
+			usage: {
+				input_tokens: 577,
+				output_tokens: 11150,
+				cached_read_tokens: 20,
+			},
+		});
+		expect(result).toEqual({
+			inputTokens: 577,
+			outputTokens: 11150,
+			cachedReadTokens: 20,
+			model: "us.anthropic.claude-sonnet-4-6",
 		});
 	});
 

@@ -4,7 +4,10 @@ locals {
   # complex. Route every workspace object mutation through one queue and let the
   # dispatcher keep the canonical allowlist in code.
   workspace_event_patterns = {
-    workspace = ["tenants/*/agents/*/workspace/*"]
+    workspace = [
+      "tenants/*/agents/*/workspace/*",
+      "tenants/*/agents/_catalog/*/workspace/skills/*",
+    ]
   }
 }
 

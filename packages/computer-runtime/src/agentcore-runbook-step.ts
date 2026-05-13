@@ -4,7 +4,7 @@ import {
 } from "@aws-sdk/client-bedrock-agentcore";
 import type { RunbookAgentCoreInvocation } from "./api-client.js";
 
-const DEFAULT_AGENTCORE_REQUEST_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_AGENTCORE_REQUEST_TIMEOUT_MS = 8 * 60 * 1000;
 const DEFAULT_AGENTCORE_INIT_RETRY_ATTEMPTS = 3;
 const DEFAULT_AGENTCORE_INIT_RETRY_DELAY_MS = 10_000;
 

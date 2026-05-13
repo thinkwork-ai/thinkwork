@@ -8,7 +8,7 @@ The goal is a saved, reusable app. Do not stop at analysis prose. Normalize the 
 
 The quality bar is an operational CRM dashboard, not a formatted report. The app should resemble a dense LastMile-style sales dashboard: compact header and source/status badges, KPI strip, visual pipeline/risk comparisons, sortable or scannable entity rows, and restrained color accents for value, risk, stale activity, and success.
 
-Do not use emoji as icons, status markers, bullets, tab labels, headings, empty states, or data values. When an icon is useful, import it from `lucide-react` or `@tabler/icons-react`; otherwise use plain text or styled badges.
+Do not use emoji as icons, status markers, bullets, tab labels, headings, empty states, or data values. When an icon is useful, import it from `lucide-react`; otherwise use plain text or styled badges.
 
 ## Source Discovery
 

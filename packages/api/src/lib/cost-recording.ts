@@ -64,9 +64,14 @@ export function extractUsage(
 		number
 	>;
 	return {
-		inputTokens: usage.inputTokens || usage.prompt_tokens || 0,
-		outputTokens: usage.outputTokens || usage.completion_tokens || 0,
-		cachedReadTokens: usage.cacheReadInputTokens || 0,
+		inputTokens: usage.inputTokens || usage.input_tokens || usage.prompt_tokens || 0,
+		outputTokens: usage.outputTokens || usage.output_tokens || usage.completion_tokens || 0,
+		cachedReadTokens:
+			usage.cacheReadInputTokens ||
+			usage.cachedReadTokens ||
+			usage.cached_read_tokens ||
+			usage.cache_read_input_tokens ||
+			0,
 		model:
 			(invokeResult.model as string) ||
 			(response.model as string) ||
@@ -154,7 +159,7 @@ function estimateTokens(text: string): number {
 
 export interface RecordCostParams {
 	tenantId: string;
-	agentId: string;
+	agentId?: string | null;
 	requestId: string;
 	model: string | null;
 	inputTokens: number;
@@ -219,7 +224,7 @@ export async function recordCostEvents(
 	if (llmCost > 0 || estimated) {
 		values.push({
 			tenant_id: params.tenantId,
-			agent_id: params.agentId,
+			agent_id: params.agentId || undefined,
 			request_id: params.requestId,
 			event_type: "llm",
 			amount_usd: llmCost.toFixed(6),
@@ -241,7 +246,7 @@ export async function recordCostEvents(
 	if (computeCost > 0) {
 		values.push({
 			tenant_id: params.tenantId,
-			agent_id: params.agentId,
+			agent_id: params.agentId || undefined,
 			request_id: params.requestId,
 			event_type: "agentcore_compute",
 			amount_usd: computeCost.toFixed(6),

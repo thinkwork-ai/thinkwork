@@ -1,6 +1,7 @@
 export type GeneratedAppPackagePolicy = {
   defaultImport?: boolean;
   namespaceImport?: boolean;
+  allowAnyNamedExport?: boolean;
   namedExports?: readonly string[];
 };
 
@@ -134,6 +135,9 @@ export const generatedAppPolicy = {
     },
     useAppletAPI: {
       namedExports: ["useAppletAPI"],
+    },
+    "lucide-react": {
+      allowAnyNamedExport: true,
     },
   },
   rechartsExports: [

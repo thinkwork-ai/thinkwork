@@ -1,12 +1,8 @@
 # Produce dashboard artifact
 
-Build an interactive dashboard artifact with a clear CRM information architecture: summary metrics, pipeline/risk breakdowns, entity-level tables or lists, and focused drill-in sections. Favor scan-friendly operational density over a marketing-style layout.
+Generate and save one interactive CRM dashboard artifact from the fetched dashboard dataset. Do not perform another discovery pass, write a separate analysis report, or run a separate validation phase. The durable output is the saved app.
 
-Use the Artifact Builder compatibility shim only as the implementation mechanism. The runbook owns the phase order and task queue; this phase owns the saved dashboard artifact.
-
-The saved artifact must look and behave like a dashboard app, not a markdown report, prose summary, or text-only list. Treat the LastMile CRM dashboard pattern as the quality bar: a dense operational surface with strong metric hierarchy, real chart/table views, compact controls, and clear status badges. Do not ship a stack of bordered text blocks.
-
-Normalize source results into `CrmDashboardData` before writing TSX:
+Normalize the previous phase output into `CrmDashboardData` before writing TSX:
 
 ```ts
 type SourceStatus = "success" | "partial" | "failed";
@@ -19,6 +15,13 @@ interface CrmDashboardData {
     generatedAt: string;
     accountFilter?: string;
   };
+  sourceStatuses?: Array<{
+    id: string;
+    label: string;
+    status: SourceStatus;
+    recordCount?: number;
+    asOf?: string;
+  }>;
   kpis: Array<{
     id: string;
     label: string;
@@ -38,6 +41,7 @@ interface CrmDashboardData {
     risk: RiskLevel;
     reason: string;
     nextStep?: string;
+    owner?: string;
   }>;
   opportunities: Array<{
     id?: string;
@@ -54,34 +58,26 @@ interface CrmDashboardData {
 }
 ```
 
-Build the app body only. The Computer host provides Artifact chrome, route title, app label, open-full action, refresh action placement, and iframe wrapper. Do not duplicate that shell inside `App.tsx`.
+Build the app body only. The Computer host supplies artifact chrome, route title, app label, open-full action, refresh action placement, and iframe wrapper.
 
-Use shadcn-compatible primitives from `@thinkwork/ui` for layout and controls: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `Badge`, `Button`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `ScrollArea`, and `Separator` where applicable. This is a hard requirement for CRM dashboard artifacts. If the generated TSX does not import `@thinkwork/ui`, revise it before calling `save_app`.
+Use shadcn-compatible primitives from `@thinkwork/ui` for dashboard layout and controls: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `Badge`, `Button`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `ScrollArea`, `Separator`, and `ChartContainer` where applicable.
 
-Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`. At minimum, include KPI cards, stage exposure, stale activity, top risks, and an opportunity table or list. Keep missing-source notes proportional and close to affected metrics.
+Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
-Visual contract for CRM dashboards:
+Hard UI requirements:
 
-- Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`. Raw `<table>`, `<button>`, and dashboard cards made from plain `<div>` elements are not acceptable.
-- Use at least two visual/data primitives from `@thinkwork/computer-stdlib`, normally `KpiStrip` plus `BarChart`, `StackedBarChart`, or `DataTable`.
-- Use real chart or table components for comparisons; do not render stage exposure, stale activity, rep concentration, or opportunities as plain paragraphs.
-- Start with a compact dashboard header/status row and KPI strip, then place charts and tables in a responsive grid. Keep the first viewport useful.
-- Use tabs, segmented controls, sorting buttons, or filters when the requested scope has multiple analytical views.
-- Keep caveats and source notes short and adjacent to the affected metric; do not dedicate large app sections to provenance unless the user explicitly asks.
-- Use restrained CRM-dashboard color accents for value, risk, stale activity, and success. Avoid one-note monochrome layouts.
-- Do not use emoji as icons, status markers, bullets, tab labels, or headings. If an icon is useful, import one from `lucide-react` or `@tabler/icons-react`; otherwise use text labels or badges.
-- Do not use decorative emoji anywhere in generated app text such as status labels, table cells, headings, empty states, or summaries.
+- Import `@thinkwork/ui`.
+- Include KPI cards or `KpiStrip`, at least one visual comparison, and an opportunity table or ranked list.
+- Use `Tabs` for multiple dashboard views when useful.
+- Use `Badge` for status/risk labels.
+- Use `DataTable` or `Table` for tabular data.
+- Do not hand-roll cards, tabs, badges, buttons, tables, or status pills from raw HTML plus custom classes.
+- Do not use raw `<table>` or raw `<button>`.
+- Do not use emoji anywhere.
+- Import icons from `lucide-react` only if useful; otherwise use text labels and badges.
+- Avoid duplicate host chrome and avoid horizontal page scrolling.
 
-Before calling `save_app`, self-check the generated `App.tsx`:
-
-- It default-exports a React component and renders a dashboard body only.
-- It is not a markdown report or prose summary.
-- It includes KPI cards plus at least one chart and one table/list with meaningful visual hierarchy.
-- It does not use emoji characters for icons or labels.
-- It has responsive constraints (`w-full`, `min-w-0`, grid wrapping, or equivalent) and avoids horizontal page scrolling.
-- It avoids duplicate host chrome such as an outer artifact card, `App` badge, or open-full control.
-
-Export `refresh()` when the dashboard can be refreshed. It must rerun saved source queries or deterministic transforms and return data shaped like `CrmDashboardData`; it must not reinterpret the whole prompt or create a different app.
+Validation should be bounded to compile/save correctness. Inspect the generated TSX once before `save_app`. If it obviously violates the hard UI requirements, revise once. Do not loop on subjective polish.
 
 Call `save_app` directly in the parent Computer turn. Include:
 
@@ -91,8 +87,8 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.threadId`: current thread id when available.
 - `metadata.prompt`: user prompt.
 - `metadata.recipe`: `crm-dashboard`.
-- `metadata.recipeVersion`: `1`.
+- `metadata.recipeVersion`: `2`.
 - `metadata.runbookSlug`: `crm-dashboard`.
 - `metadata.dataShape`: `CrmDashboardData`.
 
-Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`.
+Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`. If `save_app` fails once, return the concrete error and stop instead of regenerating repeatedly.

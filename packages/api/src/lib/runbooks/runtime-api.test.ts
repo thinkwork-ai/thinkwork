@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   selectQueue: [] as Array<unknown[]>,
   updates: [] as Array<Record<string, unknown>>,
+  costRecords: [] as Array<Record<string, unknown>>,
+  budgetChecks: [] as Array<[string, string]>,
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -72,10 +74,43 @@ vi.mock("@thinkwork/database-pg", () => ({
   }),
 }));
 
+vi.mock("../cost-recording.js", () => ({
+  extractUsage: (invokeResult: Record<string, unknown>) => {
+    const response = (invokeResult.response || {}) as Record<string, unknown>;
+    const usage = (invokeResult.usage || response.usage || {}) as Record<
+      string,
+      number
+    >;
+    return {
+      inputTokens:
+        usage.inputTokens || usage.input_tokens || usage.prompt_tokens || 0,
+      outputTokens:
+        usage.outputTokens || usage.output_tokens || usage.completion_tokens || 0,
+      cachedReadTokens:
+        usage.cacheReadInputTokens ||
+        usage.cachedReadTokens ||
+        usage.cached_read_tokens ||
+        usage.cache_read_input_tokens ||
+        0,
+      model:
+        (invokeResult.model as string) || (response.model as string) || null,
+    };
+  },
+  recordCostEvents: vi.fn(async (params: Record<string, unknown>) => {
+    mocks.costRecords.push(params);
+    return { totalUsd: 0.123456, llmUsd: 0.1, computeUsd: 0.023456 };
+  }),
+  checkBudgetAndPause: vi.fn(async (tenantId: string, agentId: string) => {
+    mocks.budgetChecks.push([tenantId, agentId]);
+  }),
+}));
+
 import {
   compactRunbookPreviousOutputs,
+  completeRunbookExecutionTask,
   completeRunbookExecutionRun,
   loadRunbookExecutionContext,
+  resolveRunbookStepModel,
   runbookProgressContent,
   shouldIncludeRunbookHistoryMessage,
   unsupportedCapabilityError,
@@ -146,6 +181,10 @@ describe("runbook runtime API helpers", () => {
   beforeEach(() => {
     mocks.selectQueue = [];
     mocks.updates = [];
+    mocks.costRecords = [];
+    mocks.budgetChecks = [];
+    delete process.env.RUNBOOK_FAST_STEP_MODEL;
+    delete process.env.RUNBOOK_ARTIFACT_STEP_MODEL;
   });
 
   it("loads runbook execution context with completed task outputs", async () => {
@@ -203,6 +242,123 @@ describe("runbook runtime API helpers", () => {
       String((compacted["discover:1"] as { responseText: string }).responseText)
         .length,
     ).toBeLessThan(1_600);
+  });
+
+  it("records tokens, dollars, duration, and output for completed runbook subagent steps", async () => {
+    const runningTask = {
+      ...completedTask,
+      status: "running",
+      started_at: new Date("2026-05-11T00:00:00.000Z"),
+      completed_at: null,
+      output: null,
+      capability_roles: ["research"],
+    };
+    const output = {
+      ok: true,
+      responseText: "Fetched pipeline fields and wrote concise evidence.",
+      model: "us.anthropic.claude-sonnet-4-6",
+      durationMs: 145_200,
+      usage: {
+        input_tokens: 577,
+        output_tokens: 11150,
+        cached_read_tokens: 12,
+      },
+    };
+
+    mocks.selectQueue.push(
+      [taskRow],
+      [runRow],
+      [runningTask],
+      [
+        {
+          primary_agent_id: "agent-primary",
+          migrated_from_agent_id: "agent-legacy",
+        },
+      ],
+      [{ ...runningTask, status: "completed", output: null }],
+      [runRow],
+      [{ ...runningTask, status: "completed" }],
+      [],
+      [runRow],
+      [{ ...runningTask, status: "completed" }],
+      [{ id: "message-existing" }],
+    );
+
+    await completeRunbookExecutionTask({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      runbookTaskId: "rt-1",
+      output,
+    });
+
+    expect(mocks.costRecords).toHaveLength(1);
+    expect(mocks.costRecords[0]).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-primary",
+      requestId: "runbook:run-1:rt-1",
+      traceId: "runbook:run-1:discover:1",
+      threadId: "thread-1",
+      source: "computer_runbook_step",
+      model: "us.anthropic.claude-sonnet-4-6",
+      inputTokens: 577,
+      outputTokens: 11150,
+      cachedReadTokens: 12,
+      durationMs: 145_200,
+    });
+    expect(mocks.budgetChecks).toEqual([["tenant-1", "agent-primary"]]);
+    expect(mocks.updates[0]).toMatchObject({
+      status: "completed",
+      output: {
+        ok: true,
+        responseText: "Fetched pipeline fields and wrote concise evidence.",
+        usage: {
+          input_tokens: 577,
+          output_tokens: 11150,
+          cached_read_tokens: 12,
+        },
+        cost: {
+          requestId: "runbook:run-1:rt-1",
+          traceId: "runbook:run-1:discover:1",
+          estimatedCostUsd: 0.123456,
+          llmCostUsd: 0.1,
+          computeCostUsd: 0.023456,
+        },
+      },
+    });
+  });
+
+  it("routes runbook step models by capability role using approved defaults", () => {
+    expect(
+      resolveRunbookStepModel({
+        templateModel: "us.anthropic.claude-sonnet-4-6",
+        capabilityRoles: ["research"],
+      }),
+    ).toBe("moonshotai.kimi-k2.5");
+    expect(
+      resolveRunbookStepModel({
+        templateModel: "us.anthropic.claude-sonnet-4-6",
+        capabilityRoles: ["artifact_build"],
+      }),
+    ).toBe("us.anthropic.claude-sonnet-4-6");
+  });
+
+  it("allows emergency runbook step model overrides from env", () => {
+    process.env.RUNBOOK_FAST_STEP_MODEL = "fallback-fast-model";
+    process.env.RUNBOOK_ARTIFACT_STEP_MODEL = "fallback-artifact-model";
+
+    expect(
+      resolveRunbookStepModel({
+        templateModel: "us.anthropic.claude-sonnet-4-6",
+        capabilityRoles: ["research"],
+      }),
+    ).toBe("fallback-fast-model");
+    expect(
+      resolveRunbookStepModel({
+        templateModel: "us.anthropic.claude-sonnet-4-6",
+        capabilityRoles: ["artifact_build"],
+      }),
+    ).toBe("fallback-artifact-model");
   });
 
   it("formats completed runbook progress without dumping raw task markdown", () => {

@@ -127,7 +127,7 @@ function assertAllowedImport(
     throw disallowedImport(specifier, location);
   }
 
-  const namedExports = new Set<string>([...(packagePolicy.namedExports ?? [])]);
+    const namedExports = new Set<string>([...(packagePolicy.namedExports ?? [])]);
   for (const importSpecifier of declaration.specifiers) {
     if (importSpecifier.type === "ImportNamespaceSpecifier") {
       if (!packagePolicy.namespaceImport) {
@@ -152,7 +152,7 @@ function assertAllowedImport(
 
     const imported =
       importSpecifier.imported.name ?? String(importSpecifier.imported.value);
-    if (!namedExports.has(imported)) {
+    if (!packagePolicy.allowAnyNamedExport && !namedExports.has(imported)) {
       throw disallowedImport(
         `${specifier}.${imported}`,
         location,

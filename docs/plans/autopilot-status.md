@@ -16,6 +16,20 @@ status: complete
 - Overall status: complete
 - Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
 
+## 2026-05-13 CRM Dashboard Streamline Hotfix
+
+- Branch/worktree: `.Codex/worktrees/streamline-crm-dashboard` on `codex/streamline-crm-dashboard`.
+- Live dev retest status: Marco's Computer now has `skills/crm-dashboard/references/thinkwork-runbook.json` at `sourceVersion: "0.2.0"` with the active `discover` and `produce` phases only. Cruz, GiGi, Loki, Marco, and Monica are linked to the `thinkwork-computer-default` Computer template; live workspace skill write tasks completed.
+- Dev data repair: updated four sleek-squirrel Computer rows and their four bound source-agent rows from the tenant `default` agent template to the platform `thinkwork-computer-default` Computer template. This did not delete or overwrite per-agent workspace files such as `SOUL.md`, `USER.md`, `IDENTITY.md`, or other overlay content.
+- Skill/source updates: streamlined CRM Dashboard runbook to fetch compact CRM data and produce/save one artifact, with old analyze/validate references retained only as superseded stubs.
+- Runtime durability updates: reduced AgentCore runbook step timeouts from hours to minutes, added Computer heartbeat cleanup for stale runbook steps, and wired the global `stall-monitor` Lambda into an EventBridge Scheduler rule.
+- Template propagation updates: added S3 workspace event fan-out for Computer template skill files so `_catalog/<template>/workspace/skills/...` updates enqueue live Computer EFS `workspace_file_write` / `workspace_file_delete` tasks.
+- Artifact compatibility updates: allowed named `lucide-react` imports in generated app policy/shims and updated Artifact Builder defaults to align with bounded lucide usage.
+- Model routing updates: added environment-driven model selection so non-artifact runbook steps and artifact generation steps can use different model IDs.
+- Follow-up idea captured: a future automation-based watcher could create a self-cleaning per-run monitor that wakes every 3-5 minutes to inspect a specific long-running task/run and report or cancel it if stale.
+- Verification passed so far: API focused tests/typecheck, Computer runtime tests/typecheck, UI/workspace-defaults focused tests/typechecks, Terraform fmt check, and `git diff --check`.
+- Verification caveat: repo `format:check` and `scripts/validate-skill-catalog.sh` cannot run locally in this checkout because root `prettier` and Python `yaml` are not installed in the current environment.
+
 ## Progress Log
 
 - 2026-05-12: Autopilot started from `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`.

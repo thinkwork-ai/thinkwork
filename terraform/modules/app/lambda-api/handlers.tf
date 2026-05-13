@@ -1039,6 +1039,30 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
 }
 
 # ---------------------------------------------------------------------------
+# Stall monitor — marks stalled thread turns and runbook steps failed every
+# minute. This is the global backstop for agent/runtime crashes; the Computer
+# heartbeat also reconciles its own stale runbook tasks while it is alive.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "stall_monitor" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-stall-monitor"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["cron-stall-monitor"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
 # ThinkWork Computer runtime reconciler — keeps active Computers aligned with
 # desired_runtime_status by provisioning/starting/stopping ECS services in
 # bounded batches. The handler is conservative and records per-Computer events

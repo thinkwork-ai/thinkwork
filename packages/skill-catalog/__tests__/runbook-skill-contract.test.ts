@@ -280,7 +280,6 @@ metadata:
       "DataTable",
       "KpiStrip",
       "lucide-react",
-      "@tabler/icons-react",
       "save_app",
     ];
 
