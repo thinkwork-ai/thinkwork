@@ -294,22 +294,27 @@ async function inviteMember(
 		})
 		.returning();
 
-	// Best-effort Computer auto-provision for the newly-invited member.
-	// Failure must NOT block the invite response; the helper itself never
-	// throws and the catch here is defense-in-depth.
-	try {
-		await provisionComputerForMember({
-			tenantId,
-			userId: cognitoSub,
-			principalType: "USER",
-			callSite: "restInvite",
-			adminUserId,
-		});
-	} catch (err) {
-		console.error(
-			"[tenants.ts:inviteMember] unexpected provisioning throw (suppressed):",
-			err,
-		);
+	// Computer provisioning is opt-in via `body.provision_computer`
+	// (truthy). Default behavior is mobile-only / no-Computer — admins
+	// can provision later via the Person-page CTA on /people/$humanId
+	// or by re-invoking this endpoint after server config is updated.
+	// Failure must NOT block the invite response; the helper itself
+	// never throws.
+	if (body.provision_computer === true) {
+		try {
+			await provisionComputerForMember({
+				tenantId,
+				userId: cognitoSub,
+				principalType: "USER",
+				callSite: "restInvite",
+				adminUserId,
+			});
+		} catch (err) {
+			console.error(
+				"[tenants.ts:inviteMember] unexpected provisioning throw (suppressed):",
+				err,
+			);
+		}
 	}
 
 	return json(
@@ -398,11 +403,11 @@ async function addMember(
 		})
 		.returning();
 
-	// Best-effort Computer auto-provision when an ACTIVE member is added.
-	// Non-active members (pending, inactive, suspended) shouldn't be
-	// provisioned yet — they can't use the Computer. The helper additionally
-	// skips when principal_type is not USER.
-	if (member.status === "active") {
+	// Computer provisioning is opt-in via `body.provision_computer`
+	// (truthy) AND only fires when the new member is active. Default
+	// behavior is mobile-only / no-Computer — admins can provision later
+	// via the Person-page CTA on /people/$humanId.
+	if (body.provision_computer === true && member.status === "active") {
 		try {
 			await provisionComputerForMember({
 				tenantId,

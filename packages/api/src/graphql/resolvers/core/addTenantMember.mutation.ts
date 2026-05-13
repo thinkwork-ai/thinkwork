@@ -22,24 +22,27 @@ export const addTenantMember = async (
 		})
 		.returning();
 
-	// Best-effort Computer auto-provision. Failure must NOT block membership;
-	// the createTenant sandbox-provision precedent is the in-repo pattern.
-	// The helper itself never throws — this catch is defense-in-depth for an
-	// unexpected programming error.
-	try {
-		const adminUserId = await resolveCallerUserId(ctx);
-		await provisionComputerForMember({
-			tenantId: args.tenantId,
-			userId: i.principalId,
-			principalType: i.principalType,
-			callSite: "addTenantMember",
-			adminUserId,
-		});
-	} catch (err) {
-		console.error(
-			"[addTenantMember] unexpected provisioning throw (suppressed):",
-			err,
-		);
+	// Computer provisioning is opt-in per add-member call. Admins explicitly
+	// pass `provisionComputer: true` when they want the helper to fire.
+	// Members default to "mobile-only / no-Computer"; admins can provision
+	// later via the Person-page CTA on /people/$humanId. Failure must NOT
+	// block membership; the helper itself never throws.
+	if (i.provisionComputer === true) {
+		try {
+			const adminUserId = await resolveCallerUserId(ctx);
+			await provisionComputerForMember({
+				tenantId: args.tenantId,
+				userId: i.principalId,
+				principalType: i.principalType,
+				callSite: "addTenantMember",
+				adminUserId,
+			});
+		} catch (err) {
+			console.error(
+				"[addTenantMember] unexpected provisioning throw (suppressed):",
+				err,
+			);
+		}
 	}
 
 	return snakeToCamel(row);

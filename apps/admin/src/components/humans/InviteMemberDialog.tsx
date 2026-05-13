@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Monitor } from "lucide-react";
 import { useMutation } from "urql";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ interface InviteMemberDialogProps {
 export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: InviteMemberDialogProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [provisionComputer, setProvisionComputer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, executeMutation] = useMutation(InviteMemberMutation);
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +33,11 @@ export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: 
     try {
       const result = await executeMutation({
         tenantId,
-        input: { email: email.trim(), name: name.trim() || undefined },
+        input: {
+          email: email.trim(),
+          name: name.trim() || undefined,
+          provisionComputer,
+        },
       });
       if (result.error) {
         setError(result.error.message);
@@ -40,6 +45,7 @@ export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: 
       }
       setEmail("");
       setName("");
+      setProvisionComputer(false);
       onOpenChange(false);
       onInvited?.();
     } catch (err: any) {
@@ -79,6 +85,32 @@ export function InviteMemberDialog({ open, onOpenChange, tenantId, onInvited }: 
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <label
+              htmlFor="invite-provision-computer"
+              className="flex cursor-pointer items-start gap-3"
+            >
+              <input
+                id="invite-provision-computer"
+                type="checkbox"
+                checked={provisionComputer}
+                onChange={(e) => setProvisionComputer(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <Monitor className="h-3.5 w-3.5 text-cyan-600" />
+                  Provision a Computer for this member
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Off by default — invitees are mobile-only unless you opt
+                  them in here. You can always provision later from the
+                  Person page.
+                </p>
+              </div>
+            </label>
           </div>
 
           {error && (
