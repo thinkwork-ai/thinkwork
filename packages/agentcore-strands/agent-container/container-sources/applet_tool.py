@@ -8,10 +8,15 @@ will swap from inert to live GraphQL calls.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import inspect
+import json
 import os
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -183,6 +188,10 @@ def get_save_app_for_test() -> Callable[..., Any]:
     return _live_save_app
 
 
+def get_preview_app_for_test() -> Callable[..., Any]:
+    return _live_preview_app
+
+
 def get_load_app_for_test() -> Callable[..., Any]:
     return _live_load_app
 
@@ -232,9 +241,10 @@ def make_save_app_fn(
         whenever the result should be refreshable. Dashboard applets should
         render real visual UI such as KPI strips, charts, tables, maps, or
         timelines, not prose-only markdown reports. Do not use emoji as icons,
-        status markers, bullets, tabs, headings, empty states, or data labels;
-        use lucide-react or @tabler/icons-react icons when iconography is
-        needed.
+        status markers, bullets, tabs, headings, empty states, or data labels.
+        Generated source must use approved shadcn/@thinkwork/ui and
+        @thinkwork/computer-stdlib primitives; raw lucide-react, raw map
+        libraries, raw controls/tables, and bespoke visual styling are rejected.
         """
 
         return await _call_seam(
@@ -247,6 +257,60 @@ def make_save_app_fn(
         )
 
     return save_app
+
+
+def make_preview_app_fn(
+    *,
+    tenant_id: str,
+    agent_id: str,
+    computer_id: str,
+    api_url: str,
+    api_secret: str,
+    thread_id: str = "",
+    prompt: str = "",
+    seam_fn: Callable[..., Any] | None = None,
+):
+    runtime = _runtime_from_values(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        computer_id=computer_id,
+        api_url=api_url,
+        api_secret=api_secret,
+        thread_id=thread_id,
+        prompt=prompt,
+    )
+    seam = seam_fn or get_preview_app_for_test()
+
+    @tool
+    async def preview_app(
+        name: str,
+        files: dict[str, str],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Emit an unsaved draft preview for a Computer applet.
+
+        Use this after generating TSX applet source and before save_app when
+        the user should see the app quickly. This tool does not create an
+        artifact row and does not write source to S3. It returns a
+        draft_app_preview payload with a draft id, source digest, validation
+        status, data provenance, shadcn registry provenance, and a promotion
+        proof for the exact source. Pass only real available data, partial real
+        data, or honest empty states; include metadata.dataProvenance and
+        metadata.shadcnMcpToolCalls / metadata.uiRegistryDigest when available.
+        Generated source must use approved shadcn/@thinkwork/ui primitives and
+        must not use lucide-react, raw map libraries, raw controls/tables, or
+        bespoke visual styling.
+        """
+
+        return await _call_seam(
+            seam,
+            runtime=runtime,
+            name=name,
+            files=files,
+            metadata=metadata,
+        )
+
+    return preview_app
 
 
 def make_load_app_fn(
@@ -316,6 +380,11 @@ def make_save_app_from_env():
     return make_save_app_fn(**values)
 
 
+def make_preview_app_from_env():
+    values = _runtime_env()
+    return make_preview_app_fn(**values)
+
+
 def make_load_app_from_env():
     values = _runtime_env()
     return make_load_app_fn(**values)
@@ -337,6 +406,142 @@ async def _call_seam(seam: Callable[..., Any], **kwargs: Any) -> dict[str, Any]:
             "errors": [{"message": "Applet tool seam returned a non-object result"}],
         }
     return result
+
+
+async def _live_preview_app(
+    *,
+    runtime: AppletToolRuntime,
+    name: str,
+    files: dict[str, str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    metadata_payload = dict(metadata) if isinstance(metadata, dict) else {}
+    if runtime.thread_id and not metadata_payload.get("threadId"):
+        metadata_payload["threadId"] = runtime.thread_id
+    if runtime.prompt and not metadata_payload.get("prompt"):
+        metadata_payload["prompt"] = runtime.prompt
+
+    source_digest = _source_digest(files)
+    validation = _validate_draft_preview(files, metadata_payload)
+    draft_id = f"draft_{uuid.uuid4().hex}"
+    expires_at = (datetime.now(UTC) + timedelta(hours=6)).isoformat().replace("+00:00", "Z")
+    promotion_proof = (
+        _promotion_proof(
+            runtime=runtime,
+            draft_id=draft_id,
+            source_digest=source_digest,
+            expires_at=expires_at,
+        )
+        if validation["ok"]
+        else None
+    )
+
+    return {
+        "ok": validation["ok"],
+        "type": "draft_app_preview",
+        "draft": {
+            "draftId": draft_id,
+            "unsaved": True,
+            "name": name,
+            "files": files,
+            "metadata": metadata_payload,
+            "sourceDigest": source_digest,
+            "promotionProof": promotion_proof,
+            "promotionProofExpiresAt": expires_at if promotion_proof else None,
+            "validation": validation,
+            "dataProvenance": _data_provenance(metadata_payload),
+            "shadcnProvenance": _shadcn_provenance(metadata_payload),
+        },
+    }
+
+
+def _source_digest(files: dict[str, str]) -> str:
+    if not isinstance(files, dict):
+        files = {}
+    canonical = json.dumps(
+        [[name, files[name]] for name in sorted(files.keys())],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validate_draft_preview(
+    files: dict[str, str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    errors: list[dict[str, str]] = []
+    if not isinstance(files, dict):
+        errors.append(
+            {
+                "code": "FILES_REQUIRED",
+                "message": "draft_app_preview requires a files object.",
+            }
+        )
+    elif not isinstance(files.get("App.tsx"), str) or not files.get("App.tsx", "").strip():
+        errors.append(
+            {
+                "code": "APP_TSX_REQUIRED",
+                "message": "draft_app_preview requires a non-empty App.tsx source file.",
+            }
+        )
+    if not isinstance(metadata.get("dataProvenance"), dict):
+        errors.append(
+            {
+                "code": "DATA_PROVENANCE_REQUIRED",
+                "message": "draft_app_preview requires metadata.dataProvenance describing real, partial, or unavailable source data.",
+            }
+        )
+    return {
+        "ok": len(errors) == 0,
+        "status": "passed" if not errors else "failed",
+        "errors": errors,
+    }
+
+
+def _data_provenance(metadata: dict[str, Any]) -> dict[str, Any]:
+    value = metadata.get("dataProvenance")
+    if isinstance(value, dict):
+        return value
+    return {
+        "status": "unknown",
+        "notes": ["No real-data provenance was supplied for this draft."],
+    }
+
+
+def _shadcn_provenance(metadata: dict[str, Any]) -> dict[str, Any]:
+    calls = metadata.get("shadcnMcpToolCalls")
+    return {
+        "uiRegistryVersion": metadata.get("uiRegistryVersion") or "generated-app-policy:v1",
+        "uiRegistryDigest": metadata.get("uiRegistryDigest") or "",
+        "mcpToolCalls": calls if isinstance(calls, list) else [],
+    }
+
+
+def _promotion_proof(
+    *,
+    runtime: AppletToolRuntime,
+    draft_id: str,
+    source_digest: str,
+    expires_at: str,
+) -> str:
+    payload = "\n".join(
+        [
+            "draft-app-preview-v1",
+            runtime.tenant_id,
+            runtime.computer_id,
+            runtime.thread_id,
+            draft_id,
+            source_digest,
+            expires_at,
+        ]
+    )
+    signature = hmac.new(
+        runtime.api_secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"draft-app-preview-v1:{signature}"
 
 
 async def _graphql(

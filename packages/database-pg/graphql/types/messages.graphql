@@ -17,7 +17,9 @@ type Message {
   # Plan-012 U7: typed UIMessage parts (Vercel AI SDK Stream Protocol shape)
   # persisted at turn-finalize for new Computer assistant messages. Null on
   # legacy rows; null on user messages until/unless a future plan opts users
-  # into typed shape too. Render-path precedence: parts non-null wins over
+  # into typed shape too. Draft app previews are represented as
+  # tool-preview_app parts carrying an unsaved draft_app_preview payload, not
+  # as MessageArtifact rows. Render-path precedence: parts non-null wins over
   # content. Tenant-scoped by the same gate as content (resolveCallerTenantId
   # + thread/computer ownership) — see contract v1 §Tenant scoping.
   parts: AWSJSON

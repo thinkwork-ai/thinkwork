@@ -187,7 +187,80 @@ def test_save_app_tool_description_sets_dashboard_quality_floor():
 
     assert "not prose-only markdown reports" in description
     assert "Do not use emoji as icons" in description
-    assert "lucide-react or @tabler/icons-react" in description
+    assert "runnable applet" in description
+    assert "raw lucide-react" in description
+
+
+def test_preview_app_returns_unsaved_draft_payload_with_digest_and_proof():
+    preview_app = applet_tool.make_preview_app_fn(
+        **RUNTIME,
+        thread_id="thread-1",
+        prompt="Build a CRM dashboard.",
+    )
+
+    result = run(
+        preview_app(
+            name="CRM Draft",
+            files={"App.tsx": "export default function App() { return null; }"},
+            metadata={
+                "dataProvenance": {
+                    "status": "real",
+                    "notes": ["Loaded live CRM rows."],
+                },
+                "uiRegistryDigest": "sha256:registry",
+                "shadcnMcpToolCalls": ["list_components", "search_registry"],
+            },
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["type"] == "draft_app_preview"
+    draft = result["draft"]
+    assert draft["unsaved"] is True
+    assert draft["draftId"].startswith("draft_")
+    assert draft["sourceDigest"].startswith("sha256:")
+    assert draft["promotionProof"].startswith("draft-app-preview-v1:")
+    assert draft["metadata"]["threadId"] == "thread-1"
+    assert draft["metadata"]["prompt"] == "Build a CRM dashboard."
+    assert draft["validation"] == {"ok": True, "status": "passed", "errors": []}
+    assert draft["dataProvenance"]["status"] == "real"
+    assert draft["shadcnProvenance"] == {
+        "uiRegistryVersion": "generated-app-policy:v1",
+        "uiRegistryDigest": "sha256:registry",
+        "mcpToolCalls": ["list_components", "search_registry"],
+    }
+
+
+def test_preview_app_returns_validation_failure_payload_for_missing_app_tsx():
+    preview_app = applet_tool.make_preview_app_fn(**RUNTIME)
+
+    result = run(
+        preview_app(
+            name="Broken Draft",
+            files={"index.ts": "export const x = 1;"},
+            metadata={},
+        )
+    )
+
+    assert result["ok"] is False
+    assert result["type"] == "draft_app_preview"
+    assert result["draft"]["promotionProof"] is None
+    assert result["draft"]["validation"]["status"] == "failed"
+    assert {error["code"] for error in result["draft"]["validation"]["errors"]} == {
+        "APP_TSX_REQUIRED",
+        "DATA_PROVENANCE_REQUIRED",
+    }
+
+
+def test_preview_app_tool_description_requires_real_data_and_shadcn_policy():
+    preview_app = applet_tool.make_preview_app_fn(**RUNTIME)
+
+    description = preview_app.__doc__ or ""
+
+    assert "unsaved draft preview" in description
+    assert "Pass only real available data" in description
+    assert "metadata.dataProvenance" in description
+    assert "must not use lucide-react" in description
 
 
 def test_load_and_list_apps_call_graphql(monkeypatch):
@@ -450,6 +523,7 @@ def test_factories_snapshot_env_independently(monkeypatch):
 
 
 def test_body_swap_forcing_functions_point_at_live_seams():
+    assert applet_tool.get_preview_app_for_test() is applet_tool._live_preview_app
     assert applet_tool.get_save_app_for_test() is applet_tool._live_save_app
     assert applet_tool.get_load_app_for_test() is applet_tool._live_load_app
     assert applet_tool.get_list_apps_for_test() is applet_tool._live_list_apps

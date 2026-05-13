@@ -1056,17 +1056,19 @@ def _call_strands_agent(
         from applet_tool import (
             make_list_apps_from_env,
             make_load_app_from_env,
+            make_preview_app_from_env,
             make_save_app_from_env,
         )
 
         tools.extend(
             [
+                make_preview_app_from_env(),
                 make_save_app_from_env(),
                 make_load_app_from_env(),
                 make_list_apps_from_env(),
             ]
         )
-        logger.info("workspace tools registered: save_app, load_app, list_apps")
+        logger.info("workspace tools registered: preview_app, save_app, load_app, list_apps")
     except Exception as e:
         logger.warning("applet tools registration failed: %s", e)
 
@@ -2753,8 +2755,10 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "runnable artifact with clear source status. Ask for setup only after the",
         "artifact exists, unless a tool requires explicit human approval.",
         "",
-        "Pass metadata with threadId and prompt so the artifact remains attached",
-        "to this thread. After save_app returns ok, answer concisely with what",
+        "Pass metadata with threadId and prompt so previews/artifacts remain",
+        "attached to this thread. When preview_app is available, call it with",
+        "real-data provenance before save_app so the user can see an unsaved",
+        "draft quickly. After save_app returns ok, answer concisely with what",
         "was created and the /artifacts/{appId} route.",
         "",
         "For applet-build requests, keep the applet implementation and save_app",
@@ -2763,7 +2767,7 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "artifacts to the current thread and their save attempts do not count as",
         "your own save_app call.",
         "",
-        "save_app, load_app, and list_apps are direct Computer tools. Do not",
+        "preview_app, save_app, load_app, and list_apps are direct Computer tools. Do not",
         "delegate applet saving to delegate or delegate_to_workspace, and do not",
         "claim an applet was saved unless your own successful save_app tool call",
         "returned ok=true and persisted=true. If save_app is unavailable or",
