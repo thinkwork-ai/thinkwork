@@ -1,9 +1,26 @@
 ---
 title: "feat: Computer terminal (PTY) via ECS Exec"
 type: feat
-status: proposed
+status: in-progress
 date: 2026-05-13
 ---
+
+## Tech choices (from research pass 2026-05-13)
+
+- **Browser MGS protocol library**: `ssm-session` (bertrandmartel, MIT). Only published JS lib that speaks the AWS Message Gateway Service wire protocol — sequence numbers, SHA-256 payload digests, ACKs, handshake. Re-implementing from `aws/session-manager-plugin` would be 1–2 weeks; not worth it.
+- **Terminal renderer**: `@xterm/xterm` + `@xterm/addon-fit`.
+- **Transport**: Browser connects directly to `wss://ssmmessages.<region>.amazonaws.com/v1/data-channel/<sessionId>?role=publish_subscribe`. WebSocket upgrades are not subject to CORS; AWS Console works this way. No API GW WebSocket proxy.
+- **Backend**: New Lambda `computer-terminal-start` invokes `@aws-sdk/client-ecs` `ExecuteCommand` and returns `{sessionId, streamUrl, tokenValue}`. Token is a short-lived bearer credential — never log it.
+
+## Gotchas to encode
+
+- **20-minute idle timeout** (hard for ECS Exec; not configurable like plain SSM). Surface "session expired — reconnect" affordance.
+- **Max 2 concurrent ECS Exec sessions per task** (AWS quota). Surface "too many active sessions" cleanly.
+- **Resize is PayloadType 3 (Size)**. Wire `xterm.onResize → ssm.sendInitMessage(ws, {cols, rows})` post-fit on container resize.
+- **Vite needs `Buffer` polyfill** — `ssm-session` uses Node `Buffer` for SHA-256. Add `vite-plugin-node-polyfills` or shim.
+- **Audit logging** is cluster-level: `aws_ecs_cluster.configuration.execute_command_configuration.log_configuration.cloud_watch_log_group_name`. Task and SPA don't have to do anything once the cluster has it.
+- **Sequence numbers reset on init**. One `ssm` instance per WebSocket; don't share across terminals.
+- **Use `ExecuteCommand` (ECS), not `StartSession` (SSM) directly** — ExecuteCommand wraps StartSession with the correct ECS target format.
 
 # feat: Computer terminal via ECS Exec
 

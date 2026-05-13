@@ -29,12 +29,33 @@ resource "aws_cloudwatch_log_group" "runtime" {
   tags = { Name = "thinkwork-${var.stage}-computer-runtime-logs" }
 }
 
+resource "aws_cloudwatch_log_group" "ecs_exec" {
+  name              = "/thinkwork/${var.stage}/computer-ecs-exec"
+  retention_in_days = var.log_retention_days
+
+  tags = { Name = "thinkwork-${var.stage}-computer-ecs-exec-logs" }
+}
+
 resource "aws_ecs_cluster" "runtime" {
   name = "thinkwork-${var.stage}-computer"
 
   setting {
     name  = "containerInsights"
     value = "enabled"
+  }
+
+  # ECS Exec audit-log destination. Per-session command streams land in this
+  # log group once enable_execute_command=true is set on the per-Computer
+  # service AND the task role has ssmmessages:Create/OpenControl+DataChannel.
+  # CloudTrail captures the ExecuteCommand API call separately. Plan:
+  # docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
+  configuration {
+    execute_command_configuration {
+      logging = "OVERRIDE"
+      log_configuration {
+        cloud_watch_log_group_name = aws_cloudwatch_log_group.ecs_exec.name
+      }
+    }
   }
 
   tags = { Name = "thinkwork-${var.stage}-computer-cluster" }
@@ -298,6 +319,41 @@ resource "aws_iam_role_policy" "task_appsync" {
   })
 }
 
+# ECS Exec — lets the in-task SSM agent open a control + data channel back
+# to ssmmessages. Required for the admin Terminal tab (browser MGS
+# WebSocket terminates at ssmmessages, which fans out to the agent in the
+# task via these channels). Plus CloudWatch Logs PutLogEvents so the
+# per-session command transcript lands in the cluster's exec log group.
+resource "aws_iam_role_policy" "task_ssm_messages" {
+  name = "computer-runtime-ssm-messages"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+        ]
+        Resource = "${aws_cloudwatch_log_group.ecs_exec.arn}:*"
+      },
+    ]
+  })
+}
+
 resource "aws_iam_policy" "manager" {
   name        = "thinkwork-${var.stage}-computer-manager"
   description = "Allow the Computer manager Lambda to reconcile per-Computer ECS/EFS resources"
@@ -330,6 +386,13 @@ resource "aws_iam_policy" "manager" {
           "ecs:RegisterTaskDefinition",
           "ecs:DeregisterTaskDefinition",
           "ecs:DescribeTaskDefinition",
+          # Admin Terminal tab — computer-terminal-start opens an
+          # interactive shell via ECS Exec. AWS scopes ExecuteCommand
+          # by task ARN; we leave Resource="*" because tasks are
+          # ephemeral and their ARNs are not known at policy-apply
+          # time. The Lambda's per-request authz (tenant-admin + the
+          # Computer's tenant_id match) is the actual gate.
+          "ecs:ExecuteCommand",
         ]
         Resource = "*"
       },

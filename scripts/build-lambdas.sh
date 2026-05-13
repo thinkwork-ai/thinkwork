@@ -405,6 +405,9 @@ build_handler "workspace-files" \
 build_handler "workspace-files-efs" \
   "$REPO_ROOT/packages/api/src/handlers/workspace-files-efs.ts"
 
+build_handler "computer-terminal-start" \
+  "$REPO_ROOT/packages/api/src/handlers/computer-terminal-start.ts"
+
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"
 
