@@ -284,11 +284,11 @@ function SetAppStyleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[min(90vh,720px)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Set App Style</DialogTitle>
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="min-h-0 space-y-4 overflow-y-auto pr-1">
           <p className="text-sm text-muted-foreground">
             Paste the Theme code copied from shadcn Create. These tokens are
             stored on tenant settings and injected into every rendered app
@@ -314,7 +314,7 @@ function SetAppStyleDialog({
             value={css}
             onChange={(event) => setCss(event.target.value)}
             placeholder=":root { --background: oklch(...); --chart-1: oklch(...); }"
-            className="min-h-72 font-mono text-xs"
+            className="h-[min(28rem,48vh)] min-h-0 resize-none overflow-y-auto font-mono text-xs [field-sizing:fixed]"
           />
           {error ? (
             <p className="text-sm text-destructive" role="alert">
