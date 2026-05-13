@@ -69,10 +69,17 @@ describe("rewriteAppletImports", () => {
     );
   });
 
-  it("rejects lucide, raw map libraries, namespace imports, and unknown UI exports", () => {
-    expect(() =>
-      rewriteAppletImports('import { ShieldCheck } from "lucide-react";'),
-    ).toThrow(/lucide-react/);
+  it("rewrites named lucide icon imports", () => {
+    const result = rewriteAppletImports(
+      'import { ShieldCheck } from "lucide-react"; export { ShieldCheck };',
+    );
+
+    expect(result).toContain(
+      'const ShieldCheck = globalThis.__THINKWORK_APPLET_HOST__["lucide-react"].ShieldCheck;',
+    );
+  });
+
+  it("rejects raw map libraries, namespace imports, and unknown UI exports", () => {
     expect(() =>
       rewriteAppletImports('import { MapContainer } from "react-leaflet";'),
     ).toThrow(/react-leaflet/);
