@@ -1,6 +1,11 @@
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   FileTree,
   FileTreeActions,
@@ -145,41 +150,12 @@ export interface FolderTreeProps {
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (path: string) => void;
-  onDelete: (path: string, isFolder: boolean) => void;
-  onCreateSkill?: () => void;
-  onAddSkillFromCatalog?: () => void;
-  preferRunbookSkills?: boolean;
+  onNewFile: (parentPath: string) => void;
+  onNewFolder: (parentPath: string) => void;
 }
 
 export function FolderTree(props: FolderTreeProps) {
-  const {
-    nodes,
-    selectedPath,
-    expandedFolders,
-    onSelect,
-    onToggle,
-    onCreateSkill,
-    onAddSkillFromCatalog,
-    onDelete,
-    preferRunbookSkills,
-  } = props;
-
-  const [skillsMenu, setSkillsMenu] = useState<{
-    x: number;
-    y: number;
-    path: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!skillsMenu) return;
-    const close = () => setSkillsMenu(null);
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", close);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", close);
-    };
-  }, [skillsMenu]);
+  const { nodes, selectedPath, expandedFolders, onSelect, onToggle } = props;
 
   // Collect the set of folder paths so the AI Elements onSelect callback
   // can route folder-name clicks into onToggle (matching the existing UX
@@ -193,12 +169,6 @@ export function FolderTree(props: FolderTreeProps) {
       </div>
     );
   }
-
-  const openSkillsMenu = (event: MouseEvent, path: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setSkillsMenu({ x: event.clientX, y: event.clientY, path });
-  };
 
   const handleExpandedChange = (next: Set<string>) => {
     // Diff against current to translate Set updates into single-path toggle
@@ -221,65 +191,17 @@ export function FolderTree(props: FolderTreeProps) {
   };
 
   return (
-    <>
-      <FileTree
-        expanded={expandedFolders}
-        onExpandedChange={handleExpandedChange}
-        selectedPath={selectedPath ?? undefined}
-        onSelect={handleSelect}
-        className="rounded-none border-0 bg-transparent text-xs"
-      >
-        {nodes.map((node) => (
-          <FolderTreeItem
-            key={node.path}
-            node={node}
-            onOpenSkillsMenu={openSkillsMenu}
-            {...props}
-          />
-        ))}
-      </FileTree>
-      {skillsMenu ? (
-        <div
-          className="fixed z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{ left: skillsMenu.x, top: skillsMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-            onClick={() => {
-              setSkillsMenu(null);
-              onCreateSkill?.();
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            {preferRunbookSkills ? "New Runbook Skill" : "New Skill"}
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-            onClick={() => {
-              setSkillsMenu(null);
-              onAddSkillFromCatalog?.();
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            {preferRunbookSkills ? "Add Runbook Skill" : "Add from catalog"}
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
-            onClick={() => {
-              setSkillsMenu(null);
-              onDelete(skillsMenu.path, true);
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-        </div>
-      ) : null}
-    </>
+    <FileTree
+      expanded={expandedFolders}
+      onExpandedChange={handleExpandedChange}
+      selectedPath={selectedPath ?? undefined}
+      onSelect={handleSelect}
+      className="rounded-none border-0 bg-transparent text-xs"
+    >
+      {nodes.map((node) => (
+        <FolderTreeItem key={node.path} node={node} {...props} />
+      ))}
+    </FileTree>
   );
 }
 
@@ -290,49 +212,57 @@ function FolderTreeItem({
   sourceFor,
   updateAvailableFor,
   onAcceptUpdate,
-  onDelete,
-  onOpenSkillsMenu,
+  onNewFile,
+  onNewFolder,
 }: FolderTreeProps & {
   node: TreeNode;
-  onOpenSkillsMenu: (event: MouseEvent, path: string) => void;
 }) {
   if (node.isFolder) {
+    // Synthetic agents/ group is a virtual UI grouping, not a real folder —
+    // its path is __synthetic__/sub-agents which can't host files. Treat
+    // creates from its context menu as workspace-root creates.
+    const contextParent = node.synthetic ? "" : node.path;
+
     return (
-      <FileTreeFolder
-        path={node.path}
-        name={renderFolderLabel(node)}
-        onContextMenu={(event) => {
-          if (isSkillsFolderPath(node.path)) {
-            onOpenSkillsMenu(event, node.path);
-          }
-        }}
-      >
-        {node.children.map((child) => (
-          <FolderTreeItem
-            key={child.path}
-            node={child}
-            selectedPath={selectedPath}
-            expandedFolders={expandedFolders}
-            sourceFor={sourceFor}
-            updateAvailableFor={updateAvailableFor}
-            onSelect={() => {}}
-            onToggle={() => {}}
-            onAcceptUpdate={onAcceptUpdate}
-            onDelete={onDelete}
-            nodes={[]}
-            onOpenSkillsMenu={onOpenSkillsMenu}
-          />
-        ))}
-        {node.synthetic && node.children.length === 0 ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            Route specialist folders from AGENTS.md.
-          </div>
-        ) : node.children.length === 0 ? (
-          <div className="px-2 py-1 text-xs italic text-muted-foreground">
-            Empty folder
-          </div>
-        ) : null}
-      </FileTreeFolder>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <FileTreeFolder path={node.path} name={renderFolderLabel(node)}>
+            {node.children.map((child) => (
+              <FolderTreeItem
+                key={child.path}
+                node={child}
+                selectedPath={selectedPath}
+                expandedFolders={expandedFolders}
+                sourceFor={sourceFor}
+                updateAvailableFor={updateAvailableFor}
+                onSelect={() => {}}
+                onToggle={() => {}}
+                onAcceptUpdate={onAcceptUpdate}
+                onNewFile={onNewFile}
+                onNewFolder={onNewFolder}
+                nodes={[]}
+              />
+            ))}
+            {node.synthetic && node.children.length === 0 ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">
+                Route specialist folders from AGENTS.md.
+              </div>
+            ) : node.children.length === 0 ? (
+              <div className="px-2 py-1 text-xs italic text-muted-foreground">
+                Empty folder
+              </div>
+            ) : null}
+          </FileTreeFolder>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => onNewFile(contextParent)}>
+            New File
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onNewFolder(contextParent)}>
+            New Folder
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   }
 
@@ -422,10 +352,6 @@ function collectFolderPaths(nodes: TreeNode[]): Set<string> {
 
 export function subAgentsNodePath(): string {
   return SUB_AGENTS_NODE_PATH;
-}
-
-function isSkillsFolderPath(path: string): boolean {
-  return path === "skills" || path.endsWith("/skills");
 }
 
 function routedFolderPaths(routingRows: Pick<RoutingRow, "goTo">[]): string[] {

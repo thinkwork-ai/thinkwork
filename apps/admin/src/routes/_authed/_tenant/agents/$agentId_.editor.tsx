@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AgentDetailChrome } from "@/components/agents/AgentDetailChrome";
-import {
-  AGENT_WORKSPACE_DEFAULT_FILES,
-  WorkspaceEditor,
-} from "@/components/agent-builder/WorkspaceEditor";
+import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/agents/$agentId_/editor",
@@ -20,15 +17,12 @@ function AgentEditorPage() {
 
   return (
     <AgentDetailChrome agentId={agentId} activeTab="editor">
-      {({ agent }) => (
+      {() => (
         <WorkspaceEditor
           target={{ agentId }}
           mode="agent"
           agentId={agentId}
-          agentSlug={agent?.slug ?? undefined}
           initialFolder={folder}
-          bootstrapFiles={AGENT_WORKSPACE_DEFAULT_FILES}
-          bootstrapLabel="Create Default Files"
           className="min-h-[500px]"
         />
       )}

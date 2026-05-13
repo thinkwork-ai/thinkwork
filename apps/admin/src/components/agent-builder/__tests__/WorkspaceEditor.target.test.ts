@@ -7,43 +7,25 @@ import {
 } from "../WorkspaceEditor";
 
 describe("workspace editor target capabilities", () => {
-  it("keeps agent-only import and template-update review on agent targets", () => {
-    expect(workspaceEditorCapabilities("agent")).toMatchObject({
-      canImportBundle: true,
+  it("exposes only the inheritance-review flag in capabilities", () => {
+    expect(workspaceEditorCapabilities("agent")).toEqual({
       canReviewTemplateUpdates: true,
-      canAddSubAgent: true,
-      canCreateLocalSkill: true,
     });
-    expect(workspaceEditorActions("agent")).toContain("import-bundle");
+    expect(workspaceEditorCapabilities("template")).toEqual({
+      canReviewTemplateUpdates: false,
+    });
+    expect(workspaceEditorCapabilities("computer")).toEqual({
+      canReviewTemplateUpdates: false,
+    });
+    expect(workspaceEditorCapabilities("defaults")).toEqual({
+      canReviewTemplateUpdates: false,
+    });
   });
 
-  it("keeps template workspace authoring but hides agent-only import", () => {
-    expect(workspaceEditorCapabilities("template")).toMatchObject({
-      canImportBundle: false,
-      canReviewTemplateUpdates: false,
-      canAddSubAgent: true,
-      canCreateLocalSkill: true,
-    });
-    expect(workspaceEditorActions("template")).not.toContain("import-bundle");
-  });
-
-  it("treats Computer workspaces as direct file editing surfaces", () => {
-    expect(workspaceEditorCapabilities("computer")).toMatchObject({
-      canImportBundle: false,
-      canReviewTemplateUpdates: false,
-      canAddSubAgent: false,
-      canCreateLocalSkill: true,
-      canAddCatalogSkill: false,
-      canBootstrapDefaults: false,
-    });
-    expect(workspaceEditorActions("computer")).toEqual([
-      "new-skill",
-      "new-file",
-      "add-docs-folder",
-      "add-procedures-folder",
-      "add-templates-folder",
-      "add-memory-folder",
-    ]);
+  it("returns a flat new-file + new-folder action list for every mode", () => {
+    for (const mode of ["agent", "template", "computer", "defaults"] as const) {
+      expect(workspaceEditorActions(mode)).toEqual(["new-file", "new-folder"]);
+    }
   });
 
   it("keys Computer targets by durable id instead of object identity", () => {
@@ -53,24 +35,6 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorTargetKey({ computerId: "computer-marco" })).toBe(
       workspaceEditorTargetKey({ computerId: "computer-marco" }),
     );
-  });
-
-  it("limits defaults to file and folder authoring", () => {
-    expect(workspaceEditorCapabilities("defaults")).toMatchObject({
-      canImportBundle: false,
-      canReviewTemplateUpdates: false,
-      canAddSubAgent: false,
-      canCreateLocalSkill: false,
-      canBootstrapDefaults: true,
-    });
-    expect(workspaceEditorActions("defaults")).toEqual([
-      "new-file",
-      "add-docs-folder",
-      "add-procedures-folder",
-      "add-templates-folder",
-      "add-memory-folder",
-      "bootstrap",
-    ]);
   });
 
   it("keeps template workspace routes on the shared editor", () => {
@@ -83,32 +47,23 @@ describe("workspace editor target capabilities", () => {
       .join("\n");
 
     expect(routeSource).toContain("WorkspaceEditor");
-    expect(routeSource).toContain(
-      "preferRunbookSkills={templateKind === TemplateKind.Computer}",
-    );
     expect(routeSource).not.toMatch(
       /CodeMirror|WsTreeItem|buildTree|wsSelectedFile|wsContent|markdownLanguage|vscodeDark/,
     );
   });
 
-  it("keeps runbook assignment on template workspace skill folders", () => {
+  it("has no toolbar entry points to gutted flows", () => {
     const editorSource = readFileSync(
       new URL("../WorkspaceEditor.tsx", import.meta.url),
       "utf8",
     );
-    const treeSource = readFileSync(
-      new URL("../FolderTree.tsx", import.meta.url),
-      "utf8",
+    expect(editorSource).not.toMatch(/ImportDropzone/);
+    expect(editorSource).not.toMatch(/AddSubAgentDialog/);
+    expect(editorSource).not.toMatch(/from\s+["']\.\/snippets["']/);
+    expect(editorSource).not.toMatch(/AGENT_WORKSPACE_DEFAULT_FILES/);
+    expect(editorSource).not.toMatch(/FOLDER_TEMPLATES/);
+    expect(editorSource).not.toMatch(
+      /"New Skill"|"New Runbook Skill"|"Add from catalog"|"Add Runbook Skill"|"Bootstrap"|"Add Sub-agent"|"Snippets"|"Import bundle"|"Add docs\/ folder"|"Add procedures\/ folder"|"Add templates\/ folder"|"Add memory\/ folder"/,
     );
-
-    expect(workspaceEditorCapabilities("template")).toMatchObject({
-      canAddCatalogSkill: true,
-      canCreateLocalSkill: true,
-    });
-    expect(workspaceEditorActions("template")).toContain("add-catalog-skill");
-    expect(editorSource).toContain("activated by their folder under");
-    expect(editorSource).toContain("filterCatalogSkills");
-    expect(treeSource).toContain("New Runbook Skill");
-    expect(treeSource).toContain("Add Runbook Skill");
   });
 });
