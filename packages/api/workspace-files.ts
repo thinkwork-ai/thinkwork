@@ -44,6 +44,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { authenticate, type AuthResult } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
@@ -449,48 +450,45 @@ async function handleList(
   return json(200, { ok: true, files });
 }
 
+// Computer list/get bypass the computer_tasks queue and read EFS directly
+// via the workspace-files-efs sidecar Lambda. This keeps the admin
+// Workspace tab independent of the Computer runtime's heartbeat / write-
+// queue backlog — operators see files even when the runtime is hung or
+// restarting. Writes (handleComputerPut / handleComputerDelete) stay on
+// the queue path because they have ordering semantics with the runtime's
+// in-process state.
 async function handleComputerList(
   target: ComputerTarget,
   includeContent: boolean,
 ): Promise<APIGatewayProxyResult> {
-  const output = await runComputerWorkspaceTask(target, "workspace_file_list");
-  const files = asWorkspaceListOutput(output).files.map((file) => ({
-    path: file.path,
-    source: "computer",
-    sha256: "",
-    overridden: false,
-    ...(includeContent ? { content: "" } : {}),
-  }));
-
-  if (!includeContent) return json(200, { ok: true, files });
-
-  const filesWithContent = await Promise.all(
-    files.map(async (file) => {
-      const readOutput = await runComputerWorkspaceTask(
-        target,
-        "workspace_file_read",
-        { path: file.path },
-      );
-      return {
-        ...file,
-        content: asWorkspaceReadOutput(readOutput).content ?? "",
-      };
-    }),
-  );
-  return json(200, { ok: true, files: filesWithContent });
+  const result = await invokeWorkspaceFilesEfs({
+    action: "list",
+    tenantId: target.tenantId,
+    computerId: target.computerId,
+    includeContent,
+  });
+  if (!result.ok) {
+    return json(result.status, { ok: false, error: result.error });
+  }
+  return json(200, { ok: true, files: result.files });
 }
 
 async function handleComputerGet(
   target: ComputerTarget,
   path: string,
 ): Promise<APIGatewayProxyResult> {
-  const output = await runComputerWorkspaceTask(target, "workspace_file_read", {
+  const result = await invokeWorkspaceFilesEfs({
+    action: "get",
+    tenantId: target.tenantId,
+    computerId: target.computerId,
     path,
   });
-  const read = asWorkspaceReadOutput(output);
+  if (!result.ok) {
+    return json(result.status, { ok: false, error: result.error });
+  }
   return json(200, {
     ok: true,
-    content: read.content,
+    content: result.content,
     source: "computer",
     sha256: "",
   });
@@ -586,6 +584,140 @@ function asWorkspaceReadOutput(output: unknown): { content: string | null } {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// workspace-files-efs sidecar invoker
+// ---------------------------------------------------------------------------
+
+type WorkspaceFilesEfsListPayload = {
+  action: "list";
+  tenantId: string;
+  computerId: string;
+  includeContent: boolean;
+};
+
+type WorkspaceFilesEfsGetPayload = {
+  action: "get";
+  tenantId: string;
+  computerId: string;
+  path: string;
+};
+
+type WorkspaceFilesEfsPayload =
+  | WorkspaceFilesEfsListPayload
+  | WorkspaceFilesEfsGetPayload;
+
+type WorkspaceFilesEfsResponse =
+  | {
+      ok: true;
+      files: Array<{
+        path: string;
+        source: "computer";
+        sha256: string;
+        overridden: false;
+        content?: string;
+      }>;
+    }
+  | {
+      ok: true;
+      content: string | null;
+      source: "computer";
+      sha256: string;
+    }
+  | { ok: false; status: number; error: string };
+
+let lambdaClient: LambdaClient | null = null;
+
+function getLambdaClient(): LambdaClient {
+  if (!lambdaClient) lambdaClient = new LambdaClient({});
+  return lambdaClient;
+}
+
+/**
+ * Lambda → Lambda RequestResponse invoke of the workspace-files-efs
+ * sidecar. The sidecar mounts the shared EFS at /mnt/efs and reads the
+ * per-Computer subpath directly, bypassing the computer_tasks queue.
+ *
+ * Caller has already validated tenant + Computer existence + permission;
+ * the sidecar only enforces path-safety (UUID-shaped ids + no traversal).
+ *
+ * Failure modes mapped to admin-facing error payloads:
+ *   - missing env var → 500 (deployment misconfig)
+ *   - InvocationException → 502 (sidecar crashed or VPC unreachable)
+ *   - non-ok body → pass through the sidecar's {status,error}
+ */
+async function invokeWorkspaceFilesEfs(
+  payload: WorkspaceFilesEfsListPayload,
+): Promise<
+  | {
+      ok: true;
+      files: Array<{
+        path: string;
+        source: "computer";
+        sha256: string;
+        overridden: false;
+        content?: string;
+      }>;
+    }
+  | { ok: false; status: number; error: string }
+>;
+async function invokeWorkspaceFilesEfs(
+  payload: WorkspaceFilesEfsGetPayload,
+): Promise<
+  | { ok: true; content: string | null; source: "computer"; sha256: string }
+  | { ok: false; status: number; error: string }
+>;
+async function invokeWorkspaceFilesEfs(
+  payload: WorkspaceFilesEfsPayload,
+): Promise<WorkspaceFilesEfsResponse> {
+  const fnArn = process.env.WORKSPACE_FILES_EFS_FN_ARN;
+  if (!fnArn) {
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "WORKSPACE_FILES_EFS_FN_ARN is not configured on the workspace-files Lambda",
+    };
+  }
+  let result;
+  try {
+    result = await getLambdaClient().send(
+      new InvokeCommand({
+        FunctionName: fnArn,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(JSON.stringify(payload)),
+      }),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      status: 502,
+      error: `workspace-files-efs invoke failed: ${message}`,
+    };
+  }
+  if (result.FunctionError) {
+    const message = result.Payload
+      ? new TextDecoder().decode(result.Payload)
+      : result.FunctionError;
+    return {
+      ok: false,
+      status: 502,
+      error: `workspace-files-efs returned an error: ${message}`,
+    };
+  }
+  if (!result.Payload) {
+    return {
+      ok: false,
+      status: 502,
+      error: "workspace-files-efs returned an empty payload",
+    };
+  }
+  const body = JSON.parse(
+    new TextDecoder().decode(result.Payload),
+  ) as WorkspaceFilesEfsResponse;
+  return body;
 }
 
 function isSkillMarkerPath(path: string): boolean {

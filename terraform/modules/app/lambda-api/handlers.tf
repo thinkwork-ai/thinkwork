@@ -147,6 +147,14 @@ locals {
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
     }
+    # workspace-files invokes the workspace-files-efs sidecar (Request
+    # Response) for Computer-target list/get to bypass the computer_tasks
+    # queue. ARN constructed from the naming pattern to avoid a self-
+    # referential dependency on the standalone Lambda resource defined at
+    # the bottom of this file.
+    "workspace-files" = {
+      WORKSPACE_FILES_EFS_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs"
+    }
     # computer-manager and computer-runtime-reconciler consume ECS/EFS task
     # config from packages/api/src/lib/computers/runtime-control.ts.
     # Scoping the COMPUTER_RUNTIME_* variables here (instead of in
@@ -1693,4 +1701,77 @@ resource "aws_cloudwatch_metric_alarm" "compliance_exports_dlq_depth" {
   dimensions = {
     QueueName = aws_sqs_queue.compliance_exports_dlq[0].name
   }
+}
+
+# ---------------------------------------------------------------------------
+# workspace-files-efs — STANDALONE Lambda that reads any Computer's workspace
+# files directly off the shared EFS file system. Bypasses the
+# computer_tasks queue for list/get operations so the admin Computer
+# Workspace tab is independent of runtime liveness or write-queue backlog.
+#
+# Plan: docs/plans/2026-05-13-XXX-feat-admin-computer-efs-listing-plan.md
+#
+# The Lambda mounts the `workspace_admin` access point at /mnt/efs. That
+# access point is rooted at /tenants on the shared EFS, so the handler
+# can address any Computer's workspace as
+#   /mnt/efs/<tenantId>/computers/<computerId>/<path...>
+# (matches the layout written by `computerWorkspacePath` in
+# packages/api/src/lib/computers/runtime-control.ts:40).
+#
+# VPC config: same subnet set the Computer ECS tasks use (so the mount
+# targets are reachable). Dedicated security group with an EFS-SG ingress
+# rule defined as a sibling of the task-SG rule in the computer-runtime
+# module — keeps Lambda traffic auditable separately.
+#
+# Writes intentionally stay on the existing computer_tasks queue path.
+# Mutations have ordering semantics with the runtime's in-process state;
+# changing them is out of scope for this PR.
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function" "workspace_files_efs" {
+  count = local.use_local_zips ? 1 : 0
+
+  function_name = "thinkwork-${var.stage}-api-workspace-files-efs"
+  role          = aws_iam_role.lambda.arn
+  handler       = "index.handler"
+  runtime       = local.runtime
+  timeout       = 30
+  memory_size   = 512
+
+  filename         = "${var.lambda_zips_dir}/workspace-files-efs.zip"
+  source_code_hash = filebase64sha256("${var.lambda_zips_dir}/workspace-files-efs.zip")
+
+  vpc_config {
+    subnet_ids         = var.computer_runtime_subnet_ids
+    security_group_ids = [var.workspace_admin_lambda_sg_id]
+  }
+
+  file_system_config {
+    arn              = var.workspace_admin_efs_access_point_arn
+    local_mount_path = "/mnt/efs"
+  }
+
+  environment {
+    variables = {
+      STAGE                               = var.stage
+      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+      WORKSPACE_EFS_ROOT                  = "/mnt/efs"
+    }
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-api-workspace-files-efs"
+    Handler = "workspace-files-efs"
+  }
+}
+
+# VPC-attached Lambdas need permission to manage ENIs. The shared lambda
+# role doesn't grant this by default because most handlers run outside a
+# VPC. AWSLambdaVPCAccessExecutionRole gives Create/Describe/DeleteNetwork
+# Interface — minimum scope for VPC Lambdas.
+resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
+  count = local.use_local_zips ? 1 : 0
+
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

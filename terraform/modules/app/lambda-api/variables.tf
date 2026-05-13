@@ -274,6 +274,18 @@ variable "computer_runtime_manager_policy_arn" {
   default     = ""
 }
 
+variable "workspace_admin_efs_access_point_arn" {
+  description = "Shared EFS access point ARN consumed by the workspace-files-efs Lambda. Rooted at /tenants on the Computer runtime EFS file system so a single Lambda can resolve any (tenantId, computerId) at request time."
+  type        = string
+  default     = ""
+}
+
+variable "workspace_admin_lambda_sg_id" {
+  description = "Security group ID assigned to the workspace-files-efs Lambda. Allowed NFS into the Computer runtime EFS security group via a sibling ingress rule defined in the computer-runtime module."
+  type        = string
+  default     = ""
+}
+
 variable "admin_url" {
   description = "Admin app URL (e.g. https://d3li9vbqnhv7w.cloudfront.net)"
   type        = string
