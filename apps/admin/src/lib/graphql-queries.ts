@@ -2265,6 +2265,20 @@ export const AdminAppletQuery = graphql(`
       }
       source
       metadata
+      themeCss
+    }
+  }
+`);
+
+export const AdminUpdateAppletSourceMutation = graphql(`
+  mutation AdminUpdateAppletSource($input: AdminUpdateAppletSourceInput!) {
+    adminUpdateAppletSource(input: $input) {
+      ok
+      appId
+      version
+      validated
+      persisted
+      errors
     }
   }
 `);

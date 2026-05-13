@@ -235,6 +235,7 @@ export const AppletQuery = gql`
       source
       files
       metadata
+      themeCss
       applet {
         ...AppletPreviewFields
       }

@@ -99,6 +99,7 @@ export async function loadApplet(args: {
   artifact: AppletArtifactRow & Record<string, unknown>;
   metadata: AppletMetadataV1;
   source: string;
+  themeCss?: string;
 }> {
   const [row] = await db
     .select()
@@ -111,23 +112,26 @@ export async function loadApplet(args: {
   }
 
   const caller = args.caller ?? (await resolveCaller(args.ctx));
-  const metadata = await withTenantAppletTheme(
+  const metadata = stripArtifactOwnedTheme(
     assertAppletArtifactAccess(row, caller),
   );
+  const themeCss = await loadTenantAppletThemeCss(metadata.tenantId);
   const source = await readSource(row);
-  return { artifact: row, metadata, source };
+  return { artifact: row, metadata, source, themeCss };
 }
 
 export function toAppletPayload(input: {
   artifact: AppletArtifactRow & Record<string, unknown>;
   metadata: AppletMetadataV1;
   source: string;
+  themeCss?: string;
 }) {
   return {
     applet: toAppletPreview(input.artifact, input.metadata),
     files: { [DEFAULT_APPLET_FILE]: input.source },
     source: input.source,
     metadata: input.metadata,
+    themeCss: input.themeCss ?? null,
   };
 }
 
@@ -184,6 +188,7 @@ export async function loadAdminApplet(args: {
   artifact: AppletArtifactRow & Record<string, unknown>;
   metadata: AppletMetadataV1;
   source: string;
+  themeCss?: string;
 }> {
   const [row] = await db
     .select()
@@ -196,14 +201,15 @@ export async function loadAdminApplet(args: {
   }
 
   await requireTenantAdmin(args.ctx, row.tenant_id);
-  const metadata = await withTenantAppletTheme(
+  const metadata = stripArtifactOwnedTheme(
     assertAppletArtifactAccess(row, {
       tenantId: row.tenant_id,
       userId: null,
     }),
   );
+  const themeCss = await loadTenantAppletThemeCss(metadata.tenantId);
   const source = await readSource(row);
-  return { artifact: row, metadata, source };
+  return { artifact: row, metadata, source, themeCss };
 }
 
 export async function listAdminApplets(args: {
@@ -266,7 +272,7 @@ export async function saveAppletInner(args: {
   ctx: GraphQLContext;
   input: SaveAppletInput;
   regenerate: boolean;
-  writeMode?: "service" | "draft_promotion";
+  writeMode?: "service" | "draft_promotion" | "admin";
   tenantId?: string;
   promotionCaller?: { tenantId: string | null; userId: string | null };
 }): Promise<SaveAppletPayload> {
@@ -285,6 +291,8 @@ export async function saveAppletInner(args: {
   }
   if (args.writeMode === "draft_promotion") {
     assertCanPromoteDraftApplet(args.ctx, tenantId, args.promotionCaller);
+  } else if (args.writeMode === "admin") {
+    await requireTenantAdmin(args.ctx, tenantId);
   } else {
     assertCanWriteApplet(args.ctx, tenantId);
   }
@@ -438,6 +446,26 @@ export async function saveAppletInner(args: {
     persisted: true,
     errors: [],
   };
+}
+
+export async function adminUpdateAppletSourceInner(args: {
+  ctx: GraphQLContext;
+  appId: string;
+  source: string;
+}): Promise<SaveAppletPayload> {
+  const existing = await loadAdminApplet({ appId: args.appId, ctx: args.ctx });
+  return saveAppletInner({
+    ctx: args.ctx,
+    tenantId: existing.metadata.tenantId,
+    regenerate: true,
+    writeMode: "admin",
+    input: {
+      appId: args.appId,
+      name: existing.metadata.name,
+      files: { [DEFAULT_APPLET_FILE]: args.source },
+      metadata: existing.metadata,
+    },
+  });
 }
 
 async function readSource(artifact: AppletArtifactRow): Promise<string> {
@@ -680,10 +708,12 @@ async function loadExistingForWrite(args: {
     .from(artifacts)
     .where(eq(artifacts.id, args.appId));
   if (!row) return null;
-  const metadata = assertAppletArtifactAccess(row, {
-    tenantId: args.tenantId,
-    userId: args.ctx.auth.principalId,
-  });
+  const metadata = stripArtifactOwnedTheme(
+    assertAppletArtifactAccess(row, {
+      tenantId: args.tenantId,
+      userId: args.ctx.auth.principalId,
+    }),
+  );
   return { artifact: row, metadata };
 }
 
@@ -706,27 +736,30 @@ function toAppletPreview(
   };
 }
 
-async function withTenantAppletTheme(
-  metadata: AppletMetadataV1,
-): Promise<AppletMetadataV1> {
-  if (metadata.appletTheme) return metadata;
+async function loadTenantAppletThemeCss(
+  tenantId: string,
+): Promise<string | undefined> {
   const [settings] = await db
     .select({ features: tenantSettings.features })
     .from(tenantSettings)
-    .where(eq(tenantSettings.tenant_id, metadata.tenantId))
+    .where(eq(tenantSettings.tenant_id, tenantId))
     .limit(1);
-  const appletTheme = parseTenantAppletTheme(settings?.features);
-  return appletTheme ? { ...metadata, appletTheme } : metadata;
+  return parseTenantAppletThemeCss(settings?.features);
 }
 
-function parseTenantAppletTheme(
-  features: unknown,
-): AppletMetadataV1["appletTheme"] | undefined {
+function parseTenantAppletThemeCss(features: unknown): string | undefined {
   const root = parseJsonObject(features);
   const artifactStyle = parseJsonObject(root?.artifactStyle);
-  return parseAppletThemeMetadata(
-    artifactStyle?.appletTheme ?? root?.appletTheme,
-  );
+  return parseAppletThemeCss(artifactStyle?.appletTheme ?? root?.appletTheme);
+}
+
+function stripArtifactOwnedTheme(metadata: AppletMetadataV1): AppletMetadataV1 {
+  const {
+    appletTheme: _legacyAppletTheme,
+    shadcnTheme: _legacyShadcnTheme,
+    ...clean
+  } = metadata as AppletMetadataV1 & { shadcnTheme?: unknown };
+  return clean;
 }
 
 function parseAppletFiles(
@@ -812,8 +845,6 @@ function buildAppletMetadata(args: {
       "shadcnProvenance",
       args.fallback?.shadcnProvenance,
     ),
-    appletTheme:
-      parseAppletThemeMetadata(input.appletTheme) ?? args.fallback?.appletTheme,
   };
 
   return Object.fromEntries(
@@ -821,22 +852,14 @@ function buildAppletMetadata(args: {
   ) as AppletMetadataV1;
 }
 
-function parseAppletThemeMetadata(
-  input: unknown,
-): AppletMetadataV1["appletTheme"] | undefined {
+function parseAppletThemeCss(input: unknown): string | undefined {
   const value = parseJsonObject(input);
   if (!value) return undefined;
   if (typeof value.css !== "string") return undefined;
   const css = value.css.trim();
   if (!css || css.length > 20_000) return undefined;
   if (!css.includes(":root") && !css.includes(".dark")) return undefined;
-  return {
-    source:
-      typeof value.source === "string" && value.source.trim()
-        ? value.source.trim()
-        : "shadcn-create",
-    css,
-  };
+  return css;
 }
 
 function parseDraftPreviewMetadata(

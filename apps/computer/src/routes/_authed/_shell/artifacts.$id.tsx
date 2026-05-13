@@ -119,7 +119,9 @@ export function AppletRouteContent({ appId }: { appId: string }) {
     if (!source) return;
     setHeaderAction(null);
     setMountedSnapshot((current) => {
-      if (current?.appId === appId) return current;
+      if (current?.appId === appId && current.themeCss === themeCss) {
+        return current;
+      }
       return {
         appId,
         instanceId,

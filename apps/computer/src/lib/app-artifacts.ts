@@ -1,5 +1,4 @@
 import { computerArtifactRoute } from "@/lib/computer-routes";
-import { appletThemeCssFromMetadata } from "@/applets/theme-tokens";
 
 export const GENERATED_APP_RUNTIME_MODE = "sandboxedGenerated" as const;
 
@@ -52,6 +51,7 @@ export interface AppletPayload {
   source?: string | null;
   files?: Record<string, string> | null;
   metadata?: unknown;
+  themeCss?: string | null;
   applet?: AppletPreviewNode | null;
 }
 
@@ -74,7 +74,7 @@ export function resolveGeneratedAppRuntimeMode(
 }
 
 export function appletThemeCss(applet: AppletPayload | null): string | null {
-  return appletThemeCssFromMetadata(applet?.metadata);
+  return applet?.themeCss?.trim() || null;
 }
 
 export function shortModel(value?: string | null, fallback = "—"): string {

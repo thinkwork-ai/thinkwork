@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  appletThemeCssFromMetadata,
-  buildAppletTheme,
-  parseShadcnThemeCss,
-} from "./theme-tokens";
+import { parseShadcnThemeCss } from "./theme-tokens";
 
 describe("shadcn applet theme tokens", () => {
   const css = `
@@ -40,15 +36,12 @@ describe("shadcn applet theme tokens", () => {
     expect(parsed["--bad"]).toBeUndefined();
   });
 
-  it("normalizes applet theme metadata", () => {
-    expect(buildAppletTheme(css)).toEqual({
-      source: "shadcn-create",
-      css: css.trim(),
-    });
+  it("does not read theme tokens from artifact metadata", () => {
     expect(
-      appletThemeCssFromMetadata({
-        appletTheme: { source: "shadcn-create", css },
-      }),
-    ).toBe(css.trim());
+      parseShadcnThemeCss(
+        ":root { --background: oklch(1 0 0); }",
+        "light",
+      ),
+    ).toEqual({ "--background": "oklch(1 0 0)" });
   });
 });

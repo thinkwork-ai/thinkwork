@@ -66,7 +66,7 @@ Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStr
 
 Theme requirements:
 
-- Prefer user-provided shadcn Create theme tokens when available. Users may paste or upload the Theme CSS copied from `ui.shadcn.com/create`; preserve that CSS in `metadata.appletTheme = { source: "shadcn-create", css: "..." }` for both preview and save so the host can inject the tokens into the rendered iframe.
+- Prefer host-injected shadcn Create theme tokens when available. Users configure Theme CSS through tenant app style settings; do not preserve that CSS in artifact metadata or generated TSX.
 - Write component classes against shadcn semantic tokens: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, `text-primary`, `text-destructive`, and `bg-accent`.
 - Use chart colors from CSS variables (`var(--chart-1)` through `var(--chart-5)`) or `ChartContainer` config. Never set bars, lines, or tooltip text to black on dark surfaces.
 - Do not invent a one-off palette in TSX. Avoid raw hex colors unless the value comes directly from validated theme tokens.
@@ -100,6 +100,6 @@ Call `save_app` directly in the parent Computer turn. Include:
 - `metadata.recipeVersion`: `2`.
 - `metadata.runbookSlug`: `crm-dashboard`.
 - `metadata.dataShape`: `CrmDashboardData`.
-- `metadata.appletTheme`: user-provided shadcn Create theme CSS when available.
+- Do not include theme CSS or app-owned theme objects in metadata.
 
 Only report success after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`. If `save_app` fails once, return the concrete error and stop instead of regenerating repeatedly.
