@@ -368,10 +368,23 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     assert "## Computer Thread Contract" in captured["system_prompt"]
     assert "use the artifact-builder skill if it is available" in captured["system_prompt"]
     assert "treat Artifact Builder as the phase implementation detail" in captured["system_prompt"]
-    assert "expected result is a saved Computer applet" in captured["system_prompt"]
-    assert "keep the applet implementation and save_app" in captured["system_prompt"]
+    assert (
+        "expected first result is an unsaved Computer applet preview" in captured["system_prompt"]
+    )
+    assert (
+        "Before emitting TSX for generated apps, consult the shadcn registry"
+        in captured["system_prompt"]
+    )
+    assert "list_components, search_registry" in captured["system_prompt"]
+    assert (
+        "uiRegistryVersion, uiRegistryDigest, and shadcnMcpToolCalls" in captured["system_prompt"]
+    )
+    assert "keep the applet implementation, preview_app" in captured["system_prompt"]
     assert "Do not" in captured["system_prompt"]
-    assert "delegate applet saving" in captured["system_prompt"]
+    assert (
+        "delegate or delegate_to_workspace to write, generate, preview, or save"
+        in captured["system_prompt"]
+    )
     assert "unless your own successful save_app tool call" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
     assert captured["suppress_app_build_helper_tools"] is True

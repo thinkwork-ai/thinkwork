@@ -1,0 +1,15 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "host-map",
+  "type": "registry:component",
+  "title": "MapView",
+  "description": "The only approved generated-app map primitive.",
+  "dependencies": ["leaflet"],
+  "registryDependencies": [],
+  "files": [
+    {
+      "path": "../computer-stdlib/src/primitives/MapView.tsx",
+      "type": "registry:component"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "card",
+  "type": "registry:component",
+  "title": "Card",
+  "description": "Approved framed panel primitive for generated apps.",
+  "dependencies": [],
+  "registryDependencies": [],
+  "files": [
+    { "path": "src/components/ui/card.tsx", "type": "registry:component" }
+  ]
+}

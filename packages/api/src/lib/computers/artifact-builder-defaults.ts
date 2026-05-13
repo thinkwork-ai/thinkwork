@@ -36,6 +36,8 @@ const UPGRADABLE_ARTIFACT_BUILDER_SHA256_BY_PATH = new Map<string, Set<string>>(
         "d14a7c4af83f83026aa95bc0a6f85ee76e3f2614dd94568a61bfe5a355e3d96e",
         // PR #1166 default before dashboard visual quality and no-emoji icon rules.
         "a29ce8d2efb38b5e138022d541f0b9213703c3696b5941f8da047c750156ae1f",
+        // PR #1187 default before preview-first shadcn registry guidance.
+        "78a41afa11db6c8c4f2df7dca3f87f6c3b49148c63675d2978715a63988e6005",
       ]),
     ],
     [

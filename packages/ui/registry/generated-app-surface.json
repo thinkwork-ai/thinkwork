@@ -1,0 +1,27 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "generated-app-surface",
+  "type": "registry:block",
+  "title": "Thinkwork Generated App Components",
+  "description": "Approved shadcn-compatible component surface for Computer-generated TSX applets.",
+  "dependencies": ["@thinkwork/ui", "@thinkwork/computer-stdlib", "recharts"],
+  "registryDependencies": [
+    "button",
+    "card",
+    "badge",
+    "tabs",
+    "table",
+    "data-table",
+    "select",
+    "dropdown-menu",
+    "combobox",
+    "chart-container",
+    "host-map"
+  ],
+  "files": [
+    {
+      "path": "registry/generated-app-components.json",
+      "type": "registry:file"
+    }
+  ]
+}

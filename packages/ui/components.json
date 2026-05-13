@@ -18,5 +18,8 @@
     "ui": "@thinkwork/ui",
     "lib": "@thinkwork/ui",
     "hooks": "@thinkwork/ui"
+  },
+  "registries": {
+    "@thinkwork": "./registry/{name}.json"
   }
 }

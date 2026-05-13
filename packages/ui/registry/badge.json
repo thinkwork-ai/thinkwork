@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "badge",
+  "type": "registry:component",
+  "title": "Badge",
+  "description": "Approved status/tag primitive for generated apps.",
+  "dependencies": ["class-variance-authority"],
+  "registryDependencies": [],
+  "files": [
+    { "path": "src/components/ui/badge.tsx", "type": "registry:component" }
+  ]
+}

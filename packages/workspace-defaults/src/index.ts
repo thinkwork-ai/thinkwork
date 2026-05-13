@@ -598,9 +598,9 @@ description: Builds reusable ThinkWork Computer apps and interactive artifacts f
 
 # Artifact Builder
 
-Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a saved app, not just a prose answer.
+Use this skill when the user wants Computer to produce an interactive, reusable artifact. The expected output is a fast unsaved app preview first, not just a prose answer. Save only after the user asks to keep it or an active runbook explicitly requires durable output.
 
-This skill is a compatibility shim for the published ThinkWork runbooks. When a Runbook Execution Context is present, the runbook phase guidance is the source of truth and this skill supplies only the artifact-generation and \`save_app\` mechanics for the current phase. Do not replace the active runbook with a separate plan.
+This skill is a compatibility shim for the published ThinkWork runbooks. When a Runbook Execution Context is present, the runbook phase guidance is the source of truth and this skill supplies only the artifact-generation, preview, and optional \`save_app\` mechanics for the current phase. Do not replace the active runbook with a separate plan.
 
 ## Contract
 
@@ -608,12 +608,13 @@ This skill is a compatibility shim for the published ThinkWork runbooks. When a 
 2. If live sources are missing or partial, keep going with the best available workspace, memory, context, web, or fixture data. Keep the visible app focused on the user's requested output; do not render provenance, source coverage, or recipe/refresh explainers unless the user explicitly asks for them.
 3. For CRM pipeline, opportunity, sales-risk, stage-exposure, stale-activity, or LastMile dashboard prompts outside an active runbook, load and follow \`skills/artifact-builder/references/crm-dashboard.md\` before writing TSX. Use that full workspace path, not a relative \`references/...\` path. During an active runbook, prefer the runbook's current phase guidance and use the reference only as fallback detail.
 4. Keep app generation and saving in this parent turn. Do not use \`delegate\` or \`delegate_to_workspace\` to write, generate, or save the app.
-5. Generate TSX using shadcn-compatible primitives from \`@thinkwork/ui\` plus domain primitives from \`@thinkwork/computer-stdlib\`. Do not hand-roll cards, tabs, badges, buttons, tables, separators, or scroll containers when a local primitive exists.
-6. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
-7. Call \`save_app\` directly before responding. Pass at least \`name\`, \`files\`, and \`metadata\`.
-8. Include \`threadId\`, \`prompt\`, \`agentVersion\`, and \`modelId\` in metadata when available.
-9. After \`save_app\` returns \`ok\`, answer concisely with what was created and the \`/artifacts/{appId}\` route.
-10. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Use \`lucide-react\` or \`@tabler/icons-react\` when an icon helps; otherwise use plain text or styled badges.
+5. Before writing TSX, consult the shadcn registry source for generated apps. Use the shadcn MCP tools when available: \`list_components\`, \`search_registry\`, \`get_component_source\`, and \`get_block\`. If MCP is unavailable, use the compact local registry generated from \`packages/ui/registry/generated-app-components.json\` or the runtime \`shadcn_registry\` helper. If neither source is available, stop with a structured guidance error instead of emitting TSX.
+6. Generate TSX using approved shadcn-compatible primitives from \`@thinkwork/ui\` plus approved domain primitives from \`@thinkwork/computer-stdlib\`. You must use approved shadcn primitives for their roles. Hand-rolled replacements for cards, tabs, badges, buttons, tables, selects, form controls, dialogs, sheets, separators, tooltips, scroll areas, charts, or maps are rejected.
+7. Export a deterministic \`refresh()\` function whenever the result should be refreshable. Refresh must rerun saved source queries or deterministic transforms; it must not reinterpret the whole user request.
+8. Call \`preview_app\` before responding. Pass at least \`name\`, \`files\`, and \`metadata\`. Metadata must include \`threadId\`, \`prompt\`, \`agentVersion\`, \`modelId\`, \`uiRegistryVersion\`, \`uiRegistryDigest\`, and \`shadcnMcpToolCalls\` when available. Use \`["local_registry_fallback"]\` for \`shadcnMcpToolCalls\` when MCP was unavailable but the local registry was consulted.
+9. Call \`save_app\` only after the user explicitly asks to save/keep the preview, or when an active runbook phase explicitly requires a durable saved artifact. Save metadata must preserve the preview's registry, data-provenance, prompt, source, agent, and model metadata.
+10. After \`preview_app\` returns \`ok\`, answer concisely with what is ready to inspect. After \`save_app\` returns \`ok\`, answer concisely with what was saved and the \`/artifacts/{appId}\` route.
+11. Never use emoji as icons, status markers, bullets, tabs, headings, empty states, or data labels in generated apps. Do not import general icon packs such as \`lucide-react\` or \`@tabler/icons-react\`; icon use must come through approved registry components or a specific host allowlist export.
 
 ## Host Chrome And Runtime
 
@@ -621,7 +622,7 @@ The Computer host renders generated Apps inside host-provided Artifact chrome: t
 
 Do not create an outer artifact card, duplicate route header, \`App\` badge, "Open full" button, refresh recipe, source coverage, evidence, or provenance panel unless the user explicitly asks for that in the app body.
 
-Generated Apps run in the sandboxed iframe runtime. Do not assume access to parent app globals, credentials, cookies, local storage, window navigation, network, dynamic imports, or browser APIs outside the supported stdlib surface.
+Generated Apps run in the sandboxed iframe runtime for both preview and save. Do not assume access to parent app globals, credentials, cookies, local storage, window navigation, network, dynamic imports, or browser APIs outside the supported stdlib surface.
 
 ## App Shape
 
@@ -629,13 +630,13 @@ Use \`App.tsx\` as the main file. Export one default React component. Prefer con
 
 ## Component System
 
-Generated dashboards must look like ThinkWork product UI, not raw HTML. Import structure and controls from \`@thinkwork/ui\`: \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardDescription\`, \`CardContent\`, \`Badge\`, \`Button\`, \`Tabs\`, \`TabsList\`, \`TabsTrigger\`, \`TabsContent\`, \`Table\`, \`TableHeader\`, \`TableBody\`, \`TableRow\`, \`TableHead\`, \`TableCell\`, \`ScrollArea\`, and \`Separator\` where applicable.
+Generated dashboards must look like ThinkWork product UI, not raw HTML. The shadcn registry is the source of truth for approved generated-app components, examples, roles, and substitutions. Import structure and controls from \`@thinkwork/ui\`: \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardDescription\`, \`CardContent\`, \`Badge\`, \`Button\`, \`Tabs\`, \`TabsList\`, \`TabsTrigger\`, \`TabsContent\`, \`Table\`, \`TableHeader\`, \`TableBody\`, \`TableRow\`, \`TableHead\`, \`TableCell\`, \`Select\`, \`Checkbox\`, \`Switch\`, \`Tooltip\`, \`Dialog\`, \`Sheet\`, \`ScrollArea\`, \`Separator\`, \`ChartContainer\`, \`Combobox\`, and \`DropdownMenu\` where applicable.
 
 Use \`@thinkwork/computer-stdlib\` for semantic dashboard primitives such as \`AppHeader\`, \`KpiStrip\`, \`BarChart\`, \`StackedBarChart\`, \`DataTable\`, \`MapView\`, and formatters. It is fine to combine stdlib charts with \`@thinkwork/ui\` layout chrome.
 
-Do not use emoji icons. Import icons from \`lucide-react\` only when an icon is needed.
+Do not use emoji icons. Do not import raw icon packs. Use plain text, \`Badge\`, or an approved registry component unless a host allowlist export explicitly provides the needed icon.
 
-Do not create adjacent plain text tabs, raw \`<table>\` layouts for tabular data, inline-pill badges, or bespoke card CSS. Tabs must use \`Tabs\`/\`TabsList\`/\`TabsTrigger\`; data grids must use \`DataTable\` or \`Table\`; status labels must use \`Badge\`; metric panels must use \`Card\` or \`KpiStrip\`.
+Do not create adjacent plain text tabs, raw \`<button>\` controls, raw \`<table>\` layouts for tabular data, raw form controls, inline-pill badges, chart wrappers outside \`ChartContainer\`, or bespoke card CSS. Tabs must use \`Tabs\`/\`TabsList\`/\`TabsTrigger\`; data grids must use \`DataTable\` or \`Table\`; status labels must use \`Badge\`; metric panels must use \`Card\` or \`KpiStrip\`; charts must use the approved chart surface; maps must use \`MapView\`.
 
 Good apps include:
 
@@ -652,9 +653,17 @@ When the user asks for a map (locations, regions, routes, geographic comparisons
 
 Pass \`fit\` (one of \`{type: "country", code: "<ISO-3166-1-alpha-2>"}\`, \`{type: "bbox", bounds: [[lat,lng],[lat,lng]]}\`, or \`{type: "auto"}\`) plus optional \`markers\`, \`polylines\`, and \`geojson\` arrays. See \`@thinkwork/computer-stdlib/MapView\` for the full prop shape.
 
+## Preview And Save
+
+The first useful result should be an unsaved preview. \`preview_app\` validates and renders the same TSX payload shape that \`save_app\` persists later, using the same generated-app policy. Do not save every preview as a durable artifact row.
+
+Use only real available data, partial real data, or honest empty states. Do not invent CRM accounts, customers, metrics, events, opportunities, locations, or evidence to make a preview look complete. Missing or partial inputs should produce a runnable app with proportional empty states and concise limitations.
+
+When the user asks to save, promote the preview by calling \`save_app\` with the same files and provenance metadata. Include the preview's \`uiRegistryVersion\`, \`uiRegistryDigest\`, and \`shadcnMcpToolCalls\` or \`["local_registry_fallback"]\` so the saved artifact records which shadcn registry source shaped the TSX.
+
 ## Missing Data
 
-Missing data is not a reason to stop before creating the artifact. Create a runnable app that handles gaps gracefully, then ask for source setup or approval as a follow-up when needed.
+Missing data is not a reason to stop before creating the preview. Create a runnable app that handles gaps gracefully, then ask for source setup, approval, or save confirmation as a follow-up when needed.
 
 For the LastMile CRM pipeline risk prompt, build an app that covers stale activity, stage exposure, and top risks. If live LastMile CRM records are unavailable, use the canonical LastMile-shaped structure and mention limitations only when they materially affect the displayed result.
 
@@ -666,7 +675,7 @@ For published runbooks, treat artifact creation as the implementation detail of 
 - Research Dashboard uses the \`research-dashboard\` runbook and should expose findings, evidence, confidence, and caveats.
 - Map Artifact uses the \`map-artifact\` runbook and \`MapView\` from \`@thinkwork/computer-stdlib\`.
 
-Always preserve runbook queue semantics: complete the current task, save the artifact through \`save_app\`, and report the saved \`/artifacts/{appId}\` route only after persistence succeeds.
+Always preserve runbook queue semantics: complete the current task, preview the artifact through \`preview_app\`, save through \`save_app\` only when the runbook phase requires persistence, and report the saved \`/artifacts/{appId}\` route only after persistence succeeds.
 `;
 
 /**

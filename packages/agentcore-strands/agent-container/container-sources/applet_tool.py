@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+from shadcn_registry import ShadcnRegistryUnavailable, registry_digest
 
 try:
     from strands import tool
@@ -231,20 +232,20 @@ def make_save_app_fn(
     ) -> dict[str, Any]:
         """Save or regenerate a Computer applet.
 
-        Use this after generating TSX applet source. For Computer requests to
-        build or create an app, applet, dashboard, briefing, report, or other
-        interactive work surface, do not stop at a prose answer: generate a
-        runnable applet and call save_app before responding. Pass one or more
-        source files, structured metadata, and an optional app_id. Omitting
-        app_id creates a new applet; providing app_id regenerates that stable
-        applet. Include a deterministic refresh() export in the TSX source
-        whenever the result should be refreshable. Dashboard applets should
-        render real visual UI such as KPI strips, charts, tables, maps, or
-        timelines, not prose-only markdown reports. Do not use emoji as icons,
-        status markers, bullets, tabs, headings, empty states, or data labels.
-        Generated source must use approved shadcn/@thinkwork/ui and
-        @thinkwork/computer-stdlib primitives; raw lucide-react, raw map
+        Use this after a preview when the user explicitly asks to save or an
+        active runbook phase requires durable output. Pass one or more source
+        files, structured metadata, and an optional app_id. Omitting app_id
+        creates a new applet; providing app_id regenerates that stable applet.
+        Include a deterministic refresh() export in the TSX source whenever
+        the result should be refreshable. Dashboard applets should render real
+        visual UI such as KPI strips, charts, tables, maps, or timelines, not
+        prose-only markdown reports. Do not use emoji as icons, status markers,
+        bullets, tabs, headings, empty states, or data labels. Generated source
+        must use approved shadcn/@thinkwork/ui and @thinkwork/computer-stdlib
+        primitives from the shadcn registry guidance; raw lucide-react, raw map
         libraries, raw controls/tables, and bespoke visual styling are rejected.
+        Metadata must preserve uiRegistryVersion, uiRegistryDigest, and
+        shadcnMcpToolCalls from the preview when available.
         """
 
         return await _call_seam(
@@ -299,7 +300,8 @@ def make_preview_app_fn(
         metadata.shadcnMcpToolCalls / metadata.uiRegistryDigest when available.
         Generated source must use approved shadcn/@thinkwork/ui primitives and
         must not use lucide-react, raw map libraries, raw controls/tables, or
-        bespoke visual styling.
+        bespoke visual styling. Consult shadcn MCP tools or the local
+        shadcn_registry fallback before emitting TSX.
         """
 
         return await _call_seam(
@@ -512,9 +514,14 @@ def _data_provenance(metadata: dict[str, Any]) -> dict[str, Any]:
 
 def _shadcn_provenance(metadata: dict[str, Any]) -> dict[str, Any]:
     calls = metadata.get("shadcnMcpToolCalls")
+    try:
+        digest = registry_digest()
+    except ShadcnRegistryUnavailable:
+        digest = ""
     return {
         "uiRegistryVersion": metadata.get("uiRegistryVersion") or "generated-app-policy:v1",
-        "uiRegistryDigest": metadata.get("uiRegistryDigest") or "",
+        "uiRegistryDigest": metadata.get("uiRegistryDigest") or digest,
+        "registrySource": metadata.get("shadcnRegistrySource") or "local_registry",
         "mcpToolCalls": calls if isinstance(calls, list) else [],
     }
 
