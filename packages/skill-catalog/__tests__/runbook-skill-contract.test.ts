@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -253,6 +259,34 @@ metadata:
           ),
         ),
       ).toBe(false);
+    }
+  });
+
+  it("crm-dashboard skill exposes the shadcn dashboard contract in its primary prompt", () => {
+    const skillBody = readFileSync(
+      join(catalogRoot, "crm-dashboard", "SKILL.md"),
+      "utf8",
+    );
+    const produceBody = readFileSync(
+      join(catalogRoot, "crm-dashboard", "references", "produce.md"),
+      "utf8",
+    );
+    const requiredTerms = [
+      "@thinkwork/ui",
+      "Card",
+      "Badge",
+      "Tabs",
+      "Table",
+      "DataTable",
+      "KpiStrip",
+      "lucide-react",
+      "@tabler/icons-react",
+      "save_app",
+    ];
+
+    for (const term of requiredTerms) {
+      expect(skillBody).toContain(term);
+      expect(produceBody).toContain(term);
     }
   });
 });
