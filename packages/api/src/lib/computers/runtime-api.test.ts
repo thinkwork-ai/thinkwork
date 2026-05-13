@@ -109,6 +109,9 @@ import {
   recordComputerHeartbeat,
   recordThreadTurnResponse,
   resolveGoogleWorkspaceCliToken,
+  buildDraftAppletSourceDigest,
+  draftPreviewPartsFromUsage,
+  verifyDraftAppletPromotionProof,
 } from "./runtime-api.js";
 
 describe("Computer runtime API Google Workspace status", () => {
@@ -922,6 +925,64 @@ describe("Computer runtime API thread turn execution", () => {
     );
   });
 
+  it("persists draft preview tool output as a typed message part without linking an artifact", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const draftOutput = {
+      ok: true,
+      type: "draft_app_preview",
+      draft: {
+        draftId: "draft_123",
+        unsaved: true,
+        files: { "App.tsx": "export default function App() { return null; }" },
+        sourceDigest: "sha256:abc",
+        promotionProof: "draft-app-preview-v1:sig",
+        validation: { ok: true, status: "passed", errors: [] },
+      },
+    };
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Here is the draft.",
+      usage: {
+        tool_invocations: [
+          {
+            tool_name: "preview_app",
+            type: "mcp_tool",
+            status: "success",
+            tool_use_id: "preview-tool-1",
+            input_json: { name: "CRM Draft" },
+            output_json: draftOutput,
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      linkedArtifactIds: [],
+      linkedArtifactCount: 0,
+    });
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-preview_app",
+            toolCallId: "preview-tool-1",
+            toolName: "preview_app",
+            state: "output-available",
+            input: { name: "CRM Draft" },
+            output: draftOutput,
+          },
+        ],
+      }),
+    );
+  });
+
   it("leaves non-build turns alone when no applet is linked", async () => {
     mocks.insertRows = [{ id: "assistant-message-1" }];
     mocks.updateRows = [[]];
@@ -978,6 +1039,72 @@ describe("Computer runtime API thread turn execution", () => {
     expect(result.artifactSaveMissing).toMatchObject({
       reason: "missing_direct_save_app",
     });
+  });
+
+  it("extracts draft preview parts from output_preview JSON", () => {
+    const output = {
+      ok: true,
+      type: "draft_app_preview",
+      draft: { draftId: "draft_123", unsaved: true },
+    };
+
+    expect(
+      draftPreviewPartsFromUsage({
+        tool_invocations: [
+          {
+            tool_name: "preview_app",
+            status: "success",
+            output_preview: JSON.stringify(output),
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        type: "tool-preview_app",
+        toolName: "preview_app",
+        output,
+      }),
+    ]);
+  });
+
+  it("verifies draft preview promotion proofs against source digest and scope", () => {
+    const files = {
+      "App.tsx": "export default function App() { return null; }",
+    };
+    const sourceDigest = buildDraftAppletSourceDigest(files);
+    const expiresAt = "2026-05-13T12:00:00.000Z";
+    const proof =
+      "draft-app-preview-v1:" +
+      "78b1227ce98b7374678ba420e0fd3f35bf0e8edc473afbb0d82f128acaa6f4d5";
+
+    expect(
+      verifyDraftAppletPromotionProof({
+        tenantId: "tenant-1",
+        computerId: "computer-1",
+        threadId: "thread-1",
+        draftId: "draft_123",
+        sourceDigest,
+        expiresAt,
+        promotionProof: proof,
+        secret: "secret",
+        now: new Date("2026-05-13T11:00:00.000Z"),
+      }),
+    ).toBe(true);
+    expect(
+      verifyDraftAppletPromotionProof({
+        tenantId: "tenant-1",
+        computerId: "computer-1",
+        threadId: "thread-1",
+        draftId: "draft_123",
+        sourceDigest: buildDraftAppletSourceDigest({
+          "App.tsx": "export default function Changed() { return null; }",
+        }),
+        expiresAt,
+        promotionProof: proof,
+        secret: "secret",
+        now: new Date("2026-05-13T11:00:00.000Z"),
+      }),
+    ).toBe(false);
   });
 
   it("rejects legacy managed-agent Thread turn execution", async () => {

@@ -38,7 +38,6 @@ from ui_message_publisher import (
     tool_output_available,
 )
 
-
 # ---------------------------------------------------------------------------
 # Body-swap forcing function — U6 inverts this assertion to `_live_emit`
 # ---------------------------------------------------------------------------
@@ -216,6 +215,21 @@ def test_validator_accepts_known_protocol_types():
         reasoning_end("r1"),
         tool_input_available(tool_call_id="t1", tool_name="x", input_payload={}),
         tool_output_available(tool_call_id="t1", output={}),
+        tool_input_available(
+            tool_call_id="draft-1",
+            tool_name="preview_app",
+            input_payload={"name": "CRM Draft"},
+        ),
+        tool_output_available(
+            tool_call_id="draft-1",
+            output={
+                "type": "draft_app_preview",
+                "draft": {
+                    "draftId": "draft_123",
+                    "unsaved": True,
+                },
+            },
+        ),
         finish(),
         error("boom"),
         {"type": "start"},

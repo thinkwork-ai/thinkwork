@@ -285,6 +285,61 @@ describe("createAppSyncChatTransport", () => {
       ]);
     });
 
+    it("forwards draft app preview tool payloads without requiring an artifact row", async () => {
+      const { mutation, subscription, source } = buildFakeUrqlClient({});
+      const transport = createAppSyncChatTransport({
+        urqlClient: { mutation, subscription },
+        threadId: "thread-1",
+      });
+
+      const stream = await transport.sendMessages({
+        trigger: "submit-message",
+        chatId: "thread-1",
+        messageId: undefined,
+        messages: [buildUserMessage("build a dashboard")],
+        abortSignal: undefined,
+      });
+
+      source.emit(
+        JSON.stringify({
+          type: "tool-input-available",
+          toolCallId: "draft-1",
+          toolName: "preview_app",
+          input: { name: "CRM Draft" },
+        }),
+      );
+      source.emit(
+        JSON.stringify({
+          type: "tool-output-available",
+          toolCallId: "draft-1",
+          output: {
+            type: "draft_app_preview",
+            draft: {
+              draftId: "draft_123",
+              unsaved: true,
+              sourceDigest: "sha256:abc",
+              validation: { ok: true, status: "passed", errors: [] },
+            },
+          },
+        }),
+      );
+      source.emit(JSON.stringify({ type: "finish" }));
+
+      const chunks = await readAll(stream);
+      expect(chunks.map((c) => c.type)).toEqual([
+        "tool-input-available",
+        "tool-output-available",
+        "finish",
+      ]);
+      expect(chunks[1]).toMatchObject({
+        type: "tool-output-available",
+        output: {
+          type: "draft_app_preview",
+          draft: { unsaved: true },
+        },
+      });
+    });
+
     it("forwards runbook confirmation and queue data parts", async () => {
       const { mutation, subscription, source } = buildFakeUrqlClient({});
       const transport = createAppSyncChatTransport({

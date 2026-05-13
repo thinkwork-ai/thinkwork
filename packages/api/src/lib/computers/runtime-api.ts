@@ -1,3 +1,4 @@
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -644,6 +645,7 @@ export async function recordThreadTurnResponse(input: {
   const directSaveAppSucceeded = hasSuccessfulDirectSaveAppEvidence(
     input.usage,
   );
+  const draftPreviewParts = draftPreviewPartsFromUsage(input.usage);
   const initialContent =
     buildStylePrompt && !directSaveAppSucceeded
       ? ARTIFACT_SAVE_MISSING_MESSAGE
@@ -655,6 +657,7 @@ export async function recordThreadTurnResponse(input: {
     source: payload.source,
     model: input.model ?? null,
     usage: input.usage ?? null,
+    draftPreviewCount: draftPreviewParts.length,
   };
   const [assistantMessage] = await db
     .insert(messages)
@@ -665,6 +668,7 @@ export async function recordThreadTurnResponse(input: {
       content: initialContent,
       sender_type: "computer",
       sender_id: input.computerId,
+      parts: draftPreviewParts.length > 0 ? draftPreviewParts : undefined,
       metadata: assistantMetadata,
     })
     .returning({ id: messages.id });
@@ -881,6 +885,111 @@ function hasSuccessfulDirectSaveAppEvidence(usage: unknown) {
   });
 }
 
+export function draftPreviewPartsFromUsage(usage: unknown) {
+  const invocations = toolInvocationsFromUsage(usage);
+  return invocations
+    .filter((invocation) => {
+      if (invocation.tool_name !== "preview_app") return false;
+      if (invocation.type === "sub_agent") return false;
+      if (!toolInvocationSucceeded(invocation.status)) return false;
+      return Boolean(draftPreviewOutputPayload(invocation));
+    })
+    .map((invocation, index) => {
+      const output = draftPreviewOutputPayload(invocation);
+      const toolCallId =
+        stringValue(invocation.tool_use_id) ??
+        stringValue(invocation.toolCallId) ??
+        stringValue(invocation.id) ??
+        `preview_app:${index + 1}`;
+      return {
+        type: "tool-preview_app",
+        toolCallId,
+        toolName: "preview_app",
+        state: "output-available",
+        input: isRecord(invocation.input_json)
+          ? invocation.input_json
+          : undefined,
+        output,
+      };
+    });
+}
+
+function draftPreviewOutputPayload(invocation: Record<string, unknown>) {
+  const output = isRecord(invocation.output_json)
+    ? invocation.output_json
+    : parseRecordJson(stringValue(invocation.output_preview));
+  if (!output) return null;
+  if (output.type !== "draft_app_preview") return null;
+  if (!isRecord(output.draft)) return null;
+  return output;
+}
+
+export function buildDraftAppletSourceDigest(files: Record<string, string>) {
+  const canonical = JSON.stringify(
+    Object.keys(files)
+      .sort()
+      .map((name) => [name, files[name]]),
+  );
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+}
+
+export function verifyDraftAppletPromotionProof(input: {
+  tenantId: string;
+  computerId: string;
+  threadId: string;
+  draftId: string;
+  sourceDigest: string;
+  expiresAt: string;
+  promotionProof: string;
+  secret?: string | null;
+  now?: Date;
+}) {
+  const secret =
+    input.secret ??
+    process.env.API_AUTH_SECRET ??
+    process.env.THINKWORK_API_SECRET ??
+    "";
+  if (!secret) return false;
+  const expiresAt = new Date(input.expiresAt);
+  if (!Number.isFinite(expiresAt.getTime())) return false;
+  if (expiresAt.getTime() < (input.now ?? new Date()).getTime()) return false;
+
+  const expected = draftAppletPromotionProof({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    threadId: input.threadId,
+    draftId: input.draftId,
+    sourceDigest: input.sourceDigest,
+    expiresAt: input.expiresAt,
+    secret,
+  });
+  return timingSafeStringEqual(input.promotionProof, expected);
+}
+
+function draftAppletPromotionProof(input: {
+  tenantId: string;
+  computerId: string;
+  threadId: string;
+  draftId: string;
+  sourceDigest: string;
+  expiresAt: string;
+  secret: string;
+}) {
+  const payload = [
+    "draft-app-preview-v1",
+    input.tenantId,
+    input.computerId,
+    input.threadId,
+    input.draftId,
+    input.sourceDigest,
+    input.expiresAt,
+  ].join("\n");
+  const signature = createHmac("sha256", input.secret)
+    .update(payload)
+    .digest("hex");
+  return `draft-app-preview-v1:${signature}`;
+}
+
 function toolInvocationsFromUsage(usage: unknown) {
   if (!isRecord(usage)) return [];
   const invocations = usage.tool_invocations;
@@ -895,13 +1004,27 @@ function toolInvocationSucceeded(status: unknown) {
 
 function saveAppOutputPayload(invocation: Record<string, unknown>) {
   if (isRecord(invocation.output_json)) return invocation.output_json;
-  if (typeof invocation.output_preview !== "string") return null;
+  return parseRecordJson(stringValue(invocation.output_preview));
+}
+
+function parseRecordJson(value: string | null) {
+  if (!value) return null;
   try {
-    const parsed = JSON.parse(invocation.output_preview);
+    const parsed = JSON.parse(value);
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function timingSafeStringEqual(a: string, b: string) {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
