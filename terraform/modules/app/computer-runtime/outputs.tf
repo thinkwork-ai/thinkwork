@@ -22,6 +22,18 @@ output "efs_security_group_id" {
   value = aws_security_group.efs.id
 }
 
+output "workspace_admin_access_point_arn" {
+  value = aws_efs_access_point.workspace_admin.arn
+}
+
+output "workspace_admin_access_point_id" {
+  value = aws_efs_access_point.workspace_admin.id
+}
+
+output "workspace_admin_lambda_sg_id" {
+  value = aws_security_group.workspace_admin_lambda.id
+}
+
 output "subnet_ids" {
   value = var.subnet_ids
 }

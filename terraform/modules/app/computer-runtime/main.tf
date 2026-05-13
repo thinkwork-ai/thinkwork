@@ -137,6 +137,65 @@ resource "aws_efs_mount_target" "workspace" {
   security_groups = [aws_security_group.efs.id]
 }
 
+# Shared access point that lets the admin `workspace-files-efs` Lambda read
+# any Computer's workspace directly without going through the per-Computer
+# runtime task queue. Per-Computer access points (created lazily by
+# provisionComputerRuntime) chroot the runtime to a single
+# /tenants/<tenantId>/computers/<computerId> subpath. This admin access point
+# is rooted higher at /tenants so a single Lambda can resolve any
+# (tenantId, computerId) at request time. uid/gid 1000 matches the PosixUser
+# used for the per-Computer access points (see
+# packages/api/src/lib/computers/runtime-control.ts:createAccessPoint), so the
+# Lambda reads files the runtime wrote with consistent ownership.
+resource "aws_efs_access_point" "workspace_admin" {
+  file_system_id = aws_efs_file_system.workspace.id
+
+  posix_user {
+    uid = 1000
+    gid = 1000
+  }
+
+  root_directory {
+    path = "/tenants"
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "750"
+    }
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-computer-workspaces-admin" }
+}
+
+# Lambda SG that mounts the shared workspace EFS. Reuses the same NFS allow-
+# from rule pattern as the per-Computer task SG; created as a sibling so
+# Lambda traffic is auditable separately from task traffic.
+resource "aws_security_group" "workspace_admin_lambda" {
+  name_prefix = "thinkwork-${var.stage}-workspace-admin-lambda-"
+  description = "ThinkWork workspace-files-efs Lambda — EFS client"
+  vpc_id      = var.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-workspace-admin-lambda-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group_rule" "efs_from_workspace_admin_lambda" {
+  description              = "NFS from workspace-files-efs Lambda"
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.efs.id
+  source_security_group_id = aws_security_group.workspace_admin_lambda.id
+}
+
 resource "aws_iam_role" "execution" {
   name = "thinkwork-${var.stage}-computer-execution"
 

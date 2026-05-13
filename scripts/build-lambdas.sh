@@ -402,6 +402,9 @@ build_handler "knowledge-base-files" \
 build_handler "workspace-files" \
   "$REPO_ROOT/packages/api/workspace-files.ts"
 
+build_handler "workspace-files-efs" \
+  "$REPO_ROOT/packages/api/src/handlers/workspace-files-efs.ts"
+
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"
 

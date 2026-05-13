@@ -23,6 +23,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
@@ -197,10 +198,13 @@ vi.mock("../lib/computers/tasks.js", () => ({
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
 const s3Mock = mockClient(S3Client);
+const lambdaMock = mockClient(LambdaClient);
 
 process.env.WORKSPACE_BUCKET = "test-bucket";
 process.env.COGNITO_USER_POOL_ID = "test-pool";
 process.env.COGNITO_APP_CLIENT_IDS = "test-client";
+process.env.WORKSPACE_FILES_EFS_FN_ARN =
+  "arn:aws:lambda:us-east-1:000000000000:function:thinkwork-test-api-workspace-files-efs";
 
 // Import handler AFTER mocks.
 import { handler } from "../../workspace-files.js";
@@ -214,6 +218,14 @@ const TEMPLATE_ID = "template-exec-id";
 const COMPUTER_ID = "computer-marco-id";
 const USER_ID = "user-eric-id";
 const EMAIL = "eric@acme.com";
+
+// aws-sdk-client-mock accepts Uint8Array for Payload at runtime, but the
+// InvokeCommandOutput type signature expects a Uint8ArrayBlobAdapter (the
+// adapter wrapping that ships in the real SDK). Local cast keeps the
+// per-test sites readable.
+function lambdaPayload(body: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(body));
+}
 
 function event(body: Record<string, unknown>, authed = true) {
   return {
@@ -282,6 +294,7 @@ async function parse(result: { statusCode: number; body: string }) {
 
 beforeEach(() => {
   s3Mock.reset();
+  lambdaMock.reset();
   resetDbQueue();
   resetEqCalls();
   authMockImpl.mockReset();
@@ -551,19 +564,39 @@ describe("agent GET / LIST", () => {
 });
 
 describe("computer EFS workspace target", () => {
-  it("lists and reads files through Computer runtime tasks", async () => {
+  it("lists and reads files via the workspace-files-efs sidecar (no task queue)", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([computerRow()]);
-    pushDbRows([
-      {
-        status: "completed",
-        output: {
-          files: [{ path: "USER.md" }, { path: "memory/contacts.md" }],
-        },
-        error: null,
-      },
-    ]);
+    lambdaMock
+      .on(InvokeCommand)
+      .resolvesOnce({
+        Payload: lambdaPayload({
+          ok: true,
+          files: [
+            {
+              path: "USER.md",
+              source: "computer",
+              sha256: "",
+              overridden: false,
+            },
+            {
+              path: "memory/contacts.md",
+              source: "computer",
+              sha256: "",
+              overridden: false,
+            },
+          ],
+        }) as never,
+      })
+      .resolvesOnce({
+        Payload: lambdaPayload({
+          ok: true,
+          content: "Name: Eric\n",
+          source: "computer",
+          sha256: "",
+        }) as never,
+      });
 
     const listRes = await parse(
       await handler(event({ action: "list", computerId: COMPUTER_ID })),
@@ -584,24 +617,21 @@ describe("computer EFS workspace target", () => {
         overridden: false,
       },
     ]);
-    expect(enqueueComputerTaskMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT_A,
-        computerId: COMPUTER_ID,
-        taskType: "workspace_file_list",
-      }),
+    const listCalls = lambdaMock.commandCalls(InvokeCommand);
+    expect(listCalls).toHaveLength(1);
+    const listPayload = JSON.parse(
+      new TextDecoder().decode(listCalls[0].args[0].input.Payload as Uint8Array),
     );
+    expect(listPayload).toEqual({
+      action: "list",
+      tenantId: TENANT_A,
+      computerId: COMPUTER_ID,
+      includeContent: false,
+    });
+    expect(enqueueComputerTaskMock).not.toHaveBeenCalled();
 
-    enqueueComputerTaskMock.mockResolvedValueOnce({ id: "computer-task-2" });
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([computerRow()]);
-    pushDbRows([
-      {
-        status: "completed",
-        output: { content: "Name: Eric\n" },
-        error: null,
-      },
-    ]);
 
     const getRes = await parse(
       await handler(
@@ -615,14 +645,43 @@ describe("computer EFS workspace target", () => {
       source: "computer",
       content: "Name: Eric\n",
     });
-    expect(enqueueComputerTaskMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        taskType: "workspace_file_read",
-        taskInput: { path: "USER.md" },
-      }),
+    const allCalls = lambdaMock.commandCalls(InvokeCommand);
+    expect(allCalls).toHaveLength(2);
+    const getPayload = JSON.parse(
+      new TextDecoder().decode(allCalls[1].args[0].input.Payload as Uint8Array),
     );
+    expect(getPayload).toEqual({
+      action: "get",
+      tenantId: TENANT_A,
+      computerId: COMPUTER_ID,
+      path: "USER.md",
+    });
+    expect(enqueueComputerTaskMock).not.toHaveBeenCalled();
     expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("surfaces sidecar errors as upstream-failure status codes", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    lambdaMock.on(InvokeCommand).resolvesOnce({
+      Payload: lambdaPayload({
+        ok: false,
+        status: 500,
+        error: "Workspace operation failed: EFS mount lost",
+      }) as never,
+    });
+
+    const res = await parse(
+      await handler(event({ action: "list", computerId: COMPUTER_ID })),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("EFS mount lost"),
+    });
   });
 
   it("writes and deletes files through Computer runtime tasks", async () => {
