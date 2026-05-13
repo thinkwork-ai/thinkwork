@@ -273,6 +273,7 @@ metadata:
     );
     const requiredTerms = [
       "@thinkwork/ui",
+      "@thinkwork/computer-stdlib",
       "Card",
       "Badge",
       "Tabs",
@@ -284,6 +285,19 @@ metadata:
     ];
 
     for (const term of requiredTerms) {
+      expect(skillBody).toContain(term);
+      expect(produceBody).toContain(term);
+    }
+
+    const requiredCrmLayoutGuidance = [
+      "KpiStrip` from `@thinkwork/computer-stdlib",
+      "Do not hand-compose KPI metrics",
+      "Do not create a vertical stack of full-width KPI cards",
+      "generated `grid-cols-*`",
+      "md:grid-cols-*",
+    ];
+
+    for (const term of requiredCrmLayoutGuidance) {
       expect(skillBody).toContain(term);
       expect(produceBody).toContain(term);
     }

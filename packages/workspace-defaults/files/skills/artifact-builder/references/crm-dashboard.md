@@ -102,7 +102,9 @@ Theme requirements:
 - Use semantic shadcn token classes and chart variables: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, and `var(--chart-1)` through `var(--chart-5)`.
 - Do not paste a `<style>` tag into `App.tsx`, hard-code black chart marks on dark surfaces, or invent a separate palette that fights the uploaded theme.
 
-Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`.
+Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; top-level KPIs must use `KpiStrip` from `@thinkwork/computer-stdlib`. Use `Card` for chart, table, or detail sections, not as a substitute for the KPI strip.
+
+Do not create a vertical stack of full-width KPI cards. Do not rely on generated `grid-cols-*` or responsive `md:grid-cols-*` Tailwind classes for the core dashboard layout; those classes may not exist in the iframe CSS bundle. Use the compiled stdlib primitives (`KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`) for dashboard structure.
 
 Do not use emoji icons. Use `lucide-react` icons when an icon is needed.
 
@@ -117,6 +119,8 @@ Before saving, reject the draft and revise it if any of these are true:
 - The app reads like a markdown report or prose summary.
 - Core metrics are shown as paragraphs instead of visual comparisons.
 - It lacks a KPI strip, chart, or table.
+- Top-level KPIs are hand-composed as individual metric `Card` components.
+- The core dashboard layout depends on `grid-cols-*` or responsive `md:grid-cols-*` class names.
 - It uses emoji characters for icons or labels.
 - It duplicates host chrome such as an outer artifact frame, `App` badge, open-full control, or refresh controls supplied by the host.
 

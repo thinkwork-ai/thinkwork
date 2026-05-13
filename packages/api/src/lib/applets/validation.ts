@@ -151,10 +151,17 @@ function validateQuality(source: string, options: AppletValidationOptions) {
     );
   }
 
-  if (!/<(?:Card|KpiStrip)\b/.test(source)) {
+  if (!importsSpecifier(source, "@thinkwork/computer-stdlib")) {
     throw new AppletQualityError(
-      "CRM_DASHBOARD_METRIC_COMPONENT_REQUIRED",
-      "CRM dashboard applets must render metric panels with Card or KpiStrip components.",
+      "CRM_DASHBOARD_STDLIB_IMPORT_REQUIRED",
+      "CRM dashboard applets must import compiled dashboard primitives from @thinkwork/computer-stdlib before save_app.",
+    );
+  }
+
+  if (!/<KpiStrip\b/.test(source)) {
+    throw new AppletQualityError(
+      "CRM_DASHBOARD_KPI_STRIP_REQUIRED",
+      "CRM dashboard applets must render top-level metrics with KpiStrip from @thinkwork/computer-stdlib instead of hand-composed metric cards.",
     );
   }
 
@@ -185,6 +192,37 @@ function validateQuality(source: string, options: AppletValidationOptions) {
       "CRM dashboard applets must not use emoji icons or decorative emoji text.",
     );
   }
+
+  const forbiddenLayoutClass = findForbiddenCrmLayoutClass(source);
+  if (forbiddenLayoutClass) {
+    throw new AppletQualityError(
+      "CRM_DASHBOARD_GENERATED_GRID_LAYOUT_FORBIDDEN",
+      `CRM dashboard applets must use compiled dashboard primitives such as KpiStrip instead of generated Tailwind grid-column layout classes; found ${forbiddenLayoutClass}.`,
+    );
+  }
+}
+
+function findForbiddenCrmLayoutClass(source: string) {
+  for (const className of collectClassNameValues(source)) {
+    const found = className
+      .split(/\s+/)
+      .find((token) =>
+        /^(?:[a-z]+:)*grid-cols-(?:\d+|\[[^\]]+\])$/.test(token),
+      );
+    if (found) return found;
+  }
+  return null;
+}
+
+function collectClassNameValues(source: string) {
+  const values: string[] = [];
+  const classNamePattern =
+    /\bclassName\s*=\s*(?:"([^"]*)"|'([^']*)'|{\s*`([^`]*)`\s*})/g;
+  let match: RegExpExecArray | null;
+  while ((match = classNamePattern.exec(source))) {
+    values.push(match[1] ?? match[2] ?? match[3] ?? "");
+  }
+  return values;
 }
 
 function importsSpecifier(source: string, specifier: string) {

@@ -74,17 +74,20 @@ Theme requirements:
 Hard UI requirements:
 
 - Import `@thinkwork/ui`.
-- Include KPI cards or `KpiStrip`, at least one visual comparison, and an opportunity table or ranked list.
+- Import `@thinkwork/computer-stdlib`.
+- Use `KpiStrip` from `@thinkwork/computer-stdlib` for top-level KPIs. Do not hand-compose KPI metrics as individual `Card` components.
+- Include at least one visual comparison and an opportunity table or ranked list.
 - Use `Tabs` for multiple dashboard views when useful.
 - Use `Badge` for status/risk labels.
 - Use `DataTable` or `Table` for tabular data.
-- Use a compact, dense dashboard layout: KPI strip in a 2-4 column grid, charts side-by-side on desktop, and a single ranked table/list for the action surface.
+- Use a compact, dense dashboard layout: `KpiStrip` for metrics, compiled stdlib chart/table primitives for comparisons, and a single ranked table/list for the action surface.
 - Do not hand-roll cards, tabs, badges, buttons, tables, or status pills from raw HTML plus custom classes.
 - Do not use raw `<table>` or raw `<button>`.
 - Do not use emoji anywhere.
 - Import icons from `lucide-react` only if useful; otherwise use text labels and badges.
 - Avoid duplicate host chrome and avoid horizontal page scrolling.
 - Do not create a vertical stack of full-width KPI cards. That layout is a failed draft.
+- Do not rely on generated `grid-cols-*` or responsive `md:grid-cols-*` Tailwind layout classes for the core dashboard structure; those classes may not exist in the iframe CSS bundle.
 - Do not render Recharts primitives directly on a black canvas without shadcn chart tokens; the tooltip, axis labels, bars, and grid must remain readable in dark mode.
 
 Validation should be bounded to compile/save correctness. Inspect the generated TSX once before `save_app`. If it obviously violates the hard UI requirements, revise once. Do not loop on subjective polish.

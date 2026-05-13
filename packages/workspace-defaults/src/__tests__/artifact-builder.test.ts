@@ -25,6 +25,9 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("Your TSX should render only the app body");
     expect(skill).toContain("Never use emoji as icons");
     expect(skill).toContain("not prose-only markdown reports");
+    expect(skill).toContain("KPIs must use `KpiStrip`");
+    expect(skill).toContain("Do not hand-compose KPI metrics");
+    expect(skill).toContain("do not rely on generated `grid-cols-*`");
   });
 
   it("requires preview-first shadcn registry guidance before TSX generation", () => {
@@ -77,6 +80,13 @@ describe("Artifact Builder defaults", () => {
     expect(crmRecipe).toContain("Do not use emoji as icons");
     expect(crmRecipe).toContain("sortable/scannable table");
     expect(crmRecipe).toContain("reject the draft and revise it");
+    expect(crmRecipe).toContain("KPIs must use `KpiStrip`");
+    expect(crmRecipe).toContain(
+      "Do not create a vertical stack of full-width KPI cards",
+    );
+    expect(crmRecipe).toContain(
+      "core dashboard layout depends on `grid-cols-*`",
+    );
   });
 
   it("keeps host chrome and provenance guidance out of default app bodies", () => {

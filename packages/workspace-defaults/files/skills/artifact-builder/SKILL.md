@@ -46,12 +46,14 @@ Use shadcn semantic tokens, not one-off colors: `bg-background`, `text-foregroun
 
 Do not use emoji icons. Use `lucide-react` named icon imports only when an icon materially improves scannability; otherwise use plain text, `Badge`, or approved registry components.
 
-Do not create adjacent plain text tabs, raw `<button>` controls, raw `<table>` layouts for tabular data, raw form controls, inline-pill badges, chart wrappers outside `ChartContainer`, or bespoke card CSS. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; data grids must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`; charts must use the approved chart surface; maps must use `MapView`.
+Do not create adjacent plain text tabs, raw `<button>` controls, raw `<table>` layouts for tabular data, raw form controls, inline-pill badges, chart wrappers outside `ChartContainer`, or bespoke card CSS. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; data grids must use `DataTable` or `Table`; status labels must use `Badge`; general metric panels may use `Card` or `KpiStrip`; charts must use the approved chart surface; maps must use `MapView`.
+
+For CRM, sales, pipeline, opportunity, account-risk, stage-exposure, stale-activity, or LastMile dashboards, top-level KPIs must use `KpiStrip` from `@thinkwork/computer-stdlib`. Do not hand-compose KPI metrics as individual full-width `Card` components, do not stack KPI cards vertically, and do not rely on generated `grid-cols-*` or responsive `md:grid-cols-*` Tailwind layout classes for the core dashboard structure. Use compiled stdlib primitives for the dashboard shape and reserve `Card` for chart, table, or detail sections.
 
 Good apps include:
 
 - Focused body content that starts at the useful work, not wrapper chrome.
-- KPI strip for key totals.
+- `KpiStrip` for CRM dashboard key totals.
 - Charts or tables that make comparison easy.
 - Empty, partial, and failed-source states proportional to the requested task.
 
