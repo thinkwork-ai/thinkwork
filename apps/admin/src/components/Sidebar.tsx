@@ -299,16 +299,16 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel>Automations</SidebarGroupLabel>
+          <SidebarGroupLabel>Managed Harness</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={automationsItems} />
+            <NavItems items={agentsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel>Managed Harness</SidebarGroupLabel>
+          <SidebarGroupLabel>Integrations</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={agentsItems} />
+            <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
