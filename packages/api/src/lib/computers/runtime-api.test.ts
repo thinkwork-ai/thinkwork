@@ -940,6 +940,11 @@ describe("Computer runtime API thread turn execution", () => {
         sourceDigest: "sha256:abc",
         promotionProof: "draft-app-preview-v1:sig",
         validation: { ok: true, status: "passed", errors: [] },
+        dataProvenance: { status: "real", notes: ["Loaded live CRM rows."] },
+        shadcnProvenance: {
+          uiRegistryDigest: "sha256:registry",
+          mcpToolCalls: ["list_components", "search_registry"],
+        },
       },
     };
 
@@ -965,10 +970,14 @@ describe("Computer runtime API thread turn execution", () => {
     expect(result).toMatchObject({
       linkedArtifactIds: [],
       linkedArtifactCount: 0,
+      draftPreviewCount: 1,
+      draftPreviewSucceeded: true,
+      artifactSaveMissing: null,
     });
     expect(mocks.inserts).toContainEqual(
       expect.objectContaining({
         role: "assistant",
+        content: "Here is the draft.",
         parts: [
           {
             type: "tool-preview_app",
@@ -981,6 +990,113 @@ describe("Computer runtime API thread turn execution", () => {
         ],
       }),
     );
+    expect(mocks.updates).toContainEqual(
+      expect.objectContaining({
+        status: "completed",
+        output: expect.objectContaining({
+          response: "Here is the draft.",
+          draftPreviewCount: 1,
+          draftPreviewSucceeded: true,
+          artifactSaveMissing: null,
+        }),
+      }),
+    );
+  });
+
+  it("does not count a draft preview without registry evidence as successful output", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Here is the draft.",
+      usage: {
+        tool_invocations: [
+          {
+            tool_name: "preview_app",
+            type: "mcp_tool",
+            status: "success",
+            output_json: {
+              ok: true,
+              type: "draft_app_preview",
+              draft: {
+                draftId: "draft_123",
+                unsaved: true,
+                sourceDigest: "sha256:abc",
+                promotionProof: "draft-app-preview-v1:sig",
+                validation: { ok: true, status: "passed", errors: [] },
+                dataProvenance: { status: "real" },
+                shadcnProvenance: {
+                  uiRegistryDigest: "",
+                  mcpToolCalls: [],
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      draftPreviewCount: 1,
+      draftPreviewSucceeded: false,
+      artifactSaveMissing: expect.objectContaining({
+        reason: "missing_direct_save_app",
+      }),
+    });
+  });
+
+  it("does not count a failed-validation draft preview as successful output", async () => {
+    mocks.insertRows = [{ id: "assistant-message-1" }];
+    mocks.updateRows = [[]];
+    queueThreadTurnRecord("Build a CRM dashboard for my pipeline.");
+
+    const result = await recordThreadTurnResponse({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+      content: "Here is the draft.",
+      usage: {
+        tool_invocations: [
+          {
+            tool_name: "preview_app",
+            type: "mcp_tool",
+            status: "success",
+            output_json: {
+              ok: false,
+              type: "draft_app_preview",
+              draft: {
+                draftId: "draft_123",
+                unsaved: true,
+                sourceDigest: "sha256:abc",
+                promotionProof: null,
+                validation: {
+                  ok: false,
+                  status: "failed",
+                  errors: [{ code: "IMPORT_NOT_ALLOWED" }],
+                },
+                dataProvenance: { status: "real" },
+                shadcnProvenance: {
+                  uiRegistryDigest: "sha256:registry",
+                  mcpToolCalls: ["list_components"],
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      draftPreviewCount: 1,
+      draftPreviewSucceeded: false,
+      artifactSaveMissing: expect.objectContaining({
+        reason: "missing_direct_save_app",
+      }),
+    });
   });
 
   it("leaves non-build turns alone when no applet is linked", async () => {

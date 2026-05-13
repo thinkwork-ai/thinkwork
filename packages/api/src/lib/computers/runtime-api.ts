@@ -649,8 +649,9 @@ export async function recordThreadTurnResponse(input: {
     input.usage,
   );
   const draftPreviewParts = draftPreviewPartsFromUsage(input.usage);
+  const draftPreviewSucceeded = hasSuccessfulDraftPreviewEvidence(input.usage);
   const initialContent =
-    buildStylePrompt && !directSaveAppSucceeded
+    buildStylePrompt && !directSaveAppSucceeded && !draftPreviewSucceeded
       ? ARTIFACT_SAVE_MISSING_MESSAGE
       : requestedContent;
   const assistantMetadata = {
@@ -661,6 +662,7 @@ export async function recordThreadTurnResponse(input: {
     model: input.model ?? null,
     usage: input.usage ?? null,
     draftPreviewCount: draftPreviewParts.length,
+    draftPreviewSucceeded,
   };
   const [assistantMessage] = await db
     .insert(messages)
@@ -708,11 +710,13 @@ export async function recordThreadTurnResponse(input: {
   const artifactSaveMissing =
     buildStylePrompt &&
     !directSaveAppSucceeded &&
-    linkedArtifactIds.length === 0
+    linkedArtifactIds.length === 0 &&
+    !draftPreviewSucceeded
       ? {
           reason: "missing_direct_save_app" as const,
           buildStylePrompt: true,
           directSaveAppSucceeded: false,
+          draftPreviewSucceeded: false,
           linkedArtifactIds,
         }
       : null;
@@ -765,6 +769,8 @@ export async function recordThreadTurnResponse(input: {
       model: input.model ?? null,
       linkedArtifactIds,
       linkedArtifactCount: linkedArtifactIds.length,
+      draftPreviewCount: draftPreviewParts.length,
+      draftPreviewSucceeded,
       artifactSaveMissing,
     },
   });
@@ -776,6 +782,8 @@ export async function recordThreadTurnResponse(input: {
       sourceMessageId: message.id,
       linkedArtifactIds,
       linkedArtifactCount: linkedArtifactIds.length,
+      draftPreviewCount: draftPreviewParts.length,
+      draftPreviewSucceeded,
       artifactSaveMissing,
     };
     if (artifactSaveMissing) {
@@ -809,6 +817,8 @@ export async function recordThreadTurnResponse(input: {
         usage: input.usage ?? null,
         linkedArtifactIds,
         linkedArtifactCount: linkedArtifactIds.length,
+        draftPreviewCount: draftPreviewParts.length,
+        draftPreviewSucceeded,
         artifactSaveMissing,
       },
       completed_at: new Date(),
@@ -861,6 +871,8 @@ export async function recordThreadTurnResponse(input: {
     model: input.model ?? null,
     linkedArtifactIds,
     linkedArtifactCount: linkedArtifactIds.length,
+    draftPreviewCount: draftPreviewParts.length,
+    draftPreviewSucceeded,
     artifactSaveMissing,
   };
 }
@@ -884,6 +896,19 @@ function hasSuccessfulDirectSaveAppEvidence(usage: unknown) {
       output.persisted === true &&
       typeof output.appId === "string" &&
       output.appId.trim().length > 0
+    );
+  });
+}
+
+function hasSuccessfulDraftPreviewEvidence(usage: unknown) {
+  const invocations = toolInvocationsFromUsage(usage);
+  return invocations.some((invocation) => {
+    if (invocation.tool_name !== "preview_app") return false;
+    if (invocation.type === "sub_agent") return false;
+    if (!toolInvocationSucceeded(invocation.status)) return false;
+
+    return isSuccessfulDraftPreviewOutput(
+      draftPreviewOutputPayload(invocation),
     );
   });
 }
@@ -925,6 +950,47 @@ function draftPreviewOutputPayload(invocation: Record<string, unknown>) {
   if (output.type !== "draft_app_preview") return null;
   if (!isRecord(output.draft)) return null;
   return output;
+}
+
+function isSuccessfulDraftPreviewOutput(
+  output: Record<string, unknown> | null,
+) {
+  if (!output || output.ok !== true) return false;
+  const draft = isRecord(output.draft) ? output.draft : null;
+  if (!draft) return false;
+
+  const validation = isRecord(draft.validation) ? draft.validation : null;
+  if (!validation || validation.ok !== true) return false;
+  if (
+    typeof draft.sourceDigest !== "string" ||
+    !draft.sourceDigest.startsWith("sha256:")
+  ) {
+    return false;
+  }
+  if (
+    typeof draft.promotionProof !== "string" ||
+    !draft.promotionProof.trim()
+  ) {
+    return false;
+  }
+
+  const dataProvenance = isRecord(draft.dataProvenance)
+    ? draft.dataProvenance
+    : null;
+  const dataStatus = stringValue(dataProvenance?.status)?.toLowerCase();
+  if (!dataStatus || !["real", "partial", "unavailable"].includes(dataStatus)) {
+    return false;
+  }
+
+  const shadcnProvenance = isRecord(draft.shadcnProvenance)
+    ? draft.shadcnProvenance
+    : null;
+  const registryDigest = stringValue(shadcnProvenance?.uiRegistryDigest);
+  if (!registryDigest?.startsWith("sha256:")) return false;
+  const mcpToolCalls = shadcnProvenance?.mcpToolCalls;
+  if (!Array.isArray(mcpToolCalls) || mcpToolCalls.length === 0) return false;
+
+  return true;
 }
 
 function toolInvocationsFromUsage(usage: unknown) {
