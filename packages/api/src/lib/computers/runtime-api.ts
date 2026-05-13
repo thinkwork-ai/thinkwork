@@ -202,9 +202,9 @@ async function reconcileStaleComputerRunbookTasks(input: {
         status = 'failed',
         error = jsonb_build_object(
           'code', 'runbook_step_timed_out',
-          'message', ${message},
+          'message', ${message}::text,
           'source', 'computer_heartbeat',
-          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}
+          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
         ),
         completed_at = NOW(),
         updated_at = NOW()
@@ -228,10 +228,10 @@ async function reconcileStaleComputerRunbookTasks(input: {
         status = 'failed',
         error = jsonb_build_object(
           'code', 'runbook_step_timed_out',
-          'message', ${message},
+          'message', ${message}::text,
           'source', 'computer_heartbeat',
-          'taskId', ${row.task_id},
-          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}
+          'taskId', ${row.task_id}::text,
+          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
         ),
         completed_at = NOW(),
         updated_at = NOW()
@@ -245,9 +245,9 @@ async function reconcileStaleComputerRunbookTasks(input: {
         status = 'failed',
         error = jsonb_build_object(
           'code', 'runbook_step_timed_out',
-          'message', ${message},
+          'message', ${message}::text,
           'source', 'computer_heartbeat',
-          'runbookRunId', ${row.run_id}
+          'runbookRunId', ${row.run_id}::text
         ),
         completed_at = NOW(),
         updated_at = NOW()
