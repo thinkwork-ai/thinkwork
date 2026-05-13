@@ -18,23 +18,19 @@ describe("artifact runbook bridge", () => {
     expect(produce?.capabilityRoles).toEqual(["artifact_build"]);
     expect(produce?.guidanceMarkdown).toContain("CrmDashboardData");
     expect(produce?.guidanceMarkdown).toContain(
-      "Artifact Builder compatibility shim",
+      "Call `save_app` directly in the parent Computer turn",
     );
     expect(produce?.guidanceMarkdown).toContain("metadata.runbookSlug");
     expect(produce?.guidanceMarkdown).toContain("save_app");
     expect(produce?.guidanceMarkdown).toContain(
-      "must look and behave like a dashboard app",
+      "Include KPI cards or `KpiStrip`",
     );
-    expect(produce?.guidanceMarkdown).toContain("not a markdown report");
-    expect(produce?.guidanceMarkdown).toContain("Do not use emoji as icons");
+    expect(produce?.guidanceMarkdown).toContain("durable output is the saved app");
+    expect(produce?.guidanceMarkdown).toContain("Do not use emoji anywhere");
     expect(produce?.guidanceMarkdown).toContain("lucide-react");
 
     const validate = runbook.phases.find((phase) => phase.id === "validate");
-    expect(validate?.guidanceMarkdown).toContain("visual dashboard");
-    expect(validate?.guidanceMarkdown).toContain("text-only cards");
-    expect(validate?.guidanceMarkdown).toContain(
-      "Icons must come from `lucide-react` or `@tabler/icons-react`",
-    );
+    expect(validate).toBeUndefined();
 
     const records = buildRunbookRunRecords({
       tenantId: "tenant-1",
@@ -47,14 +43,13 @@ describe("artifact runbook bridge", () => {
     const produceTasks = records.tasks.filter(
       (task) => task.phase_id === "produce",
     );
-    expect(produceTasks).toHaveLength(2);
+    expect(produceTasks).toHaveLength(1);
     expect(
       produceTasks.every((task) =>
         task.capability_roles.includes("artifact_build"),
       ),
     ).toBe(true);
-    expect(produceTasks[0]?.title).toContain("CrmDashboardData");
-    expect(produceTasks[1]?.title).toContain("save_app");
+    expect(produceTasks[0]?.title).toContain("Generate and save");
   });
 
   it("uses the same artifact machinery for generic research dashboards", () => {
