@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   MessagesSquare,
   Inbox,
-  Bot,
   Monitor,
   Users,
   Repeat,
@@ -27,7 +26,6 @@ import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import {
   InboxItemsListQuery,
-  AgentsListQuery,
   ComputersListQuery,
   ThreadsPagedQuery,
   RoutinesListQuery,
@@ -111,13 +109,6 @@ export function AppSidebar() {
     pause: !tenantId,
   });
   const pendingInboxCount = inboxResult.data?.inboxItems?.length ?? 0;
-
-  const [agentsResult] = useQuery({
-    query: AgentsListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
-  });
-  const agentCount = agentsResult.data?.agents?.length ?? 0;
 
   const [computersResult] = useQuery({
     query: ComputersListQuery,
@@ -223,16 +214,16 @@ export function AppSidebar() {
 
   const automationsItems: NavItem[] = [
     {
+      to: "/automations/schedules",
+      icon: CalendarClock,
+      label: "Automations",
+      badge: activeScheduledJobs,
+    },
+    {
       to: "/automations/routines",
       icon: Repeat,
       label: "Routines",
       badge: routineActiveCount,
-    },
-    {
-      to: "/automations/schedules",
-      icon: CalendarClock,
-      label: "Scheduled Jobs",
-      badge: activeScheduledJobs,
     },
     {
       to: "/automations/webhooks",
@@ -242,7 +233,6 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
@@ -254,8 +244,8 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
-    { to: "/people", icon: Users, label: "People" },
     { to: "/compliance", icon: ScrollText, label: "Compliance" },
+    { to: "/people", icon: Users, label: "People" },
     { to: "/security", icon: Shield, label: "Security Center" },
     { to: "/symphony", icon: Network, label: "Symphony" },
     ...(BILLING_VISIBLE && isOwner

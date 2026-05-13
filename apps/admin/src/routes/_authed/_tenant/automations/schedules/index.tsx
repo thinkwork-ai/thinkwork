@@ -409,10 +409,10 @@ function ScheduledJobsPage() {
 
   const filterTitle =
     type === "agent"
-      ? "Scheduled Jobs: Agents"
+      ? "Automations: Agents"
       : type === "routine"
-        ? "Scheduled Jobs: Routines"
-        : "Scheduled Jobs";
+        ? "Automations: Routines"
+        : "Automations";
 
   const agentName = agentId ? agentNames.get(agentId) : null;
 
@@ -421,16 +421,16 @@ function ScheduledJobsPage() {
       return [
         { label: "Agents", href: "/agents" },
         { label: agentName ?? "...", href: `/agents/${agentId}` },
-        { label: "Scheduled Jobs" },
+        { label: "Automations" },
       ];
     }
     if (type === "routine") {
       return [
         { label: "Routines", href: "/automations/routines" },
-        { label: "Scheduled Jobs" },
+        { label: "Automations" },
       ];
     }
-    return [{ label: "Scheduled Jobs" }];
+    return [{ label: "Automations" }];
   }, [type, agentId, agentName]);
 
   useBreadcrumbs(breadcrumbs);
