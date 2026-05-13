@@ -155,6 +155,11 @@ locals {
     "workspace-files" = {
       WORKSPACE_FILES_EFS_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs"
     }
+    # computer-terminal-start needs the cluster name to scope its
+    # ECS ListTasks / DescribeTasks / ExecuteCommand calls.
+    "computer-terminal-start" = {
+      COMPUTER_RUNTIME_CLUSTER_NAME = var.computer_runtime_cluster_name
+    }
     # computer-manager and computer-runtime-reconciler consume ECS/EFS task
     # config from packages/api/src/lib/computers/runtime-control.ts.
     # Scoping the COMPUTER_RUNTIME_* variables here (instead of in
@@ -303,6 +308,12 @@ resource "aws_lambda_function" "handler" {
     "computer-runtime",
     "computer-manager",
     "computer-runtime-reconciler",
+    # Admin Terminal tab — POST /api/computers/{computerId}/terminal/start.
+    # Returns the SSM Session Manager session envelope (sessionId,
+    # streamUrl, tokenValue) so the browser can open a direct WebSocket
+    # to ssmmessages. Plan:
+    # docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
+    "computer-terminal-start",
     "code-factory",
     "eval-runner",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
@@ -803,6 +814,12 @@ locals {
     # Bearer API_AUTH_SECRET to fetch config, heartbeat, claim one task, append
     # product/audit events, and complete/fail tasks.
     "ANY /api/computers/runtime/{proxy+}" = "computer-runtime"
+
+    # Admin Terminal tab — opens an ECS Exec session into the running
+    # Computer task and returns {sessionId, streamUrl, tokenValue} to the
+    # browser, which then connects WebSocket directly to ssmmessages.
+    "POST /api/computers/{computerId}/terminal/start"    = "computer-terminal-start"
+    "OPTIONS /api/computers/{computerId}/terminal/start" = "computer-terminal-start"
 
     # ThinkWork Computer manager API. Internal service-auth endpoint used by
     # admin operations to reconcile per-Computer ECS service desired state.

@@ -46,6 +46,7 @@ import { ComputerEventsPanel } from "./-components/ComputerEventsPanel";
 import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
 import { ComputerDashboardActivity } from "./-components/ComputerDashboardActivity";
 import { ComputerIdentityEditPanel } from "./-components/ComputerIdentityEditPanel";
+import { ComputerTerminal } from "./-components/ComputerTerminal";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
@@ -55,10 +56,12 @@ export const Route = createFileRoute("/_authed/_tenant/computers/$computerId")({
   }),
 });
 
-type ComputerDetailTab = "dashboard" | "workspace" | "config";
+type ComputerDetailTab = "dashboard" | "workspace" | "config" | "terminal";
 
 function parseComputerTab(value: unknown): ComputerDetailTab {
-  if (value === "workspace" || value === "config") return value;
+  if (value === "workspace" || value === "config" || value === "terminal") {
+    return value;
+  }
   return "dashboard";
 }
 
@@ -192,6 +195,15 @@ function ComputerDetailPage() {
                       Config
                     </Link>
                   </TabsTrigger>
+                  <TabsTrigger value="terminal" asChild className="px-4">
+                    <Link
+                      to="/computers/$computerId"
+                      params={{ computerId }}
+                      search={{ tab: "terminal" }}
+                    >
+                      Terminal
+                    </Link>
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -260,8 +272,16 @@ function ComputerDetailPage() {
           <ComputerMigrationPanel computer={computer} />
         </div>
       ) : null}
+
+      {tab === "terminal" ? (
+        <ComputerTerminalTab computerId={computer.id} />
+      ) : null}
     </PageLayout>
   );
+}
+
+function ComputerTerminalTab({ computerId }: { computerId: string }) {
+  return <ComputerTerminal computerId={computerId} className="min-h-[650px]" />;
 }
 
 function ComputerDashboardTab({

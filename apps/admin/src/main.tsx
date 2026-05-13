@@ -1,5 +1,12 @@
+import { Buffer } from "buffer";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+
+// `ssm-session` (used by the Computer Terminal tab) reaches for the
+// Node-only `Buffer` global to frame the AWS Message Gateway Service
+// WebSocket protocol. Polyfill it here so any module that imports it
+// at top level still works in the browser bundle.
+(globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider as UrqlProvider } from "urql";

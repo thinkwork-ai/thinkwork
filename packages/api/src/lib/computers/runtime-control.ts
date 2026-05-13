@@ -107,6 +107,9 @@ export async function provisionComputerRuntime(input: {
         service: serviceName,
         taskDefinition: taskDefinitionArn,
         desiredCount: 1,
+        // Keep enableExecuteCommand in sync on existing services — without
+        // this an updated service silently flips it back to false.
+        enableExecuteCommand: true,
         networkConfiguration: createServiceInput.networkConfiguration,
       }),
     );
@@ -384,6 +387,12 @@ export function buildCreateServiceInput(input: {
     taskDefinition: input.taskDefinitionArn,
     desiredCount: 1,
     launchType: "FARGATE",
+    // ECS Exec — admin Terminal tab calls ExecuteCommand into this service's
+    // running task. Requires task role with ssmmessages:Create/OpenControl+
+    // DataChannel (granted in terraform/modules/app/computer-runtime/main.tf
+    // aws_iam_role_policy.task_ssm_messages). Plan:
+    // docs/plans/2026-05-13-004-feat-computer-terminal-ecs-exec-plan.md.
+    enableExecuteCommand: true,
     networkConfiguration: {
       awsvpcConfiguration: {
         subnets: input.subnetIds,

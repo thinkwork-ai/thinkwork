@@ -39,11 +39,13 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain('mode="computer"');
     expect(detailRouteSource).not.toContain("target={{ agentId:");
     expect(detailRouteSource).toContain(
-      'type ComputerDetailTab = "dashboard" | "workspace" | "config"',
+      'type ComputerDetailTab = "dashboard" | "workspace" | "config" | "terminal"',
     );
     expect(detailRouteSource).toContain('value="dashboard"');
     expect(detailRouteSource).toContain('value="workspace"');
     expect(detailRouteSource).toContain('value="config"');
+    expect(detailRouteSource).toContain('value="terminal"');
+    expect(detailRouteSource).toContain("ComputerTerminal");
     expect(detailRouteSource).toContain("ComputerStatusPanel");
     expect(detailRouteSource).toContain("ComputerDashboardMetrics");
     expect(detailRouteSource).toContain("ComputerDashboardActivity");
