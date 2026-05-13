@@ -281,7 +281,17 @@ function ComputerDetailPage() {
 }
 
 function ComputerTerminalTab({ computerId }: { computerId: string }) {
-  return <ComputerTerminal computerId={computerId} className="min-h-[650px]" />;
+  // Pin the terminal to viewport-minus-header height so xterm's internal
+  // scrollback handles overflow, not the outer page. min-h floor keeps it
+  // usable on short windows. h-[calc(...)] cap stops the container from
+  // pushing the page scrollbar — the value lines up with the Computer
+  // detail header (title + tabs + status badges + body padding ≈ 220px).
+  return (
+    <ComputerTerminal
+      computerId={computerId}
+      className="h-[calc(100vh-220px)] min-h-[420px]"
+    />
+  );
 }
 
 function ComputerDashboardTab({
