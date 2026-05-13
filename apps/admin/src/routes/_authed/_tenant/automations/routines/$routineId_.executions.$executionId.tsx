@@ -215,28 +215,30 @@ function ExecutionDetailPage() {
         />
       }
     >
-      <div className="relative h-full min-h-0 overflow-hidden rounded-md border border-border/80 bg-background">
-        <ExecutionGraph
-          aslJson={aslVersion?.aslJson}
-          stepManifest={stepManifest}
-          stepEvents={stepEventsLite}
-          executionStatus={execution.status}
-          executionOutput={executionOutput}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-          className="h-full min-h-0 rounded-none border-0"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="absolute right-3 top-3 z-20 xl:hidden"
-          onClick={() => setDetailsOpen(true)}
-        >
-          <PanelRight className="h-3.5 w-3.5" />
-          Details
-        </Button>
-        <div className="absolute inset-y-0 right-0 z-20 hidden w-[440px] min-h-0 overflow-y-auto border-l border-border/70 bg-card/95 shadow-2xl backdrop-blur xl:block">
+      <div className="flex h-full min-h-0 gap-3">
+        <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-background">
+          <ExecutionGraph
+            aslJson={aslVersion?.aslJson}
+            stepManifest={stepManifest}
+            stepEvents={stepEventsLite}
+            executionStatus={execution.status}
+            executionOutput={executionOutput}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+            className="h-full min-h-0 rounded-none border-0"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="absolute right-3 top-3 z-20 xl:hidden"
+            onClick={() => setDetailsOpen(true)}
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+            Details
+          </Button>
+        </div>
+        <div className="hidden h-full min-h-0 w-[440px] shrink-0 overflow-y-auto rounded-md border border-border/70 bg-card/95 backdrop-blur xl:block">
           {renderStepDetails()}
         </div>
       </div>

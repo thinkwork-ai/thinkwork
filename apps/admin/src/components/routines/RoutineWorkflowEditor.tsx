@@ -189,19 +189,21 @@ export function RoutineWorkflowEditor({
 
       {workspace ? (
         <>
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-background">
-            {flowCanvas}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="absolute right-28 top-3 z-20 xl:hidden"
-              onClick={() => setDetailsOpen(true)}
-            >
-              <PanelRight className="h-3.5 w-3.5" />
-              Details
-            </Button>
-            <div className="absolute inset-y-0 right-0 z-20 hidden w-[380px] min-h-0 flex-col border-l border-border/70 bg-card/95 shadow-2xl backdrop-blur xl:flex">
+          <div className="flex min-h-0 flex-1 gap-3">
+            <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-background">
+              {flowCanvas}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="absolute right-28 top-3 z-20 xl:hidden"
+                onClick={() => setDetailsOpen(true)}
+              >
+                <PanelRight className="h-3.5 w-3.5" />
+                Details
+              </Button>
+            </div>
+            <div className="hidden h-full min-h-0 w-[380px] shrink-0 flex-col overflow-hidden rounded-md border border-border/70 bg-card/95 backdrop-blur xl:flex">
               {renderSidebar()}
             </div>
           </div>
