@@ -41,12 +41,14 @@ Use shadcn-compatible primitives from `@thinkwork/ui` for dashboard layout and c
 
 Use `@thinkwork/computer-stdlib` for semantic app primitives and data visualization: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
-Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`; tabular data must use `DataTable` or `Table`. Use real chart or table components for stage exposure, stale activity, risks, rep concentration, and opportunities.
+Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`; status labels must use `Badge`; top-level KPIs must use `KpiStrip` from `@thinkwork/computer-stdlib`; tabular data must use `DataTable` or `Table`. Do not hand-compose KPI metrics as individual `Card` components. Use `Card` for chart, table, or detail sections, not as a substitute for the KPI strip. Use real chart or table components for stage exposure, stale activity, risks, rep concentration, and opportunities.
+
+Do not create a vertical stack of full-width KPI cards. Do not rely on generated `grid-cols-*` or responsive `md:grid-cols-*` Tailwind classes for the core dashboard layout. The saved app must use compiled stdlib primitives for dashboard structure.
 
 Do not use emoji as icons, status markers, bullets, tab labels, headings, or decorative text. If an icon is useful, import it from `lucide-react`; otherwise use text labels and badges.
 
 Do not store shadcn Create Theme CSS in applet metadata or generated TSX. App style is tenant-controlled host configuration. Build with semantic shadcn classes and chart variables so the host-injected tenant style controls the rendered artifact.
 
-Before calling `save_app`, inspect the generated TSX. If it does not import `@thinkwork/ui`, use real dashboard components, include meaningful KPI/chart/table sections, and avoid emoji, revise it before saving.
+Before calling `save_app`, inspect the generated TSX. If it does not import `@thinkwork/ui`, import `@thinkwork/computer-stdlib`, render top-level metrics with `KpiStrip`, use real dashboard components, include meaningful chart/table sections, and avoid emoji, revise it before saving.
 
 Use `assets/crm-dashboard-data.schema.json` and the produce-phase guidance to shape the saved app. If `save_app` fails once, report the concrete error and stop instead of regenerating repeatedly.

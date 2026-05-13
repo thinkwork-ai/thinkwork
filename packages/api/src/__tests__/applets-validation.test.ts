@@ -44,7 +44,7 @@ describe("applet source validation", () => {
               <main>
                 <Card>
                   <CardContent>
-                    <KpiStrip items={[]} />
+                    <KpiStrip cards={[]} />
                     <Badge>CRM Live</Badge>
                     <ChartContainer config={{ amount: { label: "Amount" } }}>
                       <BarChart data={[]}>
@@ -142,6 +142,66 @@ describe("applet source validation", () => {
     ).toThrow(AppletQualityError);
   });
 
+  it("rejects CRM dashboard applets that omit computer-stdlib primitives", () => {
+    expect(() =>
+      validateAppletSource(
+        `
+          import { Card, Table } from "@thinkwork/ui";
+
+          export default function Applet() {
+            return <Card><Table /></Card>;
+          }
+        `,
+        { metadata: { recipe: "crm-dashboard" } },
+      ),
+    ).toThrow(/computer-stdlib/);
+  });
+
+  it("rejects CRM dashboard applets with hand-composed metric cards", () => {
+    expect(() =>
+      validateAppletSource(
+        `
+          import { Card, CardContent, Table } from "@thinkwork/ui";
+          import { BarChart } from "@thinkwork/computer-stdlib";
+
+          export default function Applet() {
+            return (
+              <main>
+                <Card><CardContent>Active Opps 82</CardContent></Card>
+                <Card><CardContent>Pipeline $1.5M</CardContent></Card>
+                <Card><CardContent>Stale 50</CardContent></Card>
+                <Table />
+                <BarChart data={[]} />
+              </main>
+            );
+          }
+        `,
+        { metadata: { recipe: "crm-dashboard" } },
+      ),
+    ).toThrow(/KpiStrip/);
+  });
+
+  it("rejects CRM dashboard applets that rely on generated grid-column layout classes", () => {
+    expect(() =>
+      validateAppletSource(
+        `
+          import { Card, Table } from "@thinkwork/ui";
+          import { KpiStrip } from "@thinkwork/computer-stdlib";
+
+          export default function Applet() {
+            return (
+              <main className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KpiStrip cards={[]} />
+                <Card><Table /></Card>
+              </main>
+            );
+          }
+        `,
+        { metadata: { recipe: "crm-dashboard" } },
+      ),
+    ).toThrow(/grid-column/);
+  });
+
   it("rejects raw HTML tables in CRM dashboard applets", () => {
     expect(() =>
       validateAppletSource(
@@ -152,7 +212,7 @@ describe("applet source validation", () => {
           export default function Applet() {
             return (
               <Card>
-                <KpiStrip items={[]} />
+                <KpiStrip cards={[]} />
                 <table>
                   <tbody>
                     <tr>
@@ -257,7 +317,7 @@ describe("applet source validation", () => {
           export default function Applet() {
             return (
               <Card>
-                <KpiStrip items={[]} />
+                <KpiStrip cards={[]} />
                 <Table />
                 <span>✅ CRM Live</span>
               </Card>
