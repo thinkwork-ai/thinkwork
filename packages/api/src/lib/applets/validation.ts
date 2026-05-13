@@ -1,4 +1,10 @@
 import { transform } from "sucrase";
+import {
+  AppletSourcePolicyError,
+  parseImportDeclarations,
+  validateGeneratedAppImports,
+  validateGeneratedAppSourcePolicy,
+} from "./source-policy.js";
 
 export interface AppletValidationResult {
   ok: true;
@@ -10,7 +16,10 @@ export interface AppletValidationOptions {
 }
 
 export class AppletImportError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
     super(message);
     this.name = "AppletImportError";
   }
@@ -44,17 +53,6 @@ export class AppletSyntaxError extends Error {
     this.name = "AppletSyntaxError";
   }
 }
-
-const ALLOWED_IMPORTS = new Set([
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "@thinkwork/ui",
-  "@thinkwork/computer-stdlib",
-  "lucide-react",
-  "@tabler/icons-react",
-  "useAppletAPI",
-]);
 
 const FORBIDDEN_RUNTIME_PATTERNS = [
   { label: "\\bfetch\\b", regex: /\bfetch\w*/ },
@@ -96,21 +94,24 @@ function validateSyntax(source: string) {
 }
 
 function validateImports(source: string) {
-  const staticImports =
-    /\bimport\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
   const dynamicImports = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-  for (const specifier of collectImportSpecifiers(source, staticImports)) {
-    assertAllowedImport(specifier);
-  }
   for (const specifier of collectImportSpecifiers(source, dynamicImports)) {
-    assertAllowedImport(specifier);
+    throw new AppletImportError(
+      `Applet dynamic imports are not allowed in generated apps; found ${specifier}.`,
+      "APPLET_DYNAMIC_IMPORT_DISALLOWED",
+    );
+  }
+  try {
+    validateGeneratedAppImports(parseImportDeclarations(source));
+  } catch (error) {
+    if (error instanceof AppletSourcePolicyError) {
+      throw new AppletImportError(error.message, error.code);
+    }
+    throw error;
   }
 }
 
-function collectImportSpecifiers(
-  source: string,
-  pattern: RegExp,
-): string[] {
+function collectImportSpecifiers(source: string, pattern: RegExp): string[] {
   const specifiers: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source))) {
@@ -118,14 +119,6 @@ function collectImportSpecifiers(
     if (specifier) specifiers.push(specifier);
   }
   return specifiers;
-}
-
-function assertAllowedImport(specifier: string) {
-  if (!ALLOWED_IMPORTS.has(specifier)) {
-    throw new AppletImportError(
-      `Applet imports may only reference react, @thinkwork/ui, @thinkwork/computer-stdlib, lucide-react, and @tabler/icons-react; found ${specifier}`,
-    );
-  }
 }
 
 function validateRuntimePatterns(source: string) {
@@ -140,6 +133,15 @@ function validateRuntimePatterns(source: string) {
 }
 
 function validateQuality(source: string, options: AppletValidationOptions) {
+  try {
+    validateGeneratedAppSourcePolicy(source);
+  } catch (error) {
+    if (error instanceof AppletSourcePolicyError) {
+      throw new AppletQualityError(error.code, error.message);
+    }
+    throw error;
+  }
+
   if (!isCrmDashboardApplet(options)) return;
 
   if (!importsSpecifier(source, "@thinkwork/ui")) {

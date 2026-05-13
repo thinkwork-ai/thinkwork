@@ -1,0 +1,149 @@
+{
+  "packages": {
+    "react": {
+      "defaultImport": true,
+      "namespaceImport": false,
+      "namedExports": [
+        "Fragment",
+        "useCallback",
+        "useEffect",
+        "useMemo",
+        "useRef",
+        "useState"
+      ]
+    },
+    "react/jsx-runtime": {
+      "namedExports": ["Fragment", "jsx", "jsxs"]
+    },
+    "react/jsx-dev-runtime": {
+      "namedExports": ["Fragment", "jsxDEV"]
+    },
+    "@thinkwork/ui": {
+      "namedExports": [
+        "Badge",
+        "Button",
+        "Card",
+        "CardContent",
+        "CardDescription",
+        "CardFooter",
+        "CardHeader",
+        "CardTitle",
+        "ChartContainer",
+        "ChartLegend",
+        "ChartLegendContent",
+        "ChartTooltip",
+        "ChartTooltipContent",
+        "Checkbox",
+        "DataTable",
+        "Dialog",
+        "DialogContent",
+        "DialogDescription",
+        "DialogFooter",
+        "DialogHeader",
+        "DialogTitle",
+        "Input",
+        "Label",
+        "ScrollArea",
+        "Select",
+        "SelectContent",
+        "SelectItem",
+        "SelectTrigger",
+        "SelectValue",
+        "Separator",
+        "Sheet",
+        "SheetContent",
+        "SheetDescription",
+        "SheetFooter",
+        "SheetHeader",
+        "SheetTitle",
+        "Skeleton",
+        "Spinner",
+        "Switch",
+        "Table",
+        "TableBody",
+        "TableCaption",
+        "TableCell",
+        "TableFooter",
+        "TableHead",
+        "TableHeader",
+        "TableRow",
+        "Tabs",
+        "TabsContent",
+        "TabsList",
+        "TabsTrigger",
+        "Textarea",
+        "Tooltip",
+        "TooltipContent",
+        "TooltipProvider",
+        "TooltipTrigger"
+      ]
+    },
+    "@thinkwork/computer-stdlib": {
+      "namedExports": [
+        "AppHeader",
+        "BarChart",
+        "DataTable",
+        "EvidenceList",
+        "KpiStrip",
+        "MapView",
+        "RefreshBar",
+        "RefreshStateTimeline",
+        "SourceStatusList",
+        "StackedBarChart",
+        "formatCurrency",
+        "formatDate"
+      ]
+    },
+    "recharts": {
+      "namedExports": [
+        "Area",
+        "AreaChart",
+        "Bar",
+        "BarChart",
+        "CartesianGrid",
+        "Cell",
+        "Legend",
+        "Line",
+        "LineChart",
+        "Pie",
+        "PieChart",
+        "ResponsiveContainer",
+        "Tooltip",
+        "XAxis",
+        "YAxis"
+      ]
+    },
+    "useAppletAPI": {
+      "namedExports": ["useAppletAPI"]
+    }
+  },
+  "rechartsExports": [
+    "Area",
+    "AreaChart",
+    "Bar",
+    "BarChart",
+    "CartesianGrid",
+    "Cell",
+    "Legend",
+    "Line",
+    "LineChart",
+    "Pie",
+    "PieChart",
+    "ResponsiveContainer",
+    "Tooltip",
+    "XAxis",
+    "YAxis"
+  ],
+  "rawElementReplacements": {
+    "button": "Button",
+    "input": "Input",
+    "select": "Select",
+    "table": "Table",
+    "tbody": "TableBody",
+    "td": "TableCell",
+    "textarea": "Textarea",
+    "th": "TableHead",
+    "thead": "TableHeader",
+    "tr": "TableRow"
+  }
+}
