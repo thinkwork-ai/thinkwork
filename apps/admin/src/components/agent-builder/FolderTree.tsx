@@ -1,25 +1,12 @@
-import { Loader2, Plus, Trash2 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   FileTree,
   FileTreeActions,
   FileTreeFile,
   FileTreeFolder,
 } from "@/components/ai-elements/file-tree";
-import { cn } from "@/lib/utils";
 import { InheritanceIndicator } from "./InheritanceIndicator";
 import type { ComposeSource } from "@/lib/agent-builder-api";
 import type { RoutingRow } from "./routing-table";
@@ -155,14 +142,10 @@ export interface FolderTreeProps {
   expandedFolders: Set<string>;
   sourceFor: (path: string) => ComposeSource | undefined;
   updateAvailableFor: (path: string) => boolean;
-  deletingPath: string | null;
-  confirmingDeletePath: string | null;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (path: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
-  onConfirmDelete: (path: string) => void;
-  onCancelDeleteConfirm: (path: string) => void;
   onCreateSkill?: () => void;
   onAddSkillFromCatalog?: () => void;
   preferRunbookSkills?: boolean;
@@ -177,7 +160,7 @@ export function FolderTree(props: FolderTreeProps) {
     onToggle,
     onCreateSkill,
     onAddSkillFromCatalog,
-    onConfirmDelete,
+    onDelete,
     preferRunbookSkills,
   } = props;
 
@@ -238,13 +221,13 @@ export function FolderTree(props: FolderTreeProps) {
   };
 
   return (
-    <TooltipProvider delayDuration={2000} skipDelayDuration={0}>
+    <>
       <FileTree
         expanded={expandedFolders}
         onExpandedChange={handleExpandedChange}
         selectedPath={selectedPath ?? undefined}
         onSelect={handleSelect}
-        className="rounded-none border-0 bg-transparent text-sm"
+        className="rounded-none border-0 bg-transparent text-xs"
       >
         {nodes.map((node) => (
           <FolderTreeItem
@@ -288,7 +271,7 @@ export function FolderTree(props: FolderTreeProps) {
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
             onClick={() => {
               setSkillsMenu(null);
-              onConfirmDelete(skillsMenu.path);
+              onDelete(skillsMenu.path, true);
             }}
           >
             <Trash2 className="h-4 w-4" />
@@ -296,7 +279,7 @@ export function FolderTree(props: FolderTreeProps) {
           </button>
         </div>
       ) : null}
-    </TooltipProvider>
+    </>
   );
 }
 
@@ -306,84 +289,23 @@ function FolderTreeItem({
   expandedFolders,
   sourceFor,
   updateAvailableFor,
-  deletingPath,
-  confirmingDeletePath,
   onAcceptUpdate,
   onDelete,
-  onConfirmDelete,
-  onCancelDeleteConfirm,
   onOpenSkillsMenu,
 }: FolderTreeProps & {
   node: TreeNode;
   onOpenSkillsMenu: (event: MouseEvent, path: string) => void;
 }) {
-  const isSelected = selectedPath === node.path;
-  const isDeleting = deletingPath === node.path;
-  const isConfirmingDelete = confirmingDeletePath === node.path;
-
-  const deleteButton = !node.synthetic ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size={isConfirmingDelete ? "sm" : "icon-xs"}
-          className={
-            isConfirmingDelete
-              ? "h-6 rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
-              : cn(
-                  "text-muted-foreground/65 transition-none hover:text-foreground",
-                  !(isSelected || isDeleting || isConfirmingDelete) &&
-                    "opacity-0 group-hover/file-tree-folder:opacity-100 group-hover/file-tree-file:opacity-100",
-                  (isSelected || isDeleting || isConfirmingDelete) &&
-                    "opacity-100",
-                )
-          }
-          aria-label={
-            isConfirmingDelete
-              ? `Confirm delete ${node.name}`
-              : `Delete ${node.name}`
-          }
-          disabled={isDeleting}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (isConfirmingDelete) onDelete(node.path, node.isFolder);
-            else onConfirmDelete(node.path);
-          }}
-        >
-          {isDeleting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          ) : isConfirmingDelete ? (
-            "Confirm"
-          ) : (
-            <Trash2 className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </TooltipTrigger>
-      {!isConfirmingDelete && !isDeleting && (
-        <TooltipContent side="right" sideOffset={6}>
-          Delete
-        </TooltipContent>
-      )}
-    </Tooltip>
-  ) : null;
-
   if (node.isFolder) {
-    const trailingActions =
-      deleteButton !== null ? (
-        <FileTreeActions>{deleteButton}</FileTreeActions>
-      ) : null;
-
     return (
       <FileTreeFolder
         path={node.path}
-        name={renderNodeLabel(node)}
-        trailing={trailingActions}
+        name={renderFolderLabel(node)}
         onContextMenu={(event) => {
           if (isSkillsFolderPath(node.path)) {
             onOpenSkillsMenu(event, node.path);
           }
         }}
-        onMouseLeave={() => onCancelDeleteConfirm(node.path)}
       >
         {node.children.map((child) => (
           <FolderTreeItem
@@ -393,14 +315,10 @@ function FolderTreeItem({
             expandedFolders={expandedFolders}
             sourceFor={sourceFor}
             updateAvailableFor={updateAvailableFor}
-            deletingPath={deletingPath}
-            confirmingDeletePath={confirmingDeletePath}
             onSelect={() => {}}
             onToggle={() => {}}
             onAcceptUpdate={onAcceptUpdate}
             onDelete={onDelete}
-            onConfirmDelete={onConfirmDelete}
-            onCancelDeleteConfirm={onCancelDeleteConfirm}
             nodes={[]}
             onOpenSkillsMenu={onOpenSkillsMenu}
           />
@@ -418,45 +336,42 @@ function FolderTreeItem({
     );
   }
 
-  // File row.
+  // File row. Only renders custom children (including FileTreeActions) when
+  // the file shows an inherited-template Review affordance; otherwise we let
+  // the AI Elements primitive render the default file row.
   const updateAvailable = updateAvailableFor(node.path);
 
+  if (!updateAvailable) {
+    return <FileTreeFile path={node.path} name={node.name} />;
+  }
+
   return (
-    <FileTreeFile
-      path={node.path}
-      name={node.name}
-      onMouseLeave={() => onCancelDeleteConfirm(node.path)}
-    >
+    <FileTreeFile path={node.path} name={node.name}>
       <span className="size-4 shrink-0" />
       <FileGlyph />
-      <FileTreeNameWithMissing name={node.name} missing={node.missing} />
+      <span className="min-w-0 flex-1 truncate">{node.name}</span>
       <FileTreeActions>
-        {updateAvailable && (
-          <>
-            <InheritanceIndicator
-              source={sourceFor(node.path)}
-              updateAvailable={updateAvailable}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 px-1.5 text-[10px] text-amber-500"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAcceptUpdate(node.path);
-              }}
-            >
-              Review
-            </Button>
-          </>
-        )}
-        {deleteButton}
+        <InheritanceIndicator
+          source={sourceFor(node.path)}
+          updateAvailable={updateAvailable}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-5 px-1.5 text-[10px] text-amber-500"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAcceptUpdate(node.path);
+          }}
+        >
+          Review
+        </Button>
       </FileTreeActions>
     </FileTreeFile>
   );
 }
 
-function renderNodeLabel(node: TreeNode): ReactNode {
+function renderFolderLabel(node: TreeNode) {
   if (node.missing) {
     return (
       <>
@@ -469,9 +384,6 @@ function renderNodeLabel(node: TreeNode): ReactNode {
 }
 
 function FileGlyph() {
-  // Small inline icon to keep visual parity with the existing file row.
-  // The AI Elements FileTreeIcon component is reused for folders inside
-  // FileTreeFolder; here we just render a plain file glyph.
   return (
     <span className="shrink-0 text-muted-foreground">
       <svg
@@ -490,23 +402,6 @@ function FileGlyph() {
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
       </svg>
-    </span>
-  );
-}
-
-function FileTreeNameWithMissing({
-  name,
-  missing,
-}: {
-  name: string;
-  missing?: boolean;
-}) {
-  return (
-    <span className="min-w-0 flex-1 truncate">
-      {name}
-      {missing ? (
-        <span className="ml-1 text-[10px] text-amber-500">no files</span>
-      ) : null}
     </span>
   );
 }
