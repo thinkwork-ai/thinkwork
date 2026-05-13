@@ -9,6 +9,7 @@ export type ExpandedRunbookTask = {
   dependsOn: string[];
   capabilityRoles: string[];
   sortOrder: number;
+  details: Record<string, unknown> | null;
 };
 
 export function expandRunbookTasks(
@@ -35,6 +36,7 @@ export function expandRunbookTasks(
         dependsOn: dependencyTaskKeys,
         capabilityRoles: phase.capabilityRoles,
         sortOrder: tasks.length + 1,
+        details: phase.supervision ? { supervision: phase.supervision } : null,
       });
     });
 

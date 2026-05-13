@@ -1,4 +1,5 @@
 import { computerArtifactRoute } from "@/lib/computer-routes";
+import { appletThemeCssFromMetadata } from "@/applets/theme-tokens";
 
 export const GENERATED_APP_RUNTIME_MODE = "sandboxedGenerated" as const;
 
@@ -70,6 +71,10 @@ export function resolveGeneratedAppRuntimeMode(
   // LLM-authored artifact metadata. Future vetted native apps should take a
   // separate host-owned path instead of reusing generated App metadata.
   return GENERATED_APP_RUNTIME_MODE;
+}
+
+export function appletThemeCss(applet: AppletPayload | null): string | null {
+  return appletThemeCssFromMetadata(applet?.metadata);
 }
 
 export function shortModel(value?: string | null, fallback = "—"): string {

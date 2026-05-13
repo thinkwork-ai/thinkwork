@@ -107,6 +107,10 @@ describe("applet GraphQL resolvers", () => {
             threadId: "11111111-1111-4111-8111-111111111111",
             prompt: "Show risk",
             stdlibVersionAtGeneration: "0.1.0",
+            appletTheme: {
+              source: "shadcn-create",
+              css: ":root { --background: oklch(1 0 0); --chart-1: oklch(0.646 0.222 41.116); }",
+            },
           },
         }),
       },
@@ -152,6 +156,10 @@ describe("applet GraphQL resolvers", () => {
       version: 1,
       tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       prompt: "Show risk",
+      appletTheme: {
+        source: "shadcn-create",
+        css: expect.stringContaining("--chart-1"),
+      },
     });
   }, 15000);
 
@@ -340,6 +348,38 @@ describe("applet GraphQL resolvers", () => {
       },
       files: { "App.tsx": source },
       source,
+    });
+  });
+
+  it("injects the tenant app style when the applet has no saved theme", async () => {
+    const { queryResolvers } = await import("../graphql/resolvers/index.js");
+    const appId = "33333333-3333-4333-8333-333333333333";
+    const source = "export default function Applet() { return null; }";
+    selectRows.push(
+      appletRow({
+        id: appId,
+        metadata: metadata({ appId }),
+        features: {
+          artifactStyle: {
+            appletTheme: {
+              source: "shadcn-create",
+              css: ":root { --background: oklch(1 0 0); --chart-1: oklch(0.646 0.222 41.116); }",
+            },
+          },
+        },
+      }),
+    );
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: { transformToString: async () => source } as any,
+    });
+
+    const result = await queryResolvers.applet(null, { appId }, userCtx());
+
+    expect(result.metadata).toMatchObject({
+      appletTheme: {
+        source: "shadcn-create",
+        css: expect.stringContaining("--chart-1"),
+      },
     });
   });
 

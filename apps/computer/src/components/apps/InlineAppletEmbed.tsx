@@ -8,6 +8,7 @@ import {
   useAppletInstanceId,
 } from "@/applets/mount";
 import {
+  appletThemeCss,
   resolveGeneratedAppRuntimeMode,
   type AppletPayload,
 } from "@/lib/app-artifacts";
@@ -37,6 +38,7 @@ export function InlineAppletEmbed({
   const applet = data?.applet ?? null;
   const source = useMemo(() => appletSource(applet), [applet]);
   const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
+  const themeCss = appletThemeCss(applet);
   const version = applet?.applet?.version ?? 1;
   const instanceId = useAppletInstanceId(appId);
 
@@ -72,6 +74,7 @@ export function InlineAppletEmbed({
         version={version}
         hideRefreshControl
         fitContentHeight
+        themeCss={themeCss}
       />
     </div>
   );

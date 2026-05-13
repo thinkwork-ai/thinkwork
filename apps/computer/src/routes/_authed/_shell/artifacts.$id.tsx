@@ -21,6 +21,7 @@ import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActi
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  appletThemeCss,
   resolveGeneratedAppRuntimeMode,
   type AppletPayload,
 } from "@/lib/app-artifacts";
@@ -50,6 +51,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   const title = applet?.applet?.name?.trim() || "Artifact";
   const source = useMemo(() => appletSource(applet), [applet]);
   const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
+  const themeCss = appletThemeCss(applet);
   const latestVersion = applet?.applet?.version ?? null;
   const artifactId = applet?.applet?.artifact?.id ?? null;
   const favoritedAt = applet?.applet?.artifact?.favoritedAt ?? null;
@@ -59,6 +61,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
     instanceId: string;
     source: string;
     version: number;
+    themeCss: string | null;
   } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [headerAction, setHeaderAction] = useState<ReactNode>(null);
@@ -72,10 +75,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   // artifact id — the delete mutation needs it.
   const composedHeaderAction = useMemo<ReactNode>(() => {
     const detailActions = artifactId ? (
-      <ArtifactDetailActions
-        artifactId={artifactId}
-        artifactTitle={title}
-      />
+      <ArtifactDetailActions artifactId={artifactId} artifactTitle={title} />
     ) : null;
     if (!headerAction && !detailActions) return null;
     return (
@@ -125,9 +125,10 @@ export function AppletRouteContent({ appId }: { appId: string }) {
         instanceId,
         source,
         version: latestVersion ?? 1,
+        themeCss,
       };
     });
-  }, [appId, instanceId, latestVersion, source]);
+  }, [appId, instanceId, latestVersion, source, themeCss]);
 
   if (!applet) {
     return (
@@ -176,6 +177,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
                     instanceId,
                     source,
                     version: latestVersion ?? 1,
+                    themeCss,
                   });
                 }
                 setReloadNonce((value) => value + 1);
@@ -194,6 +196,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
             source={mountedSnapshot.source}
             version={mountedSnapshot.version}
             onHeaderActionChange={handleHeaderActionChange}
+            themeCss={mountedSnapshot.themeCss}
           />
         ) : (
           <AppletLoading />

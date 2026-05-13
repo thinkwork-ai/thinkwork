@@ -96,6 +96,12 @@ Use shadcn-compatible primitives from `@thinkwork/ui` for layout and controls: `
 
 Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
 
+Theme requirements:
+
+- If the user provides Theme CSS from shadcn Create, preserve it in `metadata.appletTheme = { source: "shadcn-create", css: "..." }` on `preview_app` and `save_app`.
+- Use semantic shadcn token classes and chart variables: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, and `var(--chart-1)` through `var(--chart-5)`.
+- Do not paste a `<style>` tag into `App.tsx`, hard-code black chart marks on dark surfaces, or invent a separate palette that fights the uploaded theme.
+
 Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`/`TabsList`/`TabsTrigger`; tabular data must use `DataTable` or `Table`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`.
 
 Do not use emoji icons. Use `lucide-react` icons when an icon is needed.
@@ -151,5 +157,6 @@ Use:
 - `metadata.recipe`: `crm-dashboard`.
 - `metadata.recipeVersion`: `1`.
 - `metadata.dataShape`: `CrmDashboardData`.
+- `metadata.appletTheme`: user-provided shadcn Create theme CSS when available.
 
 Only tell the user the artifact exists after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`.

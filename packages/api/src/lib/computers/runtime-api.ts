@@ -124,11 +124,14 @@ export async function recordComputerHeartbeat(input: {
       computerId: input.computerId,
     });
   } catch (err) {
-    console.error("[computer-runtime] failed to reconcile stale runbook tasks", {
-      tenantId: input.tenantId,
-      computerId: input.computerId,
-      message: err instanceof Error ? err.message : String(err),
-    });
+    console.error(
+      "[computer-runtime] failed to reconcile stale runbook tasks",
+      {
+        tenantId: input.tenantId,
+        computerId: input.computerId,
+        message: err instanceof Error ? err.message : String(err),
+      },
+    );
   }
   try {
     await ensureMigratedComputerWorkspaceSeeded({
@@ -173,21 +176,33 @@ async function reconcileStaleComputerRunbookTasks(input: {
   computerId: string;
 }) {
   const result = await db.execute(sql`
-    SELECT
-      task.id AS task_id,
-      task.title AS task_title,
-      run.id AS run_id,
-      run.thread_id,
-      thread.title AS thread_title
-    FROM ${computerRunbookTasks} task
-    JOIN ${computerRunbookRuns} run ON run.id = task.run_id
-    LEFT JOIN ${threads} thread ON thread.id = run.thread_id
-    WHERE task.tenant_id = ${input.tenantId}::uuid
-      AND run.computer_id = ${input.computerId}::uuid
-      AND task.status = 'running'
-      AND run.status IN ('queued', 'running')
-      AND COALESCE(task.started_at, task.updated_at, task.created_at)
-        <= NOW() - INTERVAL '${sql.raw(String(RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES))} minutes'
+    WITH candidates AS (
+      SELECT
+        task.id AS task_id,
+        task.title AS task_title,
+        run.id AS run_id,
+        run.thread_id,
+        thread.title AS thread_title,
+        COALESCE(task.started_at, task.updated_at, task.created_at) AS stale_since,
+        CASE
+          WHEN task.details->'supervision'->>'staleAfterMinutes' ~ '^[0-9]+$'
+            THEN LEAST(
+              GREATEST((task.details->'supervision'->>'staleAfterMinutes')::int, 1),
+              120
+            )
+          ELSE ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
+        END AS stale_after_minutes
+      FROM ${computerRunbookTasks} task
+      JOIN ${computerRunbookRuns} run ON run.id = task.run_id
+      LEFT JOIN ${threads} thread ON thread.id = run.thread_id
+      WHERE task.tenant_id = ${input.tenantId}::uuid
+        AND run.computer_id = ${input.computerId}::uuid
+        AND task.status = 'running'
+        AND run.status IN ('queued', 'running')
+    )
+    SELECT *
+    FROM candidates
+    WHERE stale_since <= NOW() - make_interval(mins => stale_after_minutes)
     LIMIT 25
   `);
 
@@ -197,12 +212,18 @@ async function reconcileStaleComputerRunbookTasks(input: {
     run_id: string;
     thread_id: string | null;
     thread_title: string | null;
+    stale_after_minutes: number;
   }>;
   if (rows.length === 0) return 0;
 
-  const message = `Runbook task exceeded the ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES} minute execution budget.`;
   let processed = 0;
   for (const row of rows) {
+    const staleAfterMinutes =
+      typeof row.stale_after_minutes === "number"
+        ? row.stale_after_minutes
+        : Number(row.stale_after_minutes) ||
+          RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES;
+    const message = `Runbook task exceeded the ${staleAfterMinutes} minute execution budget.`;
     await db.execute(sql`
       UPDATE ${computerRunbookTasks}
       SET
@@ -211,7 +232,7 @@ async function reconcileStaleComputerRunbookTasks(input: {
           'code', 'runbook_step_timed_out',
           'message', ${message}::text,
           'source', 'computer_heartbeat',
-          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
+          'staleAfterMinutes', ${staleAfterMinutes}::int
         ),
         completed_at = NOW(),
         updated_at = NOW()
@@ -238,7 +259,7 @@ async function reconcileStaleComputerRunbookTasks(input: {
           'message', ${message}::text,
           'source', 'computer_heartbeat',
           'taskId', ${row.task_id}::text,
-          'staleAfterMinutes', ${RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES}::int
+          'staleAfterMinutes', ${staleAfterMinutes}::int
         ),
         completed_at = NOW(),
         updated_at = NOW()

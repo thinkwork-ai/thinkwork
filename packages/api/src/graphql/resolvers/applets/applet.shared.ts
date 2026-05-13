@@ -10,6 +10,7 @@ import {
   lt,
   randomUUID,
   sql,
+  tenantSettings,
   threads,
 } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -110,7 +111,9 @@ export async function loadApplet(args: {
   }
 
   const caller = args.caller ?? (await resolveCaller(args.ctx));
-  const metadata = assertAppletArtifactAccess(row, caller);
+  const metadata = await withTenantAppletTheme(
+    assertAppletArtifactAccess(row, caller),
+  );
   const source = await readSource(row);
   return { artifact: row, metadata, source };
 }
@@ -193,10 +196,12 @@ export async function loadAdminApplet(args: {
   }
 
   await requireTenantAdmin(args.ctx, row.tenant_id);
-  const metadata = assertAppletArtifactAccess(row, {
-    tenantId: row.tenant_id,
-    userId: null,
-  });
+  const metadata = await withTenantAppletTheme(
+    assertAppletArtifactAccess(row, {
+      tenantId: row.tenant_id,
+      userId: null,
+    }),
+  );
   const source = await readSource(row);
   return { artifact: row, metadata, source };
 }
@@ -701,6 +706,29 @@ function toAppletPreview(
   };
 }
 
+async function withTenantAppletTheme(
+  metadata: AppletMetadataV1,
+): Promise<AppletMetadataV1> {
+  if (metadata.appletTheme) return metadata;
+  const [settings] = await db
+    .select({ features: tenantSettings.features })
+    .from(tenantSettings)
+    .where(eq(tenantSettings.tenant_id, metadata.tenantId))
+    .limit(1);
+  const appletTheme = parseTenantAppletTheme(settings?.features);
+  return appletTheme ? { ...metadata, appletTheme } : metadata;
+}
+
+function parseTenantAppletTheme(
+  features: unknown,
+): AppletMetadataV1["appletTheme"] | undefined {
+  const root = parseJsonObject(features);
+  const artifactStyle = parseJsonObject(root?.artifactStyle);
+  return parseAppletThemeMetadata(
+    artifactStyle?.appletTheme ?? root?.appletTheme,
+  );
+}
+
 function parseAppletFiles(
   input: unknown,
 ):
@@ -784,11 +812,31 @@ function buildAppletMetadata(args: {
       "shadcnProvenance",
       args.fallback?.shadcnProvenance,
     ),
+    appletTheme:
+      parseAppletThemeMetadata(input.appletTheme) ?? args.fallback?.appletTheme,
   };
 
   return Object.fromEntries(
     Object.entries(metadata).filter(([, value]) => value !== undefined),
   ) as AppletMetadataV1;
+}
+
+function parseAppletThemeMetadata(
+  input: unknown,
+): AppletMetadataV1["appletTheme"] | undefined {
+  const value = parseJsonObject(input);
+  if (!value) return undefined;
+  if (typeof value.css !== "string") return undefined;
+  const css = value.css.trim();
+  if (!css || css.length > 20_000) return undefined;
+  if (!css.includes(":root") && !css.includes(".dark")) return undefined;
+  return {
+    source:
+      typeof value.source === "string" && value.source.trim()
+        ? value.source.trim()
+        : "shadcn-create",
+    css,
+  };
 }
 
 function parseDraftPreviewMetadata(

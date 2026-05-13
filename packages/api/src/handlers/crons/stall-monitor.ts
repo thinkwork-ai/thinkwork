@@ -9,7 +9,7 @@
 
 import { sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { notifyThreadUpdate } from "../../graphql/notify.js";
+import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import { getRetryDelay } from "../../lib/retry-backoff.js";
 
 const STALL_THRESHOLD_MINUTES = 5;
@@ -91,40 +91,60 @@ export async function handler() {
 
 async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
   const result = await db.execute(sql`
-		SELECT
-			task.id AS task_id,
-			task.tenant_id,
-			run.id AS run_id,
-			run.computer_id,
-			run.thread_id,
-			run.runbook_slug,
-			thread.title AS thread_title,
-			thread.status AS thread_status
-		FROM computer_runbook_tasks task
-		JOIN computer_runbook_runs run ON run.id = task.run_id
-		LEFT JOIN threads thread ON thread.id = run.thread_id
-		WHERE task.status = 'running'
-		  AND run.status IN ('queued', 'running')
-		  AND COALESCE(task.started_at, task.updated_at, task.created_at) < NOW() - INTERVAL '${sql.raw(String(STALL_THRESHOLD_MINUTES))} minutes'
+		WITH candidates AS (
+			SELECT
+				task.id AS task_id,
+				task.tenant_id,
+				task.title AS task_title,
+				run.id AS run_id,
+				run.computer_id,
+				run.thread_id,
+				run.runbook_slug,
+				thread.title AS thread_title,
+				thread.status AS thread_status,
+				COALESCE(task.started_at, task.updated_at, task.created_at) AS stale_since,
+				CASE
+					WHEN task.details->'supervision'->>'staleAfterMinutes' ~ '^[0-9]+$'
+						THEN LEAST(
+							GREATEST((task.details->'supervision'->>'staleAfterMinutes')::int, 1),
+							120
+						)
+					ELSE ${STALL_THRESHOLD_MINUTES}::int
+				END AS stale_after_minutes
+			FROM computer_runbook_tasks task
+			JOIN computer_runbook_runs run ON run.id = task.run_id
+			LEFT JOIN threads thread ON thread.id = run.thread_id
+			WHERE task.status = 'running'
+			  AND run.status IN ('queued', 'running')
+		)
+		SELECT *
+		FROM candidates
+		WHERE stale_since < NOW() - make_interval(mins => stale_after_minutes)
 		LIMIT 25
 	`);
 
   const rows = (result.rows || []) as Array<{
     task_id: string;
     tenant_id: string;
+    task_title: string;
     run_id: string;
     computer_id: string;
     thread_id: string | null;
     runbook_slug: string;
     thread_title: string | null;
     thread_status: string | null;
+    stale_after_minutes: number;
   }>;
   if (rows.length === 0) return 0;
 
   console.log(`[stall-monitor] Found ${rows.length} stalled runbook tasks`);
   let processed = 0;
   for (const row of rows) {
-    const message = `Runbook task exceeded the ${STALL_THRESHOLD_MINUTES} minute execution budget.`;
+    const staleAfterMinutes =
+      typeof row.stale_after_minutes === "number"
+        ? row.stale_after_minutes
+        : Number(row.stale_after_minutes) || STALL_THRESHOLD_MINUTES;
+    const message = `Runbook task exceeded the ${staleAfterMinutes} minute execution budget.`;
     await db.execute(sql`
 			UPDATE computer_runbook_tasks
 			SET
@@ -132,7 +152,7 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 				error = jsonb_build_object(
 					'code', 'runbook_step_timed_out',
 					'message', ${message}::text,
-					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}::int
+					'staleAfterMinutes', ${staleAfterMinutes}::int
 				),
 				completed_at = NOW(),
 				updated_at = NOW()
@@ -158,7 +178,7 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 					'code', 'runbook_step_timed_out',
 					'message', ${message}::text,
 					'taskId', ${row.task_id}::text,
-					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}::int
+					'staleAfterMinutes', ${staleAfterMinutes}::int
 				),
 				completed_at = NOW(),
 				updated_at = NOW()
@@ -185,15 +205,72 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 		`);
 
     if (row.thread_id) {
+      const content = `**Stopped:** ${row.task_title}\n\n${message}`;
+      const preview =
+        content.length > 240 ? `${content.slice(0, 237)}...` : content;
+      const inserted = await db.execute(sql`
+				INSERT INTO messages (
+					id,
+					tenant_id,
+					thread_id,
+					role,
+					content,
+					parts,
+					sender_type,
+					sender_id,
+					metadata,
+					created_at
+				)
+				VALUES (
+					gen_random_uuid(),
+					${row.tenant_id}::uuid,
+					${row.thread_id}::uuid,
+					'assistant',
+					${content}::text,
+					jsonb_build_array(
+						jsonb_build_object(
+							'type', 'text',
+							'id', ${`runbook-timeout:${row.run_id}:${row.task_id}`}::text,
+							'text', ${content}::text
+						)
+					),
+					'computer',
+					${row.computer_id}::uuid,
+					jsonb_build_object(
+						'runbookMessageKey', ${`runbook-timeout:${row.run_id}:${row.task_id}`}::text,
+						'runbookRunId', ${row.run_id}::text,
+						'runbookTaskId', ${row.task_id}::text,
+						'runbookProgressKind', 'failed',
+						'source', 'stall_monitor'
+					),
+					NOW()
+				)
+				RETURNING id
+			`);
+      const messageId = (inserted.rows?.[0] as { id?: string } | undefined)?.id;
       await db.execute(sql`
 				UPDATE threads
-				SET updated_at = NOW()
+				SET
+					status = 'blocked',
+					last_response_preview = ${preview}::text,
+					updated_at = NOW()
 				WHERE id = ${row.thread_id}::uuid
 			`);
+      if (messageId) {
+        await notifyNewMessage({
+          messageId,
+          threadId: row.thread_id,
+          tenantId: row.tenant_id,
+          role: "assistant",
+          content,
+          senderType: "computer",
+          senderId: row.computer_id,
+        }).catch(() => {});
+      }
       await notifyThreadUpdate({
         threadId: row.thread_id,
         tenantId: row.tenant_id,
-        status: row.thread_status ?? "in_progress",
+        status: "blocked",
         title: row.thread_title ?? "Untitled thread",
       }).catch(() => {});
     }
