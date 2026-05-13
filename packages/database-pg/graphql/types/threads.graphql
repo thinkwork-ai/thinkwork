@@ -194,6 +194,14 @@ extend type Query {
     sortDir: String
     limit: Int
     offset: Int
+    """
+    Optional scope to a single Computer. When set, results are filtered to
+    threads where `computer_id = $computerId`. Tenant scoping still applies
+    on top, so a cross-tenant computerId returns empty rather than leaking.
+    Consumed by the admin Computer Detail Dashboard's shared ThreadsTable
+    (plan 2026-05-13-005 U7).
+    """
+    computerId: ID
   ): ThreadsPage!
   thread(id: ID!): Thread
   threadByNumber(tenantId: ID!, number: Int!): Thread

@@ -7,6 +7,15 @@ import {
 export const threadsPaged_query = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions: any[] = [eq(threads.tenant_id, args.tenantId)];
 
+	// Filter: scope to a single Computer when the caller passes one. Plan
+	// 2026-05-13-005 U1 — admin Computer Detail Dashboard renders the same
+	// shared ThreadsTable as /threads, filtered to a specific Computer.
+	// Tenant scoping above still applies; the computerId predicate is layered
+	// on top so a cross-tenant computerId returns empty rather than leaking.
+	if (args.computerId) {
+		conditions.push(eq(threads.computer_id, args.computerId));
+	}
+
 	// Filter: archived vs non-archived
 	if (args.showArchived) {
 		conditions.push(sql`${threads.archived_at} IS NOT NULL`);

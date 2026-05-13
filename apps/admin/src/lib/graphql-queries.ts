@@ -377,53 +377,12 @@ export const UpdateComputerMutation = graphql(`
   }
 `);
 
-export const ComputerTasksQuery = graphql(`
-  query ComputerTasks($computerId: ID!, $limit: Int) {
-    computerTasks(computerId: $computerId, limit: $limit) {
-      id
-      taskType
-      status
-      input
-      output
-      error
-      idempotencyKey
-      claimedAt
-      completedAt
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const ComputerThreadsQuery = graphql(`
-  query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
-    threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
-      id
-      number
-      identifier
-      title
-      status
-      channel
-      costSummary
-      lastResponsePreview
-      createdAt
-      updatedAt
-    }
-  }
-`);
-
-export const ComputerEventsQuery = graphql(`
-  query ComputerEvents($computerId: ID!, $limit: Int) {
-    computerEvents(computerId: $computerId, limit: $limit) {
-      id
-      taskId
-      eventType
-      level
-      payload
-      createdAt
-    }
-  }
-`);
+// ComputerTasksQuery, ComputerThreadsQuery, and ComputerEventsQuery
+// retired by plan 2026-05-13-005 U2 alongside the
+// ComputerLiveTasksPanel, ComputerDashboardActivity, and
+// ComputerEventsPanel components. The Computer Dashboard now reads
+// threads via the shared ThreadsTable + threadsPaged(computerId:...)
+// path; tasks + events were judged operator noise and removed.
 
 export const EnqueueComputerTaskMutation = graphql(`
   mutation EnqueueComputerTask($input: EnqueueComputerTaskInput!) {
@@ -863,6 +822,7 @@ export const ThreadsPagedQuery = gql`
     $sortDir: String
     $limit: Int
     $offset: Int
+    $computerId: ID
   ) {
     threadsPaged(
       tenantId: $tenantId
@@ -872,6 +832,7 @@ export const ThreadsPagedQuery = gql`
       sortDir: $sortDir
       limit: $limit
       offset: $offset
+      computerId: $computerId
     ) {
       items {
         id
