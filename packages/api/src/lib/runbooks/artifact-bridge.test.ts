@@ -23,7 +23,10 @@ describe("artifact runbook bridge", () => {
     expect(produce?.guidanceMarkdown).toContain("metadata.runbookSlug");
     expect(produce?.guidanceMarkdown).toContain("save_app");
     expect(produce?.guidanceMarkdown).toContain(
-      "Include KPI cards or `KpiStrip`",
+      "Use `KpiStrip` from `@thinkwork/computer-stdlib` for top-level KPIs",
+    );
+    expect(produce?.guidanceMarkdown).toContain(
+      "Do not create a vertical stack of full-width KPI cards",
     );
     expect(produce?.guidanceMarkdown).toContain("durable output is the saved app");
     expect(produce?.guidanceMarkdown).toContain("Do not use emoji anywhere");
