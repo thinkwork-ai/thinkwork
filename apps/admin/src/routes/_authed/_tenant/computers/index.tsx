@@ -35,26 +35,13 @@ type ComputerRow = {
   ownerEmail: string | null;
   templateName: string | null;
   status: string;
-  desiredRuntimeStatus: string;
-  runtimeStatus: string;
   budgetMonthlyCents: number | null;
   spentMonthlyCents: number | null;
   lastHeartbeatAt: string | null;
   lastActiveAt: string | null;
-  migratedFromAgentId: string | null;
 };
 
-type SortField =
-  | "name"
-  | "ownerName"
-  | "status"
-  | "runtimeStatus"
-  | "lastHeartbeatAt";
-
-function label(value: string | null | undefined): string {
-  if (!value) return "—";
-  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+type SortField = "name" | "ownerName" | "status" | "lastHeartbeatAt";
 
 function formatBudget(spent: number | null, budget: number | null): string {
   if (spent == null && budget == null) return "—";
@@ -100,21 +87,6 @@ const columns: ColumnDef<ComputerRow>[] = [
     size: 110,
   },
   {
-    accessorKey: "runtimeStatus",
-    header: "Runtime",
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1.5">
-        <Badge variant="outline" className="text-xs whitespace-nowrap">
-          Desired {label(row.original.desiredRuntimeStatus)}
-        </Badge>
-        <Badge variant="outline" className="text-xs whitespace-nowrap">
-          {label(row.original.runtimeStatus)}
-        </Badge>
-      </div>
-    ),
-    size: 180,
-  },
-  {
     accessorKey: "templateName",
     header: "Template",
     cell: ({ row }) =>
@@ -152,19 +124,6 @@ const columns: ColumnDef<ComputerRow>[] = [
     ),
     size: 130,
   },
-  {
-    accessorKey: "migratedFromAgentId",
-    header: "Migration",
-    cell: ({ row }) =>
-      row.original.migratedFromAgentId ? (
-        <Badge variant="outline" className="text-xs whitespace-nowrap">
-          Migrated
-        </Badge>
-      ) : (
-        <span className="text-xs text-muted-foreground">Native</span>
-      ),
-    size: 110,
-  },
 ];
 
 function ComputersPage() {
@@ -200,13 +159,10 @@ function ComputersPage() {
       ownerEmail: computer.owner?.email ?? null,
       templateName: computer.template?.name ?? null,
       status: computer.status,
-      desiredRuntimeStatus: computer.desiredRuntimeStatus,
-      runtimeStatus: computer.runtimeStatus,
       budgetMonthlyCents: computer.budgetMonthlyCents ?? null,
       spentMonthlyCents: computer.spentMonthlyCents ?? null,
       lastHeartbeatAt: computer.lastHeartbeatAt ?? null,
       lastActiveAt: computer.lastActiveAt ?? null,
-      migratedFromAgentId: computer.migratedFromAgentId ?? null,
     }));
     const dir = sortDir === "asc" ? 1 : -1;
     mapped.sort((a, b) => {
@@ -293,7 +249,6 @@ function ComputersPage() {
                   { value: "name", label: "Name" },
                   { value: "ownerName", label: "Owner" },
                   { value: "status", label: "Status" },
-                  { value: "runtimeStatus", label: "Runtime" },
                   { value: "lastHeartbeatAt", label: "Heartbeat" },
                 ]}
                 field={sortField}
