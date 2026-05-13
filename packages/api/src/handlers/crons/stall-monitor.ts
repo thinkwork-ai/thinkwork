@@ -131,8 +131,8 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 				status = 'failed',
 				error = jsonb_build_object(
 					'code', 'runbook_step_timed_out',
-					'message', ${message},
-					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}
+					'message', ${message}::text,
+					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}::int
 				),
 				completed_at = NOW(),
 				updated_at = NOW()
@@ -156,9 +156,9 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 				status = 'failed',
 				error = jsonb_build_object(
 					'code', 'runbook_step_timed_out',
-					'message', ${message},
-					'taskId', ${row.task_id},
-					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}
+					'message', ${message}::text,
+					'taskId', ${row.task_id}::text,
+					'staleAfterMinutes', ${STALL_THRESHOLD_MINUTES}::int
 				),
 				completed_at = NOW(),
 				updated_at = NOW()
@@ -172,8 +172,8 @@ async function reconcileStalledRunbookTasks(db: ReturnType<typeof getDb>) {
 				status = 'failed',
 				error = jsonb_build_object(
 					'code', 'runbook_step_timed_out',
-					'message', ${message},
-					'runbookRunId', ${row.run_id}
+					'message', ${message}::text,
+					'runbookRunId', ${row.run_id}::text
 				),
 				completed_at = NOW(),
 				updated_at = NOW()
