@@ -37,6 +37,7 @@ import {
 } from "../../../lib/artifacts/payload-storage.js";
 import {
   AppletImportError,
+  AppletQualityError,
   AppletRuntimePatternError,
   AppletSyntaxError,
   validateAppletSource,
@@ -324,7 +325,10 @@ export async function saveAppletInner(args: {
   }
 
   try {
-    validateAppletSource(filesResult.source);
+    validateAppletSource(filesResult.source, {
+      metadata: args.input.metadata,
+      name: args.input.name,
+    });
   } catch (err) {
     return failurePayload({
       appId,
@@ -809,6 +813,12 @@ function appletError(err: unknown, fallbackCode = "BAD_USER_INPUT") {
   if (err instanceof AppletSyntaxError) {
     return {
       code: "SYNTAX_ERROR",
+      message: err.message,
+    };
+  }
+  if (err instanceof AppletQualityError) {
+    return {
+      code: err.code,
       message: err.message,
     };
   }

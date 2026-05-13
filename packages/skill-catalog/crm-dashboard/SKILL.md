@@ -33,4 +33,18 @@ Start by reading `references/thinkwork-runbook.json` for routing, confirmation, 
 
 Follow the phase order unless the active run snapshot tells you otherwise: discover CRM context, analyze pipeline and account risk, produce the dashboard artifact, then validate the result. Keep claims grounded in source data or label them as assumptions.
 
-When producing the artifact, use `assets/crm-dashboard-data.schema.json` and the produce-phase guidance to shape the saved app.
+## Artifact UI Contract
+
+When producing or updating the artifact, load `references/produce.md` and treat its UI contract as mandatory. The saved `App.tsx` must be a dense operational dashboard built with the platform component libraries, not a markdown report, prose summary, or custom HTML layout.
+
+Use shadcn-compatible primitives from `@thinkwork/ui` for dashboard layout and controls: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `Badge`, `Button`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `ScrollArea`, and `Separator` where applicable.
+
+Use `@thinkwork/computer-stdlib` for semantic app primitives and data visualization: `AppHeader`, `KpiStrip`, `BarChart`, `StackedBarChart`, `DataTable`, and formatters such as `formatCurrency`.
+
+Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`; status labels must use `Badge`; metric panels must use `Card` or `KpiStrip`; tabular data must use `DataTable` or `Table`. Use real chart or table components for stage exposure, stale activity, risks, rep concentration, and opportunities.
+
+Do not use emoji as icons, status markers, bullets, tab labels, headings, or decorative text. If an icon is useful, import it from `lucide-react` or `@tabler/icons-react`; otherwise use text labels and badges.
+
+Before calling `save_app`, inspect the generated TSX. If it does not import `@thinkwork/ui`, use real dashboard components, include meaningful KPI/chart/table sections, and avoid emoji, revise it before saving.
+
+Use `assets/crm-dashboard-data.schema.json` and the produce-phase guidance to shape the saved app.
