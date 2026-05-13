@@ -21,6 +21,10 @@ vi.mock("@/applets/mount", () => ({
 	useAppletInstanceId: (appId: string) => `instance-${appId}`,
 }));
 
+vi.mock("urql", () => ({
+	useMutation: () => [{ fetching: false }, vi.fn()],
+}));
+
 import { renderTypedPart, renderTypedParts } from "./render-typed-part";
 
 afterEach(cleanup);

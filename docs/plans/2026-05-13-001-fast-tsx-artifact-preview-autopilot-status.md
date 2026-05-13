@@ -38,6 +38,8 @@ status: active
 - 2026-05-13: Began U4 by adding the `promoteDraftApplet` schema/resolver path, draft promotion proof verification, user-auth promotion boundary, deterministic draft app IDs, and a Save action in `DraftAppletPreview`.
 - 2026-05-13: U4 focused verification passed: API applet resolver/access/runtime proof tests, Computer draft preview/query tests, Python applet tool tests, GraphQL contract test, API/Computer typechecks, API/Computer builds, CLI typecheck, root lint, Python ruff check for touched files, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
 - 2026-05-13: Opened U4 PR #1187 from `codex/fast-tsx-u4-promote-draft`.
+- 2026-05-13: U4 PR #1187 CI failed in `test` because `render-typed-part.test.tsx` rendered `DraftAppletPreview` without a `urql` provider or mock after the Save hook was added; patched the test to mock `useMutation`.
+- 2026-05-13: U4 CI fix verification passed: `render-typed-part` + `DraftAppletPreview` tests, Computer typecheck, and `git diff --check`.
 
 ## Pull Requests
 
@@ -48,7 +50,7 @@ status: active
 
 ## CI Failures
 
-None yet.
+- 2026-05-13: U4 PR #1187 `test` failed once on missing `urql` provider in `apps/computer/src/components/computer/render-typed-part.test.tsx`; fixed with a test-local `useMutation` mock.
 
 ## Blockers
 
