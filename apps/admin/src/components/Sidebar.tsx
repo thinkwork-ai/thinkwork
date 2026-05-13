@@ -206,7 +206,6 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/symphony", icon: Network, label: "Symphony" },
     {
       to: "/computers",
       icon: Monitor,
@@ -245,18 +244,21 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
-    { to: "/applets", icon: AppWindow, label: "Apps" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
-    { to: "/security", icon: Shield, label: "Security Center" },
   ];
 
+  // Billing is intentionally hidden — flip BILLING_VISIBLE back on when ready.
+  const BILLING_VISIBLE = false;
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
+    { to: "/applets", icon: AppWindow, label: "Artifacts" },
     { to: "/people", icon: Users, label: "People" },
     { to: "/compliance", icon: ScrollText, label: "Compliance" },
-    ...(isOwner
+    { to: "/security", icon: Shield, label: "Security Center" },
+    { to: "/symphony", icon: Network, label: "Symphony" },
+    ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
     { to: "/settings", icon: Settings, label: "Settings" },
@@ -307,16 +309,16 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel>Managed Agents</SidebarGroupLabel>
+          <SidebarGroupLabel>Automations</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={agentsItems} />
+            <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel>Automations</SidebarGroupLabel>
+          <SidebarGroupLabel>Managed Harness</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavItems items={automationsItems} />
+            <NavItems items={agentsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
 

@@ -14,10 +14,10 @@ describe("Apps admin routes", () => {
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$appId.tsx");
 
-  it("exposes Apps as a read-only admin surface", () => {
-    expect(sidebarSource).toContain('label: "Apps"');
+  it("exposes Artifacts as a read-only admin surface", () => {
+    expect(sidebarSource).toContain('label: "Artifacts"');
     expect(sidebarSource).toContain('to: "/applets"');
-    expect(commandPaletteSource).toContain('label: "Apps"');
+    expect(commandPaletteSource).toContain('label: "Artifacts"');
     expect(commandPaletteSource).toContain('to: "/applets"');
   });
 

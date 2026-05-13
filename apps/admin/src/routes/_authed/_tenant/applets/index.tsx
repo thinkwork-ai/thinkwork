@@ -77,7 +77,7 @@ function AppletsPage() {
   const [userFilter, setUserFilter] = useState("");
   const trimmedUserFilter = userFilter.trim();
 
-  useBreadcrumbs([{ label: "Apps" }]);
+  useBreadcrumbs([{ label: "Artifacts" }]);
 
   const [result] = useQuery({
     query: AdminAppletsQuery,
@@ -109,7 +109,7 @@ function AppletsPage() {
   return (
     <PageLayout
       header={
-        <PageHeader title="Apps">
+        <PageHeader title="Artifacts">
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
