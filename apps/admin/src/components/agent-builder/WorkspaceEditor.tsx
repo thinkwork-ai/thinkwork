@@ -1106,8 +1106,6 @@ export function WorkspaceEditor({
                 expandedFolders={expandedFolders}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
-                deletingPath={deletingPath}
-                confirmingDeletePath={confirmingDeletePath}
                 onSelect={openWorkspaceFile}
                 onToggle={toggleFolder}
                 onAcceptUpdate={
@@ -1116,8 +1114,6 @@ export function WorkspaceEditor({
                     : () => {}
                 }
                 onDelete={handleDeletePath}
-                onConfirmDelete={handleConfirmDelete}
-                onCancelDeleteConfirm={handleCancelDeleteConfirm}
                 onCreateSkill={openNewSkillDialog}
                 onAddSkillFromCatalog={() => openCatalogSkillDialog()}
                 preferRunbookSkills={preferRunbookSkills}

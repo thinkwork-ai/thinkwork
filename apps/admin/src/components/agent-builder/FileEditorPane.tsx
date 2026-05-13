@@ -41,10 +41,10 @@ export function FileEditorPane({
   onConfirmDelete,
   onCancelDeleteConfirm,
 }: FileEditorPaneProps) {
-  const [editingMarkdown, setEditingMarkdown] = useState(false);
+  const [editingMarkdown, setEditingMarkdown] = useState(true);
 
   useEffect(() => {
-    setEditingMarkdown(false);
+    setEditingMarkdown(true);
   }, [openFile]);
 
   if (!openFile) {
