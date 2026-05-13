@@ -13,6 +13,7 @@ import {
   ComputerWikiPageQuery,
   ComputerWikiSearchQuery,
   DeleteComputerMemoryRecordMutation,
+  PromoteDraftAppletMutation,
   ThreadTurnUpdatedSubscription,
 } from "./graphql-queries";
 
@@ -92,5 +93,14 @@ describe("computer GraphQL queries", () => {
     expect(query).toContain("nodes");
     expect(query).toContain("nextCursor");
     expect(query).toContain("prompt");
+  });
+
+  it("promotes draft applet previews through the user-callable mutation", () => {
+    const mutation = print(PromoteDraftAppletMutation);
+
+    expect(mutation).toContain("promoteDraftApplet(input: $input)");
+    expect(mutation).toContain("appId");
+    expect(mutation).toContain("persisted");
+    expect(mutation).toContain("errors");
   });
 });

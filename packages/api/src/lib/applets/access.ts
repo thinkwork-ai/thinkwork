@@ -1,9 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../graphql/context.js";
-import {
-  parseAppletMetadataV1,
-  type AppletMetadataV1,
-} from "./metadata.js";
+import { parseAppletMetadataV1, type AppletMetadataV1 } from "./metadata.js";
 
 export interface AppletArtifactRow {
   id: string;
@@ -48,6 +45,27 @@ export function assertCanWriteApplet(ctx: GraphQLContext, tenantId: string) {
     throw new GraphQLError("Applet writes require service authentication", {
       extensions: { code: "FORBIDDEN" },
     });
+  }
+}
+
+export function assertCanPromoteDraftApplet(
+  ctx: GraphQLContext,
+  tenantId: string,
+  caller?: { tenantId: string | null; userId: string | null },
+) {
+  const callerTenantId = caller?.tenantId ?? ctx.auth.tenantId;
+  const callerUserId = caller?.userId ?? ctx.auth.principalId;
+  if (
+    ctx.auth.authType !== "cognito" ||
+    callerTenantId !== tenantId ||
+    !callerUserId
+  ) {
+    throw new GraphQLError(
+      "Draft applet promotion requires user authentication",
+      {
+        extensions: { code: "FORBIDDEN" },
+      },
+    );
   }
 }
 

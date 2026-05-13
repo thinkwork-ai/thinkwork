@@ -1,4 +1,7 @@
-import { Badge } from "@thinkwork/ui";
+import { useState } from "react";
+import { ExternalLink, Loader2, Save } from "lucide-react";
+import { useMutation } from "urql";
+import { Badge, Button } from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletMount,
@@ -10,15 +13,20 @@ import {
   WebPreviewConsole,
   WebPreviewNavigation,
 } from "@/components/ai-elements/web-preview";
+import { PromoteDraftAppletMutation } from "@/lib/graphql-queries";
 
 interface DraftAppPreviewOutput {
   type?: string;
   draft?: {
     draftId?: string;
     unsaved?: boolean;
+    computerId?: string;
     name?: string;
     files?: Record<string, string>;
+    metadata?: Record<string, unknown>;
     sourceDigest?: string;
+    promotionProof?: string | null;
+    promotionProofExpiresAt?: string | null;
     validation?: {
       ok?: boolean;
       status?: string;
@@ -28,6 +36,7 @@ interface DraftAppPreviewOutput {
       status?: string;
       notes?: string[];
     };
+    shadcnProvenance?: Record<string, unknown>;
   };
 }
 
@@ -40,6 +49,10 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
   const draft = payload?.draft;
   const draftId = draft?.draftId ?? "draft";
   const instanceId = useAppletInstanceId(draftId);
+  const [, promoteDraftApplet] = useMutation(PromoteDraftAppletMutation);
+  const [saving, setSaving] = useState(false);
+  const [savedAppId, setSavedAppId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const source =
     draft?.files && typeof draft.files["App.tsx"] === "string"
       ? draft.files["App.tsx"]
@@ -47,6 +60,19 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
   const validation = draft?.validation;
   const errors = validation?.errors ?? [];
   const canMount = Boolean(source.trim()) && validation?.ok !== false;
+  const canPromote =
+    canMount &&
+    !savedAppId &&
+    Boolean(
+      draft?.draftId &&
+      draft.computerId &&
+      draft.sourceDigest &&
+      draft.promotionProof &&
+      draft.promotionProofExpiresAt &&
+      draft.metadata &&
+      typeof draft.metadata.threadId === "string" &&
+      draft.metadata.threadId.trim(),
+    );
   const logs = errors.map((error) => ({
     level: "error" as const,
     message:
@@ -54,6 +80,47 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
       "Draft preview validation failed.",
     timestamp: new Date(0),
   }));
+
+  async function handleSave() {
+    if (!draft || !canPromote) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await promoteDraftApplet({
+        input: {
+          draftId: draft.draftId,
+          computerId: draft.computerId,
+          threadId: draft.metadata?.threadId,
+          name: draft.name ?? "Generated app preview",
+          files: draft.files,
+          metadata: {
+            ...draft.metadata,
+            dataProvenance: draft.dataProvenance,
+            shadcnProvenance: draft.shadcnProvenance,
+          },
+          sourceDigest: draft.sourceDigest,
+          promotionProof: draft.promotionProof,
+          promotionProofExpiresAt: draft.promotionProofExpiresAt,
+        },
+      });
+      const payload = result.data?.promoteDraftApplet;
+      if (result.error || !payload?.ok || !payload.appId) {
+        setSaveError(
+          payload?.errors?.[0]?.message ??
+            result.error?.message ??
+            "Could not save this draft preview.",
+        );
+        return;
+      }
+      setSavedAppId(payload.appId);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Could not save draft.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <WebPreview
@@ -78,10 +145,43 @@ export function DraftAppletPreview({ output }: DraftAppletPreviewProps) {
             {draft.dataProvenance.status}
           </span>
         ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {savedAppId ? (
+            <Button asChild size="sm" variant="secondary" className="gap-2">
+              <a href={`/artifacts/${savedAppId}`}>
+                <ExternalLink className="size-4" />
+                Open saved
+              </a>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className="gap-2"
+              disabled={!canPromote || saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              Save
+            </Button>
+          )}
+        </div>
       </WebPreviewNavigation>
       {draft?.dataProvenance?.notes?.length ? (
         <div className="border-b bg-background px-3 py-2 text-xs text-muted-foreground">
           {draft.dataProvenance.notes.slice(0, 2).join(" ")}
+        </div>
+      ) : null}
+      {saveError ? (
+        <div
+          className="border-b bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          role="alert"
+        >
+          {saveError}
         </div>
       ) : null}
       <WebPreviewBody className="min-h-[380px] bg-background">

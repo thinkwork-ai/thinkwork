@@ -14,6 +14,15 @@ export interface AppletMetadataV1 {
   modelId?: string;
   generatedAt: string;
   stdlibVersionAtGeneration: string;
+  sourceDigest?: string;
+  draftPreview?: {
+    draftId: string;
+    sourceDigest: string;
+    promotedAt: string;
+    promotionProofExpiresAt?: string;
+  };
+  dataProvenance?: Record<string, unknown>;
+  shadcnProvenance?: Record<string, unknown>;
 }
 
 export class AppletMetadataValidationError extends Error {
@@ -52,6 +61,26 @@ const appletMetadataSchema = {
     modelId: { type: "string", minLength: 1 },
     generatedAt: { type: "string", format: "date-time" },
     stdlibVersionAtGeneration: { type: "string", minLength: 1 },
+    sourceDigest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+    draftPreview: {
+      type: "object",
+      additionalProperties: false,
+      required: ["draftId", "sourceDigest", "promotedAt"],
+      properties: {
+        draftId: { type: "string", minLength: 1 },
+        sourceDigest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+        promotedAt: { type: "string", format: "date-time" },
+        promotionProofExpiresAt: { type: "string", format: "date-time" },
+      },
+    },
+    dataProvenance: {
+      type: "object",
+      additionalProperties: true,
+    },
+    shadcnProvenance: {
+      type: "object",
+      additionalProperties: true,
+    },
   },
 } as const;
 

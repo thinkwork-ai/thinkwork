@@ -1,6 +1,18 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const promoteDraftAppletMock = vi.fn();
+
+vi.mock("urql", () => ({
+  useMutation: () => [{ fetching: false }, promoteDraftAppletMock],
+}));
 
 vi.mock("@/applets/mount", () => ({
   AppletFailure: ({ children }: { children: ReactNode }) => (
@@ -13,6 +25,10 @@ vi.mock("@/applets/mount", () => ({
 }));
 
 import { DraftAppletPreview } from "./DraftAppletPreview";
+
+beforeEach(() => {
+  promoteDraftAppletMock.mockReset();
+});
 
 afterEach(cleanup);
 
@@ -49,6 +65,106 @@ describe("DraftAppletPreview", () => {
     expect(mount.getAttribute("data-source")).toContain(
       "export default function App",
     );
+  });
+
+  it("promotes valid draft source to a saved applet", async () => {
+    promoteDraftAppletMock.mockResolvedValue({
+      data: {
+        promoteDraftApplet: {
+          ok: true,
+          appId: "33333333-3333-4333-8333-333333333333",
+          persisted: true,
+          errors: [],
+        },
+      },
+    });
+
+    render(
+      <DraftAppletPreview
+        output={{
+          type: "draft_app_preview",
+          draft: {
+            draftId: "draft_123",
+            computerId: "computer-1",
+            unsaved: true,
+            name: "CRM Draft",
+            files: {
+              "App.tsx": "export default function App() { return null; }",
+            },
+            metadata: {
+              threadId: "11111111-1111-4111-8111-111111111111",
+              prompt: "Build this",
+            },
+            sourceDigest: "sha256:abc",
+            promotionProof: "draft-app-preview-v1:sig",
+            promotionProofExpiresAt: "2026-05-13T18:00:00.000Z",
+            validation: { ok: true, status: "passed", errors: [] },
+            dataProvenance: {
+              status: "real",
+              notes: ["Loaded live CRM rows."],
+            },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(promoteDraftAppletMock).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          draftId: "draft_123",
+          computerId: "computer-1",
+          threadId: "11111111-1111-4111-8111-111111111111",
+          sourceDigest: "sha256:abc",
+        }),
+      });
+    });
+    expect(screen.getByText("Open saved")).toBeTruthy();
+  });
+
+  it("leaves the draft mounted when promotion validation fails", async () => {
+    promoteDraftAppletMock.mockResolvedValue({
+      data: {
+        promoteDraftApplet: {
+          ok: false,
+          persisted: false,
+          errors: [{ message: "Source digest mismatch." }],
+        },
+      },
+    });
+
+    render(
+      <DraftAppletPreview
+        output={{
+          type: "draft_app_preview",
+          draft: {
+            draftId: "draft_123",
+            computerId: "computer-1",
+            unsaved: true,
+            files: {
+              "App.tsx": "export default function App() { return null; }",
+            },
+            metadata: {
+              threadId: "11111111-1111-4111-8111-111111111111",
+            },
+            sourceDigest: "sha256:abc",
+            promotionProof: "draft-app-preview-v1:sig",
+            promotionProofExpiresAt: "2026-05-13T18:00:00.000Z",
+            validation: { ok: true, status: "passed", errors: [] },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Source digest mismatch",
+      );
+    });
+    expect(screen.getByTestId("applet-mount")).toBeTruthy();
   });
 
   it("renders validation failures without mounting TSX", () => {
