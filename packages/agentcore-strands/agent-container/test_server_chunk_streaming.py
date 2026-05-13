@@ -286,6 +286,27 @@ def test_save_app_tool_summary_preserves_artifact_persistence_evidence():
     }
 
 
+def test_preview_app_tool_payload_preserves_valid_draft_for_runtime_accounting():
+    payload = {
+        "ok": True,
+        "type": "draft_app_preview",
+        "draft": {
+            "draftId": "draft_123",
+            "files": {"App.tsx": "export default function App() { return null; }"},
+            "validation": {"ok": True, "status": "passed", "errors": []},
+            "dataProvenance": {"status": "real"},
+            "shadcnProvenance": {
+                "uiRegistryDigest": "sha256:registry",
+                "mcpToolCalls": ["list_components"],
+            },
+        },
+    }
+
+    assert server._preview_app_tool_payload(payload) == payload
+    assert server._preview_app_tool_payload({"ok": True}) is None
+    assert server._preview_app_tool_payload("not-json") is None
+
+
 def test_typed_stream_delta_normalizer_handles_full_buffer_replays():
     state = {}
 

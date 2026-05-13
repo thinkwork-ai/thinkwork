@@ -10,9 +10,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U5 - Wire shadcn registry/MCP guidance to the generator
-- Branch: `codex/fast-tsx-u5-shadcn-guidance`
-- Worktree: `.Codex/worktrees/fast-tsx-u5-shadcn-guidance`
+- Unit: U6 - Relax runtime success accounting for preview-first turns
+- Branch: `codex/fast-tsx-u6-preview-success`
+- Worktree: `.Codex/worktrees/fast-tsx-u6-preview-success`
 - Started: 2026-05-13
 - State: in progress
 
@@ -46,6 +46,11 @@ status: active
 - 2026-05-13: U5 focused verification passed: UI registry export tests and typecheck, workspace-defaults tests and typecheck, API applet/source-policy/default-upgrade tests and typecheck, Computer import/render tests and typecheck, Python shadcn/app-preview/server/boot tests, targeted Python ruff checks, and `git diff --check`.
 - 2026-05-13: U5 broader hygiene: `pnpm lint` passed. Root `pnpm format:check` could not run because root `prettier` is not installed; `pnpm dlx prettier@3.8.2 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reported pre-existing formatting drift across the repository, while the touched TS/JSON/MD files passed targeted Prettier check.
 - 2026-05-13: Opened U5 PR #1188 from `codex/fast-tsx-u5-shadcn-guidance`.
+- 2026-05-13: U5 PR #1188 passed required checks and was squash-merged to `main` at `fee977e7`.
+- 2026-05-13: Removed the completed U5 worktree, fetched `origin/main`, and started U6 in `.Codex/worktrees/fast-tsx-u6-preview-success` on branch `codex/fast-tsx-u6-preview-success`.
+- 2026-05-13: Began U6 by making successful validated `preview_app` output count as preview-first artifact output while keeping save claims strict.
+- 2026-05-13: U6 focused verification passed: API runtime tests and typecheck, Python server streaming tests, `ruff check --select F` for touched Python files, root `pnpm lint`, targeted Prettier check for touched TS/MD files, and `git diff --check`.
+- 2026-05-13: Opened U6 PR #1189 from `codex/fast-tsx-u6-preview-success`.
 
 ## Pull Requests
 
@@ -54,6 +59,7 @@ status: active
 - U3: #1186 - <https://github.com/thinkwork-ai/thinkwork/pull/1186>
 - U4: #1187 - <https://github.com/thinkwork-ai/thinkwork/pull/1187>
 - U5: #1188 - <https://github.com/thinkwork-ai/thinkwork/pull/1188>
+- U6: #1189 - <https://github.com/thinkwork-ai/thinkwork/pull/1189>
 
 ## CI Failures
 

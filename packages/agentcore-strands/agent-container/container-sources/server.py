@@ -736,6 +736,16 @@ def _save_app_tool_summary(payload: object) -> dict | None:
     return summary or None
 
 
+def _preview_app_tool_payload(payload: object) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("type") != "draft_app_preview":
+        return None
+    if not isinstance(payload.get("draft"), dict):
+        return None
+    return payload
+
+
 def _normalize_append_only_stream_delta(state: dict, text: str) -> str | None:
     """Convert provider full-buffer repeats into append-only deltas.
 
@@ -2140,6 +2150,10 @@ def _call_strands_agent(
                                         save_app_summary = _save_app_tool_summary(parsed)
                                         if save_app_summary:
                                             inv["output_json"] = save_app_summary
+                                    if inv.get("tool_name") == "preview_app":
+                                        preview_app_payload = _preview_app_tool_payload(parsed)
+                                        if preview_app_payload:
+                                            inv["output_json"] = preview_app_payload
                                     # Inject _source for MCP tool calls (not sub-agents)
                                     _source = None
                                     if inv.get("type") in ("mcp_tool", "mcp_server"):
