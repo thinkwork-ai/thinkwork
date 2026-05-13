@@ -13,6 +13,8 @@ describe("typed template admin surface", () => {
 
   it("labels the route as Templates and exposes kind filters", () => {
     expect(sidebarSource).toContain('label: "Templates"');
+    expect(listSource).toContain("Computer Templates");
+    expect(listSource).toContain("Agent Templates");
     expect(listSource).toContain("TemplateKind.Computer");
     expect(listSource).toContain("TemplateKind.Agent");
   });
@@ -29,5 +31,24 @@ describe("typed template admin surface", () => {
     expect(queriesSource).toContain("templateKind");
     expect(editorSource).toContain("setTemplateKind");
     expect(editorSource).toContain("templateKind,");
+  });
+
+  it("surfaces platform Computer templates by merging both list queries", () => {
+    expect(listSource).toContain("ComputerTemplatesListQuery");
+    expect(listSource).toContain("mergeTemplates(");
+    expect(listSource).toContain("computerTemplates");
+  });
+
+  it("offers a Duplicate action for platform (NULL-tenant) templates", () => {
+    expect(listSource).toContain("isPlatformTemplate");
+    expect(listSource).toContain("handleDuplicate");
+    expect(listSource).toContain("CreateAgentTemplateMutation");
+    expect(listSource).toContain('"Duplicate"');
+  });
+
+  it("skips edit-on-row-click for platform templates", () => {
+    expect(listSource).toContain(
+      "// Platform-shipped templates (tenantId IS NULL) are read-only",
+    );
   });
 });
