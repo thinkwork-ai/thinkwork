@@ -1072,6 +1072,17 @@ def _call_strands_agent(
     except Exception as e:
         logger.warning("applet tools registration failed: %s", e)
 
+    try:
+        from shadcn_registry import make_shadcn_registry_tools
+
+        tools.extend(make_shadcn_registry_tools())
+        logger.info(
+            "workspace tools registered: shadcn list_components, search_registry, "
+            "get_component_source, get_block"
+        )
+    except Exception as e:
+        logger.warning("shadcn registry tools registration failed: %s", e)
+
     # Self-serve agent tools (docs/plans/2026-04-22-003-...-plan.md):
     #   - update_agent_name: agent renames itself
     #   - update_identity: agent edits its own IDENTITY.md personality fields
@@ -2741,31 +2752,44 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
         "",
         "For active runbook tasks with artifact_build or map_build capability,",
         "treat Artifact Builder as the phase implementation detail. Follow the",
-        "runbook phase guidance first, save the artifact in this parent turn,",
-        "and keep the visible Queue aligned to the runbook tasks.",
+        "runbook phase guidance first, preview the artifact in this parent turn,",
+        "save only when the phase requires persistence, and keep the visible",
+        "Queue aligned to the runbook tasks.",
         "",
         "When the user asks you to build, create, generate, or make an app,",
         "applet, dashboard, report, briefing, workspace, or other interactive",
         "surface, use the artifact-builder skill if it is available. The",
-        "expected result is a saved Computer applet, not only a prose answer.",
+        "expected first result is an unsaved Computer applet preview, not only",
+        "a prose answer.",
         "",
         "If a requested live source is unavailable, do not stop only to ask for",
         "data. Use the available workspace, memory, context, web, or source-tool",
-        "results; make missing/partial sources visible in the applet; and save a",
-        "runnable artifact with clear source status. Ask for setup only after the",
-        "artifact exists, unless a tool requires explicit human approval.",
+        "results; make missing/partial sources visible in the applet; and preview",
+        "a runnable artifact with clear source status. Ask for setup or save",
+        "confirmation only after the preview exists, unless a tool requires",
+        "explicit human approval.",
+        "",
+        "Before emitting TSX for generated apps, consult the shadcn registry",
+        "source. Prefer the shadcn MCP tools list_components, search_registry,",
+        "get_component_source, and get_block when available; otherwise use the",
+        "local shadcn_registry fallback. If neither registry source is available,",
+        "return a structured guidance error instead of generating TSX. Include",
+        "uiRegistryVersion, uiRegistryDigest, and shadcnMcpToolCalls metadata",
+        "on preview_app and save_app calls.",
         "",
         "Pass metadata with threadId and prompt so previews/artifacts remain",
         "attached to this thread. When preview_app is available, call it with",
         "real-data provenance before save_app so the user can see an unsaved",
-        "draft quickly. After save_app returns ok, answer concisely with what",
-        "was created and the /artifacts/{appId} route.",
+        "draft quickly. Call save_app only after the user asks to save or an",
+        "active runbook phase requires persistence. After save_app returns ok,",
+        "answer concisely with what was saved and the /artifacts/{appId} route.",
         "",
-        "For applet-build requests, keep the applet implementation and save_app",
-        "call in this parent turn. Do not use delegate or delegate_to_workspace",
-        "to write, generate, or save the applet. Those tools may not persist",
-        "artifacts to the current thread and their save attempts do not count as",
-        "your own save_app call.",
+        "For applet-build requests, keep the applet implementation, preview_app",
+        "call, and any explicit save_app call in this parent turn. Do not use",
+        "delegate or delegate_to_workspace to write, generate, preview, or save",
+        "the applet. Those tools may not attach previews or persist artifacts to",
+        "the current thread and their save attempts do not count as your own",
+        "save_app call.",
         "",
         "preview_app, save_app, load_app, and list_apps are direct Computer tools. Do not",
         "delegate applet saving to delegate or delegate_to_workspace, and do not",

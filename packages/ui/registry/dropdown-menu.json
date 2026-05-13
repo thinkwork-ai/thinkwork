@@ -1,0 +1,15 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "dropdown-menu",
+  "type": "registry:component",
+  "title": "DropdownMenu",
+  "description": "Approved action-menu primitive for generated apps.",
+  "dependencies": ["radix-ui"],
+  "registryDependencies": ["button"],
+  "files": [
+    {
+      "path": "src/components/ui/dropdown-menu.tsx",
+      "type": "registry:component"
+    }
+  ]
+}

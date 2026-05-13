@@ -24,9 +24,36 @@ describe("Artifact Builder defaults", () => {
     expect(skill).toContain("sandboxed iframe runtime");
     expect(skill).toContain("Your TSX should render only the app body");
     expect(skill).toContain("Never use emoji as icons");
-    expect(skill).toContain("lucide-react");
-    expect(skill).toContain("@tabler/icons-react");
     expect(skill).toContain("not prose-only markdown reports");
+  });
+
+  it("requires preview-first shadcn registry guidance before TSX generation", () => {
+    expect(skill).toContain("fast unsaved app preview first");
+    expect(skill).toContain("consult the shadcn registry source");
+    expect(skill).toContain("list_components");
+    expect(skill).toContain("search_registry");
+    expect(skill).toContain("get_component_source");
+    expect(skill).toContain("get_block");
+    expect(skill).toContain(
+      "packages/ui/registry/generated-app-components.json",
+    );
+    expect(skill).toContain("shadcn_registry");
+    expect(skill).toContain("structured guidance error");
+    expect(skill).toContain("You must use approved shadcn primitives");
+    expect(skill).toContain("Hand-rolled replacements");
+    expect(skill).toContain("preview_app");
+    expect(skill).toContain("uiRegistryVersion");
+    expect(skill).toContain("uiRegistryDigest");
+    expect(skill).toContain("shadcnMcpToolCalls");
+    expect(skill).toContain('["local_registry_fallback"]');
+    expect(skill).toContain("same generated-app policy");
+  });
+
+  it("does not allow generated apps to import raw icon packs", () => {
+    expect(skill).toContain("Do not import general icon packs");
+    expect(skill).toContain("specific host allowlist export");
+    expect(skill).not.toContain("Import icons from `lucide-react`");
+    expect(skill).not.toContain("when an icon helps");
   });
 
   it("defines the CRM dashboard applet contract", () => {

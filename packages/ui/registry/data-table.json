@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "data-table",
+  "type": "registry:component",
+  "title": "DataTable",
+  "description": "Approved dense operational grid primitive for generated apps.",
+  "dependencies": ["@tanstack/react-table"],
+  "registryDependencies": ["table"],
+  "files": [
+    { "path": "src/components/ui/data-table.tsx", "type": "registry:component" }
+  ]
+}

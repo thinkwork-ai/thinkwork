@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "chart-container",
+  "type": "registry:component",
+  "title": "ChartContainer",
+  "description": "Required shadcn chart wrapper for Recharts primitives in generated apps.",
+  "dependencies": ["recharts"],
+  "registryDependencies": [],
+  "files": [
+    { "path": "src/components/ui/chart.tsx", "type": "registry:component" }
+  ]
+}

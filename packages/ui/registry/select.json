@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "select",
+  "type": "registry:component",
+  "title": "Select",
+  "description": "Approved dropdown value-selection primitive for generated apps.",
+  "dependencies": ["radix-ui"],
+  "registryDependencies": [],
+  "files": [
+    { "path": "src/components/ui/select.tsx", "type": "registry:component" }
+  ]
+}

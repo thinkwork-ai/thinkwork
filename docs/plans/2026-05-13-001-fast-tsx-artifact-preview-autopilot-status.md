@@ -10,9 +10,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U4 - Promote draft preview to saved artifact
-- Branch: `codex/fast-tsx-u4-promote-draft`
-- Worktree: `.Codex/worktrees/fast-tsx-u4-promote-draft`
+- Unit: U5 - Wire shadcn registry/MCP guidance to the generator
+- Branch: `codex/fast-tsx-u5-shadcn-guidance`
+- Worktree: `.Codex/worktrees/fast-tsx-u5-shadcn-guidance`
 - Started: 2026-05-13
 - State: in progress
 
@@ -40,6 +40,12 @@ status: active
 - 2026-05-13: Opened U4 PR #1187 from `codex/fast-tsx-u4-promote-draft`.
 - 2026-05-13: U4 PR #1187 CI failed in `test` because `render-typed-part.test.tsx` rendered `DraftAppletPreview` without a `urql` provider or mock after the Save hook was added; patched the test to mock `useMutation`.
 - 2026-05-13: U4 CI fix verification passed: `render-typed-part` + `DraftAppletPreview` tests, Computer typecheck, and `git diff --check`.
+- 2026-05-13: U4 PR #1187 passed required checks after a no-op CI nudge and was squash-merged to `main` at `d6975f60`.
+- 2026-05-13: Removed the completed U4 worktree, fetched `origin/main`, and started U5 in `.Codex/worktrees/fast-tsx-u5-shadcn-guidance` on branch `codex/fast-tsx-u5-shadcn-guidance`.
+- 2026-05-13: Began U5 by publishing a shadcn-compatible Thinkwork registry, expanding the generated-app component manifest, exposing local `list_components`, `search_registry`, `get_component_source`, and `get_block` registry tools in the Strands runtime, and updating Artifact Builder guidance to require registry consultation before TSX.
+- 2026-05-13: U5 focused verification passed: UI registry export tests and typecheck, workspace-defaults tests and typecheck, API applet/source-policy/default-upgrade tests and typecheck, Computer import/render tests and typecheck, Python shadcn/app-preview/server/boot tests, targeted Python ruff checks, and `git diff --check`.
+- 2026-05-13: U5 broader hygiene: `pnpm lint` passed. Root `pnpm format:check` could not run because root `prettier` is not installed; `pnpm dlx prettier@3.8.2 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reported pre-existing formatting drift across the repository, while the touched TS/JSON/MD files passed targeted Prettier check.
+- 2026-05-13: Opened U5 PR #1188 from `codex/fast-tsx-u5-shadcn-guidance`.
 
 ## Pull Requests
 
@@ -47,6 +53,7 @@ status: active
 - U2: #1185 - <https://github.com/thinkwork-ai/thinkwork/pull/1185>
 - U3: #1186 - <https://github.com/thinkwork-ai/thinkwork/pull/1186>
 - U4: #1187 - <https://github.com/thinkwork-ai/thinkwork/pull/1187>
+- U5: #1188 - <https://github.com/thinkwork-ai/thinkwork/pull/1188>
 
 ## CI Failures
 

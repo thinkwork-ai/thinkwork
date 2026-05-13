@@ -1,0 +1,170 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "thinkwork",
+  "homepage": "https://thinkwork.ai",
+  "items": [
+    {
+      "name": "generated-app-surface",
+      "type": "registry:block",
+      "title": "Thinkwork Generated App Components",
+      "description": "Approved shadcn-compatible component surface for Computer-generated TSX applets.",
+      "registryDependencies": [
+        "button",
+        "card",
+        "badge",
+        "tabs",
+        "table",
+        "data-table",
+        "select",
+        "dropdown-menu",
+        "combobox",
+        "chart-container",
+        "host-map"
+      ],
+      "dependencies": [
+        "@thinkwork/ui",
+        "@thinkwork/computer-stdlib",
+        "recharts"
+      ],
+      "files": [
+        {
+          "path": "registry/generated-app-components.json",
+          "type": "registry:file"
+        }
+      ]
+    },
+    {
+      "name": "button",
+      "type": "registry:component",
+      "title": "Button",
+      "description": "Approved command primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": ["@radix-ui/react-slot", "class-variance-authority"],
+      "files": [
+        { "path": "src/components/ui/button.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "card",
+      "type": "registry:component",
+      "title": "Card",
+      "description": "Approved framed panel primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": [],
+      "files": [
+        { "path": "src/components/ui/card.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "badge",
+      "type": "registry:component",
+      "title": "Badge",
+      "description": "Approved status/tag primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": ["class-variance-authority"],
+      "files": [
+        { "path": "src/components/ui/badge.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "tabs",
+      "type": "registry:component",
+      "title": "Tabs",
+      "description": "Approved tab-set primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": ["radix-ui"],
+      "files": [
+        { "path": "src/components/ui/tabs.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "table",
+      "type": "registry:component",
+      "title": "Table",
+      "description": "Approved simple table primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": [],
+      "files": [
+        { "path": "src/components/ui/table.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "data-table",
+      "type": "registry:component",
+      "title": "DataTable",
+      "description": "Approved dense operational grid primitive for generated apps.",
+      "registryDependencies": ["table"],
+      "dependencies": ["@tanstack/react-table"],
+      "files": [
+        {
+          "path": "src/components/ui/data-table.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "select",
+      "type": "registry:component",
+      "title": "Select",
+      "description": "Approved dropdown value-selection primitive for generated apps.",
+      "registryDependencies": [],
+      "dependencies": ["radix-ui"],
+      "files": [
+        { "path": "src/components/ui/select.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "dropdown-menu",
+      "type": "registry:component",
+      "title": "DropdownMenu",
+      "description": "Approved action-menu primitive for generated apps.",
+      "registryDependencies": ["button"],
+      "dependencies": ["radix-ui"],
+      "files": [
+        {
+          "path": "src/components/ui/dropdown-menu.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "combobox",
+      "type": "registry:component",
+      "title": "Combobox",
+      "description": "Approved searchable selection primitive for generated apps.",
+      "registryDependencies": ["button"],
+      "dependencies": ["cmdk", "radix-ui"],
+      "files": [
+        {
+          "path": "src/components/ui/combobox.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chart-container",
+      "type": "registry:component",
+      "title": "ChartContainer",
+      "description": "Required shadcn chart wrapper for Recharts primitives in generated apps.",
+      "registryDependencies": [],
+      "dependencies": ["recharts"],
+      "files": [
+        { "path": "src/components/ui/chart.tsx", "type": "registry:component" }
+      ]
+    },
+    {
+      "name": "host-map",
+      "type": "registry:component",
+      "title": "MapView",
+      "description": "The only approved generated-app map primitive.",
+      "registryDependencies": [],
+      "dependencies": ["leaflet"],
+      "files": [
+        {
+          "path": "../computer-stdlib/src/primitives/MapView.tsx",
+          "type": "registry:component"
+        }
+      ]
+    }
+  ]
+}

@@ -185,9 +185,10 @@ def test_save_app_tool_description_sets_dashboard_quality_floor():
 
     description = save_app.__doc__ or ""
 
-    assert "not prose-only markdown reports" in description
+    assert "prose-only markdown reports" in description
     assert "Do not use emoji as icons" in description
-    assert "runnable applet" in description
+    assert "after a preview when the user explicitly asks to save" in description
+    assert "uiRegistryDigest" in description
     assert "raw lucide-react" in description
 
 
@@ -228,6 +229,7 @@ def test_preview_app_returns_unsaved_draft_payload_with_digest_and_proof():
     assert draft["shadcnProvenance"] == {
         "uiRegistryVersion": "generated-app-policy:v1",
         "uiRegistryDigest": "sha256:registry",
+        "registrySource": "local_registry",
         "mcpToolCalls": ["list_components", "search_registry"],
     }
 

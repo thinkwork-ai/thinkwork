@@ -1,0 +1,12 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "table",
+  "type": "registry:component",
+  "title": "Table",
+  "description": "Approved simple table primitive for generated apps.",
+  "dependencies": [],
+  "registryDependencies": [],
+  "files": [
+    { "path": "src/components/ui/table.tsx", "type": "registry:component" }
+  ]
+}
