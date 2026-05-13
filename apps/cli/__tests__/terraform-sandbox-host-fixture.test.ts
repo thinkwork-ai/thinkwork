@@ -227,8 +227,8 @@ describe("U10 — host CSP wired for computer_site", () => {
     // Plan-012 U10: the parent SPA's host CSP is set via the
     // CloudFront response-headers policy, not via <meta> in
     // index.html. Host CSP allowlists the sandbox subdomain in
-    // frame-src and keeps frame-ancestors 'none' so the parent is
-    // never framed by hostile pages.
+    // frame-src and permits only ThinkWork Admin to frame the Computer
+    // artifact route for admin-side live app inspection.
     const source = read(THINKWORK_MAIN);
     const computerSiteBlock = source.match(
       /module "computer_site"\s*\{[\s\S]*?\n\}/,
@@ -243,9 +243,14 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(/computer_host_csp/);
     expect(source).toMatch(/computer_host_script_src/);
     expect(source).toMatch(/computer_host_worker_src/);
+    expect(source).toMatch(/computer_host_frame_ancestors/);
     expect(source).toMatch(/script-src \$\{local\.computer_host_script_src\}/);
     expect(source).toMatch(/worker-src \$\{local\.computer_host_worker_src\}/);
-    expect(source).toMatch(/frame-ancestors 'none'/);
+    expect(source).toMatch(
+      /frame-ancestors \$\{local\.computer_host_frame_ancestors\}/,
+    );
+    expect(source).toMatch(/var\.admin_domain/);
+    expect(source).toMatch(/module\.admin_site\.distribution_domain/);
     // connect-src must allow API Gateway for GraphQL queries/mutations,
     // AppSync for the streaming wire, Cognito IdP for SDK calls, and
     // Cognito Hosted UI for the OAuth callback token exchange.

@@ -32,6 +32,7 @@ function AppletDetailPage() {
   const { appId } = Route.useParams();
   const navigate = useNavigate();
   const [source, setSource] = useState("");
+  const [activeTab, setActiveTab] = useState("app");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState<string | null>(null);
   const [result, reexecuteQuery] = useQuery({
@@ -93,28 +94,66 @@ function AppletDetailPage() {
   return (
     <PageLayout
       header={
-        <PageHeader title={applet.name}>
-          <Button variant="outline" size="sm" asChild>
-            <a href={appUrl} target="_blank" rel="noreferrer">
-              <ExternalLink className="h-4 w-4" />
-              Open Live
-            </a>
-          </Button>
-        </PageHeader>
+        <PageHeader
+          title={applet.name}
+          actions={
+            <Button variant="outline" size="sm" asChild>
+              <a href={appUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Open Live
+              </a>
+            </Button>
+          }
+        />
       }
     >
-      <Tabs defaultValue="app" className="min-h-0 gap-4">
-        <TabsList className="mx-auto">
-          <TabsTrigger value="app" className="px-6">
-            App
-          </TabsTrigger>
-          <TabsTrigger value="source" className="px-6">
-            Source
-          </TabsTrigger>
-          <TabsTrigger value="config" className="px-6">
-            Config
-          </TabsTrigger>
-        </TabsList>
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="min-h-0 gap-4"
+      >
+        <div className="relative flex min-h-9 items-center justify-center gap-3">
+          <TabsList>
+            <TabsTrigger value="app" className="px-6">
+              App
+            </TabsTrigger>
+            <TabsTrigger value="source" className="px-6">
+              Source
+            </TabsTrigger>
+            <TabsTrigger value="config" className="px-6">
+              Config
+            </TabsTrigger>
+          </TabsList>
+          {activeTab === "source" ? (
+            <div className="absolute right-0 flex items-center gap-3">
+              {saveError ? (
+                <span className="text-xs text-destructive" role="alert">
+                  {saveError}
+                </span>
+              ) : saveOk ? (
+                <span className="text-xs text-muted-foreground">{saveOk}</span>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={!sourceDirty || saveResult.fetching}
+                onClick={() =>
+                  void saveSource({
+                    appId: applet.appId,
+                    source,
+                    updateAppletSource,
+                    reexecuteQuery,
+                    setSaveError,
+                    setSaveOk,
+                  })
+                }
+              >
+                <Save className="h-4 w-4" />
+                Save Source
+              </Button>
+            </div>
+          ) : null}
+        </div>
 
         <TabsContent value="app" className="min-h-0">
           <section className="h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-md border bg-background">
@@ -127,43 +166,8 @@ function AppletDetailPage() {
         </TabsContent>
 
         <TabsContent value="source" className="min-h-0">
-          <section className="min-h-0 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Code2 className="h-4 w-4 text-primary" />
-                Source
-              </div>
-              <div className="flex items-center gap-3">
-                {saveError ? (
-                  <span className="text-xs text-destructive" role="alert">
-                    {saveError}
-                  </span>
-                ) : saveOk ? (
-                  <span className="text-xs text-muted-foreground">
-                    {saveOk}
-                  </span>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!sourceDirty || saveResult.fetching}
-                  onClick={() =>
-                    void saveSource({
-                      appId: applet.appId,
-                      source,
-                      updateAppletSource,
-                      reexecuteQuery,
-                      setSaveError,
-                      setSaveOk,
-                    })
-                  }
-                >
-                  <Save className="h-4 w-4" />
-                  Save Source
-                </Button>
-              </div>
-            </div>
-            <div className="h-[calc(100vh-18rem)] min-h-[520px] overflow-hidden rounded-md border bg-black">
+          <section className="min-h-0">
+            <div className="h-[calc(100vh-15rem)] min-h-[520px] overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
               <CodeMirror
                 value={source}
                 onChange={(value) => {
@@ -191,7 +195,7 @@ function AppletDetailPage() {
         </TabsContent>
 
         <TabsContent value="config" className="min-h-0">
-          <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid gap-4 overflow-x-auto [grid-template-columns:minmax(280px,360px)_minmax(0,1fr)]">
             <section className="space-y-2 rounded-md border p-4">
               <h2 className="text-sm font-semibold">Provenance</h2>
               <dl className="grid gap-2 text-sm">
@@ -220,7 +224,9 @@ function AppletDetailPage() {
                 Metadata
               </div>
               <pre className="max-h-[calc(100vh-20rem)] overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
-                <code>{formatJson(payload.metadata)}</code>
+                <code className="whitespace-pre-wrap break-words">
+                  {formatJson(payload.metadata)}
+                </code>
               </pre>
             </section>
           </div>
@@ -293,7 +299,7 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dt className="text-xs font-medium uppercase text-muted-foreground">
         {label}
       </dt>
-      <dd className="truncate font-mono text-xs text-foreground">{value}</dd>
+      <dd className="break-all font-mono text-xs text-foreground">{value}</dd>
     </div>
   );
 }
