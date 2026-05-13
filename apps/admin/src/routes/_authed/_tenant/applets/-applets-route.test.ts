@@ -38,9 +38,12 @@ describe("Apps admin routes", () => {
     expect(listRouteSource).toContain('to: "/applets/$appId"');
     expect(detailRouteSource).toContain("AdminUpdateAppletSourceMutation");
     expect(detailRouteSource).toContain("CodeMirror");
+    expect(detailRouteSource).toContain("activeTab === \"source\"");
+    expect(detailRouteSource).toContain("Save Source");
     expect(detailRouteSource).toContain('TabsTrigger value="app"');
     expect(detailRouteSource).toContain('TabsTrigger value="source"');
     expect(detailRouteSource).toContain('TabsTrigger value="config"');
+    expect(detailRouteSource).not.toContain(">Source</div>");
     expect(detailRouteSource).toContain("persistedSource");
     expect(detailRouteSource).toContain("formatJson(payload.metadata)");
     expect(detailRouteSource).not.toContain("saveApplet");
