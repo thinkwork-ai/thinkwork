@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +23,17 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AgentTemplatesListQuery,
+  ComputerTemplatesListQuery,
   CreateAgentFromTemplateMutation,
+  CreateAgentTemplateMutation,
 } from "@/lib/graphql-queries";
 import { AgentRuntime, TemplateKind } from "@/gql/graphql";
+import {
+  isPlatformTemplate,
+  mergeTemplates,
+  suggestedCloneName,
+  suggestedCloneSlug,
+} from "./-merge-templates";
 
 export const Route = createFileRoute("/_authed/_tenant/agent-templates/")({
   component: AgentTemplatesPage,
@@ -32,6 +41,7 @@ export const Route = createFileRoute("/_authed/_tenant/agent-templates/")({
 
 interface TemplateRow {
   id: string;
+  tenantId?: string | null;
   name: string;
   slug: string;
   description?: string | null;
@@ -56,9 +66,7 @@ function AgentTemplatesPage() {
   useBreadcrumbs([{ label: "Templates" }]);
 
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<TemplateKind>(
-    TemplateKind.Computer,
-  );
+  const [kindFilter, setKindFilter] = useState<"all" | TemplateKind>("all");
   const [useDialogOpen, setUseDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(
     null,
@@ -73,14 +81,40 @@ function AgentTemplatesPage() {
     requestPolicy: "cache-and-network",
   });
 
+  // Surface platform-shipped Computer templates (tenant_id IS NULL) that
+  // `agentTemplates(tenantId)` filters out by design. The dedicated
+  // `computerTemplates(tenantId)` resolver returns the tenant + platform
+  // union for Computer kind; merging by id keeps tenant-owned rows
+  // authoritative when both queries return the same record.
+  const [computerResult] = useQuery({
+    query: ComputerTemplatesListQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+
   const [, createFromTemplate] = useMutation(CreateAgentFromTemplateMutation);
-  if (result.fetching && !result.data) return <PageSkeleton />;
+  const [, createTemplate] = useMutation(CreateAgentTemplateMutation);
+  if (
+    (result.fetching && !result.data) ||
+    (computerResult.fetching && !computerResult.data)
+  ) {
+    return <PageSkeleton />;
+  }
   if (result.error) {
     console.error("Agent templates query error:", result.error.message);
   }
+  if (computerResult.error) {
+    console.error(
+      "Computer templates query error:",
+      computerResult.error.message,
+    );
+  }
 
-  const templates: TemplateRow[] = (result.data?.agentTemplates ??
-    []) as TemplateRow[];
+  const templates: TemplateRow[] = mergeTemplates(
+    (result.data?.agentTemplates ?? []) as TemplateRow[],
+    (computerResult.data?.computerTemplates ?? []) as TemplateRow[],
+  );
 
   const agentTemplateCount = templates.filter(
     (t) => t.templateKind === TemplateKind.Agent,
@@ -90,7 +124,8 @@ function AgentTemplatesPage() {
   ).length;
 
   const rows = templates.filter((template) => {
-    const matchesKind = template.templateKind === kindFilter;
+    const matchesKind =
+      kindFilter === "all" || template.templateKind === kindFilter;
     const matchesSearch =
       !search ||
       template.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -123,6 +158,56 @@ function AgentTemplatesPage() {
       .split("/")
       .pop();
     return short || model;
+  };
+
+  const handleDuplicate = async (template: TemplateRow) => {
+    if (!tenantId) return;
+    const res = await createTemplate({
+      input: {
+        tenantId,
+        name: suggestedCloneName(template.name),
+        slug: suggestedCloneSlug(template.slug),
+        description: template.description ?? undefined,
+        category: template.category ?? undefined,
+        icon: template.icon ?? undefined,
+        templateKind: template.templateKind,
+        runtime: template.runtime ?? undefined,
+        model: template.model ?? undefined,
+        guardrailId: template.guardrailId ?? undefined,
+        config:
+          template.config != null
+            ? typeof template.config === "string"
+              ? template.config
+              : JSON.stringify(template.config)
+            : undefined,
+        blockedTools:
+          template.blockedTools != null
+            ? typeof template.blockedTools === "string"
+              ? template.blockedTools
+              : JSON.stringify(template.blockedTools)
+            : undefined,
+        skills:
+          template.skills != null
+            ? typeof template.skills === "string"
+              ? template.skills
+              : JSON.stringify(template.skills)
+            : undefined,
+      },
+    });
+    if (res.error) {
+      console.error("Duplicate template failed:", res.error.message);
+      window.alert(
+        `Couldn't duplicate "${template.name}": ${res.error.message}`,
+      );
+      return;
+    }
+    const newId = res.data?.createAgentTemplate?.id;
+    if (newId) {
+      navigate({
+        to: "/agent-templates/$templateId/$tab",
+        params: { templateId: newId, tab: "configuration" },
+      });
+    }
   };
 
   const handleUseTemplate = async () => {
@@ -238,73 +323,94 @@ function AgentTemplatesPage() {
     {
       id: "actions",
       header: "",
-      size: 80,
-      cell: ({ row }) => (
-        <div className="pr-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (row.original.templateKind === TemplateKind.Computer) {
-                navigate({ to: "/computers" });
-                return;
-              }
-              setSelectedTemplate(row.original);
-              setNewAgentName("");
-              setNewAgentSlug("");
-              setUseDialogOpen(true);
-            }}
-          >
-            {row.original.templateKind === TemplateKind.Computer
-              ? "Computers"
-              : "Use"}
-          </Button>
-        </div>
-      ),
+      size: 100,
+      cell: ({ row }) => {
+        const platform = isPlatformTemplate(row.original);
+        return (
+          <div className="pr-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (platform) {
+                  void handleDuplicate(row.original);
+                  return;
+                }
+                if (row.original.templateKind === TemplateKind.Computer) {
+                  navigate({ to: "/computers" });
+                  return;
+                }
+                setSelectedTemplate(row.original);
+                setNewAgentName("");
+                setNewAgentSlug("");
+                setUseDialogOpen(true);
+              }}
+            >
+              {platform
+                ? "Duplicate"
+                : row.original.templateKind === TemplateKind.Computer
+                  ? "Computers"
+                  : "Use"}
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
   return (
     <PageLayout
       header={
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 items-center">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold tracking-tight leading-tight text-foreground">
-                Templates
-              </h1>
-            </div>
-            <div className="flex justify-center">
-              <Tabs
-                value={kindFilter}
-                onValueChange={(value) =>
-                  setKindFilter(value as TemplateKind)
-                }
-              >
-                <TabsList>
-                  <TabsTrigger value={TemplateKind.Computer} className="px-2">
-                    Computer
-                    {computerTemplateCount ? (
-                      <Badge variant="outline" className="ml-2 text-[10px]">
-                        {computerTemplateCount}
-                      </Badge>
-                    ) : null}
-                  </TabsTrigger>
-                  <TabsTrigger value={TemplateKind.Agent} className="px-2">
-                    Agents
-                    {agentTemplateCount ? (
-                      <Badge variant="outline" className="ml-2 text-[10px]">
-                        {agentTemplateCount}
-                      </Badge>
-                    ) : null}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div />
-          </div>
-          <div className="flex items-center gap-2">
+        <>
+          <PageHeader
+            title="Templates"
+            description="Define Computer workplaces and delegated Agent capabilities from typed templates."
+            actions={
+              <>
+                <Button
+                  onClick={() => navigate({ to: "/agent-templates/new" })}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Template
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate({ to: "/agent-templates/defaults" })}
+                >
+                  <FileText className="h-4 w-4" />
+                  Default Workspace
+                </Button>
+              </>
+            }
+          />
+          <div className="flex items-center gap-4 mt-4">
+            <Tabs
+              value={kindFilter}
+              onValueChange={(value) =>
+                setKindFilter(value as "all" | TemplateKind)
+              }
+            >
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value={TemplateKind.Computer}>
+                  Computer Templates
+                  {computerTemplateCount ? (
+                    <Badge variant="outline" className="ml-2 text-[10px]">
+                      {computerTemplateCount}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+                <TabsTrigger value={TemplateKind.Agent}>
+                  Agent Templates
+                  {agentTemplateCount ? (
+                    <Badge variant="outline" className="ml-2 text-[10px]">
+                      {agentTemplateCount}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -314,21 +420,8 @@ function AgentTemplatesPage() {
                 className="pl-9"
               />
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Button onClick={() => navigate({ to: "/agent-templates/new" })}>
-                <Plus className="h-4 w-4" />
-                Create Template
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate({ to: "/agent-templates/defaults" })}
-              >
-                <FileText className="h-4 w-4" />
-                Default Workspace
-              </Button>
-            </div>
           </div>
-        </div>
+        </>
       }
     >
       <DataTable
@@ -337,12 +430,17 @@ function AgentTemplatesPage() {
         filterValue={search}
         scrollable
         tableClassName="table-fixed"
-        onRowClick={(row) =>
+        onRowClick={(row) => {
+          // Platform-shipped templates (tenantId IS NULL) are read-only at
+          // the API boundary — `updateAgentTemplate` rejects them via
+          // `requireTenantAdmin`. Route the operator to the Duplicate action
+          // instead of an editor that would only fail on save.
+          if (isPlatformTemplate(row)) return;
           navigate({
             to: "/agent-templates/$templateId",
             params: { templateId: row.id },
-          })
-        }
+          });
+        }}
       />
 
       <Dialog open={useDialogOpen} onOpenChange={setUseDialogOpen}>
