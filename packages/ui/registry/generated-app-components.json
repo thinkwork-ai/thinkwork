@@ -83,8 +83,8 @@
       "allowedVariants": [],
       "dependencies": ["@tanstack/react-table"],
       "registryDependencies": ["table"],
-      "description": "Use for dense sortable/scannable business records and operational grids.",
-      "example": "import { DataTable } from \"@thinkwork/ui\";\n<DataTable columns={columns} data={rows} />"
+      "description": "Use for dense sortable/scannable business records and operational grids. Generated apps may pass columns as { key, label/header, render, sortable, align, width } objects.",
+      "example": "import { Badge, DataTable } from \"@thinkwork/ui\";\nconst columns = [{ key: \"account\", label: \"Account\" }, { key: \"risk\", label: \"Risk\", render: (value) => <Badge variant=\"destructive\">{value}</Badge> }];\n<DataTable columns={columns} data={rows} pageSize={0} />"
     },
     {
       "id": "select",

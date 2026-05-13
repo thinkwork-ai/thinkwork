@@ -12,6 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -20,11 +21,36 @@ import {
   TableHeader,
   TableRow,
 } from "./table.js";
+import { Badge } from "./badge.js";
 import { DataTablePagination } from "./data-table-pagination.js";
 
+export interface GeneratedDataTableColumn<TData> {
+  key: Extract<keyof TData, string> | string;
+  label?: React.ReactNode;
+  header?: React.ReactNode;
+  align?: "left" | "center" | "right";
+  width?: number;
+  sortable?: boolean;
+  render?: (value: unknown, row: TData) => React.ReactNode;
+}
+
+type DataTableColumn<TData, TValue> =
+  | ColumnDef<TData, TValue>
+  | GeneratedDataTableColumn<TData>;
+
 interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
-  data: TData[];
+  columns: Array<DataTableColumn<TData, TValue>>;
+  data?: TData[];
+  /** Generated app alias for data. */
+  rows?: TData[];
+  /** Optional generated app table heading. */
+  title?: React.ReactNode;
+  /** Optional generated app table subheading. */
+  description?: React.ReactNode;
+  /** Optional generated app table badges. */
+  badges?: React.ReactNode[];
+  /** Empty state for generated app usage. */
+  emptyState?: React.ReactNode;
   /** Global filter value (controlled externally) */
   filterValue?: string;
   /** Column id to apply filterValue to. Defaults to global filter if omitted. */
@@ -60,6 +86,11 @@ interface DataTableProps<TData, TValue> {
 export function DataTable<TData, TValue>({
   columns,
   data,
+  rows,
+  title,
+  description,
+  badges = [],
+  emptyState = "No results.",
   filterValue,
   filterColumn,
   onRowClick,
@@ -77,6 +108,11 @@ export function DataTable<TData, TValue>({
   onPageSizeChange,
 }: DataTableProps<TData, TValue>) {
   const manualPagination = totalCount != null;
+  const tableData = data ?? rows ?? [];
+  const tableColumns = React.useMemo(
+    () => normalizeColumns<TData, TValue>(columns),
+    [columns],
+  );
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -96,8 +132,8 @@ export function DataTable<TData, TValue>({
   }, [filterValue, filterColumn]);
 
   const table = useReactTable({
-    data,
-    columns,
+    data: tableData,
+    columns: tableColumns,
     autoResetPageIndex: false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -210,7 +246,7 @@ export function DataTable<TData, TValue>({
             colSpan={columns.length}
             className="h-24 text-center text-muted-foreground"
           >
-            No results.
+            {emptyState}
           </TableCell>
         </TableRow>
       )}
@@ -223,6 +259,27 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className={scrollable ? "flex flex-col h-full" : undefined}>
+      {title || description || badges.length ? (
+        <div className="flex flex-col gap-2 border-x border-t px-4 py-3 first:rounded-t-md sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {title ? <h3 className="text-sm font-semibold">{title}</h3> : null}
+            {description ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {badges.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {badges.map((badge, index) => (
+                <Badge key={index} variant="secondary" className="rounded-md">
+                  {badge}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {toolbar && (
         <div className={scrollable ? "shrink-0 flex items-center py-3" : "flex items-center py-3"}>
           {toolbar(table)}
@@ -244,5 +301,79 @@ export function DataTable<TData, TValue>({
         </div>
       )}
     </div>
+  );
+}
+
+function normalizeColumns<TData, TValue>(
+  columns: Array<DataTableColumn<TData, TValue>>,
+): Array<ColumnDef<TData, TValue>> {
+  return columns.map((column) => {
+    if (!isGeneratedColumn(column)) {
+      return column;
+    }
+
+    const heading = column.header ?? column.label ?? column.key;
+
+    return {
+      accessorKey: column.key,
+      enableSorting: column.sortable ?? true,
+      header: ({ column: tableColumn }) => {
+        const sortDirection = tableColumn.getIsSorted();
+        const sortIcon =
+          sortDirection === "desc" ? (
+            <ArrowDown className="size-3" aria-hidden="true" />
+          ) : sortDirection === "asc" ? (
+            <ArrowUp className="size-3" aria-hidden="true" />
+          ) : null;
+        const className =
+          column.align === "right"
+            ? "flex w-full items-center justify-end gap-1 text-right"
+            : column.align === "center"
+              ? "flex w-full items-center justify-center gap-1 text-center"
+              : "flex w-full items-center gap-1 text-left";
+
+        if (column.sortable === false) {
+          return <span className={className}>{heading}</span>;
+        }
+
+        return (
+          <button
+            type="button"
+            className={className}
+            onClick={tableColumn.getToggleSortingHandler()}
+          >
+            {heading}
+            {sortIcon}
+          </button>
+        );
+      },
+      size: column.width,
+      cell: ({ row, getValue }) => {
+        const value = getValue();
+        const rendered = column.render
+          ? column.render(value, row.original)
+          : String(value ?? "");
+        const className =
+          column.align === "right"
+            ? "block text-right font-mono tabular-nums"
+            : column.align === "center"
+              ? "block text-center"
+              : "block min-w-0 truncate";
+
+        return <span className={className}>{rendered}</span>;
+      },
+    } as ColumnDef<TData, TValue>;
+  });
+}
+
+function isGeneratedColumn<TData, TValue>(
+  column: DataTableColumn<TData, TValue>,
+): column is GeneratedDataTableColumn<TData> {
+  return (
+    typeof column === "object" &&
+    column !== null &&
+    "key" in column &&
+    !("accessorKey" in column) &&
+    !("accessorFn" in column)
   );
 }
