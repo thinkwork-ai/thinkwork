@@ -107,10 +107,6 @@ describe("applet GraphQL resolvers", () => {
             threadId: "11111111-1111-4111-8111-111111111111",
             prompt: "Show risk",
             stdlibVersionAtGeneration: "0.1.0",
-            appletTheme: {
-              source: "shadcn-create",
-              css: ":root { --background: oklch(1 0 0); --chart-1: oklch(0.646 0.222 41.116); }",
-            },
           },
         }),
       },
@@ -156,11 +152,8 @@ describe("applet GraphQL resolvers", () => {
       version: 1,
       tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       prompt: "Show risk",
-      appletTheme: {
-        source: "shadcn-create",
-        css: expect.stringContaining("--chart-1"),
-      },
     });
+    expect(insertedRows[0].metadata).not.toHaveProperty("appletTheme");
   }, 15000);
 
   it("returns structured validation errors and does not persist invalid imports", async () => {
@@ -351,7 +344,7 @@ describe("applet GraphQL resolvers", () => {
     });
   });
 
-  it("injects the tenant app style when the applet has no saved theme", async () => {
+  it("returns tenant app style separately from applet metadata", async () => {
     const { queryResolvers } = await import("../graphql/resolvers/index.js");
     const appId = "33333333-3333-4333-8333-333333333333";
     const source = "export default function Applet() { return null; }";
@@ -375,12 +368,8 @@ describe("applet GraphQL resolvers", () => {
 
     const result = await queryResolvers.applet(null, { appId }, userCtx());
 
-    expect(result.metadata).toMatchObject({
-      appletTheme: {
-        source: "shadcn-create",
-        css: expect.stringContaining("--chart-1"),
-      },
-    });
+    expect(result.themeCss).toContain("--chart-1");
+    expect(result.metadata).not.toHaveProperty("appletTheme");
   });
 
   it("lists metadata previews without source bodies", async () => {
@@ -432,6 +421,54 @@ describe("applet GraphQL resolvers", () => {
       source,
       metadata: expect.objectContaining({ appId }),
     });
+  });
+
+  it("lets tenant admins update applet source without embedding theme metadata", async () => {
+    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+    const appId = "33333333-3333-4333-8333-333333333333";
+    selectRows.push(
+      appletRow({
+        id: appId,
+        metadata: metadata({
+          appId,
+          appletTheme: {
+            source: "shadcn-create",
+            css: ":root { --background: oklch(1 0 0); }",
+          },
+        }),
+      }),
+    );
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: {
+        transformToString: async () =>
+          "export default function Applet() { return null; }",
+      } as any,
+    });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const result = await mutationResolvers.adminUpdateAppletSource(
+      null,
+      {
+        input: {
+          appId,
+          source: "export default function Applet() { return <main />; }",
+        },
+      },
+      userCtx(),
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+      expect.anything(),
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      appId,
+      version: 2,
+      persisted: true,
+    });
+    expect(updatedRows[0].metadata).not.toHaveProperty("appletTheme");
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(2);
   });
 
   it("lets tenant admins list applets and filter by thread user", async () => {

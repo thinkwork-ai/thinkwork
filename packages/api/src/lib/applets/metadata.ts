@@ -23,6 +23,8 @@ export interface AppletMetadataV1 {
   };
   dataProvenance?: Record<string, unknown>;
   shadcnProvenance?: Record<string, unknown>;
+  // Legacy compatibility only. New writes strip this field because app style is
+  // tenant-owned host configuration, not artifact-owned metadata.
   appletTheme?: {
     source?: string;
     css: string;

@@ -21,16 +21,13 @@ vi.mock("@/applets/mount", () => ({
   AppletMount: ({
     appId,
     source,
-    themeCss,
   }: {
     appId: string;
     source: string;
-    themeCss?: string | null;
   }) => (
     <div
       data-app-id={appId}
       data-source={source}
-      data-theme-css={themeCss ?? ""}
       data-testid="applet-mount"
     />
   ),
@@ -136,7 +133,7 @@ describe("DraftAppletPreview", () => {
     expect(screen.getByText("Open saved")).toBeTruthy();
   });
 
-  it("applies uploaded shadcn theme tokens to preview and saved metadata", async () => {
+  it("does not persist artifact-owned theme metadata", async () => {
     promoteDraftAppletMock.mockResolvedValue({
       data: {
         promoteDraftApplet: {
@@ -171,18 +168,7 @@ describe("DraftAppletPreview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
-    fireEvent.change(screen.getByPlaceholderText(/:root/), {
-      target: {
-        value:
-          ":root { --background: oklch(1 0 0); --chart-1: oklch(0.7 0.2 40); } .dark { --background: oklch(0.145 0 0); }",
-      },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Theme" }));
-
-    expect(
-      screen.getByTestId("applet-mount").getAttribute("data-theme-css"),
-    ).toContain("--chart-1");
+    expect(screen.queryByRole("button", { name: "Theme" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -190,14 +176,14 @@ describe("DraftAppletPreview", () => {
       expect(promoteDraftAppletMock).toHaveBeenCalledWith({
         input: expect.objectContaining({
           metadata: expect.objectContaining({
-            appletTheme: expect.objectContaining({
-              source: "shadcn-create",
-              css: expect.stringContaining("--chart-1"),
-            }),
+            threadId: "11111111-1111-4111-8111-111111111111",
           }),
         }),
       });
     });
+    expect(
+      promoteDraftAppletMock.mock.calls[0]?.[0]?.input?.metadata,
+    ).not.toHaveProperty("appletTheme");
   });
 
   it("leaves the draft mounted when promotion validation fails", async () => {

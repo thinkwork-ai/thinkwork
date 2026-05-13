@@ -45,7 +45,7 @@ Do not hand-roll cards, tabs, badges, buttons, or tables. Tabs must use `Tabs`; 
 
 Do not use emoji as icons, status markers, bullets, tab labels, headings, or decorative text. If an icon is useful, import it from `lucide-react`; otherwise use text labels and badges.
 
-If the user provides a shadcn Create Theme export, keep the copied `globals.css` token block intact in `metadata.appletTheme = { source: "shadcn-create", css: "..." }` for preview and save. Build with semantic shadcn classes and chart variables so those uploaded tokens control the rendered artifact style.
+Do not store shadcn Create Theme CSS in applet metadata or generated TSX. App style is tenant-controlled host configuration. Build with semantic shadcn classes and chart variables so the host-injected tenant style controls the rendered artifact.
 
 Before calling `save_app`, inspect the generated TSX. If it does not import `@thinkwork/ui`, use real dashboard components, include meaningful KPI/chart/table sections, and avoid emoji, revise it before saving.
 

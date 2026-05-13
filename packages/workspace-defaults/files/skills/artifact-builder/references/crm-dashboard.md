@@ -98,7 +98,7 @@ Use `@thinkwork/computer-stdlib` primitives where they fit: `AppHeader`, `KpiStr
 
 Theme requirements:
 
-- If the user provides Theme CSS from shadcn Create, preserve it in `metadata.appletTheme = { source: "shadcn-create", css: "..." }` on `preview_app` and `save_app`.
+- Do not preserve Theme CSS in artifact metadata. Shadcn Create Theme CSS is tenant app style controlled by the host renderer.
 - Use semantic shadcn token classes and chart variables: `bg-background`, `text-foreground`, `bg-card`, `text-card-foreground`, `border-border`, `text-muted-foreground`, `bg-muted`, and `var(--chart-1)` through `var(--chart-5)`.
 - Do not paste a `<style>` tag into `App.tsx`, hard-code black chart marks on dark surfaces, or invent a separate palette that fights the uploaded theme.
 
@@ -157,6 +157,6 @@ Use:
 - `metadata.recipe`: `crm-dashboard`.
 - `metadata.recipeVersion`: `1`.
 - `metadata.dataShape`: `CrmDashboardData`.
-- `metadata.appletTheme`: user-provided shadcn Create theme CSS when available.
+- Do not include theme CSS or app-owned theme objects in metadata.
 
 Only tell the user the artifact exists after `save_app` returns `ok`, `persisted`, and an `appId`. Link to `/artifacts/{appId}`.

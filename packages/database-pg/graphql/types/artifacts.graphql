@@ -37,6 +37,12 @@ type AppletPayload {
   files: AWSJSON!
   source: String!
   metadata: AWSJSON!
+  themeCss: String
+}
+
+input AdminUpdateAppletSourceInput {
+  appId: ID!
+  source: String!
 }
 
 type AppletConnection {
@@ -166,5 +172,6 @@ extend type Mutation {
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
   promoteDraftApplet(input: PromoteDraftAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
+  adminUpdateAppletSource(input: AdminUpdateAppletSourceInput!): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

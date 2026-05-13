@@ -98,6 +98,11 @@ export type AdminRoleCheckResult = {
   role: Scalars['String']['output'];
 };
 
+export type AdminUpdateAppletSourceInput = {
+  appId: Scalars['ID']['input'];
+  source: Scalars['String']['input'];
+};
+
 export type Agent = {
   __typename?: 'Agent';
   adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
@@ -543,6 +548,7 @@ export type AppletPayload = {
   files: Scalars['AWSJSON']['output'];
   metadata: Scalars['AWSJSON']['output'];
   source: Scalars['String']['output'];
+  themeCss?: Maybe<Scalars['String']['output']>;
 };
 
 export type AppletState = {
@@ -2089,6 +2095,7 @@ export type Mutation = {
   addTeamUser: TeamUser;
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
+  adminUpdateAppletSource: SaveAppletPayload;
   approveInboxItem: InboxItem;
   archiveConnector: Connector;
   assignThreadLabel: ThreadLabelAssignment;
@@ -2348,6 +2355,11 @@ export type MutationAddTenantMemberArgs = {
 export type MutationAddThreadDependencyArgs = {
   blockedByThreadId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
+};
+
+
+export type MutationAdminUpdateAppletSourceArgs = {
+  input: AdminUpdateAppletSourceInput;
 };
 
 

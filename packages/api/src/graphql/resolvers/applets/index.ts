@@ -3,6 +3,7 @@ import { adminApplets } from "./adminApplets.query.js";
 import { applet } from "./applet.query.js";
 import { applets } from "./applets.query.js";
 import { appletState } from "./appletState.query.js";
+import { adminUpdateAppletSource } from "./adminUpdateAppletSource.mutation.js";
 import { regenerateApplet } from "./regenerateApplet.mutation.js";
 import { promoteDraftApplet } from "./promoteDraftApplet.mutation.js";
 import { saveApplet } from "./saveApplet.mutation.js";
@@ -17,6 +18,7 @@ export const appletQueries = {
 };
 export const appletMutations = {
   saveApplet,
+  adminUpdateAppletSource,
   promoteDraftApplet,
   regenerateApplet,
   saveAppletState,
