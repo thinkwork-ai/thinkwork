@@ -32,11 +32,13 @@ status: active
 - 2026-05-13: Removed the completed U2 worktree, fetched `origin/main`, and started U3 in `.Codex/worktrees/fast-tsx-u3-draft-render` on branch `codex/fast-tsx-u3-draft-render`.
 - 2026-05-13: Began U3 by adding the iframe-backed `DraftAppletPreview` renderer inside AI Elements `WebPreview` chrome and routing `tool-preview_app` output to it.
 - 2026-05-13: U3 focused verification passed: DraftAppletPreview/render typed-part tests, GeneratedArtifactCard/AppSync transport regression tests, Computer typecheck, Computer build, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
+- 2026-05-13: Opened U3 PR #1186 from `codex/fast-tsx-u3-draft-render`.
 
 ## Pull Requests
 
 - U1: #1184 - <https://github.com/thinkwork-ai/thinkwork/pull/1184>
 - U2: #1185 - <https://github.com/thinkwork-ai/thinkwork/pull/1185>
+- U3: #1186 - <https://github.com/thinkwork-ai/thinkwork/pull/1186>
 
 ## CI Failures
 
