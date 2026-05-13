@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  AppletImportRewriteError,
-  rewriteAppletImports,
-} from "../import-shim";
+import { AppletImportRewriteError, rewriteAppletImports } from "../import-shim";
 
 describe("rewriteAppletImports", () => {
   it("rewrites allowed named imports to host registry lookups", () => {
@@ -16,19 +13,19 @@ describe("rewriteAppletImports", () => {
     expect(result).not.toContain("import { KpiStrip }");
   });
 
-  it("rewrites aliases, namespace imports, and the automatic JSX runtime", () => {
+  it("rewrites aliases and the automatic JSX runtime", () => {
     const result = rewriteAppletImports(`
       import { jsx as _jsx } from "react/jsx-runtime";
-      import * as UI from "@thinkwork/ui";
+      import { Card } from "@thinkwork/ui";
       import { useAppletAPI as useAPI } from "useAppletAPI";
-      export default UI;
+      export default Card;
     `);
 
     expect(result).toContain(
       'const _jsx = globalThis.__THINKWORK_APPLET_HOST__["react/jsx-runtime"].jsx;',
     );
     expect(result).toContain(
-      'const UI = globalThis.__THINKWORK_APPLET_HOST__["@thinkwork/ui"];',
+      'const Card = globalThis.__THINKWORK_APPLET_HOST__["@thinkwork/ui"].Card;',
     );
     expect(result).toContain(
       "const useAPI = globalThis.__THINKWORK_APPLET_HOST__.useAppletAPI;",
@@ -50,41 +47,61 @@ describe("rewriteAppletImports", () => {
     expect(result).not.toContain('from "react"');
   });
 
-  it("rewrites bundled visualization and icon imports loaded by the iframe registry", () => {
+  it("rewrites Recharts imports that save validation allows through ChartContainer", () => {
     const result = rewriteAppletImports(`
       import { BarChart } from "recharts";
-      import { ShieldCheck } from "lucide-react";
-      import { MapContainer } from "react-leaflet";
-      import L from "leaflet";
-      export { BarChart, ShieldCheck, MapContainer, L };
+      export { BarChart };
     `);
 
     expect(result).toContain(
       'const BarChart = globalThis.__THINKWORK_APPLET_HOST__["recharts"].BarChart;',
     );
+  });
+
+  it("rewrites the approved host map component", () => {
+    const result = rewriteAppletImports(`
+      import { MapView } from "@thinkwork/computer-stdlib";
+      export { MapView };
+    `);
+
     expect(result).toContain(
-      'const ShieldCheck = globalThis.__THINKWORK_APPLET_HOST__["lucide-react"].ShieldCheck;',
+      'const MapView = globalThis.__THINKWORK_APPLET_HOST__["@thinkwork/computer-stdlib"].MapView;',
     );
-    expect(result).toContain(
-      'const MapContainer = globalThis.__THINKWORK_APPLET_HOST__["react-leaflet"].MapContainer;',
-    );
-    expect(result).toContain(
-      'const L = globalThis.__THINKWORK_APPLET_HOST__["leaflet"].default;',
-    );
+  });
+
+  it("rejects lucide, raw map libraries, namespace imports, and unknown UI exports", () => {
+    expect(() =>
+      rewriteAppletImports('import { ShieldCheck } from "lucide-react";'),
+    ).toThrow(/lucide-react/);
+    expect(() =>
+      rewriteAppletImports('import { MapContainer } from "react-leaflet";'),
+    ).toThrow(/react-leaflet/);
+    expect(() =>
+      rewriteAppletImports('import * as UI from "@thinkwork/ui";'),
+    ).toThrow(/Namespace imports/);
+    expect(() =>
+      rewriteAppletImports('import { Calendar } from "@thinkwork/ui";'),
+    ).toThrow(/Calendar/);
   });
 
   it("rejects disallowed bare imports with the module name", () => {
     expect(() =>
-      rewriteAppletImports('import lodash from "lodash"; export default lodash;'),
+      rewriteAppletImports(
+        'import lodash from "lodash"; export default lodash;',
+      ),
     ).toThrow(AppletImportRewriteError);
     expect(() =>
-      rewriteAppletImports('import lodash from "lodash"; export default lodash;'),
+      rewriteAppletImports(
+        'import lodash from "lodash"; export default lodash;',
+      ),
     ).toThrow(/lodash/);
   });
 
   it("rejects dynamic imports before runtime", () => {
     expect(() =>
-      rewriteAppletImports('export async function load() { return import("lodash"); }'),
+      rewriteAppletImports(
+        'export async function load() { return import("lodash"); }',
+      ),
     ).toThrow(/lodash/);
   });
 });

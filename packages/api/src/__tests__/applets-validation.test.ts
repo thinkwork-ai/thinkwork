@@ -30,24 +30,27 @@ describe("applet source validation", () => {
             Badge,
             Card,
             CardContent,
+            ChartContainer,
             Table,
             TableBody,
             TableCell,
             TableRow,
           } from "@thinkwork/ui";
           import { KpiStrip } from "@thinkwork/computer-stdlib";
-          import { LayoutDashboard } from "lucide-react";
-          import { IconChartBar } from "@tabler/icons-react";
+          import { Bar, BarChart } from "recharts";
 
           export default function Applet() {
             return (
               <main>
                 <Card>
                   <CardContent>
-                    <LayoutDashboard />
-                    <IconChartBar />
                     <KpiStrip items={[]} />
                     <Badge>CRM Live</Badge>
+                    <ChartContainer config={{ amount: { label: "Amount" } }}>
+                      <BarChart data={[]}>
+                        <Bar dataKey="amount" />
+                      </BarChart>
+                    </ChartContainer>
                     <Table>
                       <TableBody>
                         <TableRow>
@@ -77,6 +80,15 @@ describe("applet source validation", () => {
       validateAppletSource(`
         import { readFileSync } from "node:fs";
         export default function Applet() { return readFileSync; }
+      `),
+    ).toThrow(AppletImportError);
+  });
+
+  it("rejects lucide-react imports for generated applets", () => {
+    expect(() =>
+      validateAppletSource(`
+        import { Calendar } from "lucide-react";
+        export default function Applet() { return <Calendar />; }
       `),
     ).toThrow(AppletImportError);
   });
@@ -155,6 +167,84 @@ describe("applet source validation", () => {
         { metadata: { runbookSlug: "crm-dashboard" } },
       ),
     ).toThrow(AppletQualityError);
+  });
+
+  it("rejects raw HTML buttons even when Button is imported", () => {
+    expect(() =>
+      validateAppletSource(`
+        import { Button, Card } from "@thinkwork/ui";
+        export default function Applet() {
+          return <Card><button>Save</button><Button>Save</Button></Card>;
+        }
+      `),
+    ).toThrow(/Button/);
+  });
+
+  it("rejects Recharts primitives outside ChartContainer", () => {
+    expect(() =>
+      validateAppletSource(`
+        import { Card } from "@thinkwork/ui";
+        import { Line, LineChart } from "recharts";
+        export default function Applet() {
+          return <Card><LineChart data={[]}><Line dataKey="value" /></LineChart></Card>;
+        }
+      `),
+    ).toThrow(/ChartContainer/);
+  });
+
+  it("accepts Recharts primitives inside ChartContainer", () => {
+    expect(
+      validateAppletSource(`
+        import { Card, ChartContainer } from "@thinkwork/ui";
+        import { Line, LineChart } from "recharts";
+        export default function Applet() {
+          return (
+            <Card>
+              <ChartContainer config={{ value: { label: "Value" } }}>
+                <LineChart data={[]}>
+                  <Line dataKey="value" />
+                </LineChart>
+              </ChartContainer>
+            </Card>
+          );
+        }
+      `),
+    ).toEqual({ ok: true });
+  });
+
+  it("rejects raw map libraries and accepts the host map component", () => {
+    expect(() =>
+      validateAppletSource(`
+        import { MapContainer } from "react-leaflet";
+        export default function Applet() { return <MapContainer />; }
+      `),
+    ).toThrow(AppletImportError);
+
+    expect(
+      validateAppletSource(`
+        import { MapView } from "@thinkwork/computer-stdlib";
+        export default function Applet() { return <MapView markers={[]} />; }
+      `),
+    ).toEqual({ ok: true });
+  });
+
+  it("rejects hand-rolled card styling and arbitrary Tailwind values", () => {
+    expect(() =>
+      validateAppletSource(`
+        export default function Applet() {
+          return <div className="rounded-lg border bg-white shadow-sm p-4">Card</div>;
+        }
+      `),
+    ).toThrow(/Card/);
+
+    expect(() =>
+      validateAppletSource(`
+        import { Card } from "@thinkwork/ui";
+        export default function Applet() {
+          return <Card><div className="max-w-[1280px]">Wide</div></Card>;
+        }
+      `),
+    ).toThrow(/arbitrary Tailwind/);
   });
 
   it("rejects emoji in CRM dashboard applets", () => {

@@ -1,20 +1,15 @@
 import { parse } from "acorn";
 import { simple as walk } from "acorn-walk";
+import {
+  generatedAppPolicy,
+  type GeneratedAppPackagePolicy,
+} from "@thinkwork/ui/generated-app-policy";
 
 const REGISTRY_NAME = "globalThis.__THINKWORK_APPLET_HOST__";
 
-export const ALLOWED_APPLET_IMPORTS = new Set([
-  "@thinkwork/ui",
-  "@thinkwork/computer-stdlib",
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "recharts",
-  "lucide-react",
-  "leaflet",
-  "react-leaflet",
-  "useAppletAPI",
-]);
+export const ALLOWED_APPLET_IMPORTS = new Set(
+  Object.keys(generatedAppPolicy.packages),
+);
 
 interface RewriteFailure {
   kind: "DisallowedImport" | "ParseError";
@@ -78,7 +73,7 @@ export function rewriteAppletImports(source: string): string {
     ImportDeclaration(node) {
       const declaration = node as unknown as ImportDeclarationNode;
       const specifier = declaration.source.value;
-      assertAllowedImport(specifier, declaration.loc?.start);
+      assertAllowedImport(declaration, specifier, declaration.loc?.start);
       replacements.push({
         start: declaration.start,
         end: declaration.end,
@@ -121,25 +116,65 @@ function parseModule(source: string) {
 }
 
 function assertAllowedImport(
+  declaration: ImportDeclarationNode,
   specifier: string,
   location?: { line: number; column: number },
 ) {
-  if (!ALLOWED_APPLET_IMPORTS.has(specifier)) {
+  const packagePolicy = generatedAppPolicy.packages[
+    specifier as keyof typeof generatedAppPolicy.packages
+  ] as GeneratedAppPackagePolicy | undefined;
+  if (!packagePolicy) {
     throw disallowedImport(specifier, location);
+  }
+
+  const namedExports = new Set<string>([...(packagePolicy.namedExports ?? [])]);
+  for (const importSpecifier of declaration.specifiers) {
+    if (importSpecifier.type === "ImportNamespaceSpecifier") {
+      if (!packagePolicy.namespaceImport) {
+        throw disallowedImport(
+          `${specifier} namespace import`,
+          location,
+          `Namespace imports from ${specifier} bypass the generated-app allowlist.`,
+        );
+      }
+      continue;
+    }
+    if (importSpecifier.type === "ImportDefaultSpecifier") {
+      if (!packagePolicy.defaultImport) {
+        throw disallowedImport(
+          `${specifier} default import`,
+          location,
+          `Default imports from ${specifier} are not approved for generated apps.`,
+        );
+      }
+      continue;
+    }
+
+    const imported =
+      importSpecifier.imported.name ?? String(importSpecifier.imported.value);
+    if (!namedExports.has(imported)) {
+      throw disallowedImport(
+        `${specifier}.${imported}`,
+        location,
+        `${imported} is not an approved generated-app export from ${specifier}.`,
+      );
+    }
   }
 }
 
 function disallowedImport(
   specifier: string,
   location?: { line: number; column: number },
+  message?: string,
 ) {
   return new AppletImportRewriteError({
     kind: "DisallowedImport",
-    message: `Applet imports may only reference ${[
-      ...ALLOWED_APPLET_IMPORTS,
-    ].join(", ")}; found ${specifier} at ${location?.line ?? "?"}:${
-      location?.column ?? "?"
-    }`,
+    message: `${
+      message ??
+      `Applet imports may only reference ${[...ALLOWED_APPLET_IMPORTS].join(
+        ", ",
+      )}; found ${specifier}`
+    } at ${location?.line ?? "?"}:${location?.column ?? "?"}`,
     specifier,
     line: location?.line,
     column: location?.column,
@@ -153,7 +188,9 @@ function rewriteImportDeclaration(node: ImportDeclarationNode) {
   }
 
   return node.specifiers
-    .map((importSpecifier) => rewriteImportSpecifier(specifier, importSpecifier))
+    .map((importSpecifier) =>
+      rewriteImportSpecifier(specifier, importSpecifier),
+    )
     .join("\n");
 }
 
@@ -189,7 +226,9 @@ function registryLookup(moduleSpecifier: string) {
 
 function applyReplacements(source: string, replacements: Replacement[]) {
   let rewritten = source;
-  for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {
+  for (const replacement of [...replacements].sort(
+    (a, b) => b.start - a.start,
+  )) {
     rewritten =
       rewritten.slice(0, replacement.start) +
       replacement.text +
