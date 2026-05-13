@@ -172,7 +172,7 @@ resource "aws_efs_access_point" "workspace_admin" {
 # Lambda traffic is auditable separately from task traffic.
 resource "aws_security_group" "workspace_admin_lambda" {
   name_prefix = "thinkwork-${var.stage}-workspace-admin-lambda-"
-  description = "ThinkWork workspace-files-efs Lambda — EFS client"
+  description = "ThinkWork workspace-files-efs Lambda - EFS client"
   vpc_id      = var.vpc_id
 
   egress {
