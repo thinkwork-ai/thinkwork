@@ -361,10 +361,9 @@ function ThreadDetailPage() {
   );
 
   // ---- Breadcrumbs ----
-  // Computer-owned threads route through /computers/$computerId; Agent-owned
-  // threads with a `?fromAgent=...` query param keep the existing Agent
-  // breadcrumb; everything else falls back to the Threads root. Decision logic
-  // lives in `-thread-breadcrumbs.ts` so it can be unit-tested.
+  // Threads with a `?fromAgent=...` query param keep the Agent breadcrumb;
+  // everything else falls back to the Threads root. Decision logic lives in
+  // `-thread-breadcrumbs.ts` so it can be unit-tested.
   useBreadcrumbs(
     buildThreadBreadcrumbs({
       thread,
