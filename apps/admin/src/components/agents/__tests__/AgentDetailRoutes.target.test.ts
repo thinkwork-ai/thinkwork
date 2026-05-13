@@ -43,7 +43,6 @@ describe("agent detail dashboard/editor routes", () => {
   it("renders the editor route through the shared workspace editor", () => {
     expect(editorRouteSource).toContain('activeTab="editor"');
     expect(editorRouteSource).toContain("WorkspaceEditor");
-    expect(editorRouteSource).toContain("AGENT_WORKSPACE_DEFAULT_FILES");
     expect(editorRouteSource).toContain("initialFolder={folder}");
     expect(editorRouteSource).toContain('className="min-h-[500px]"');
     expect(editorRouteSource).not.toContain("Agent Builder");

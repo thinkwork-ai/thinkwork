@@ -1210,8 +1210,6 @@ function TemplateEditorPage() {
           <WorkspaceEditor
             target={{ templateId }}
             mode="template"
-            templateSlug={result.data?.agentTemplate?.slug ?? slug}
-            preferRunbookSkills={templateKind === TemplateKind.Computer}
             className="min-h-[500px]"
           />
         )}

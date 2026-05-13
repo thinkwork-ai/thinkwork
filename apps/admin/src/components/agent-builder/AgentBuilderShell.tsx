@@ -2,10 +2,7 @@ import { useMemo } from "react";
 import { gql, useQuery } from "urql";
 import { PageLayout } from "@/components/PageLayout";
 import type { Target } from "@/lib/agent-builder-api";
-import {
-  AGENT_WORKSPACE_DEFAULT_FILES,
-  WorkspaceEditor,
-} from "./WorkspaceEditor";
+import { WorkspaceEditor } from "./WorkspaceEditor";
 
 const AgentDetailQuery = gql`
   query AgentDetail($id: ID!) {
@@ -54,10 +51,7 @@ export function AgentBuilderShell({
         target={target}
         mode="agent"
         agentId={agentId}
-        agentSlug={agent?.slug ?? undefined}
         initialFolder={initialFolder}
-        bootstrapFiles={AGENT_WORKSPACE_DEFAULT_FILES}
-        bootstrapLabel="Create Default Files"
       />
     </PageLayout>
   );
