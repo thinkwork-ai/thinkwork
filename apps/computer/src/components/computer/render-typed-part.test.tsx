@@ -7,8 +7,20 @@
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import type { ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
+
+vi.mock("@/applets/mount", () => ({
+	AppletFailure: ({ children }: { children: ReactNode }) => (
+		<div data-testid="applet-failure">{children}</div>
+	),
+	AppletMount: ({ appId }: { appId: string }) => (
+		<div data-app-id={appId} data-testid="draft-applet-mount" />
+	),
+	useAppletInstanceId: (appId: string) => `instance-${appId}`,
+}));
+
 import { renderTypedPart, renderTypedParts } from "./render-typed-part";
 
 afterEach(cleanup);
@@ -56,6 +68,33 @@ describe("renderTypedPart", () => {
 		// Tool renders some structural elements; we just assert the
 		// container has children and didn't throw.
 		expect(container.firstChild).not.toBeNull();
+	});
+
+	it("renders draft app preview tool output through the sandbox preview component", () => {
+		const part: AccumulatedPart = {
+			type: "tool-preview_app",
+			toolCallId: "draft-1",
+			toolName: "preview_app",
+			output: {
+				type: "draft_app_preview",
+				draft: {
+					draftId: "draft_123",
+					unsaved: true,
+					name: "CRM Draft",
+					files: {
+						"App.tsx": "export default function App() { return null; }",
+					},
+					validation: { ok: true, status: "passed", errors: [] },
+				},
+			},
+			state: "output-available",
+		};
+
+		render(<>{renderTypedPart(part, rk())}</>);
+
+		expect(screen.getByTestId("draft-applet-preview")).toBeTruthy();
+		expect(screen.getByTestId("draft-applet-mount")).toBeTruthy();
+		expect(screen.queryByLabelText("Tool activity")).toBeNull();
 	});
 
 	it("groups tool parts into one collapsed tool activity section", () => {

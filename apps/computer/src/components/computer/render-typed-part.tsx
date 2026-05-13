@@ -21,6 +21,10 @@
 
 import type { ReactNode } from "react";
 import {
+  DraftAppletPreview,
+  isDraftAppPreviewOutput,
+} from "@/components/apps/DraftAppletPreview";
+import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
@@ -112,6 +116,12 @@ export function renderTypedPart(
       AccumulatedPart,
       { type: `tool-${string}` }
     >;
+    if (
+      toolPart.toolName === "preview_app" &&
+      isDraftAppPreviewOutput(toolPart.output)
+    ) {
+      return <DraftAppletPreview key={key} output={toolPart.output} />;
+    }
     return (
       <Tool key={key}>
         <ToolHeader type={toolPart.type} state={toolPart.state} />

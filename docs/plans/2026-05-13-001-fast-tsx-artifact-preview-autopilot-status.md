@@ -10,9 +10,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U2 - Add draft app preview payload contract
-- Branch: `codex/fast-tsx-u2-draft-payload`
-- Worktree: `.Codex/worktrees/fast-tsx-u2-draft-payload`
+- Unit: U3 - Render unsaved TSX previews in Computer
+- Branch: `codex/fast-tsx-u3-draft-render`
+- Worktree: `.Codex/worktrees/fast-tsx-u3-draft-render`
 - Started: 2026-05-13
 - State: in progress
 
@@ -28,11 +28,17 @@ status: active
 - 2026-05-13: Began U2 by adding the unsaved `preview_app` tool payload contract, service-minted draft proof helpers, and typed `tool-preview_app` durable message part extraction.
 - 2026-05-13: U2 focused verification passed: API runtime/thread-cutover tests, Computer AppSync transport test, Python applet tool/UI message publisher tests, API build, API/Computer typechecks, Python applet-tool lint, Python runtime-error lint for the touched server integration, and `git diff --check`.
 - 2026-05-13: Opened U2 PR #1185 from `codex/fast-tsx-u2-draft-payload`.
+- 2026-05-13: U2 PR #1185 passed required checks and was squash-merged to `main` at `39d1c60b`.
+- 2026-05-13: Removed the completed U2 worktree, fetched `origin/main`, and started U3 in `.Codex/worktrees/fast-tsx-u3-draft-render` on branch `codex/fast-tsx-u3-draft-render`.
+- 2026-05-13: Began U3 by adding the iframe-backed `DraftAppletPreview` renderer inside AI Elements `WebPreview` chrome and routing `tool-preview_app` output to it.
+- 2026-05-13: U3 focused verification passed: DraftAppletPreview/render typed-part tests, GeneratedArtifactCard/AppSync transport regression tests, Computer typecheck, Computer build, and `git diff --check`. Computer build emitted existing sourcemap/chunk-size warnings only.
+- 2026-05-13: Opened U3 PR #1186 from `codex/fast-tsx-u3-draft-render`.
 
 ## Pull Requests
 
 - U1: #1184 - <https://github.com/thinkwork-ai/thinkwork/pull/1184>
 - U2: #1185 - <https://github.com/thinkwork-ai/thinkwork/pull/1185>
+- U3: #1186 - <https://github.com/thinkwork-ai/thinkwork/pull/1186>
 
 ## CI Failures
 
