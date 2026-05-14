@@ -1,4 +1,5 @@
-import { ExternalLink, Puzzle } from "lucide-react";
+import { ExternalLink, Puzzle, ShieldCheck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AdminExtensionComponentProps } from "./types";
 import { registerAdminExtension } from "./registry";
@@ -11,6 +12,9 @@ const label = readTrimmed(import.meta.env.VITE_ADMIN_EXTENSION_SAMPLE_LABEL);
 const url = normalizeUrl(import.meta.env.VITE_ADMIN_EXTENSION_SAMPLE_URL);
 const navGroup = readNavGroup(
   import.meta.env.VITE_ADMIN_EXTENSION_SAMPLE_NAV_GROUP,
+);
+const embedMode = readEmbedMode(
+  import.meta.env.VITE_ADMIN_EXTENSION_SAMPLE_EMBED_MODE,
 );
 
 function ConfiguredExternalExtension(_props: AdminExtensionComponentProps) {
@@ -34,14 +38,48 @@ function ConfiguredExternalExtension(_props: AdminExtensionComponentProps) {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card">
-        <iframe
-          title={label}
-          src={url}
-          className="h-full w-full border-0 bg-background"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      </div>
+      {embedMode === "embed" ? (
+        <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card">
+          <iframe
+            title={label}
+            src={url}
+            className="h-full w-full border-0 bg-background"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 items-start rounded-lg border border-border bg-card p-4">
+          <div className="grid w-full gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+            <div className="min-w-0 space-y-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1.5">
+                  <ShieldCheck className="h-3 w-3" />
+                  Installed
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold leading-tight">
+                  {label} opens in its dedicated workspace
+                </h2>
+                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                  This extension is registered in ThinkWork Admin, but its
+                  authenticated operator surface launches separately so sign-in
+                  and customer isolation stay with the deployed extension.
+                </p>
+              </div>
+              <div className="truncate rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                {url}
+              </div>
+            </div>
+            <Button asChild className="justify-self-start md:justify-self-end">
+              <a href={url} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Open {label}
+              </a>
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -94,4 +132,8 @@ function readNavGroup(value: unknown) {
     return candidate;
   }
   return "integrations";
+}
+
+function readEmbedMode(value: unknown) {
+  return readTrimmed(value) === "embed" ? "embed" : "launch";
 }
