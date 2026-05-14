@@ -195,6 +195,18 @@ export function AppSidebar() {
   }, [roleRetryTick]);
   const isOwner = callerRole === "owner";
 
+  const extensions = getAdminExtensions();
+  const extensionItemsFor = (
+    group: "main" | "managed-harness" | "integrations" | "manage",
+  ): NavItem[] =>
+    extensions
+      .filter((extension) => (extension.navGroup ?? "integrations") === group)
+      .map((extension) => ({
+        to: `/extensions/${extension.id}`,
+        icon: extension.icon ?? Puzzle,
+        label: extension.label,
+      }));
+
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     {
@@ -210,6 +222,7 @@ export function AppSidebar() {
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
+    ...extensionItemsFor("main"),
   ];
 
   const automationsItems: NavItem[] = [
@@ -230,6 +243,7 @@ export function AppSidebar() {
       icon: Webhook,
       label: "Webhooks",
     },
+    ...extensionItemsFor("integrations"),
   ];
 
   const agentsItems: NavItem[] = [
@@ -237,13 +251,8 @@ export function AppSidebar() {
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
+    ...extensionItemsFor("managed-harness"),
   ];
-
-  const extensionItems: NavItem[] = getAdminExtensions().map((extension) => ({
-    to: `/extensions/${extension.id}`,
-    icon: extension.icon ?? Puzzle,
-    label: extension.label,
-  }));
 
   // Billing is intentionally hidden — flip BILLING_VISIBLE back on when ready.
   const BILLING_VISIBLE = false;
@@ -257,6 +266,7 @@ export function AppSidebar() {
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
     { to: "/settings", icon: Settings, label: "Settings" },
+    ...extensionItemsFor("manage"),
   ];
 
   return (
@@ -316,15 +326,6 @@ export function AppSidebar() {
             <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {extensionItems.length > 0 && (
-          <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-            <SidebarGroupLabel>Extensions</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <NavItems items={extensionItems} />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel>Manage</SidebarGroupLabel>

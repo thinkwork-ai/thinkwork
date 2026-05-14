@@ -5,9 +5,8 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import path from "node:path";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, new URL(".", import.meta.url).pathname, [
-    "VITE_",
-  ]);
+  const adminRoot = new URL(".", import.meta.url).pathname;
+  const env = loadEnv(mode, adminRoot, ["VITE_"]);
   const sandboxIframeSrc =
     env.VITE_SANDBOX_IFRAME_SRC ||
     process.env.VITE_SANDBOX_IFRAME_SRC ||

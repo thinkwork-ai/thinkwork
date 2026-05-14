@@ -1,5 +1,10 @@
 import type { ComponentType } from "react";
 
+export interface AdminExtensionBreadcrumb {
+  label: string;
+  href?: string;
+}
+
 export interface AdminExtensionProxyClient {
   get<T = unknown>(path: string, init?: RequestInit): Promise<T>;
   post<T = unknown>(
@@ -24,9 +29,11 @@ export interface AdminExtensionDefinition {
   id: string;
   label: string;
   description?: string;
-  navGroup?: "managed-harness" | "integrations" | "manage";
+  navGroup?: "main" | "managed-harness" | "integrations" | "manage";
+  breadcrumbs?: AdminExtensionBreadcrumb[];
   proxyBasePath?: string;
   icon?: ComponentType<{ className?: string }>;
+  ownsPageLayout?: boolean;
   load: () => Promise<{
     default?: AdminExtensionComponent;
     Extension?: AdminExtensionComponent;
