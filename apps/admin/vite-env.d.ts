@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_ADMIN_EXTENSION_SAMPLE_ID?: string;
   readonly VITE_ADMIN_EXTENSION_SAMPLE_LABEL?: string;
   readonly VITE_ADMIN_EXTENSION_SAMPLE_URL?: string;
+  readonly VITE_ADMIN_EXTENSION_SAMPLE_GRAPHQL_URL?: string;
   readonly VITE_ADMIN_EXTENSION_SAMPLE_NAV_GROUP?: string;
   readonly VITE_ADMIN_EXTENSION_SAMPLE_EMBED_MODE?: string;
 }
