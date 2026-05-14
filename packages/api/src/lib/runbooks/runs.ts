@@ -7,6 +7,7 @@ import {
   computerRunbookTasks,
   computers,
   tenantRunbookCatalog,
+  threads,
   type RunbookInvocationMode,
   type RunbookRunStatus,
 } from "@thinkwork/database-pg/schema";
@@ -325,7 +326,7 @@ export async function completeRunbookRunFromThreadTurn(input: {
           inArray(computerRunbookTasks.status, ["pending", "running"]),
         ),
       );
-    await tx
+    const [updatedRun] = await tx
       .update(computerRunbookRuns)
       .set({
         status: "completed",
@@ -339,7 +340,32 @@ export async function completeRunbookRunFromThreadTurn(input: {
           eq(computerRunbookRuns.id, input.runId),
           inArray(computerRunbookRuns.status, ["queued", "running"]),
         ),
-      );
+      )
+      .returning({ threadId: computerRunbookRuns.thread_id });
+    if (updatedRun?.threadId) {
+      await tx
+        .update(threads)
+        .set({
+          status: "done",
+          completed_at: now,
+          closed_at: now,
+          last_turn_completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, updatedRun.threadId),
+            inArray(threads.status, [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "blocked",
+            ]),
+          ),
+        );
+    }
   });
   return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
 }
@@ -413,7 +439,7 @@ export async function failRunbookRunFromThreadTurn(input: {
           eq(computerRunbookTasks.status, "pending"),
         ),
       );
-    await tx
+    const [updatedRun] = await tx
       .update(computerRunbookRuns)
       .set({
         status: "failed",
@@ -427,7 +453,29 @@ export async function failRunbookRunFromThreadTurn(input: {
           eq(computerRunbookRuns.id, input.runId),
           inArray(computerRunbookRuns.status, ["queued", "running"]),
         ),
-      );
+      )
+      .returning({ threadId: computerRunbookRuns.thread_id });
+    if (updatedRun?.threadId) {
+      await tx
+        .update(threads)
+        .set({
+          status: "blocked",
+          last_turn_completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, updatedRun.threadId),
+            inArray(threads.status, [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+            ]),
+          ),
+        );
+    }
   });
   return getRunbookRun({ tenantId: input.tenantId, runId: input.runId });
 }

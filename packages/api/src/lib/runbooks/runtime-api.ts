@@ -684,19 +684,20 @@ export async function failRunbookExecutionTask(input: {
   error: unknown;
 }) {
   const { payload } = await loadRunbookExecuteTask(input);
-  await loadRunbookRunState({
+  const { run } = await loadRunbookRunState({
     tenantId: input.tenantId,
     computerId: input.computerId,
     runbookRunId: payload.runbookRunId,
   });
+  const now = new Date();
   await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(computerRunbookTasks)
       .set({
         status: "failed",
         error: input.error ?? { message: "Runbook task failed" },
-        completed_at: new Date(),
-        updated_at: new Date(),
+        completed_at: now,
+        updated_at: now,
       })
       .where(
         and(
@@ -711,7 +712,7 @@ export async function failRunbookExecutionTask(input: {
     }
     await tx
       .update(computerRunbookTasks)
-      .set({ status: "skipped", updated_at: new Date() })
+      .set({ status: "skipped", completed_at: now, updated_at: now })
       .where(
         and(
           eq(computerRunbookTasks.tenant_id, input.tenantId),
@@ -724,8 +725,8 @@ export async function failRunbookExecutionTask(input: {
       .set({
         status: "failed",
         error: input.error ?? { message: "Runbook task failed" },
-        completed_at: new Date(),
-        updated_at: new Date(),
+        completed_at: now,
+        updated_at: now,
       })
       .where(
         and(
@@ -733,6 +734,27 @@ export async function failRunbookExecutionTask(input: {
           eq(computerRunbookRuns.id, payload.runbookRunId),
         ),
       );
+    if (run.thread_id) {
+      await tx
+        .update(threads)
+        .set({
+          status: "blocked",
+          last_turn_completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, run.thread_id),
+            inArray(threads.status, [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+            ]),
+          ),
+        );
+    }
   });
   await syncRunbookTaskQueueMessage({
     tenantId: input.tenantId,
@@ -771,23 +793,51 @@ export async function completeRunbookExecutionRun(input: {
       409,
     );
   }
-  const [updated] = await db
-    .update(computerRunbookRuns)
-    .set({
-      status: "completed",
-      output: input.output ?? null,
-      completed_at: new Date(),
-      updated_at: new Date(),
-    })
-    .where(
-      and(
-        eq(computerRunbookRuns.tenant_id, input.tenantId),
-        eq(computerRunbookRuns.computer_id, input.computerId),
-        eq(computerRunbookRuns.id, payload.runbookRunId),
-        inArray(computerRunbookRuns.status, ["queued", "running"]),
-      ),
-    )
-    .returning();
+  const now = new Date();
+  const [updated] = await db.transaction(async (tx) => {
+    const [run] = await tx
+      .update(computerRunbookRuns)
+      .set({
+        status: "completed",
+        output: input.output ?? null,
+        completed_at: now,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(computerRunbookRuns.tenant_id, input.tenantId),
+          eq(computerRunbookRuns.computer_id, input.computerId),
+          eq(computerRunbookRuns.id, payload.runbookRunId),
+          inArray(computerRunbookRuns.status, ["queued", "running"]),
+        ),
+      )
+      .returning();
+    if (run?.thread_id) {
+      await tx
+        .update(threads)
+        .set({
+          status: "done",
+          completed_at: now,
+          closed_at: now,
+          last_turn_completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, run.thread_id),
+            inArray(threads.status, [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "blocked",
+            ]),
+          ),
+        );
+    }
+    return [run];
+  });
   if (!updated) {
     throw new RunbookRuntimeError("Runbook run not found or not active", 404);
   }
