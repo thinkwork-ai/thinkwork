@@ -920,6 +920,7 @@ jobs:
           VITE_ADMIN_EXTENSION_SAMPLE_LABEL: ${{ vars.ADMIN_EXTENSION_SAMPLE_LABEL }}
           VITE_ADMIN_EXTENSION_SAMPLE_URL: ${{ vars.ADMIN_EXTENSION_SAMPLE_URL }}
           VITE_ADMIN_EXTENSION_SAMPLE_NAV_GROUP: ${{ vars.ADMIN_EXTENSION_SAMPLE_NAV_GROUP }}
+          VITE_ADMIN_EXTENSION_SAMPLE_EMBED_MODE: ${{ vars.ADMIN_EXTENSION_SAMPLE_EMBED_MODE }}
         # API_AUTH_SECRET is intentionally NOT passed to the admin build.
         # The admin SPA authenticates REST calls with the user's Cognito
         # id token (see apps/admin/src/lib/api-fetch.ts). Never re-inject
