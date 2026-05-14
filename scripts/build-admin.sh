@@ -60,6 +60,18 @@ VITE_COGNITO_DOMAIN=${COGNITO_DOMAIN}
 VITE_API_URL=${API_ENDPOINT}
 EOF
 
+for optional_env in \
+  VITE_ADMIN_EXTENSION_SAMPLE_ENABLED \
+  VITE_ADMIN_EXTENSION_SAMPLE_ID \
+  VITE_ADMIN_EXTENSION_SAMPLE_LABEL \
+  VITE_ADMIN_EXTENSION_SAMPLE_URL \
+  VITE_ADMIN_EXTENSION_SAMPLE_NAV_GROUP
+do
+  if [ -n "${!optional_env:-}" ]; then
+    printf "%s=%s\n" "$optional_env" "${!optional_env}" >> apps/admin/.env.production
+  fi
+done
+
 pnpm --filter admin build
 
 echo "▸ Syncing to S3 bucket: $ADMIN_BUCKET ..."

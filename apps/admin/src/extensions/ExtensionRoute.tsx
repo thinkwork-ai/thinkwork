@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch } from "@/lib/api-fetch";
 import { getAdminExtension } from "./registry";
@@ -13,6 +14,9 @@ import type {
 export function ExtensionRoute({ extensionId }: { extensionId: string }) {
   const extension = getAdminExtension(extensionId);
   const { tenantId } = useTenant();
+  useBreadcrumbs(
+    extension?.breadcrumbs ?? (extension ? [{ label: extension.label }] : []),
+  );
 
   const proxy = useMemo(
     () =>
@@ -50,22 +54,28 @@ export function ExtensionRoute({ extensionId }: { extensionId: string }) {
     return { default: Loaded as AdminExtensionComponent };
   });
 
+  const content = (
+    <Suspense
+      fallback={<div className="text-sm text-muted-foreground">Loading...</div>}
+    >
+      <Component
+        extensionId={extension.id}
+        tenantId={tenantId}
+        proxyBasePath={
+          extension.proxyBasePath ?? `/api/extensions/${extension.id}`
+        }
+        proxy={proxy}
+      />
+    </Suspense>
+  );
+
+  if (extension.ownsPageLayout) {
+    return content;
+  }
+
   return (
     <PageLayout header={<PageHeader title={extension.label} />}>
-      <Suspense
-        fallback={
-          <div className="text-sm text-muted-foreground">Loading...</div>
-        }
-      >
-        <Component
-          extensionId={extension.id}
-          tenantId={tenantId}
-          proxyBasePath={
-            extension.proxyBasePath ?? `/api/extensions/${extension.id}`
-          }
-          proxy={proxy}
-        />
-      </Suspense>
+      {content}
     </PageLayout>
   );
 }

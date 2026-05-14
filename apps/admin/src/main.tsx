@@ -21,6 +21,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { graphqlClient } from "@/lib/graphql-client";
 import { queryClient } from "@/lib/query-client";
 import { routeTree } from "./routeTree.gen";
+import "./extensions/configured-external-extension";
 import "./index.css";
 
 const router = createRouter({

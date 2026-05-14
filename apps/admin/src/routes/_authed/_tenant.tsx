@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import { Moon, Search, Sun } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -11,6 +11,8 @@ import { AppSyncSubscriptionProvider } from "@/context/AppSyncSubscriptionProvid
 import { CreateThreadDialog } from "@/components/threads/CreateThreadDialog";
 import { NewAgentDialog } from "@/components/agents/NewAgentDialog";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { getAdminExtension } from "@/extensions/registry";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant")({
   component: TenantLayout,
@@ -19,7 +21,9 @@ export const Route = createFileRoute("/_authed/_tenant")({
 function TenantLayout() {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
   const nextTheme = theme === "dark" ? "light" : "dark";
+  const ownsExtensionLayout = getOwnedExtensionLayout(location.pathname);
 
   function openSearch() {
     document.dispatchEvent(
@@ -70,7 +74,12 @@ function TenantLayout() {
           </header>
 
           {/* Page content */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 min-h-0 min-w-0">
+          <main
+            className={cn(
+              "flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0",
+              ownsExtensionLayout ? "p-4" : "p-6",
+            )}
+          >
             <Outlet />
           </main>
         </SidebarInset>
@@ -79,4 +88,10 @@ function TenantLayout() {
       <NewAgentDialog />
     </AppSyncSubscriptionProvider>
   );
+}
+
+function getOwnedExtensionLayout(pathname: string) {
+  const match = pathname.match(/(?:^|\/)extensions\/([^/]+)/);
+  if (!match) return false;
+  return getAdminExtension(match[1])?.ownsPageLayout === true;
 }
