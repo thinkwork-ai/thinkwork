@@ -2,7 +2,7 @@
 title: "Autopilot status: retire OSS Symphony and connectors"
 date: 2026-05-14
 plan: docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md
-status: active
+status: completed
 ---
 
 # Autopilot Status: Retire OSS Symphony And Connectors
@@ -10,10 +10,11 @@ status: active
 ## Current State
 
 - Target branch: `main`
-- Active unit: U1-U6 grouped, retire connector schema/API/UI/docs/generated surfaces
-- Active branch: `codex/retire-oss-connectors-u1`
-- Active worktree: `.Codex/worktrees/retire-oss-connectors-u1`
+- Active unit: none - plan implementation complete
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-14
+- Completed: 2026-05-14
 
 ## Progress Log
 
@@ -32,12 +33,14 @@ status: active
   - Added `0087_retire_oss_connectors.sql` to drop installed connector tables and tracker-specific external refs during upgrade.
   - Replaced connector-focused docs with narrower integration/MCP language that does not expose Symphony as an OSS feature.
 - Verified repo search no longer finds active Symphony/connector runtime identifiers outside the retirement migration and tests.
+- Opened [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226), waited for required checks, and squash-merged it to `main`.
+- Deleted the remote branch `codex/retire-oss-connectors-u1`.
 
 ## Pull Requests
 
 | Unit | Branch | PR | Status | Notes |
 | --- | --- | --- | --- | --- |
-| U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | CI passed; merge pending | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
+| U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | Merged | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
 
 ## CI / Verification Log
 
