@@ -115,7 +115,11 @@ import {
   shouldIncludeRunbookHistoryMessage,
   unsupportedCapabilityError,
 } from "./runtime-api.js";
-import { failRunbookRunFromThreadTurn, markRunbookRunRunning } from "./runs.js";
+import {
+  completeRunbookRunFromThreadTurn,
+  failRunbookRunFromThreadTurn,
+  markRunbookRunRunning,
+} from "./runs.js";
 
 const taskRow = {
   id: "task-1",
@@ -497,6 +501,35 @@ describe("runbook runtime API helpers", () => {
     ]);
   });
 
+  it("marks the owning thread done when a thread-turn runbook completes", async () => {
+    mocks.selectQueue.push(
+      [],
+      [{ threadId: "thread-1" }],
+      [],
+      [{ ...runRow, status: "completed" }],
+      [{ ...completedTask, status: "completed" }],
+    );
+
+    const result = await completeRunbookRunFromThreadTurn({
+      tenantId: "tenant-1",
+      runId: "run-1",
+      output: { responseMessageId: "message-2" },
+    });
+
+    expect(mocks.updates).toHaveLength(3);
+    expect(mocks.updates[1]).toMatchObject({
+      status: "completed",
+      output: { responseMessageId: "message-2" },
+    });
+    expect(mocks.updates[2]).toMatchObject({
+      status: "done",
+      completed_at: expect.any(Date),
+      closed_at: expect.any(Date),
+      last_turn_completed_at: expect.any(Date),
+    });
+    expect(result?.status).toBe("COMPLETED");
+  });
+
   it("fails only the active task and skips pending tasks when a thread-turn runbook fails", async () => {
     const runningTask = {
       ...completedTask,
@@ -516,6 +549,7 @@ describe("runbook runtime API helpers", () => {
       [{ id: "rt-1" }],
       [],
       [],
+      [{ threadId: "thread-1" }],
       [],
       [{ ...runRow, status: "failed" }],
       [
@@ -530,7 +564,7 @@ describe("runbook runtime API helpers", () => {
       error: { message: "boom" },
     });
 
-    expect(mocks.updates).toHaveLength(3);
+    expect(mocks.updates).toHaveLength(4);
     expect(mocks.updates[0]).toMatchObject({
       status: "failed",
       error: { message: "boom" },
@@ -539,6 +573,10 @@ describe("runbook runtime API helpers", () => {
     expect(mocks.updates[2]).toMatchObject({
       status: "failed",
       error: { message: "boom" },
+    });
+    expect(mocks.updates[3]).toMatchObject({
+      status: "blocked",
+      last_turn_completed_at: expect.any(Date),
     });
     expect(result?.tasks.map((task) => task.status)).toEqual([
       "FAILED",
