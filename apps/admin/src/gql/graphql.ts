@@ -974,7 +974,6 @@ export enum ComputerTaskStatus {
 }
 
 export enum ComputerTaskType {
-  ConnectorWork = 'CONNECTOR_WORK',
   GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
@@ -1001,169 +1000,6 @@ export type ConcurrencySnapshot = {
   byStatus: Array<StatusCount>;
   totalActive: Scalars['Int']['output'];
 };
-
-export type Connector = {
-  __typename?: 'Connector';
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  connectionId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdById?: Maybe<Scalars['String']['output']>;
-  createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  dispatchTargetId: Scalars['ID']['output'];
-  dispatchTargetType: DispatchTargetType;
-  ebScheduleName?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  lastPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastPollCursor?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  nextPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: ConnectorStatus;
-  tenantId: Scalars['ID']['output'];
-  type: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type ConnectorBinding = {
-  __typename?: 'ConnectorBinding';
-  catalogSlug: Scalars['String']['output'];
-  computerId: Scalars['ID']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type ConnectorCatalogItem = {
-  __typename?: 'ConnectorCatalogItem';
-  category?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  enabled: Scalars['Boolean']['output'];
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
-export type ConnectorDispatchResult = {
-  __typename?: 'ConnectorDispatchResult';
-  computerId?: Maybe<Scalars['ID']['output']>;
-  computerTaskId?: Maybe<Scalars['ID']['output']>;
-  connectorId: Scalars['ID']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  executionId?: Maybe<Scalars['ID']['output']>;
-  externalRef?: Maybe<Scalars['String']['output']>;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  reason?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  targetType?: Maybe<DispatchTargetType>;
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type ConnectorExecution = {
-  __typename?: 'ConnectorExecution';
-  connectorId: Scalars['ID']['output'];
-  costFinalizedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  currentState: ConnectorExecutionState;
-  errorClass?: Maybe<Scalars['String']['output']>;
-  externalRef: Scalars['String']['output'];
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  killTarget?: Maybe<Scalars['String']['output']>;
-  killTargetAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastUsageEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  outcomePayload?: Maybe<Scalars['AWSJSON']['output']>;
-  retryAttempt: Scalars['Int']['output'];
-  spendEnvelopeUsdCents?: Maybe<Scalars['Int']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  stateMachineArn?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-};
-
-export enum ConnectorExecutionState {
-  Cancelled = 'cancelled',
-  Dispatching = 'dispatching',
-  Failed = 'failed',
-  Invoking = 'invoking',
-  Pending = 'pending',
-  RecordingResult = 'recording_result',
-  Terminal = 'terminal'
-}
-
-export type ConnectorFilter = {
-  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
-  status?: InputMaybe<ConnectorStatus>;
-  type?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type ConnectorRunComputerTask = {
-  __typename?: 'ConnectorRunComputerTask';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  input?: Maybe<Scalars['AWSJSON']['output']>;
-  output?: Maybe<Scalars['AWSJSON']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type ConnectorRunDelegation = {
-  __typename?: 'ConnectorRunDelegation';
-  agentId: Scalars['ID']['output'];
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  inputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
-  outputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
-  result?: Maybe<Scalars['AWSJSON']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type ConnectorRunLifecycle = {
-  __typename?: 'ConnectorRunLifecycle';
-  computerId?: Maybe<Scalars['ID']['output']>;
-  computerTask?: Maybe<ConnectorRunComputerTask>;
-  connector: Connector;
-  delegation?: Maybe<ConnectorRunDelegation>;
-  execution: ConnectorExecution;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  threadId?: Maybe<Scalars['ID']['output']>;
-  threadTurn?: Maybe<ConnectorRunThreadTurn>;
-};
-
-export type ConnectorRunNowResult = {
-  __typename?: 'ConnectorRunNowResult';
-  connectorId: Scalars['ID']['output'];
-  results: Array<ConnectorDispatchResult>;
-};
-
-export type ConnectorRunThreadTurn = {
-  __typename?: 'ConnectorRunThreadTurn';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  errorCode?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  resultJson?: Maybe<Scalars['AWSJSON']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export enum ConnectorStatus {
-  Active = 'active',
-  Archived = 'archived',
-  Paused = 'paused',
-  Unhealthy = 'unhealthy'
-}
 
 export type CostEvent = {
   __typename?: 'CostEvent';
@@ -1324,20 +1160,6 @@ export type CreateComputerInput = {
   slug?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
-};
-
-export type CreateConnectorInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  connectionId?: InputMaybe<Scalars['ID']['input']>;
-  createdById?: InputMaybe<Scalars['String']['input']>;
-  createdByType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  dispatchTargetId: Scalars['ID']['input'];
-  dispatchTargetType: DispatchTargetType;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  type: Scalars['String']['input'];
 };
 
 export type CreateEvalTestCaseInput = {
@@ -1510,7 +1332,6 @@ export type CreateWebhookInput = {
 export type CustomizeBindings = {
   __typename?: 'CustomizeBindings';
   computerId: Scalars['ID']['output'];
-  connectedConnectorSlugs: Array<Scalars['String']['output']>;
   connectedSkillIds: Array<Scalars['String']['output']>;
   connectedWorkflowSlugs: Array<Scalars['String']['output']>;
 };
@@ -1557,29 +1378,12 @@ export type DeploymentStatus = {
   stage: Scalars['String']['output'];
 };
 
-export type DisableConnectorInput = {
-  computerId: Scalars['ID']['input'];
-  slug: Scalars['String']['input'];
-};
-
 export type DisableSkillInput = {
   computerId: Scalars['ID']['input'];
   skillId: Scalars['String']['input'];
 };
 
 export type DisableWorkflowInput = {
-  computerId: Scalars['ID']['input'];
-  slug: Scalars['String']['input'];
-};
-
-export enum DispatchTargetType {
-  Agent = 'agent',
-  Computer = 'computer',
-  HybridRoutine = 'hybrid_routine',
-  Routine = 'routine'
-}
-
-export type EnableConnectorInput = {
   computerId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -2097,7 +1901,6 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   approveInboxItem: InboxItem;
-  archiveConnector: Connector;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -2149,7 +1952,6 @@ export type Mutation = {
    */
   createComplianceExport: ComplianceExport;
   createComputer: Computer;
-  createConnector: Connector;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -2188,11 +1990,9 @@ export type Mutation = {
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
-  disableConnector: Scalars['Boolean']['output'];
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
   editTenantEntityFact: TenantEntitySection;
-  enableConnector: ConnectorBinding;
   enableSkill: AgentSkill;
   enableWorkflow: WorkflowBinding;
   enqueueComputerTask: ComputerTask;
@@ -2208,7 +2008,6 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
-  pauseConnector: Connector;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
   publishComputerThreadChunk: ComputerThreadChunkEvent;
@@ -2240,12 +2039,10 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
-  resumeConnector: Connector;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
-  runConnectorNow: ConnectorRunNowResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   seedEvalTestCases: Scalars['Int']['output'];
@@ -2276,7 +2073,6 @@ export type Mutation = {
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
   updateComputer: Computer;
-  updateConnector: Connector;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
@@ -2366,11 +2162,6 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationApproveInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ApproveInboxItemInput>;
-};
-
-
-export type MutationArchiveConnectorArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2489,11 +2280,6 @@ export type MutationCreateComplianceExportArgs = {
 
 export type MutationCreateComputerArgs = {
   input: CreateComputerInput;
-};
-
-
-export type MutationCreateConnectorArgs = {
-  input: CreateConnectorInput;
 };
 
 
@@ -2695,11 +2481,6 @@ export type MutationDeleteWebhookArgs = {
 };
 
 
-export type MutationDisableConnectorArgs = {
-  input: DisableConnectorInput;
-};
-
-
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -2713,11 +2494,6 @@ export type MutationDisableWorkflowArgs = {
 export type MutationEditTenantEntityFactArgs = {
   content: Scalars['String']['input'];
   factId: Scalars['ID']['input'];
-};
-
-
-export type MutationEnableConnectorArgs = {
-  input: EnableConnectorInput;
 };
 
 
@@ -2834,11 +2610,6 @@ export type MutationNotifyThreadUpdateArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
-};
-
-
-export type MutationPauseConnectorArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2984,11 +2755,6 @@ export type MutationResumeAgentWorkspaceRunArgs = {
 };
 
 
-export type MutationResumeConnectorArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationRevokeAgentApiKeyArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3007,11 +2773,6 @@ export type MutationRotateTenantCredentialArgs = {
 
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
-};
-
-
-export type MutationRunConnectorNowArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -3163,12 +2924,6 @@ export type MutationUpdateArtifactArgs = {
 export type MutationUpdateComputerArgs = {
   id: Scalars['ID']['input'];
   input: UpdateComputerInput;
-};
-
-
-export type MutationUpdateConnectorArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateConnectorInput;
 };
 
 
@@ -3462,12 +3217,6 @@ export type Query = {
   computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
-  connector?: Maybe<Connector>;
-  connectorCatalog: Array<ConnectorCatalogItem>;
-  connectorExecution?: Maybe<ConnectorExecution>;
-  connectorExecutions: Array<ConnectorExecution>;
-  connectorRunLifecycles: Array<ConnectorRunLifecycle>;
-  connectors: Array<Connector>;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
@@ -3851,38 +3600,6 @@ export type QueryComputersArgs = {
 
 export type QueryConcurrencySnapshotArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorExecutionArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorExecutionsArgs = {
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<ConnectorExecutionState>;
-};
-
-
-export type QueryConnectorRunLifecyclesArgs = {
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryConnectorsArgs = {
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  filter?: InputMaybe<ConnectorFilter>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -5610,17 +5327,6 @@ export type UpdateComputerInput = {
   templateId?: InputMaybe<Scalars['ID']['input']>;
 };
 
-export type UpdateConnectorInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  connectionId?: InputMaybe<Scalars['ID']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  dispatchTargetId?: InputMaybe<Scalars['ID']['input']>;
-  dispatchTargetType?: InputMaybe<DispatchTargetType>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type UpdateEvalTestCaseInput = {
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -6330,31 +6036,6 @@ export type UpdateComputerMutationVariables = Exact<{
 
 export type UpdateComputerMutation = { __typename?: 'Mutation', updateComputer: { __typename?: 'Computer', id: string, name: string, status: ComputerStatus, desiredRuntimeStatus: ComputerDesiredRuntimeStatus, runtimeStatus: ComputerRuntimeStatus, liveWorkspaceRoot?: string | null, efsAccessPointId?: string | null, ecsServiceName?: string | null, lastHeartbeatAt?: any | null, lastActiveAt?: any | null, budgetMonthlyCents?: number | null, spentMonthlyCents?: number | null, budgetPausedReason?: string | null, updatedAt: any } };
 
-export type ComputerTasksQueryVariables = Exact<{
-  computerId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type ComputerTasksQuery = { __typename?: 'Query', computerTasks: Array<{ __typename?: 'ComputerTask', id: string, taskType: ComputerTaskType, status: ComputerTaskStatus, input?: any | null, output?: any | null, error?: any | null, idempotencyKey?: string | null, claimedAt?: any | null, completedAt?: any | null, createdAt: any, updatedAt: any }> };
-
-export type ComputerThreadsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  computerId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type ComputerThreadsQuery = { __typename?: 'Query', threads: Array<{ __typename?: 'Thread', id: string, number: number, identifier?: string | null, title: string, status: ThreadStatus, channel: ThreadChannel, costSummary?: number | null, lastResponsePreview?: string | null, createdAt: any, updatedAt: any }> };
-
-export type ComputerEventsQueryVariables = Exact<{
-  computerId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type ComputerEventsQuery = { __typename?: 'Query', computerEvents: Array<{ __typename?: 'ComputerEvent', id: string, taskId?: string | null, eventType: string, level: ComputerEventLevel, payload?: any | null, createdAt: any }> };
-
 export type EnqueueComputerTaskMutationVariables = Exact<{
   input: EnqueueComputerTaskInput;
 }>;
@@ -6366,77 +6047,6 @@ export type ModelCatalogQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type ModelCatalogQuery = { __typename?: 'Query', modelCatalog: Array<{ __typename?: 'ModelCatalogEntry', id: string, modelId: string, displayName: string, provider: string, inputCostPerMillion?: number | null, outputCostPerMillion?: number | null }> };
-
-export type ConnectorsListQueryVariables = Exact<{
-  filter?: InputMaybe<ConnectorFilter>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type ConnectorsListQuery = { __typename?: 'Query', connectors: Array<{ __typename?: 'Connector', id: string, tenantId: string, type: string, name: string, description?: string | null, status: ConnectorStatus, connectionId?: string | null, config?: any | null, dispatchTargetType: DispatchTargetType, dispatchTargetId: string, lastPollAt?: any | null, nextPollAt?: any | null, enabled: boolean, createdByType?: string | null, createdById?: string | null, createdAt: any, updatedAt: any }> };
-
-export type CreateConnectorMutationVariables = Exact<{
-  input: CreateConnectorInput;
-}>;
-
-
-export type CreateConnectorMutation = { __typename?: 'Mutation', createConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
-
-export type UpdateConnectorMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-  input: UpdateConnectorInput;
-}>;
-
-
-export type UpdateConnectorMutation = { __typename?: 'Mutation', updateConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
-
-export type PauseConnectorMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type PauseConnectorMutation = { __typename?: 'Mutation', pauseConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
-
-export type ResumeConnectorMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type ResumeConnectorMutation = { __typename?: 'Mutation', resumeConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
-
-export type ArchiveConnectorMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type ArchiveConnectorMutation = { __typename?: 'Mutation', archiveConnector: { __typename?: 'Connector', id: string, status: ConnectorStatus, updatedAt: any } };
-
-export type RunConnectorNowMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type RunConnectorNowMutation = { __typename?: 'Mutation', runConnectorNow: { __typename?: 'ConnectorRunNowResult', connectorId: string, results: Array<{ __typename?: 'ConnectorDispatchResult', status: string, connectorId: string, executionId?: string | null, externalRef?: string | null, threadId?: string | null, messageId?: string | null, computerId?: string | null, computerTaskId?: string | null, targetType?: DispatchTargetType | null, reason?: string | null, error?: string | null }> } };
-
-export type ConnectorExecutionsListQueryVariables = Exact<{
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  status?: InputMaybe<ConnectorExecutionState>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type ConnectorExecutionsListQuery = { __typename?: 'Query', connectorExecutions: Array<{ __typename?: 'ConnectorExecution', id: string, tenantId: string, connectorId: string, externalRef: string, currentState: ConnectorExecutionState, startedAt?: any | null, finishedAt?: any | null, errorClass?: string | null, outcomePayload?: any | null, retryAttempt: number, createdAt: any }> };
-
-export type ConnectorRunLifecyclesQueryVariables = Exact<{
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type ConnectorRunLifecyclesQuery = { __typename?: 'Query', connectorRunLifecycles: Array<{ __typename?: 'ConnectorRunLifecycle', threadId?: string | null, messageId?: string | null, computerId?: string | null, execution: { __typename?: 'ConnectorExecution', id: string, tenantId: string, connectorId: string, externalRef: string, currentState: ConnectorExecutionState, startedAt?: any | null, finishedAt?: any | null, errorClass?: string | null, outcomePayload?: any | null, retryAttempt: number, createdAt: any }, connector: { __typename?: 'Connector', id: string, type: string, name: string, status: ConnectorStatus }, computerTask?: { __typename?: 'ConnectorRunComputerTask', id: string, status: string, output?: any | null, error?: any | null, completedAt?: any | null, createdAt: any } | null, delegation?: { __typename?: 'ConnectorRunDelegation', id: string, status: string, agentId: string, outputArtifacts?: any | null, result?: any | null, error?: any | null, completedAt?: any | null, createdAt: any } | null, threadTurn?: { __typename?: 'ConnectorRunThreadTurn', id: string, threadId?: string | null, agentId?: string | null, status: string, resultJson?: any | null, error?: string | null, errorCode?: string | null, startedAt?: any | null, finishedAt?: any | null, createdAt: any } | null }> };
 
 export type AgentEmailCapabilityQueryVariables = Exact<{
   agentId: Scalars['ID']['input'];
@@ -7419,20 +7029,8 @@ export const ComputerDetailDocument = {"kind":"Document","definitions":[{"kind":
 export const MyComputerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyComputer"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myComputer"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"desiredRuntimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"liveWorkspaceRoot"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastActiveAt"}}]}}]}}]} as unknown as DocumentNode<MyComputerQuery, MyComputerQueryVariables>;
 export const CreateComputerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateComputer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateComputerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createComputer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"desiredRuntimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"templateId"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateComputerMutation, CreateComputerMutationVariables>;
 export const UpdateComputerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateComputer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateComputerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateComputer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"desiredRuntimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"liveWorkspaceRoot"}},{"kind":"Field","name":{"kind":"Name","value":"efsAccessPointId"}},{"kind":"Field","name":{"kind":"Name","value":"ecsServiceName"}},{"kind":"Field","name":{"kind":"Name","value":"lastHeartbeatAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastActiveAt"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"spentMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"budgetPausedReason"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateComputerMutation, UpdateComputerMutationVariables>;
-export const ComputerTasksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputerTasks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computerTasks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"computerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"output"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ComputerTasksQuery, ComputerTasksQueryVariables>;
-export const ComputerThreadsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputerThreads"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"threads"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"computerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"number"}},{"kind":"Field","name":{"kind":"Name","value":"identifier"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"channel"}},{"kind":"Field","name":{"kind":"Name","value":"costSummary"}},{"kind":"Field","name":{"kind":"Name","value":"lastResponsePreview"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ComputerThreadsQuery, ComputerThreadsQueryVariables>;
-export const ComputerEventsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ComputerEvents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computerEvents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"computerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"computerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"taskId"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ComputerEventsQuery, ComputerEventsQueryVariables>;
 export const EnqueueComputerTaskDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"EnqueueComputerTask"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EnqueueComputerTaskInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"enqueueComputerTask"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"output"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"idempotencyKey"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<EnqueueComputerTaskMutation, EnqueueComputerTaskMutationVariables>;
 export const ModelCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ModelCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"modelCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"modelId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"inputCostPerMillion"}},{"kind":"Field","name":{"kind":"Name","value":"outputCostPerMillion"}}]}}]}}]} as unknown as DocumentNode<ModelCatalogQuery, ModelCatalogQueryVariables>;
-export const ConnectorsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ConnectorsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ConnectorFilter"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectors"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"connectionId"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"dispatchTargetType"}},{"kind":"Field","name":{"kind":"Name","value":"dispatchTargetId"}},{"kind":"Field","name":{"kind":"Name","value":"lastPollAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextPollAt"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"createdByType"}},{"kind":"Field","name":{"kind":"Name","value":"createdById"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ConnectorsListQuery, ConnectorsListQueryVariables>;
-export const CreateConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateConnectorInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateConnectorMutation, CreateConnectorMutationVariables>;
-export const UpdateConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateConnectorInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateConnectorMutation, UpdateConnectorMutationVariables>;
-export const PauseConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PauseConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pauseConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PauseConnectorMutation, PauseConnectorMutationVariables>;
-export const ResumeConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ResumeConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resumeConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ResumeConnectorMutation, ResumeConnectorMutationVariables>;
-export const ArchiveConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ArchiveConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"archiveConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<ArchiveConnectorMutation, ArchiveConnectorMutationVariables>;
-export const RunConnectorNowDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RunConnectorNow"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runConnectorNow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"results"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"executionId"}},{"kind":"Field","name":{"kind":"Name","value":"externalRef"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"computerId"}},{"kind":"Field","name":{"kind":"Name","value":"computerTaskId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"error"}}]}}]}}]}}]} as unknown as DocumentNode<RunConnectorNowMutation, RunConnectorNowMutationVariables>;
-export const ConnectorExecutionsListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ConnectorExecutionsList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"connectorId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ConnectorExecutionState"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectorExecutions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"connectorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"connectorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"externalRef"}},{"kind":"Field","name":{"kind":"Name","value":"currentState"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorClass"}},{"kind":"Field","name":{"kind":"Name","value":"outcomePayload"}},{"kind":"Field","name":{"kind":"Name","value":"retryAttempt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ConnectorExecutionsListQuery, ConnectorExecutionsListQueryVariables>;
-export const ConnectorRunLifecyclesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ConnectorRunLifecycles"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"connectorId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectorRunLifecycles"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"connectorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"connectorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"execution"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"externalRef"}},{"kind":"Field","name":{"kind":"Name","value":"currentState"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorClass"}},{"kind":"Field","name":{"kind":"Name","value":"outcomePayload"}},{"kind":"Field","name":{"kind":"Name","value":"retryAttempt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"connector"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}},{"kind":"Field","name":{"kind":"Name","value":"computerTask"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"output"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"delegation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"outputArtifacts"}},{"kind":"Field","name":{"kind":"Name","value":"result"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"threadTurn"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"resultJson"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"errorCode"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"computerId"}}]}}]}}]} as unknown as DocumentNode<ConnectorRunLifecyclesQuery, ConnectorRunLifecyclesQueryVariables>;
 export const AgentEmailCapabilityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AgentEmailCapability"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentEmailCapability"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"emailAddress"}},{"kind":"Field","name":{"kind":"Name","value":"vanityAddress"}},{"kind":"Field","name":{"kind":"Name","value":"allowedSenders"}}]}}]}}]} as unknown as DocumentNode<AgentEmailCapabilityQuery, AgentEmailCapabilityQueryVariables>;
 export const UpdateAgentEmailAllowlistDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateAgentEmailAllowlist"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentEmailAllowlist"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"allowedSenders"},"value":{"kind":"Variable","name":{"kind":"Name","value":"allowedSenders"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<UpdateAgentEmailAllowlistMutation, UpdateAgentEmailAllowlistMutationVariables>;
 export const ToggleAgentEmailChannelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ToggleAgentEmailChannel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"toggleAgentEmailChannel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<ToggleAgentEmailChannelMutation, ToggleAgentEmailChannelMutationVariables>;

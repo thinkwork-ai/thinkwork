@@ -20,7 +20,6 @@ export const COMPUTER_TASK_TYPES = [
   "workspace_file_read",
   "workspace_file_write",
   "workspace_file_delete",
-  "connector_work",
   "thread_turn",
   "google_cli_smoke",
   "google_workspace_auth_check",
@@ -189,10 +188,6 @@ export function normalizeTaskInput(
     return normalizeGoogleCalendarUpcomingInput(input);
   }
 
-  if (taskType === "connector_work") {
-    return normalizeConnectorWorkInput(input);
-  }
-
   if (taskType === "thread_turn") {
     return normalizeThreadTurnInput(input);
   }
@@ -239,24 +234,6 @@ export function validateWorkspaceRelativePath(path: string): string {
     throw new ComputerTaskInputError("path cannot contain . or .. segments");
   }
   return parts.join("/");
-}
-
-function normalizeConnectorWorkInput(input: unknown): Record<string, unknown> {
-  const payload = coerceObject(input);
-  return {
-    connectorId: requiredString(payload.connectorId, "connectorId"),
-    connectorExecutionId: requiredString(
-      payload.connectorExecutionId,
-      "connectorExecutionId",
-    ),
-    externalRef: requiredString(payload.externalRef, "externalRef"),
-    title: requiredString(payload.title, "title"),
-    body: requiredString(payload.body, "body"),
-    metadata:
-      payload.metadata && typeof payload.metadata === "object"
-        ? payload.metadata
-        : null,
-  };
 }
 
 function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {

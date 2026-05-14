@@ -29,7 +29,7 @@ A **Invite Member** button in the header opens the `InviteMemberDialog`.
 Three roles cover the common cases:
 
 - **Owner** — full access to every admin surface. Can invite and remove other members, change roles, delete the tenant configuration, and touch billing
-- **Editor** — can create and edit agents, templates, skills, connectors, scheduled jobs, routines, and webhooks. Cannot manage members or tenant settings
+- **Editor** — can create and edit agents, templates, skills, integrations, scheduled jobs, routines, and webhooks. Cannot manage members or tenant settings
 - **Viewer** — read-only access to all admin surfaces. Useful for auditors or stakeholders who need visibility but not authority
 
 Role checks are enforced server-side. Even if the UI shows a button, the underlying mutation is rejected if the caller's role doesn't allow it.

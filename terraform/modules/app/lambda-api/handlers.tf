@@ -276,7 +276,6 @@ resource "aws_lambda_function" "handler" {
     "budgets",
     "guardrails",
     "scheduled-jobs",
-    "connector-poller",
     "job-schedule-manager",
     "job-trigger",
     "routine-task-weather-email",
@@ -444,7 +443,7 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "connector-poller" ? 120 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
@@ -934,35 +933,6 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
     role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# Connector Poller — EventBridge schedule (every 1 min)
-# ---------------------------------------------------------------------------
-
-resource "aws_scheduler_schedule" "connector_poller" {
-  count = local.use_local_zips ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-connector-poller"
-  group_name          = "default"
-  schedule_expression = "rate(1 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["connector-poller"].arn
-    role_arn = aws_iam_role.scheduler.arn
-
-    # The next minute is the retry. Connector dispatch is idempotent, but
-    # Scheduler's default 185 retries can overlap with the regular cadence
-    # and turn transient failures into noisy duplicate scans.
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
   }
 }
 

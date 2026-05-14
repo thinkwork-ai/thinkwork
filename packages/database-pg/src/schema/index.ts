@@ -12,8 +12,6 @@ export * from "./messages";
 export * from "./teams";
 export * from "./routines";
 export * from "./routine-executions";
-export * from "./connectors";
-export * from "./connector-executions";
 export * from "./routine-step-events";
 export * from "./routine-asl-versions";
 export * from "./routine-approval-tokens";

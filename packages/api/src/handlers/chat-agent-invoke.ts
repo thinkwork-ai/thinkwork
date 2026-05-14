@@ -46,10 +46,6 @@ import {
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
 import {
-  markConnectorDelegationTurnCompleted,
-  markConnectorDelegationTurnFailed,
-} from "../lib/computers/delegation-lifecycle.js";
-import {
   completeRunbookExecutionTask,
   failRunbookExecutionTask,
 } from "../lib/runbooks/runtime-api.js";
@@ -100,54 +96,6 @@ class RunbookStepPersistenceError extends Error {
   }
 }
 
-async function recordConnectorDelegationCompleted(input: {
-  tenantId: string;
-  agentId: string;
-  threadId: string;
-  threadTurnId: string;
-  messageId?: string;
-  responseText: string;
-  usage?: Record<string, unknown>;
-}) {
-  try {
-    const result = await markConnectorDelegationTurnCompleted(input);
-    if (result.updatedCount > 0) {
-      console.log(
-        `[chat-agent-invoke] Completed connector delegation(s): ${result.delegationIds.join(", ")}`,
-      );
-    }
-  } catch (err) {
-    console.error(
-      `[chat-agent-invoke] Failed to complete connector delegation:`,
-      err,
-    );
-  }
-}
-
-async function recordConnectorDelegationFailed(input: {
-  tenantId: string;
-  agentId: string;
-  threadId: string;
-  threadTurnId: string;
-  messageId?: string;
-  errorMessage: string;
-  errorCode?: string | null;
-}) {
-  try {
-    const result = await markConnectorDelegationTurnFailed(input);
-    if (result.updatedCount > 0) {
-      console.log(
-        `[chat-agent-invoke] Failed connector delegation(s): ${result.delegationIds.join(", ")}`,
-      );
-    }
-  } catch (err) {
-    console.error(
-      `[chat-agent-invoke] Failed to mark connector delegation failed:`,
-      err,
-    );
-  }
-}
-
 /** Extract plain text from AgentCore response (handles ChatCompletion, raw text, etc.) */
 function extractResponseText(data: unknown): string {
   if (typeof data === "string") return data;
@@ -190,7 +138,6 @@ interface InvokeEvent {
 type ChatInvokeIdentitySource =
   | "message_sender"
   | "thread_creator"
-  | "connector_agent_human_pair"
   | "computer_agent_human_pair"
   | "none";
 
@@ -293,10 +240,7 @@ export async function resolveChatInvokeIdentity(
     };
   }
 
-  if (
-    thread?.created_by_type === "connector" ||
-    thread?.created_by_type === "computer"
-  ) {
+  if (thread?.created_by_type === "computer") {
     const humanPairId = await deps.loadAgentHumanPair({
       agentId: args.agentId,
       tenantId: args.tenantId,
@@ -305,10 +249,7 @@ export async function resolveChatInvokeIdentity(
       return {
         currentUserId: humanPairId,
         currentUserEmail: await deps.loadUserEmail(humanPairId),
-        source:
-          thread.created_by_type === "computer"
-            ? "computer_agent_human_pair"
-            : "connector_agent_human_pair",
+        source: "computer_agent_human_pair",
       };
     }
   }
@@ -674,15 +615,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
-          await recordConnectorDelegationFailed({
-            tenantId,
-            threadId,
-            agentId,
-            threadTurnId: turnId,
-            messageId: event.messageId,
-            errorMessage: errMsgText,
-            errorCode: String(invokeRes.FunctionError),
-          });
           await notifyThreadTurnUpdate({
             runId: turnId,
             tenantId,
@@ -747,15 +679,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
-          await recordConnectorDelegationFailed({
-            tenantId,
-            threadId,
-            agentId,
-            threadTurnId: turnId,
-            messageId: event.messageId,
-            errorMessage: errMsgText,
-            errorCode: String(adapterStatus),
-          });
           await notifyThreadTurnUpdate({
             runId: turnId,
             tenantId,
@@ -978,15 +901,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           })
           .where(eq(threadTurns.id, turnId));
 
-        await recordConnectorDelegationCompleted({
-          tenantId,
-          threadId,
-          agentId,
-          threadTurnId: turnId,
-          messageId: event.messageId,
-          responseText,
-          usage: turnUsage,
-        });
         await notifyThreadTurnUpdate({
           runId: turnId,
           tenantId,
@@ -1205,14 +1119,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           })
           .where(eq(threadTurns.id, turnId));
 
-        await recordConnectorDelegationFailed({
-          tenantId,
-          threadId,
-          agentId,
-          threadTurnId: turnId,
-          messageId: event.messageId,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        });
         await notifyThreadTurnUpdate({
           runId: turnId,
           tenantId,

@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => {
     appendComputerTaskEvent: vi.fn(),
     checkGoogleWorkspaceConnection: vi.fn(),
     resolveGoogleWorkspaceCliToken: vi.fn(),
-    delegateConnectorWorkTask: vi.fn(),
     executeThreadTurnTask: vi.fn(),
     loadThreadTurnContext: vi.fn(),
     recordThreadTurnResponse: vi.fn(),
@@ -55,7 +54,6 @@ vi.mock("../lib/computers/runtime-api.js", () => ({
   appendComputerTaskEvent: mocks.appendComputerTaskEvent,
   checkGoogleWorkspaceConnection: mocks.checkGoogleWorkspaceConnection,
   resolveGoogleWorkspaceCliToken: mocks.resolveGoogleWorkspaceCliToken,
-  delegateConnectorWorkTask: mocks.delegateConnectorWorkTask,
   executeThreadTurnTask: mocks.executeThreadTurnTask,
   loadThreadTurnContext: mocks.loadThreadTurnContext,
   recordThreadTurnResponse: mocks.recordThreadTurnResponse,
@@ -138,14 +136,6 @@ describe("computer-runtime handler", () => {
       connected: true,
       tokenResolved: true,
       accessToken: "ya29.secret-token",
-    });
-    mocks.delegateConnectorWorkTask.mockResolvedValue({
-      delegated: true,
-      mode: "managed_agent",
-      delegationId: "delegation-1",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      status: "running",
     });
     mocks.executeThreadTurnTask.mockResolvedValue({
       error: "legacy-disabled",
@@ -395,33 +385,6 @@ describe("computer-runtime handler", () => {
     });
   });
 
-  it("delegates connector work through the service-auth task endpoint", async () => {
-    const response = await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/delegate-connector-work`,
-        {
-          body: {
-            tenantId: TENANT_ID,
-            computerId: COMPUTER_ID,
-          },
-        },
-      ),
-    );
-
-    expect(response.statusCode).toBe(200);
-    expect(mocks.delegateConnectorWorkTask).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      computerId: COMPUTER_ID,
-      taskId: TASK_ID,
-    });
-    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
-      delegated: true,
-      mode: "managed_agent",
-      delegationId: "delegation-1",
-    });
-  });
-
   it("loads Computer-owned thread turn context through the service-auth task endpoint", async () => {
     const response = await handler(
       event(
@@ -506,33 +469,6 @@ describe("computer-runtime handler", () => {
       model: null,
       usage: undefined,
     });
-  });
-
-  it("surfaces connector work delegation errors with their status code", async () => {
-    mocks.delegateConnectorWorkTask.mockRejectedValueOnce(
-      new mocks.ComputerTaskDelegationError(
-        "Computer has no delegated Managed Agent configured",
-        409,
-      ),
-    );
-
-    const response = await handler(
-      event(
-        "POST",
-        `/api/computers/runtime/tasks/${TASK_ID}/delegate-connector-work`,
-        {
-          body: {
-            tenantId: TENANT_ID,
-            computerId: COMPUTER_ID,
-          },
-        },
-      ),
-    );
-
-    expect(response.statusCode).toBe(409);
-    expect(response.body).toContain(
-      "Computer has no delegated Managed Agent configured",
-    );
   });
 
   it("checks Google Workspace connection status without exposing tokens", async () => {

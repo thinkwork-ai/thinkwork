@@ -53,7 +53,7 @@ Source queries run in parallel. Whichever is slowest sets the turn's baseline la
 The model's context window is a hard limit. Every token spent on retrieved context is a token unavailable for the response. The harness budgets aggressively:
 
 - **System prompt** — template base + agent-specific prompt. Typically 500–2000 tokens.
-- **Tool definitions** — registered tools from skill packs, connectors, MCP. Typically 200–1500 tokens depending on agent surface.
+- **Tool definitions** — registered tools from skill packs, integrations, MCP. Typically 200–1500 tokens depending on agent surface.
 - **Response headroom** — `maxTokens` from the template, reserved so the model has room to generate.
 - **Retrieved context** — what's left after the above. The four sources compete for this pool.
 

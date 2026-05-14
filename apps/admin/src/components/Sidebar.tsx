@@ -17,7 +17,6 @@ import {
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
-  Network,
   ScrollText,
   AppWindow,
 } from "lucide-react";
@@ -247,7 +246,6 @@ export function AppSidebar() {
     { to: "/compliance", icon: ScrollText, label: "Compliance" },
     { to: "/people", icon: Users, label: "People" },
     { to: "/security", icon: Shield, label: "Security Center" },
-    { to: "/symphony", icon: Network, label: "Symphony" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),

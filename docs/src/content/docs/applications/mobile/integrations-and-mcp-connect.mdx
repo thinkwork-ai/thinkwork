@@ -1,11 +1,11 @@
 ---
 title: Mobile — Integrations & MCP Connect
-description: Self-serve per-user OAuth for connectors and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, and any MCP server registered at the tenant level.
+description: Self-serve per-user OAuth for integrations and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, and any MCP server registered at the tenant level.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The mobile app owns the **user side** of connector and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers lives in the [Admin Web App](/applications/admin/mcp-servers/).
+The mobile app owns the **user side** of integration and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers lives in the [Admin Web App](/applications/admin/mcp-servers/).
 
 <Aside type="note">
   Why the split? Admin registers infrastructure (the MCP server's URL,
@@ -41,13 +41,13 @@ For integrations that route inbound work, the integration row can expose a **tar
 
 ### Disconnecting
 
-Tapping an already-connected integration and choosing **Disconnect** clears the per-user token and revokes the provider's OAuth grant (where the provider supports revocation). The tenant-level connector registration is untouched — only this user's personal access is removed.
+Tapping an already-connected integration and choosing **Disconnect** clears the per-user token and revokes the provider's OAuth grant (where the provider supports revocation). The tenant-level integration registration is untouched — only this user's personal access is removed.
 
 ## MCP Servers screen
 
 **Route:** `/settings/mcp-servers`
 
-The MCP Servers screen is the user side of [MCP Tool Connectors](/concepts/connectors/mcp-tools/). It lists every MCP server registered at the tenant level that is assigned to any agent the user has access to, plus the user's per-server auth status.
+The MCP Servers screen is the user side of [MCP Tools](/concepts/mcp-tools/). It lists every MCP server registered at the tenant level that is assigned to any agent the user has access to, plus the user's per-server auth status.
 
 Each row shows:
 
@@ -102,6 +102,6 @@ A few things to check when a connection isn't behaving:
 
 ## Related pages
 
-- [MCP Tool Connectors](/concepts/connectors/mcp-tools/) — the concept page with the full MCP model and token lifecycle
+- [MCP Tools](/concepts/mcp-tools/) — the concept page with the full MCP model and token lifecycle
 - [Admin — Tenant MCP Servers](/applications/admin/mcp-servers/) — the tenant-level registration side
 - [Mobile — Authentication](/applications/mobile/authentication/) — the sign-in flow that precedes any of this

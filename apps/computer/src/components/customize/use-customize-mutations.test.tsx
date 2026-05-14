@@ -3,16 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
-  useConnectorMutation,
   useSkillMutation,
   useToggleMutation,
   useWorkflowMutation,
-  MCP_VIA_MOBILE_HINT,
   BUILTIN_TOOL_HINT,
 } from "./use-customize-mutations";
 import {
-  EnableConnectorMutation,
-  DisableConnectorMutation,
   EnableSkillMutation,
   DisableSkillMutation,
   EnableWorkflowMutation,
@@ -65,7 +61,6 @@ beforeEach(() => {
   // mutation. The shared helper instantiates them in that order.
   useMutationMock.mockImplementation(((doc: unknown) => {
     const isEnable =
-      doc === EnableConnectorMutation ||
       doc === EnableSkillMutation ||
       doc === EnableWorkflowMutation;
     return [
@@ -82,26 +77,27 @@ afterEach(() => {
 
 describe("useToggleMutation core", () => {
   const opts = {
-    enableMutation: EnableConnectorMutation,
-    disableMutation: DisableConnectorMutation,
-    typenames: ["Connector", "ConnectorBinding", "CustomizeBindings"] as const,
-    buildVariables: (computerId: string, slug: string) => ({
-      input: { computerId, slug },
+    enableMutation: EnableSkillMutation,
+    disableMutation: DisableSkillMutation,
+    typenames: ["AgentSkill", "CustomizeBindings"] as const,
+    buildVariables: (computerId: string, skillId: string) => ({
+      input: { computerId, skillId },
     }),
-    errorCodeHints: { CUSTOMIZE_MCP_NOT_SUPPORTED: MCP_VIA_MOBILE_HINT },
+    errorCodeHints: {
+      CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
+    },
   };
 
   it("enable path passes additionalTypenames and the helper-built variables", async () => {
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
-      await result.current.toggle("slack", true);
+      await result.current.toggle("sales-prep", true);
     });
     expect(enableExec).toHaveBeenCalledWith(
-      { input: { computerId: "computer-1", slug: "slack" } },
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
       {
         additionalTypenames: [
-          "Connector",
-          "ConnectorBinding",
+          "AgentSkill",
           "CustomizeBindings",
         ],
       },
@@ -112,12 +108,12 @@ describe("useToggleMutation core", () => {
   it("disable path routes to the disable mutation with the same shape", async () => {
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
-      await result.current.toggle("slack", false);
+      await result.current.toggle("sales-prep", false);
     });
     expect(disableExec).toHaveBeenCalledWith(
-      { input: { computerId: "computer-1", slug: "slack" } },
+      { input: { computerId: "computer-1", skillId: "sales-prep" } },
       expect.objectContaining({
-        additionalTypenames: expect.arrayContaining(["Connector"]),
+        additionalTypenames: expect.arrayContaining(["AgentSkill"]),
       }),
     );
     expect(enableExec).not.toHaveBeenCalled();
@@ -131,14 +127,14 @@ describe("useToggleMutation core", () => {
     const { result } = renderHook(() => useToggleMutation(opts));
     let togglePromise: Promise<void> | undefined;
     act(() => {
-      togglePromise = result.current.toggle("slack", true);
+      togglePromise = result.current.toggle("sales-prep", true);
     });
-    expect(result.current.pendingSlugs.has("slack")).toBe(true);
+    expect(result.current.pendingSlugs.has("sales-prep")).toBe(true);
     await act(async () => {
       resolveEnable({});
       await togglePromise;
     });
-    expect(result.current.pendingSlugs.has("slack")).toBe(false);
+    expect(result.current.pendingSlugs.has("sales-prep")).toBe(false);
   });
 
   it("error code with a registered hint surfaces toast.message", async () => {
@@ -146,15 +142,15 @@ describe("useToggleMutation core", () => {
       error: {
         message: "fallback should not surface",
         graphQLErrors: [
-          { extensions: { code: "CUSTOMIZE_MCP_NOT_SUPPORTED" } },
+          { extensions: { code: "CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE" } },
         ],
       },
     });
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
-      await result.current.toggle("slack", true);
+      await result.current.toggle("web-search", true);
     });
-    expect(toastMessage).toHaveBeenCalledWith(MCP_VIA_MOBILE_HINT);
+    expect(toastMessage).toHaveBeenCalledWith(BUILTIN_TOOL_HINT);
     expect(toastError).not.toHaveBeenCalled();
   });
 
@@ -169,7 +165,7 @@ describe("useToggleMutation core", () => {
     });
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
-      await result.current.toggle("slack", true);
+      await result.current.toggle("sales-prep", true);
     });
     expect(toastError).toHaveBeenCalledWith("Custom failure");
     expect(toastMessage).not.toHaveBeenCalled();
@@ -179,42 +175,13 @@ describe("useToggleMutation core", () => {
     setComputerId(null);
     const { result } = renderHook(() => useToggleMutation(opts));
     await act(async () => {
-      await result.current.toggle("slack", true);
+      await result.current.toggle("sales-prep", true);
     });
     expect(toastError).toHaveBeenCalledWith(
       expect.stringMatching(/Couldn't resolve your Computer/),
     );
     expect(enableExec).not.toHaveBeenCalled();
     expect(disableExec).not.toHaveBeenCalled();
-  });
-});
-
-describe("useConnectorMutation regression (composes useToggleMutation)", () => {
-  it("still routes CUSTOMIZE_MCP_NOT_SUPPORTED to MCP_VIA_MOBILE_HINT", async () => {
-    enableExec.mockResolvedValue({
-      error: {
-        message: "fallback should not surface",
-        graphQLErrors: [
-          { extensions: { code: "CUSTOMIZE_MCP_NOT_SUPPORTED" } },
-        ],
-      },
-    });
-    const { result } = renderHook(() => useConnectorMutation());
-    await act(async () => {
-      await result.current.toggle("slack", true);
-    });
-    expect(toastMessage).toHaveBeenCalledWith(MCP_VIA_MOBILE_HINT);
-  });
-
-  it("connector enable still posts { input: { computerId, slug } }", async () => {
-    const { result } = renderHook(() => useConnectorMutation());
-    await act(async () => {
-      await result.current.toggle("github", true);
-    });
-    expect(enableExec).toHaveBeenCalledWith(
-      { input: { computerId: "computer-1", slug: "github" } },
-      expect.any(Object),
-    );
   });
 });
 

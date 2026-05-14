@@ -1,18 +1,5 @@
-# Customize page surface — read-only catalog + bindings for Connectors,
-# Skills, and Workflows. Mutations land in a follow-on slice (plan U4-U6).
-
-type ConnectorCatalogItem {
-  id: ID!
-  tenantId: ID!
-  slug: String!
-  kind: String!
-  displayName: String!
-  description: String
-  category: String
-  icon: String
-  status: String!
-  enabled: Boolean!
-}
+# Customize page surface — read-only catalog + bindings for Skills and
+# Workflows.
 
 type WorkflowCatalogItem {
   id: ID!
@@ -47,19 +34,8 @@ type SkillCatalogItem {
 # Frontend merges these with the catalog lists to derive `connected: true`.
 type CustomizeBindings {
   computerId: ID!
-  connectedConnectorSlugs: [String!]!
   connectedSkillIds: [String!]!
   connectedWorkflowSlugs: [String!]!
-}
-
-type ConnectorBinding {
-  id: ID!
-  tenantId: ID!
-  computerId: ID!
-  catalogSlug: String!
-  status: String!
-  enabled: Boolean!
-  updatedAt: AWSDateTime!
 }
 
 # Mirrors ConnectorBinding shape for parity. Distinct from the heavier
@@ -75,16 +51,6 @@ type WorkflowBinding {
   status: String!
   enabled: Boolean!
   updatedAt: AWSDateTime!
-}
-
-input EnableConnectorInput {
-  computerId: ID!
-  slug: String!
-}
-
-input DisableConnectorInput {
-  computerId: ID!
-  slug: String!
 }
 
 input EnableSkillInput {
@@ -108,15 +74,12 @@ input DisableWorkflowInput {
 }
 
 extend type Query {
-  connectorCatalog: [ConnectorCatalogItem!]!
   skillCatalog: [SkillCatalogItem!]!
   workflowCatalog: [WorkflowCatalogItem!]!
   customizeBindings: CustomizeBindings
 }
 
 extend type Mutation {
-  enableConnector(input: EnableConnectorInput!): ConnectorBinding!
-  disableConnector(input: DisableConnectorInput!): Boolean!
   enableSkill(input: EnableSkillInput!): AgentSkill!
   disableSkill(input: DisableSkillInput!): Boolean!
   enableWorkflow(input: EnableWorkflowInput!): WorkflowBinding!

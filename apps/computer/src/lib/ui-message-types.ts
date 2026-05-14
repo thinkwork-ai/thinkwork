@@ -168,7 +168,6 @@ export interface TaskQueueSource {
     | "deep_research"
     | "artifact_build"
     | "map_build"
-    | "connector_work"
     | "manual_plan"
     | string;
   id?: string;

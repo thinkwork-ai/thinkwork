@@ -31,7 +31,6 @@ import { Route as AuthedShellMemoryKbsRouteImport } from "./routes/_authed/_shel
 import { Route as AuthedShellMemoryBrainRouteImport } from "./routes/_authed/_shell/memory.brain";
 import { Route as AuthedShellCustomizeWorkflowsRouteImport } from "./routes/_authed/_shell/customize.workflows";
 import { Route as AuthedShellCustomizeSkillsRouteImport } from "./routes/_authed/_shell/customize.skills";
-import { Route as AuthedShellCustomizeConnectorsRouteImport } from "./routes/_authed/_shell/customize.connectors";
 import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./routes/_authed/_shell/automations.$scheduledJobId";
 import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_shell/artifacts.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
@@ -151,12 +150,6 @@ const AuthedShellCustomizeSkillsRoute =
     path: "/skills",
     getParentRoute: () => AuthedShellCustomizeRoute,
   } as any);
-const AuthedShellCustomizeConnectorsRoute =
-  AuthedShellCustomizeConnectorsRouteImport.update({
-    id: "/connectors",
-    path: "/connectors",
-    getParentRoute: () => AuthedShellCustomizeRoute,
-  } as any);
 const AuthedShellAutomationsScheduledJobIdRoute =
   AuthedShellAutomationsScheduledJobIdRouteImport.update({
     id: "/$scheduledJobId",
@@ -193,7 +186,6 @@ export interface FileRoutesByFullPath {
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
-  "/customize/connectors": typeof AuthedShellCustomizeConnectorsRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -217,7 +209,6 @@ export interface FileRoutesByTo {
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
-  "/customize/connectors": typeof AuthedShellCustomizeConnectorsRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -247,7 +238,6 @@ export interface FileRoutesById {
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
-  "/_authed/_shell/customize/connectors": typeof AuthedShellCustomizeConnectorsRoute;
   "/_authed/_shell/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/_authed/_shell/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/_authed/_shell/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -276,7 +266,6 @@ export interface FileRouteTypes {
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
-    | "/customize/connectors"
     | "/customize/skills"
     | "/customize/workflows"
     | "/memory/brain"
@@ -300,7 +289,6 @@ export interface FileRouteTypes {
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
-    | "/customize/connectors"
     | "/customize/skills"
     | "/customize/workflows"
     | "/memory/brain"
@@ -329,7 +317,6 @@ export interface FileRouteTypes {
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/artifacts/$id"
     | "/_authed/_shell/automations/$scheduledJobId"
-    | "/_authed/_shell/customize/connectors"
     | "/_authed/_shell/customize/skills"
     | "/_authed/_shell/customize/workflows"
     | "/_authed/_shell/memory/brain"
@@ -509,13 +496,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellCustomizeSkillsRouteImport;
       parentRoute: typeof AuthedShellCustomizeRoute;
     };
-    "/_authed/_shell/customize/connectors": {
-      id: "/_authed/_shell/customize/connectors";
-      path: "/connectors";
-      fullPath: "/customize/connectors";
-      preLoaderRoute: typeof AuthedShellCustomizeConnectorsRouteImport;
-      parentRoute: typeof AuthedShellCustomizeRoute;
-    };
     "/_authed/_shell/automations/$scheduledJobId": {
       id: "/_authed/_shell/automations/$scheduledJobId";
       path: "/$scheduledJobId";
@@ -565,14 +545,12 @@ const AuthedShellAutomationsRouteWithChildren =
   );
 
 interface AuthedShellCustomizeRouteChildren {
-  AuthedShellCustomizeConnectorsRoute: typeof AuthedShellCustomizeConnectorsRoute;
   AuthedShellCustomizeSkillsRoute: typeof AuthedShellCustomizeSkillsRoute;
   AuthedShellCustomizeWorkflowsRoute: typeof AuthedShellCustomizeWorkflowsRoute;
   AuthedShellCustomizeIndexRoute: typeof AuthedShellCustomizeIndexRoute;
 }
 
 const AuthedShellCustomizeRouteChildren: AuthedShellCustomizeRouteChildren = {
-  AuthedShellCustomizeConnectorsRoute: AuthedShellCustomizeConnectorsRoute,
   AuthedShellCustomizeSkillsRoute: AuthedShellCustomizeSkillsRoute,
   AuthedShellCustomizeWorkflowsRoute: AuthedShellCustomizeWorkflowsRoute,
   AuthedShellCustomizeIndexRoute: AuthedShellCustomizeIndexRoute,

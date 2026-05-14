@@ -39,7 +39,6 @@ import { registerScheduledJobCommand } from "./commands/scheduled-job.js";
 import { registerTurnCommand } from "./commands/turn.js";
 import { registerWakeupCommand } from "./commands/wakeup.js";
 import { registerWebhookCommand } from "./commands/webhook.js";
-import { registerConnectorCommand } from "./commands/connector.js";
 import { registerSkillCommand } from "./commands/skill.js";
 // Phase-4 (memory / recipes / artifacts).
 import { registerMemoryCommand } from "./commands/memory.js";
@@ -134,7 +133,6 @@ registerScheduledJobCommand(program);
 registerTurnCommand(program);
 registerWakeupCommand(program);
 registerWebhookCommand(program);
-registerConnectorCommand(program);
 registerSkillCommand(program);
 
 // Phase-4 stubs

@@ -160,7 +160,7 @@ Examples:
   $ thinkwork mcp add my-tools --url https://mcp.example.com/crm \\
       --auth-type tenant_api_key --api-key sk-abc -s dev -t acme
 
-  # OAuth connector (users connect from the mobile app)
+  # OAuth-backed MCP integration (users connect from the mobile app)
   $ thinkwork mcp add crm-tools --url https://mcp.example.com/crm \\
       --auth-type per_user_oauth --oauth-provider crm_provider -s dev -t acme
 `,

@@ -13,7 +13,7 @@ Every thread sits in one of seven statuses. The state machine is small and delib
 
 | Status | Meaning | Typical trigger |
 |---|---|---|
-| `BACKLOG` | Captured, but not scheduled for work yet | New thread from a connector, or a user drafting without sending |
+| `BACKLOG` | Captured, but not scheduled for work yet | New thread from a integration, or a user drafting without sending |
 | `TODO` | Ready to be picked up | An assignee has the thread in their queue, or an agent is about to run |
 | `IN_PROGRESS` | Currently being worked on | An agent turn is running, or a human is actively typing |
 | `IN_REVIEW` | Waiting on human review | Agent requested approval (see [Admin: Inbox](/applications/admin/inbox/)); or an operator needs to confirm |
@@ -57,10 +57,10 @@ Every thread has a `channel` column set at creation time. Channel determines the
 |---|---|---|---|
 | `CHAT` | `CHAT-` | User sends message in admin or mobile app | AppSync subscription streams response back to the app |
 | `AUTO` | `AUTO-` | EventBridge / AWS Scheduler fires a scheduled job or event trigger | Response recorded on the thread; optional side-effects via tool calls |
-| `SLACK` | `SLACK-` | Slack Events API webhook to the Slack connector Lambda | Slack connector posts the response back to the originating channel/thread |
-| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | GitHub connector posts a comment via the GitHub API |
-| `EMAIL` | `EMAIL-` | SES inbound email rule to the email connector | SES sending domain sends a reply; `inReplyTo` and `References` headers are preserved |
-| `TASK` | `TASK-` | External task system webhook | Task connector normalizes state changes back to the external system |
+| `SLACK` | `SLACK-` | Slack Events API webhook to the Slack integration Lambda | Slack integration posts the response back to the originating channel/thread |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | GitHub integration posts a comment via the GitHub API |
+| `EMAIL` | `EMAIL-` | SES inbound email rule to the email integration | SES sending domain sends a reply; `inReplyTo` and `References` headers are preserved |
+| `TASK` | `TASK-` | External task system webhook | Task integration normalizes state changes back to the external system |
 
 The prefix is part of the thread id — a thread id is `<CHANNEL>-<ULID>`, e.g. `SLACK-01H8QKPZ4X8M4NXDRM9N8KBJ9P`. The prefix isn't a display-only formatter; it's on the row, indexed, and used to pick the outbound response handler.
 
@@ -76,14 +76,14 @@ The lifecycle, channel, and priority axes all surface in [Admin: Threads](/appli
 
 ### What's tenant-scoped (admin web)
 
-- **Status auto-transitions.** Off by default. Status writes only on explicit mutations — agent activity, operator action, connector event. To enable agent-driven `IN_PROGRESS → DONE` on reply, set the per-template "auto-close on assistant turn" toggle (a template-level setting, not a thread setting). Most pilots leave this off and let operators mark `DONE` deliberately.
-- **Default priority on inbound.** Defaults to `MEDIUM`. Per-connector overrides set this when an external system already encodes urgency — e.g., a PagerDuty webhook that should always create a `CRITICAL` thread. Configure on the connector, not the thread.
+- **Status auto-transitions.** Off by default. Status writes only on explicit mutations — agent activity, operator action, integration event. To enable agent-driven `IN_PROGRESS → DONE` on reply, set the per-template "auto-close on assistant turn" toggle (a template-level setting, not a thread setting). Most pilots leave this off and let operators mark `DONE` deliberately.
+- **Default priority on inbound.** Defaults to `MEDIUM`. Per-integration overrides set this when an external system already encodes urgency — e.g., a PagerDuty webhook that should always create a `CRITICAL` thread. Configure on the integration, not the thread.
 - **Inbox status filters.** The admin Threads view ships with `running / unread / read` as default filter chips. Add tenant-specific filters (e.g., "all `CRITICAL` priority") via the saved-views API. The computed `inbox status` is not a column you write to.
-- **Channel routing rules.** When a connector creates a thread, which agent gets it? Configured under each connector's Routing settings — by `@-mention`, by source channel, by default fallback. See [Routing and Metadata](/concepts/threads/routing-and-metadata/).
+- **Channel routing rules.** When a integration creates a thread, which agent gets it? Configured under each integration's Routing settings — by `@-mention`, by source channel, by default fallback. See [Routing and Metadata](/concepts/threads/routing-and-metadata/).
 
 ### What's deployment-scoped (Terraform)
 
-- **The channel set itself.** `CHAT / AUTO / SLACK / GITHUB / EMAIL / TASK` is a Postgres enum. New channels require code changes in the API schema, the connector Lambda, and the outbound reply handler — they're not a configuration knob.
+- **The channel set itself.** `CHAT / AUTO / SLACK / GITHUB / EMAIL / TASK` is a Postgres enum. New channels require code changes in the API schema, the integration Lambda, and the outbound reply handler — they're not a configuration knob.
 - **Status set + priority set.** Same — Postgres enums, application-coupled. The seven statuses and five priorities are deliberately fixed; expanding them creates UX cliffs in the admin app.
 - **Concurrency invariant.** "One running turn per thread" is hard-coded as a thread-level lock at the AgentCore invocation boundary; not a knob. Don't try to relax it — the alternative is races and corrupted thread state.
 
@@ -93,10 +93,10 @@ The lifecycle, channel, and priority axes all surface in [Admin: Threads](/appli
 
 A customer asks a question on Slack, your agent answers, the thread closes. A week later they reply in the same Slack thread. ThinkWork should reopen the existing thread — not start a new one — so the agent sees its earlier answer and continues the conversation.
 
-This is automatic. The Slack connector watches `threadTs` (Slack's thread timestamp) on every inbound event:
+This is automatic. The Slack integration watches `threadTs` (Slack's thread timestamp) on every inbound event:
 
-1. **Inbound event.** Slack POSTs the new message to the connector's webhook with the original `threadTs`.
-2. **Reopen lookup.** The connector queries `threads` for `channel = 'SLACK' AND metadata->>'threadTs' = $1`.
+1. **Inbound event.** Slack POSTs the new message to the integration's webhook with the original `threadTs`.
+2. **Reopen lookup.** The integration queries `threads` for `channel = 'SLACK' AND metadata->>'threadTs' = $1`.
 3. **Reopen.** If found, the thread's status flips from `DONE` (or wherever it sat) back to `IN_PROGRESS`, the new message is appended, and the agent assigned to the thread fires a turn — which sees the entire prior conversation.
 4. **Create.** If no match, a new `SLACK-<ULID>` thread is minted.
 
@@ -104,15 +104,15 @@ For email and GitHub, the same pattern uses `inReplyTo` chains and `(repoFullNam
 
 ### Promote a `BLOCKED` thread on dependency clear
 
-When a tool call fails non-retryably (a connector hits an external auth failure, a knowledge-base query times out), the agent flips the thread to `BLOCKED` and writes the failure context as a turn. The operator inbox surfaces `BLOCKED` threads in a distinct queue.
+When a tool call fails non-retryably (a integration hits an external auth failure, a knowledge-base query times out), the agent flips the thread to `BLOCKED` and writes the failure context as a turn. The operator inbox surfaces `BLOCKED` threads in a distinct queue.
 
 To resume: an operator clicks "Resume" in the admin thread detail. The status flips `BLOCKED → IN_PROGRESS` and a new turn fires against the same thread. Memory and prior turns are visible to the new turn — the agent doesn't repeat the failed approach unless it has reason to.
 
-For pilots, the `BLOCKED → IN_PROGRESS` transition is the most common operator-side action. Watch the rate; a high `BLOCKED` rate is a tuning signal that connector credentials, guardrails, or template capability grants need a refresh.
+For pilots, the `BLOCKED → IN_PROGRESS` transition is the most common operator-side action. Watch the rate; a high `BLOCKED` rate is a tuning signal that integration credentials, guardrails, or template capability grants need a refresh.
 
 ## Known limits
 
-- **Channel set is closed.** Adding a new channel requires code changes in the API schema, the connector Lambda, and the outbound reply handler. The channel column is a Postgres enum, not an open string.
+- **Channel set is closed.** Adding a new channel requires code changes in the API schema, the integration Lambda, and the outbound reply handler. The channel column is a Postgres enum, not an open string.
 - **No cross-channel merging.** A GitHub issue and an Email thread about the same subject stay as two threads. The agent can reference both, but the data model does not link them.
 - **Inbox status is not persisted.** A server restart loses unread tracking for already-open clients until they reload.
 
@@ -121,10 +121,10 @@ For pilots, the `BLOCKED → IN_PROGRESS` transition is the most common operator
 - [Threads (overview)](/concepts/threads/) — why ThinkWork picks one universal container
 - [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound events map into the thread model
 - [Admin: Threads](/applications/admin/threads/) — the operator view of this lifecycle
-- [Connectors](/concepts/connectors/) — how each inbound channel is implemented
+- [Integrations](/concepts/integrations) — how each inbound channel is implemented
 
 ## Under the hood
 
 Status, channel, and priority are Postgres enums on the `threads` table (migrations live in `packages/database-pg/drizzle/`). The thread id format — `<CHANNEL>-<ULID>` — is generated when the row is created.
 
-Inbound connector handlers (in `packages/api/src/handlers/`) look up existing threads by channel-scoped metadata before deciding to create a new thread vs. append to an existing one. For the operator view of lifecycle in the admin UI, see [Admin: Threads](/applications/admin/threads/).
+Inbound integration handlers (in `packages/api/src/handlers/`) look up existing threads by channel-scoped metadata before deciding to create a new thread vs. append to an existing one. For the operator view of lifecycle in the admin UI, see [Admin: Threads](/applications/admin/threads/).

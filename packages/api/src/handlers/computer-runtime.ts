@@ -19,7 +19,6 @@ import {
   ComputerTaskDelegationError,
   ComputerNotFoundError,
   ComputerTaskNotFoundError,
-  delegateConnectorWorkTask,
   executeThreadTurnTask,
   failComputerTask,
   loadThreadTurnContext,
@@ -169,21 +168,6 @@ async function route(
         payload: body.payload,
       }),
       201,
-    );
-  }
-
-  const delegateConnectorWorkMatch = path.match(
-    /^\/api\/computers\/runtime\/tasks\/([^/]+)\/delegate-connector-work$/,
-  );
-  if (method === "POST" && delegateConnectorWorkMatch) {
-    const tenantId = validUuid(body.tenantId, "tenantId");
-    const computerId = validUuid(body.computerId, "computerId");
-    return json(
-      await delegateConnectorWorkTask({
-        tenantId,
-        computerId,
-        taskId: validUuid(delegateConnectorWorkMatch[1], "taskId"),
-      }),
     );
   }
 

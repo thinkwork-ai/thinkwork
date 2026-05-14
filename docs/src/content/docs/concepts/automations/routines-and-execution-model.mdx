@@ -15,7 +15,7 @@ A routine is composed from a small fixed vocabulary of "recipes" — the v0 cata
 
 | Recipe | Purpose |
 |---|---|
-| `http_request` | Generic outbound HTTP. Connectors that don't have a dedicated recipe yet flow through this. |
+| `http_request` | Generic outbound HTTP. Integrations that don't have a dedicated recipe yet flow through this. |
 | `aurora_query` | Read from the tenant's Aurora schema. |
 | `transform_json` | JSONata expression to reshape data between steps. |
 | `set_variable` | Bind a named value into the SFN execution context for downstream steps. |
@@ -83,7 +83,7 @@ A worked example: "process every overnight customer email."
 Start
   │
   ▼
-FetchOvernightEmails  (http_request: query email connector)
+FetchOvernightEmails  (http_request: query email integration)
   │
   ▼
 ForEachEmail  (map, concurrency=5)

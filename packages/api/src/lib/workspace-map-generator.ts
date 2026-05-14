@@ -27,17 +27,14 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { eq, and, asc, isNotNull, ne, or } from "drizzle-orm";
+import { eq, and, asc, isNotNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
   agentSkills,
   agentKnowledgeBases,
-  computers,
-  connectors,
   knowledgeBases,
   routines,
-  tenantConnectorCatalog,
   tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
@@ -73,13 +70,6 @@ interface KBInfo {
   description: string;
   /** Workspace slugs that reference this KB */
   usedIn: string[];
-}
-
-interface ConnectorInfo {
-  catalogSlug: string;
-  name: string;
-  description: string;
-  category: string | null;
 }
 
 interface WorkflowInfo {
@@ -283,7 +273,6 @@ function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary 
  * Reads:
  *   - agent_skills table → skill catalog (built-in tool slugs filtered out)
  *   - agent_knowledge_bases + knowledge_bases tables → KB catalog
- *   - connectors + tenant_connector_catalog → Connectors catalog (Computer-keyed)
  *   - routines + tenant_workflow_catalog → Workflows catalog (agent-keyed)
  *   - S3 workspace folders → workspace discovery + CONTEXT.md parsing
  *
@@ -291,14 +280,10 @@ function parseWorkspaceContext(content: string, slug: string): WorkspaceSummary 
  *   - AGENTS.md to S3 workspace (skipped when content unchanged)
  *   - CONTEXT.md to S3 workspace (skipped when content unchanged)
  *
- * When `computerId` is omitted, the renderer auto-resolves a Computer via
- * `computers.primary_agent_id` / `migrated_from_agent_id` so non-Customize
- * callers (setAgentSkills, template flows) don't have to know about it.
- * Plan: docs/plans/2026-05-09-011-feat-customize-workspace-renderer-plan.md U7-1.
  */
 export async function regenerateWorkspaceMap(
   agentId: string,
-  computerId?: string,
+  _computerId?: string,
 ): Promise<void> {
   const db = getDb();
 
@@ -333,46 +318,6 @@ export async function regenerateWorkspaceMap(
   const agentSlug = agent.slug;
   const prefix = workspacePrefix(tenantSlug, agentSlug);
 
-  // 2a. Resolve Computer (explicit param wins; otherwise look up by primary
-  //     agent). Connectors are Computer-keyed; Skills + Workflows are
-  //     agent-keyed, so a missing Computer only suppresses the Connectors
-  //     section.
-  let computerRow: { id: string; tenant_id: string } | null = null;
-  if (computerId) {
-    const [row] = await db
-      .select({ id: computers.id, tenant_id: computers.tenant_id })
-      .from(computers)
-      .where(
-        and(
-          eq(computers.id, computerId),
-          ne(computers.status, "archived"),
-        ),
-      );
-    computerRow = row ?? null;
-  } else {
-    // Auto-resolve must scope by tenant — primary_agent_id / migrated_from_agent_id
-    // are not unique-per-tenant in the schema, so without this predicate a
-    // Computer in tenant B that points at an agent in tenant A would be
-    // selected when rendering tenant A's agent. LIMIT 1 + deterministic
-    // ORDER BY pin which row wins when multiple match within a tenant.
-    const [row] = await db
-      .select({ id: computers.id, tenant_id: computers.tenant_id })
-      .from(computers)
-      .where(
-        and(
-          eq(computers.tenant_id, agent.tenant_id),
-          or(
-            eq(computers.primary_agent_id, agentId),
-            eq(computers.migrated_from_agent_id, agentId),
-          ),
-          ne(computers.status, "archived"),
-        ),
-      )
-      .orderBy(asc(computers.id))
-      .limit(1);
-    computerRow = row ?? null;
-  }
-
   // 2. Query skills (filter built-in tool slugs — they're template/runtime
   //    config, not workspace skills, per
   //    docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md).
@@ -404,59 +349,6 @@ export async function regenerateWorkspaceMap(
       and(eq(agentKnowledgeBases.agent_id, agentId), eq(agentKnowledgeBases.enabled, true)),
     )
     .orderBy(asc(knowledgeBases.id));
-
-  // 3b. Query active Customize connectors (Computer-keyed). Joined to the
-  //     tenant_connector_catalog for display_name + description + category.
-  //     Empty when no Computer was resolved — the section still renders in
-  //     "no connectors configured" form.
-  const connectorRows: Array<{
-    catalog_slug: string;
-    display_name: string;
-    description: string | null;
-    category: string | null;
-  }> = computerRow
-    ? await db
-        .select({
-          catalog_slug: connectors.catalog_slug,
-          display_name: tenantConnectorCatalog.display_name,
-          description: tenantConnectorCatalog.description,
-          category: tenantConnectorCatalog.category,
-        })
-        .from(connectors)
-        .innerJoin(
-          tenantConnectorCatalog,
-          and(
-            eq(tenantConnectorCatalog.tenant_id, connectors.tenant_id),
-            eq(tenantConnectorCatalog.slug, connectors.catalog_slug),
-          ),
-        )
-        .where(
-          and(
-            eq(connectors.tenant_id, computerRow.tenant_id),
-            eq(connectors.dispatch_target_type, "computer"),
-            eq(connectors.dispatch_target_id, computerRow.id),
-            eq(connectors.enabled, true),
-            eq(connectors.status, "active"),
-            isNotNull(connectors.catalog_slug),
-          ),
-        )
-        .orderBy(asc(connectors.catalog_slug))
-        // Drizzle's join row typing leaves catalog_slug as nullable since
-        // the source column allows null; the WHERE filter guarantees it.
-        .then((rows) =>
-          rows
-            .filter(
-              (r): r is typeof r & { catalog_slug: string } =>
-                r.catalog_slug !== null,
-            )
-            .map((r) => ({
-              catalog_slug: r.catalog_slug,
-              display_name: r.display_name,
-              description: r.description,
-              category: r.category,
-            })),
-        )
-    : [];
 
   // 3c. Query active Customize workflows (agent-keyed). Joined to
   //     tenant_workflow_catalog for display_name + description; schedule
@@ -564,15 +456,7 @@ export async function regenerateWorkspaceMap(
     usedIn: [], // TODO: parse from workspace CONTEXT.md "Knowledge Bases" section
   }));
 
-  // 6b. Build Connectors catalog
-  const connectorInfos: ConnectorInfo[] = connectorRows.map((c) => ({
-    catalogSlug: c.catalog_slug,
-    name: c.display_name,
-    description: c.description ?? "",
-    category: c.category,
-  }));
-
-  // 6c. Build Workflows catalog
+  // 6b. Build Workflows catalog
   const workflowInfos: WorkflowInfo[] = workflowRows.map((w) => ({
     catalogSlug: w.catalog_slug,
     name: w.display_name,
@@ -586,7 +470,6 @@ export async function regenerateWorkspaceMap(
     agentSlug,
     skillInfos,
     kbInfos,
-    connectorInfos,
     workflowInfos,
     workspaces,
   );
@@ -620,7 +503,7 @@ export async function regenerateWorkspaceMap(
   }
 
   console.log(
-    `[workspace-map] Regenerated for ${agentSlug}: ${workspaces.length} workspace(s), ${skillInfos.length} skill(s), ${kbInfos.length} KB(s), ${connectorInfos.length} connector(s), ${workflowInfos.length} workflow(s)`,
+    `[workspace-map] Regenerated for ${agentSlug}: ${workspaces.length} workspace(s), ${skillInfos.length} skill(s), ${kbInfos.length} KB(s), ${workflowInfos.length} workflow(s)`,
   );
 
   // 10. Regenerate manifest so runtime picks up changes on next sync
@@ -643,7 +526,6 @@ function renderAgentsMap(
   agentSlug: string,
   skills: SkillInfo[],
   kbs: KBInfo[],
-  connectorList: ConnectorInfo[],
   workflowList: WorkflowInfo[],
   workspaces: WorkspaceSummary[],
 ): string {
@@ -708,22 +590,6 @@ function renderAgentsMap(
     }
     lines.push("");
   }
-
-  // Connectors (Customize-page-driven; Computer-keyed)
-  lines.push("## Connectors");
-  lines.push("");
-  if (connectorList.length > 0) {
-    lines.push("| Connector | Description | Category |");
-    lines.push("|-----------|-------------|----------|");
-    for (const c of connectorList) {
-      const desc = escTableCell(c.description?.slice(0, 80) ?? null);
-      const category = escTableCell(c.category);
-      lines.push(`| ${escTableCell(c.name)} | ${desc} | ${category} |`);
-    }
-  } else {
-    lines.push("No connectors configured.");
-  }
-  lines.push("");
 
   // Workflows (Customize-page-driven; agent-keyed)
   lines.push("## Workflows");

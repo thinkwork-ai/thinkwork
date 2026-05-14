@@ -1,11 +1,11 @@
 ---
 title: Threads
-description: The universal work container in ThinkWork. Every conversation, automation run, and connector event lands in the same durable record with history, status, and channel context.
+description: The universal work container in ThinkWork. Every conversation, automation run, and integration event lands in the same durable record with history, status, and channel context.
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** operating guarantee.
+A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a integration, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** operating guarantee.
 
 That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 
@@ -19,7 +19,7 @@ ThinkWork picks the other tradeoff: every piece of work is a thread, and every c
 
 - **Handoff.** A Slack-originated thread escalates to a human. The admin app already has a thread detail view; the inbox already has an approval surface. No new surface to build because everything is already a thread.
 - **Audit.** A compliance question lands for an agent turn that happened three months ago. The thread still has the full record — messages, tool calls, memory reads, guardrail activations, cost — regardless of whether it started from chat, cron, or webhook.
-- **Composition.** Automations can spawn child threads. Connectors can reply into existing threads. Agents can pin context from a previous thread into a new one. All uniformly, because it's all the same shape.
+- **Composition.** Automations can spawn child threads. Integrations can reply into existing threads. Agents can pin context from a previous thread into a new one. All uniformly, because it's all the same shape.
 - **Tenancy.** Tenant isolation is enforced once, in the thread store. Every downstream surface that reads threads inherits the isolation for free.
 - **Replay.** The audit log is partitioned by thread id. Reconstructing a turn from three months ago — or replaying a bad automation run against a fixed agent prompt — is one scan, not a cross-system archaeology.
 
@@ -73,7 +73,7 @@ Every thread has a channel set at creation time. Channel determines the prefix a
 | -------- | --------- | ------------------------------------------ | ---------------------------------------------------------------- |
 | `CHAT`   | `CHAT-`   | User sends message in admin or mobile app  | Streamed back to the app over a real-time subscription           |
 | `AUTO`   | `AUTO-`   | Scheduler or event trigger fires           | Response recorded on the thread; optional tool-call side-effects |
-| `SLACK`  | `SLACK-`  | Inbound Slack event to the Slack connector | Reply posted back to the originating Slack channel/thread        |
+| `SLACK`  | `SLACK-`  | Inbound Slack event to the Slack integration | Reply posted back to the originating Slack channel/thread        |
 | `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment)        | Comment posted via the GitHub API                                |
 | `EMAIL`  | `EMAIL-`  | Inbound email                              | Reply sent; `In-Reply-To` / `References` preserved               |
 | `TASK`   | `TASK-`   | External task system webhook               | Task state normalized back to the external system                |
@@ -86,9 +86,9 @@ The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn
 
 ### Adding a new channel
 
-Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each connector fills it in.
+Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each integration fills it in.
 
-Connector-origin threads also carry provider metadata, such as Linear issue id, connector execution id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the metadata ties the visible thread back to the durable connector lifecycle.
+Integration-origin threads also carry provider metadata, such as Linear issue id, integration execution id, Computer task id, and provider writeback state. The channel tells operators what kind of source created the thread; the metadata ties the visible thread back to the durable integration lifecycle.
 
 ## Reopen, don't recreate
 
@@ -107,9 +107,9 @@ The reopen key is the channel-specific metadata, not the ThinkWork thread id dir
 
 That guarantees conversation continuity. An agent that answered a Slack question in March sees its own earlier answer when someone follows up in April. Without this, every follow-up would be a fresh thread with no memory of the conversation that preceded it.
 
-The reopen happens at the connector boundary — whenever an inbound event arrives, the connector looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
+The reopen happens at the integration boundary — whenever an inbound event arrives, the integration looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
 
-Tracker-style connector work, such as the Symphony Linear checkpoint, also uses provider metadata to keep one external work item linked to one Computer-owned thread. Repeated polling of the same Linear issue should update or recognize the existing lifecycle instead of creating duplicate visible work.
+Tracker-style integration work, such as the private extension Linear checkpoint, also uses provider metadata to keep one external work item linked to one Computer-owned thread. Repeated polling of the same Linear issue should update or recognize the existing lifecycle instead of creating duplicate visible work.
 
 ## The status lifecycle
 
@@ -127,7 +127,7 @@ Status answers _"where is this thread in its workflow right now?"_ Seven values 
 
 The state machine is deliberately loose — any-to-any transitions are allowed — because real work doesn't flow cleanly. A thread can go `IN_PROGRESS → BLOCKED → IN_PROGRESS` multiple times in a day. `DONE` is terminal by convention but not by enforcement; a new message into a `DONE` thread reopens it (implicit `DONE → IN_PROGRESS`).
 
-The one hard rule: **no transitions are triggered by reads.** Opening a thread in the UI doesn't change its status. Status is written only by explicit mutations — agent activity, operator action, or connector event.
+The one hard rule: **no transitions are triggered by reads.** Opening a thread in the UI doesn't change its status. Status is written only by explicit mutations — agent activity, operator action, or integration event.
 
 ### Priority is a separate axis
 
@@ -151,9 +151,9 @@ Threads have a small, deliberate configuration surface. Most of the day-to-day k
 
 Per-tenant configuration lives at [Admin: Threads](/applications/admin/threads/) and the surrounding tenant settings:
 
-- **Default channel routing.** Which connectors create threads under which channel prefixes. Defaults to one prefix per connector; override only when you split a connector across multiple business contexts (e.g., two Slack workspaces routed to the same tenant).
-- **Status auto-transitions.** Off by default. Status is written only by explicit mutations — agent activity, operator action, or connector event (see "The status lifecycle" above). If you want `IN_PROGRESS → DONE` on agent reply, that's a per-agent template setting, not a thread setting.
-- **Default priority on inbound.** Defaults to `MEDIUM`. Per-channel overrides are configured at the connector level (e.g., "PagerDuty webhooks default to `URGENT`").
+- **Default channel routing.** Which integrations create threads under which channel prefixes. Defaults to one prefix per integration; override only when you split a integration across multiple business contexts (e.g., two Slack workspaces routed to the same tenant).
+- **Status auto-transitions.** Off by default. Status is written only by explicit mutations — agent activity, operator action, or integration event (see "The status lifecycle" above). If you want `IN_PROGRESS → DONE` on agent reply, that's a per-agent template setting, not a thread setting.
+- **Default priority on inbound.** Defaults to `MEDIUM`. Per-channel overrides are configured at the integration level (e.g., "PagerDuty webhooks default to `URGENT`").
 - **Retention defaults.** Threads themselves are durable indefinitely (see "Retention and archival"); retention windows on the audit log are configured separately at the deployment level.
 - **Review queues.** Which statuses route into which operator queues. `IN_REVIEW` and `BLOCKED` ship as queues by default; the admin Threads route lets you add more.
 
@@ -167,11 +167,11 @@ Cross-tenant defaults set when ThinkWork is deployed:
 
 ### When the defaults are wrong
 
-The default tenant-scoped configuration is calibrated for a single ops-team pilot — one tenant, a handful of agents, a handful of connectors. It deviates as you scale:
+The default tenant-scoped configuration is calibrated for a single ops-team pilot — one tenant, a handful of agents, a handful of integrations. It deviates as you scale:
 
 - A multi-tenant deployment where each tenant has its own Slack workspace needs explicit channel routing per tenant.
 - A high-frequency automations workload (hundreds of `AUTO`-prefixed threads per hour) benefits from a tighter `BACKLOG` retention default to keep the operator UI's default view focused.
-- An incident-response use case wants a non-default priority handler that flips inbound `CRITICAL` threads to a paging queue. That's a connector-side rule today, not a thread-side one.
+- An incident-response use case wants a non-default priority handler that flips inbound `CRITICAL` threads to a paging queue. That's a integration-side rule today, not a thread-side one.
 
 For all three, the configuration knobs above are sufficient — none of them require a code change.
 
@@ -181,10 +181,10 @@ For all three, the configuration knobs above are sufficient — none of them req
 
 The canonical thread-system pattern: a customer asks a question on Slack, ThinkWork answers, the thread closes. A week later the customer follows up in the same Slack thread. ThinkWork should reopen the existing thread — not start a new one — so the agent sees its earlier answer and continues the conversation.
 
-This is automatic. The Slack connector watches `thread_ts` (Slack's thread timestamp) on every inbound event:
+This is automatic. The Slack integration watches `thread_ts` (Slack's thread timestamp) on every inbound event:
 
-1. **Inbound event.** Slack POSTs the new message to the connector's webhook with the original `thread_ts`.
-2. **Reopen lookup.** The connector queries the thread store for an open or closed thread matching `(tenant_id, channel='SLACK', metadata->>'slack_thread_ts')`.
+1. **Inbound event.** Slack POSTs the new message to the integration's webhook with the original `thread_ts`.
+2. **Reopen lookup.** The integration queries the thread store for an open or closed thread matching `(tenant_id, channel='SLACK', metadata->>'slack_thread_ts')`.
 3. **Reopen.** If found, the thread's status flips from `DONE` (or wherever it was) back to `IN_PROGRESS`, the new message is appended, and the agent assigned to the thread fires a turn — which sees the entire prior conversation.
 4. **Create.** If no match, a new `SLACK-<ULID>` thread is created.
 
@@ -194,10 +194,10 @@ The pattern matters because it makes ThinkWork stateful from the user's perspect
 
 A different pattern: an inbound email shouldn't always land in a chat thread for an operator to respond to. Sometimes the right destination is an automation — for example, a vendor invoice email that should kick off an "extract amount, file in finance system" workflow.
 
-The Email connector handles this by reading the `To:` address:
+The Email integration handles this by reading the `To:` address:
 
-1. **Inbound email.** SES delivers the email to the inbound bucket; the connector Lambda reads the new object.
-2. **Route by recipient.** If `To:` matches a configured `AUTO` channel mapping (e.g., `invoices@agents.thinkwork.ai`), the connector creates an `AUTO-<ULID>` thread instead of an `EMAIL-<ULID>` thread, attaches the email body as the first message, and tags the thread with the target [automation](/concepts/automations/) recipe.
+1. **Inbound email.** SES delivers the email to the inbound bucket; the integration Lambda reads the new object.
+2. **Route by recipient.** If `To:` matches a configured `AUTO` channel mapping (e.g., `invoices@agents.thinkwork.ai`), the integration creates an `AUTO-<ULID>` thread instead of an `EMAIL-<ULID>` thread, attaches the email body as the first message, and tags the thread with the target [automation](/concepts/automations/) recipe.
 3. **Automation runs.** Step Functions picks up the `AUTO` thread and executes the recipe — extract data, call downstream tool, write back the result.
 4. **Status closes.** The automation marks the thread `DONE`. Inbound emails that follow up are matched on `Message-Id` chain and reopen the same thread, just like Slack.
 
@@ -219,7 +219,7 @@ Messages are ordered by creation time with a monotonic sequence number per threa
 
 ### Idempotent inbound delivery
 
-Webhooks retry. Connector handlers are expected to dedupe on provider-specific event ids before creating a message, so a replayed webhook becomes a no-op rather than a duplicate.
+Webhooks retry. Integration handlers are expected to dedupe on provider-specific event ids before creating a message, so a replayed webhook becomes a no-op rather than a duplicate.
 
 ### Metadata editing
 
@@ -251,8 +251,8 @@ The mobile app has no delete surface at all. End-users archive, operators can de
 - [Admin: Threads](/applications/admin/threads/) — the operator view: Kanban, table, filters, detail, audit
 - [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
-- [Concepts: Connectors](/concepts/connectors/) — how inbound events become threads
-- [Connector Lifecycle](/concepts/connectors/lifecycle/) — how connector executions, Computer tasks, and threads link together
+- [Concepts: Integrations](/concepts/integrations) — how inbound events become threads
+- [Integration Lifecycle](/concepts/integrations/) — how integration executions, Computer tasks, and threads link together
 - [API Reference: GraphQL](/api/graphql/) — the thread queries, mutations, and subscriptions
 
 ## Under the hood

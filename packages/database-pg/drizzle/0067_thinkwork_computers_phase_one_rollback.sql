@@ -10,7 +10,6 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '120s';
 
-DROP TABLE IF EXISTS public.computer_delegations;
 DROP TABLE IF EXISTS public.computer_snapshots;
 DROP TABLE IF EXISTS public.computer_events;
 DROP TABLE IF EXISTS public.computer_tasks;

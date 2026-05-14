@@ -51,8 +51,8 @@ describe("resolveChatInvokeIdentity", () => {
   it("falls back to the user-created thread when the message is not human-authored", async () => {
     const subject = deps({
       loadMessageSender: vi.fn(async () => ({
-        sender_id: "connector-1",
-        sender_type: "connector",
+        sender_id: "system-1",
+        sender_type: "system",
       })),
       loadThreadCreator: vi.fn(async () => ({
         created_by_id: "user-thread",
@@ -72,29 +72,7 @@ describe("resolveChatInvokeIdentity", () => {
     });
   });
 
-  it("uses the target agent's paired human for connector-created threads", async () => {
-    const subject = deps({
-      loadThreadCreator: vi.fn(async () => ({
-        created_by_id: "connector-1",
-        created_by_type: "connector",
-      })),
-      loadAgentHumanPair: vi.fn(async () => "paired-human"),
-    });
-
-    const identity = await resolveChatInvokeIdentity(baseArgs, subject);
-
-    expect(identity).toEqual({
-      currentUserId: "paired-human",
-      currentUserEmail: "paired-human@example.com",
-      source: "connector_agent_human_pair",
-    });
-    expect(subject.loadAgentHumanPair).toHaveBeenCalledWith({
-      agentId: "agent-1",
-      tenantId: "tenant-1",
-    });
-  });
-
-  it("uses the delegated agent's paired human for Computer-owned connector threads", async () => {
+  it("uses the delegated agent's paired human for Computer-owned threads", async () => {
     const subject = deps({
       loadThreadCreator: vi.fn(async () => ({
         created_by_id: "computer-1",
@@ -116,25 +94,7 @@ describe("resolveChatInvokeIdentity", () => {
     });
   });
 
-  it("returns no identity when a connector-created thread has no paired human", async () => {
-    const subject = deps({
-      loadThreadCreator: vi.fn(async () => ({
-        created_by_id: "connector-1",
-        created_by_type: "connector",
-      })),
-      loadAgentHumanPair: vi.fn(async () => null),
-    });
-
-    await expect(resolveChatInvokeIdentity(baseArgs, subject)).resolves.toEqual(
-      {
-        currentUserId: "",
-        currentUserEmail: "",
-        source: "none",
-      },
-    );
-  });
-
-  it("does not use the agent human pair for generic non-connector threads", async () => {
+  it("does not use the agent human pair for generic non-computer threads", async () => {
     const subject = deps({
       loadThreadCreator: vi.fn(async () => ({
         created_by_id: null,

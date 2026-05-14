@@ -7,8 +7,6 @@ import { Aside } from "@astrojs/starlight/components";
 
 The Computers surface is where operators manage the durable per-user ThinkWork Computer. A Computer owns the user's live workspace and orchestration runtime; managed Agents remain available as delegated workers.
 
-Computers are also valid connector-facing actors. The current Linear/Symphony checkpoint routes a `symphony`-labeled Linear issue to a Computer as a `connector_work` task, records a `connector_work_received` event, and creates a Computer-owned connector thread before any deeper runtime delegation occurs.
-
 ## Computer list
 
 **Route:** `/computers`  
@@ -95,26 +93,11 @@ Authorization: Bearer <API_AUTH_SECRET>
 
 Supported actions are `provision`, `start`, `stop`, `restart`, and `status`.
 
-The task surface currently supports `health_check`, `workspace_file_write`, `google_cli_smoke`, and `connector_work`. `connector_work` is the connector handoff task used by the Linear checkpoint. For the Symphony proof, that task now delegates repo-backed coding work to a managed Agent and links the result back to the Computer-owned thread. Google Workspace OAuth-backed actions are still deferred; the smoke only verifies image tooling.
-
-## Connector checkpoint
-
-The first Computer-facing connector proof is Linear-only:
-
-1. A Linear issue has the `symphony` label.
-2. The Symphony connector is enabled and targets a Computer.
-3. The connector runtime records a terminal connector execution.
-4. The target Computer receives a `connector_work` task and `connector_work_received` event.
-5. ThinkWork creates a connector thread assigned to that Computer.
-6. The Computer delegates the coding turn, receives PR metadata, and the Symphony Runs tab shows the lifecycle.
-
-Use [Run the Symphony Linear Checkpoint](/guides/symphony-linear-checkpoint/) for the normal operator walkthrough and `docs/runbooks/computer-first-linear-connector-checkpoint.md` for lower-level deploy verification and duplicate-check expectations.
+The task surface currently supports `health_check`, `workspace_file_write`, and `google_cli_smoke`. Google Workspace OAuth-backed actions are still deferred; the smoke only verifies image tooling.
 
 ## Related pages
 
 - [Computers](/concepts/computers/) — product and runtime model
-- [Connectors](/concepts/connectors/) — external-system work routing
-- [Connector Lifecycle](/concepts/connectors/lifecycle/) — connector execution, Computer task, thread, delegation, and writeback
-- [Admin: Symphony](/applications/admin/symphony/) — Linear connector setup and run visibility
+- [Integrations](/concepts/integrations) — how OSS ThinkWork keeps integration foundations separate from premium modules
 - [Admin: Agents](/applications/admin/agents/) — delegated managed workers
 - [Admin: Agent Templates](/applications/admin/agent-templates/) — Computer Templates vs Agent Templates

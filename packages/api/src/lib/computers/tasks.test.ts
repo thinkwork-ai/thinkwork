@@ -21,7 +21,6 @@ describe("Computer task helpers", () => {
     expect(parseComputerTaskType("WORKSPACE_FILE_DELETE")).toBe(
       "workspace_file_delete",
     );
-    expect(parseComputerTaskType("CONNECTOR_WORK")).toBe("connector_work");
     expect(parseComputerTaskType("THREAD_TURN")).toBe("thread_turn");
     expect(parseComputerTaskType("GOOGLE_CLI_SMOKE")).toBe("google_cli_smoke");
     expect(parseComputerTaskType("GOOGLE_WORKSPACE_AUTH_CHECK")).toBe(
@@ -63,37 +62,6 @@ describe("Computer task helpers", () => {
     expect(
       normalizeTaskInput("workspace_file_delete", { path: "memory/old.md" }),
     ).toEqual({ path: "memory/old.md" });
-  });
-
-  it("normalizes connector work input", () => {
-    expect(
-      normalizeTaskInput("connector_work", {
-        connectorId: "connector-1",
-        connectorExecutionId: "execution-1",
-        externalRef: "TECH-101",
-        title: "Handle task",
-        body: "Linear issue body",
-        metadata: { sourceKind: "tracker_issue" },
-      }),
-    ).toEqual({
-      connectorId: "connector-1",
-      connectorExecutionId: "execution-1",
-      externalRef: "TECH-101",
-      title: "Handle task",
-      body: "Linear issue body",
-      metadata: { sourceKind: "tracker_issue" },
-    });
-  });
-
-  it("rejects malformed connector work input", () => {
-    expect(() =>
-      normalizeTaskInput("connector_work", {
-        connectorId: "connector-1",
-        externalRef: "TECH-101",
-        title: "Handle task",
-        body: "Linear issue body",
-      }),
-    ).toThrow("connectorExecutionId is required");
   });
 
   it("normalizes Computer-owned thread turn input", () => {

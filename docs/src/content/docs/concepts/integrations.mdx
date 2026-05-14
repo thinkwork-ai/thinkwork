@@ -1,0 +1,54 @@
+---
+title: Integrations
+description: OAuth, webhook, and provider boundaries for external systems in ThinkWork.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+ThinkWork integrations are the boundaries where external systems meet the agent harness. In OSS ThinkWork, that foundation is intentionally small: OAuth credential primitives, webhook surfaces, MCP server registration, and per-user connection flows. Premium extensions can build richer provider-specific modules on top without depending on a shared OSS integration runtime.
+
+## What remains in OSS
+
+The OSS integration foundation includes:
+
+- tenant and user credential storage primitives
+- OAuth redirect and token handling patterns
+- MCP server registration and per-user MCP auth
+- webhooks as explicit API surfaces
+- thread and Computer primitives that integrations can target
+
+It does not include a public integration catalog, integration execution table, private extension route, Linear tracker flow, or integration lifecycle API.
+
+## Design posture
+
+External-system access should be modeled at the right level:
+
+| Need | Preferred shape |
+| --- | --- |
+| A Computer needs tools during work | MCP server or built-in skill/tool |
+| A user needs provider OAuth | Mobile per-user connection flow |
+| A tenant needs an inbound endpoint | Explicit webhook/API route |
+| An enterprise customer needs a packaged workflow | Private extension with its own tables, runtime, and admin module |
+
+This keeps OSS ThinkWork focused on the harness and avoids shipping under-proven provider abstractions as if they were stable platform contracts.
+
+## OAuth and credentials
+
+OAuth credentials and provider tokens remain part of the platform. They should be resolved only by the runtime surface that needs them, and future Slack, Google, or GitHub behavior should use Computer/user capability patterns rather than tenant-wide admin integration toggles.
+
+<Aside type="note">
+  Per-user provider setup belongs in the mobile connection flow when user
+  identity matters. Admin remains the place for tenant-level infrastructure,
+  such as MCP server registration and webhook configuration.
+</Aside>
+
+## Private extensions
+
+Premium or enterprise modules can install into the same AWS account and appear in admin, but they should own their domain model and lifecycle explicitly. private extension is the canonical example: it should bring its own tracker adapters, admin module, runtime bridge, writeback model, deployment wiring, and docs.
+
+## Related pages
+
+- [MCP Tools](/concepts/mcp-tools/)
+- [Admin: MCP Servers](/applications/admin/mcp-servers/)
+- [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/)
+- [Webhooks](/applications/admin/webhooks/)

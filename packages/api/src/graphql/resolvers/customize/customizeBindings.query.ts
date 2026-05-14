@@ -3,12 +3,11 @@ import {
   agentSkills,
   and,
   computers,
-  connectors,
   db,
   eq,
-  isNotNull,
   ne,
   routines,
+  isNotNull,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 
@@ -16,10 +15,6 @@ import { resolveCaller } from "../core/resolve-auth-user.js";
  * Returns the slug / id sets that the apps/computer Customize page uses
  * to mark catalog rows as `connected`.
  *
- *   - **Connectors:** `connectors.catalog_slug` is the canonical pointer
- *     to the catalog row (added by plan 008 U4-1). Rows with a NULL
- *     `catalog_slug` (legacy or pre-backfill) are excluded so they don't
- *     appear bound to anything on the Customize surface.
  *   - **Skills:** `agent_skills.skill_id` is the same shape as
  *     `tenant_skills.skill_id`. Direct equality.
  *   - **Workflows:** `routines.catalog_slug` is the canonical pointer to
@@ -57,22 +52,7 @@ export async function customizeBindings(
     computer.migrated_from_agent_id,
   );
 
-  const [connectorRows, skillRows, workflowRows] = await Promise.all([
-    db
-      .select({
-        catalog_slug: connectors.catalog_slug,
-        status: connectors.status,
-      })
-      .from(connectors)
-      .where(
-        and(
-          eq(connectors.tenant_id, tenantId),
-          eq(connectors.dispatch_target_type, "computer"),
-          eq(connectors.dispatch_target_id, computer.id),
-          eq(connectors.enabled, true),
-          isNotNull(connectors.catalog_slug),
-        ),
-      ),
+  const [skillRows, workflowRows] = await Promise.all([
     agentId
       ? db
           .select({ skill_id: agentSkills.skill_id })
@@ -98,16 +78,6 @@ export async function customizeBindings(
       : Promise.resolve([] as { catalog_slug: string | null }[]),
   ]);
 
-  const connectedConnectorSlugs = Array.from(
-    new Set(
-      connectorRows
-        .filter(
-          (row): row is { catalog_slug: string; status: string } =>
-            row.status === "active" && row.catalog_slug !== null,
-        )
-        .map((row) => row.catalog_slug),
-    ),
-  );
   const connectedSkillIds = Array.from(
     new Set(skillRows.map((row) => row.skill_id)),
   );
@@ -121,7 +91,6 @@ export async function customizeBindings(
 
   return {
     computerId: computer.id,
-    connectedConnectorSlugs,
     connectedSkillIds,
     connectedWorkflowSlugs,
   };

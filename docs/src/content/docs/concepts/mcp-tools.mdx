@@ -1,0 +1,69 @@
+---
+title: MCP Tools
+description: Register MCP servers and expose external capabilities to Computers and managed Agents.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+MCP (Model Context Protocol) is ThinkWork's OSS path for external tools. MCP servers expose capabilities that Computers and managed Agents can call during work, while ThinkWork controls registration, assignment, auth resolution, and audit.
+
+Use MCP tools when a Computer or managed Agent needs to call remote capabilities during a turn, such as CRM lookups, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
+
+## How it works
+
+```text
+Admin registers MCP server
+    -> Assigns it to a template, Computer, or managed Agent
+    -> Invocation resolves tenant or user auth
+    -> Runtime connects to MCP server
+    -> Tools are discovered
+    -> Computer or managed Agent calls tools during the turn
+    -> Calls are logged in the thread timeline
+```
+
+## Registration
+
+MCP servers are registered at the tenant level, then assigned to templates, Computers, or managed Agents depending on the product surface.
+
+Typical config includes:
+
+| Field | Description |
+| --- | --- |
+| Name | Display name for the MCP server |
+| URL | HTTP endpoint for the server |
+| Transport | Streamable HTTP or SSE |
+| Auth | None, tenant API key, or per-user OAuth |
+
+### URL is read from the record on every call
+
+The MCP endpoint URL lives in `tenant_mcp_servers.url`. The runtime resolves it on every outbound call. There are no hardcoded defaults and no env-var fallbacks for MCP base URLs. Rename the record in admin and the next request uses the new host.
+
+## Authentication
+
+MCP tools commonly use one of three patterns:
+
+- **None** for private-network services or systems with external network controls.
+- **Tenant API key** for a shared secret resolved at invocation time.
+- **Per-user OAuth** when downstream tools need user-scoped access.
+
+<Aside type="note">
+  If a per-user OAuth token is missing, ThinkWork can skip that MCP server for
+  the invocation while still allowing the rest of the run to proceed.
+</Aside>
+
+## Runtime behavior
+
+At runtime, ThinkWork discovers tools from the MCP server and adds them beside built-in tools and skill-provided tools. If an MCP server is unavailable, the worker can continue with its remaining toolset.
+
+MCP usage is tracked in the thread timeline, including:
+
+- tool name
+- MCP server attribution
+- input and output previews
+- execution status
+
+## Related pages
+
+- [Integrations](/concepts/integrations/)
+- [Admin: Tenant MCP Servers](/applications/admin/mcp-servers/)
+- [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/)

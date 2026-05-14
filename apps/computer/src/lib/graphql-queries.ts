@@ -649,22 +649,6 @@ export const ComputerKnowledgeBaseDetailQuery = gql`
 
 // ─── Customize page (apps/computer Customize) ─────────────────────────────
 
-export const ConnectorCatalogQuery = gql`
-  query ConnectorCatalog {
-    connectorCatalog {
-      id
-      slug
-      kind
-      displayName
-      description
-      category
-      icon
-      status
-      enabled
-    }
-  }
-`;
-
 export const SkillCatalogQuery = gql`
   query SkillCatalog {
     skillCatalog {
@@ -700,30 +684,9 @@ export const CustomizeBindingsQuery = gql`
   query CustomizeBindings {
     customizeBindings {
       computerId
-      connectedConnectorSlugs
       connectedSkillIds
       connectedWorkflowSlugs
     }
-  }
-`;
-
-export const EnableConnectorMutation = gql`
-  mutation EnableConnector($input: EnableConnectorInput!) {
-    enableConnector(input: $input) {
-      id
-      tenantId
-      computerId
-      catalogSlug
-      status
-      enabled
-      updatedAt
-    }
-  }
-`;
-
-export const DisableConnectorMutation = gql`
-  mutation DisableConnector($input: DisableConnectorInput!) {
-    disableConnector(input: $input)
   }
 `;
 
