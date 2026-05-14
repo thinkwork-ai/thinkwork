@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import {
-  computerDelegations,
   computerEvents,
   computerSnapshots,
   computerTasks,
@@ -27,12 +26,10 @@ describe("ThinkWork Computer schema", () => {
     expect(getTableName(computerTasks)).toBe("computer_tasks");
     expect(getTableName(computerEvents)).toBe("computer_events");
     expect(getTableName(computerSnapshots)).toBe("computer_snapshots");
-    expect(getTableName(computerDelegations)).toBe("computer_delegations");
 
     expect(getTableColumns(computerTasks).computer_id.notNull).toBe(true);
     expect(getTableColumns(computerEvents).computer_id.notNull).toBe(true);
     expect(getTableColumns(computerSnapshots).computer_id.notNull).toBe(true);
-    expect(getTableColumns(computerDelegations).agent_id.notNull).toBe(true);
   });
 
   it("types templates without replacing the existing template table", () => {

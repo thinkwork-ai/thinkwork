@@ -23,10 +23,10 @@ These features are complete and supported in v1:
 | AgentCore managed memory with automatic per-turn retention (always on)   | Stable |
 | Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)         | Beta   |
 | Knowledge Bases (Bedrock KB + document upload)                           | Stable |
-| Slack connector                                                          | Stable |
-| GitHub connector                                                         | Stable |
-| Google Workspace connector (Gmail + Calendar)                            | Beta   |
-| Symphony Linear tracker connector (Computer-first pickup + PR writeback) | Beta   |
+| Slack integration                                                          | Stable |
+| GitHub integration                                                         | Stable |
+| Google Workspace integration (Gmail + Calendar)                            | Beta   |
+| private extension tracker integration (Computer-first pickup + PR writeback) | Beta   |
 | Tenant credential vault (KMS-backed provider credentials)                | Stable |
 | Scheduled automations (EventBridge + Step Functions)                     | Stable |
 | Event-driven automations                                                 | Beta   |
@@ -78,7 +78,7 @@ A location intelligence service with Aurora pgvector for geospatial embeddings, 
 
 A consumer-facing web client for end users to interact with agents (as opposed to the current admin app, which is for platform operators). This would be a white-label React app deployed to CloudFront.
 
-**Not in v1 because:** Most v1 users are integrating ThinkWork into their own apps via the GraphQL API or the Slack/GitHub connectors. The end-user client is a future UX layer.
+**Not in v1 because:** Most v1 users are integrating ThinkWork into their own apps via the GraphQL API or the Slack/GitHub integrations. The end-user client is a future UX layer.
 
 ### Eval agent with browser automation
 
@@ -97,7 +97,7 @@ The ThinkWork Computer foundation ships the product model, ECS/EFS substrate, ru
 These are the highest-priority items being actively worked on:
 
 1. **ThinkWork Computers** — Product surface, migration operationalization, ECS/EFS runtime skeleton
-2. **Connector platform expansion** — Linear is the current proof; future connector ordering is still being planned
+2. **Integration platform expansion** — Linear is the current proof; future integration ordering is still being planned
 3. **Computer runtime hardening** — CLI/tool install, stronger isolation, runtime reconciliation, browser/computer-use path
 4. **Cost tracking** — Aggregated cost reports by tenant, Computer, Agent, and time period
 5. **Places module** — Location intelligence as an optional Terraform module
@@ -109,7 +109,7 @@ These are the highest-priority items being actively worked on:
 
 ThinkWork is Apache 2.0 licensed and open source. Contributions are welcome, especially for:
 
-- New connector implementations
+- New integration implementations
 - Skill pack library additions
 - Terraform module improvements
 - Test coverage

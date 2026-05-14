@@ -215,47 +215,6 @@ export const computerSnapshots = pgTable(
   ],
 );
 
-export const computerDelegations = pgTable(
-  "computer_delegations",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .references(() => tenants.id, { onDelete: "cascade" })
-      .notNull(),
-    computer_id: uuid("computer_id")
-      .references(() => computers.id, { onDelete: "cascade" })
-      .notNull(),
-    agent_id: uuid("agent_id")
-      .references(() => agents.id)
-      .notNull(),
-    task_id: uuid("task_id").references(() => computerTasks.id, {
-      onDelete: "set null",
-    }),
-    status: text("status").notNull().default("pending"),
-    input_artifacts: jsonb("input_artifacts"),
-    output_artifacts: jsonb("output_artifacts"),
-    result: jsonb("result"),
-    error: jsonb("error"),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    completed_at: timestamp("completed_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("idx_computer_delegations_computer_status").on(
-      table.computer_id,
-      table.status,
-    ),
-    index("idx_computer_delegations_agent").on(table.agent_id),
-    check(
-      "computer_delegations_status_allowed",
-      sql`${table.status} IN ('pending','running','completed','failed','cancelled')`,
-    ),
-  ],
-);
-
 export const computersRelations = relations(computers, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [computers.tenant_id],
@@ -276,5 +235,4 @@ export const computersRelations = relations(computers, ({ one, many }) => ({
   tasks: many(computerTasks),
   events: many(computerEvents),
   snapshots: many(computerSnapshots),
-  delegations: many(computerDelegations),
 }));

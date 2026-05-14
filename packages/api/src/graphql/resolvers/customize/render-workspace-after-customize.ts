@@ -1,7 +1,7 @@
 /**
- * Helper invoked by the 6 Customize mutations
- * (enableConnector / disableConnector / enableSkill / disableSkill /
- * enableWorkflow / disableWorkflow) after a binding write commits, to
+ * Helper invoked by the Customize mutations
+ * (enableSkill / disableSkill / enableWorkflow / disableWorkflow) after a
+ * binding write commits, to
  * regenerate the agent's `AGENTS.md` workspace map so the Strands
  * runtime sees the new customization on its next sync.
  *

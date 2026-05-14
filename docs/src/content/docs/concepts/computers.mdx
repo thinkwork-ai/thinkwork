@@ -47,18 +47,18 @@ Phase 3 task types are deliberately bounded:
 | `workspace_file_write` | the Computer owns a real live filesystem workspace                                          |
 | `google_cli_smoke`     | the runtime image can carry Google Workspace CLI tooling without exposing user OAuth tokens |
 
-Connector-origin work uses the same task/event surface. The shipped Symphony Linear connector creates a `connector_work` task and a `connector_work_received` event for the target Computer, then opens a Computer-owned thread. The Computer can preserve that thread and workspace while delegating the actual coding turn to a managed Agent.
+Integration-origin work uses the same task/event surface. The shipped private extension Linear integration creates a `integration_work` task and a `integration_work_received` event for the target Computer, then opens a Computer-owned thread. The Computer can preserve that thread and workspace while delegating the actual coding turn to a managed Agent.
 
-## Connector handoff
+## Integration handoff
 
-Connectors route external work to Computers by default. That is the practical consequence of the Computer reframe: the Computer is the user's durable workplace, so it should own work that arrives from Linear, Slack, GitHub, or future external systems.
+Integrations route external work to Computers by default. That is the practical consequence of the Computer reframe: the Computer is the user's durable workplace, so it should own work that arrives from Linear, Slack, GitHub, or future external systems.
 
-For the Linear/Symphony path:
+For the private extension path:
 
-1. The scheduled connector poller finds a Linear issue with the `symphony` label.
-2. The connector runtime records a connector execution for that external issue.
-3. The runtime creates a `connector_work` task and `connector_work_received` event for the configured Computer.
-4. A Computer-owned connector thread becomes the visible work artifact.
+1. The scheduled integration poller finds a Linear issue with the `private-extension` label.
+2. The integration runtime records a integration execution for that external issue.
+3. The runtime creates a `integration_work` task and `integration_work_received` event for the configured Computer.
+4. A Computer-owned integration thread becomes the visible work artifact.
 5. The Computer delegates coding work to a managed Agent, which creates a branch, commit, and draft PR.
 6. Linear receives dispatch and PR comments, and the card moves to `In Review` after the draft PR exists.
 
@@ -108,9 +108,9 @@ Blocked cases remain Agents until an operator resolves them. The migration repor
 
 - [Admin: Computers](/applications/admin/computers/) — operator surface for Computer state and migration metadata
 - [Computer runbooks](/concepts/computers/runbooks/) — published repeatable work such as dashboards, maps, and research artifacts
-- [Connectors](/concepts/connectors/) — external systems route work to Computers
-- [Connector Lifecycle](/concepts/connectors/lifecycle/) — how connector-origin work becomes Computer-owned work
-- [Admin: Symphony](/applications/admin/symphony/) — Linear connector setup and run visibility
+- [Integrations](/concepts/integrations) — external systems route work to Computers
+- [Integration Lifecycle](/concepts/integrations/) — how integration-origin work becomes Computer-owned work
+- [Admin: private extension](/applications/admin/) — Linear integration setup and run visibility
 - [Agents](/concepts/agents/) — delegated worker model after the Computer reframe
 - [Templates](/concepts/agents/templates/) — shared configuration for Computer Templates and Agent Templates
 - [Architecture](/architecture/) — where ECS/EFS fits into the AWS deployment topology

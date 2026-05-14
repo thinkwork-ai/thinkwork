@@ -974,7 +974,6 @@ export enum ComputerTaskStatus {
 }
 
 export enum ComputerTaskType {
-  ConnectorWork = 'CONNECTOR_WORK',
   GoogleCalendarUpcoming = 'GOOGLE_CALENDAR_UPCOMING',
   GoogleCliSmoke = 'GOOGLE_CLI_SMOKE',
   GoogleWorkspaceAuthCheck = 'GOOGLE_WORKSPACE_AUTH_CHECK',
@@ -1001,169 +1000,6 @@ export type ConcurrencySnapshot = {
   byStatus: Array<StatusCount>;
   totalActive: Scalars['Int']['output'];
 };
-
-export type Connector = {
-  __typename?: 'Connector';
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  connectionId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdById?: Maybe<Scalars['String']['output']>;
-  createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  dispatchTargetId: Scalars['ID']['output'];
-  dispatchTargetType: DispatchTargetType;
-  ebScheduleName?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  lastPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastPollCursor?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  nextPollAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: ConnectorStatus;
-  tenantId: Scalars['ID']['output'];
-  type: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type ConnectorBinding = {
-  __typename?: 'ConnectorBinding';
-  catalogSlug: Scalars['String']['output'];
-  computerId: Scalars['ID']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type ConnectorCatalogItem = {
-  __typename?: 'ConnectorCatalogItem';
-  category?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  displayName: Scalars['String']['output'];
-  enabled: Scalars['Boolean']['output'];
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
-export type ConnectorDispatchResult = {
-  __typename?: 'ConnectorDispatchResult';
-  computerId?: Maybe<Scalars['ID']['output']>;
-  computerTaskId?: Maybe<Scalars['ID']['output']>;
-  connectorId: Scalars['ID']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  executionId?: Maybe<Scalars['ID']['output']>;
-  externalRef?: Maybe<Scalars['String']['output']>;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  reason?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  targetType?: Maybe<DispatchTargetType>;
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type ConnectorExecution = {
-  __typename?: 'ConnectorExecution';
-  connectorId: Scalars['ID']['output'];
-  costFinalizedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  currentState: ConnectorExecutionState;
-  errorClass?: Maybe<Scalars['String']['output']>;
-  externalRef: Scalars['String']['output'];
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  killTarget?: Maybe<Scalars['String']['output']>;
-  killTargetAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastUsageEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  outcomePayload?: Maybe<Scalars['AWSJSON']['output']>;
-  retryAttempt: Scalars['Int']['output'];
-  spendEnvelopeUsdCents?: Maybe<Scalars['Int']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  stateMachineArn?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-};
-
-export enum ConnectorExecutionState {
-  Cancelled = 'cancelled',
-  Dispatching = 'dispatching',
-  Failed = 'failed',
-  Invoking = 'invoking',
-  Pending = 'pending',
-  RecordingResult = 'recording_result',
-  Terminal = 'terminal'
-}
-
-export type ConnectorFilter = {
-  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
-  status?: InputMaybe<ConnectorStatus>;
-  type?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type ConnectorRunComputerTask = {
-  __typename?: 'ConnectorRunComputerTask';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  input?: Maybe<Scalars['AWSJSON']['output']>;
-  output?: Maybe<Scalars['AWSJSON']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type ConnectorRunDelegation = {
-  __typename?: 'ConnectorRunDelegation';
-  agentId: Scalars['ID']['output'];
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  inputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
-  outputArtifacts?: Maybe<Scalars['AWSJSON']['output']>;
-  result?: Maybe<Scalars['AWSJSON']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type ConnectorRunLifecycle = {
-  __typename?: 'ConnectorRunLifecycle';
-  computerId?: Maybe<Scalars['ID']['output']>;
-  computerTask?: Maybe<ConnectorRunComputerTask>;
-  connector: Connector;
-  delegation?: Maybe<ConnectorRunDelegation>;
-  execution: ConnectorExecution;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  threadId?: Maybe<Scalars['ID']['output']>;
-  threadTurn?: Maybe<ConnectorRunThreadTurn>;
-};
-
-export type ConnectorRunNowResult = {
-  __typename?: 'ConnectorRunNowResult';
-  connectorId: Scalars['ID']['output'];
-  results: Array<ConnectorDispatchResult>;
-};
-
-export type ConnectorRunThreadTurn = {
-  __typename?: 'ConnectorRunThreadTurn';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  errorCode?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  resultJson?: Maybe<Scalars['AWSJSON']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export enum ConnectorStatus {
-  Active = 'active',
-  Archived = 'archived',
-  Paused = 'paused',
-  Unhealthy = 'unhealthy'
-}
 
 export type CostEvent = {
   __typename?: 'CostEvent';
@@ -1324,20 +1160,6 @@ export type CreateComputerInput = {
   slug?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
-};
-
-export type CreateConnectorInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  connectionId?: InputMaybe<Scalars['ID']['input']>;
-  createdById?: InputMaybe<Scalars['String']['input']>;
-  createdByType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  dispatchTargetId: Scalars['ID']['input'];
-  dispatchTargetType: DispatchTargetType;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  type: Scalars['String']['input'];
 };
 
 export type CreateEvalTestCaseInput = {
@@ -1510,7 +1332,6 @@ export type CreateWebhookInput = {
 export type CustomizeBindings = {
   __typename?: 'CustomizeBindings';
   computerId: Scalars['ID']['output'];
-  connectedConnectorSlugs: Array<Scalars['String']['output']>;
   connectedSkillIds: Array<Scalars['String']['output']>;
   connectedWorkflowSlugs: Array<Scalars['String']['output']>;
 };
@@ -1557,29 +1378,12 @@ export type DeploymentStatus = {
   stage: Scalars['String']['output'];
 };
 
-export type DisableConnectorInput = {
-  computerId: Scalars['ID']['input'];
-  slug: Scalars['String']['input'];
-};
-
 export type DisableSkillInput = {
   computerId: Scalars['ID']['input'];
   skillId: Scalars['String']['input'];
 };
 
 export type DisableWorkflowInput = {
-  computerId: Scalars['ID']['input'];
-  slug: Scalars['String']['input'];
-};
-
-export enum DispatchTargetType {
-  Agent = 'agent',
-  Computer = 'computer',
-  HybridRoutine = 'hybrid_routine',
-  Routine = 'routine'
-}
-
-export type EnableConnectorInput = {
   computerId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -2097,7 +1901,6 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   approveInboxItem: InboxItem;
-  archiveConnector: Connector;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -2149,7 +1952,6 @@ export type Mutation = {
    */
   createComplianceExport: ComplianceExport;
   createComputer: Computer;
-  createConnector: Connector;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -2188,11 +1990,9 @@ export type Mutation = {
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
-  disableConnector: Scalars['Boolean']['output'];
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
   editTenantEntityFact: TenantEntitySection;
-  enableConnector: ConnectorBinding;
   enableSkill: AgentSkill;
   enableWorkflow: WorkflowBinding;
   enqueueComputerTask: ComputerTask;
@@ -2208,7 +2008,6 @@ export type Mutation = {
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
-  pauseConnector: Connector;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
   publishComputerThreadChunk: ComputerThreadChunkEvent;
@@ -2240,12 +2039,10 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
-  resumeConnector: Connector;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
-  runConnectorNow: ConnectorRunNowResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   seedEvalTestCases: Scalars['Int']['output'];
@@ -2276,7 +2073,6 @@ export type Mutation = {
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
   updateComputer: Computer;
-  updateConnector: Connector;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
@@ -2366,11 +2162,6 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationApproveInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ApproveInboxItemInput>;
-};
-
-
-export type MutationArchiveConnectorArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2489,11 +2280,6 @@ export type MutationCreateComplianceExportArgs = {
 
 export type MutationCreateComputerArgs = {
   input: CreateComputerInput;
-};
-
-
-export type MutationCreateConnectorArgs = {
-  input: CreateConnectorInput;
 };
 
 
@@ -2695,11 +2481,6 @@ export type MutationDeleteWebhookArgs = {
 };
 
 
-export type MutationDisableConnectorArgs = {
-  input: DisableConnectorInput;
-};
-
-
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -2713,11 +2494,6 @@ export type MutationDisableWorkflowArgs = {
 export type MutationEditTenantEntityFactArgs = {
   content: Scalars['String']['input'];
   factId: Scalars['ID']['input'];
-};
-
-
-export type MutationEnableConnectorArgs = {
-  input: EnableConnectorInput;
 };
 
 
@@ -2834,11 +2610,6 @@ export type MutationNotifyThreadUpdateArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
-};
-
-
-export type MutationPauseConnectorArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2984,11 +2755,6 @@ export type MutationResumeAgentWorkspaceRunArgs = {
 };
 
 
-export type MutationResumeConnectorArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationRevokeAgentApiKeyArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3007,11 +2773,6 @@ export type MutationRotateTenantCredentialArgs = {
 
 export type MutationRunBrainPageEnrichmentArgs = {
   input: RunBrainPageEnrichmentInput;
-};
-
-
-export type MutationRunConnectorNowArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -3163,12 +2924,6 @@ export type MutationUpdateArtifactArgs = {
 export type MutationUpdateComputerArgs = {
   id: Scalars['ID']['input'];
   input: UpdateComputerInput;
-};
-
-
-export type MutationUpdateConnectorArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateConnectorInput;
 };
 
 
@@ -3462,12 +3217,6 @@ export type Query = {
   computerTemplates: Array<AgentTemplate>;
   computers: Array<Computer>;
   concurrencySnapshot: ConcurrencySnapshot;
-  connector?: Maybe<Connector>;
-  connectorCatalog: Array<ConnectorCatalogItem>;
-  connectorExecution?: Maybe<ConnectorExecution>;
-  connectorExecutions: Array<ConnectorExecution>;
-  connectorRunLifecycles: Array<ConnectorRunLifecycle>;
-  connectors: Array<Connector>;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
   costSummary: CostSummary;
@@ -3851,38 +3600,6 @@ export type QueryComputersArgs = {
 
 export type QueryConcurrencySnapshotArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorExecutionArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryConnectorExecutionsArgs = {
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<ConnectorExecutionState>;
-};
-
-
-export type QueryConnectorRunLifecyclesArgs = {
-  connectorId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-};
-
-
-export type QueryConnectorsArgs = {
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  filter?: InputMaybe<ConnectorFilter>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -4309,6 +4026,7 @@ export type QueryThreadsArgs = {
 
 
 export type QueryThreadsPagedArgs = {
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
@@ -5607,17 +5325,6 @@ export type UpdateComputerInput = {
   spentMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ComputerStatus>;
   templateId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-export type UpdateConnectorInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  connectionId?: InputMaybe<Scalars['ID']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  dispatchTargetId?: InputMaybe<Scalars['ID']['input']>;
-  dispatchTargetType?: InputMaybe<DispatchTargetType>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateEvalTestCaseInput = {

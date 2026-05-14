@@ -25,7 +25,7 @@ Common patterns:
 - **Async specialist work** — a parent asks `legal/` or `expenses/` to handle work without blocking the current turn.
 - **Human-in-the-loop review** — an agent writes a review request, then resumes when the review is accepted or cancelled.
 - **Parent-managed fan-out** — a parent wakes multiple specialist folders and tracks their completion in its own `status.json` or run notes.
-- **Long-running background work** — scheduled jobs and connector events can write requests into the workspace instead of inventing a parallel queue.
+- **Long-running background work** — scheduled jobs and integration events can write requests into the workspace instead of inventing a parallel queue.
 - **Memory and wiki follow-up** — `memory/*.md` changes can become canonical events that downstream compilers inspect.
 
 ## Mental model

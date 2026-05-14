@@ -1,8 +1,8 @@
 import { ALL_CATEGORIES } from "./CustomizeToolbar";
 
 /**
- * Single item in the Customize catalog. Same shape across Connectors,
- * Skills, and Workflows. `connected` reflects whether the caller's
+ * Single item in the Customize catalog. Same shape across Skills and
+ * Workflows. `connected` reflects whether the caller's
  * Computer has an active binding row for this catalog entry.
  */
 export interface CustomizeItem {

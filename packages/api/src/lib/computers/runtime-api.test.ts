@@ -21,7 +21,6 @@ const mocks = vi.hoisted(() => ({
   resolveOAuthToken: vi.fn(),
   resolveOAuthTokenDetails: vi.fn(),
   invokeChatAgent: vi.fn(),
-  runSymphonyPrConnectorWork: vi.fn(),
   notifyNewMessage: vi.fn(),
   notifyThreadUpdate: vi.fn(),
   ensureMigratedComputerWorkspaceSeeded: vi.fn(),
@@ -92,10 +91,6 @@ vi.mock("../../graphql/notify.js", () => ({
   notifyThreadUpdate: mocks.notifyThreadUpdate,
 }));
 
-vi.mock("./symphony-pr-harness.js", () => ({
-  runSymphonyPrConnectorWork: mocks.runSymphonyPrConnectorWork,
-}));
-
 vi.mock("./workspace-seed.js", () => ({
   ensureMigratedComputerWorkspaceSeeded:
     mocks.ensureMigratedComputerWorkspaceSeeded,
@@ -105,7 +100,6 @@ vi.mock("./workspace-seed.js", () => ({
 
 import {
   checkGoogleWorkspaceConnection,
-  delegateConnectorWorkTask,
   executeThreadTurnTask,
   loadThreadTurnContext,
   recordComputerHeartbeat,
@@ -135,10 +129,6 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.updates = [];
     mocks.execute.mockResolvedValue({ rows: [] });
     mocks.invokeChatAgent.mockResolvedValue(true);
-    mocks.runSymphonyPrConnectorWork.mockResolvedValue({
-      handled: false,
-      reason: "not_linear_connector_work",
-    });
     mocks.notifyNewMessage.mockResolvedValue(undefined);
     mocks.notifyThreadUpdate.mockResolvedValue(undefined);
     mocks.ensureMigratedComputerWorkspaceSeeded.mockResolvedValue({
@@ -422,253 +412,6 @@ describe("Computer runtime API heartbeat workspace materialization", () => {
         status: "blocked",
       }),
     );
-  });
-});
-
-describe("Computer runtime API connector work delegation", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.selectQueue = [];
-    mocks.insertRows = [{ id: "delegation-1", agent_id: "agent-1" }];
-    mocks.inserts = [];
-    mocks.updates = [];
-    mocks.invokeChatAgent.mockResolvedValue(true);
-  });
-
-  it("creates a delegation and invokes the managed agent for connector work", async () => {
-    mocks.selectQueue = [
-      [
-        {
-          id: "task-1",
-          task_type: "connector_work",
-          input: {
-            connectorId: "connector-1",
-            connectorExecutionId: "execution-1",
-            externalRef: "TECH-60",
-            title: "Handle Linear issue",
-            body: "Linear body",
-            metadata: { linear: { identifier: "TECH-60" } },
-          },
-        },
-      ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          migrated_from_agent_id: "agent-1",
-        },
-      ],
-      [{ id: "agent-1" }],
-      [],
-      [{ id: "thread-1" }],
-      [{ id: "message-1" }],
-    ];
-
-    const result = await delegateConnectorWorkTask({
-      tenantId: "tenant-1",
-      computerId: "computer-1",
-      taskId: "task-1",
-    });
-
-    expect(result).toMatchObject({
-      delegated: true,
-      idempotent: false,
-      mode: "managed_agent",
-      delegationId: "delegation-1",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      messageId: "message-1",
-      status: "running",
-    });
-    expect(mocks.invokeChatAgent).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "Linear body",
-      messageId: "message-1",
-    });
-    expect(mocks.inserts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          tenant_id: "tenant-1",
-          computer_id: "computer-1",
-          agent_id: "agent-1",
-          task_id: "task-1",
-          status: "pending",
-        }),
-        expect.objectContaining({
-          event_type: "connector_work_delegation_started",
-          task_id: "task-1",
-        }),
-      ]),
-    );
-    expect(mocks.updates).toContainEqual({ status: "running" });
-  });
-
-  it("runs the Symphony PR harness for Linear connector work", async () => {
-    mocks.runSymphonyPrConnectorWork.mockResolvedValueOnce({
-      handled: true,
-      branch: "symphony/tech-60/aaaaaaaa",
-      commitSha: "commit-1",
-      prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
-      prNumber: 123,
-      threadTurnId: "turn-1",
-      linear: {
-        dispatchComment: { created: true },
-        prComment: { created: true },
-        reviewWriteback: { updated: true, stateName: "In Review" },
-      },
-    });
-    mocks.selectQueue = [
-      [
-        {
-          id: "task-1",
-          task_type: "connector_work",
-          input: {
-            connectorId: "connector-1",
-            connectorExecutionId: "execution-1",
-            externalRef: "issue-uuid",
-            title: "Handle Linear issue",
-            body: "Linear body",
-            metadata: { linear: { identifier: "TECH-60" } },
-          },
-        },
-      ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          migrated_from_agent_id: "agent-1",
-        },
-      ],
-      [{ id: "agent-1" }],
-      [],
-      [{ id: "thread-1" }],
-      [{ id: "message-1" }],
-    ];
-
-    const result = await delegateConnectorWorkTask({
-      tenantId: "tenant-1",
-      computerId: "computer-1",
-      taskId: "task-1",
-    });
-
-    expect(result).toMatchObject({
-      delegated: true,
-      idempotent: false,
-      mode: "symphony_pr_harness",
-      delegationId: "delegation-1",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      messageId: "message-1",
-      branch: "symphony/tech-60/aaaaaaaa",
-      prUrl: "https://github.com/thinkwork-ai/thinkwork/pull/123",
-      threadTurnId: "turn-1",
-      status: "completed",
-    });
-    expect(mocks.runSymphonyPrConnectorWork).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      computerId: "computer-1",
-      taskId: "task-1",
-      delegationId: "delegation-1",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      messageId: "message-1",
-      payload: expect.objectContaining({
-        connectorId: "connector-1",
-        connectorExecutionId: "execution-1",
-      }),
-    });
-    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
-  });
-
-  it("returns an existing delegation without invoking a duplicate managed-agent run", async () => {
-    mocks.selectQueue = [
-      [
-        {
-          id: "task-1",
-          task_type: "connector_work",
-          input: {
-            connectorId: "connector-1",
-            connectorExecutionId: "execution-1",
-            externalRef: "TECH-60",
-            title: "Handle Linear issue",
-            body: "Linear body",
-          },
-        },
-      ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          migrated_from_agent_id: "agent-1",
-        },
-      ],
-      [{ id: "agent-1" }],
-      [
-        {
-          id: "delegation-existing",
-          agent_id: "agent-1",
-          status: "running",
-          input_artifacts: { threadId: "thread-1" },
-        },
-      ],
-    ];
-
-    const result = await delegateConnectorWorkTask({
-      tenantId: "tenant-1",
-      computerId: "computer-1",
-      taskId: "task-1",
-    });
-
-    expect(result).toMatchObject({
-      delegated: false,
-      idempotent: true,
-      delegationId: "delegation-existing",
-      agentId: "agent-1",
-      threadId: "thread-1",
-      status: "running",
-    });
-    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
-    expect(mocks.inserts).toEqual([]);
-  });
-
-  it("rejects connector work when the Computer has no delegated managed agent", async () => {
-    mocks.selectQueue = [
-      [
-        {
-          id: "task-1",
-          task_type: "connector_work",
-          input: {
-            connectorId: "connector-1",
-            connectorExecutionId: "execution-1",
-            externalRef: "TECH-60",
-            title: "Handle Linear issue",
-            body: "Linear body",
-          },
-        },
-      ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          migrated_from_agent_id: null,
-        },
-      ],
-    ];
-
-    await expect(
-      delegateConnectorWorkTask({
-        tenantId: "tenant-1",
-        computerId: "computer-1",
-        taskId: "task-1",
-      }),
-    ).rejects.toThrow("Computer has no delegated Managed Agent configured");
-    expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 });
 

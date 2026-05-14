@@ -52,7 +52,7 @@ The Bedrock Guardrail id (and version) applied on every Bedrock call for this te
 
 ### Tool configuration
 
-Which tool categories are exposed to the agent at runtime — SQL, S3, web search, connector-provided MCP tools, built-in tools. Flags, not prompt-level gates: a disabled category is actually absent from the tool registry, not just discouraged by instruction.
+Which tool categories are exposed to the agent at runtime — SQL, S3, web search, integration-provided MCP tools, built-in tools. Flags, not prompt-level gates: a disabled category is actually absent from the tool registry, not just discouraged by instruction.
 
 Also here: the per-turn tool-call cap, the safety valve against runaway tool loops.
 
@@ -165,7 +165,7 @@ Templates diverge along a handful of real axes:
 - **Model tier.** Haiku for cheap/fast, Sonnet for balanced, Opus for hard reasoning.
 - **Runtime substrate.** Strands for the stable default path, Pi for canary agents or templates validating the Pi loop.
 - **Guardrail strictness.** Customer-facing needs strict PII; internal tools tolerate more.
-- **Tool surface.** An eval agent needs no connectors; a support agent needs Slack + email + CRM.
+- **Tool surface.** An eval agent needs no integrations; a support agent needs Slack + email + CRM.
 - **Budget class.** Internal tools on $10/month; customer-facing on $200/month.
 - **Memory adapter.** Most tenants use one adapter; occasionally an experimental template runs the other to compare.
 
@@ -218,7 +218,7 @@ The factory templates ThinkWork ships (`Support — Standard`, `Research — Ext
 
 - A multi-tenant deployment with strict-PII customers and lax-PII customers needs separate templates with different guardrail attachments — not one template with a "depends on tenant" rule (templates don't have those, and shouldn't).
 - A high-volume cost-sensitive workload (Haiku-tier inference on millions of turns) benefits from a tighter `maxOutputTokens` than the defaults; the savings compound.
-- An eval-heavy workflow benefits from a dedicated *Eval — Sandbox* template with no connectors, no MCP tools, and a low budget cap; tool-surface isolation is the cheapest way to keep eval runs reproducible.
+- An eval-heavy workflow benefits from a dedicated *Eval — Sandbox* template with no integrations, no MCP tools, and a low budget cap; tool-surface isolation is the cheapest way to keep eval runs reproducible.
 
 For all three, the template editor is sufficient — no code changes, no deploys.
 

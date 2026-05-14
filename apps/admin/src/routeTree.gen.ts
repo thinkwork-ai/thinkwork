@@ -17,7 +17,6 @@ import { Route as OnboardingWelcomeRouteImport } from "./routes/onboarding/welco
 import { Route as InviteTokenRouteImport } from "./routes/invite.$token";
 import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedTenantRouteImport } from "./routes/_authed/_tenant";
-import { Route as AuthedTenantSymphonyRouteImport } from "./routes/_authed/_tenant/symphony";
 import { Route as AuthedTenantSettingsRouteImport } from "./routes/_authed/_tenant/settings";
 import { Route as AuthedTenantOrgRouteImport } from "./routes/_authed/_tenant/org";
 import { Route as AuthedTenantKnowledgeRouteImport } from "./routes/_authed/_tenant/knowledge";
@@ -143,11 +142,6 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 const AuthedTenantRoute = AuthedTenantRouteImport.update({
   id: "/_tenant",
   getParentRoute: () => AuthedRoute,
-} as any);
-const AuthedTenantSymphonyRoute = AuthedTenantSymphonyRouteImport.update({
-  id: "/symphony",
-  path: "/symphony",
-  getParentRoute: () => AuthedTenantRoute,
 } as any);
 const AuthedTenantSettingsRoute = AuthedTenantSettingsRouteImport.update({
   id: "/settings",
@@ -677,7 +671,6 @@ export interface FileRoutesByFullPath {
   "/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
-  "/symphony": typeof AuthedTenantSymphonyRoute;
   "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
@@ -769,7 +762,6 @@ export interface FileRoutesByTo {
   "/dashboard": typeof AuthedTenantDashboardRoute;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
-  "/symphony": typeof AuthedTenantSymphonyRoute;
   "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
@@ -868,7 +860,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
   "/_authed/_tenant/org": typeof AuthedTenantOrgRoute;
   "/_authed/_tenant/settings": typeof AuthedTenantSettingsRoute;
-  "/_authed/_tenant/symphony": typeof AuthedTenantSymphonyRoute;
   "/_authed/_tenant/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
   "/_authed/_tenant/agents/$agentId": typeof AuthedTenantAgentsAgentIdRoute;
   "/_authed/_tenant/agents/invites": typeof AuthedTenantAgentsInvitesRoute;
@@ -966,7 +957,6 @@ export interface FileRouteTypes {
     | "/knowledge"
     | "/org"
     | "/settings"
-    | "/symphony"
     | "/agent-templates/defaults"
     | "/agents/$agentId"
     | "/agents/invites"
@@ -1058,7 +1048,6 @@ export interface FileRouteTypes {
     | "/dashboard"
     | "/org"
     | "/settings"
-    | "/symphony"
     | "/agent-templates/defaults"
     | "/agents/$agentId"
     | "/agents/invites"
@@ -1156,7 +1145,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/knowledge"
     | "/_authed/_tenant/org"
     | "/_authed/_tenant/settings"
-    | "/_authed/_tenant/symphony"
     | "/_authed/_tenant/agent-templates/defaults"
     | "/_authed/_tenant/agents/$agentId"
     | "/_authed/_tenant/agents/invites"
@@ -1305,13 +1293,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/";
       preLoaderRoute: typeof AuthedTenantRouteImport;
       parentRoute: typeof AuthedRoute;
-    };
-    "/_authed/_tenant/symphony": {
-      id: "/_authed/_tenant/symphony";
-      path: "/symphony";
-      fullPath: "/symphony";
-      preLoaderRoute: typeof AuthedTenantSymphonyRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/settings": {
       id: "/_authed/_tenant/settings";
@@ -2046,7 +2027,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren;
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute;
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute;
-  AuthedTenantSymphonyRoute: typeof AuthedTenantSymphonyRoute;
   AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute;
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute;
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute;
@@ -2117,7 +2097,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantKnowledgeRoute: AuthedTenantKnowledgeRouteWithChildren,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
-  AuthedTenantSymphonyRoute: AuthedTenantSymphonyRoute,
   AuthedTenantAgentTemplatesDefaultsRoute:
     AuthedTenantAgentTemplatesDefaultsRoute,
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,

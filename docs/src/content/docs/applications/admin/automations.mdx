@@ -82,7 +82,7 @@ The webhook surface that previously lived at `/webhooks`. Behavior is unchanged 
 
 - **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not Automations. Routine-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
 - **Per-thread agent invocations** — those live in [Threads](/applications/admin/threads/). Routines are distinct: a routine execution has its own `routine_executions` row, not a `thread_turns` row, and is observable through the run-detail graph rather than a chat timeline.
-- **Per-user OAuth or connector credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
+- **Per-user OAuth or integration credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
 - **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the Phase E migration and excluded from the routines list. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
 
 ## Under the hood

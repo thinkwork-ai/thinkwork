@@ -9,9 +9,9 @@
 # In production this module will contain 30+ Lambda functions covering:
 # - GraphQL HTTP handler (the main API entry point)
 # - Agent invoke / chat
-# - Thread, agent, template, connector CRUD
+# - Thread, agent, and template CRUD
 # - Skills, KB, memory handlers
-# - Connectors (Slack, GitHub, Google)
+# - Webhook, MCP, and OAuth handlers
 # - Email inbound/outbound
 # - OAuth callbacks
 ################################################################################

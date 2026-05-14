@@ -23,7 +23,7 @@ export interface CustomizeTabBodyProps {
 }
 
 /**
- * Shared body chrome for the Connectors / Skills / Workflows tabs. Owns
+ * Shared body chrome for the Skills / Workflows tabs. Owns
  * the per-page toolbar (search left, tabs centered, category right),
  * the DataTable below it, and the side Sheet that opens when a row is
  * clicked. Real data wiring lands in U4-U6.

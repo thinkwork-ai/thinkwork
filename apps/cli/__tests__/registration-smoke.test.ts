@@ -19,7 +19,6 @@ import { registerScheduledJobCommand } from "../src/commands/scheduled-job.js";
 import { registerTurnCommand } from "../src/commands/turn.js";
 import { registerWakeupCommand } from "../src/commands/wakeup.js";
 import { registerWebhookCommand } from "../src/commands/webhook.js";
-import { registerConnectorCommand } from "../src/commands/connector.js";
 import { registerSkillCommand } from "../src/commands/skill.js";
 import { registerMemoryCommand } from "../src/commands/memory.js";
 import { registerRecipeCommand } from "../src/commands/recipe.js";
@@ -135,12 +134,6 @@ const DOMAINS: DomainCase[] = [
     phase: 3,
     register: registerWebhookCommand,
     expectedSubcommand: "rotate",
-  },
-  {
-    domain: "connector",
-    phase: 3,
-    register: registerConnectorCommand,
-    expectedSubcommand: "enable",
   },
   {
     domain: "skill",
@@ -276,9 +269,9 @@ describe("stub registration (taxonomy smoke test)", () => {
     vi.restoreAllMocks();
   });
 
-  it("covers 25 domain groups and 1 leaf command for a total of 26 Phase-0 scaffolds", () => {
+  it("covers 24 domain groups and 1 leaf command for a total of 25 Phase-0 scaffolds", () => {
     // Guards against accidental drops when someone deletes a register() import.
-    expect(DOMAINS.length).toBe(25);
+    expect(DOMAINS.length).toBe(24);
   });
 });
 

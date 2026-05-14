@@ -519,7 +519,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 |-------|----------|
 | 1 — Work & approvals | [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) |
 | 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
-| 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`connector`](#connector), [`skill`](#skill) |
+| 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
@@ -686,16 +686,6 @@ Inbound webhooks that dispatch agents or routines.
 thinkwork webhook list | get <id> | create [name] --target-type AGENT|ROUTINE --target-id <id> [--rate-limit]
 thinkwork webhook update <id> | delete <id>
 thinkwork webhook test <id> [--payload <json>] | rotate <id> | deliveries <id> [--limit]
-```
-
-### connector
-
-Third-party integrations (Slack, GitHub, Linear, …).
-
-```bash
-thinkwork connector list [--enabled-only] | get <slug>
-thinkwork connector enable <slug> [--config <json>] [--config-file]
-thinkwork connector disable <slug> | test <slug>
 ```
 
 ### skill

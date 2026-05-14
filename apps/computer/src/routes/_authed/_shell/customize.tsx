@@ -6,7 +6,6 @@ export const Route = createFileRoute("/_authed/_shell/customize")({
 });
 
 export const CUSTOMIZE_TABS = [
-  { to: "/customize/connectors", label: "Connectors" },
   { to: "/customize/skills", label: "Skills" },
   { to: "/customize/workflows", label: "Workflows" },
 ] as const;

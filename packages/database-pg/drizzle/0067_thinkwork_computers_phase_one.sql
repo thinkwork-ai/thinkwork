@@ -13,7 +13,6 @@
 -- creates: public.computer_tasks
 -- creates: public.computer_events
 -- creates: public.computer_snapshots
--- creates: public.computer_delegations
 -- creates: public.uq_computers_tenant_slug
 -- creates: public.uq_computers_active_owner
 -- creates: public.idx_computers_tenant_status
@@ -26,8 +25,6 @@
 -- creates: public.idx_computer_events_computer_created
 -- creates: public.idx_computer_events_task
 -- creates: public.idx_computer_snapshots_computer_created
--- creates: public.idx_computer_delegations_computer_status
--- creates: public.idx_computer_delegations_agent
 
 \set ON_ERROR_STOP on
 
@@ -173,29 +170,5 @@ CREATE TABLE IF NOT EXISTS public.computer_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_computer_snapshots_computer_created
   ON public.computer_snapshots (computer_id, created_at);
-
-CREATE TABLE IF NOT EXISTS public.computer_delegations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  computer_id uuid NOT NULL REFERENCES public.computers(id) ON DELETE CASCADE,
-  agent_id uuid NOT NULL REFERENCES public.agents(id),
-  task_id uuid REFERENCES public.computer_tasks(id) ON DELETE SET NULL,
-  status text NOT NULL DEFAULT 'pending',
-  input_artifacts jsonb,
-  output_artifacts jsonb,
-  result jsonb,
-  error jsonb,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  completed_at timestamp with time zone,
-  CONSTRAINT computer_delegations_status_allowed CHECK (
-    status IN ('pending', 'running', 'completed', 'failed', 'cancelled')
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_computer_delegations_computer_status
-  ON public.computer_delegations (computer_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_computer_delegations_agent
-  ON public.computer_delegations (agent_id);
 
 COMMIT;

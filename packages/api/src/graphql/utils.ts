@@ -92,7 +92,6 @@ import {
   computerTasks,
   computerEvents,
   computerSnapshots,
-  computerDelegations,
   tenantRunbookCatalog,
   computerRunbookRuns,
   computerRunbookTasks,
@@ -108,10 +107,8 @@ import {
   tenantMcpContextTools,
   tenantCredentials,
   // Customize page (apps/computer)
-  connectors,
   skillCatalog,
   tenantSkills,
-  tenantConnectorCatalog,
   tenantWorkflowCatalog,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
@@ -187,7 +184,6 @@ export {
   computerTasks,
   computerEvents,
   computerSnapshots,
-  computerDelegations,
   tenantRunbookCatalog,
   computerRunbookRuns,
   computerRunbookTasks,
@@ -198,10 +194,8 @@ export {
   resolvedCapabilityManifests,
   tenantMcpContextTools,
   tenantCredentials,
-  connectors,
   skillCatalog,
   tenantSkills,
-  tenantConnectorCatalog,
   tenantWorkflowCatalog,
   checkAndFireUnblockWakeups,
   generateSlug,

@@ -24,11 +24,11 @@ Schedules are created and managed in the admin app (Scheduled Jobs surface) or v
 
 ### Event-driven
 
-An event-driven automation fires when something external happens: a webhook arrives, a connector event lands, an external task changes state, a KPI crosses a threshold. Event-driven automations in ThinkWork route through **EventBridge** (the custom event bus, not scheduled rules). A triggering event carries a `detail-type`, `source`, and `detail` payload; ThinkWork's event trigger rules match on those fields.
+An event-driven automation fires when something external happens: a webhook arrives, a integration event lands, an external task changes state, a KPI crosses a threshold. Event-driven automations in ThinkWork route through **EventBridge** (the custom event bus, not scheduled rules). A triggering event carries a `detail-type`, `source`, and `detail` payload; ThinkWork's event trigger rules match on those fields.
 
 Event-driven triggers in ThinkWork can be configured for:
 
-- Connector events (`GitHub: new issue`, `Slack: app mention in #ops`).
+- Integration events (`GitHub: new issue`, `Slack: app mention in #ops`).
 - External task events (`Task assigned to me`).
 - Internal events (agent completed a turn of a specific type; a guardrail fired; a budget was hit).
 - Webhook events (custom external webhook routed into the event bus).
@@ -108,7 +108,7 @@ For event-driven automations:
 - [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) — what happens after the trigger fires
 - [Admin: Automations](/applications/admin/automations/) — the UI
 - [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — where AUTO threads fit
-- [Connectors](/concepts/connectors/) — how connector events become triggers
+- [Integrations](/concepts/integrations) — how integration events become triggers
 
 ## Under the hood
 

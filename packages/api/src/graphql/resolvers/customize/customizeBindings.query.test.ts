@@ -12,7 +12,6 @@ const {
     migrated_from_agent_id: null,
   },
   state: {
-    connectorRows: [] as Array<{ catalog_slug: string | null; status: string }>,
     skillRows: [] as Array<{ skill_id: string }>,
     workflowRows: [] as Array<{ catalog_slug: string | null }>,
     computerFound: true,
@@ -28,7 +27,6 @@ vi.mock("../../utils.js", () => ({
           if (name === "computers") {
             return state.computerFound ? [computerRow] : [];
           }
-          if (name === "connectors") return state.connectorRows;
           if (name === "agent_skills") return state.skillRows;
           if (name === "routines") return state.workflowRows;
           return [];
@@ -41,15 +39,6 @@ vi.mock("../../utils.js", () => ({
   ne: (...args: unknown[]) => args,
   isNotNull: (col: unknown) => ({ isNotNull: col }),
   computers: { __name: "computers" },
-  connectors: {
-    __name: "connectors",
-    tenant_id: "tenant_id",
-    dispatch_target_type: "dispatch_target_type",
-    dispatch_target_id: "dispatch_target_id",
-    enabled: "enabled",
-    catalog_slug: "catalog_slug",
-    status: "status",
-  },
   agentSkills: {
     __name: "agent_skills",
     agent_id: "agent_id",
@@ -79,7 +68,6 @@ describe("customizeBindings.connectedWorkflowSlugs", () => {
       userId: "user-1",
       tenantId: "tenant-1",
     });
-    state.connectorRows = [];
     state.skillRows = [];
     state.workflowRows = [];
     state.computerFound = true;
@@ -143,17 +131,12 @@ describe("customizeBindings.connectedWorkflowSlugs", () => {
     expect(result).toBeNull();
   });
 
-  it("regression: connector + skill projections still work alongside the new workflows projection", async () => {
-    state.connectorRows = [
-      { catalog_slug: "slack", status: "active" },
-      { catalog_slug: "github", status: "active" },
-    ];
+  it("returns skill and workflow projections together", async () => {
     state.skillRows = [{ skill_id: "sales-prep" }];
     state.workflowRows = [{ catalog_slug: "daily-digest" }];
     const result = await customizeBindings(null, undefined, ctx);
     expect(result).toEqual({
       computerId: "computer-1",
-      connectedConnectorSlugs: ["slack", "github"],
       connectedSkillIds: ["sales-prep"],
       connectedWorkflowSlugs: ["daily-digest"],
     });

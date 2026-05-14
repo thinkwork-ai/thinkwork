@@ -27,7 +27,7 @@ ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`
 
 <CardGrid>
   <Card title="Scheduled and Event-driven" icon="time">
-    Cron-like schedules ("every weekday at 9am") and event triggers (webhooks, connector events). Backed by AWS Scheduler + EventBridge. Both can target a routine or a single agent invocation.
+    Cron-like schedules ("every weekday at 9am") and event triggers (webhooks, integration events). Backed by AWS Scheduler + EventBridge. Both can target a routine or a single agent invocation.
   </Card>
   <Card title="Routines and Execution Model" icon="gear">
     Multi-step work backed by Step Functions — branching, retries, human-in-the-loop waits, parallel fan-out, and failure handling, all composed from a small fixed catalog of recipes that the chat builder agent emits as ASL.
@@ -53,7 +53,7 @@ The chat builder picks the shape automatically. If the operator's intent decompo
 
 ## Routines: composed from a fixed recipe catalog
 
-A routine is composed from a small vocabulary of recipes — `http_request`, `aurora_query`, `slack_send`, `email_send`, `inbox_approval`, `python`, `agent_invoke`, `tool_invoke`, `routine_invoke`, plus the ASL primitives `choice`, `wait`, `map`, `sequence`, `fail`. Each recipe has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. The catalog stays small on purpose so the chat builder can keep the surface area human-readable; new recipes are added as real connector demand surfaces.
+A routine is composed from a small vocabulary of recipes — `http_request`, `aurora_query`, `slack_send`, `email_send`, `inbox_approval`, `python`, `agent_invoke`, `tool_invoke`, `routine_invoke`, plus the ASL primitives `choice`, `wait`, `map`, `sequence`, `fail`. Each recipe has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. The catalog stays small on purpose so the chat builder can keep the surface area human-readable; new recipes are added as real integration demand surfaces.
 
 `python` is the escape hatch for behavior no recipe covers. It runs in an AgentCore code-interpreter sandbox with an explicit env-var allowlist; the `routine-task-python` wrapper offloads stdout/stderr to S3 with a 4KB inline preview so a 10MB python step doesn't blow Step Functions' 256KB state-payload limit.
 

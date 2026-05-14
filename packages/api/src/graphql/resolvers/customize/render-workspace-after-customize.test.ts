@@ -25,7 +25,7 @@ describe("renderWorkspaceAfterCustomize", () => {
   it("invokes the renderer with (agentId, computerId) on the happy path", async () => {
     mockRegenerateWorkspaceMap.mockResolvedValue(undefined);
     await renderWorkspaceAfterCustomize(
-      "enableConnector",
+      "enableWorkflow",
       "agent-primary",
       "computer-1",
     );

@@ -1,21 +1,21 @@
 ---
 title: Routing and Metadata
-description: How inbound connector events become threads — the normalization path, channel-specific metadata, and how Computers and managed Agents see source context.
+description: How inbound integration events become threads — the normalization path, channel-specific metadata, and how Computers and managed Agents see source context.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-When a Slack message, a GitHub issue comment, or an inbound Linear issue arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that the Computer or delegated managed Agent can write back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes structured work. The metadata that carries through is what makes the **Security** operating guarantee work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
+When a Slack message, a GitHub issue comment, or an inbound Linear issue arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that the Computer or delegated managed Agent can write back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Integrations](/concepts/integrations)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes structured work. The metadata that carries through is what makes the **Security** operating guarantee work at the integration boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
 
 ## The routing question
 
-Every inbound connector event answers the same three routing questions before it becomes a thread turn:
+Every inbound integration event answers the same three routing questions before it becomes a thread turn:
 
 1. **Does a thread already exist for this external conversation?** A Slack threaded reply should land in the same ThinkWork thread as the original message, not a new one.
 2. **If yes, is that thread still open?** A reply to a `DONE` thread should reopen it, not silently drop.
 3. **If no thread exists, which Computer should own the new one?** The inbound event may name a target, or the tenant may have a default routing rule.
 
-Each connector runtime runs through those questions before creating or updating a thread. The answers live in channel-specific metadata.
+Each integration runtime runs through those questions before creating or updating a thread. The answers live in channel-specific metadata.
 
 ## What metadata carries
 
@@ -33,7 +33,7 @@ Every thread has a `metadata` JSON column. Channel determines what that column h
 }
 ```
 
-`threadTs` is the Slack-native thread identifier — the first message's timestamp. Every subsequent message in that Slack thread carries the same `threadTs`, which is how the connector finds the existing ThinkWork thread on reply. If `threadTs` is absent (the user sent a top-level message, not a threaded reply), the connector either matches to a same-`channelId` open thread or creates a new one.
+`threadTs` is the Slack-native thread identifier — the first message's timestamp. Every subsequent message in that Slack thread carries the same `threadTs`, which is how the integration finds the existing ThinkWork thread on reply. If `threadTs` is absent (the user sent a top-level message, not a threaded reply), the integration either matches to a same-`channelId` open thread or creates a new one.
 
 ### `GITHUB`
 
@@ -75,7 +75,7 @@ SES inbound lookup uses `inReplyTo` and `references` to stitch replies into exis
 }
 ```
 
-Task connectors update the thread's metadata on every external state change so the mobile task card always reflects current task state without needing a round-trip to the external system at render time.
+Task integrations update the thread's metadata on every external state change so the mobile task card always reflects current task state without needing a round-trip to the external system at render time.
 
 ### `AUTO` and `CHAT`
 
@@ -86,29 +86,29 @@ Internal channels have simpler metadata:
 
 ## How to configure it
 
-Routing is configured per connector in the relevant admin surface, such as [Symphony](/applications/admin/symphony/) for Linear tracker work or [Webhooks](/applications/admin/webhooks/) for custom inbound events. The thread side of routing — which Computer owns a new thread, what channel a thread starts in, and what metadata follows it — is downstream of the connector configuration.
+Routing is configured per integration in the relevant admin surface, such as [private extension](/applications/admin/) for Linear tracker work or [Webhooks](/applications/admin/webhooks/) for custom inbound events. The thread side of routing — which Computer owns a new thread, what channel a thread starts in, and what metadata follows it — is downstream of the integration configuration.
 
 ### What's tenant-scoped (admin web)
 
-- **Target Computer per connector.** Every connector that creates work needs a target Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
-- **Routing rules per connector.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the connector's target Computer runs.
-- **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the connector's reopen mode to `disabled`.
-- **Signing secret rotation.** Each connector's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active connector runtimes pick up the new value from deployed configuration. See [Connectors → credential vault](/concepts/connectors/#credential-vault).
+- **Target Computer per integration.** Every integration that creates work needs a target Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
+- **Routing rules per integration.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the integration's target Computer runs.
+- **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the integration's reopen mode to `disabled`.
+- **Signing secret rotation.** Each integration's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active integration runtimes pick up the new value from deployed configuration. See [Integrations → credential vault](/concepts/integrations#credential-vault).
 
 ### What's deployment-scoped (Terraform)
 
-- **The metadata schema per channel.** Each channel's `metadata` JSON shape is enforced at the application layer by TypeScript types in the connector + outbound handler. Adding a field to existing channel metadata is a code change, not configuration. New channels require the three-seam pattern in [Lifecycle and Types → Channel set](/concepts/threads/lifecycle-and-types/#known-limits).
-- **Webhook ingress paths.** The API Gateway route per connector (e.g., `/connectors/slack/webhook`) is wired in Terraform. Adding a new connector means a new route + Lambda; not a knob.
+- **The metadata schema per channel.** Each channel's `metadata` JSON shape is enforced at the application layer by TypeScript types in the integration + outbound handler. Adding a field to existing channel metadata is a code change, not configuration. New channels require the three-seam pattern in [Lifecycle and Types → Channel set](/concepts/threads/lifecycle-and-types/#known-limits).
+- **Webhook ingress paths.** The API Gateway route per integration (e.g., `/integrations/slack/webhook`) is wired in Terraform. Adding a new integration means a new route + Lambda; not a knob.
 
 ## A worked example: Slack → thread
 
 Here's the full path of an inbound Slack message becoming a thread turn.
 
-1. **Slack fires a webhook.** Slack POSTs an `event_callback` to `/connectors/slack/webhook` on API Gateway.
-2. **Webhook signature verified.** The Slack connector runtime validates the `X-Slack-Signature` header against the tenant credential vault.
-3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the connector-agnostic shape the thread path consumes.
-4. **Routing check.** The connector queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
-5. **Target resolution.** For a new thread, the Lambda picks a Computer target: the target of an @-mention, a channel binding, or the connector default. For an existing thread, the assigned Computer already owns it.
+1. **Slack fires a webhook.** Slack POSTs an `event_callback` to `/integrations/slack/webhook` on API Gateway.
+2. **Webhook signature verified.** The Slack integration runtime validates the `X-Slack-Signature` header against the tenant credential vault.
+3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the integration-agnostic shape the thread path consumes.
+4. **Routing check.** The integration queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
+5. **Target resolution.** For a new thread, the Lambda picks a Computer target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the assigned Computer already owns it.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
 7. **Computer invoked.** The Computer runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
 8. **Reply or delegation.** The Computer handles the work or delegates to a managed Agent. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
@@ -125,17 +125,17 @@ This is the system boundary made useful: the worker is channel-agnostic in its r
 
 - **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops Computer _and_ the PagerDuty integration" requires two separate routing setups today.
 - **Thread merging is manual.** If a customer emails and then follows up on Slack, the two threads stay separate. An operator can mark one as a duplicate, but the system doesn't auto-merge.
-- **Webhook replay isn't idempotent at the event level.** A connector Lambda deduping on provider-specific event ids is the right fix; today it happens inconsistently across providers.
+- **Webhook replay isn't idempotent at the event level.** A integration Lambda deduping on provider-specific event ids is the right fix; today it happens inconsistently across providers.
 
 ## Related pages
 
 - [Threads (overview)](/concepts/threads/) — the universal container
 - [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — status, channel, priority
-- [Connectors](/concepts/connectors/) — the integrations that produce these events
+- [Integrations](/concepts/integrations) — the integrations that produce these events
 - [Admin: Threads](/applications/admin/threads/) — where metadata is visible in the UI
 
 ## Under the hood
 
-Inbound connector handlers live in `packages/api/src/handlers/` (one per provider — e.g., `github-app.ts`, `email-inbound.ts`). Each verifies the provider's signature, normalizes the event into a shared shape, and calls the same internal thread-resolution path before appending or creating.
+Inbound integration handlers live in `packages/api/src/handlers/` (one per provider — e.g., `github-app.ts`, `email-inbound.ts`). Each verifies the provider's signature, normalizes the event into a shared shape, and calls the same internal thread-resolution path before appending or creating.
 
-The `metadata` column is JSONB — no Postgres-level schema — with shape enforced at the application layer by the TypeScript types the connectors and outbound reply handlers share. Outbound handlers read from the same `metadata` to decide where to post a reply.
+The `metadata` column is JSONB — no Postgres-level schema — with shape enforced at the application layer by the TypeScript types the integrations and outbound reply handlers share. Outbound handlers read from the same `metadata` to decide where to post a reply.

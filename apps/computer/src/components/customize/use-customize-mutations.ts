@@ -2,10 +2,8 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, type AnyVariables, type TypedDocumentNode } from "urql";
 import { toast } from "sonner";
 import {
-  DisableConnectorMutation,
   DisableSkillMutation,
   DisableWorkflowMutation,
-  EnableConnectorMutation,
   EnableSkillMutation,
   EnableWorkflowMutation,
   MyComputerQuery,
@@ -20,15 +18,6 @@ export interface UseToggleMutationResult {
   pendingSlugs: ReadonlySet<string>;
 }
 
-/** Back-compat aliases retained from U4 / U5 wiring. */
-export type UseConnectorMutationResult = UseToggleMutationResult;
-
-const CONNECTOR_TYPENAMES = [
-  "Connector",
-  "ConnectorBinding",
-  "CustomizeBindings",
-] as const;
-
 const SKILL_TYPENAMES = ["AgentSkill", "CustomizeBindings"] as const;
 
 const WORKFLOW_TYPENAMES = [
@@ -36,10 +25,6 @@ const WORKFLOW_TYPENAMES = [
   "WorkflowBinding",
   "CustomizeBindings",
 ] as const;
-
-/** Surfaced when a user clicks Connect on an MCP-kind card. */
-export const MCP_VIA_MOBILE_HINT =
-  "Connect this MCP server from the mobile app's per-user OAuth flow.";
 
 /** Surfaced when the server rejects a built-in tool slug toggle. */
 export const BUILTIN_TOOL_HINT =
@@ -61,16 +46,6 @@ interface ToggleMutationOptions {
 // passes a stable reference into useToggleMutation. Inline object
 // literals would invalidate `toggle`'s useCallback deps every render
 // and bust referential identity for downstream consumers.
-const CONNECTOR_OPTS: ToggleMutationOptions = {
-  enableMutation: EnableConnectorMutation,
-  disableMutation: DisableConnectorMutation,
-  typenames: CONNECTOR_TYPENAMES,
-  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
-  errorCodeHints: {
-    CUSTOMIZE_MCP_NOT_SUPPORTED: MCP_VIA_MOBILE_HINT,
-  },
-};
-
 const SKILL_OPTS: ToggleMutationOptions = {
   enableMutation: EnableSkillMutation,
   disableMutation: DisableSkillMutation,
@@ -97,8 +72,8 @@ const WORKFLOW_OPTS: ToggleMutationOptions = {
  * server `extensions.code` errors to per-mutation hint messages when
  * present (otherwise falls back to `toast.error(message)`).
  *
- * The connector / skill / workflow hooks are now thin wrappers around
- * this helper. Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-4.
+ * The skill / workflow hooks are thin wrappers around this helper.
+ * Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-4.
  */
 export function useToggleMutation(
   opts: ToggleMutationOptions,
@@ -157,19 +132,6 @@ export function useToggleMutation(
   );
 
   return { toggle, pendingSlugs };
-}
-
-/**
- * urql wrapper for the Connectors-tab Connect / Disable button. Composes
- * useToggleMutation with the connector mutation pair, the
- * `CONNECTOR_TYPENAMES` invalidation set, and routes
- * `CUSTOMIZE_MCP_NOT_SUPPORTED` to MCP_VIA_MOBILE_HINT.
- *
- * MCP-kind catalog rows must NOT be passed to this hook; the per-tab
- * page short-circuits to MCP_VIA_MOBILE_HINT instead.
- */
-export function useConnectorMutation(): UseConnectorMutationResult {
-  return useToggleMutation(CONNECTOR_OPTS);
 }
 
 /**

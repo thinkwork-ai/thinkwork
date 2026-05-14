@@ -157,19 +157,11 @@ export default defineConfig({
               ],
             },
             {
-              label: "Connectors",
+              label: "Integrations",
               collapsed: true,
               items: [
-                { label: "Overview", slug: "concepts/connectors" },
-                {
-                  label: "Lifecycle",
-                  slug: "concepts/connectors/lifecycle",
-                },
-                {
-                  label: "Integrations",
-                  slug: "concepts/connectors/integrations",
-                },
-                { label: "MCP Tools", slug: "concepts/connectors/mcp-tools" },
+                { label: "Overview", slug: "concepts/integrations" },
+                { label: "MCP Tools", slug: "concepts/mcp-tools" },
               ],
             },
             {
@@ -239,11 +231,6 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { label: "Skill Packs", slug: "guides/skill-packs" },
-                { label: "Connectors", slug: "guides/connectors" },
-                {
-                  label: "Symphony Linear Checkpoint",
-                  slug: "guides/symphony-linear-checkpoint",
-                },
                 { label: "Evaluations", slug: "guides/evaluations" },
                 {
                   label: "Operating Compiled Pages",
@@ -320,10 +307,6 @@ export default defineConfig({
                         {
                           label: "Dashboard",
                           slug: "applications/admin/dashboard",
-                        },
-                        {
-                          label: "Symphony",
-                          slug: "applications/admin/symphony",
                         },
                         {
                           label: "Threads",

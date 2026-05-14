@@ -16,7 +16,6 @@ const {
       tenant_id: "tenant-1",
     } as { name: string; slug: string; tenant_id: string } | null,
     tenantSlug: "acme",
-    computer: null as { id: string; tenant_id: string } | null,
     skills: [] as Array<{
       skill_id: string;
       config: Record<string, unknown> | null;
@@ -26,12 +25,6 @@ const {
       id: string;
       name: string | null;
       description: string | null;
-    }>,
-    connectors: [] as Array<{
-      catalog_slug: string | null;
-      display_name: string;
-      description: string | null;
-      category: string | null;
     }>,
     workflows: [] as Array<{
       catalog_slug: string | null;
@@ -132,10 +125,8 @@ vi.mock("@thinkwork/database-pg", () => {
     const name = table.__name ?? "";
     if (name === "agents") return state.agent ? [state.agent] : [];
     if (name === "tenants") return [{ slug: state.tenantSlug }];
-    if (name === "computers") return state.computer ? [state.computer] : [];
     if (name === "agent_skills") return state.skills;
     if (name === "agent_knowledge_bases") return state.knowledgeBases;
-    if (name === "connectors") return state.connectors;
     if (name === "routines") return state.workflows;
     if (name === "skill_catalog") return state.skillCatalog;
     return [];
@@ -170,10 +161,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agentSkills: tagTable("agent_skills"),
   agentKnowledgeBases: tagTable("agent_knowledge_bases"),
   knowledgeBases: tagTable("knowledge_bases"),
-  computers: tagTable("computers"),
-  connectors: tagTable("connectors"),
   routines: tagTable("routines"),
-  tenantConnectorCatalog: tagTable("tenant_connector_catalog"),
   tenantWorkflowCatalog: tagTable("tenant_workflow_catalog"),
   skillCatalog: tagTable("skill_catalog"),
   tenants: tagTable("tenants"),
@@ -187,8 +175,6 @@ vi.mock("../workspace-manifest.js", () => ({
 vi.mock("drizzle-orm", () => ({
   eq: () => ({}),
   and: () => ({}),
-  or: () => ({}),
-  ne: () => ({}),
   asc: () => ({}),
   isNotNull: () => ({}),
 }));
@@ -204,10 +190,8 @@ function resetState(): void {
     tenant_id: "tenant-1",
   };
   state.tenantSlug = "acme";
-  state.computer = { id: "computer-1", tenant_id: "tenant-1" };
   state.skills = [];
   state.knowledgeBases = [];
-  state.connectors = [];
   state.workflows = [];
   state.skillCatalog = [];
   state.s3GetResponses.clear();
@@ -228,38 +212,6 @@ function lastWrittenAgentsMd(): string | null {
 beforeEach(() => {
   resetState();
   process.env.WORKSPACE_BUCKET = "thinkwork-dev-workspace";
-});
-
-describe("regenerateWorkspaceMap — Connectors projection", () => {
-  it("projects active connectors into the Connectors section keyed by Computer", async () => {
-    state.connectors = [
-      {
-        catalog_slug: "slack",
-        display_name: "Slack",
-        description: "Send and receive messages",
-        category: "Messaging",
-      },
-      {
-        catalog_slug: "github",
-        display_name: "GitHub",
-        description: "Repos, PRs, issues",
-        category: "Engineering",
-      },
-    ];
-    await regenerateWorkspaceMap("agent-1", "computer-1");
-    const md = lastWrittenAgentsMd();
-    expect(md).toContain("## Connectors");
-    expect(md).toContain("| Slack | Send and receive messages | Messaging |");
-    expect(md).toContain("| GitHub | Repos, PRs, issues | Engineering |");
-  });
-
-  it("renders empty Connectors section with placeholder line when none active", async () => {
-    state.connectors = [];
-    await regenerateWorkspaceMap("agent-1", "computer-1");
-    const md = lastWrittenAgentsMd();
-    expect(md).toContain("## Connectors");
-    expect(md).toContain("No connectors configured.");
-  });
 });
 
 describe("regenerateWorkspaceMap — Workflows projection", () => {
@@ -426,39 +378,5 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
     await regenerateWorkspaceMap("agent-1", "computer-1");
     expect(s3Calls.puts.length).toBe(2);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("regenerateWorkspaceMap — Computer fallback resolution", () => {
-  it("auto-resolves Computer from agentId when computerId is omitted", async () => {
-    state.connectors = [
-      {
-        catalog_slug: "slack",
-        display_name: "Slack",
-        description: null,
-        category: null,
-      },
-    ];
-    await regenerateWorkspaceMap("agent-1");
-    expect(lastWrittenAgentsMd()).toContain("| Slack | — | — |");
-  });
-
-  it("renders 'No connectors configured.' when no Computer found and no computerId given", async () => {
-    state.computer = null;
-    state.connectors = [
-      {
-        catalog_slug: "slack",
-        display_name: "Slack",
-        description: null,
-        category: null,
-      },
-    ];
-    await regenerateWorkspaceMap("agent-1");
-    const md = lastWrittenAgentsMd();
-    // Connectors section still rendered, but the connector list is empty
-    // because the renderer skipped the connectors query.
-    expect(md).toContain("## Connectors");
-    expect(md).toContain("No connectors configured.");
-    expect(md).not.toContain("| Slack |");
   });
 });

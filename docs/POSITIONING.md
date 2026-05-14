@@ -21,7 +21,7 @@ We are not an AI app. Not an agent-hosting service. Not a governance product. No
 That's the headline promise. Three load-bearing parts:
 
 1. **Production-grade.** Not demos, not chat. The harness ships every operating guarantee on day one: Reliability, Efficiency, Security, Traceability.
-2. **AI work.** Not just chat. Threads carry conversational *and* non-conversational work — automations, connector events, multi-step routines.
+2. **AI work.** Not just chat. Threads carry conversational *and* non-conversational work — automations, integration events, multi-step routines.
 3. **On AWS you own.** Inside the customer's AWS boundary. Their VPC, their IAM, their Aurora, their S3 audit log. No shared SaaS control plane. The runtime stays in their account across all three operating models.
 
 The strategic refrain: **The harness stays yours.**
@@ -47,7 +47,7 @@ We are deliberately *not* these things, and copy that drifts toward them is wron
 - **Not an AI adoption journey or governance program.** That's consulting. The "AI adoption journey" framing is retired across all surfaces.
 - **Not a hosted SaaS agent platform.** We do not run a multi-tenant control plane in our AWS. Even ThinkWork for Business deploys into the customer's AWS — we operate the runtime *in their account*, not ours. **Managed does not mean vendor-hosted.**
 - **Not "AgentCore + glue."** AgentCore is one runtime adapter beneath the harness. The harness is a contract above it (Threads, Memory, Audit, Cost, Templates) that survives any single vendor service.
-- **Not a chat product.** Threads carry every kind of work, not just chat. The thread shape is what makes audit, cost, and replay tractable across automations, connectors, and conversation.
+- **Not a chat product.** Threads carry every kind of work, not just chat. The thread shape is what makes audit, cost, and replay tractable across automations, integrations, and conversation.
 - **Not a Bedrock wrapper.** The harness is the durable layer; Bedrock is one execution surface. AgentCore Memory and Hindsight are interchangeable adapters under one ThinkWork memory contract.
 - **Not for K8s shops.** AWS-only is a positioning commitment, not a limitation. Trying to be cloud-neutral dilutes the wedge against hosted SaaS platforms.
 
@@ -66,7 +66,7 @@ The vocabulary the rest of the surface should pull from. Use these verbatim wher
 - **Runs in your AWS / inside your AWS boundary / your IAM / your account** — ownership reinforcers
 - **Reliability, Efficiency, Security, Traceability** — spelled out, on first use everywhere
 - **Operating guarantees** — collective shorthand for the four
-- **Threads / Memory / Agents / Connectors / Automations / Control** — the canonical six components
+- **Threads / Memory / Agents / Integrations / Automations / Control** — the canonical six components
 - **Pilot. Visible work. Expansion. Operate.** — the rollout path
 - **PPAF agent loop (Perception, Planning, Action, Feedback)** — docs only
 - **Self-host / operated / enterprise services** — the three doors

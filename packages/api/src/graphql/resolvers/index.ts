@@ -44,7 +44,6 @@ import {
   quickActionQueries,
   quickActionMutations,
 } from "./quick-actions/index.js";
-import { connectorQueries, connectorMutations } from "./connectors/index.js";
 import {
   computerQueries,
   computerMutations,
@@ -81,7 +80,6 @@ export const queryResolvers: Record<string, any> = {
   ...routineQueries,
   ...tenantCredentialQueries,
   ...quickActionQueries,
-  ...connectorQueries,
   ...computerQueries,
   ...runbookQueries,
   ...customizeQueries,
@@ -114,7 +112,6 @@ export const mutationResolvers: Record<string, any> = {
   ...routineMutations,
   ...tenantCredentialMutations,
   ...quickActionMutations,
-  ...connectorMutations,
   ...computerMutations,
   ...runbookMutations,
   ...customizeMutations,

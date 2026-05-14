@@ -1,285 +1,69 @@
 ---
-title: Computer Runbooks as Agent Skills Autopilot Status
-date: 2026-05-12
-plan: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
-target_branch: main
-status: complete
+title: "Autopilot status: retire OSS Symphony and connectors"
+date: 2026-05-14
+plan: docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md
+status: active
 ---
 
-# Computer Runbooks as Agent Skills Autopilot Status
+# Autopilot Status: Retire OSS Symphony And Connectors
 
 ## Current State
 
-- Active unit: none — all implementation units are merged
-- Active branch/worktree: none
-- Latest synced base: `origin/main` at `6020c015`
-- Overall status: complete
-- Plan: `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`
-
-## 2026-05-13 CRM Dashboard Streamline Hotfix
-
-- Branch/worktree: `.Codex/worktrees/streamline-crm-dashboard` on `codex/streamline-crm-dashboard`.
-- Live dev retest status: Marco's Computer now has `skills/crm-dashboard/references/thinkwork-runbook.json` at `sourceVersion: "0.2.0"` with the active `discover` and `produce` phases only. Cruz, GiGi, Loki, Marco, and Monica are linked to the `thinkwork-computer-default` Computer template; live workspace skill write tasks completed.
-- Dev data repair: updated four sleek-squirrel Computer rows and their four bound source-agent rows from the tenant `default` agent template to the platform `thinkwork-computer-default` Computer template. This did not delete or overwrite per-agent workspace files such as `SOUL.md`, `USER.md`, `IDENTITY.md`, or other overlay content.
-- Skill/source updates: streamlined CRM Dashboard runbook to fetch compact CRM data and produce/save one artifact, with old analyze/validate references retained only as superseded stubs.
-- Runtime durability updates: reduced AgentCore runbook step timeouts from hours to minutes, added Computer heartbeat cleanup for stale runbook steps, and wired the global `stall-monitor` Lambda into an EventBridge Scheduler rule.
-- Template propagation updates: added S3 workspace event fan-out for Computer template skill files so `_catalog/<template>/workspace/skills/...` updates enqueue live Computer EFS `workspace_file_write` / `workspace_file_delete` tasks.
-- Artifact compatibility updates: allowed named `lucide-react` imports in generated app policy/shims and updated Artifact Builder defaults to align with bounded lucide usage.
-- Model routing updates: added environment-driven model selection so non-artifact runbook steps and artifact generation steps can use different model IDs.
-- Follow-up idea captured: a future automation-based watcher could create a self-cleaning per-run monitor that wakes every 3-5 minutes to inspect a specific long-running task/run and report or cancel it if stale.
-- Verification passed so far: API focused tests/typecheck, Computer runtime tests/typecheck, UI/workspace-defaults focused tests/typechecks, Terraform fmt check, and `git diff --check`.
-- Verification caveat: repo `format:check` and `scripts/validate-skill-catalog.sh` cannot run locally in this checkout because root `prettier` and Python `yaml` are not installed in the current environment.
+- Target branch: `main`
+- Active unit: U1-U6 grouped, retire connector schema/API/UI/docs/generated surfaces
+- Active branch: `codex/retire-oss-connectors-u1`
+- Active worktree: `.Codex/worktrees/retire-oss-connectors-u1`
+- Started: 2026-05-14
 
 ## Progress Log
 
-- 2026-05-12: Autopilot started from `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`.
-- 2026-05-12: Closed and deleted the superseded `codex/runbook-template-assignments` remote branch/PR path before starting implementation.
-- 2026-05-12: Created U1 worktree `.Codex/worktrees/runbook-skill-u1` on branch `codex/runbook-skill-contract-u1` from `origin/main`.
-- 2026-05-12: U1 selected as the first implementation unit because U2 conversion depends on a stable runbook-capable skill contract and validator.
-- 2026-05-12: Implemented U1 runbook-capable skill validator, tests, skill-catalog README guidance, and landed the skill-native plan/superseded-doc markers in this unit branch.
-- 2026-05-12: U1 focused verification passed: `pnpm --filter @thinkwork/skill-catalog test -- runbook-skill-contract`, `pnpm --filter @thinkwork/skill-catalog typecheck`, `pnpm --filter @thinkwork/skill-catalog test`, and `git diff --check`.
-- 2026-05-12: Compound review/autofix pass found one safe hardening fix before PR: validate custom runbook contract paths as skill-local before reading them. Added coverage and reran focused checks.
-- 2026-05-12: U1 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: Opened U1 PR #1167 from `codex/runbook-skill-contract-u1`.
-- 2026-05-12: U1 PR #1167 passed required checks and was squash-merged to `main` at `13ea3df5`.
-- 2026-05-12: Removed U1 remote branch and local worktree, synced `origin/main`, and started U2 in `.Codex/worktrees/runbook-skills-u2` on branch `codex/runbook-skills-convert-u2`.
-- 2026-05-12: Began U2 by converting CRM Dashboard, Research Dashboard, and Map Artifact into runbook-capable catalog skill directories with `SKILL.md`, `references/thinkwork-runbook.json`, phase references, and output-shaping assets.
-- 2026-05-12: Updated the `@thinkwork/runbooks` compatibility loader to adapt runbook-capable catalog skills into the existing `RunbookDefinition` shape while the API migrates to direct skill discovery in U3.
-- 2026-05-12: Updated Lambda packaging to include catalog skill directories in `graphql-http.zip` and verified the zip contains the converted runbook skills.
-- 2026-05-12: U2 focused verification passed: catalog runbook contract tests, runbooks package tests/typecheck/build, API runbook tests/typecheck, docs build, smoke dry-run, shell syntax check, and `graphql-http` Lambda build.
-- 2026-05-12: U2 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: Compound review/autofix pass found two compatibility hardening cleanups before PR: wrap malformed skill YAML/JSON as `RunbookValidationError` and simplify the smoke dry-run phase reader. Re-ran focused checks.
-- 2026-05-12: Rebasing U2 onto `origin/main` brought in PR #1168 (`32ecce5d`) and preserved the CRM dashboard artifact quality-bar updates in `packages/skill-catalog/crm-dashboard/references/produce.md`; re-ran focused checks after the rebase.
-- 2026-05-12: Opened U2 PR #1169 from `codex/runbook-skills-convert-u2`; required checks passed and the PR was squash-merged to `main` at `914aee77`.
-- 2026-05-12: Removed U2 remote branch and local worktree, synced `origin/main`, and started U3 in `.Codex/worktrees/runbook-skill-u3` on branch `codex/runbook-skill-discovery-u3`.
-- 2026-05-12: Began U3 by adding a workspace skill discovery adapter that converts assigned `workspace/skills/<slug>/SKILL.md` plus `references/thinkwork-runbook.json` into the existing Computer run execution shape.
-- 2026-05-12: Removed production API usage of `runbookRegistry.all`/`runbookRegistry.require`; Computer routing now discovers runbook-capable skills from the active template workspace and queues confirmed runs from the stored definition snapshot.
-- 2026-05-12: U3 focused verification passed: `pnpm --filter @thinkwork/api test -- runbooks`, `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/api build`, `pnpm --filter @thinkwork/api test -- computer-thread-cutover-routing`, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: U3 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
-- 2026-05-12: Opened U3 PR #1170 from `codex/runbook-skill-discovery-u3`; required checks passed and the PR was squash-merged to `main` at `3d356154`.
-- 2026-05-12: Removed U3 remote branch and local worktree, synced `origin/main`, and started U4 in `.Codex/worktrees/runbook-skill-u4` on branch `codex/runbook-skill-admin-u4`.
-- 2026-05-12: Began U4 by adding a runbook-aware admin skill scaffold plus catalog filtering so Computer templates assign runbook-capable skills through the existing workspace `skills/<slug>/` install/remove flow.
-- 2026-05-12: U4 focused verification passed: `pnpm --filter @thinkwork/admin test -- skill-authoring-templates skills-api WorkspaceEditor.target`, `pnpm --filter @thinkwork/admin test`, `pnpm --filter @thinkwork/admin build`, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: U4 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, and `pnpm -r --if-present build`.
-- 2026-05-12: Opened U4 PR #1171 from `codex/runbook-skill-admin-u4`; required checks passed and the PR was squash-merged to `main` at `bc61526e`.
-- 2026-05-12: Removed U4 remote branch and local worktree, synced `origin/main`, and started U5 in `.Codex/worktrees/runbook-skill-u5` on branch `codex/runbook-skill-runtime-u5`.
-- 2026-05-12: Began U5 by making run snapshots preserve activated skill source metadata, SKILL.md checksums/content, contract checksums, asset references, and Strands skill-instruction context.
-- 2026-05-12: U5 local verification passed: focused API runtime/run snapshot tests, focused Strands runbook context/capability tests, API typecheck/build, API runbook suite, Python ruff checks, workspace typecheck/test/lint/build, touched-file Prettier check, and `git diff --check`.
-- 2026-05-12: Opened U5 PR #1172 from `codex/runbook-skill-runtime-u5`.
-- 2026-05-12: U5 PR #1172 passed required checks and was squash-merged to `main` at `185c31cf`.
-- 2026-05-12: Removed U5 remote branch and local worktree, synced `origin/main`, and started U6 in `.Codex/worktrees/runbook-skill-u6` on branch `codex/runbook-skill-cleanup-u6`.
-- 2026-05-12: Began U6 by folding the remaining `@thinkwork/runbooks` validation/type surface into API internals, switching API tests to skill-catalog fixtures, removing the compatibility package, and updating current docs/comments away from the retired package.
-- 2026-05-12: U6 focused verification passed: API runbook tests/typecheck/build, skill-catalog tests, docs build, package-reference searches, `bash -n scripts/build-lambdas.sh`, and touched-file Prettier.
-- 2026-05-12: U6 broad verification passed: `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`, and a clean rerun of `pnpm -r --if-present test`. An earlier full workspace test attempt, run in parallel with typecheck, hit a transient `applets-resolvers.test.ts` timeout; the file passed alone and the full API/workspace reruns passed.
-- 2026-05-12: Opened U6 PR #1176 from `codex/runbook-skill-cleanup-u6`; required checks passed after local verification.
-- 2026-05-12: U6 PR #1176 passed required checks and was squash-merged to `main` at `6020c015`.
-- 2026-05-12: Removed U6 remote branch and local worktree, synced `origin/main`, and completed all implementation units for the Agent Skills runbook refactor.
+### 2026-05-14
 
-## Current Implementation Units
+- Read `AGENTS.md`.
+- Read `docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md`.
+- Read migration-related prior learnings:
+  - `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`
+  - `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`
+- Created isolated worktree from `origin/main` for U1.
+- Confirmed `origin/main` already has `0086_update_default_template_models.sql`; U1 will use `0087_retire_oss_connectors.sql`.
+- Implemented the grouped U1-U6 cleanup:
+  - Removed the OSS connector/Symphony GraphQL contract, generated clients, admin/computer UI routes, CLI command, runtime/poller code, Terraform poller resources, and public docs.
+  - Removed connector database schema exports and obsolete connector migrations from the OSS tree.
+  - Added `0087_retire_oss_connectors.sql` to drop installed connector tables and tracker-specific external refs during upgrade.
+  - Replaced connector-focused docs with narrower integration/MCP language that does not expose Symphony as an OSS feature.
+- Verified repo search no longer finds active Symphony/connector runtime identifiers outside the retirement migration and tests.
 
-| Unit                                                                         | Status | Branch                             | PR    | Notes                                                                      |
-| ---------------------------------------------------------------------------- | ------ | ---------------------------------- | ----- | -------------------------------------------------------------------------- |
-| U1 Define runbook-capable skill contract                                     | merged | `codex/runbook-skill-contract-u1`  | #1167 | Squash-merged to `main` at `13ea3df5`; remote branch and worktree removed. |
-| U2 Convert existing packaged runbooks into skills                            | merged | `codex/runbook-skills-convert-u2`  | #1169 | Squash-merged to `main` at `914aee77`; remote branch and worktree removed. |
-| U3 Replace `@thinkwork/runbooks` registry usage with skill catalog discovery | merged | `codex/runbook-skill-discovery-u3` | #1170 | Squash-merged to `main` at `3d356154`; remote branch and worktree removed. |
-| U4 Make admin assignment skill-native                                        | merged | `codex/runbook-skill-admin-u4`     | #1171 | Squash-merged to `main` at `bc61526e`; remote branch and worktree removed. |
-| U5 Adapt execution snapshots and runtime context                             | merged | `codex/runbook-skill-runtime-u5`   | #1172 | Squash-merged to `main` at `185c31cf`; remote branch and worktree removed. |
-| U6 Clean up compatibility package and naming                                 | merged | `codex/runbook-skill-cleanup-u6`   | #1176 | Squash-merged to `main` at `6020c015`; remote branch and worktree removed. |
+## Pull Requests
 
-## Current CI / Verification Notes
+| Unit | Branch | PR | Status | Notes |
+| --- | --- | --- | --- | --- |
+| U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | CI passed; merge pending | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
 
-| Unit | Check                                                                                                                                                      | Status | Notes                                                                                                                                                                                |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| U5   | `pnpm --filter @thinkwork/api test -- runbooks/runs runbooks/runtime-api`                                                                                  | passed | Snapshot and runtime capability helper tests passed.                                                                                                                                 |
-| U5   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed after snapshot and runtime changes.                                                                                                                         |
-| U5   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                                                                                                                   |
-| U5   | `uv run pytest packages/agentcore-strands/agent-container/test_runbook_context.py packages/agentcore-strands/agent-container/test_runbook_capabilities.py` | passed | Focused Strands context and capability tests passed.                                                                                                                                 |
-| U5   | `uv run ruff format --check ...` / `uv run ruff check ...`                                                                                                 | passed | Focused Python formatting and lint checks passed.                                                                                                                                    |
-| U5   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                      |
-| U5   | `pnpm dlx prettier@3.8.2 --check ...` / `git diff --check`                                                                                                 | passed | Touched-file Prettier check and whitespace check passed.                                                                                                                             |
-| U6   | `pnpm --filter @thinkwork/api test -- runbooks`                                                                                                            | passed | API runbook suite passed against skill-catalog fixtures after package removal.                                                                                                       |
-| U6   | `pnpm --filter @thinkwork/api typecheck` / `pnpm --filter @thinkwork/api build`                                                                            | passed | API package typecheck and build completed cleanly.                                                                                                                                   |
-| U6   | `pnpm --filter @thinkwork/skill-catalog test` / `pnpm --filter @thinkwork/docs build`                                                                      | passed | Skill contract/catalog coverage and docs build completed cleanly.                                                                                                                    |
-| U6   | package-reference searches                                                                                                                                 | passed | Live `packages`, `apps`, `scripts`, and `docs/src` contain no `@thinkwork/runbooks` or `packages/runbooks` references; remaining `runbook.yaml` hits are negative tests/docs guards. |
-| U6   | `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present lint`, `pnpm -r --if-present build`                                   | passed | Workspace verification completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                      |
-| U6   | `bash -n scripts/build-lambdas.sh`, `pnpm dlx prettier@3.8.2 --check ...`, `git diff --check`                                                              | passed | Shell syntax, touched-file formatting, and whitespace checks passed.                                                                                                                 |
-| U6   | GitHub required checks                                                                                                                                     | passed | cla, lint, test, typecheck, and verify passed on PR #1176 before merge.                                                                                                              |
+## CI / Verification Log
 
-## Previous Autopilot Archive
-
-The history below belongs to the earlier Computer Runbooks Foundation autopilot run for `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`. It is retained for continuity but is not the active run.
-
-- 2026-05-10: Autopilot started from `docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md`.
-- 2026-05-10: Post-merge live smoke found deployed `runbookCatalog` returning no rows because the GraphQL Lambda artifact did not include the source-authored runbook YAML/Markdown assets. Started `codex/fix-runbook-lambda-assets` to include those assets in the `graphql-http` zip before rerunning live end-to-end validation.
-- 2026-05-10: After PR #1131 deployed, `runbookCatalog` still returned no rows because the bundled loader resolved `../runbooks` above `/var/task`. Started `codex/fix-runbook-loader-bundle-root` to resolve the bundled `/var/task/runbooks` root.
-- 2026-05-10: U1 selected as the first implementation unit because it has no dependencies and is required by U2/U3.
-- 2026-05-10: Created U1 worktree `.Codex/worktrees/runbooks-u1` on branch `codex/runbooks-u1` from `origin/main`.
-- 2026-05-10: Implemented initial `@thinkwork/runbooks` package, validation/loader/registry tests, and CRM Dashboard, Research Dashboard, and Map Artifact runbook definitions.
-- 2026-05-10: Opened U1 PR #1119.
-- 2026-05-10: U1 PR #1119 passed required checks and was squash-merged to `main` at `c63d1fa8`.
-- 2026-05-10: Removed U1 remote/local branch and worktree, synced `main`, and started U2 in `.Codex/worktrees/runbooks-u2` on branch `codex/runbooks-u2`.
-- 2026-05-10: Implemented U2 tenant runbook catalog, run snapshot, and expanded task schema; added HTTP GraphQL catalog/run queries and confirm/reject/cancel mutations.
-- 2026-05-10: Added U2 tests for catalog source seeding, unavailable source detection, run snapshot/task expansion, state transitions, and resolver access gating.
-- 2026-05-10: Completed U2 local verification: workspace typecheck, workspace tests, workspace lint scripts, and workspace builds passed.
-- 2026-05-10: Opened U2 PR #1120 from `codex/runbooks-u2`.
-- 2026-05-10: U2 PR #1120 passed required checks and was squash-merged to `main` at `882586c7`.
-- 2026-05-10: Removed U2 remote/local branch and worktree, synced `main` to `45e81e72`, and started U3 in `.Codex/worktrees/runbooks-u3` on branch `codex/runbooks-u3`.
-- 2026-05-10: Implemented U3 deterministic runbook routing, confirmation/queue message builders, `runbook_execute` task normalization, Computer `sendMessage` routing, and approval-time execution enqueueing.
-- 2026-05-10: Regenerated GraphQL consumers after adding the `RUNBOOK_EXECUTE` Computer task type.
-- 2026-05-10: Completed U3 local verification: package checks, workspace typecheck, workspace tests, workspace lint scripts, workspace build, and touched-file Prettier check passed.
-- 2026-05-10: Opened U3 PR #1121 from `codex/runbooks-u3`.
-- 2026-05-10: U3 PR #1121 passed required checks and was squash-merged to `main` at `573ac4bb`.
-- 2026-05-10: Removed U3 remote/local branch and worktree, synced `main`, and started U4 in `.Codex/worktrees/runbooks-u4` on branch `codex/runbooks-u4`.
-- 2026-05-10: Implemented U4 sequential runbook executor, runtime API endpoints for runbook context/task/run state, Computer runtime client methods, and coarse task cancellation support.
-- 2026-05-10: Completed U4 local verification: focused runtime/API tests, package typechecks/builds, workspace tests, workspace lint scripts, workspace build, diff check, and touched-file Prettier check passed.
-- 2026-05-10: Opened U4 PR #1122 from `codex/runbooks-u4`.
-- 2026-05-10: U4 PR #1122 passed required checks and was squash-merged to `main` at `e0ad47d6`.
-- 2026-05-10: Removed U4 remote/local branch and worktree, synced `main`, and started U5 in `.Codex/worktrees/runbooks-u5` on branch `codex/runbooks-u5`.
-- 2026-05-10: Began U5 implementation with Python runbook context formatting, capability role mapping, typed queue update publishing, and Strands prompt wiring.
-- 2026-05-10: Completed U5 local verification: focused Python tests, Strands agent-container tests with transient extras, Python lint/format checks for new modules, workspace typecheck/tests/lint/build, and diff check passed.
-- 2026-05-10: Opened U5 PR #1123 from `codex/runbooks-u5`.
-- 2026-05-10: U5 PR #1123 passed required checks and was squash-merged to `main` at `e41aca1e`.
-- 2026-05-10: Removed U5 remote/local branch and worktree, synced `main`, and started U6 in `.Codex/worktrees/runbooks-u6` on branch `codex/runbooks-u6`.
-- 2026-05-10: Implemented U6 runbook confirmation and queue renderers, runbook GraphQL mutations, persisted `Message.parts` reload rendering, and stable streamed queue data-part replacement.
-- 2026-05-10: Completed U6 focused local verification: Computer runbook component tests, typed chunk parser/merge/transport tests, TaskThreadView persisted-part test, Computer typecheck, Computer build, and diff check passed.
-- 2026-05-10: Completed U6 workspace verification: workspace typecheck, tests, lint scripts, build, and touched-file Prettier check passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
-- 2026-05-10: Opened U6 PR #1124 from `codex/runbooks-u6`.
-- 2026-05-10: U6 PR #1124 passed required checks and was squash-merged to `main` at `345a6651`.
-- 2026-05-10: Removed U6 remote/local branch and worktree, synced `main`, and started U7 in `.Codex/worktrees/runbooks-u7` on branch `codex/runbooks-u7`.
-- 2026-05-10: Began U7 by moving artifact recipe detail into runbook produce-phase guidance, retaining Artifact Builder as a compatibility shim, and adding safe default upgrade paths for known shim files.
-- 2026-05-10: Completed U7 focused verification: API artifact bridge/default seeding tests, workspace default parity tests, runbook registry/loader tests, Strands runbook context/contract tests, package typechecks/builds, Python syntax/format checks, diff check, and touched-file Prettier check passed.
-- 2026-05-10: Completed U7 workspace verification: workspace typecheck, tests, lint scripts, and build passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
-- 2026-05-10: Opened U7 PR #1125 from `codex/runbooks-u7`.
-- 2026-05-10: U7 PR #1125 passed required checks and was squash-merged to `main` at `f6832e4f`.
-- 2026-05-10: Removed U7 remote/local branch and worktree, synced `main`, and started U8 in `.Codex/worktrees/runbooks-u8` on branch `codex/runbooks-u8`.
-- 2026-05-10: Began U8 docs and smoke coverage with Computer runbook concept/reference docs, runbooks package README, AI Elements runbook part spec, and a dry-run/live runbook smoke script.
-- 2026-05-10: Completed U8 focused verification: smoke script syntax/dry-run, docs build, runbooks package tests, touched-file Prettier, and diff check passed.
-- 2026-05-10: Completed U8 workspace verification: workspace typecheck, tests, lint scripts, and build passed; root `pnpm format:check` still cannot run locally because `prettier` is not installed as a root dependency.
-- 2026-05-10: Opened U8 PR #1126 from `codex/runbooks-u8`.
-- 2026-05-10: U8 PR #1126 passed required checks and was squash-merged to `main` at `069d0a5c`.
-- 2026-05-10: Removed U8 remote/local branch and worktree. The main checkout has unrelated local changes, so final bookkeeping continued in `.Codex/worktrees/runbooks-final-status` from `origin/main`.
-
-## Implementation Units
-
-| Unit                                              | Status | Branch              | PR    | Notes                                                               |
-| ------------------------------------------------- | ------ | ------------------- | ----- | ------------------------------------------------------------------- |
-| U1 Runbook Source Package                         | merged | `codex/runbooks-u1` | #1119 | Squash-merged to `main` at `c63d1fa8`; branch and worktree removed. |
-| U2 Catalog and Run Data Model                     | merged | `codex/runbooks-u2` | #1120 | Squash-merged to `main` at `882586c7`; branch and worktree removed. |
-| U3 Routing and Confirmation API                   | merged | `codex/runbooks-u3` | #1121 | Squash-merged to `main` at `573ac4bb`; branch and worktree removed. |
-| U4 Sequential Runbook Executor                    | merged | `codex/runbooks-u4` | #1122 | Squash-merged to `main` at `e0ad47d6`; branch and worktree removed. |
-| U5 Strands Runbook Context and Capability Mapping | merged | `codex/runbooks-u5` | #1123 | Squash-merged to `main` at `e41aca1e`; branch and worktree removed. |
-| U6 Computer UI Confirmation and Queue             | merged | `codex/runbooks-u6` | #1124 | Squash-merged to `main` at `345a6651`; branch and worktree removed. |
-| U7 Artifact Builder Runbook Bridge                | merged | `codex/runbooks-u7` | #1125 | Squash-merged to `main` at `f6832e4f`; branch and worktree removed. |
-| U8 Docs, Smoke Coverage, and Rollout Guardrails   | merged | `codex/runbooks-u8` | #1126 | Squash-merged to `main` at `069d0a5c`; branch and worktree removed. |
-
-## PRs
-
-| Unit | PR    | Status | Merge Commit | Notes                                       |
-| ---- | ----- | ------ | ------------ | ------------------------------------------- |
-| U1   | #1119 | merged | `c63d1fa8`   | Required checks passed before squash merge. |
-| U2   | #1120 | merged | `882586c7`   | Required checks passed before squash merge. |
-| U3   | #1121 | merged | `573ac4bb`   | Required checks passed before squash merge. |
-| U4   | #1122 | merged | `e0ad47d6`   | Required checks passed before squash merge. |
-| U5   | #1123 | merged | `e41aca1e`   | Required checks passed before squash merge. |
-| U6   | #1124 | merged | `345a6651`   | Required checks passed before squash merge. |
-| U7   | #1125 | merged | `f6832e4f`   | Required checks passed before squash merge. |
-| U8   | #1126 | merged | `069d0a5c`   | Required checks passed before squash merge. |
-
-## CI / Verification Notes
-
-| Unit | Check                                                   | Status | Notes                                                                                                                                                                                                                                                                        |
-| ---- | ------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1   | `pnpm --filter @thinkwork/runbooks test`                | passed | 3 files, 11 tests.                                                                                                                                                                                                                                                           |
-| U1   | `pnpm --filter @thinkwork/runbooks typecheck`           | passed | Package typecheck completed cleanly.                                                                                                                                                                                                                                         |
-| U1   | `pnpm --filter @thinkwork/runbooks build`               | passed | Package build completed cleanly.                                                                                                                                                                                                                                             |
-| U1   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Root `pnpm format:check` could not run because `prettier` is not installed as a root dependency; used pinned `pnpm dlx prettier@3.8.2` for touched files.                                                                                                                    |
-| U1   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U1   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 235 files / 2471 tests and `apps/computer` 52 files / 363 tests.                                                                                                                                           |
-| U2   | `pnpm install`                                          | passed | Linked fresh worktree dependencies and updated `pnpm-lock.yaml` for `@thinkwork/api -> @thinkwork/runbooks`.                                                                                                                                                                 |
-| U2   | `pnpm schema:build`                                     | passed | Rebuilt AppSync subscription schema; no subscription schema diff was produced.                                                                                                                                                                                               |
-| U2   | consumer GraphQL codegen                                | passed | Ran codegen for `apps/admin`, `apps/mobile`, and `apps/cli`; `packages/api` has no codegen script.                                                                                                                                                                           |
-| U2   | `pnpm --filter @thinkwork/api typecheck`                | passed | API resolver/lib changes typecheck cleanly.                                                                                                                                                                                                                                  |
-| U2   | `pnpm --filter @thinkwork/database-pg typecheck`        | passed | Database schema changes typecheck cleanly.                                                                                                                                                                                                                                   |
-| U2   | `pnpm --filter @thinkwork/runbooks typecheck`           | passed | Source runbook package still typechecks after API dependency wiring.                                                                                                                                                                                                         |
-| U2   | focused API runbook tests                               | passed | 3 files, 9 tests: catalog helpers, run helpers, GraphQL resolver access gate.                                                                                                                                                                                                |
-| U2   | API/database package builds                             | passed | `pnpm --filter @thinkwork/api build` and `pnpm --filter @thinkwork/database-pg build` completed cleanly.                                                                                                                                                                     |
-| U2   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U2   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 238 files / 2480 tests and `apps/computer` 52 files / 363 tests.                                                                                                                                           |
-| U2   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U2   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings only.                                                                                                                                                                                    |
-| U2   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on authored code, GraphQL schema, package metadata, and status doc. Generated clients/lockfile are intentionally left in codegen/lockfile format.                                                                                                                     |
-| U2   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1120 before merge.                                                                                                                                                                                                      |
-| U3   | `pnpm install`                                          | passed | Linked fresh worktree dependencies.                                                                                                                                                                                                                                          |
-| U3   | `pnpm --filter @thinkwork/api typecheck`                | passed | API routing, confirmation, and task changes typecheck cleanly.                                                                                                                                                                                                               |
-| U3   | focused API routing/confirmation tests                  | passed | 5 files, 26 tests: router, confirmation message builder, task normalization, queue input helper, and approval enqueue resolver behavior.                                                                                                                                     |
-| U3   | `pnpm schema:build`                                     | passed | Rebuilt AppSync subscription schema after `RUNBOOK_EXECUTE` enum addition.                                                                                                                                                                                                   |
-| U3   | consumer GraphQL codegen                                | passed | Ran codegen for `apps/admin`, `apps/mobile`, and `apps/cli`; `packages/api` has no codegen script.                                                                                                                                                                           |
-| U3   | `pnpm --filter @thinkwork/api build`                    | passed | API package build completed cleanly.                                                                                                                                                                                                                                         |
-| U3   | package typechecks                                      | passed | API, database-pg, and runbooks package typechecks passed.                                                                                                                                                                                                                    |
-| U3   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U3   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 241 files / 2490 tests and `apps/computer` 52 files / 363 tests.                                                                                                                                           |
-| U3   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U3   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                                                                                                                                            |
-| U3   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on authored code, GraphQL schema, and status doc. Generated clients are intentionally left in codegen format.                                                                                                                                                         |
-| U3   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1121 before merge.                                                                                                                                                                                                      |
-| U4   | `pnpm install`                                          | passed | Linked fresh worktree dependencies.                                                                                                                                                                                                                                          |
-| U4   | focused computer-runtime tests                          | passed | 2 files, 13 tests: sequential executor, task-loop runbook handling, and cancellation handoff.                                                                                                                                                                                |
-| U4   | focused API runtime tests                               | passed | 3 files, 34 tests: runbook runtime context helper, Computer runtime handler routes, and existing runtime API behavior.                                                                                                                                                       |
-| U4   | package typechecks                                      | passed | API and computer-runtime package typechecks passed after the first implementation pass.                                                                                                                                                                                      |
-| U4   | package builds                                          | passed | API and computer-runtime package builds completed cleanly.                                                                                                                                                                                                                   |
-| U4   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
-| U4   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 242 files / 2493 tests and `apps/computer` 52 files / 363 tests.                                                                                                                                           |
-| U4   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U4   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                                                                                                                                            |
-| U4   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on authored code and status doc.                                                                                                                                                                                                                                      |
-| U4   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1122 before merge.                                                                                                                                                                                                      |
-| U5   | `pnpm install`                                          | passed | Linked fresh worktree dependencies.                                                                                                                                                                                                                                          |
-| U5   | focused Python runbook tests                            | passed | 21 tests across boot assert, runbook capability mapping, runbook context formatting, and server prompt/queue wiring.                                                                                                                                                         |
-| U5   | Python lint/format checks                               | passed | `ruff check` passed for new modules/tests; focused server unused-import check passed; `ruff format --check` passed for new modules/tests.                                                                                                                                    |
-| U5   | Strands agent-container tests                           | passed | 594 tests passed with transient extras (`boto3`, `botocore`, `pytest-asyncio`, `httpx`, `pyyaml`, `strands-agents`) and retired workspace-composer test ignored.                                                                                                             |
-| U5   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
-| U5   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U5   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 242 files / 2493 tests and `apps/computer` 52 files / 363 tests.                                                                                                                                           |
-| U5   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U5   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; Vite emitted pre-existing sourcemap/chunk-size warnings and chunk-size warnings only.                                                                                                                                                            |
-| U5   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1123 before merge.                                                                                                                                                                                                      |
-| U6   | `pnpm install`                                          | passed | Linked fresh worktree dependencies.                                                                                                                                                                                                                                          |
-| U6   | focused Computer runbook UI tests                       | passed | 94 tests across runbook confirmation, queue, typed chunk parser, UI message merge, AppSync transport, and TaskThreadView persisted-part rendering.                                                                                                                           |
-| U6   | `pnpm --filter @thinkwork/computer typecheck`           | passed | Computer app typecheck completed cleanly.                                                                                                                                                                                                                                    |
-| U6   | `pnpm --filter @thinkwork/computer build`               | passed | Computer app build completed; emitted pre-existing sourcemap/chunk-size warnings only.                                                                                                                                                                                       |
-| U6   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
-| U6   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U6   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 242 passed / 3 skipped and `apps/computer` 54 files / 373 tests.                                                                                                                                           |
-| U6   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U6   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; Vite emitted pre-existing docs/admin/computer sourcemap and chunk-size warnings only.                                                                                                                                                            |
-| U6   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on touched U6 files and status doc. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency.                                                                                                                                 |
-| U6   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1124 before merge.                                                                                                                                                                                                      |
-| U7   | `pnpm install`                                          | passed | Linked fresh worktree dependencies.                                                                                                                                                                                                                                          |
-| U7   | focused API artifact bridge tests                       | passed | 13 tests across Artifact Builder default seeding, runbook artifact bridge, and run record expansion.                                                                                                                                                                         |
-| U7   | focused workspace-defaults tests                        | passed | 21 tests covering Artifact Builder default content and byte-for-byte Markdown parity.                                                                                                                                                                                        |
-| U7   | focused runbooks tests                                  | passed | 6 registry/loader tests passed after runbook produce guidance changes.                                                                                                                                                                                                       |
-| U7   | focused Strands runbook tests                           | passed | 8 Python tests passed across runbook context, capability mapping, and Computer artifact contract injection.                                                                                                                                                                  |
-| U7   | package typechecks                                      | passed | API, workspace-defaults, and runbooks typechecks passed.                                                                                                                                                                                                                     |
-| U7   | package builds                                          | passed | API, workspace-defaults, and runbooks builds passed.                                                                                                                                                                                                                         |
-| U7   | Python syntax/format checks                             | passed | `ruff check --select E9,F63,F7,F82` and `ruff format --check` passed for touched Python files.                                                                                                                                                                               |
-| U7   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U7   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 243 passed / 3 skipped and `apps/computer` 54 files / 373 tests.                                                                                                                                           |
-| U7   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U7   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; docs/admin/computer emitted pre-existing warnings only.                                                                                                                                                                                          |
-| U7   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on touched TS, Markdown, YAML, and status doc files. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency.                                                                                                                |
-| U7   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
-| U8   | `node --check scripts/smoke/computer-runbook-smoke.mjs` | passed | Smoke script syntax check passed.                                                                                                                                                                                                                                            |
-| U8   | `node scripts/smoke/computer-runbook-smoke.mjs`         | passed | Dry-run validated CRM Dashboard, Research Dashboard, and Map Artifact runbook markers plus runbook confirmation/queue part expectations.                                                                                                                                     |
-| U8   | `pnpm --filter docs build`                              | passed | Docs build generated `/concepts/computers/runbooks/` and `/reference/runbooks/`; emitted existing i18n/sitemap/npm config warnings only.                                                                                                                                     |
-| U8   | `pnpm --filter @thinkwork/runbooks test`                | passed | 3 files, 11 tests.                                                                                                                                                                                                                                                           |
-| U8   | `pnpm -r --if-present typecheck`                        | passed | Workspace typecheck completed across packages.                                                                                                                                                                                                                               |
-| U8   | `pnpm -r --if-present lint`                             | passed | Only configured lint scripts ran; current lint scripts are skip stubs for packages with scripts.                                                                                                                                                                             |
-| U8   | `pnpm -r --if-present test`                             | passed | Workspace tests completed; notable suites included `packages/api` 243 passed / 3 skipped and `apps/computer` 54 files / 373 tests.                                                                                                                                           |
-| U8   | `pnpm -r --if-present build`                            | passed | Workspace builds completed; docs/admin/computer emitted existing sourcemap/chunk-size warnings only.                                                                                                                                                                         |
-| U8   | `pnpm dlx prettier@3.8.2 --check ...`                   | passed | Passed on touched Prettier-compatible docs, scripts, README files, and status doc; the AI Elements spec preserves legacy non-Prettier formatting to avoid unrelated churn. Root `pnpm format:check` failed locally because `prettier` is not installed as a root dependency. |
-| U8   | `git diff --check`                                      | passed | No whitespace errors.                                                                                                                                                                                                                                                        |
-| U8   | GitHub required checks                                  | passed | cla, lint, test, typecheck, and verify passed on PR #1126 before merge.                                                                                                                                                                                                      |
+- `pnpm install` - passed.
+- `pnpm schema:build` - passed.
+- `pnpm --filter @thinkwork/admin codegen` - passed.
+- `pnpm --filter @thinkwork/mobile codegen` - passed.
+- `pnpm --filter thinkwork-cli codegen` - passed.
+- `pnpm --filter @thinkwork/admin build` - passed.
+- `pnpm --filter @thinkwork/computer typecheck` - passed.
+- `pnpm --filter @thinkwork/computer build` - passed.
+- Targeted database/API/computer/computer-runtime tests for removed connector behavior - passed.
+- `pnpm --filter thinkwork-cli test` - passed.
+- `pnpm --filter @thinkwork/docs build` - passed.
+- `pnpm --filter @thinkwork/admin test` - passed.
+- `pnpm -r --if-present typecheck` - passed.
+- `pnpm -r --if-present test` - passed.
+- `git diff --check` - passed.
+- `pnpm format:check` - blocked locally because `prettier` is not installed in this workspace (`sh: prettier: command not found`).
+- GitHub PR checks on [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) - passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
 
 ## Blockers
 
-- None currently.
+None.

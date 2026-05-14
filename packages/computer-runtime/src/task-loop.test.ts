@@ -7,7 +7,6 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-thread" }),
       checkGoogleWorkspaceConnection: vi.fn(),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn().mockResolvedValue({
         taskId: "task-thread",
         source: "chat_message",
@@ -98,7 +97,6 @@ describe("Computer task loop", () => {
         connectionId: "connection-1",
         checkedAt: "2026-05-07T00:00:00.000Z",
       }),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn(),
       recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
@@ -140,7 +138,6 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-runbook" }),
       checkGoogleWorkspaceConnection: vi.fn(),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn(),
       recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
@@ -223,7 +220,6 @@ describe("Computer task loop", () => {
       failTask: vi.fn(),
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-runbook" }),
       checkGoogleWorkspaceConnection: vi.fn(),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn(),
       recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn(),
@@ -264,7 +260,6 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-2" }),
       checkGoogleWorkspaceConnection: vi.fn(),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn(),
       recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({
@@ -341,7 +336,6 @@ describe("Computer task loop", () => {
     const api = {
       appendTaskEvent: vi.fn().mockResolvedValue({ id: "event-3" }),
       checkGoogleWorkspaceConnection: vi.fn(),
-      delegateConnectorWork: vi.fn(),
       loadThreadTurnContext: vi.fn(),
       recordThreadTurnResponse: vi.fn(),
       resolveGoogleWorkspaceCliToken: vi.fn().mockResolvedValue({

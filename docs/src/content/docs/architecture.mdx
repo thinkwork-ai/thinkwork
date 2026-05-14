@@ -17,7 +17,7 @@ Every resource lives in your AWS account. There is no shared infrastructure, no 
 
 ## The harness mechanics
 
-A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Company Brain, Agents, Connectors, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
+A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Company Brain, Agents, Integrations, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
 
 <Aside type="tip">
   The "harness" framing comes from the [Definitive Guide to Harness Engineering](https://www.harnessengineering.com/) (Mitchell Hashimoto, 2026). The metaphor: a state-of-the-art model is a powerful but directionless wild horse; the harness is the reins, bit, and bridle that make its power useful. ThinkWork's job is the harness — the engineered structure between your inputs and the model's output that turns potential into reliable, governable work. The rest of this page assumes that frame.
@@ -35,12 +35,12 @@ flowchart LR
   F -.->|next turn| P
 ```
 
-- **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, Company Brain context, the tool catalog, and current channel context. This is what Threads + Company Brain + Connectors produce together — a structured snapshot the model reasons over.
+- **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, Company Brain context, the tool catalog, and current channel context. This is what Threads + Company Brain + Integrations produce together — a structured snapshot the model reasons over.
 - **Planning.** The model (via the selected AgentCore runtime on Bedrock) decides what to do next. ThinkWork doesn't replace the model's reasoning; it bounds the inputs and channels the outputs.
-- **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through connectors). Every action is captured as it happens.
+- **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through integrations). Every action is captured as it happens.
 - **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the *next* turn perceives — and what an operator reads after the fact.
 
-The four phases are why the docs structure the components the way it does: Threads + Company Brain + Connectors are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
+The four phases are why the docs structure the components the way it does: Threads + Company Brain + Integrations are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
 
 ### The four operating guarantees
 
@@ -63,7 +63,7 @@ That separation is what makes turns reproducible (re-run a turn against a differ
 
 ### The conceptual model maps onto the harness
 
-The conceptual model below — Threads, Company Brain, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
+The conceptual model below — Threads, Company Brain, Agents, Integrations, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
 
 ## System model
 
@@ -80,12 +80,12 @@ Company Brain
     ↓
 Agents
     ↓
-Connectors and responses back out
+Integrations and responses back out
 ```
 
 ### Threads
 
-Threads are the durable record of work. User chats, connector events, emails, and automations all become threads with history, status, metadata, and auditability.
+Threads are the durable record of work. User chats, integration events, emails, and automations all become threads with history, status, metadata, and auditability.
 
 See [Threads](/concepts/threads/).
 
@@ -120,16 +120,16 @@ In managed mode, this execution happens in AgentCore. Strands is the default run
 
 See [Agents](/concepts/agents/).
 
-### Connectors
+### Integrations
 
-Connectors are the integration boundary. Some connectors bring inbound events into threads, and some expose external tools for agents to call.
+Integrations are the integration boundary. Some integrations bring inbound events into threads, and some expose external tools for agents to call.
 
 This includes:
 
-- channel and event connectors such as Slack, GitHub, and Google Workspace
-- tool connectors, including [MCP Tools](/concepts/connectors/mcp-tools/)
+- channel and event integrations such as Slack, GitHub, and Google Workspace
+- tool integrations, including [MCP Tools](/concepts/mcp-tools/)
 
-See [Connectors](/concepts/connectors/).
+See [Integrations](/concepts/integrations).
 
 ## Three-tier deployment model
 
@@ -137,7 +137,7 @@ See [Connectors](/concepts/connectors/).
 ┌─────────────────────────────────────────────────────────────┐
 │  App Tier                                                    │
 │  AppSync · API Gateway · AgentCore runtimes · Crons · SES   │
-│  CloudFront · Connector Lambdas · Step Functions            │
+│  CloudFront · Integration Lambdas · Step Functions            │
 ├─────────────────────────────────────────────────────────────┤
 │  Data Tier                                                   │
 │  Aurora Postgres (pgvector) · S3 (skills, KB, logs)         │
@@ -169,7 +169,7 @@ The data tier holds all persistent state. It depends on the foundation tier for 
 
 | Resource | Purpose |
 |----------|---------|
-| Aurora Postgres | Primary data store: agents, threads, messages, automations, connectors, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
+| Aurora Postgres | Primary data store: agents, threads, messages, automations, integrations, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
 | S3 — skill catalog | `skills/catalog/*.md` — skill packs loaded at invoke time |
 | S3 — knowledge docs | Source documents for Bedrock Knowledge Bases |
 | S3 — audit logs | Append-only log of every agent invoke (NDJSON, partitioned by date) |
@@ -184,10 +184,10 @@ The app tier is where computation happens. It depends on both lower tiers.
 | Resource | Purpose |
 |----------|---------|
 | AppSync GraphQL API | Real-time subscriptions (WebSocket), used for streaming responses |
-| API Gateway v2 | HTTP queries and mutations, connector webhook ingress |
+| API Gateway v2 | HTTP queries and mutations, integration webhook ingress |
 | AgentCore runtimes | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore |
 | ECS Fargate + EFS | ThinkWork Computer runtime substrate: lightweight per-user orchestration tasks with persistent workspaces |
-| Connector Lambdas | One per connector (Slack, GitHub, Google) — handles inbound events |
+| Integration Lambdas | One per integration (Slack, GitHub, Google) — handles inbound events |
 | Step Functions | Automation runner, routine executor |
 | EventBridge | Triggers for scheduled automations |
 | Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |
@@ -235,24 +235,24 @@ A full round trip from user message to agent response:
    └─ Final NewMessageEvent marks completion
 ```
 
-## Data flow: connector inbound
+## Data flow: integration inbound
 
 ```
 External service (Slack, GitHub, etc.)
-    → POST /connectors/<id>/webhook (API Gateway)
-    → Connector Lambda
+    → POST /integrations/<id>/webhook (API Gateway)
+    → Integration Lambda
         └─ Validates signature
         └─ Writes thread record to Aurora (channel=SLACK, metadata={...})
         └─ Invokes AgentCore (same path as user message above)
     → Agent response
-        → Outbound connector or tool call posts reply back to Slack/GitHub/etc.
+        → Outbound integration or tool call posts reply back to Slack/GitHub/etc.
 ```
 
-## Data flow: MCP tool connector
+## Data flow: MCP tool integration
 
 ```
 Selected AgentCore runtime receives thread + assembled context
-    → Resolves enabled tool connectors from template/agent config
+    → Resolves enabled tool integrations from template/agent config
     → Connects to MCP server over HTTP streaming or SSE
     → Discovers available tools for this invocation
     → Model calls MCP tool when needed
@@ -299,7 +299,7 @@ This split is useful to keep in mind:
 - **Threads** preserve the canonical record of work in Aurora
 - **Company Brain** combines persisted sources like documents and memories with retrieval-time assembly
 - **Agents** are mostly stateless between invocations aside from their configuration
-- **Connectors** store credentials and integration configuration, but the resulting work still lands in threads
+- **Integrations** store credentials and integration configuration, but the resulting work still lands in threads
 
 | What | Where | Backup |
 |------|-------|--------|
@@ -338,7 +338,7 @@ CREATE POLICY tenant_isolation ON threads
 | API → Aurora | IAM auth + VPC security groups |
 | AgentCore → Bedrock | IAM role (least privilege) |
 | AgentCore → S3 | IAM role (read skills, read KB docs, write audit logs) |
-| AgentCore → SSM | IAM role (read credentials for assigned connectors) |
+| AgentCore → SSM | IAM role (read credentials for assigned integrations) |
 | Tenant isolation | Postgres RLS on all tables |
 | Secrets at rest | KMS encryption (dedicated key per secret category) |
 | Audit trail | Append-only S3 bucket (no delete permissions on Lambda role) |

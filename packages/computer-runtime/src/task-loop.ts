@@ -34,7 +34,6 @@ export type TaskLoopOptions = {
     | "failTask"
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
-    | "delegateConnectorWork"
     | "loadThreadTurnContext"
     | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
@@ -90,7 +89,6 @@ export async function handleTask(
     ComputerRuntimeApi,
     | "appendTaskEvent"
     | "checkGoogleWorkspaceConnection"
-    | "delegateConnectorWork"
     | "loadThreadTurnContext"
     | "recordThreadTurnResponse"
     | "resolveGoogleWorkspaceCliToken"
@@ -126,16 +124,6 @@ export async function handleTask(
   if (task.taskType === "google_cli_smoke") {
     const smoke = await smokeGoogleWorkspaceCli();
     return { ok: true, taskType: "google_cli_smoke", smoke };
-  }
-  if (task.taskType === "connector_work") {
-    if (!api) throw new Error("Computer runtime API is required");
-    const delegation = await api.delegateConnectorWork(task.id);
-    return {
-      ok: true,
-      taskType: "connector_work",
-      accepted: true,
-      ...delegation,
-    };
   }
   if (task.taskType === "thread_turn") {
     if (!api) throw new Error("Computer runtime API is required");

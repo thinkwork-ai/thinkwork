@@ -15,7 +15,7 @@ From "user sends a message" to "agent response streams back," end to end.
 
 ### 1 — The trigger
 
-A new message lands in a thread assigned to a managed agent. How it got there doesn't matter — could be a chat from the mobile app, an inbound Slack event mapped by the Slack connector, or an automation's scheduled run. The message row is written to Aurora; an AppSync mutation fires; a message also lands on an SQS queue that the AgentCore runtime consumes.
+A new message lands in a thread assigned to a managed agent. How it got there doesn't matter — could be a chat from the mobile app, an inbound Slack event mapped by the Slack integration, or an automation's scheduled run. The message row is written to Aurora; an AppSync mutation fires; a message also lands on an SQS queue that the AgentCore runtime consumes.
 
 ### 2 — Runtime dispatch
 

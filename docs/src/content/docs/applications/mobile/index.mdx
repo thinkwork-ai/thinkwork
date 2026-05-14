@@ -10,7 +10,7 @@ The mobile app is the end-user client for ThinkWork. Where the [Admin Web App](/
 It's an [Expo](https://expo.dev) application built on React Native, Expo Router, and the same GraphQL + REST endpoints the admin app uses. It is currently shipping on **iOS via TestFlight**.
 
 <Aside type="note">
-The mobile app owns **user-scoped** state: sign-in, per-user integration connections, per-user MCP tokens, and push subscriptions. Tenant-scoped state — agents, templates, connectors at the tenant level — lives in the [Admin Web App](/applications/admin/).
+The mobile app owns **user-scoped** state: sign-in, per-user integration connections, per-user MCP tokens, and push subscriptions. Tenant-scoped state — agents, templates, integrations at the tenant level — lives in the [Admin Web App](/applications/admin/).
 </Aside>
 
 ## Who uses it
@@ -32,7 +32,7 @@ The root layout is a three-tab structure with deep-link support for additional s
 | Tab | Purpose |
 |---|---|
 | **Threads** | Thread list, filtering, message input, and agent confirmation requests. Doubles as the entry point for starting new work |
-| **Tasks** | External task list — only visible when a task connector is connected |
+| **Tasks** | External task list — only visible when a task integration is connected |
 | **Settings** | Account, integrations, MCP servers, push notifications, theme, biometric lock |
 
 From any tab, the user can drill into a **thread detail** screen (`/thread/[threadId]`) which is where chat happens. The message input supports workspace selection, voice dictation, and quick actions.
@@ -43,7 +43,7 @@ This section splits the mobile app into five sub-pages:
 
 - [Authentication](/applications/mobile/authentication/) — Google OAuth, biometric lock, session restore, the pre-signup Lambda
 - [Threads & Chat](/applications/mobile/threads-and-chat/) — Threads tab, thread detail, HITL review cards, streaming render, message input, quick actions
-- [Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — self-serve OAuth for connectors and MCP servers
+- [Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — self-serve OAuth for integrations and MCP servers
 - [Push Notifications](/applications/mobile/push-notifications/) — registration, payload handling, deep linking
 - [Distribution](/applications/mobile/distribution/) — EAS channels, TestFlight, iOS build setup
 
@@ -68,4 +68,4 @@ The v1 focus is iOS. Android follows once the iOS shape is stable.
 
 - [Admin Web App](/applications/admin/) — the operator-facing control plane
 - [CLI](/applications/cli/) — `thinkwork-cli` for deployment
-- [MCP Tools](/concepts/connectors/mcp-tools/) — the MCP model the mobile app connects into
+- [MCP Tools](/concepts/mcp-tools/) — the MCP model the mobile app connects into
