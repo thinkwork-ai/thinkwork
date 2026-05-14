@@ -63,6 +63,10 @@ build_handler() {
   local entry="$2"
   local out_dir="$DIST/$name"
 
+  if [ -n "$FILTER" ] && [ "$FILTER" != "$name" ]; then
+    return
+  fi
+
   if [ ! -f "$entry" ]; then
     echo "  SKIP $name — entry not found: $entry"
     return
@@ -222,6 +226,9 @@ build_handler "stripe-subscription" \
 
 build_handler "auth-me" \
   "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
+
+build_handler "extension-proxy" \
+  "$REPO_ROOT/packages/api/src/handlers/extension-proxy.ts"
 
 build_handler "teams" \
   "$REPO_ROOT/packages/api/src/handlers/teams.ts"
