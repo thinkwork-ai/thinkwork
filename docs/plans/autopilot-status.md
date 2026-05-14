@@ -37,7 +37,7 @@ status: active
 
 | Unit | Branch | PR | Status | Notes |
 | --- | --- | --- | --- | --- |
-| U1-U6 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | CI pending | Grouped because deleting the database connector schema breaks API, admin, computer, and generated clients until the connector contract is removed everywhere. |
+| U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | CI passed; merge pending | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
 
 ## CI / Verification Log
 
@@ -57,6 +57,12 @@ status: active
 - `pnpm -r --if-present test` - passed.
 - `git diff --check` - passed.
 - `pnpm format:check` - blocked locally because `prettier` is not installed in this workspace (`sh: prettier: command not found`).
+- GitHub PR checks on [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) - passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
 
 ## Blockers
 
