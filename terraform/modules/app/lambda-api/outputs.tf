@@ -13,6 +13,11 @@ output "api_execution_arn" {
   value       = aws_apigatewayv2_api.main.execution_arn
 }
 
+output "extension_proxy_route_prefix" {
+  description = "Route prefix private Admin extensions call through for tenant-scoped backend proxying."
+  value       = "/api/extensions"
+}
+
 output "lambda_role_arn" {
   description = "Shared Lambda execution role ARN (for other modules that add routes)"
   value       = aws_iam_role.lambda.arn

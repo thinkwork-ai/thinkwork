@@ -124,6 +124,10 @@ locals {
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
   handler_extra_env = {
+    "extension-proxy" = {
+      EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
+      EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
+    }
     "job-schedule-manager" = {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
@@ -262,6 +266,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-portal",
     "stripe-subscription",
     "auth-me",
+    "extension-proxy",
     "teams",
     "team-members",
     "tenants",
@@ -708,15 +713,17 @@ locals {
 
     # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
     # server-to-server with Stripe signature verification).
-    "POST /api/stripe/checkout-session"    = "stripe-checkout"
-    "OPTIONS /api/stripe/checkout-session" = "stripe-checkout"
-    "POST /api/stripe/webhook"             = "stripe-webhook"
-    "POST /api/stripe/portal-session"      = "stripe-portal"
-    "OPTIONS /api/stripe/portal-session"   = "stripe-portal"
-    "GET /api/stripe/subscription"         = "stripe-subscription"
-    "OPTIONS /api/stripe/subscription"     = "stripe-subscription"
-    "GET /api/auth/me"                     = "auth-me"
-    "OPTIONS /api/auth/me"                 = "auth-me"
+    "POST /api/stripe/checkout-session"          = "stripe-checkout"
+    "OPTIONS /api/stripe/checkout-session"       = "stripe-checkout"
+    "POST /api/stripe/webhook"                   = "stripe-webhook"
+    "POST /api/stripe/portal-session"            = "stripe-portal"
+    "OPTIONS /api/stripe/portal-session"         = "stripe-portal"
+    "GET /api/stripe/subscription"               = "stripe-subscription"
+    "OPTIONS /api/stripe/subscription"           = "stripe-subscription"
+    "GET /api/auth/me"                           = "auth-me"
+    "OPTIONS /api/auth/me"                       = "auth-me"
+    "ANY /api/extensions/{extensionId}"          = "extension-proxy"
+    "ANY /api/extensions/{extensionId}/{proxy+}" = "extension-proxy"
 
     # Routines
     "ANY /api/routines/{proxy+}" = "routines"

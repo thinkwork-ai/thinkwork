@@ -146,6 +146,19 @@ variable "api_auth_secret" {
   default     = ""
 }
 
+variable "extension_proxy_backends_json" {
+  description = "JSON map of enabled Admin extension ids to allowlisted backend base URLs. Example: {\"customer-module\":{\"baseUrl\":\"https://extension.example.com\"}}"
+  type        = string
+  default     = "{}"
+}
+
+variable "extension_proxy_signing_secret" {
+  description = "Shared HMAC secret used by the generic Admin extension proxy to sign actor context for extension backends."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "hindsight_endpoint" {
   description = "Hindsight API endpoint (empty when enable_hindsight = false)"
   type        = string

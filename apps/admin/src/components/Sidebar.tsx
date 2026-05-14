@@ -31,6 +31,7 @@ import {
 } from "@/lib/graphql-queries";
 import { InboxItemStatus } from "@/gql/graphql";
 import { Badge } from "@/components/ui/badge";
+import { getAdminExtensions } from "@/extensions/registry";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -238,6 +239,12 @@ export function AppSidebar() {
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
   ];
 
+  const extensionItems: NavItem[] = getAdminExtensions().map((extension) => ({
+    to: `/extensions/${extension.id}`,
+    icon: extension.icon ?? Puzzle,
+    label: extension.label,
+  }));
+
   // Billing is intentionally hidden — flip BILLING_VISIBLE back on when ready.
   const BILLING_VISIBLE = false;
   const manageItems: NavItem[] = [
@@ -309,6 +316,15 @@ export function AppSidebar() {
             <NavItems items={automationsItems} />
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {extensionItems.length > 0 && (
+          <SidebarGroup className="group-data-[collapsible=icon]:p-2">
+            <SidebarGroupLabel>Extensions</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <NavItems items={extensionItems} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
           <SidebarGroupLabel>Manage</SidebarGroupLabel>
