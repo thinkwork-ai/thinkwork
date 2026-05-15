@@ -132,6 +132,34 @@ export async function handler(
 		expiresIn: DOWNLOAD_URL_TTL_SECONDS,
 	});
 
+	// Response shape: 302 by default (matches the direct-navigation flow
+	// where a browser opens the URL in the address bar — followed
+	// natively). When the caller sends `Accept: application/json`, return
+	// `{url}` instead. The XHR/fetch path can't follow a cross-origin
+	// 302 with credentials — `fetch(..., {redirect: 'manual'})` returns
+	// an opaque-redirect response (status 0, no readable Location), and
+	// `redirect: 'follow'` strips the Authorization header on the
+	// follow-up request to S3 (which then 400s on the dropped header).
+	// Returning JSON sidesteps both. The presigned URL itself already
+	// carries `ResponseContentDisposition: attachment` so the eventual
+	// window.open behaves as a download.
+	const accept = (event.headers?.accept || event.headers?.Accept || "").toLowerCase();
+	if (accept.includes("application/json")) {
+		return {
+			statusCode: 200,
+			headers: {
+				"content-type": "application/json",
+				"cache-control": "no-store",
+			},
+			body: JSON.stringify({
+				url: signedUrl,
+				expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS,
+				name: attachment.name ?? null,
+				mimeType: attachment.mime_type ?? null,
+			}),
+		};
+	}
+
 	return {
 		statusCode: 302,
 		headers: { location: signedUrl },
