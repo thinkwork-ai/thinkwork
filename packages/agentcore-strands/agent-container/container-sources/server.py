@@ -96,6 +96,171 @@ def _apply_workspace_bucket_env(bucket: str) -> None:
 
 _apply_workspace_bucket_env(os.environ.get("AGENTCORE_FILES_BUCKET", ""))
 
+
+# ---------------------------------------------------------------------------
+# Finance pilot U3 — per-turn /tmp attachment staging
+# ---------------------------------------------------------------------------
+
+
+def _stage_message_attachments(
+    attachments: list,
+    *,
+    workspace_bucket: str,
+    expected_tenant_id: str,
+    expected_thread_id: str,
+) -> tuple[str, list[dict]]:
+    """Stage message attachments to /tmp/turn-<uuid>/attachments/<name>.
+
+    U3 of docs/plans/2026-05-14-002-feat-finance-analysis-pilot-plan.md.
+
+    Lambda /tmp is ephemeral per-invocation, naturally per-turn-isolated
+    via a UUID directory. Returns (turn_dir, staged_entries) where each
+    entry is {attachment_id, local_path, name, mime_type, size_bytes}.
+
+    Defense-in-depth:
+      * s3_key must match the expected tenants/<tid>/attachments/<thr>/...
+        prefix — guards against an envelope-tampered ref pointing
+        elsewhere in the bucket.
+      * local_path is realpath-checked against turn_dir so a malicious
+        `name` containing path components cannot escape /tmp/turn-<id>/.
+      * Failures on individual files are logged and skipped — the turn
+        proceeds with the remaining attachments rather than crashing.
+
+    Empty input → empty list, no directory created.
+    """
+    import uuid as _uuid
+    import shutil as _shutil
+
+    if not attachments:
+        return ("", [])
+    if not workspace_bucket:
+        logger.warning(
+            "[attachments] workspace_bucket not set; skipping attachment staging"
+        )
+        return ("", [])
+
+    turn_id = _uuid.uuid4().hex
+    turn_dir = f"/tmp/turn-{turn_id}/attachments"
+    os.makedirs(turn_dir, exist_ok=True)
+
+    expected_prefix = (
+        f"tenants/{expected_tenant_id}/attachments/{expected_thread_id}/"
+        if expected_tenant_id and expected_thread_id
+        else ""
+    )
+
+    s3 = boto3.client(
+        "s3",
+        region_name=os.environ.get("AWS_REGION") or "us-east-1",
+    )
+
+    real_turn_dir = os.path.realpath(turn_dir)
+    staged: list[dict] = []
+    for ref in attachments:
+        if not isinstance(ref, dict):
+            continue
+        attachment_id = ref.get("attachment_id") or ref.get("attachmentId")
+        s3_key = ref.get("s3_key") or ref.get("s3Key")
+        name = ref.get("name")
+        mime_type = ref.get("mime_type") or ref.get("mimeType") or ""
+        size_bytes = ref.get("size_bytes") or ref.get("sizeBytes") or 0
+        if not (
+            isinstance(attachment_id, str)
+            and isinstance(s3_key, str)
+            and isinstance(name, str)
+            and attachment_id
+            and s3_key
+            and name
+        ):
+            logger.warning(
+                "[attachments] skipping malformed attachment ref: %r", ref
+            )
+            continue
+        # S3-key prefix defense — refuse refs that don't live under the
+        # expected tenant/thread prefix.
+        if expected_prefix and not s3_key.startswith(expected_prefix):
+            logger.warning(
+                "[attachments] skipping ref with mismatched prefix: %s "
+                "(expected prefix %s)",
+                s3_key,
+                expected_prefix,
+            )
+            continue
+        candidate_path = os.path.join(turn_dir, name)
+        real_local_path = os.path.realpath(candidate_path)
+        if not real_local_path.startswith(real_turn_dir + os.sep):
+            logger.warning(
+                "[attachments] skipping ref whose name escapes turn dir: %s",
+                name,
+            )
+            continue
+        try:
+            s3.download_file(workspace_bucket, s3_key, candidate_path)
+        except Exception as exc:  # noqa: BLE001 — boto3 errors are diverse
+            logger.warning(
+                "[attachments] download failed for %s (%s): %s",
+                attachment_id,
+                s3_key,
+                exc,
+            )
+            continue
+        staged.append(
+            {
+                "attachment_id": attachment_id,
+                "local_path": candidate_path,
+                "name": name,
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+            }
+        )
+
+    if not staged:
+        # Clean up the empty directory so we don't accumulate orphans.
+        try:
+            _shutil.rmtree(f"/tmp/turn-{turn_id}", ignore_errors=True)
+        except Exception:
+            pass
+        return ("", [])
+
+    return (turn_dir, staged)
+
+
+def _format_message_attachments_preamble(staged: list[dict]) -> str:
+    """Build the `Files attached to this turn` block for the system prompt.
+
+    Lists the absolute /tmp paths the agent should pass to `file_read`.
+    Filenames are sanitized server-side (presign + finalize); only the
+    paths themselves vary at this layer.
+    """
+    if not staged:
+        return ""
+    lines = ["Files attached to this turn:"]
+    for entry in staged:
+        size_kb = max(1, int(entry["size_bytes"] or 0) // 1024)
+        mime = entry.get("mime_type") or "application/octet-stream"
+        lines.append(
+            f'  - {entry["local_path"]}  ({mime}, ~{size_kb} KB)'
+        )
+    lines.append(
+        "Use the `file_read` tool with the absolute path to inspect each "
+        "file. Cite specific values when answering."
+    )
+    return "\n".join(lines)
+
+
+def _cleanup_message_attachments_turn_dir(turn_dir: str) -> None:
+    """Best-effort cleanup of /tmp/turn-<id>/ after the agent turn."""
+    if not turn_dir:
+        return
+    import shutil as _shutil
+
+    # `turn_dir` is .../attachments — remove the parent /tmp/turn-<id>/
+    parent = os.path.dirname(turn_dir)
+    try:
+        _shutil.rmtree(parent, ignore_errors=True)
+    except Exception:  # noqa: BLE001
+        pass
+
 # The personality-template constant used to drive _fetch_memory_templates
 # / _bootstrap_personality_files. Those functions are gone (Unit 7) —
 # everything flows through the composer now. The list lives in
@@ -2480,6 +2645,13 @@ def _execute_agent_turn(payload: dict) -> dict:
     browser_automation_enabled = bool(payload.get("browser_automation_enabled"))
     tenant_id_for_audit = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
     ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
+    # U3 of the finance pilot — message_attachments rides directly on
+    # the payload dict (NOT through apply_invocation_env; that helper is
+    # an os.environ string-setter, not an array-of-records carrier).
+    # Empty list when the turn has no attachments.
+    message_attachments_raw = payload.get("message_attachments") or []
+    if not isinstance(message_attachments_raw, list):
+        message_attachments_raw = []
 
     # Set per-payload env (caller already ran apply_invocation_env for
     # identity; these are orthogonal — workspace / composer / hindsight).
@@ -2544,6 +2716,18 @@ def _execute_agent_turn(payload: dict) -> dict:
         prompt=message,
     )
 
+    # U3 of the finance pilot — stage attachments before the model loop
+    # so the preamble can reference real /tmp paths the model will then
+    # read via the `file_read` tool. Empty list → no staging, no
+    # preamble. The cleanup runs in the outer `finally` so a crashed
+    # turn does not leak /tmp/turn-<id>/ across warm container invocations.
+    attachments_turn_dir, attachments_staged = _stage_message_attachments(
+        message_attachments_raw,
+        workspace_bucket=workspace_bucket,
+        expected_tenant_id=workspace_tenant_id,
+        expected_thread_id=ticket_id,
+    )
+
     try:
         # Build messages from history + current.
         messages = []
@@ -2579,6 +2763,15 @@ def _execute_agent_turn(payload: dict) -> dict:
         has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
         parent_kb_config = None if has_workspace_map else knowledge_bases_config
         system_prompt = _build_system_prompt(effective_skills, parent_kb_config, profile=profile)
+
+        # U3 of finance pilot — splice the attachment preamble in early so
+        # the model sees it before runbook / external / workflow blocks. The
+        # preamble names absolute /tmp paths the model uses with file_read.
+        attachments_preamble = _format_message_attachments_preamble(
+            attachments_staged
+        )
+        if attachments_preamble:
+            system_prompt += "\n\n---\n\n" + attachments_preamble
 
         external_block = format_external_task_context(thread_metadata)
         if external_block:
@@ -2680,6 +2873,11 @@ def _execute_agent_turn(payload: dict) -> dict:
         detach_eval_context(eval_ctx_token)
         _cleanup_skill_env(injected_env_keys)
         _restore_env_snapshot(computer_env_snapshot)
+        # U3 of finance pilot — clean the per-turn /tmp directory so a
+        # warm container doesn't accumulate orphan directories. /tmp is
+        # ephemeral per-invocation in principle, but warm reuse keeps it
+        # around until cold start; explicit cleanup is cheap insurance.
+        _cleanup_message_attachments_turn_dir(attachments_turn_dir)
 
 
 def _set_computer_turn_env(
