@@ -287,6 +287,16 @@ build_handler "computer-runtime-reconciler" \
 build_handler "plugin-upload" \
   "$REPO_ROOT/packages/api/src/handlers/plugin-upload.ts"
 
+# U2 of finance pilot — thread-attachment upload (presign + finalize).
+# presign issues a 5-min PUT URL; finalize sniffs magic bytes + scans
+# OOXML containers (macros, external links) before inserting a
+# thread_attachments row + emitting attachment.received audit event.
+build_handler "thread-attachments-presign" \
+  "$REPO_ROOT/packages/api/src/handlers/thread-attachments-presign.ts"
+
+build_handler "thread-attachments-finalize" \
+  "$REPO_ROOT/packages/api/src/handlers/thread-attachments-finalize.ts"
+
 build_handler "folder-bundle-import" \
   "$REPO_ROOT/packages/api/src/handlers/folder-bundle-import.ts"
 
