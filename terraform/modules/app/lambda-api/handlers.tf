@@ -398,6 +398,12 @@ resource "aws_lambda_function" "handler" {
     # threads.tenant_id lookup. Needs WORKSPACE_BUCKET env for S3.
     "thread-attachments-presign",
     "thread-attachments-finalize",
+    # U9-remainder of finance pilot — tenant-pinned download endpoint.
+    # GET /api/threads/{tid}/attachments/{aid}/download returns a 302
+    # to a 5-minute presigned S3 GET URL with ResponseContentDisposition:
+    # attachment so browsers download rather than render inline. Same
+    # tenant-pin discipline as presign/finalize.
+    "thread-attachment-download",
     # Folder bundle import (fat-folder plan Phase D). Admin uploads a zip
     # or GitHub ref and the handler normalizes vendor folder layouts into
     # the agent workspace.
@@ -893,6 +899,10 @@ locals {
     "OPTIONS /api/threads/{threadId}/attachments/presign"  = "thread-attachments-presign"
     "POST /api/threads/{threadId}/attachments/finalize"    = "thread-attachments-finalize"
     "OPTIONS /api/threads/{threadId}/attachments/finalize" = "thread-attachments-finalize"
+
+    # U9-remainder of finance pilot — tenant-pinned download endpoint.
+    "GET /api/threads/{threadId}/attachments/{attachmentId}/download"     = "thread-attachment-download"
+    "OPTIONS /api/threads/{threadId}/attachments/{attachmentId}/download" = "thread-attachment-download"
 
     # Fat-folder bundle import. OPTIONS is handled inside the Lambda before auth.
     "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"

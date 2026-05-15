@@ -297,6 +297,12 @@ build_handler "thread-attachments-presign" \
 build_handler "thread-attachments-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/thread-attachments-finalize.ts"
 
+# U9-remainder of finance pilot — tenant-pinned download endpoint.
+# GET /api/threads/{tid}/attachments/{aid}/download returns a 302 to a
+# 5-minute presigned S3 GET URL with Content-Disposition: attachment.
+build_handler "thread-attachment-download" \
+  "$REPO_ROOT/packages/api/src/handlers/thread-attachment-download.ts"
+
 build_handler "folder-bundle-import" \
   "$REPO_ROOT/packages/api/src/handlers/folder-bundle-import.ts"
 
