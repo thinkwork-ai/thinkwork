@@ -5085,7 +5085,6 @@ export type ThreadAttachment = {
   id: Scalars['ID']['output'];
   mimeType?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
-  s3Key?: Maybe<Scalars['String']['output']>;
   sizeBytes?: Maybe<Scalars['Int']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];

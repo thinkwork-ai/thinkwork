@@ -97,7 +97,6 @@ type ThreadAttachment {
   threadId: ID!
   tenantId: ID!
   name: String
-  s3Key: String
   mimeType: String
   sizeBytes: Int
   uploadedBy: ID
