@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thinkwork.ai/schemas/industrial-account-briefing-data.schema.json",
+  "title": "Industrial Account Briefing Data",
+  "type": "object",
+  "required": [
+    "briefingTitle",
+    "reviewWindow",
+    "sourceCoverage",
+    "operatorSignals",
+    "recommendedActions",
+    "sourceNotes"
+  ],
+  "properties": {
+    "briefingTitle": {
+      "type": "string"
+    },
+    "accountOrSegment": {
+      "type": "string"
+    },
+    "reviewWindow": {
+      "type": "string"
+    },
+    "sourceCoverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["family", "status", "notes"],
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": ["erp_sales", "crm", "fleet_management"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "partial", "unavailable"]
+          },
+          "recordCount": {
+            "type": "number"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "signals"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "signals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "operatorSignals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "title", "summary", "sourceFamilies"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["info", "watch", "attention", "urgent"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "sourceFamilies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["erp_sales", "crm", "fleet_management"]
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "contradictions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "systems", "summary"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "systems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          },
+          "operatorQuestion": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommendedActions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "action", "rationale"],
+        "properties": {
+          "priority": {
+            "type": "number"
+          },
+          "action": {
+            "type": "string"
+          },
+          "ownerHint": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "sourceNotes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

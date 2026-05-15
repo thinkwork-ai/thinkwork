@@ -21,6 +21,7 @@ const catalogRoot = resolve(__dirname, "..");
 const repoRoot = resolve(catalogRoot, "..", "..");
 const convertedRunbookSlugs = [
   "crm-dashboard",
+  "industrial-account-briefing",
   "map-artifact",
   "research-dashboard",
 ] as const;
@@ -300,6 +301,52 @@ metadata:
     for (const term of requiredCrmLayoutGuidance) {
       expect(skillBody).toContain(term);
       expect(produceBody).toContain(term);
+    }
+  });
+
+  it("industrial-account-briefing pins the ERP, CRM, and fleet operator contract", () => {
+    const root = join(catalogRoot, "industrial-account-briefing");
+    const skillBody = readFileSync(join(root, "SKILL.md"), "utf8");
+    const discoverBody = readFileSync(
+      join(root, "references", "discover.md"),
+      "utf8",
+    );
+    const synthesizeBody = readFileSync(
+      join(root, "references", "synthesize.md"),
+      "utf8",
+    );
+    const produceBody = readFileSync(
+      join(root, "references", "produce.md"),
+      "utf8",
+    );
+    const schemaBody = readFileSync(
+      join(root, "assets", "industrial-account-briefing-data.schema.json"),
+      "utf8",
+    );
+
+    const combinedGuidance = [
+      skillBody,
+      discoverBody,
+      synthesizeBody,
+      produceBody,
+      schemaBody,
+    ].join("\n");
+
+    const requiredTerms = [
+      "executive operator",
+      "ERP sales",
+      "CRM",
+      "fleet-management",
+      "source coverage",
+      "unavailable",
+      "contradictions",
+      "recommended next actions",
+      "erp_sales",
+      "fleet_management",
+    ];
+
+    for (const term of requiredTerms) {
+      expect(combinedGuidance).toContain(term);
     }
   });
 });

@@ -1,0 +1,138 @@
+{
+  "version": "1.0.0",
+  "sourceVersion": "0.1.0",
+  "routing": {
+    "explicitAliases": [
+      "industrial account briefing",
+      "executive account briefing",
+      "operator briefing",
+      "erp crm fleet briefing"
+    ],
+    "triggerExamples": [
+      "Create an executive operator briefing for this industrial account.",
+      "Brief me on account risk using ERP sales, CRM, and fleet data.",
+      "Run the industrial account briefing for today's executive review."
+    ],
+    "confidenceHints": [
+      "The user asks for executive or operator-level account context.",
+      "The requested sources include ERP, CRM, fleet, service capacity, sales, invoices, margin, or industrial account operations.",
+      "The expected output is a briefing or inspectable artifact, not a raw export."
+    ]
+  },
+  "inputs": [
+    {
+      "id": "account_or_segment",
+      "label": "Account or segment",
+      "description": "The customer account, branch, region, territory, or segment the executive operator wants to review.",
+      "required": false,
+      "source": "user"
+    },
+    {
+      "id": "review_window",
+      "label": "Review window",
+      "description": "The period to compare, such as last 7 days, last 30 days, month to date, or quarter to date.",
+      "required": false,
+      "source": "user"
+    },
+    {
+      "id": "data_sources",
+      "label": "ERP, CRM, and fleet sources",
+      "description": "Connected data, workspace files, catalog exports, or briefing datasets that provide ERP sales, CRM, and fleet-management evidence.",
+      "required": false,
+      "source": "context"
+    }
+  ],
+  "confirmation": {
+    "title": "Build Industrial Account Briefing",
+    "summary": "Computer will gather available ERP sales, CRM, and fleet-management context, synthesize operator-facing risks and opportunities, and produce a compact executive briefing artifact or Markdown fallback.",
+    "expectedOutputs": [
+      "Executive operator briefing",
+      "Source coverage note",
+      "Recommended next actions"
+    ],
+    "likelyTools": [
+      "workspace search",
+      "connected ERP/CRM/fleet data sources",
+      "artifact builder"
+    ],
+    "phaseSummary": [
+      "Discover available ERP, CRM, and fleet source coverage.",
+      "Synthesize source-grounded account signals, contradictions, and next actions.",
+      "Produce an inspectable briefing artifact or compact Markdown fallback."
+    ]
+  },
+  "phases": [
+    {
+      "id": "discover",
+      "title": "Discover source coverage",
+      "guidance": "references/discover.md",
+      "capabilityRoles": ["research"],
+      "dependsOn": [],
+      "supervision": {
+        "staleAfterMinutes": 8,
+        "progressExpectation": "Find enough source coverage to state which ERP, CRM, and fleet signals are available. Stop after a bounded search; do not chase every possible field."
+      },
+      "taskSeeds": [
+        "Identify available ERP sales, CRM, and fleet-management datasets for the requested account or segment."
+      ]
+    },
+    {
+      "id": "synthesize",
+      "title": "Synthesize operator signals",
+      "guidance": "references/synthesize.md",
+      "capabilityRoles": ["analysis"],
+      "dependsOn": ["discover"],
+      "supervision": {
+        "staleAfterMinutes": 10,
+        "progressExpectation": "Normalize the available evidence into account changes, risks, contradictions, and next actions. Mark missing source families clearly."
+      },
+      "taskSeeds": [
+        "Create a source-grounded briefing dataset from the discovered ERP, CRM, and fleet evidence."
+      ]
+    },
+    {
+      "id": "produce",
+      "title": "Produce briefing",
+      "guidance": "references/produce.md",
+      "capabilityRoles": ["artifact_build"],
+      "dependsOn": ["synthesize"],
+      "supervision": {
+        "staleAfterMinutes": 15,
+        "progressExpectation": "Produce the artifact or Markdown fallback from the synthesized briefing dataset. Do not restart discovery unless required evidence is missing."
+      },
+      "taskSeeds": [
+        "Produce an executive operator briefing artifact or Markdown fallback."
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "briefing_artifact",
+      "title": "Industrial account briefing artifact",
+      "type": "artifact",
+      "description": "An inspectable briefing artifact for executive operators reviewing account, revenue, CRM, and fleet signals.",
+      "asset": "assets/industrial-account-briefing-data.schema.json"
+    },
+    {
+      "id": "briefing_markdown",
+      "title": "Markdown briefing fallback",
+      "type": "summary",
+      "description": "A compact Markdown brief when artifact production is unavailable."
+    },
+    {
+      "id": "source_coverage_note",
+      "title": "Source coverage note",
+      "type": "summary",
+      "description": "A note listing available and unavailable ERP, CRM, and fleet source families."
+    }
+  ],
+  "assets": ["assets/industrial-account-briefing-data.schema.json"],
+  "overrides": {
+    "allowedFields": [
+      "catalog.description",
+      "approval.summary",
+      "approval.expectedOutputs",
+      "routing.triggerExamples"
+    ]
+  }
+}
