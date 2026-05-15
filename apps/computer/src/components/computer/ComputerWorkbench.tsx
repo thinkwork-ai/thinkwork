@@ -4,7 +4,13 @@ import { useMutation, useQuery } from "urql";
 import { ComputerComposer } from "@/components/computer/ComputerComposer";
 import { StarterCardGrid } from "@/components/computer/StarterCardGrid";
 import { useTenant } from "@/context/TenantContext";
-import { CreateThreadMutation, MyComputerQuery } from "@/lib/graphql-queries";
+import {
+  CreateThreadMutation,
+  MyComputerQuery,
+  SendMessageMutation,
+} from "@/lib/graphql-queries";
+import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
+import { getIdToken } from "@/lib/auth";
 
 interface MyComputerResult {
   myComputer: { id: string; name?: string | null } | null;
@@ -20,7 +26,20 @@ interface CreateThreadVars {
     computerId: string;
     title: string;
     channel: "CHAT";
-    firstMessage: string;
+    firstMessage?: string;
+  };
+}
+
+interface SendMessageResult {
+  sendMessage: { id: string };
+}
+
+interface SendMessageVars {
+  input: {
+    threadId: string;
+    role: "USER";
+    content: string;
+    metadata?: string;
   };
 }
 
@@ -29,6 +48,7 @@ export function ComputerWorkbench() {
   const { tenantId } = useTenant();
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [{ data: computerData }] = useQuery<MyComputerResult>({
     query: MyComputerQuery,
   });
@@ -36,40 +56,124 @@ export function ComputerWorkbench() {
     CreateThreadResult,
     CreateThreadVars
   >(CreateThreadMutation);
+  const [, sendMessage] = useMutation<SendMessageResult, SendMessageVars>(
+    SendMessageMutation,
+  );
 
   const computerId = computerData?.myComputer?.id ?? null;
 
-  async function handleSubmit() {
+  async function handleSubmit(files: File[]) {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed && files.length === 0) return;
     if (!tenantId || !computerId) {
       setError("Your Computer is not ready yet. Try again in a moment.");
       return;
     }
 
     setError(null);
-    const result = await createThread({
-      input: {
-        tenantId,
-        computerId,
-        title: titleFromPrompt(trimmed),
-        channel: "CHAT",
-        firstMessage: trimmed,
-      },
-    });
+    setBusy(true);
+    try {
+      // File-attached path: createThread WITHOUT firstMessage (so the
+      // thread starts empty), upload each file via the U2 presign +
+      // finalize flow against the new threadId, then send the first
+      // user message with metadata.attachments referencing the uploaded
+      // ids. Thread auto-titles from the first user message
+      // (sendMessage.mutation.ts) — so the operator's prompt becomes
+      // the visible title in the threads sidebar.
+      //
+      // Text-only path (no files): keep the existing atomic
+      // createThread-with-firstMessage flow so we don't regress the
+      // one-RT happy path.
+      if (files.length === 0) {
+        const result = await createThread({
+          input: {
+            tenantId,
+            computerId,
+            title: titleFromPrompt(trimmed),
+            channel: "CHAT",
+            firstMessage: trimmed,
+          },
+        });
+        if (result.error) {
+          setError(result.error.message ?? "Failed to start Computer work");
+          return;
+        }
+        const threadId = result.data?.createThread?.id;
+        if (!threadId) {
+          setError("Thread created but no id returned");
+          return;
+        }
+        navigate({ to: "/threads/$id", params: { id: threadId } });
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error.message ?? "Failed to start Computer work");
-      return;
+      // Files present: 3-call sequence.
+      const created = await createThread({
+        input: {
+          tenantId,
+          computerId,
+          title: titleFromPromptWithAttachments(trimmed, files),
+          channel: "CHAT",
+        },
+      });
+      if (created.error) {
+        setError(created.error.message ?? "Failed to start Computer work");
+        return;
+      }
+      const threadId = created.data?.createThread?.id;
+      if (!threadId) {
+        setError("Thread created but no id returned");
+        return;
+      }
+
+      const apiUrl = import.meta.env.VITE_API_URL || "";
+      const token = await getIdToken();
+      if (!apiUrl || !token) {
+        setError("Sign-in required to upload attachments");
+        return;
+      }
+      const uploadResult = await uploadThreadAttachments({
+        endpoints: { apiUrl, token },
+        threadId,
+        files,
+      });
+      if (
+        uploadResult.uploaded.length === 0 &&
+        uploadResult.failures.length > 0
+      ) {
+        const first = uploadResult.failures[0]!;
+        setError(`Upload failed (${first.stage}): ${first.message}`);
+        return;
+      }
+      if (uploadResult.failures.length > 0) {
+        console.warn(
+          "[ComputerWorkbench] partial upload failure:",
+          uploadResult.failures,
+        );
+      }
+
+      const attachmentRefs = uploadResult.uploaded.map((a) => ({
+        attachmentId: a.attachmentId,
+      }));
+      const sent = await sendMessage({
+        input: {
+          threadId,
+          role: "USER",
+          content: trimmed,
+          metadata: JSON.stringify({ attachments: attachmentRefs }),
+        },
+      });
+      if (sent.error) {
+        setError(sent.error.message ?? "Failed to send the first message");
+        return;
+      }
+
+      navigate({ to: "/threads/$id", params: { id: threadId } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start work");
+    } finally {
+      setBusy(false);
     }
-
-    const threadId = result.data?.createThread?.id;
-    if (!threadId) {
-      setError("Thread created but no id returned");
-      return;
-    }
-
-    navigate({ to: "/threads/$id", params: { id: threadId } });
   }
 
   return (
@@ -85,7 +189,7 @@ export function ComputerWorkbench() {
           value={prompt}
           onChange={setPrompt}
           onSubmit={handleSubmit}
-          isSubmitting={fetching}
+          isSubmitting={fetching || busy}
           error={error}
         />
 
@@ -100,4 +204,16 @@ export function ComputerWorkbench() {
 function titleFromPrompt(prompt: string): string {
   const firstLine = prompt.split(/\n/)[0]?.trim() || "New Computer thread";
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
+}
+
+function titleFromPromptWithAttachments(
+  prompt: string,
+  files: File[],
+): string {
+  if (prompt.trim()) return titleFromPrompt(prompt);
+  // File-only turn — title after the first attached file so the
+  // sidebar entry reads sensibly without an explicit prompt.
+  const first = files[0]?.name ?? "attachment";
+  const suffix = files.length > 1 ? ` (+${files.length - 1})` : "";
+  return `Analyze ${first}${suffix}`;
 }
