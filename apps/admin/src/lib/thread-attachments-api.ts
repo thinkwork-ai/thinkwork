@@ -125,13 +125,19 @@ export function buildAttachmentDownloadUrl(input: {
 }
 
 /**
- * Open the download URL in a new tab. Browsers honor the
- * `Content-Disposition: attachment` header on the presigned S3 redirect,
- * so the tab closes immediately after the download starts.
+ * Open the download URL in a new tab. The endpoint, when called with
+ * `Accept: application/json`, returns `{url}` (the presigned S3 GET
+ * URL) instead of a 302. We can't follow a cross-origin 302 from
+ * fetch:
  *
- * The 302 carries the Authorization-required endpoint to the presigned
- * S3 URL which does not require auth — so the user-mediated click flow
- * works without bearer-header rewriting.
+ *   - `redirect: 'manual'` → opaque-redirect response (status 0, no
+ *      readable Location header)
+ *   - `redirect: 'follow'` → fetch strips the Authorization header on
+ *     the follow-up GET to S3, which then fails the signature check
+ *
+ * The presigned URL itself carries
+ * `ResponseContentDisposition: attachment` so the eventual
+ * `window.open` behaves as a download (no inline render).
  */
 export async function downloadThreadAttachment(input: {
 	threadId: string;
@@ -145,18 +151,17 @@ export async function downloadThreadAttachment(input: {
 		method: "GET",
 		headers: {
 			authorization: `Bearer ${token}`,
+			accept: "application/json",
 		},
-		redirect: "manual",
 	});
-	// 302 redirects don't auto-follow with `redirect: 'manual'`.
-	// The Location header is the presigned S3 URL — open it in a new
-	// tab to trigger the browser's native download.
-	const location =
-		res.status === 302 ? res.headers.get("location") : null;
-	if (!location) {
+	if (!res.ok) {
 		throw new Error(`download endpoint returned ${res.status}`);
 	}
-	window.open(location, "_blank", "noopener,noreferrer");
+	const body = (await res.json()) as { url?: string };
+	if (!body.url) {
+		throw new Error("download endpoint returned no url");
+	}
+	window.open(body.url, "_blank", "noopener,noreferrer");
 }
 
 async function presign(
