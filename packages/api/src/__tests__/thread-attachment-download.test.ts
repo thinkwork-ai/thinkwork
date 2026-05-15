@@ -71,11 +71,14 @@ const THREAD = "11111111-1111-1111-1111-111111111111";
 const ATTACHMENT = "22222222-2222-2222-2222-222222222222";
 const TENANT_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
-function event(path?: string): APIGatewayProxyEventV2 {
+function event(
+	path?: string,
+	extraHeaders?: Record<string, string>,
+): APIGatewayProxyEventV2 {
 	return {
 		rawPath:
 			path ?? `/api/threads/${THREAD}/attachments/${ATTACHMENT}/download`,
-		headers: { authorization: "Bearer test" },
+		headers: { authorization: "Bearer test", ...(extraHeaders ?? {}) },
 		requestContext: { http: { method: "GET" } },
 	} as unknown as APIGatewayProxyEventV2;
 }
@@ -108,12 +111,46 @@ describe("GET /api/threads/{tid}/attachments/{aid}/download", () => {
 		(dbMod.db as unknown as { __resetCallIdx: () => void }).__resetCallIdx();
 	});
 
-	it("happy path: returns 302 with the presigned S3 URL in Location", async () => {
+	it("happy path: returns 302 with the presigned S3 URL in Location (direct browser navigation)", async () => {
 		const res = await handler(event());
 		expect(res.statusCode).toBe(302);
 		expect((res.headers as Record<string, string>).location).toBe(
 			"https://s3.amazonaws.com/signed-get-url",
 		);
+	});
+
+	it("returns JSON {url} when caller sends Accept: application/json (XHR/fetch path)", async () => {
+		const res = await handler(event(undefined, { accept: "application/json" }));
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.url).toBe("https://s3.amazonaws.com/signed-get-url");
+		expect(body.expiresInSeconds).toBe(300);
+		expect(body.name).toBe("financials.xlsx");
+		expect((res.headers as Record<string, string>)["content-type"]).toBe(
+			"application/json",
+		);
+		expect((res.headers as Record<string, string>)["cache-control"]).toBe(
+			"no-store",
+		);
+	});
+
+	it("returns JSON when Accept header has multiple types including application/json", async () => {
+		const res = await handler(
+			event(undefined, {
+				accept: "text/html,application/json;q=0.9,*/*;q=0.8",
+			}),
+		);
+		expect(res.statusCode).toBe(200);
+		expect(JSON.parse(res.body ?? "{}").url).toBe(
+			"https://s3.amazonaws.com/signed-get-url",
+		);
+	});
+
+	it("returns 302 when Accept omits application/json (plain browser GET)", async () => {
+		const res = await handler(
+			event(undefined, { accept: "text/html,*/*" }),
+		);
+		expect(res.statusCode).toBe(302);
 	});
 
 	it("issues the presigned URL with ResponseContentDisposition: attachment", async () => {
