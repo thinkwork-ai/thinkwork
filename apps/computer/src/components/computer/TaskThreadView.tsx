@@ -25,11 +25,18 @@ import {
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   PromptInput,
+  PromptInputAttachment,
+  PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
+  PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
+  PromptInputTools,
+  usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import { IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
   ReasoningContent,
@@ -115,7 +122,7 @@ interface TaskThreadViewProps {
   streamState?: UIMessageStreamState;
   runbookQueues?: RunbookQueueData[];
   isSending?: boolean;
-  onSendFollowUp?: (content: string) => Promise<void> | void;
+  onSendFollowUp?: (content: string, files?: File[]) => Promise<void> | void;
 }
 
 export function TaskThreadView({
@@ -586,6 +593,29 @@ function toAiMessageRole(role: string): "user" | "assistant" | "system" {
   return "assistant";
 }
 
+/**
+ * Simple paperclip-icon trigger that opens the native file picker via the
+ * PromptInput's attachments context. Replaces the upstream
+ * `PromptInputActionAddAttachments` (which is a `DropdownMenuItem` that
+ * requires an enclosing menu we don't render here). The PromptInputAttachments
+ * row above the textarea renders the chip list once files are added.
+ */
+function PromptInputAttachButton() {
+  const attachments = usePromptInputAttachments();
+  return (
+    <PromptInputButton
+      type="button"
+      variant="ghost"
+      onClick={() => attachments.openFileDialog()}
+      aria-label="Attach file"
+      title="Attach file"
+      className="text-white hover:bg-white/10"
+    >
+      <IconPaperclip stroke={2} className="h-4 w-4" />
+    </PromptInputButton>
+  );
+}
+
 function FollowUpComposer({
   taskQueue,
   disabled,
@@ -595,22 +625,35 @@ function FollowUpComposer({
   taskQueue?: ActiveTaskQueue | null;
   disabled?: boolean;
   isSending?: boolean;
-  onSubmit?: (content: string) => Promise<void> | void;
+  onSubmit?: (content: string, files?: File[]) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
-  const canSubmit = composer.text.trim().length > 0 && !disabled && !isSending;
+  const canSubmit =
+    (composer.text.trim().length > 0 || composer.files.length > 0) &&
+    !disabled &&
+    !isSending;
 
   // Plan-012 U13: in-thread composer migrated to AI Elements
   // <PromptInput>. Shares useComposerState with the empty-thread
   // composer; submit semantics unchanged. The composer never invokes
   // the turn-start mutation directly (single-submit invariant, P0) —
   // the route's onSendFollowUp is the sole owner of the call.
-  async function handlePromptSubmit(_message: PromptInputMessage) {
+  //
+  // U1 of finance pilot (2026-05-14-002): the composer now forwards
+  // attached files alongside text. The route's onSendFollowUp is
+  // responsible for uploading them via the U2 presign + finalize
+  // endpoints and including the resulting attachmentId references in
+  // the sendMessage metadata.
+  async function handlePromptSubmit(message: PromptInputMessage) {
     if (!canSubmit || !onSubmit) return;
     composer.setError(null);
     composer.setSubmitting(true);
     try {
-      await onSubmit(composer.text.trim());
+      // PromptInput emits FileUIPart entries with blob URLs. Fetch the
+      // blob and rebuild File objects so the route's upload helper can
+      // POST the bytes through presign + PUT + finalize.
+      const files = await fileUiPartsToFiles(message.files);
+      await onSubmit(composer.text.trim(), files);
       composer.clear();
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
@@ -634,29 +677,42 @@ function FollowUpComposer({
       ) : null}
       <PromptInput
         className={cn(
-          "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
+          "text-white transition-transform duration-300 ease-out focus-within:scale-[1.005] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
           hasTaskQueue
             ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
-            : "[&_[data-slot=input-group]]:rounded-full [&_[data-slot=input-group]]:shadow-lg",
+            : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
         )}
+        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+        maxFiles={5}
+        maxFileSize={25 * 1024 * 1024}
+        multiple
+        onError={(err) => composer.setError(err.message)}
         onSubmit={handlePromptSubmit}
       >
         <PromptInputBody>
+          <PromptInputAttachments>
+            {(attachment) => <PromptInputAttachment data={attachment} />}
+          </PromptInputAttachments>
           <PromptInputTextarea
             aria-label="Follow up"
             className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
             value={composer.text}
             onChange={(event) => composer.setText(event.target.value)}
-            placeholder="Type a command..."
+            placeholder="Type a command, attach an .xlsx / .csv..."
             disabled={disabled}
           />
         </PromptInputBody>
-        <PromptInputSubmit
-          className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
-          disabled={!canSubmit}
-          status={isSending ? "submitted" : undefined}
-          aria-label={isSending ? "Sending" : "Send"}
-        />
+        <PromptInputFooter className="px-2 pb-2">
+          <PromptInputTools>
+            <PromptInputAttachButton />
+          </PromptInputTools>
+          <PromptInputSubmit
+            className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
+            disabled={!canSubmit}
+            status={isSending ? "submitted" : undefined}
+            aria-label={isSending ? "Sending" : "Send"}
+          />
+        </PromptInputFooter>
       </PromptInput>
       {composer.error ? (
         <p className="text-sm text-destructive">{composer.error}</p>
@@ -1396,4 +1452,38 @@ function TaskThreadState({ label, tone }: { label: string; tone?: "error" }) {
       </p>
     </main>
   );
+}
+
+/**
+ * Convert AI-Elements FileUIPart entries (blob URLs) back to File
+ * objects so the upload helper can POST the bytes. PromptInput's
+ * onSubmit hands us `{ type: 'file', url: blob://..., mediaType, filename }`
+ * — fetch each blob, slice into a File with the original filename + MIME.
+ *
+ * Used by U1 of the finance pilot to surface the user's attached
+ * Excel/CSV files to the route's `onSendFollowUp` upload pipeline.
+ */
+async function fileUiPartsToFiles(
+  parts: Array<{ url?: string; mediaType?: string; filename?: string }>,
+): Promise<File[]> {
+  if (!parts || parts.length === 0) return [];
+  const files: File[] = [];
+  for (const part of parts) {
+    if (!part?.url) continue;
+    try {
+      const response = await fetch(part.url);
+      const blob = await response.blob();
+      files.push(
+        new File([blob], part.filename ?? "attachment", {
+          type: part.mediaType ?? blob.type ?? "application/octet-stream",
+        }),
+      );
+    } catch (err) {
+      console.warn(
+        `[FollowUpComposer] failed to reify attached file ${part.filename}:`,
+        err,
+      );
+    }
+  }
+  return files;
 }

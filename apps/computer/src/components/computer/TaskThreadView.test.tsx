@@ -1842,7 +1842,11 @@ describe("TaskThreadView", () => {
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail");
+      // U1 of finance pilot — FollowUpComposer forwards a files array
+      // (empty when no attachments) alongside the text. The route
+      // uploads files before sendMessage and embeds attachmentId refs
+      // in metadata.attachments.
+      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", []);
     });
   });
 });
