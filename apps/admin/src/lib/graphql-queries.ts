@@ -735,7 +735,6 @@ export const ThreadDetailQuery = graphql(`
         id
         threadId
         name
-        s3Key
         mimeType
         sizeBytes
         uploadedBy

@@ -1007,7 +1007,6 @@ export const ThreadQuery = graphql(`
       attachments {
         id
         name
-        s3Key
         mimeType
         sizeBytes
         createdAt
