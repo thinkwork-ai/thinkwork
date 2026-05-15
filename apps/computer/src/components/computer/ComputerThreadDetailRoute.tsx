@@ -21,6 +21,8 @@ import {
 } from "@/lib/graphql-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
+import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
+import { getIdToken } from "@/lib/auth";
 
 interface ComputerThreadDetailRouteProps {
   threadId: string;
@@ -355,16 +357,55 @@ export function ComputerThreadDetailRoute({
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
-      onSendFollowUp={async (content) => {
+      onSendFollowUp={async (content, files) => {
         setOptimisticMessage(content);
         resetStreamingChunks();
-        const result = await sendMessage({
-          input: {
+
+        // U1 of finance pilot: upload attached files before the
+        // sendMessage mutation so the resulting attachmentId references
+        // are embedded in `metadata.attachments`. The Strands turn
+        // (U3) reads that list at dispatch and stages files to /tmp
+        // before the model loop. Partial-success: any failed upload
+        // surfaces inline; the message still sends so the user isn't
+        // blocked.
+        const apiUrl = import.meta.env.VITE_API_URL || "";
+        let attachmentRefs: { attachmentId: string }[] = [];
+        if (files && files.length > 0 && apiUrl) {
+          const token = await getIdToken();
+          if (!token) {
+            setOptimisticMessage(null);
+            throw new Error("Sign-in required to upload attachments");
+          }
+          const result = await uploadThreadAttachments({
+            endpoints: { apiUrl, token },
             threadId,
-            role: "USER",
-            content,
-          },
-        });
+            files,
+          });
+          attachmentRefs = result.uploaded.map((a) => ({
+            attachmentId: a.attachmentId,
+          }));
+          if (result.failures.length > 0) {
+            console.warn(
+              "[ComputerThreadDetail] attachment upload failures:",
+              result.failures,
+            );
+          }
+        }
+
+        const sendInput: {
+          threadId: string;
+          role: "USER";
+          content: string;
+          metadata?: string;
+        } = {
+          threadId,
+          role: "USER",
+          content,
+        };
+        if (attachmentRefs.length > 0) {
+          sendInput.metadata = JSON.stringify({ attachments: attachmentRefs });
+        }
+        const result = await sendMessage({ input: sendInput });
         if (result.error) {
           setOptimisticMessage(null);
           throw result.error;
