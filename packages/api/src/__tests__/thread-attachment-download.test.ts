@@ -105,7 +105,7 @@ describe("GET /api/threads/{tid}/attachments/{aid}/download", () => {
 			"https://s3.amazonaws.com/signed-get-url",
 		);
 		const dbMod = await import("../lib/db.js");
-		(dbMod.db as { __resetCallIdx: () => void }).__resetCallIdx();
+		(dbMod.db as unknown as { __resetCallIdx: () => void }).__resetCallIdx();
 	});
 
 	it("happy path: returns 302 with the presigned S3 URL in Location", async () => {
