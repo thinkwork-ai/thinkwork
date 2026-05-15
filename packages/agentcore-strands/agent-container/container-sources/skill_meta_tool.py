@@ -34,6 +34,7 @@ Session allowlist invariant (plan R6/R7):
 
 from __future__ import annotations
 
+import contextvars
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -48,6 +49,64 @@ from skill_dispatcher import (
 from skill_session_pool import SkillSessionPool
 
 logger = logging.getLogger(__name__)
+
+
+# U4 of finance pilot (2026-05-14-002) — per-turn dedup for the
+# `skill.activated` compliance event.
+#
+# Stored in a `ContextVar` rather than a module-level global so concurrent
+# agent turns (different tenants on the same warm Lambda container) don't
+# bleed activations across each other. ``contextvars`` is the right
+# primitive: it propagates with asyncio Tasks but isolates per
+# top-level call (each ``_execute_agent_turn`` entry runs in its own
+# context).
+#
+# The set holds skill slugs already audited this turn. The first time a
+# slug fires we emit `skill.activated`; subsequent invocations of the
+# same slug in the same turn skip the emit but the skill still runs.
+_activated_skills_this_turn: contextvars.ContextVar[set[str] | None] = (
+    contextvars.ContextVar("activated_skills_this_turn", default=None)
+)
+
+
+def reset_skill_activation_dedup_for_turn() -> contextvars.Token[set[str] | None]:
+    """Reset the per-turn dedup set. Call once at the start of each agent
+    turn (server.py's _execute_agent_turn is the call site). Returns a
+    token the caller passes to ``release_skill_activation_dedup_for_turn``
+    in a finally block to restore the prior context.
+    """
+    return _activated_skills_this_turn.set(set())
+
+
+def release_skill_activation_dedup_for_turn(
+    token: contextvars.Token[set[str] | None],
+) -> None:
+    """Restore the previous dedup-set value. Must be paired with
+    ``reset_skill_activation_dedup_for_turn`` in a try/finally.
+    """
+    _activated_skills_this_turn.reset(token)
+
+
+def _mark_skill_activated_this_turn(slug: str) -> bool:
+    """Returns True the first time this slug is seen this turn, False
+    on every subsequent call. The caller emits the audit event only on
+    a True return.
+    """
+    seen = _activated_skills_this_turn.get()
+    if seen is None:
+        # No turn context — caller forgot to reset, or test scaffolding
+        # ran outside an agent turn. Fail open: emit every time so the
+        # signal still gets through, but log so the gap is visible.
+        logger.warning(
+            "skill-meta: activation seen with no turn-dedup context — "
+            "emitting every invocation. Did the caller call "
+            "reset_skill_activation_dedup_for_turn?"
+        )
+        return True
+    if slug in seen:
+        return False
+    seen.add(slug)
+    return True
 
 
 class SkillUnauthorized(SkillDispatchError):
@@ -168,6 +227,14 @@ class SkillMetaContext:
     runner: Any  # duck-typed as skill_dispatcher.SandboxRunner
     counters: TurnCounters = field(default_factory=TurnCounters)
     on_audit: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+    # U4 of finance pilot — `skill.activated` audit emit hook. Fires
+    # exactly once per distinct skill slug per turn (the dedup state
+    # lives in the module-level ContextVar above). server.py wires this
+    # to compliance_client.emit. Called with the slug + outcome
+    # ("allowed" / "denied") + an optional denied_reason. Telemetry tier:
+    # exceptions are caught and logged; the agent turn never fails on
+    # an audit error.
+    on_skill_activated: Callable[[str, str, str | None], Awaitable[None]] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -209,9 +276,27 @@ async def invoke_skill(
             ctx.user_id,
             ctx.environment,
         )
+        # U4 of finance pilot — emit skill.activated with outcome="denied"
+        # so the audit log records blocked attempts. Deduped per turn so
+        # a model that loops on a denied skill doesn't flood the log.
+        await _maybe_emit_skill_activated(
+            ctx,
+            slug=name,
+            outcome="denied",
+            denied_reason="not_in_allowlist",
+        )
         raise SkillUnauthorized(
             f"skill '{name}' is not available in this session"
         )
+
+    # U4 of finance pilot — emit skill.activated with outcome="allowed"
+    # the first time each slug fires this turn.
+    await _maybe_emit_skill_activated(
+        ctx,
+        slug=name,
+        outcome="allowed",
+        denied_reason=None,
+    )
 
     # Pure-SKILL.md skills never touch the sandbox. Returning the body lets
     # the model consume the instructions inline; no quota, no pool slot.
@@ -239,6 +324,36 @@ async def invoke_skill(
         result=dispatch_result.result,
         duration_ms=dispatch_result.duration_ms,
     ).to_dict()
+
+
+async def _maybe_emit_skill_activated(
+    ctx: SkillMetaContext,
+    *,
+    slug: str,
+    outcome: str,
+    denied_reason: str | None,
+) -> None:
+    """Per-turn deduped skill.activated emit.
+
+    Fires the context's ``on_skill_activated`` hook the first time a
+    given slug appears within a turn. Subsequent invocations of the
+    same slug in the same turn are silenced.
+
+    Telemetry tier: hook exceptions are caught and logged. The agent
+    turn never fails on an audit error.
+    """
+    if ctx.on_skill_activated is None:
+        return
+    if not _mark_skill_activated_this_turn(slug):
+        return
+    try:
+        await ctx.on_skill_activated(slug, outcome, denied_reason)
+    except Exception:  # noqa: BLE001 — telemetry tier
+        logger.exception(
+            "skill-meta: skill.activated emit failed for slug=%s outcome=%s",
+            slug,
+            outcome,
+        )
 
 
 def build_skill_meta_tool(ctx: SkillMetaContext) -> Callable[..., Awaitable[dict[str, Any]]]:
