@@ -271,6 +271,53 @@ export const EVENT_PAYLOAD_SHAPES: Record<ComplianceEventType, RedactionSchema> 
 		"policy.blocked": { allowedFields: new Set() },
 		"policy.bypassed": { allowedFields: new Set() },
 		"approval.recorded": { allowedFields: new Set() },
+
+		// ── Finance pilot (U6 of 2026-05-14-002 plan) ─────────────────
+		//
+		// Payloads intentionally reference operational ids (attachmentId,
+		// thread_id, message_id, artifact_id) — raw S3 keys / filenames /
+		// content stay OUT of the audit log. The same hardening discipline
+		// is mirrored at the GraphQL surface (ThreadAttachment.s3Key was
+		// removed in U9-resolver-patch); see plan §"Key Technical Decisions".
+
+		"attachment.received": {
+			// thread_id and message_id are envelope fields, but we mirror
+			// them in the payload so the auditor view does not need a join
+			// to render attachment context. message_id is optional because
+			// admin-initiated uploads (operator seeding files mid-thread)
+			// are not bound to a specific message.
+			allowedFields: new Set([
+				"attachmentId",
+				"thread_id",
+				"message_id",
+				"mime_type",
+				"size_bytes",
+			]),
+		},
+		"skill.activated": {
+			// outcome is a coarse enum ("allowed" | "denied"); denied_reason
+			// is a short label, not free-text. Per-turn dedup in the Strands
+			// side (U4) keeps cardinality bounded to one event per distinct
+			// skill slug per turn.
+			allowedFields: new Set([
+				"thread_id",
+				"agent_id",
+				"skill_slug",
+				"outcome",
+				"denied_reason",
+			]),
+		},
+		"output.artifact_produced": {
+			// artifact_type is the MessageArtifact.artifact_type discriminator;
+			// size_bytes is best-effort (some artifact bodies live in S3).
+			allowedFields: new Set([
+				"thread_id",
+				"message_id",
+				"artifact_id",
+				"artifact_type",
+				"size_bytes",
+			]),
+		},
 	};
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,
