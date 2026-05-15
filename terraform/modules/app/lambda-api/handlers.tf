@@ -389,6 +389,15 @@ resource "aws_lambda_function" "handler" {
     # POST /api/plugins/presign + /upload, GET /api/plugins (+ /:uploadId).
     # Cognito JWT; admin-role gated. Needs WORKSPACE_BUCKET env for S3.
     "plugin-upload",
+    # Finance pilot U2 — thread-attachment upload (presign + finalize).
+    # presign issues a 5-min PUT URL the end-user client uses to push
+    # Excel/CSV bytes directly to S3; finalize sniffs magic bytes, scans
+    # OOXML containers (rejects macros + external links), inserts
+    # thread_attachments, and emits attachment.received audit event.
+    # Cognito JWT (end-user-facing — NOT admin-gated); tenant pinned via
+    # threads.tenant_id lookup. Needs WORKSPACE_BUCKET env for S3.
+    "thread-attachments-presign",
+    "thread-attachments-finalize",
     # Folder bundle import (fat-folder plan Phase D). Admin uploads a zip
     # or GitHub ref and the handler normalizes vendor folder layouts into
     # the agent workspace.
@@ -876,6 +885,14 @@ locals {
     "OPTIONS /api/plugins"            = "plugin-upload"
     "GET /api/plugins/{uploadId}"     = "plugin-upload"
     "OPTIONS /api/plugins/{uploadId}" = "plugin-upload"
+
+    # Finance pilot U2 — thread-attachment upload (presign + finalize).
+    # Cognito JWT; tenant pinned via threads.tenant_id lookup. OPTIONS
+    # is handled inside the Lambda before auth.
+    "POST /api/threads/{threadId}/attachments/presign"     = "thread-attachments-presign"
+    "OPTIONS /api/threads/{threadId}/attachments/presign"  = "thread-attachments-presign"
+    "POST /api/threads/{threadId}/attachments/finalize"    = "thread-attachments-finalize"
+    "OPTIONS /api/threads/{threadId}/attachments/finalize" = "thread-attachments-finalize"
 
     # Fat-folder bundle import. OPTIONS is handled inside the Lambda before auth.
     "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"
