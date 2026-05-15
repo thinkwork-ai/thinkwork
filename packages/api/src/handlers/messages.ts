@@ -24,6 +24,7 @@ import {
 	readArtifactPayloadFromS3,
 	writeArtifactPayloadToS3,
 } from "../lib/artifacts/payload-storage.js";
+import { emitAuditEvent } from "../lib/compliance/emit.js";
 
 // ---------------------------------------------------------------------------
 // Router
@@ -212,11 +213,16 @@ async function createArtifact(
 	const body = JSON.parse(event.body || "{}");
 	if (!body.artifact_type) return error("artifact_type is required");
 
-	// Look up the message to get thread_id and tenant_id
+	// Look up the message to get thread_id, tenant_id, and sender info
+	// (sender_type/sender_id let the audit emit attribute the artifact to
+	// the agent that produced it when the originating message came from an
+	// agent; bare-system callers fall back to platform-credential).
 	const [msg] = await db
 		.select({
 			thread_id: messages.thread_id,
 			tenant_id: messages.tenant_id,
+			sender_type: messages.sender_type,
+			sender_id: messages.sender_id,
 		})
 		.from(messages)
 		.where(eq(messages.id, messageId));
@@ -240,26 +246,66 @@ async function createArtifact(
 		});
 	}
 
-	const [artifact] = await db
-		.insert(messageArtifacts)
-		.values({
-			id: artifactId,
-			message_id: messageId,
-			thread_id: msg.thread_id,
-			tenant_id: msg.tenant_id,
-			artifact_type: body.artifact_type,
-			name: body.name,
-			content: contentS3Key ? null : body.content,
-			s3_key: contentS3Key,
-			mime_type: body.mime_type,
-			size_bytes:
-				body.size_bytes ??
-				(typeof body.content === "string"
-					? Buffer.byteLength(body.content, "utf8")
-					: undefined),
-			metadata: body.metadata,
-		})
-		.returning();
+	const sizeBytes =
+		body.size_bytes ??
+		(typeof body.content === "string"
+			? Buffer.byteLength(body.content, "utf8")
+			: undefined);
+
+	// Wrap insert + audit emit in a single transaction so audit-write
+	// failure rolls back the artifact row (control-evidence tier per the
+	// compliance master plan U5). The row IS the durable evidence — a
+	// dangling artifact with no audit event would weaken the SOC2
+	// CC8.1 / CC6.7 story.
+	const [artifact] = await db.transaction(async (tx) => {
+		const [inserted] = await tx
+			.insert(messageArtifacts)
+			.values({
+				id: artifactId,
+				message_id: messageId,
+				thread_id: msg.thread_id,
+				tenant_id: msg.tenant_id,
+				artifact_type: body.artifact_type,
+				name: body.name,
+				content: contentS3Key ? null : body.content,
+				s3_key: contentS3Key,
+				mime_type: body.mime_type,
+				size_bytes: sizeBytes,
+				metadata: body.metadata,
+			})
+			.returning();
+
+		// Audit emit (U6 of finance pilot plan). The /api/messages/*/artifacts
+		// endpoint is API-secret-authed (Strands container is the primary
+		// caller), so the actor is "system" with the platform-credential
+		// pseudonym constant — matching the apikey branch in
+		// createAgent.mutation.ts.
+		await emitAuditEvent(tx, {
+			tenantId: msg.tenant_id,
+			actorId: "platform-credential",
+			actorType: "system",
+			eventType: "output.artifact_produced",
+			source: "lambda",
+			payload: {
+				thread_id: msg.thread_id,
+				message_id: messageId,
+				artifact_id: artifactId,
+				artifact_type: body.artifact_type,
+				size_bytes: sizeBytes,
+			},
+			resourceType: "message_artifact",
+			resourceId: artifactId,
+			action: "create",
+			outcome: "success",
+			threadId: msg.thread_id,
+			agentId:
+				msg.sender_type === "agent" && msg.sender_id
+					? msg.sender_id
+					: undefined,
+		});
+
+		return [inserted];
+	});
 
 	return json(
 		contentS3Key ? { ...artifact, content: body.content } : artifact,

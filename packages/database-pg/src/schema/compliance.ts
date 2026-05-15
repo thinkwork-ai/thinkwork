@@ -99,8 +99,10 @@ export const auditOutbox = compliance.table(
 			table.enqueued_at,
 		),
 		check(
-			"audit_outbox_event_type_prefix",
-			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval)\\.'`,
+			// _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
+			// to include attachment|skill|output prefixes for the finance pilot.
+			"audit_outbox_event_type_prefix_v2",
+			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
 		),
 	],
 );
@@ -175,8 +177,10 @@ export const auditEvents = compliance.table(
 			sql`${table.actor_type} IN ('user','system','agent')`,
 		),
 		check(
-			"audit_events_event_type_prefix",
-			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval)\\.'`,
+			// _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
+			// to include attachment|skill|output prefixes for the finance pilot.
+			"audit_events_event_type_prefix_v2",
+			sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
 		),
 	],
 );
@@ -304,7 +308,10 @@ export const tenantAnchorState = compliance.table(
 /**
  * Canonical event-type slate (R10) — the 10 starter events for SOC2
  * Type 1 evidence + 5 reserved Phase 6 governance types (R14, declared
- * but not emitted in v1).
+ * but not emitted in v1) + 3 finance-pilot events (U6 of the finance
+ * analysis pilot plan: attachment uploads, skill activations, artifact
+ * produced — adds the `attachment|skill|output` prefixes recognized by
+ * the audit_outbox / audit_events event_type check constraints).
  */
 export const COMPLIANCE_EVENT_TYPES = [
 	// Phase 3 starter slate (R10)
@@ -328,6 +335,10 @@ export const COMPLIANCE_EVENT_TYPES = [
 	"policy.blocked",
 	"policy.bypassed",
 	"approval.recorded",
+	// Finance pilot (U6 of 2026-05-14-002-feat-finance-analysis-pilot-plan)
+	"attachment.received",
+	"skill.activated",
+	"output.artifact_produced",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];
