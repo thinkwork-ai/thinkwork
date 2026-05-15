@@ -29,6 +29,15 @@ export const sendMessage = async (
     .where(eq(threads.id, i.threadId));
   if (!thread) throw new Error("Thread not found");
 
+  // metadata.attachments is the message ↔ thread_attachments link for the
+  // finance pilot (U3 of 2026-05-14-002). The presign/finalize handlers
+  // already inserted the thread_attachments rows; sendMessage only
+  // persists the UUID reference list on the message so chat-agent-invoke
+  // can re-resolve the attachment rows at dispatch time. The full row
+  // contents (s3_key, mime_type, size) live exclusively on the
+  // thread_attachments table — never duplicated into messages.metadata.
+  const parsedMetadata = i.metadata ? JSON.parse(i.metadata) : undefined;
+
   const [row] = await db
     .insert(messages)
     .values({
@@ -40,7 +49,7 @@ export const sendMessage = async (
       sender_id: senderId,
       tool_calls: i.toolCalls ? JSON.parse(i.toolCalls) : undefined,
       tool_results: i.toolResults ? JSON.parse(i.toolResults) : undefined,
-      metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
+      metadata: parsedMetadata,
     })
     .returning();
 

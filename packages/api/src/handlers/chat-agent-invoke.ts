@@ -122,6 +122,14 @@ function extractResponseText(data: unknown): string {
   return JSON.stringify(data);
 }
 
+interface InvokeAttachment {
+  attachmentId: string;
+  s3Key: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 interface InvokeEvent {
   threadId: string;
   tenantId: string;
@@ -133,6 +141,14 @@ interface InvokeEvent {
   runbookTaskId?: string;
   runbookContext?: unknown;
   responseMode?: "runbook_step";
+  /**
+   * U3 of the finance pilot — the dispatch caller (thread-cutover.ts)
+   * resolves `messages.metadata.attachments` against `thread_attachments`
+   * with a tenant pin and passes the full record set here. Empty when
+   * the turn has no attachments. Forwarded to the AgentCore Lambda
+   * invoke payload as `message_attachments` (snake_case for Python).
+   */
+  messageAttachments?: InvokeAttachment[];
 }
 
 type ChatInvokeIdentitySource =
@@ -547,6 +563,22 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       browser_automation_enabled:
         runtimeConfig.browserAutomationEnabled || undefined,
       runbook_context: event.runbookContext || undefined,
+      // U3 of the finance pilot — Strands' _execute_agent_turn reads
+      // payload["message_attachments"] directly off this dict (no
+      // apply_invocation_env indirection; that helper is an os.environ
+      // setter for scalar strings, not an array-of-records carrier).
+      // Convert camelCase → snake_case at the field-shape boundary so
+      // the Python side sees the conventional Python casing.
+      message_attachments:
+        event.messageAttachments && event.messageAttachments.length > 0
+          ? event.messageAttachments.map((att) => ({
+              attachment_id: att.attachmentId,
+              s3_key: att.s3Key,
+              name: att.name,
+              mime_type: att.mimeType,
+              size_bytes: att.sizeBytes,
+            }))
+          : undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {

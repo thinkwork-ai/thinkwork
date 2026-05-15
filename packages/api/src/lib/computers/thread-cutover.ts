@@ -1,10 +1,11 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   computers,
   computerEvents,
   computerTasks,
   messages,
+  threadAttachments,
   threads,
 } from "@thinkwork/database-pg/schema";
 import type { RunbookDefinition } from "../runbooks/definition.js";
@@ -722,7 +723,10 @@ async function dispatchComputerThreadTurn(input: {
   }
 
   const [message] = await db
-    .select({ content: messages.content })
+    .select({
+      content: messages.content,
+      metadata: messages.metadata,
+    })
     .from(messages)
     .where(
       and(
@@ -740,6 +744,18 @@ async function dispatchComputerThreadTurn(input: {
     });
     return false;
   }
+
+  // Resolve the finance-pilot attachment list (U3 of 2026-05-14-002).
+  // The presign/finalize handlers (U2) wrote the rows; sendMessage
+  // persisted the UUID list on `messages.metadata.attachments`. Here
+  // we re-SELECT the rows with a tenant-pin so the Strands invoke
+  // payload carries the full record set even if the agent runtime
+  // can't reach Aurora directly. Empty list when no attachments —
+  // chat-agent-invoke + Strands tolerate both shapes.
+  const messageAttachments = await resolveMessageAttachmentsForDispatch({
+    tenantId: input.tenantId,
+    metadata: message.metadata,
+  });
 
   try {
     const recipeDefaults = await ensureArtifactBuilderDefaults({
@@ -828,6 +844,7 @@ async function dispatchComputerThreadTurn(input: {
     computerId: input.computerId,
     computerTaskId: input.taskId,
     runbookContext,
+    messageAttachments,
   });
 
   if (!invoked) {
@@ -938,4 +955,94 @@ async function markDispatchFailed(
       title: thread.title ?? "Untitled thread",
     }).catch(() => {});
   }
+}
+
+/**
+ * U3 of the finance pilot — finance attachment resolution at dispatch.
+ *
+ * `messages.metadata` is a free-form JSONB. The U3 contract restricts the
+ * attachment portion to:
+ *
+ *     metadata.attachments: Array<{ attachmentId: string }>
+ *
+ * Read the list, defend against shape drift (non-array, non-string-uuid,
+ * empty), and SELECT the actual `thread_attachments` rows with a
+ * tenant pin (defense-in-depth even though sendMessage's mutation
+ * already pinned the originating thread). Returns the row data the
+ * Strands invoke payload carries — never `s3_key` alone, the full
+ * record so the Strands side can boto3-download by key without an
+ * additional API call.
+ *
+ * Empty input → empty output. Callers do NOT need to special-case the
+ * "no attachments" path; the Strands turn loop skips the preamble when
+ * the list is empty.
+ */
+export interface DispatchAttachment {
+  attachmentId: string;
+  s3Key: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export async function resolveMessageAttachmentsForDispatch(input: {
+  tenantId: string;
+  metadata: unknown;
+}): Promise<DispatchAttachment[]> {
+  const list = readAttachmentIdList(input.metadata);
+  if (list.length === 0) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: threadAttachments.id,
+      s3_key: threadAttachments.s3_key,
+      name: threadAttachments.name,
+      mime_type: threadAttachments.mime_type,
+      size_bytes: threadAttachments.size_bytes,
+    })
+    .from(threadAttachments)
+    .where(
+      and(
+        inArray(threadAttachments.id, list),
+        eq(threadAttachments.tenant_id, input.tenantId),
+      ),
+    );
+
+  // Preserve the metadata.attachments order so the model sees the file
+  // list in the order the user attached them.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const ordered: DispatchAttachment[] = [];
+  for (const id of list) {
+    const r = byId.get(id);
+    if (!r || !r.s3_key || !r.name) continue;
+    ordered.push({
+      attachmentId: r.id,
+      s3Key: r.s3_key,
+      name: r.name,
+      mimeType: r.mime_type ?? "application/octet-stream",
+      sizeBytes: r.size_bytes ?? 0,
+    });
+  }
+  return ordered;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readAttachmentIdList(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== "object") return [];
+  const m = metadata as Record<string, unknown>;
+  const raw = m.attachments;
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const v = e.attachmentId;
+    if (typeof v !== "string") continue;
+    if (!UUID_RE.test(v)) continue;
+    ids.push(v.toLowerCase());
+  }
+  return ids;
 }
