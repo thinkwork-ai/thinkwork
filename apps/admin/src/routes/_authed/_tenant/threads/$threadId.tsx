@@ -47,6 +47,10 @@ import {
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
+  downloadThreadAttachment,
+  uploadThreadAttachmentsFromAdmin,
+} from "@/lib/thread-attachments-api";
+import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -399,19 +403,55 @@ function ThreadDetailPage() {
     navigate({ to: "/threads" });
   };
 
+  const uploadFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setAttachmentError(null);
+    try {
+      const result = await uploadThreadAttachmentsFromAdmin({
+        threadId,
+        files: list,
+      });
+      if (result.failures.length > 0) {
+        const first = result.failures[0]!;
+        setAttachmentError(
+          `${result.failures.length} upload failure(s): ${first.stage}: ${first.message}`,
+        );
+      }
+      if (result.uploaded.length > 0) {
+        reexecuteThread({ requestPolicy: "network-only" });
+      }
+    } catch (err) {
+      setAttachmentError(
+        err instanceof Error ? err.message : "Upload failed",
+      );
+    }
+  };
+
   const handleFilePicked = async (evt: ChangeEvent<HTMLInputElement>) => {
-    // TODO: Wire to attachment upload mutation when available
     const files = evt.target.files;
     if (!files || files.length === 0) return;
-    setAttachmentError("Attachment upload is not yet implemented.");
+    await uploadFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleAttachmentDrop = async (evt: DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
     setAttachmentDragActive(false);
-    // TODO: Wire to attachment upload mutation when available
-    setAttachmentError("Attachment upload is not yet implemented.");
+    const dropped = evt.dataTransfer?.files;
+    if (!dropped || dropped.length === 0) return;
+    await uploadFiles(dropped);
+  };
+
+  const handleAttachmentClick = async (attachmentId: string) => {
+    setAttachmentError(null);
+    try {
+      await downloadThreadAttachment({ threadId, attachmentId });
+    } catch (err) {
+      setAttachmentError(
+        err instanceof Error ? err.message : "Download failed",
+      );
+    }
   };
 
   const attachmentUploadButton = (
@@ -419,12 +459,13 @@ function ThreadDetailPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,application/pdf,text/plain,text/markdown,application/json,text/csv,text/html,.md,.markdown"
+        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
         className="hidden"
         onChange={handleFilePicked}
         multiple
       />
       <button
+        type="button"
         onClick={() => fileInputRef.current?.click()}
         className={cn(
           "text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1",
@@ -577,16 +618,19 @@ function ThreadDetailPage() {
                 className="rounded-md border border-border bg-background p-2"
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span
-                    className="text-xs truncate"
-                    title={attachment.name ?? attachment.id}
+                  <button
+                    type="button"
+                    onClick={() => handleAttachmentClick(attachment.id)}
+                    className="text-xs truncate text-left hover:text-primary underline-offset-2 hover:underline"
+                    title={`Download ${attachment.name ?? attachment.id}`}
                   >
                     {attachment.name ?? attachment.id}
-                  </span>
+                  </button>
                   <button
                     type="button"
                     className="text-muted-foreground hover:text-destructive shrink-0"
-                    title="Delete"
+                    title="Delete (not yet implemented)"
+                    disabled
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
