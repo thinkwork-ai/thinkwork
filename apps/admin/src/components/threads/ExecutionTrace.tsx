@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/collapsible";
 import { formatCost } from "@/lib/activity-utils";
 import {
+  summarizeToolInvocations,
+  type ToolPill,
+} from "./tool-pills";
+import {
   ThreadTurnsForThreadQuery,
   ThreadTurnEventsQuery,
   TurnInvocationLogsQuery,
@@ -39,6 +43,8 @@ import {
   Brain,
   Zap,
   Maximize2,
+  Wrench,
+  Sparkles,
 } from "lucide-react";
 import {
   Dialog,
@@ -87,6 +93,51 @@ function formatDuration(ms: number | undefined | null): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+function ToolPillRow({ pills }: { pills: ToolPill[] }) {
+  if (pills.length === 0) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5 pl-9 pr-4 pb-2 -mt-1"
+      data-testid="turn-tool-pills"
+    >
+      {pills.map((pill) => (
+        <ToolPillBadge key={pill.key} pill={pill} />
+      ))}
+    </div>
+  );
+}
+
+function ToolPillBadge({ pill }: { pill: ToolPill }) {
+  const Icon =
+    pill.type === "sub_agent"
+      ? Bot
+      : pill.type === "skill"
+        ? Sparkles
+        : Wrench;
+  const tone =
+    pill.type === "sub_agent"
+      ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20"
+      : pill.type === "skill"
+        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20"
+        : "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20";
+  const label =
+    pill.type === "skill" ? `Skill · ${pill.toolName}` : pill.toolName;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none ${tone}`}
+      title={
+        pill.count > 1 ? `${label} (called ${pill.count}×)` : label
+      }
+    >
+      <Icon className="h-3 w-3 shrink-0" />
+      <span className="max-w-[12rem] truncate">{label}</span>
+      {pill.count > 1 && (
+        <span className="text-muted-foreground">×{pill.count}</span>
+      )}
+    </span>
+  );
 }
 
 function formatTokens(n: unknown): string {
@@ -836,6 +887,7 @@ function TurnRow({
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
   const cfg = statusConfig[turn.status] || statusConfig.failed;
+  const toolPills = summarizeToolInvocations(usage);
 
   const durationMs = usage?.duration_ms as number | undefined;
   const inputTokens = usage?.input_tokens;
@@ -849,8 +901,10 @@ function TurnRow({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="w-full">
-        <div className="flex items-start gap-3 px-4 py-3 hover:bg-accent/20 transition-colors rounded-md text-sm group">
+      <CollapsibleTrigger className="w-full text-left">
+        <div
+          className={`flex items-start gap-3 px-4 pt-3 hover:bg-accent/20 transition-colors rounded-md text-sm group ${toolPills.length > 0 ? "pb-1" : "pb-3"}`}
+        >
           <div className="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted">
             <Brain className={`h-3.5 w-3.5 shrink-0 ${statusColorClass}`} />
           </div>
@@ -917,6 +971,7 @@ function TurnRow({
             </span>
           </div>
         </div>
+        <ToolPillRow pills={toolPills} />
       </CollapsibleTrigger>
 
       <CollapsibleContent>
