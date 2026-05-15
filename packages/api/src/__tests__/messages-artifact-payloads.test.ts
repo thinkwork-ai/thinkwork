@@ -6,13 +6,13 @@ const { mockDb, selectRows, insertedRows } = vi.hoisted(() => {
   const selectRows: any[] = [];
   const insertedRows: any[] = [];
 
-  const selectBuilder = {
+  const selectBuilder: any = {
     from: vi.fn(() => selectBuilder),
     where: vi.fn(() => selectBuilder),
     orderBy: vi.fn(() => Promise.resolve(selectRows)),
     then: (resolve: (rows: any[]) => unknown) => resolve(selectRows),
   };
-  const insertBuilder = {
+  const insertBuilder: any = {
     values: vi.fn((row: any) => {
       insertedRows.push(row);
       return insertBuilder;
@@ -20,13 +20,20 @@ const { mockDb, selectRows, insertedRows } = vi.hoisted(() => {
     returning: vi.fn(() => Promise.resolve(insertedRows.slice(-1))),
   };
 
+  // The U6 artifact emit wraps insert + emitAuditEvent in a transaction.
+  // Mock transaction by re-using mockDb as the tx handle — the builders
+  // are stateful via the shared insertedRows / selectRows arrays, so a
+  // single instance is sufficient.
+  const mockDb: any = {
+    select: vi.fn(() => selectBuilder),
+    insert: vi.fn(() => insertBuilder),
+    transaction: vi.fn(async (cb: (tx: any) => unknown) => cb(mockDb)),
+  };
+
   return {
     selectRows,
     insertedRows,
-    mockDb: {
-      select: vi.fn(() => selectBuilder),
-      insert: vi.fn(() => insertBuilder),
-    },
+    mockDb,
   };
 });
 

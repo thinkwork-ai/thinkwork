@@ -65,6 +65,79 @@ describe("redactPayload", () => {
 			expect(result.redacted).not.toHaveProperty("password");
 			expect(result.redactedFields).toContain("password");
 		});
+
+		it("attachment.received drops raw s3_key / filename — only attachmentId reference survives", () => {
+			// U6 hardening: operational metadata (raw S3 paths, filenames)
+			// must not enter the audit log. The plan's Key Technical Decision
+			// names this explicitly. attachmentId (UUID) is the only durable
+			// pointer.
+			const result = redactPayload("attachment.received", {
+				attachmentId: "att-uuid-1",
+				thread_id: "thread-uuid-1",
+				message_id: "msg-uuid-1",
+				mime_type:
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				size_bytes: 42_000,
+				// These MUST be dropped — they would defeat the hardening
+				// intent that mirrors the GraphQL ThreadAttachment s3Key
+				// removal in U9-resolver-patch.
+				s3_key: "tenants/acme/threads/t1/attachments/att-uuid-1/financials.xlsx",
+				name: "financials.xlsx",
+				uploaded_by: "user-uuid-1",
+			});
+			expect(result.redacted).not.toHaveProperty("s3_key");
+			expect(result.redacted).not.toHaveProperty("name");
+			expect(result.redacted).not.toHaveProperty("uploaded_by");
+			expect(result.redactedFields).toEqual(
+				expect.arrayContaining(["s3_key", "name", "uploaded_by"]),
+			);
+			expect(result.redacted.attachmentId).toBe("att-uuid-1");
+			expect(result.redacted.mime_type).toBe(
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			);
+			expect(result.redacted.size_bytes).toBe(42_000);
+		});
+
+		it("skill.activated retains slug + outcome + denied_reason; drops everything else", () => {
+			const result = redactPayload("skill.activated", {
+				thread_id: "thread-uuid-1",
+				agent_id: "agent-uuid-1",
+				skill_slug: "finance-statement-analysis",
+				outcome: "denied",
+				denied_reason: "kill_switch_active",
+				// Dropped — free-text rationale should not leak through.
+				model_response: "I cannot run that skill because…",
+				system_prompt_excerpt: "You are an agent…",
+			});
+			expect(result.redacted).not.toHaveProperty("model_response");
+			expect(result.redacted).not.toHaveProperty("system_prompt_excerpt");
+			expect(result.redacted).toMatchObject({
+				skill_slug: "finance-statement-analysis",
+				outcome: "denied",
+				denied_reason: "kill_switch_active",
+			});
+		});
+
+		it("output.artifact_produced retains artifact identifiers; drops content / s3 key", () => {
+			const result = redactPayload("output.artifact_produced", {
+				thread_id: "thread-uuid-1",
+				message_id: "msg-uuid-1",
+				artifact_id: "art-uuid-1",
+				artifact_type: "table",
+				size_bytes: 8192,
+				// Dropped — the row itself is the durable evidence; the audit
+				// log records only the pointer.
+				s3_key: "tenants/acme/artifact-payloads/message-artifacts/art-uuid-1/content/r1",
+				content: "| col | val |\n| --- | --- |\n",
+			});
+			expect(result.redacted).not.toHaveProperty("s3_key");
+			expect(result.redacted).not.toHaveProperty("content");
+			expect(result.redacted).toMatchObject({
+				artifact_id: "art-uuid-1",
+				artifact_type: "table",
+				size_bytes: 8192,
+			});
+		});
 	});
 
 	describe("secret pattern scrub on allowed fields", () => {
