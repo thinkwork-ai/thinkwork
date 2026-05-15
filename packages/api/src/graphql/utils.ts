@@ -291,6 +291,14 @@ export async function getKbManagerFnArn(): Promise<string | null> {
 // Eval Runner Lambda — resolved from SSM at cold start
 // ---------------------------------------------------------------------------
 
+export interface ChatAgentInvokeAttachment {
+  attachmentId: string;
+  s3Key: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 /** Fire-and-forget: invoke chat-agent-invoke Lambda for immediate agent response */
 export async function invokeChatAgent(payload: {
   threadId: string;
@@ -301,6 +309,14 @@ export async function invokeChatAgent(payload: {
   computerId?: string;
   computerTaskId?: string;
   runbookContext?: unknown;
+  /**
+   * U3 of the finance pilot — the attachment records the dispatching
+   * caller resolved from `messages.metadata.attachments`. Empty array
+   * when the turn has no attachments. chat-agent-invoke forwards this
+   * to the AgentCore Lambda invoke payload as `message_attachments`
+   * (snake_case for the Python side).
+   */
+  messageAttachments?: ChatAgentInvokeAttachment[];
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();
