@@ -15,20 +15,30 @@
  * catalog's `deriveAgentSkills` picks up the SKILL.md on PUT, so the
  * agent gets the new capability without any GraphQL mutation.
  *
- * Usage:
+ * Usage — Cognito JWT auth (interactive operator):
  *
  *   pnpm tsx packages/skill-catalog/scripts/install-finance-pilot.ts \
  *     --api-url=https://abc.execute-api.us-east-1.amazonaws.com \
  *     --token=<cognito-id-token> \
  *     --agent-id=<agent-uuid>
  *
+ * Usage — service-auth (apikey, for CI / scripted activation):
+ *
+ *   pnpm tsx packages/skill-catalog/scripts/install-finance-pilot.ts \
+ *     --api-url=https://abc.execute-api.us-east-1.amazonaws.com \
+ *     --api-key=<API_AUTH_SECRET> \
+ *     --tenant-id=<tenant-uuid> \
+ *     --agent-id=<agent-uuid>
+ *
  *   # OR target a template instead of an agent:
  *   pnpm tsx packages/skill-catalog/scripts/install-finance-pilot.ts \
  *     --api-url=... --token=... --template-id=<template-uuid>
  *
- * Get a token via `thinkwork login -s <stage>` then `thinkwork me`
+ * Get a Cognito token via `thinkwork login -s <stage>` then `thinkwork me`
  * (or copy from the admin web app's auth state). Token expires after
- * 1 hour; re-run with a fresh token if you hit a 401.
+ * 1 hour; re-run with a fresh token if you hit a 401. The apikey path
+ * uses the shared API_AUTH_SECRET (Secrets Manager / Lambda env) and
+ * does not expire.
  *
  * Re-runs are idempotent — PUTs overwrite the existing file.
  */
@@ -48,9 +58,13 @@ const PILOT_SKILL_SLUGS = [
 
 interface CliArgs {
 	apiUrl: string;
-	token: string;
+	auth: AuthArgs;
 	target: { agentId: string } | { templateId: string };
 }
+
+type AuthArgs =
+	| { kind: "cognito"; token: string }
+	| { kind: "apikey"; apiKey: string; tenantId: string; principalId: string };
 
 function parseArgs(argv: string[]): CliArgs {
 	const out: Record<string, string> = {};
@@ -63,8 +77,30 @@ function parseArgs(argv: string[]): CliArgs {
 		throw new Error("missing --api-url");
 	}
 	const token = out["token"] || "";
-	if (!token) {
-		throw new Error("missing --token");
+	const apiKey = out["api-key"] || "";
+	const tenantId = out["tenant-id"] || "";
+	const principalId = out["principal-id"] || "";
+	let auth: AuthArgs;
+	if (apiKey) {
+		if (!tenantId) {
+			throw new Error("--api-key requires --tenant-id (the tenant UUID)");
+		}
+		auth = {
+			kind: "apikey",
+			apiKey,
+			tenantId,
+			// Operator identity for audit. Required for tenant_admin / cognito-path
+			// callers; for apikey it surfaces in resolveAuditActor as a "system"
+			// actor but x-principal-id is still forwarded for log correlation.
+			// Defaults to "operator-install-finance-pilot" if not supplied.
+			principalId: principalId || "operator-install-finance-pilot",
+		};
+	} else if (token) {
+		auth = { kind: "cognito", token };
+	} else {
+		throw new Error(
+			"must pass either --token (Cognito JWT) or --api-key + --tenant-id (service-auth)",
+		);
 	}
 	const agentId = out["agent-id"] || "";
 	const templateId = out["template-id"] || "";
@@ -76,7 +112,7 @@ function parseArgs(argv: string[]): CliArgs {
 	}
 	return {
 		apiUrl,
-		token,
+		auth,
 		target: agentId ? { agentId } : { templateId },
 	};
 }
@@ -86,6 +122,26 @@ interface PutFileInput {
 	body: string;
 }
 
+function authHeaders(args: CliArgs): Record<string, string> {
+	if (args.auth.kind === "cognito") {
+		return { authorization: `Bearer ${args.auth.token}` };
+	}
+	// Service-auth path: presents the shared API_AUTH_SECRET + the tenant
+	// the operator is acting on behalf of. Apikey callers bypass the
+	// tenant-admin role check (workspace-files.ts:1421) but MUST present
+	// x-agent-id matching the target agent for identity-field writes —
+	// generic SKILL.md PUTs are unconstrained.
+	const headers: Record<string, string> = {
+		"x-api-key": args.auth.apiKey,
+		"x-tenant-id": args.auth.tenantId,
+		"x-principal-id": args.auth.principalId,
+	};
+	if ("agentId" in args.target) {
+		headers["x-agent-id"] = args.target.agentId;
+	}
+	return headers;
+}
+
 async function putWorkspaceFile(
 	args: CliArgs,
 	input: PutFileInput,
@@ -93,14 +149,18 @@ async function putWorkspaceFile(
 	const requestBody: Record<string, unknown> = {
 		action: "put",
 		path: input.relPath,
-		body: input.body,
+		// Handler field is `content`, not `body`. The original draft of this
+		// script sent `body: ...` which fails 400 ("path and content are
+		// required for put"). Catalog install was never run against dev, so
+		// the wire-format mismatch hid in plain sight until activation.
+		content: input.body,
 		...args.target,
 	};
 	const res = await fetch(`${args.apiUrl}/api/workspaces/files`, {
 		method: "POST",
 		headers: {
 			"content-type": "application/json",
-			authorization: `Bearer ${args.token}`,
+			...authHeaders(args),
 		},
 		body: JSON.stringify(requestBody),
 	});
