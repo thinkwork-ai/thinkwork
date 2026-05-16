@@ -15,8 +15,12 @@ const readMigration = (name: string) =>
 const migration0078 = readMigration("0078_tenant_customize_catalog.sql");
 const migration0079 = readMigration("0079_seed_tenant_customize_catalog.sql");
 const migration0087 = readMigration("0087_retire_oss_connectors.sql");
+// External-refs source moved into brain.ts as part of the brain schema
+// extraction (0090). The test still grep-checks the source for connector
+// retirement assertions — brain.ts is now the file that holds the constraint
+// definitions.
 const externalRefsSchema = readFileSync(
-	join(HERE, "..", "src", "schema", "tenant-entity-external-refs.ts"),
+	join(HERE, "..", "src", "schema", "brain.ts"),
 	"utf-8",
 );
 
