@@ -3,6 +3,7 @@ import {
   Bot,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Code2,
   Database,
   ListChecks,
@@ -541,14 +542,18 @@ function CollapsibleUserMessageBody({ body }: { body: string }) {
           />
         ) : null}
       </div>
-      {collapsed ? (
+      {isOverflowing ? (
         <button
           type="button"
-          onClick={() => setIsExpanded(true)}
+          onClick={() => setIsExpanded((prev) => !prev)}
           className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          Show more
-          <ChevronDown className="size-4" aria-hidden="true" />
+          {isExpanded ? "Show less" : "Show more"}
+          {isExpanded ? (
+            <ChevronUp className="size-4" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="size-4" aria-hidden="true" />
+          )}
         </button>
       ) : null}
     </>

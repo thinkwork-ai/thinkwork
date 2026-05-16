@@ -1917,17 +1917,28 @@ describe("TaskThreadView", () => {
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("false");
       expect(wrapper.style.maxHeight).toBe("");
+      // The clamp affordance flips to "Show less" once expanded so the
+      // user can re-collapse without scrolling past the full prompt.
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /show less/i }),
+      ).toBeTruthy();
     });
 
-    it("never renders a Show less affordance once expanded", () => {
+    it("re-collapses back to clipped state when Show less is clicked", () => {
       mockScrollHeight(800);
       renderUserMessage("Long prompt that overflows");
 
       fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+      fireEvent.click(screen.getByRole("button", { name: /show less/i }));
 
+      const wrapper = screen.getByTestId("collapsible-user-body");
+      expect(wrapper.getAttribute("data-collapsed")).toBe("true");
+      expect(wrapper.style.maxHeight).toBe("280px");
+      expect(
+        screen.getByRole("button", { name: /show more/i }),
+      ).toBeTruthy();
       expect(screen.queryByRole("button", { name: /show less/i })).toBeNull();
-      expect(screen.queryByRole("button", { name: /collapse/i })).toBeNull();
     });
 
     it("re-evaluates overflow when the body content grows past the threshold", () => {

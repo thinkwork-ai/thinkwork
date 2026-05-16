@@ -27,7 +27,7 @@ OpenAI's chat surface solves this by clipping the user bubble to ~10 lines, over
 - R1. User message bubbles in the Computer thread transcript clip to ~10 lines of body content when long, with a bottom-to-top fade gradient over the last ~2 lines of clipped content.
 - R2. When clipped, a "Show more" button (with a downward chevron) sits inside the bubble container, immediately below the clipped text and above the bubble's bottom padding, mirroring the reference design in [Image #2]. Clicking it expands the bubble to full content.
 - R3. Short user messages (≤ ~10 lines rendered) render unchanged — no max-height, no gradient, no "Show more".
-- R4. Expansion is one-way per session: there is no "Show less" affordance. Once expanded, the bubble stays expanded for the lifetime of the component.
+- R4. The clamp affordance is two-way. While clipped, the button reads "Show more" with a down-chevron and expands on click. While expanded, the button reads "Show less" with an up-chevron and re-collapses on click. The button only renders when the content actually overflows the threshold. (Original R4 specified one-way expansion; reversed 2026-05-16 after live UI review showed the lack of a re-collapse affordance left the user scrolling past the full prompt.)
 - R5. Assistant messages, action rows, thinking rows, generated artifact cards, and other non-user-bubble surfaces render unchanged.
 - R6. Existing `TaskThreadView` test coverage continues to pass; new tests assert the collapse, fade, and expansion behavior.
 
@@ -52,7 +52,6 @@ OpenAI's chat surface solves this by clipping the user bubble to ~10 lines, over
 
 ### Deferred to Follow-Up Work
 
-- A potential "Show less" affordance once expanded, if user feedback after this lands suggests it is needed for very long prompts.
 - Applying similar collapse logic to other surfaces that render long prompt strings (Threads list previews, scheduled-job dialogs) — they have their own truncation strategies today.
 
 ---
