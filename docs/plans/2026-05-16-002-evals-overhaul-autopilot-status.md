@@ -13,7 +13,7 @@ status: active
 - Unit: U13. Running run detail rows
 - Branch: `codex/evals-running-detail-rows`
 - Worktree: `.Codex/worktrees/evals-running-detail-rows`
-- State: local verification passed; preparing PR
+- State: PR #1272 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -103,6 +103,7 @@ status: active
 - 2026-05-16: Created clean U13 follow-up worktree from `origin/main`.
 - 2026-05-16: Updated `evalRunResults` to merge completed result rows with planned test-case placeholder rows, so pending/running/cancelled/failed runs expose all selected cases immediately and completed rows replace placeholders as they arrive.
 - 2026-05-16: Local U13 verification passed: focused API resolver test, API typecheck, API build, and `git diff --check`.
+- 2026-05-16: Opened PR #1272 for U13.
 
 ## Pull Requests
 
@@ -121,7 +122,7 @@ status: active
 | U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
 | U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
-| U13    | `codex/evals-running-detail-rows`              | pending                                                      | pending | pending | Follow-up: show planned eval rows and per-test statuses while a run is still in progress                                           |
+| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | pending | pending | Follow-up: show planned eval rows and per-test statuses while a run is still in progress                                           |
 
 ## CI Failures
 
