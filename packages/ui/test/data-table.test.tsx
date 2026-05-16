@@ -39,4 +39,35 @@ describe("DataTable", () => {
     expect(html).toContain("Risk");
     expect(html).toContain("Stale activity");
   });
+
+  it("pins body rows to 40px (h-10) with cell padding and overflow neutralized", () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={[{ key: "name", header: "Name" }]}
+        data={[{ name: "Row one" }, { name: "Row two" }]}
+        pageSize={0}
+      />,
+    );
+
+    // renderToStaticMarkup HTML-encodes `&` and `>` inside class attrs.
+    const rowClassFragment =
+      "h-10 [&amp;&gt;td]:py-0 [&amp;&gt;td]:overflow-hidden";
+    const occurrences = html.split(rowClassFragment).length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it("pins the empty-state row to 40px (h-10)", () => {
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={[{ key: "name", header: "Name" }]}
+        data={[]}
+        pageSize={0}
+      />,
+    );
+
+    expect(html).toContain(
+      "h-10 [&amp;&gt;td]:py-0 [&amp;&gt;td]:overflow-hidden",
+    );
+    expect(html).not.toContain("h-24");
+  });
 });

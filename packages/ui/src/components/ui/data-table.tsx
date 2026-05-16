@@ -232,10 +232,10 @@ export function DataTable<TData, TValue>({
           </TableRow>
         ))
       ) : (
-        <TableRow>
+        <TableRow className="h-10 [&>td]:py-0 [&>td]:overflow-hidden">
           <TableCell
             colSpan={columns.length}
-            className="h-24 text-center text-muted-foreground"
+            className="text-center text-muted-foreground"
           >
             {emptyState}
           </TableCell>

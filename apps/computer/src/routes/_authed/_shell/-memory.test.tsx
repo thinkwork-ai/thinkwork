@@ -107,7 +107,7 @@ describe("apps/computer Memory in-page tab strip", () => {
     expect(memoriesTab.getAttribute("data-state")).toBe("active");
   });
 
-  it("uses compact 40px table rows for memory records", async () => {
+  it("uses 40px table rows for memory records", async () => {
     useQueryMock.mockReset();
     useQueryMock
       .mockReturnValueOnce([
