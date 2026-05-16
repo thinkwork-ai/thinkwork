@@ -28,6 +28,7 @@ import { tenants } from "./core";
 import { agents } from "./agents";
 import { agentTemplates } from "./agent-templates";
 import { scheduledJobs } from "./scheduled-jobs";
+import { computers } from "./computers";
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -99,6 +100,7 @@ export const evalRuns = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		agent_id: uuid("agent_id").references(() => agents.id),
+		computer_id: uuid("computer_id").references(() => computers.id),
 		// Run-level agent template — picked when the user clicks Run
 		// Evaluation. Determines the workspace/tools/model the eval test
 		// agent loads for every test case in this run, unless the test
@@ -132,6 +134,11 @@ export const evalRuns = pgTable(
 		index("idx_eval_runs_tenant_agent_created").on(
 			table.tenant_id,
 			table.agent_id,
+			table.created_at,
+		),
+		index("idx_eval_runs_tenant_computer_created").on(
+			table.tenant_id,
+			table.computer_id,
 			table.created_at,
 		),
 		index("idx_eval_runs_tenant_status").on(table.tenant_id, table.status),
@@ -214,6 +221,10 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
 	agent: one(agents, {
 		fields: [evalRuns.agent_id],
 		references: [agents.id],
+	}),
+	computer: one(computers, {
+		fields: [evalRuns.computer_id],
+		references: [computers.id],
 	}),
 	agentTemplate: one(agentTemplates, {
 		fields: [evalRuns.agent_template_id],

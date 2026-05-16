@@ -443,6 +443,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         model?: string;
         categories?: string[];
       };
+      let targetComputerId: string | null = null;
       let targetAgentId: string | null = null;
       let targetTemplateId: string | null = null;
 
@@ -479,6 +480,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           console.warn(`[job-trigger] ${message} for trigger ${triggerId}`);
           return;
         }
+        targetComputerId = computer.id;
         targetAgentId =
           computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
         targetTemplateId = computer.templateId;
@@ -505,6 +507,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .values({
           tenant_id: tenantId,
           agent_id: targetAgentId,
+          computer_id: targetComputerId,
           agent_template_id: targetTemplateId,
           scheduled_job_id: triggerId,
           status: "pending",

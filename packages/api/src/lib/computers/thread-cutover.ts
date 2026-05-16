@@ -700,11 +700,12 @@ async function dispatchComputerThreadTurn(input: {
   taskId: string;
   runbookRunId?: string | null;
 }) {
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      migrated_from_agent_id: computers.migrated_from_agent_id,
-    })
+	const [computer] = await db
+		.select({
+			id: computers.id,
+			primary_agent_id: computers.primary_agent_id,
+			migrated_from_agent_id: computers.migrated_from_agent_id,
+		})
     .from(computers)
     .where(
       and(
@@ -714,10 +715,12 @@ async function dispatchComputerThreadTurn(input: {
     )
     .limit(1);
 
-  if (!computer?.migrated_from_agent_id) {
-    await markDispatchFailed(input, {
-      message: "Computer has no Strands backing agent configured",
-      code: "missing_backing_agent",
+	const backingAgentId =
+		computer?.primary_agent_id ?? computer?.migrated_from_agent_id ?? null;
+	if (!backingAgentId) {
+		await markDispatchFailed(input, {
+			message: "Computer has no Strands backing agent configured",
+			code: "missing_backing_agent",
     });
     return false;
   }
@@ -773,10 +776,10 @@ async function dispatchComputerThreadTurn(input: {
       recipeDefaults.written.length > 0 ||
       recipeDefaults.updated.length > 0
     ) {
-      await db.insert(computerEvents).values({
-        tenant_id: input.tenantId,
-        computer_id: input.computerId,
-        task_id: input.taskId,
+	await db.insert(computerEvents).values({
+		tenant_id: input.tenantId,
+		computer_id: input.computerId,
+		task_id: input.taskId,
         event_type: "artifact_builder_defaults_seeded",
         level: "info",
         payload: {
@@ -818,13 +821,13 @@ async function dispatchComputerThreadTurn(input: {
     task_id: input.taskId,
     event_type: "thread_turn_dispatched",
     level: "info",
-    payload: {
-      threadId: input.threadId,
-      messageId: input.messageId,
-      agentId: computer.migrated_from_agent_id,
-      runtime: "strands",
-    },
-  });
+		payload: {
+			threadId: input.threadId,
+			messageId: input.messageId,
+			agentId: backingAgentId,
+			runtime: "strands",
+		},
+	});
 
   let runbookContext: unknown;
   if (input.runbookRunId) {
@@ -835,12 +838,12 @@ async function dispatchComputerThreadTurn(input: {
     runbookContext = runningRun ? buildAgentRunbookContext(runningRun) : null;
   }
 
-  const invoked = await invokeChatAgent({
-    tenantId: input.tenantId,
-    threadId: input.threadId,
-    agentId: computer.migrated_from_agent_id,
-    userMessage: message.content ?? "",
-    messageId: input.messageId,
+	const invoked = await invokeChatAgent({
+		tenantId: input.tenantId,
+		threadId: input.threadId,
+		agentId: backingAgentId,
+		userMessage: message.content ?? "",
+		messageId: input.messageId,
     computerId: input.computerId,
     computerTaskId: input.taskId,
     runbookContext,

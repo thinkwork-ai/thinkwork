@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentCoreEvaluatorsEnabled,
   estimateAgentCoreEvaluatorCostUsd,
+  extractComputerTaskResponse,
   parseEvalWorkerMessage,
   summarizeEvalResults,
 } from "./eval-worker.js";
@@ -69,5 +70,20 @@ describe("eval-worker evaluator cost controls", () => {
     expect(agentCoreEvaluatorsEnabled("disabled")).toBe(false);
     expect(agentCoreEvaluatorsEnabled("enabled")).toBe(true);
     expect(agentCoreEvaluatorsEnabled("FULL")).toBe(true);
+  });
+});
+
+describe("eval-worker Computer task output", () => {
+  it("extracts the response text from Computer task output shapes", () => {
+    expect(extractComputerTaskResponse({ response: "from task" })).toBe(
+      "from task",
+    );
+    expect(extractComputerTaskResponse({ responseText: "from runbook" })).toBe(
+      "from runbook",
+    );
+    expect(extractComputerTaskResponse({ content: "from fallback" })).toBe(
+      "from fallback",
+    );
+    expect(extractComputerTaskResponse({ ok: true })).toBe("");
   });
 });

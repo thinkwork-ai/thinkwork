@@ -45,6 +45,7 @@ type EvalRun {
   tenantId: ID!
   agentId: ID
   agentName: String
+  computerId: ID
   # Template the eval test agent loaded for this run. The user picks
   # this in the Run Evaluation dialog. Per-test-case
   # eval_test_cases.agent_template_id overrides this for individual

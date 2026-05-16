@@ -1449,6 +1449,7 @@ export type EvalRun = {
   agentTemplateName?: Maybe<Scalars['String']['output']>;
   categories: Array<Scalars['String']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  computerId?: Maybe<Scalars['ID']['output']>;
   costUsd?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   errorMessage?: Maybe<Scalars['String']['output']>;

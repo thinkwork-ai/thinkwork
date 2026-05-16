@@ -38,6 +38,7 @@ function runToGraphql(
     tenantId: row.tenant_id,
     agentId: row.agent_id,
     agentName: agentName ?? null,
+    computerId: row.computer_id ?? null,
     agentTemplateId: row.agent_template_id ?? null,
     agentTemplateName: agentTemplateName ?? null,
     scheduledJobId: row.scheduled_job_id ?? null,
@@ -554,7 +555,11 @@ interface StartEvalRunInput {
 async function resolveRunTarget(args: {
   tenantId: string;
   input: StartEvalRunInput;
-}): Promise<{ agentId: string | null; agentTemplateId: string | null }> {
+}): Promise<{
+  computerId: string;
+  agentId: string | null;
+  agentTemplateId: string | null;
+}> {
   if (!args.input.computerId) {
     throw new Error("Eval runs must target a running Computer");
   }
@@ -590,6 +595,7 @@ async function resolveRunTarget(args: {
   }
 
   return {
+    computerId: computer.id,
     agentId,
     agentTemplateId: computer.templateId,
   };
@@ -607,6 +613,7 @@ const startEvalRun = async (
     .values({
       tenant_id: args.tenantId,
       agent_id: target.agentId,
+      computer_id: target.computerId,
       agent_template_id: target.agentTemplateId,
       status: "pending",
       model: args.input.model ?? null,
