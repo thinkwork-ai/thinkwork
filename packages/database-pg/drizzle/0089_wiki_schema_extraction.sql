@@ -112,13 +112,16 @@
 
 BEGIN;
 
+-- Set timeouts BEFORE acquiring the advisory lock so the lock acquisition
+-- itself is bounded. Without this ordering, a concurrent transaction holding
+-- the same advisory lock would cause this migration to block indefinitely.
+SET LOCAL lock_timeout = '30s';
+SET LOCAL statement_timeout = '300s';
+
 -- Serialize concurrent application attempts (two operators racing, automation
 -- + operator overlap). Without the advisory lock, two transactions can both
 -- pass the pre-flight invariants before either commits.
 SELECT pg_advisory_xact_lock(hashtext('wiki_schema_extraction'));
-
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '60s';
 
 -- Refuse to apply against an unexpected DB. Hand-rolled migrations are
 -- applied by an operator and a stale DATABASE_URL pointing at a non-dev
@@ -131,7 +134,10 @@ BEGIN
 END $$;
 
 -- Pre-flight invariants: refuse to re-apply over a partially-completed
--- previous run. For each table, assert old name exists AND new name does not.
+-- previous run. For each table, assert old name exists AND new name does
+-- not. Symmetric checks across all 9 tables convert any partial-state
+-- scenario into a clear pre-flight error rather than an opaque
+-- mid-migration DDL crash.
 DO $$
 BEGIN
   IF to_regclass('public.wiki_pages') IS NULL THEN
@@ -143,26 +149,50 @@ BEGIN
   IF to_regclass('public.wiki_page_sections') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_page_sections does not exist';
   END IF;
+  IF to_regclass('wiki.page_sections') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.page_sections already exists — refusing to re-apply';
+  END IF;
   IF to_regclass('public.wiki_page_links') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_page_links does not exist';
+  END IF;
+  IF to_regclass('wiki.page_links') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.page_links already exists — refusing to re-apply';
   END IF;
   IF to_regclass('public.wiki_page_aliases') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_page_aliases does not exist';
   END IF;
+  IF to_regclass('wiki.page_aliases') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.page_aliases already exists — refusing to re-apply';
+  END IF;
   IF to_regclass('public.wiki_unresolved_mentions') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_unresolved_mentions does not exist';
+  END IF;
+  IF to_regclass('wiki.unresolved_mentions') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.unresolved_mentions already exists — refusing to re-apply';
   END IF;
   IF to_regclass('public.wiki_section_sources') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_section_sources does not exist';
   END IF;
+  IF to_regclass('wiki.section_sources') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.section_sources already exists — refusing to re-apply';
+  END IF;
   IF to_regclass('public.wiki_compile_jobs') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_compile_jobs does not exist';
+  END IF;
+  IF to_regclass('wiki.compile_jobs') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.compile_jobs already exists — refusing to re-apply';
   END IF;
   IF to_regclass('public.wiki_compile_cursors') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_compile_cursors does not exist';
   END IF;
+  IF to_regclass('wiki.compile_cursors') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.compile_cursors already exists — refusing to re-apply';
+  END IF;
   IF to_regclass('public.wiki_places') IS NULL THEN
     RAISE EXCEPTION 'pre-flight: public.wiki_places does not exist';
+  END IF;
+  IF to_regclass('wiki.places') IS NOT NULL THEN
+    RAISE EXCEPTION 'pre-flight: wiki.places already exists — refusing to re-apply';
   END IF;
 END $$;
 
@@ -261,7 +291,18 @@ ALTER INDEX wiki.wiki_compile_jobs_dedupe_key_unique RENAME TO compile_jobs_dedu
 -- underlying table), so any write paths via the old name continue to work
 -- as well. PR 3 drops these.
 
-CREATE VIEW public.wiki_pages AS SELECT * FROM wiki.pages;
+-- wiki.pages has a `search_tsv` GENERATED ALWAYS column. A SELECT * compat
+-- view exposes that column, which causes any old INSERT that explicitly
+-- names it in the column list to fail with `column search_tsv is a
+-- generated column`. Enumerating columns and omitting search_tsv makes the
+-- view auto-update-safe: Postgres regenerates search_tsv from the
+-- GENERATED ALWAYS expression on write through the view. Other 8 tables
+-- have no generated columns and SELECT * is fine.
+CREATE VIEW public.wiki_pages AS
+  SELECT id, tenant_id, owner_id, type, entity_subtype, slug, title,
+         summary, body_md, status, parent_page_id, place_id,
+         hubness_score, tags, last_compiled_at, created_at, updated_at
+  FROM wiki.pages;
 CREATE VIEW public.wiki_page_sections AS SELECT * FROM wiki.page_sections;
 CREATE VIEW public.wiki_page_links AS SELECT * FROM wiki.page_links;
 CREATE VIEW public.wiki_page_aliases AS SELECT * FROM wiki.page_aliases;
