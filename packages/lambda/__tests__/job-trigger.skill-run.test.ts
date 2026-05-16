@@ -510,6 +510,41 @@ describe("job-trigger skill_run misconfiguration", () => {
   });
 });
 
+describe("job-trigger eval_scheduled", () => {
+  it("creates an eval run for a selected agent or computer template", async () => {
+    mockSelect.mockReturnValueOnce([
+      {
+        enabled: true,
+        name: "Daily eval",
+        config: {
+          agentTemplateId: "computer-template-1",
+          model: "anthropic.claude-haiku-4-5",
+          categories: ["performance-computer"],
+        },
+      },
+    ]);
+    mockInsert.mockReturnValueOnce([{ id: "eval-run-1" }]);
+
+    await handler({
+      triggerId: "job-eval-1",
+      triggerType: "eval_scheduled",
+      tenantId: "T1",
+    });
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "T1",
+        agent_id: null,
+        agent_template_id: "computer-template-1",
+        status: "pending",
+        model: "anthropic.claude-haiku-4-5",
+        categories: ["performance-computer"],
+      }),
+    );
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("job-trigger Computer scheduled thread turns", () => {
   it("queues migrated agent schedules as Computer-owned thread_turn tasks with zero Agent wakeups", async () => {
     mockSelect

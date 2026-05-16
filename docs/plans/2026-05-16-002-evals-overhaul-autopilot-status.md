@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U9. Drill-in surface
-- Branch: `codex/evals-overhaul-u9-drill-in`
-- Worktree: `.Codex/worktrees/evals-overhaul-u9-drill-in`
-- State: implementation in progress
+- Unit: U10. Eval schedule form on existing ScheduledJobFormDialog
+- Branch: `codex/evals-overhaul-u10-schedules`
+- Worktree: `.Codex/worktrees/evals-overhaul-u10-schedules`
+- State: PR #1267 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -79,6 +79,12 @@ status: active
 - 2026-05-16: Created clean U9 worktree from `origin/main`.
 - 2026-05-16: Started U9 drill-in surface: extracting shared AgentCore span loading, adding the `evalResultSpans` GraphQL query, and extending the admin run-detail sheet with evaluator reasoning plus lazy trace loading.
 - 2026-05-16: Local U9 verification passed: schema build, CLI/mobile codegen, API/admin/mobile tests, API/admin/CLI builds or typechecks, graphql-http/eval-worker Lambda bundles, non-generated touched-file Prettier check, and `git diff --check`. Admin codegen remains blocked by pre-existing configured-extension GraphQL documents that reference fields absent from the checked-in schema.
+- 2026-05-16: PR #1266 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Created clean U10 worktree from `origin/main`.
+- 2026-05-16: Implemented eval schedule authoring on the shared scheduled-job dialog. The target picker supports both Computer templates and generic Agent templates, stores the selected template in schedule config, and the scheduled/manual-fire paths persist it as `eval_runs.agent_template_id`.
+- 2026-05-16: Extended `/automations/schedules?type=eval_scheduled` filtering, row labeling, edit prefill, and the immediate Admin UI "Run Evaluation" dialog so both Computer templates and Agent templates can be evaluated.
+- 2026-05-16: Local U10 verification passed: focused admin/API/Lambda tests, Admin/API/Lambda builds, `git diff --check`, and Prettier check for the newly formatted admin/Lambda files. Full touched-file Prettier check was skipped for pre-existing non-Prettier files (`scheduled-jobs.ts`, `scheduled-jobs.fire.test.ts`, and the schedule detail route) to avoid formatting-only churn.
+- 2026-05-16: Opened PR #1267 for U10.
 
 ## Pull Requests
 
@@ -93,7 +99,8 @@ status: active
 | U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                      |
 | U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                   |
 | U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                             |
-| U9     | `codex/evals-overhaul-u9-drill-in`             | pending                                                      | pending | pending | Drill-in sheet evaluator reasoning and lazy AgentCore span trace                                                                 |
+| U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                       |
+| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | pending | pending | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection                                  |
 
 ## CI Failures
 
@@ -159,6 +166,14 @@ status: active
 - `pnpm --filter @thinkwork/mobile test` - passed for U9.
 - Non-generated touched-file Prettier check - passed for U9.
 - `git diff --check` - passed for U9.
+- `pnpm --filter @thinkwork/admin exec vitest run src/components/scheduled-jobs/ScheduledJobFormDialog.test.ts` - passed for U10.
+- `pnpm --filter @thinkwork/api test -- scheduled-jobs.fire.test.ts` - passed for U10.
+- `pnpm --filter @thinkwork/lambda test -- job-trigger.skill-run.test.ts` - passed for U10.
+- `pnpm --filter @thinkwork/admin build` - passed for U10 with pre-existing Vite sourcemap/chunk warnings.
+- `pnpm --filter @thinkwork/api build` - passed for U10.
+- `pnpm --filter @thinkwork/lambda build` - passed for U10.
+- Prettier check for newly formatted admin/Lambda files - passed for U10. Full touched-file check intentionally skipped for pre-existing non-Prettier files to avoid formatting-only churn.
+- `git diff --check` - passed for U10.
 - `git diff --check` - passed for U7.
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
 - `pnpm --filter @thinkwork/api build` - passed for U8.

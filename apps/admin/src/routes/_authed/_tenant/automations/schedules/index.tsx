@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Plus,
   Loader2,
+  Beaker,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSubscription, useQuery } from "urql";
@@ -38,15 +39,17 @@ import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJob
 import { relativeTime } from "@/lib/utils";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 
-export const Route = createFileRoute("/_authed/_tenant/automations/schedules/")({
-  component: ScheduledJobsPage,
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { type?: string; agentId?: string } => ({
-    ...(search.type ? { type: search.type as string } : {}),
-    ...(search.agentId ? { agentId: search.agentId as string } : {}),
-  }),
-});
+export const Route = createFileRoute("/_authed/_tenant/automations/schedules/")(
+  {
+    component: ScheduledJobsPage,
+    validateSearch: (
+      search: Record<string, unknown>,
+    ): { type?: string; agentId?: string } => ({
+      ...(search.type ? { type: search.type as string } : {}),
+      ...(search.agentId ? { agentId: search.agentId as string } : {}),
+    }),
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,6 +115,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   agent_heartbeat: "Heartbeat",
   agent_reminder: "Reminder",
   agent_scheduled: "Scheduled",
+  eval_scheduled: "Evaluation",
   routine_schedule: "Routine",
   routine_one_time: "One-time",
 };
@@ -120,11 +124,13 @@ const JOB_TYPE_COLORS: Record<string, string> = {
   agent_heartbeat: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   agent_reminder: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   agent_scheduled: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+  eval_scheduled: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
   routine_schedule: "bg-green-500/15 text-green-600 dark:text-green-400",
   routine_one_time: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
 };
 
 function jobTypeIcon(type: string) {
+  if (type === "eval_scheduled") return <Beaker className="h-3.5 w-3.5" />;
   if (type.startsWith("agent_")) return <Bot className="h-3.5 w-3.5" />;
   return <Repeat className="h-3.5 w-3.5" />;
 }
@@ -199,6 +205,13 @@ function ownerLabel(
   job: ScheduledJobRow,
   agentNames: Map<string, string>,
 ): { icon: React.ReactNode; label: string; color: string } {
+  if (job.trigger_type === "eval_scheduled") {
+    return {
+      icon: <Beaker className="h-3.5 w-3.5" />,
+      label: "Evaluation",
+      color: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
+    };
+  }
   if (job.trigger_type.startsWith("routine_")) {
     return {
       icon: <Repeat className="h-3.5 w-3.5" />,
@@ -364,6 +377,9 @@ function CreateScheduledJobButton({
         onOpenChange={setAgentDialogOpen}
         mode="create"
         tenantId={tenantId}
+        defaultTriggerType={
+          filterType === "eval_scheduled" ? "eval_scheduled" : undefined
+        }
         onSubmit={async (data) => {
           await apiFetch("/api/scheduled-jobs", tenantId, {
             method: "POST",
@@ -410,9 +426,11 @@ function ScheduledJobsPage() {
   const filterTitle =
     type === "agent"
       ? "Automations: Agents"
-      : type === "routine"
-        ? "Automations: Routines"
-        : "Automations";
+      : type === "eval_scheduled"
+        ? "Evaluation Schedules"
+        : type === "routine"
+          ? "Automations: Routines"
+          : "Automations";
 
   const agentName = agentId ? agentNames.get(agentId) : null;
 
@@ -428,6 +446,12 @@ function ScheduledJobsPage() {
       return [
         { label: "Routines", href: "/automations/routines" },
         { label: "Automations" },
+      ];
+    }
+    if (type === "eval_scheduled") {
+      return [
+        { label: "Evaluations", href: "/evaluations" },
+        { label: "Schedules" },
       ];
     }
     return [{ label: "Automations" }];
@@ -485,6 +509,8 @@ function ScheduledJobsPage() {
     let filtered = jobs;
     if (type === "agent")
       filtered = filtered.filter((j) => j.trigger_type.startsWith("agent_"));
+    else if (type === "eval_scheduled")
+      filtered = filtered.filter((j) => j.trigger_type === "eval_scheduled");
     else if (type === "routine")
       filtered = filtered.filter((j) => j.trigger_type.startsWith("routine_"));
     if (agentId) filtered = filtered.filter((j) => j.agent_id === agentId);
@@ -553,6 +579,7 @@ function ScheduledJobsPage() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="agent">Agent</SelectItem>
+                <SelectItem value="eval_scheduled">Evaluation</SelectItem>
                 <SelectItem value="routine">Routine</SelectItem>
               </SelectContent>
             </Select>

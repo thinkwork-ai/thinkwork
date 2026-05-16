@@ -492,12 +492,14 @@ async function fireScheduledJob(
 		// packages/lambda/job-trigger.ts.
 		const cfg = (trig.config ?? {}) as {
 			agentId?: string;
+			agentTemplateId?: string;
 			model?: string;
 			categories?: string[];
 		};
 		const [run] = await db.insert(evalRuns).values({
 			tenant_id: tenantId,
 			agent_id: cfg.agentId ?? trig.agent_id ?? null,
+			agent_template_id: cfg.agentTemplateId ?? null,
 			status: "pending",
 			model: cfg.model ?? null,
 			categories: cfg.categories ?? [],

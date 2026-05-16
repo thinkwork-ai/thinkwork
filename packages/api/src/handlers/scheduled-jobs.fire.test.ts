@@ -26,7 +26,9 @@ const mocks = vi.hoisted(() => ({
 	insertIntoComputerTasks: vi.fn(),
 	insertIntoComputerEvents: vi.fn(),
 	insertIntoAgentWakeupRequests: vi.fn(),
+	insertIntoEvalRuns: vi.fn(),
 	updateAgents: vi.fn(),
+	lambdaSend: vi.fn(),
 }));
 
 vi.mock("../lib/tenant-membership.js", () => ({
@@ -105,6 +107,7 @@ vi.mock("../lib/db.js", () => {
 				return mocks.insertIntoComputerEvents({ values });
 			if (t === "agentWakeupRequests")
 				return mocks.insertIntoAgentWakeupRequests({ values });
+			if (t === "evalRuns") return mocks.insertIntoEvalRuns({ values });
 			return [];
 		};
 		return {
@@ -132,6 +135,11 @@ vi.mock("../lib/db.js", () => {
 
 	return { db: { select, insert, update } };
 });
+
+vi.mock("@aws-sdk/client-lambda", () => ({
+	LambdaClient: vi.fn().mockImplementation(() => ({ send: mocks.lambdaSend })),
+	InvokeCommand: vi.fn().mockImplementation((input) => ({ input })),
+}));
 
 import { handler } from "./scheduled-jobs.js";
 
@@ -192,6 +200,11 @@ beforeEach(() => {
 	mocks.insertIntoComputerTasks.mockResolvedValue([{ id: "task-1" }]);
 	mocks.insertIntoComputerEvents.mockResolvedValue([{ id: "evt-1" }]);
 	mocks.insertIntoAgentWakeupRequests.mockResolvedValue([{ id: "wakeup-1" }]);
+	mocks.insertIntoEvalRuns.mockResolvedValue([{ id: "eval-run-1" }]);
+	mocks.lambdaSend.mockResolvedValue({
+		FunctionError: undefined,
+		Payload: undefined,
+	});
 	mocks.updateAgents.mockResolvedValue([{ id: AGENT_ID }]);
 });
 
@@ -275,5 +288,36 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 		expect(response.statusCode).toBe(401);
 		expect(mocks.insertIntoComputerTasks).not.toHaveBeenCalled();
 		expect(mocks.insertIntoAgentWakeupRequests).not.toHaveBeenCalled();
+	});
+
+	it("manual-fires eval schedules against agent or computer template ids", async () => {
+		mocks.selectFromScheduledJobs.mockResolvedValue(
+			schedRow({
+				trigger_type: "eval_scheduled",
+				agent_id: null,
+				computer_id: null,
+				config: {
+					agentTemplateId: "computer-template-1",
+					model: "anthropic.claude-haiku-4-5",
+					categories: ["performance-computer"],
+				},
+			}),
+		);
+
+		const response = await handler(fireEvent());
+
+		expect(response.statusCode).toBe(201);
+		expect(mocks.insertIntoEvalRuns).toHaveBeenCalledWith({
+			values: expect.objectContaining({
+				tenant_id: TENANT_ID,
+				agent_id: null,
+				agent_template_id: "computer-template-1",
+				status: "pending",
+				model: "anthropic.claude-haiku-4-5",
+				categories: ["performance-computer"],
+			}),
+		});
+		expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);
+		expect(mocks.insertIntoComputerTasks).not.toHaveBeenCalled();
 	});
 });

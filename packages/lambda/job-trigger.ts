@@ -434,10 +434,11 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       }
     } else if (triggerType === "eval_scheduled") {
       // Eval-scheduled jobs: insert a pending eval_runs row + fire the
-      // eval-runner Lambda async. Config carries the agent + categories
-      // + model selection (set by the EvalScheduleDialog UI).
+      // eval-runner Lambda async. Config carries the selected target
+      // template (agent or Computer), categories, and model selection.
       const cfg = (job?.config ?? {}) as {
         agentId?: string;
+        agentTemplateId?: string;
         model?: string;
         categories?: string[];
       };
@@ -446,6 +447,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .values({
           tenant_id: tenantId,
           agent_id: cfg.agentId ?? agentId ?? null,
+          agent_template_id: cfg.agentTemplateId ?? null,
           status: "pending",
           model: cfg.model ?? null,
           categories: cfg.categories ?? [],
