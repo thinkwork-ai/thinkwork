@@ -13,7 +13,7 @@ status: active
 - Unit: U6. Red-team library — skills (GitHub + file system + workspace)
 - Branch: `codex/evals-overhaul-u6-skill-redteam`
 - Worktree: `.Codex/worktrees/evals-overhaul-u6-skill-redteam`
-- State: locally verified, PR pending
+- State: PR open, CI pending
 
 ## Progress Log
 
@@ -55,6 +55,7 @@ status: active
 - 2026-05-16: Created clean U6 worktree from `origin/main`.
 - 2026-05-16: Started U6 skill red-team starter pack with GitHub, filesystem, and workspace seed files.
 - 2026-05-16: Local U6 verification passed: seed shape-invariant test, API build, touched-file Prettier check, and `git diff --check`.
+- 2026-05-16: Opened PR #1260 for U6.
 
 ## Pull Requests
 
@@ -66,7 +67,7 @@ status: active
 | U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
 | U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                    |
 | U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                 |
-| U6     | `codex/evals-overhaul-u6-skill-redteam`        | pending                                                      | pending | pending | Skill red-team starter pack for GitHub, filesystem, and workspace                                                                |
+| U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | pending | pending | Skill red-team starter pack for GitHub, filesystem, and workspace                                                                |
 
 ## CI Failures
 
