@@ -2,8 +2,23 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useSubscription, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Beaker, Calendar, Loader2, Play, ShieldCheck } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  AlertTriangle,
+  Beaker,
+  Calendar,
+  Loader2,
+  Play,
+  ShieldCheck,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -13,7 +28,13 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,7 +44,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn, relativeTime } from "@/lib/utils";
 import {
   AgentTemplatesListQuery,
@@ -35,19 +64,16 @@ import {
   OnEvalRunUpdatedSubscription,
 } from "@/lib/graphql-queries";
 
-// Mirror maniflow's RunEvaluationDialog category list. Labels are
-// title-case versions of the seed-pack category slugs (see
-// seeds/eval-test-cases/*.json).
+// Labels are title-case versions of the Thinkwork seed-pack category slugs
+// (see seeds/eval-test-cases/*.json).
 const CATEGORIES: Array<{ id: string; label: string }> = [
-  { id: "email-calendar", label: "Email & Calendar" },
-  { id: "knowledge-base", label: "Knowledge Base" },
-  { id: "mcp-gateway", label: "MCP Gateway" },
-  { id: "red-team", label: "Red Team" },
-  { id: "sub-agents", label: "Sub-Agents" },
-  { id: "thread-management", label: "Thread Management" },
-  { id: "tool-safety", label: "Tool Safety" },
-  { id: "workspace-memory", label: "Workspace Memory" },
-  { id: "workspace-routing", label: "Workspace Routing" },
+  { id: "red-team-prompt-injection", label: "Prompt Injection" },
+  { id: "red-team-tool-misuse", label: "Tool Misuse" },
+  { id: "red-team-data-boundary", label: "Data Boundary" },
+  { id: "red-team-safety-scope", label: "Safety & Scope" },
+  { id: "performance-agents", label: "Agent Performance" },
+  { id: "performance-computer", label: "Computer Performance" },
+  { id: "performance-skills", label: "Skill Performance" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -65,7 +91,11 @@ function statusBadge(status: string) {
   switch (status.toLowerCase()) {
     case "pass":
     case "completed":
-      return <Badge className="bg-green-600 hover:bg-green-600 text-white">{status.toLowerCase()}</Badge>;
+      return (
+        <Badge className="bg-green-600 hover:bg-green-600 text-white">
+          {status.toLowerCase()}
+        </Badge>
+      );
     case "fail":
     case "failed":
       return <Badge variant="destructive">{status.toLowerCase()}</Badge>;
@@ -115,11 +145,22 @@ const runsColumns: ColumnDef<RunRow>[] = [
     accessorKey: "categories",
     header: "Categories",
     cell: ({ row }) => {
-      const names = Array.isArray(row.original.categories) ? row.original.categories : [];
-      if (names.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-      if (names.length === CATEGORIES.length) return <span className="text-sm whitespace-nowrap">All Categories</span>;
-      if (names.length === 1) return <span className="text-sm whitespace-nowrap">{names[0]}</span>;
-      return <span className="text-sm whitespace-nowrap">{names.length} Categories</span>;
+      const names = Array.isArray(row.original.categories)
+        ? row.original.categories
+        : [];
+      if (names.length === 0)
+        return <span className="text-xs text-muted-foreground">—</span>;
+      if (names.length === CATEGORIES.length)
+        return (
+          <span className="text-sm whitespace-nowrap">All Categories</span>
+        );
+      if (names.length === 1)
+        return <span className="text-sm whitespace-nowrap">{names[0]}</span>;
+      return (
+        <span className="text-sm whitespace-nowrap">
+          {names.length} Categories
+        </span>
+      );
     },
   },
   {
@@ -127,7 +168,8 @@ const runsColumns: ColumnDef<RunRow>[] = [
     header: "Template",
     cell: ({ row }) => {
       const name = row.original.agentTemplateName;
-      if (!name) return <span className="text-xs text-muted-foreground">—</span>;
+      if (!name)
+        return <span className="text-xs text-muted-foreground">—</span>;
       return <span className="text-sm whitespace-nowrap">{name}</span>;
     },
   },
@@ -136,7 +178,8 @@ const runsColumns: ColumnDef<RunRow>[] = [
     header: "Model",
     cell: ({ row }) => {
       const model = row.original.model;
-      if (!model) return <span className="text-xs text-muted-foreground">—</span>;
+      if (!model)
+        return <span className="text-xs text-muted-foreground">—</span>;
       const short = model
         .replace(/^us\.anthropic\./, "")
         .replace(/^anthropic\./, "")
@@ -144,7 +187,11 @@ const runsColumns: ColumnDef<RunRow>[] = [
         .replace(/^amazon\./, "")
         .replace(/-v\d+:\d+$/, "")
         .replace(/-\d{8}$/, "");
-      return <span className="text-xs text-muted-foreground whitespace-nowrap">{short}</span>;
+      return (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {short}
+        </span>
+      );
     },
   },
   {
@@ -162,11 +209,16 @@ const runsColumns: ColumnDef<RunRow>[] = [
     cell: ({ row }) => {
       const { passed, failed, passRate } = row.original;
       const completed = (passed ?? 0) + (failed ?? 0);
-      const pct = completed > 0
-        ? ((passed ?? 0) / completed) * 100
-        : passRate != null ? passRate * 100 : null;
+      const pct =
+        completed > 0
+          ? ((passed ?? 0) / completed) * 100
+          : passRate != null
+            ? passRate * 100
+            : null;
       return (
-        <span className={`text-sm font-medium tabular-nums ${passRateColor(pct ?? 0)}`}>
+        <span
+          className={`text-sm font-medium tabular-nums ${passRateColor(pct ?? 0)}`}
+        >
           {pct != null ? `${pct.toFixed(1)}%` : "—"}
         </span>
       );
@@ -177,7 +229,9 @@ const runsColumns: ColumnDef<RunRow>[] = [
     header: "Cost",
     cell: ({ row }) => (
       <span className="text-xs text-muted-foreground tabular-nums">
-        {row.original.costUsd != null ? `$${Number(row.original.costUsd).toFixed(4)}` : "—"}
+        {row.original.costUsd != null
+          ? `$${Number(row.original.costUsd).toFixed(4)}`
+          : "—"}
       </span>
     ),
   },
@@ -198,9 +252,19 @@ const runsColumns: ColumnDef<RunRow>[] = [
 
 // Zero-fill the last 30 days so the chart always renders with a consistent
 // x-axis even when there are few runs.
-function buildLast30Days(timeSeries: Array<{ day: string; passRate: number | null; passed?: number; failed?: number }>) {
+function buildLast30Days(
+  timeSeries: Array<{
+    day: string;
+    passRate: number | null;
+    passed?: number;
+    failed?: number;
+  }>,
+) {
   const lookup = new Map(
-    timeSeries.map((d) => [d.day, { ...d, passRate: d.passRate != null ? d.passRate * 100 : null }]),
+    timeSeries.map((d) => [
+      d.day,
+      { ...d, passRate: d.passRate != null ? d.passRate * 100 : null },
+    ]),
   );
   const days: Array<{ day: string; passRate: number | null }> = [];
   const now = new Date();
@@ -244,15 +308,18 @@ function EvaluationsPage() {
   });
 
   // Refetch summary + runs on subscription pings.
-  useSubscription({
-    query: OnEvalRunUpdatedSubscription,
-    variables: { tenantId },
-    pause: !tenantId,
-  }, () => {
-    refetchSummary({ requestPolicy: "network-only" });
-    refetchRuns({ requestPolicy: "network-only" });
-    return null;
-  });
+  useSubscription(
+    {
+      query: OnEvalRunUpdatedSubscription,
+      variables: { tenantId },
+      pause: !tenantId,
+    },
+    () => {
+      refetchSummary({ requestPolicy: "network-only" });
+      refetchRuns({ requestPolicy: "network-only" });
+      return null;
+    },
+  );
 
   if (!tenantId) return <PageSkeleton />;
 
@@ -274,14 +341,20 @@ function EvaluationsPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link to="/automations/schedules" search={{ type: "eval_scheduled" }}>
+                <Link
+                  to="/automations/schedules"
+                  search={{ type: "eval_scheduled" }}
+                >
                   <Calendar className="mr-1 h-4 w-4" /> Schedules
                 </Link>
               </Button>
-              <RunEvaluationButton tenantId={tenantId} onStarted={() => {
-                refetchSummary({ requestPolicy: "network-only" });
-                refetchRuns({ requestPolicy: "network-only" });
-              }} />
+              <RunEvaluationButton
+                tenantId={tenantId}
+                onStarted={() => {
+                  refetchSummary({ requestPolicy: "network-only" });
+                  refetchRuns({ requestPolicy: "network-only" });
+                }}
+              />
             </div>
           }
         />
@@ -299,7 +372,7 @@ function EvaluationsPage() {
             label="Latest Pass Rate"
             value={`${((s?.latestPassRate ?? 0) * 100).toFixed(1)}%`}
             icon={<ShieldCheck className="h-4 w-4" />}
-            className={passRateColor(((s?.latestPassRate ?? 0) * 100))}
+            className={passRateColor((s?.latestPassRate ?? 0) * 100)}
           />
           <MetricCard
             label="Average Score"
@@ -342,7 +415,9 @@ function EvaluationsPage() {
 
         {/* Recent Runs — DataTable with row-click → run detail */}
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide">Recent Runs</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide">
+            Recent Runs
+          </h3>
           {items.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -355,7 +430,10 @@ function EvaluationsPage() {
               data={items as RunRow[]}
               pageSize={25}
               onRowClick={(run) =>
-                navigate({ to: "/evaluations/$runId", params: { runId: run.id } })
+                navigate({
+                  to: "/evaluations/$runId",
+                  params: { runId: run.id },
+                })
               }
             />
           )}
@@ -369,7 +447,13 @@ function EvaluationsPage() {
 // Run Evaluation dialog (inline — keeps the route self-contained for v1)
 // ---------------------------------------------------------------------------
 
-function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStarted: () => void }) {
+function RunEvaluationButton({
+  tenantId,
+  onStarted,
+}: {
+  tenantId: string;
+  onStarted: () => void;
+}) {
   const [open, setOpen] = useState(false);
   // The agent itself is always the eval test agent (a generic AgentCore
   // Runtime instance). What the user picks here is which template the
@@ -389,11 +473,19 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
     pause: !tenantId || !open,
   });
   const [modelsRes] = useQuery({ query: ModelCatalogQuery, pause: !open });
-  const templates = (templatesRes.data?.agentTemplates ?? []) as Array<{ id: string; name: string }>;
-  const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as Array<{ modelId: string; displayName: string }>;
+  const templates = (templatesRes.data?.agentTemplates ?? []) as Array<{
+    id: string;
+    name: string;
+  }>;
+  const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as Array<{
+    modelId: string;
+    displayName: string;
+  }>;
 
   function toggleCat(id: string) {
-    setSelectedCats((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setSelectedCats((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
   }
 
   async function handleStart() {
@@ -410,7 +502,9 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
         },
       });
       if (res.error) {
-        alert(`Run failed: ${res.error.message}\n\nIf this mentions an unknown field like 'agentTemplateId', the deployed graphql-http hasn't picked up the latest schema yet. Wait for the next deploy on main.`);
+        alert(
+          `Run failed: ${res.error.message}\n\nIf this mentions an unknown field like 'agentTemplateId', the deployed graphql-http hasn't picked up the latest schema yet. Wait for the next deploy on main.`,
+        );
         return;
       }
       onStarted();
@@ -431,7 +525,8 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
         <DialogHeader>
           <DialogTitle>Run Evaluation</DialogTitle>
           <DialogDescription>
-            The eval test agent loads the chosen template's workspace + tools and runs every selected test case through it.
+            The eval test agent loads the chosen template's workspace + tools
+            and runs every selected test case through it.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -443,12 +538,15 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
               </SelectTrigger>
               <SelectContent>
                 {templates.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              The eval test agent loads this template's workspace, skills, and default model. Per-test-case template overrides still apply.
+              The eval test agent loads this template's workspace, skills, and
+              default model. Per-test-case template overrides still apply.
             </p>
           </div>
 
@@ -460,7 +558,9 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
               </SelectTrigger>
               <SelectContent>
                 {modelCatalog.map((m) => (
-                  <SelectItem key={m.modelId} value={m.modelId}>{m.displayName}</SelectItem>
+                  <SelectItem key={m.modelId} value={m.modelId}>
+                    {m.displayName}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -474,7 +574,9 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
               </SelectTrigger>
               <SelectContent>
                 {INVOCATION_MODES.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -502,8 +604,19 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleStart} disabled={submitting || !agentTemplateId}>{submitting ? "Starting…" : "Start Evaluation"}</Button>
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleStart}
+            disabled={submitting || !agentTemplateId}
+          >
+            {submitting ? "Starting…" : "Start Evaluation"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -511,7 +624,15 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
 }
 
 // Pill-style category chip — matches maniflow's selected/unselected look.
-function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"

@@ -1,0 +1,71 @@
+---
+title: Evaluation Seed Cleanup
+description: Remove maniflow-era evaluation starter rows after pulling the ThinkWork red-team and performance seed pack.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The ThinkWork red-team and performance starter pack replaces the older
+maniflow evaluation seeds. Fresh tenants receive the new pack automatically.
+Existing deployments should run the cleanup SQL once so old seeded rows no
+longer appear in the Studio category list or future evaluation runs.
+
+<Aside type="note">
+  This cleanup only deletes rows with `source = 'yaml-seed'` in legacy
+  categories. Manually-authored evaluation test cases are not touched.
+  Historical `eval_results` rows are preserved; any references to deleted legacy
+  test cases are detached first.
+</Aside>
+
+## Run the cleanup
+
+After pulling a release that includes the new seed pack, run the migration
+against each deployed tenant database:
+
+```bash
+psql "$DATABASE_URL" \
+  -v ON_ERROR_STOP=1 \
+  -f packages/database-pg/drizzle/0089_remove_maniflow_eval_seeds.sql
+```
+
+Then open Evaluations Studio or run the seed command to import the new pack:
+
+```bash
+thinkwork eval seed --stage <stage>
+```
+
+## Verify
+
+Legacy seed rows should be gone:
+
+```sql
+SELECT category, count(*)
+FROM eval_test_cases
+WHERE source = 'yaml-seed'
+  AND category IN (
+    'email-calendar',
+    'knowledge-base',
+    'mcp-gateway',
+    'red-team',
+    'sub-agents',
+    'brain-onepager-citations',
+    'brain-triage-routing',
+    'brain-trust-gradient-promotion',
+    'brain-write-back-capture',
+    'thread-management',
+    'tool-safety',
+    'workspace-memory',
+    'workspace-routing'
+  )
+GROUP BY category;
+```
+
+The query should return zero rows. New seeded categories should be limited to
+red-team dimensions and performance slices:
+
+```sql
+SELECT DISTINCT category
+FROM eval_test_cases
+WHERE source = 'yaml-seed'
+ORDER BY category;
+```

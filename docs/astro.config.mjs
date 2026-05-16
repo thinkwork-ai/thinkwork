@@ -224,6 +224,10 @@ export default defineConfig({
                   label: "Configuration Reference",
                   slug: "deploy/configuration",
                 },
+                {
+                  label: "Evaluation Seed Cleanup",
+                  slug: "deploy/evaluation-seed-cleanup",
+                },
               ],
             },
             {
