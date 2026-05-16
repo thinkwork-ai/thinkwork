@@ -530,16 +530,13 @@ function CollapsibleUserMessageBody({ body }: { body: string }) {
         ref={wrapperRef}
         data-testid="collapsible-user-body"
         data-collapsed={collapsed ? "true" : "false"}
-        className={cn(
-          "relative",
-          collapsed && "max-h-[280px] overflow-hidden",
-        )}
+        className={cn("relative", collapsed && "overflow-hidden")}
+        style={collapsed ? { maxHeight: COLLAPSE_MAX_HEIGHT_PX } : undefined}
       >
         {body}
         {collapsed ? (
           <div
             aria-hidden="true"
-            data-testid="collapsible-user-body-fade"
             className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-muted to-transparent"
           />
         ) : null}

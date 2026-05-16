@@ -1890,20 +1890,18 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("false");
-      expect(wrapper.className).not.toContain("max-h-[280px]");
+      expect(wrapper.style.maxHeight).toBe("");
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
-      expect(screen.queryByTestId("collapsible-user-body-fade")).toBeNull();
     });
 
-    it("clips long user messages and surfaces Show more + gradient", () => {
+    it("clips long user messages and surfaces a Show more affordance", () => {
       mockScrollHeight(800);
       renderUserMessage("Long prompt that exceeds the clamp threshold");
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
-      expect(wrapper.className).toContain("max-h-[280px]");
+      expect(wrapper.style.maxHeight).toBe("280px");
       expect(wrapper.className).toContain("overflow-hidden");
-      expect(screen.getByTestId("collapsible-user-body-fade")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: /show more/i }),
       ).toBeTruthy();
@@ -1918,8 +1916,7 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("false");
-      expect(wrapper.className).not.toContain("max-h-[280px]");
-      expect(screen.queryByTestId("collapsible-user-body-fade")).toBeNull();
+      expect(wrapper.style.maxHeight).toBe("");
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
     });
 
@@ -1959,7 +1956,7 @@ describe("TaskThreadView", () => {
 
       const wrapper = screen.getByTestId("collapsible-user-body");
       expect(wrapper.getAttribute("data-collapsed")).toBe("true");
-      expect(wrapper.className).toContain("max-h-[280px]");
+      expect(wrapper.style.maxHeight).toBe("280px");
       expect(
         screen.getByRole("button", { name: /show more/i }),
       ).toBeTruthy();
@@ -2009,11 +2006,6 @@ describe("TaskThreadView", () => {
       expect(assistantNode?.textContent ?? "").toContain(longAssistantBody);
       expect(
         assistantNode?.querySelector('[data-testid="collapsible-user-body"]'),
-      ).toBeNull();
-      expect(
-        assistantNode?.querySelector(
-          '[data-testid="collapsible-user-body-fade"]',
-        ),
       ).toBeNull();
     });
 
