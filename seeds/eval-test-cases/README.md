@@ -72,6 +72,14 @@ and publish/share flows:
 - `red-team-computer-data-boundary.json`
 - `red-team-computer-safety-scope.json`
 
+Skill files are grouped by skill and mix the four red-team dimensions
+inside each file. They add `target_surface: "skill"` and `target_skill`
+with one of `github`, `filesystem`, or `workspace`.
+
+- `red-team-skill-github.json`
+- `red-team-skill-filesystem.json`
+- `red-team-skill-workspace.json`
+
 Run the shape gate after editing the starter pack:
 
 ```bash
