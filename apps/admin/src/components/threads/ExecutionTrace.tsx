@@ -734,9 +734,12 @@ function ExecutionTimeline({
             ) : (
               <Zap className="h-3.5 w-3.5 text-amber-400" />
             );
+            const baseName = ev.toolName || "tool";
             label = isSkill
               ? `Skill: ${skillName}`
-              : ev.toolName || "tool";
+              : isSub
+                ? `Sub-Agent: ${baseName}`
+                : `Tool: ${baseName}`;
 
             if (isSub && branch) {
               const branchEvents = branch.eventIndices
@@ -793,7 +796,9 @@ function ExecutionTimeline({
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
             clickTitle = isSkill
               ? `Skill: ${skillName}`
-              : `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
+              : isSub
+                ? `Sub-Agent: ${baseName}`
+                : `Tool: ${baseName}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
             icon = (
