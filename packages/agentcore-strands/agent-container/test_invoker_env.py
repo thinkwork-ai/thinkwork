@@ -22,6 +22,7 @@ Run with:
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 
@@ -36,6 +37,20 @@ ENV_KEYS = [
     "_MCP_TENANT_ID",
     "_MCP_AGENT_ID",
     "_MCP_USER_ID",
+    "SLACK_ENVELOPE",
+    "SLACK_TEAM_ID",
+    "SLACK_USER_ID",
+    "SLACK_WORKSPACE_ROW_ID",
+    "SLACK_CHANNEL_ID",
+    "SLACK_CHANNEL_TYPE",
+    "SLACK_ROOT_THREAD_TS",
+    "SLACK_RESPONSE_URL",
+    "SLACK_TRIGGER_SURFACE",
+    "SLACK_SOURCE_MESSAGE",
+    "SLACK_THREAD_CONTEXT",
+    "SLACK_FILE_REFS",
+    "SLACK_PLACEHOLDER_TS",
+    "SLACK_MODAL_VIEW_ID",
 ]
 
 
@@ -118,6 +133,58 @@ class ApplyInvocationEnvTests(unittest.TestCase):
         self.assertIsNone(os.environ.get("CURRENT_THREAD_ID"))
         # CURRENT_USER_ID still set — thread ID is independent of invoker
         self.assertEqual(os.environ.get("CURRENT_USER_ID"), "user-a")
+
+    def test_slack_envelope_sets_all_passthrough_keys(self):
+        payload = {
+            "workspace_tenant_id": "tenant-a",
+            "assistant_id": "agent-a",
+            "user_id": "user-a",
+            "thread_id": "thread-a",
+            "slack": {
+                "slackTeamId": "T123",
+                "slackUserId": "U123",
+                "slackWorkspaceRowId": "workspace-1",
+                "channelId": "C123",
+                "channelType": "channel",
+                "rootThreadTs": "1710000000.000000",
+                "responseUrl": "https://hooks.slack.com/actions/response",
+                "triggerSurface": "message_action",
+                "sourceMessage": {"ts": "1710000001.000000", "user": "U456", "text": "help"},
+                "threadContext": [{"ts": "1710000000.000000", "user": "U456", "text": "earlier"}],
+                "fileRefs": [{"id": "F123", "name": "brief.pdf"}],
+                "placeholderTs": "1710000002.000000",
+                "modalViewId": "V123",
+            },
+        }
+
+        keys = invocation_env.apply_invocation_env(payload)
+
+        self.assertEqual(os.environ.get("SLACK_TEAM_ID"), "T123")
+        self.assertEqual(os.environ.get("SLACK_USER_ID"), "U123")
+        self.assertEqual(os.environ.get("SLACK_WORKSPACE_ROW_ID"), "workspace-1")
+        self.assertEqual(os.environ.get("SLACK_CHANNEL_ID"), "C123")
+        self.assertEqual(os.environ.get("SLACK_CHANNEL_TYPE"), "channel")
+        self.assertEqual(os.environ.get("SLACK_ROOT_THREAD_TS"), "1710000000.000000")
+        self.assertEqual(
+            os.environ.get("SLACK_RESPONSE_URL"),
+            "https://hooks.slack.com/actions/response",
+        )
+        self.assertEqual(os.environ.get("SLACK_TRIGGER_SURFACE"), "message_action")
+        self.assertEqual(os.environ.get("SLACK_PLACEHOLDER_TS"), "1710000002.000000")
+        self.assertEqual(os.environ.get("SLACK_MODAL_VIEW_ID"), "V123")
+        self.assertEqual(
+            json.loads(os.environ["SLACK_SOURCE_MESSAGE"]),
+            {"ts": "1710000001.000000", "user": "U456", "text": "help"},
+        )
+        self.assertEqual(
+            json.loads(os.environ["SLACK_THREAD_CONTEXT"]),
+            [{"ts": "1710000000.000000", "user": "U456", "text": "earlier"}],
+        )
+        self.assertEqual(
+            json.loads(os.environ["SLACK_FILE_REFS"]), [{"id": "F123", "name": "brief.pdf"}]
+        )
+        self.assertIn("SLACK_ENVELOPE", keys)
+        self.assertIn("SLACK_TRIGGER_SURFACE", keys)
 
 
 class CleanupInvocationEnvTests(unittest.TestCase):

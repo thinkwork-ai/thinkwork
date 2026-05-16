@@ -7,6 +7,7 @@ import {
 } from "./slash-command.js";
 
 const WORKSPACE: SlackWorkspaceContext = {
+  id: "workspace-1",
   tenantId: "tenant-1",
   slackTeamId: "T123",
   slackTeamName: "Acme",
@@ -55,7 +56,12 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     wasCreated: true,
   }));
   const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
-  return { enqueueTask, loadLinkedComputer, ...overrides };
+  const resolveSlackThread = vi.fn(async () => ({
+    threadId: "thread-1",
+    messageId: "message-1",
+    wasCreated: true,
+  }));
+  return { enqueueTask, loadLinkedComputer, resolveSlackThread, ...overrides };
 }
 
 describe("Slack slash command handler", () => {

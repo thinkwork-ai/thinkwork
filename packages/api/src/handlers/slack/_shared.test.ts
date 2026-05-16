@@ -11,6 +11,7 @@ const NOW_SECONDS = 1_800_000_000;
 const NOW_MS = NOW_SECONDS * 1000;
 const SIGNING_SECRET = "slack-signing-secret";
 const WORKSPACE: SlackWorkspaceContext = {
+  id: "workspace-1",
   tenantId: "tenant-1",
   slackTeamId: "T123",
   slackTeamName: "Acme",

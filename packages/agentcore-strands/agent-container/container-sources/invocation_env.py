@@ -20,6 +20,7 @@ refuse; writing an empty string would bypass that check.
 
 from __future__ import annotations
 
+import json
 import os
 
 
@@ -65,6 +66,23 @@ def apply_invocation_env(payload: dict) -> list[str]:
         os.environ["CURRENT_THREAD_ID"] = thread_id
         keys.append("CURRENT_THREAD_ID")
 
+    slack = payload.get("slack")
+    if isinstance(slack, dict):
+        _set_env(keys, "SLACK_ENVELOPE", json.dumps(slack, separators=(",", ":")))
+        _set_env(keys, "SLACK_TEAM_ID", slack.get("slackTeamId"))
+        _set_env(keys, "SLACK_USER_ID", slack.get("slackUserId"))
+        _set_env(keys, "SLACK_WORKSPACE_ROW_ID", slack.get("slackWorkspaceRowId"))
+        _set_env(keys, "SLACK_CHANNEL_ID", slack.get("channelId"))
+        _set_env(keys, "SLACK_CHANNEL_TYPE", slack.get("channelType"))
+        _set_env(keys, "SLACK_ROOT_THREAD_TS", slack.get("rootThreadTs"))
+        _set_env(keys, "SLACK_RESPONSE_URL", slack.get("responseUrl"))
+        _set_env(keys, "SLACK_TRIGGER_SURFACE", slack.get("triggerSurface"))
+        _set_json_env(keys, "SLACK_SOURCE_MESSAGE", slack.get("sourceMessage"))
+        _set_json_env(keys, "SLACK_THREAD_CONTEXT", slack.get("threadContext"))
+        _set_json_env(keys, "SLACK_FILE_REFS", slack.get("fileRefs"))
+        _set_env(keys, "SLACK_PLACEHOLDER_TS", slack.get("placeholderTs"))
+        _set_env(keys, "SLACK_MODAL_VIEW_ID", slack.get("modalViewId"))
+
     # Sandbox. Dispatcher sets sandbox_* payload fields only when pre-
     # flight returned status=ready; server.py reads SANDBOX_INTERPRETER_ID
     # to gate execute_code registration. Unconditional pop at invocation
@@ -96,6 +114,18 @@ def apply_invocation_env(payload: dict) -> list[str]:
         keys.append("SANDBOX_ENVIRONMENT")
 
     return keys
+
+
+def _set_env(keys: list[str], name: str, value: object) -> None:
+    if isinstance(value, str) and value:
+        os.environ[name] = value
+        keys.append(name)
+
+
+def _set_json_env(keys: list[str], name: str, value: object) -> None:
+    if value is not None:
+        os.environ[name] = json.dumps(value, separators=(",", ":"))
+        keys.append(name)
 
 
 def cleanup_invocation_env(keys: list[str]) -> None:

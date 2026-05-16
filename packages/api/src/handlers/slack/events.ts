@@ -9,11 +9,16 @@ import {
   slackThreadTs,
   summarizeSlackThreadContext,
   type SlackThreadContextMessage,
+  withSlackThreadMapping,
 } from "../../lib/slack/envelope.js";
 import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import {
+  resolveOrCreateSlackThread,
+  type SlackThreadMappingResult,
+} from "../../lib/slack/thread-mapping.js";
 import { createSlackHandler, type SlackHandlerArgs } from "./_shared.js";
 
 type DbClient = typeof db;
@@ -78,6 +83,12 @@ export interface SlackEventsDeps {
     taskId: string;
     taskInput: Record<string, unknown>;
   }) => Promise<void>;
+  resolveSlackThread?: (input: {
+    tenantId: string;
+    computerId: string;
+    actorId: string;
+    envelope: ReturnType<typeof buildSlackThreadTurnInput>;
+  }) => Promise<SlackThreadMappingResult>;
 }
 
 export async function handleUrlVerification(args: {
@@ -103,6 +114,8 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   const updateTaskInput =
     deps.updateTaskInput ??
     ((input) => defaultUpdateTaskInput(input, dbClient));
+  const resolveSlackThread =
+    deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
 
   return async function dispatchSlackEvent(
     args: SlackHandlerArgs,
@@ -153,18 +166,26 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       channelType,
       slackTeamId,
       slackUserId,
+      slackWorkspaceRowId: args.workspace.id,
       channelId,
       eventId,
       event,
       threadContext,
       actorId: link.userId,
     });
+    const mapping = await resolveSlackThread({
+      tenantId: args.workspace.tenantId,
+      computerId: link.computerId,
+      actorId: link.userId,
+      envelope: taskInput,
+    });
+    const mappedTaskInput = withSlackThreadMapping(taskInput, mapping);
 
     const task = await enqueueTask({
       tenantId: args.workspace.tenantId,
       computerId: link.computerId,
       taskType: "thread_turn",
-      taskInput,
+      taskInput: mappedTaskInput,
       idempotencyKey: eventId,
       createdByUserId: link.userId,
     });
@@ -185,7 +206,11 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
           tenantId: args.workspace.tenantId,
           computerId: link.computerId,
           taskId: task.id,
-          taskInput: { ...taskInput, placeholderTs: placeholder.ts },
+          taskInput: {
+            ...mappedTaskInput,
+            placeholderTs: placeholder.ts,
+            slack: { ...mappedTaskInput.slack, placeholderTs: placeholder.ts },
+          },
         });
       } catch (err) {
         console.warn("[slack:events] placeholder metadata update failed", {
