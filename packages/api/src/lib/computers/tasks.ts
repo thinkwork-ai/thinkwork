@@ -290,6 +290,10 @@ function normalizeSlackThreadTurnInput(
       typeof payload.placeholderTs === "string" && payload.placeholderTs.trim()
         ? payload.placeholderTs.trim()
         : null,
+    modalViewId:
+      typeof payload.modalViewId === "string" && payload.modalViewId.trim()
+        ? payload.modalViewId.trim()
+        : null,
     actorType:
       typeof payload.actorType === "string" && payload.actorType.trim()
         ? payload.actorType.trim()

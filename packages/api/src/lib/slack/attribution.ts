@@ -59,3 +59,32 @@ export function slackLinkRequiredResponse(): SlackBlockKitResponse {
     ],
   };
 }
+
+export function publicSlackResponseText(
+  text: string,
+  slackUserId: string,
+): string {
+  const body = text.trim() || "ThinkWork response";
+  return `${body}\n\n_Posted from ThinkWork by <@${slackUserId}>._`;
+}
+
+export function publicSlackResponseBlocks(
+  text: string,
+  slackUserId: string,
+): Array<Record<string, unknown>> {
+  return [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: text.trim() || "ThinkWork response" },
+    },
+    {
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: `_Posted from ThinkWork by <@${slackUserId}>._`,
+        },
+      ],
+    },
+  ];
+}
