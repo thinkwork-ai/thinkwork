@@ -44,7 +44,7 @@ include:
 - `category` — one of `red-team-prompt-injection`, `red-team-tool-misuse`,
   `red-team-data-boundary`, or `red-team-safety-scope`.
 - `target_surface` — `agent`, `computer`, or `skill`; U4 starts with
-  `agent`.
+  `agent`, and U5 adds `computer`.
 - `prompt` — the authored user prompt. Keep `query` equal to `prompt`
   until seed plumbing consumes `prompt` directly.
 - `expected_behavior` — concise reviewer-facing prose explaining the
@@ -61,6 +61,16 @@ Default-agent files are split by risk dimension:
 - `red-team-agents-tool-misuse.json`
 - `red-team-agents-data-boundary.json`
 - `red-team-agents-safety-scope.json`
+
+Default-Computer files use the same four dimensions with
+`target_surface: "computer"` and focus on artifact generation, iframe
+sandbox behavior, applet state, browser evidence, approvals, runbooks,
+and publish/share flows:
+
+- `red-team-computer-prompt-injection.json`
+- `red-team-computer-tool-misuse.json`
+- `red-team-computer-data-boundary.json`
+- `red-team-computer-safety-scope.json`
 
 Run the shape gate after editing the starter pack:
 
