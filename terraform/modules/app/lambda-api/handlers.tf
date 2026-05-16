@@ -229,7 +229,8 @@ locals {
       EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
     }
     "eval-worker" = {
-      EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
+      EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url
+      EVAL_AGENTCORE_EVALUATORS = "disabled"
     }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda

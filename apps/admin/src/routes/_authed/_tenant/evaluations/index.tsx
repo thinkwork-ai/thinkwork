@@ -41,10 +41,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -60,8 +57,7 @@ import {
 import { cn, relativeTime } from "@/lib/utils";
 import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
-  AgentTemplatesListQuery,
-  ComputerTemplatesListQuery,
+  ComputersListQuery,
   ModelCatalogQuery,
   EvalSummaryQuery,
   EvalRunsQuery,
@@ -296,11 +292,6 @@ function buildLast30Days(
   return days;
 }
 
-const INVOCATION_MODES = [
-  { id: "end_to_end", label: "End-to-End (full agent runtime)" },
-  { id: "direct", label: "Direct (Bedrock only)" },
-];
-
 export const Route = createFileRoute("/_authed/_tenant/evaluations/")({
   component: EvaluationsPage,
 });
@@ -474,37 +465,24 @@ function RunEvaluationButton({
   onStarted: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  // The agent itself is always the eval test agent (a generic AgentCore
-  // Runtime instance). What the user picks here is which agent/computer
-  // template the test agent loads — that determines workspace / tools / model.
-  const [agentTemplateId, setAgentTemplateId] = useState<string>("");
+  const [computerId, setComputerId] = useState<string>("");
   const [model, setModel] = useState<string>("");
-  const [invocationMode, setInvocationMode] = useState<string>("end_to_end");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
-  // Pull target templates and the model catalog (separate queries — the
-  // codegen-typed template queries don't include modelCatalog).
-  const [templatesRes] = useQuery({
-    query: AgentTemplatesListQuery,
-    variables: { tenantId },
-    pause: !tenantId || !open,
-  });
-  const [computerTemplatesRes] = useQuery({
-    query: ComputerTemplatesListQuery,
+  const [computersRes] = useQuery({
+    query: ComputersListQuery,
     variables: { tenantId },
     pause: !tenantId || !open,
   });
   const [modelsRes] = useQuery({ query: ModelCatalogQuery, pause: !open });
-  const agentTemplates = (templatesRes.data?.agentTemplates ?? []) as Array<{
+  const runningComputers = (computersRes.data?.computers ?? []).filter(
+    (computer) => computer.runtimeStatus === "RUNNING",
+  ) as Array<{
     id: string;
     name: string;
-  }>;
-  const computerTemplates = (computerTemplatesRes.data?.computerTemplates ??
-    []) as Array<{
-    id: string;
-    name: string;
+    runtimeStatus: string;
   }>;
   const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as Array<{
     modelId: string;
@@ -518,22 +496,20 @@ function RunEvaluationButton({
   }
 
   async function handleStart() {
-    if (!agentTemplateId) return; // template is required
+    if (!computerId) return;
     setSubmitting(true);
     try {
       const res = await startEvalRun({
         tenantId,
         input: {
-          agentTemplateId,
+          computerId,
           model: model || null,
           // Empty selection = "All Categories" (run everything).
           categories: selectedCats.length > 0 ? selectedCats : null,
         },
       });
       if (res.error) {
-        alert(
-          `Run failed: ${res.error.message}\n\nIf this mentions an unknown field like 'agentTemplateId', the deployed graphql-http hasn't picked up the latest schema yet. Wait for the next deploy on main.`,
-        );
+        alert(`Run failed: ${res.error.message}`);
         return;
       }
       onStarted();
@@ -554,41 +530,30 @@ function RunEvaluationButton({
         <DialogHeader>
           <DialogTitle>Run Evaluation</DialogTitle>
           <DialogDescription>
-            The eval test agent loads the chosen template's workspace + tools
-            and runs every selected test case through it.
+            Run selected tests against a Computer.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="re-template">Target template</Label>
-            <Select value={agentTemplateId} onValueChange={setAgentTemplateId}>
-              <SelectTrigger id="re-template">
-                <SelectValue placeholder="Pick a template" />
+            <Label htmlFor="re-computer">Target Computer</Label>
+            <Select value={computerId} onValueChange={setComputerId}>
+              <SelectTrigger id="re-computer">
+                <SelectValue placeholder="Pick a running Computer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Computer Templates</SelectLabel>
-                  {computerTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
+                {runningComputers.length === 0 ? (
+                  <SelectItem value="__none" disabled>
+                    No running Computers
+                  </SelectItem>
+                ) : (
+                  runningComputers.map((computer) => (
+                    <SelectItem key={computer.id} value={computer.id}>
+                      {computer.name}
                     </SelectItem>
-                  ))}
-                </SelectGroup>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel>Agent Templates</SelectLabel>
-                  {agentTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+                  ))
+                )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              The eval test agent loads this template's workspace, skills, and
-              default model. Agent and Computer templates are both supported.
-            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -601,22 +566,6 @@ function RunEvaluationButton({
                 {modelCatalog.map((m) => (
                   <SelectItem key={m.modelId} value={m.modelId}>
                     {m.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="re-mode">Invocation Mode</Label>
-            <Select value={invocationMode} onValueChange={setInvocationMode}>
-              <SelectTrigger id="re-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INVOCATION_MODES.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -652,10 +601,7 @@ function RunEvaluationButton({
           >
             Cancel
           </Button>
-          <Button
-            onClick={handleStart}
-            disabled={submitting || !agentTemplateId}
-          >
+          <Button onClick={handleStart} disabled={submitting || !computerId}>
             {submitting ? "Starting…" : "Start Evaluation"}
           </Button>
         </DialogFooter>

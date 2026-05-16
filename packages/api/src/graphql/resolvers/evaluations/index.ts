@@ -10,6 +10,7 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, asc, desc, inArray, sql } from "../../utils.js";
 import {
+  computers,
   evalRuns,
   evalResults,
   evalTestCases,
@@ -542,6 +543,7 @@ const evalTestCaseHistory = async (
 // ---------------------------------------------------------------------------
 
 interface StartEvalRunInput {
+  computerId?: string | null;
   agentId?: string | null;
   agentTemplateId?: string | null;
   model?: string | null;
@@ -549,17 +551,63 @@ interface StartEvalRunInput {
   testCaseIds?: string[] | null;
 }
 
+async function resolveRunTarget(args: {
+  tenantId: string;
+  input: StartEvalRunInput;
+}): Promise<{ agentId: string | null; agentTemplateId: string | null }> {
+  if (!args.input.computerId) {
+    throw new Error("Eval runs must target a running Computer");
+  }
+
+  const [computer] = await db
+    .select({
+      id: computers.id,
+      tenantId: computers.tenant_id,
+      templateId: computers.template_id,
+      runtimeStatus: computers.runtime_status,
+      primaryAgentId: computers.primary_agent_id,
+      migratedFromAgentId: computers.migrated_from_agent_id,
+    })
+    .from(computers)
+    .where(
+      and(
+        eq(computers.id, args.input.computerId),
+        eq(computers.tenant_id, args.tenantId),
+      ),
+    );
+
+  if (!computer) {
+    throw new Error("Computer not found for eval run");
+  }
+  if (computer.runtimeStatus !== "running") {
+    throw new Error("Eval runs must target a running Computer");
+  }
+
+  const agentId =
+    computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
+  if (!agentId) {
+    throw new Error("Running Computer has no primary agent to evaluate");
+  }
+
+  return {
+    agentId,
+    agentTemplateId: computer.templateId,
+  };
+}
+
 const startEvalRun = async (
   _p: any,
   args: { tenantId: string; input: StartEvalRunInput },
   _ctx: GraphQLContext,
 ) => {
+  const target = await resolveRunTarget(args);
+
   const [run] = await db
     .insert(evalRuns)
     .values({
       tenant_id: args.tenantId,
-      agent_id: args.input.agentId ?? null,
-      agent_template_id: args.input.agentTemplateId ?? null,
+      agent_id: target.agentId,
+      agent_template_id: target.agentTemplateId,
       status: "pending",
       model: args.input.model ?? null,
       categories: args.input.categories ?? [],

@@ -2,7 +2,12 @@ import { graphql } from "../../gql/index.js";
 
 export const EvalRunsDoc = graphql(`
   query CliEvalRuns($tenantId: ID!, $agentId: ID, $limit: Int, $offset: Int) {
-    evalRuns(tenantId: $tenantId, agentId: $agentId, limit: $limit, offset: $offset) {
+    evalRuns(
+      tenantId: $tenantId
+      agentId: $agentId
+      limit: $limit
+      offset: $offset
+    ) {
       totalCount
       items {
         id
@@ -117,6 +122,17 @@ export const EvalTestCaseDoc = graphql(`
   }
 `);
 
+export const ComputersForEvalDoc = graphql(`
+  query CliComputersForEval($tenantId: ID!) {
+    computers(tenantId: $tenantId) {
+      id
+      name
+      slug
+      runtimeStatus
+    }
+  }
+`);
+
 export const AgentTemplatesForEvalDoc = graphql(`
   query CliAgentTemplatesForEval($tenantId: ID!) {
     agentTemplates(tenantId: $tenantId) {
@@ -171,7 +187,10 @@ export const DeleteEvalRunDoc = graphql(`
 `);
 
 export const CreateEvalTestCaseDoc = graphql(`
-  mutation CliCreateEvalTestCase($tenantId: ID!, $input: CreateEvalTestCaseInput!) {
+  mutation CliCreateEvalTestCase(
+    $tenantId: ID!
+    $input: CreateEvalTestCaseInput!
+  ) {
     createEvalTestCase(tenantId: $tenantId, input: $input) {
       id
       name

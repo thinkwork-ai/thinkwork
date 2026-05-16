@@ -898,6 +898,7 @@ export type Computer = {
   name: Scalars['String']['output'];
   owner?: Maybe<User>;
   ownerUserId: Scalars['ID']['output'];
+  primaryAgentId?: Maybe<Scalars['ID']['output']>;
   runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
   runtimeStatus: ComputerRuntimeStatus;
   slug: Scalars['String']['output'];
@@ -4694,6 +4695,7 @@ export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
+  computerId?: InputMaybe<Scalars['ID']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
