@@ -23,7 +23,7 @@ export interface SlackThreadContextMessage {
 
 export interface SlackThreadTurnInput {
   source: "slack";
-  channelType: "app_mention" | "im";
+  channelType: "app_mention" | "im" | "slash";
   slackTeamId: string;
   slackUserId: string;
   channelId: string;
@@ -33,7 +33,7 @@ export interface SlackThreadTurnInput {
   sourceMessage: SlackSourceMessage;
   threadContext: SlackThreadContextMessage[];
   fileRefs: SlackFileRef[];
-  responseUrl: null;
+  responseUrl: string | null;
   placeholderTs: string | null;
   actorType: "user";
   actorId: string;
@@ -135,6 +135,45 @@ export function buildSlackThreadTurnInput(input: {
     threadContext: summarizeSlackThreadContext(input.threadContext ?? []),
     fileRefs: slackFileRefs(input.event.files),
     responseUrl: null,
+    placeholderTs: null,
+    actorType: "user",
+    actorId: requiredSlackString(input.actorId),
+  };
+}
+
+export function buildSlackSlashCommandInput(input: {
+  slackTeamId: string;
+  slackUserId: string;
+  channelId: string;
+  text: string;
+  responseUrl: string;
+  triggerId: string;
+  actorId: string;
+}): SlackThreadTurnInput {
+  const eventId = `slash:${requiredSlackString(input.triggerId)}`;
+  const slackTeamId = requiredSlackString(input.slackTeamId);
+  const slackUserId = requiredSlackString(input.slackUserId);
+  const channelId = requiredSlackString(input.channelId);
+  return {
+    source: "slack",
+    channelType: "slash",
+    slackTeamId,
+    slackUserId,
+    channelId,
+    threadTs: eventId,
+    messageTs: eventId,
+    eventId,
+    sourceMessage: {
+      text: input.text.trim(),
+      ts: eventId,
+      user: slackUserId,
+      channel: channelId,
+      team: slackTeamId,
+      permalink: null,
+    },
+    threadContext: [],
+    fileRefs: [],
+    responseUrl: requiredSlackString(input.responseUrl),
     placeholderTs: null,
     actorType: "user",
     actorId: requiredSlackString(input.actorId),

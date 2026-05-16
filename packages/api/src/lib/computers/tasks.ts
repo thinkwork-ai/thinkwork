@@ -282,7 +282,10 @@ function normalizeSlackThreadTurnInput(
       ? payload.threadContext
       : [],
     fileRefs: Array.isArray(payload.fileRefs) ? payload.fileRefs : [],
-    responseUrl: null,
+    responseUrl:
+      typeof payload.responseUrl === "string" && payload.responseUrl.trim()
+        ? payload.responseUrl.trim()
+        : null,
     placeholderTs:
       typeof payload.placeholderTs === "string" && payload.placeholderTs.trim()
         ? payload.placeholderTs.trim()
