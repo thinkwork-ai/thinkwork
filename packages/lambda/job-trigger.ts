@@ -448,6 +448,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           tenant_id: tenantId,
           agent_id: cfg.agentId ?? agentId ?? null,
           agent_template_id: cfg.agentTemplateId ?? null,
+          scheduled_job_id: triggerId,
           status: "pending",
           model: cfg.model ?? null,
           categories: cfg.categories ?? [],

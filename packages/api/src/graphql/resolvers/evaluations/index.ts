@@ -39,6 +39,7 @@ function runToGraphql(
     agentName: agentName ?? null,
     agentTemplateId: row.agent_template_id ?? null,
     agentTemplateName: agentTemplateName ?? null,
+    scheduledJobId: row.scheduled_job_id ?? null,
     status: row.status,
     model: row.model,
     categories: row.categories,

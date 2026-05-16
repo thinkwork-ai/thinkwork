@@ -82,4 +82,21 @@ describe("evaluation result detail helpers", () => {
     expect(routeSource).toContain("pause: !traceEnabled");
     expect(querySource).toContain("query EvalResultSpans");
   });
+
+  it("keeps scheduled eval provenance visible in the run list", () => {
+    const routeSource = readFileSync(
+      new URL("./index.tsx", import.meta.url),
+      "utf8",
+    );
+    const querySource = readFileSync(
+      new URL("../../../../lib/graphql-queries.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(querySource).toContain("scheduledJobId");
+    expect(routeSource).toContain(
+      'to="/automations/schedules/$scheduledJobId"',
+    );
+    expect(routeSource).toContain("CalendarClock");
+  });
 });

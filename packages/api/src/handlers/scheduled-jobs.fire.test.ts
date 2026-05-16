@@ -312,6 +312,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 				tenant_id: TENANT_ID,
 				agent_id: null,
 				agent_template_id: "computer-template-1",
+				scheduled_job_id: TRIGGER_ID,
 				status: "pending",
 				model: "anthropic.claude-haiku-4-5",
 				categories: ["performance-computer"],
