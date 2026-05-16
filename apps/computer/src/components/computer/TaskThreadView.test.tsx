@@ -1849,4 +1849,181 @@ describe("TaskThreadView", () => {
       expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", []);
     });
   });
+
+  describe("collapsible user message body", () => {
+    // jsdom returns 0 for scrollHeight by default. Mock the prototype
+    // getter so the layout effect inside CollapsibleUserMessageBody can
+    // decide whether a message overflows the 10-line clamp (280px).
+    function mockScrollHeight(value: number) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+        configurable: true,
+        get() {
+          return value;
+        },
+      });
+    }
+
+    afterEach(() => {
+      delete (HTMLElement.prototype as { scrollHeight?: unknown }).scrollHeight;
+    });
+
+    function renderUserMessage(content: string) {
+      return render(
+        <TaskThreadView
+          thread={{
+            id: "thread-collapse",
+            messages: [
+              {
+                id: "user-1",
+                role: "USER",
+                content,
+              },
+            ],
+          }}
+        />,
+      );
+    }
+
+    it("renders short user messages without a Show more affordance", () => {
+      mockScrollHeight(120);
+      renderUserMessage("Tiny prompt");
+
+      const wrapper = screen.getByTestId("collapsible-user-body");
+      expect(wrapper.getAttribute("data-collapsed")).toBe("false");
+      expect(wrapper.className).not.toContain("max-h-[280px]");
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+      expect(screen.queryByTestId("collapsible-user-body-fade")).toBeNull();
+    });
+
+    it("clips long user messages and surfaces Show more + gradient", () => {
+      mockScrollHeight(800);
+      renderUserMessage("Long prompt that exceeds the clamp threshold");
+
+      const wrapper = screen.getByTestId("collapsible-user-body");
+      expect(wrapper.getAttribute("data-collapsed")).toBe("true");
+      expect(wrapper.className).toContain("max-h-[280px]");
+      expect(wrapper.className).toContain("overflow-hidden");
+      expect(screen.getByTestId("collapsible-user-body-fade")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: /show more/i }),
+      ).toBeTruthy();
+    });
+
+    it("expands to full content when Show more is clicked", () => {
+      mockScrollHeight(800);
+      renderUserMessage("Long prompt that overflows");
+
+      const button = screen.getByRole("button", { name: /show more/i });
+      fireEvent.click(button);
+
+      const wrapper = screen.getByTestId("collapsible-user-body");
+      expect(wrapper.getAttribute("data-collapsed")).toBe("false");
+      expect(wrapper.className).not.toContain("max-h-[280px]");
+      expect(screen.queryByTestId("collapsible-user-body-fade")).toBeNull();
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+    });
+
+    it("never renders a Show less affordance once expanded", () => {
+      mockScrollHeight(800);
+      renderUserMessage("Long prompt that overflows");
+
+      fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+
+      expect(screen.queryByRole("button", { name: /show less/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /collapse/i })).toBeNull();
+    });
+
+    it("re-evaluates overflow when the body content grows past the threshold", () => {
+      mockScrollHeight(120);
+      const { rerender } = renderUserMessage("Tiny prompt");
+
+      expect(
+        screen.queryByRole("button", { name: /show more/i }),
+      ).toBeNull();
+
+      mockScrollHeight(900);
+      rerender(
+        <TaskThreadView
+          thread={{
+            id: "thread-collapse",
+            messages: [
+              {
+                id: "user-1",
+                role: "USER",
+                content: "Now-long prompt that exceeds the clamp",
+              },
+            ],
+          }}
+        />,
+      );
+
+      const wrapper = screen.getByTestId("collapsible-user-body");
+      expect(wrapper.getAttribute("data-collapsed")).toBe("true");
+      expect(wrapper.className).toContain("max-h-[280px]");
+      expect(
+        screen.getByRole("button", { name: /show more/i }),
+      ).toBeTruthy();
+    });
+
+    it("leaves long assistant messages unchanged", () => {
+      // Even with a giant scrollHeight, the assistant render path does
+      // not route through CollapsibleUserMessageBody, so no clamp wrapper
+      // is added to the assistant message. (The user message, also
+      // mocked at 900px, legitimately surfaces its own "Show more" — the
+      // invariant being checked here is wrapper count and assistant
+      // content presence.)
+      const longAssistantBody =
+        "A very long assistant response that would overflow if " +
+        "the clamp logic applied to it, but must not.";
+      mockScrollHeight(900);
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-collapse-assistant",
+            messages: [
+              {
+                id: "user-1",
+                role: "USER",
+                content: "short",
+              },
+              {
+                id: "assistant-1",
+                role: "ASSISTANT",
+                content: longAssistantBody,
+              },
+            ],
+          }}
+        />,
+      );
+
+      // Exactly one CollapsibleUserMessageBody wrapper exists — the
+      // user message. The assistant message never receives one.
+      expect(screen.getAllByTestId("collapsible-user-body")).toHaveLength(1);
+
+      // The assistant message renders inside the assistant DOM region
+      // with its content visible (no clamp).
+      const assistantNode = document.querySelector(
+        '[data-message-role="assistant"]',
+      );
+      expect(assistantNode).toBeTruthy();
+      expect(assistantNode?.textContent ?? "").toContain(longAssistantBody);
+      expect(
+        assistantNode?.querySelector('[data-testid="collapsible-user-body"]'),
+      ).toBeNull();
+      expect(
+        assistantNode?.querySelector(
+          '[data-testid="collapsible-user-body-fade"]',
+        ),
+      ).toBeNull();
+    });
+
+    it("preserves the empty-body fallback for messages with no content", () => {
+      mockScrollHeight(0);
+      renderUserMessage("");
+
+      expect(screen.getByText("(No message content)")).toBeTruthy();
+      expect(screen.queryByTestId("collapsible-user-body")).toBeNull();
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+    });
+  });
 });
