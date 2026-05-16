@@ -92,8 +92,8 @@ export async function searchWikiForUser(args: {
 			SELECT unnest(${fuzzyTermArray}) AS term
 		), alias_hits AS (
 			SELECT DISTINCT a.page_id, a.alias
-			FROM wiki_page_aliases a
-			INNER JOIN wiki_pages p ON p.id = a.page_id
+			FROM wiki.page_aliases a
+			INNER JOIN wiki.pages p ON p.id = a.page_id
 			WHERE p.tenant_id = ${args.tenantId}
 			  AND p.owner_id = ${args.userId}
 			  AND p.status = 'active'
@@ -115,7 +115,7 @@ export async function searchWikiForUser(args: {
 				  END
 			)::float AS score,
 			ah.alias AS matched_alias
-		FROM wiki_pages p
+		FROM wiki.pages p
 		LEFT JOIN alias_hits ah ON ah.page_id = p.id
 		CROSS JOIN LATERAL (
 			SELECT lower(concat_ws(' ', p.title, p.summary, p.body_md)) AS haystack

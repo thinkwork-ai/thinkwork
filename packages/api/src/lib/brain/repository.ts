@@ -227,9 +227,9 @@ export async function findPageSourcesAcrossSurfaces(
 			wp.title,
 			wp.slug,
 			wp.entity_subtype AS "entitySubtype"
-		FROM wiki_section_sources wss
-		INNER JOIN wiki_page_sections ws ON ws.id = wss.section_id
-		INNER JOIN wiki_pages wp ON wp.id = ws.page_id
+		FROM wiki.section_sources wss
+		INNER JOIN wiki.page_sections ws ON ws.id = wss.section_id
+		INNER JOIN wiki.pages wp ON wp.id = ws.page_id
 		WHERE wp.tenant_id = ${args.tenantId}
 			${ownerPredicate}
 			AND wp.status = 'active'

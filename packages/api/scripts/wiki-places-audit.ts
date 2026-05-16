@@ -89,7 +89,7 @@ async function auditScope(
 	const result = await db.execute(sql`
 		WITH active_entities AS (
 			SELECT id
-			FROM wiki_pages
+			FROM wiki.pages
 			WHERE tenant_id = ${tenantId}::uuid
 				AND owner_id = ${ownerId}::uuid
 				AND type = 'entity'
@@ -99,15 +99,15 @@ async function auditScope(
 			SELECT p.id
 			FROM active_entities p
 			WHERE NOT EXISTS (
-				SELECT 1 FROM wiki_page_links l
+				SELECT 1 FROM wiki.page_links l
 				WHERE l.from_page_id = p.id AND l.kind = 'reference'
 			)
 		),
 		unlinked_with_place AS (
 			SELECT DISTINCT u.id
 			FROM unlinked u
-			JOIN wiki_page_sections s ON s.page_id = u.id
-			JOIN wiki_section_sources ss ON ss.section_id = s.id
+			JOIN wiki.page_sections s ON s.page_id = u.id
+			JOIN wiki.section_sources ss ON ss.section_id = s.id
 			JOIN hindsight.memory_units m ON m.id::text = ss.source_ref
 			WHERE ss.source_kind = 'memory_unit'
 				AND m.metadata ->> 'place_google_place_id' IS NOT NULL

@@ -1626,11 +1626,11 @@ export async function markUnresolvedPromoted(
 	const result = await db.execute(sql`
 		WITH target AS (
 			SELECT id, tenant_id, owner_id, alias_normalized
-			FROM wiki_unresolved_mentions
+			FROM wiki.unresolved_mentions
 			WHERE id = ${args.mentionId}
 		),
 		updated AS (
-			UPDATE wiki_unresolved_mentions mention
+			UPDATE wiki.unresolved_mentions mention
 			SET status = 'promoted',
 				promoted_page_id = ${args.pageId},
 				updated_at = now()
@@ -1638,7 +1638,7 @@ export async function markUnresolvedPromoted(
 			WHERE mention.id = target.id
 			  AND NOT EXISTS (
 				SELECT 1
-				FROM wiki_unresolved_mentions other
+				FROM wiki.unresolved_mentions other
 				WHERE other.tenant_id = target.tenant_id
 				  AND other.owner_id = target.owner_id
 				  AND other.alias_normalized = target.alias_normalized
@@ -1656,12 +1656,12 @@ export async function markUnresolvedPromoted(
 	// promoted mention in this scope. Remove the stale open mention so future
 	// planner passes do not keep trying to promote it into the same unique key.
 	await db.execute(sql`
-		DELETE FROM wiki_unresolved_mentions mention
+		DELETE FROM wiki.unresolved_mentions mention
 		WHERE mention.id = ${args.mentionId}
 		  AND mention.status = 'open'
 		  AND EXISTS (
 			SELECT 1
-			FROM wiki_unresolved_mentions other
+			FROM wiki.unresolved_mentions other
 			WHERE other.tenant_id = mention.tenant_id
 			  AND other.owner_id = mention.owner_id
 			  AND other.alias_normalized = mention.alias_normalized
