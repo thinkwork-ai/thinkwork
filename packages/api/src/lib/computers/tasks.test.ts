@@ -146,6 +146,40 @@ describe("Computer task helpers", () => {
     });
   });
 
+  it("preserves Slack slash command response_url metadata", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "slash",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "slash:trigger-1",
+        messageTs: "slash:trigger-1",
+        eventId: "slash:trigger-1",
+        sourceMessage: {
+          text: "summarize",
+          ts: "slash:trigger-1",
+          user: "U123",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        responseUrl: "https://hooks.slack.com/commands/response",
+        actorId: "user-1",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        source: "slack",
+        channelType: "slash",
+        eventId: "slash:trigger-1",
+        responseUrl: "https://hooks.slack.com/commands/response",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    );
+  });
+
   it("normalizes runbook execution input", () => {
     expect(
       normalizeTaskInput("runbook_execute", {

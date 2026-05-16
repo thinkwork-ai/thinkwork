@@ -1,10 +1,6 @@
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { and, eq, ne } from "drizzle-orm";
-import {
-  computers,
-  computerTasks,
-  slackUserLinks,
-} from "@thinkwork/database-pg/schema";
+import { and, eq } from "drizzle-orm";
+import { computerTasks } from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { enqueueComputerTask } from "../../lib/computers/tasks.js";
 import { json } from "../../lib/response.js";
@@ -14,6 +10,10 @@ import {
   summarizeSlackThreadContext,
   type SlackThreadContextMessage,
 } from "../../lib/slack/envelope.js";
+import {
+  loadLinkedSlackComputer,
+  type SlackLinkedComputer,
+} from "../../lib/slack/linked-computer.js";
 import { createSlackHandler, type SlackHandlerArgs } from "./_shared.js";
 
 type DbClient = typeof db;
@@ -41,13 +41,6 @@ interface SlackEventBody {
   ts?: unknown;
   thread_ts?: unknown;
   files?: unknown;
-}
-
-interface LinkedComputer {
-  userId: string;
-  slackUserName: string | null;
-  computerId: string;
-  computerName: string;
 }
 
 interface SlackApi {
@@ -78,7 +71,7 @@ export interface SlackEventsDeps {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
-  }) => Promise<LinkedComputer | null>;
+  }) => Promise<SlackLinkedComputer | null>;
   updateTaskInput?: (input: {
     tenantId: string;
     computerId: string;
@@ -106,7 +99,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   const slackApi = deps.slackApi ?? defaultSlackApi;
   const loadLinkedComputer =
     deps.loadLinkedComputer ??
-    ((input) => defaultLoadLinkedComputer(input, dbClient));
+    ((input) => loadLinkedSlackComputer(input, dbClient));
   const updateTaskInput =
     deps.updateTaskInput ??
     ((input) => defaultUpdateTaskInput(input, dbClient));
@@ -221,42 +214,6 @@ function classifySlackEvent(
   if (event.type === "app_mention") return "app_mention";
   if (event.type === "message" && event.channel_type === "im") return "im";
   return null;
-}
-
-async function defaultLoadLinkedComputer(
-  input: {
-    tenantId: string;
-    slackTeamId: string;
-    slackUserId: string;
-  },
-  dbClient: DbClient,
-): Promise<LinkedComputer | null> {
-  const [row] = await dbClient
-    .select({
-      userId: slackUserLinks.user_id,
-      slackUserName: slackUserLinks.slack_user_name,
-      computerId: computers.id,
-      computerName: computers.name,
-    })
-    .from(slackUserLinks)
-    .innerJoin(
-      computers,
-      and(
-        eq(computers.tenant_id, slackUserLinks.tenant_id),
-        eq(computers.owner_user_id, slackUserLinks.user_id),
-        ne(computers.status, "archived"),
-      ),
-    )
-    .where(
-      and(
-        eq(slackUserLinks.tenant_id, input.tenantId),
-        eq(slackUserLinks.slack_team_id, input.slackTeamId),
-        eq(slackUserLinks.slack_user_id, input.slackUserId),
-        eq(slackUserLinks.status, "active"),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
 }
 
 async function defaultUpdateTaskInput(

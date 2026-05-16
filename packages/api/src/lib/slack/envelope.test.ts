@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSlackSlashCommandInput,
   buildSlackThreadTurnInput,
   slackFileRefs,
   summarizeSlackThreadContext,
@@ -66,6 +67,27 @@ describe("Slack event envelope helpers", () => {
       messageTs: "1710000001.000000",
       responseUrl: null,
       placeholderTs: null,
+      actorId: "user-1",
+    });
+  });
+
+  it("builds a slash command input with response_url metadata", () => {
+    expect(
+      buildSlackSlashCommandInput({
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        text: "summarize Q3",
+        responseUrl: "https://hooks.slack.com/commands/response",
+        triggerId: "trigger-1",
+        actorId: "user-1",
+      }),
+    ).toMatchObject({
+      source: "slack",
+      channelType: "slash",
+      eventId: "slash:trigger-1",
+      responseUrl: "https://hooks.slack.com/commands/response",
+      sourceMessage: { text: "summarize Q3" },
       actorId: "user-1",
     });
   });
