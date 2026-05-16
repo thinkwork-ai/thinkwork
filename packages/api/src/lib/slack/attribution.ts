@@ -88,3 +88,79 @@ export function publicSlackResponseBlocks(
     },
   ];
 }
+
+export interface SlackComputerAttribution {
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export function slackComputerUsername(displayName: string): string {
+  return `${normalizeSlackDisplayName(displayName)}'s Computer`;
+}
+
+export function slackComputerFooter(displayName: string): string {
+  return `Routed via @ThinkWork · ${slackComputerUsername(displayName)}`;
+}
+
+export function slackComputerResponseText(
+  text: string,
+  attribution: SlackComputerAttribution,
+  options: { degraded?: boolean } = {},
+): string {
+  const body = text.trim() || "ThinkWork response";
+  if (!options.degraded) return body;
+  return `*${slackComputerUsername(attribution.displayName)}:*\n${body}`;
+}
+
+export function slackComputerResponseBlocks(
+  text: string,
+  attribution: SlackComputerAttribution,
+  options: { degraded?: boolean } = {},
+): Array<Record<string, unknown>> {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: slackComputerResponseText(text, attribution, options),
+      },
+    },
+    {
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: slackComputerFooter(attribution.displayName),
+        },
+      ],
+    },
+  ];
+}
+
+export function slackComputerEphemeralResponse(
+  text: string,
+  attribution: SlackComputerAttribution,
+): SlackBlockKitResponse {
+  return {
+    response_type: "ephemeral",
+    text: slackComputerResponseText(text, attribution),
+    blocks: [
+      ...slackComputerResponseBlocks(text, attribution),
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: "Post to channel" },
+            action_id: "slack_promote_response",
+            value: "completed_response",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function normalizeSlackDisplayName(displayName: string): string {
+  return displayName.trim() || "User";
+}

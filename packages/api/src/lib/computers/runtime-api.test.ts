@@ -552,6 +552,13 @@ describe("Computer runtime API thread turn execution", () => {
         task_id: "task-1",
       }),
     );
+    expect(mocks.inserts).toContainEqual(
+      expect.objectContaining({
+        event_type: "task_completed",
+        task_id: "task-1",
+        payload: expect.objectContaining({ source: "chat_message" }),
+      }),
+    );
     expect(mocks.updates).toContainEqual(
       expect.objectContaining({
         source_message_id: "assistant-message-1",

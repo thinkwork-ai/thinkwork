@@ -214,6 +214,7 @@ async function route(
         taskId: validUuid(threadTurnResponseMatch[1], "taskId"),
         content: bodyString(body.content, "content"),
         model: optionalString(body.model),
+        source: optionalString(body.source),
         usage: body.usage,
       }),
     );

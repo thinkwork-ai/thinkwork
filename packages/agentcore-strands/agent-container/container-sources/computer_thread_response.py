@@ -33,6 +33,7 @@ def record_thread_turn_response(
     content: str,
     model: str | None = None,
     usage: dict[str, Any] | None = None,
+    source: str | None = None,
     api_url: str | None = None,
     api_secret: str | None = None,
     timeout_seconds: float = 10.0,
@@ -56,9 +57,7 @@ def record_thread_turn_response(
             "missing THINKWORK_API_URL / API_AUTH_SECRET for thread response persistence"
         )
     if not tenant_id or not computer_id or not task_id:
-        raise ThreadResponsePersistenceError(
-            "tenant_id, computer_id, and task_id are required"
-        )
+        raise ThreadResponsePersistenceError("tenant_id, computer_id, and task_id are required")
 
     url = f"{api_url}/api/computers/runtime/tasks/{task_id}/thread-turn-response"
     body = {
@@ -70,6 +69,8 @@ def record_thread_turn_response(
         body["model"] = model
     if usage is not None:
         body["usage"] = usage
+    if source:
+        body["source"] = source
 
     payload = json.dumps(body).encode("utf-8")
     last_error: Exception | None = None

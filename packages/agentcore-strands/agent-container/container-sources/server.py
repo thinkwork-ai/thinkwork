@@ -2715,6 +2715,14 @@ def _execute_agent_turn(payload: dict) -> dict:
         thread_id=ticket_id,
         prompt=message,
     )
+    slack_post_back_client = None
+    if is_computer_thread_turn:
+        try:
+            from slack_post_back import build_slack_post_back_client
+
+            slack_post_back_client = build_slack_post_back_client(payload)
+        except Exception as e:
+            logger.warning("Slack post-back context unavailable: %s", e)
 
     # U3 of the finance pilot — stage attachments before the model loop
     # so the preamble can reference real /tmp paths the model will then
@@ -2843,18 +2851,25 @@ def _execute_agent_turn(payload: dict) -> dict:
         duration_ms = int(time.time() * 1000) - start_ms
         computer_thread_response = None
         if is_computer_thread_turn:
-            from computer_thread_response import record_thread_turn_response
+            if slack_post_back_client and slack_post_back_client.available:
+                computer_thread_response = slack_post_back_client.post_response(
+                    content=response_text,
+                    model=request_model or DEFAULT_MODEL,
+                    usage=strands_usage,
+                )
+            else:
+                from computer_thread_response import record_thread_turn_response
 
-            computer_thread_response = record_thread_turn_response(
-                tenant_id=workspace_tenant_id or tenant_id_for_audit,
-                computer_id=computer_id,
-                task_id=computer_task_id,
-                content=response_text,
-                model=request_model or DEFAULT_MODEL,
-                usage=strands_usage,
-                api_url=thinkwork_api_url,
-                api_secret=thinkwork_api_secret,
-            )
+                computer_thread_response = record_thread_turn_response(
+                    tenant_id=workspace_tenant_id or tenant_id_for_audit,
+                    computer_id=computer_id,
+                    task_id=computer_task_id,
+                    content=response_text,
+                    model=request_model or DEFAULT_MODEL,
+                    usage=strands_usage,
+                    api_url=thinkwork_api_url,
+                    api_secret=thinkwork_api_secret,
+                )
 
         # Drain per-invocation tool costs. The chat handler also clears this
         # list on guardrail failure inside its except block; our caller
