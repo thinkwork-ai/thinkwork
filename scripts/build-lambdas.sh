@@ -29,7 +29,7 @@ ESBUILD_FLAGS=(
 )
 
 # graphql-http, memory-retain, mcp-user-memory, mcp-context-engine,
-# eval-runner, and wiki-compile use AWS Bedrock SDKs
+# eval-runner, eval-worker, and wiki-compile use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
 # wiki-compile's InvokeModel planner/section-writer) that aren't in the default
@@ -74,7 +74,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -512,6 +512,9 @@ build_handler "sandbox-log-scrubber" \
 
 build_handler "eval-runner" \
   "$REPO_ROOT/packages/api/src/handlers/eval-runner.ts"
+
+build_handler "eval-worker" \
+  "$REPO_ROOT/packages/api/src/handlers/eval-worker.ts"
 
 # ---------------------------------------------------------------------------
 # P2: Cron handlers

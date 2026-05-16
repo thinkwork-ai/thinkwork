@@ -7,8 +7,9 @@
 ################################################################################
 
 locals {
-  use_local_zips = var.lambda_zips_dir != ""
-  runtime        = "nodejs20.x"
+  use_local_zips        = var.lambda_zips_dir != ""
+  eval_fanout_queue_url = local.use_local_zips ? aws_sqs_queue.eval_fanout[0].url : ""
+  runtime               = "nodejs20.x"
 
   # Common environment variables shared by all API handlers
   common_env = {
@@ -221,6 +222,15 @@ locals {
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
     }
+    # U2 eval fan-out substrate. eval-runner does not dispatch to this
+    # queue until U3; eval-worker is a throwing inert stub that redrives
+    # accidental traffic to the DLQ.
+    "eval-runner" = {
+      EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
+    }
+    "eval-worker" = {
+      EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
+    }
     # job-trigger fires scheduled routine runs via SFN.StartExecution
     # (Phase B U7) — the alias ARN comes from the row, but the Lambda
     # also reads AWS_ACCOUNT_ID for diagnostic logging. It also passes
@@ -320,6 +330,7 @@ resource "aws_lambda_function" "handler" {
     "computer-terminal-start",
     "code-factory",
     "eval-runner",
+    "eval-worker",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
     # Both are service-endpoint shape: the Strands container POSTs with
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
@@ -463,8 +474,8 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -474,7 +485,7 @@ resource "aws_lambda_function" "handler" {
   # concurrent drainers would race the chain head SELECT and produce
   # orphan prev_hash links). All other handlers run with the default
   # account-level concurrency pool.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 5 : -1
 
   environment {
     variables = merge(
@@ -1312,6 +1323,7 @@ resource "aws_ssm_parameter" "lambda_arns" {
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
     "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
     "eval-runner-fn-arn"          = aws_lambda_function.handler["eval-runner"].arn
+    "eval-worker-fn-arn"          = aws_lambda_function.handler["eval-worker"].arn
   } : {}
 
   name  = "/thinkwork/${var.stage}/${each.key}"
