@@ -1,7 +1,7 @@
 ---
 title: "feat: Collapse long user prompts on Computer thread detail page"
 type: feat
-status: active
+status: completed
 created: 2026-05-16
 depth: lightweight
 ---
