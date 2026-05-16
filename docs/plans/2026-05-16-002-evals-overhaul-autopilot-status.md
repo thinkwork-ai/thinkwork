@@ -11,8 +11,8 @@ status: active
 ## Current Unit
 
 - Unit: U3. Worker live + dispatcher rewrite + run finalizer
-- Branch: `codex/evals-overhaul-u3-worker-live`
-- Worktree: `.Codex/worktrees/evals-overhaul-u3-worker-live`
+- Branch: `codex/evals-overhaul-u3-advisory-idempotency`
+- Worktree: `.Codex/worktrees/evals-overhaul-u3-advisory-idempotency`
 - State: PR open, CI pending
 
 ## Progress Log
@@ -34,6 +34,10 @@ status: active
 - 2026-05-16: Wired the eval_results idempotency index into the normal deploy workflow before Lambda code swap, so the worker's `ON CONFLICT` target exists when U3 deploys.
 - 2026-05-16: Local U3 verification passed: API typecheck, database build, eval-runner/eval-worker/integration tests, eval-runner/eval-worker Lambda builds, Lambda API Terraform validate, Terraform fmt, and `git diff --check`.
 - 2026-05-16: Opened PR #1254 for U3.
+- 2026-05-16: PR #1254 required checks passed and was squash-merged, but the post-merge Deploy failed before Terraform apply: creating `uq_eval_results_run_test_case` found existing duplicate dev rows for `(run_id, test_case_id)`.
+- 2026-05-16: Created fix-forward worktree `codex/evals-overhaul-u3-advisory-idempotency`. Removed the unique-index migration/deploy step and changed worker idempotency to use `pg_advisory_xact_lock(hashtext(runId), hashtext(testCaseId))` plus a transaction-local duplicate check before insert.
+- 2026-05-16: Local U3 fix verification passed: API typecheck, database build, eval-runner/eval-worker/integration tests, eval-worker Lambda build, and `git diff --check`.
+- 2026-05-16: Opened PR #1255 for the U3 deploy fix.
 
 ## Pull Requests
 
@@ -41,11 +45,12 @@ status: active
 | --- | --- | --- | --- | --- | --- |
 | U1 | `codex/evals-overhaul-u1-stall-probe` | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed | merged | Stall probe script + findings doc |
 | U2 | `codex/evals-overhaul-u2-sqs-substrate` | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed | merged | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry |
-| U3 | `codex/evals-overhaul-u3-worker-live` | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | pending | pending | Worker live body, dispatcher rewrite, run finalizer, idempotency index; locally verified |
+| U3 | `codex/evals-overhaul-u3-worker-live` | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed | merged | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
+| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | pending | pending | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; locally verified |
 
 ## CI Failures
 
-None yet.
+- 2026-05-16: Post-merge Deploy for U3 merge commit `77e3f9810328a54442f7aef150a96f739ec02f1b` failed in Terraform Apply step `Add eval_results run/test-case idempotency index (evals U3)`. `psql` could not create `uq_eval_results_run_test_case` because dev already has duplicate key `(run_id, test_case_id)=(bac89ee3-1876-4459-b49a-82d559a83976, 9a9eb780-ec0e-400f-8976-e90a741ff87b)`.
 
 ## Verification
 
@@ -66,7 +71,10 @@ None yet.
 - `bash scripts/build-lambdas.sh eval-runner && bash scripts/build-lambdas.sh eval-worker` - passed.
 - `terraform fmt -check terraform/modules/app/lambda-api/eval-fanout.tf terraform/modules/app/lambda-api/handlers.tf` - passed.
 - `terraform -chdir=terraform/modules/app/lambda-api validate` - passed after `terraform init -backend=false`.
-- `bash scripts/db-migrate-manual.sh --dry-run` - sees `0089_eval_results_run_test_case_unique.sql` marker. The command exits nonzero because pre-existing files `0076_scheduled_jobs_marco_backfill.sql` and `0079_seed_tenant_customize_catalog.sql` have no markers.
+- `pnpm --filter @thinkwork/api test -- eval-runner.test.ts eval-worker.test.ts eval-worker-integration.test.ts` - passed for U3 fix.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U3 fix.
+- `pnpm --filter @thinkwork/database-pg build` - passed for U3 fix.
+- `bash scripts/build-lambdas.sh eval-worker` - passed for U3 fix.
 
 ## Blockers
 

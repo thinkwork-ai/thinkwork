@@ -22,7 +22,6 @@ import {
 	timestamp,
 	jsonb,
 	index,
-	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -179,10 +178,6 @@ export const evalResults = pgTable(
 		index("idx_eval_results_test_case_created").on(
 			table.test_case_id,
 			table.created_at,
-		),
-		uniqueIndex("uq_eval_results_run_test_case").on(
-			table.run_id,
-			table.test_case_id,
 		),
 	],
 );
