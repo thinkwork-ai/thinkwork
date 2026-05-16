@@ -8,7 +8,7 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, and, desc, sql } from "../../utils.js";
+import { db, eq, and, asc, desc, inArray, sql } from "../../utils.js";
 import {
   evalRuns,
   evalResults,
@@ -77,6 +77,44 @@ function resultToGraphql(
     assertions: JSON.stringify(row.assertions ?? []),
     errorMessage: row.error_message,
     createdAt: row.created_at,
+  };
+}
+
+export function placeholderStatusForEvalRun(runStatus: string) {
+  if (runStatus === "pending") return "pending";
+  if (runStatus === "running") return "running";
+  if (runStatus === "cancelled") return "cancelled";
+  if (runStatus === "failed") return "failed";
+  return "waiting";
+}
+
+function plannedResultToGraphql(
+  run: Record<string, unknown>,
+  testCase: {
+    id: string;
+    name: string;
+    category: string;
+    query: string;
+    assertions: unknown;
+  },
+) {
+  return {
+    id: `pending:${run.id}:${testCase.id}`,
+    runId: run.id,
+    testCaseId: testCase.id,
+    testCaseName: testCase.name,
+    category: testCase.category,
+    status: placeholderStatusForEvalRun(String(run.status ?? "")),
+    score: null,
+    durationMs: null,
+    agentSessionId: null,
+    input: testCase.query,
+    expected: null,
+    actualOutput: null,
+    evaluatorResults: JSON.stringify([]),
+    assertions: JSON.stringify(testCase.assertions ?? []),
+    errorMessage: null,
+    createdAt: run.created_at,
   };
 }
 
@@ -252,6 +290,12 @@ const evalRunResults = async (
   args: { runId: string },
   _ctx: GraphQLContext,
 ) => {
+  const [run] = await db
+    .select()
+    .from(evalRuns)
+    .where(eq(evalRuns.id, args.runId));
+  if (!run) return [];
+
   const rows = await db
     .select({
       result: evalResults,
@@ -262,7 +306,7 @@ const evalRunResults = async (
     .leftJoin(evalTestCases, eq(evalResults.test_case_id, evalTestCases.id))
     .where(eq(evalResults.run_id, args.runId))
     .orderBy(desc(evalResults.created_at));
-  return rows.map((r) =>
+  const actualRows = rows.map((r) =>
     resultToGraphql(
       r.result as unknown as Record<string, unknown>,
       r.testCaseName
@@ -270,6 +314,41 @@ const evalRunResults = async (
         : null,
     ),
   );
+
+  const actualByTestCaseId = new Map(
+    actualRows
+      .filter((result) => result.testCaseId)
+      .map((result) => [result.testCaseId, result]),
+  );
+  const caseConditions = [
+    eq(evalTestCases.tenant_id, run.tenant_id),
+    eq(evalTestCases.enabled, true),
+  ];
+  if (run.categories.length > 0) {
+    caseConditions.push(inArray(evalTestCases.category, run.categories));
+  }
+
+  const testCases = await db
+    .select({
+      id: evalTestCases.id,
+      name: evalTestCases.name,
+      category: evalTestCases.category,
+      query: evalTestCases.query,
+      assertions: evalTestCases.assertions,
+    })
+    .from(evalTestCases)
+    .where(and(...caseConditions))
+    .orderBy(asc(evalTestCases.category), asc(evalTestCases.name));
+
+  const plannedRows = testCases.map((testCase) => {
+    const actual = actualByTestCaseId.get(testCase.id);
+    return actual ?? plannedResultToGraphql(run, testCase);
+  });
+  const resultRowsWithoutTestCase = actualRows.filter(
+    (result) => !result.testCaseId,
+  );
+
+  return [...resultRowsWithoutTestCase, ...plannedRows];
 };
 
 export const evalResultSpans = async (
