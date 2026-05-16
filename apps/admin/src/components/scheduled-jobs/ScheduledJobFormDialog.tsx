@@ -25,10 +25,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -37,16 +34,12 @@ import {
   type SchedulePickerValue,
 } from "@/components/schedule-picker/SchedulePicker";
 import { apiFetch } from "@/lib/api-fetch";
-import {
-  AgentTemplatesListQuery,
-  ComputerTemplatesListQuery,
-  ModelCatalogQuery,
-} from "@/lib/graphql-queries";
+import { ComputersListQuery, ModelCatalogQuery } from "@/lib/graphql-queries";
 import { allEvalCategoryIds, EVAL_CATEGORIES } from "@/lib/evaluation-options";
 import { cn } from "@/lib/utils";
 
 type AgentOption = { id: string; name: string };
-type TemplateOption = { id: string; name: string; templateKind?: string };
+type ComputerOption = { id: string; name: string; runtimeStatus: string };
 type ModelOption = { modelId: string; displayName: string };
 
 export const EVAL_SCHEDULE_TRIGGER_TYPE = "eval_scheduled";
@@ -54,6 +47,7 @@ export const EVAL_SCHEDULE_TRIGGER_TYPE = "eval_scheduled";
 export interface EvalScheduleConfig {
   agentId?: string;
   agentTemplateId?: string;
+  computerId?: string;
   targetTemplateKind?: "agent" | "computer";
   model?: string;
   categories?: string[];
@@ -88,6 +82,7 @@ const triggerFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   agentId: z.string().optional(),
   agentTemplateId: z.string().optional(),
+  computerId: z.string().optional(),
   model: z.string().optional(),
   categories: z.array(z.string()).optional(),
   prompt: z.string().optional(),
@@ -119,10 +114,10 @@ export function validateScheduledJobForm(
   if (isEvalScheduledTrigger(triggerType)) {
     const errors: Array<{ field: keyof TriggerFormValues; message: string }> =
       [];
-    if (!values.agentTemplateId) {
+    if (!values.computerId) {
       errors.push({
-        field: "agentTemplateId",
-        message: "Select a target template",
+        field: "computerId",
+        message: "Select a running Computer",
       });
     }
     if ((values.categories ?? []).length === 0) {
@@ -147,7 +142,7 @@ export function buildScheduledJobPayload(
 ): ScheduledJobFormData {
   if (isEvalScheduledTrigger(triggerType)) {
     const config: EvalScheduleConfig = {
-      agentTemplateId: values.agentTemplateId,
+      computerId: values.computerId,
       categories: values.categories ?? [],
     };
     if (values.model) config.model = values.model;
@@ -210,6 +205,7 @@ export function ScheduledJobFormDialog({
       name: initial?.name || "",
       agentId: initial?.agent_id || "",
       agentTemplateId: evalConfig.agentTemplateId || "",
+      computerId: evalConfig.computerId || "",
       model: evalConfig.model || "",
       categories: evalConfig.categories?.length
         ? evalConfig.categories
@@ -220,13 +216,8 @@ export function ScheduledJobFormDialog({
     },
   });
 
-  const [templatesRes] = useQuery({
-    query: AgentTemplatesListQuery,
-    variables: { tenantId },
-    pause: !open || !isEvalSchedule,
-  });
-  const [computerTemplatesRes] = useQuery({
-    query: ComputerTemplatesListQuery,
+  const [computersRes] = useQuery({
+    query: ComputersListQuery,
     variables: { tenantId },
     pause: !open || !isEvalSchedule,
   });
@@ -235,10 +226,9 @@ export function ScheduledJobFormDialog({
     pause: !open || !isEvalSchedule,
   });
 
-  const agentTemplates = (templatesRes.data?.agentTemplates ??
-    []) as TemplateOption[];
-  const computerTemplates = (computerTemplatesRes.data?.computerTemplates ??
-    []) as TemplateOption[];
+  const runningComputers = (computersRes.data?.computers ?? []).filter(
+    (computer) => computer.runtimeStatus === "RUNNING",
+  ) as ComputerOption[];
   const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as ModelOption[];
   const selectedCategories = form.watch("categories") ?? [];
 
@@ -255,6 +245,7 @@ export function ScheduledJobFormDialog({
       name: initial?.name || "",
       agentId: initial?.agent_id || "",
       agentTemplateId: nextEvalConfig.agentTemplateId || "",
+      computerId: nextEvalConfig.computerId || "",
       model: nextEvalConfig.model || "",
       categories: nextEvalConfig.categories?.length
         ? nextEvalConfig.categories
@@ -357,11 +348,11 @@ export function ScheduledJobFormDialog({
                 {isEvalSchedule ? (
                   <FormField
                     control={form.control}
-                    name="agentTemplateId"
+                    name="computerId"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-semibold">
-                          Target Template
+                          Target Computer
                         </FormLabel>
                         <Select
                           value={field.value}
@@ -369,33 +360,24 @@ export function ScheduledJobFormDialog({
                         >
                           <FormControl>
                             <SelectTrigger className="w-[220px]">
-                              <SelectValue placeholder="Select template..." />
+                              <SelectValue placeholder="Select Computer..." />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectGroup>
-                              <SelectLabel>Computer Templates</SelectLabel>
-                              {computerTemplates.map((template) => (
+                            {runningComputers.length === 0 ? (
+                              <SelectItem value="__none" disabled>
+                                No running Computers
+                              </SelectItem>
+                            ) : (
+                              runningComputers.map((computer) => (
                                 <SelectItem
-                                  key={template.id}
-                                  value={template.id}
+                                  key={computer.id}
+                                  value={computer.id}
                                 >
-                                  {template.name}
+                                  {computer.name}
                                 </SelectItem>
-                              ))}
-                            </SelectGroup>
-                            <SelectSeparator />
-                            <SelectGroup>
-                              <SelectLabel>Agent Templates</SelectLabel>
-                              {agentTemplates.map((template) => (
-                                <SelectItem
-                                  key={template.id}
-                                  value={template.id}
-                                >
-                                  {template.name}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />

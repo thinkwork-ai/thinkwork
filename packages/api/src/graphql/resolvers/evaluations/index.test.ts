@@ -19,7 +19,9 @@ vi.mock("../../utils.js", () => ({
   },
   eq: (...args: unknown[]) => ({ eq: args }),
   and: (...args: unknown[]) => ({ and: args }),
+  asc: (arg: unknown) => ({ asc: arg }),
   desc: (arg: unknown) => ({ desc: arg }),
+  inArray: (...args: unknown[]) => ({ inArray: args }),
   sql: (...args: unknown[]) => ({ sql: args }),
 }));
 
@@ -27,7 +29,17 @@ vi.mock("../../../lib/agentcore-spans.js", () => ({
   fetchSpansForSession: mockFetchSpansForSession,
 }));
 
-import { evalResultSpans } from "./index.js";
+import { evalResultSpans, placeholderStatusForEvalRun } from "./index.js";
+
+describe("placeholderStatusForEvalRun", () => {
+  it("keeps planned eval rows visible with the parent run state", () => {
+    expect(placeholderStatusForEvalRun("pending")).toBe("pending");
+    expect(placeholderStatusForEvalRun("running")).toBe("running");
+    expect(placeholderStatusForEvalRun("cancelled")).toBe("cancelled");
+    expect(placeholderStatusForEvalRun("failed")).toBe("failed");
+    expect(placeholderStatusForEvalRun("completed")).toBe("waiting");
+  });
+});
 
 describe("evalResultSpans", () => {
   beforeEach(() => {

@@ -31,8 +31,17 @@ runner's `query` field directly:
 
 Allowed assertion `type` values: `contains`, `not-contains`, `icontains`,
 `equals`, `regex`, `llm-rubric`. Deterministic types are evaluated locally
-by the eval-runner; `llm-rubric` is judged by AWS Bedrock AgentCore
-Evaluations.
+by the eval-worker; `llm-rubric` is judged with the configured Bedrock judge
+model.
+
+Manual and scheduled eval runs target a concrete running Computer. Prompts that
+exercise agent behavior should still live in this corpus, but they run through
+the Computer's primary agent/runtime identity so delegation is part of the
+measured behavior. Seed rows may still carry `agentcore_evaluator_ids`, but the
+worker's default interactive path skips AWS AgentCore built-in evaluators to
+keep run latency and token cost bounded. Set `EVAL_AGENTCORE_EVALUATORS=enabled`
+on `eval-worker` for a full trace-level scoring sweep, such as a sampled nightly
+or release-gate run.
 
 ## New red-team corpus shape
 

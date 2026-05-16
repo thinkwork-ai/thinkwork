@@ -18,7 +18,7 @@ export function registerEvalCommand(program: Command): void {
     .command("eval")
     .alias("evals")
     .description(
-      "Run evaluations against your agents and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
+      "Run evaluations against running Computers and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
     );
 
   evals
@@ -29,26 +29,32 @@ export function registerEvalCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-r, --region <region>", "AWS region", "us-east-1")
-    .option("--agent-template <id>", "Run-level agent template ID")
-    .option("--agent <id>", "Optional agent under test")
+    .option("--computer <id>", "Running Computer ID to evaluate")
     .option("--model <id>", "Optional model override")
     .option("--category <name...>", "Only run these categories (repeatable)")
-    .option("--test-case <id...>", "Only run these specific test case IDs (repeatable)")
+    .option(
+      "--test-case <id...>",
+      "Only run these specific test case IDs (repeatable)",
+    )
     .option("--all", "Run all enabled test cases for the tenant")
     .option("--watch", "Block and poll until the run reaches a terminal status")
-    .option("--timeout <seconds>", "Max wait seconds for --watch (default 900)", "900")
+    .option(
+      "--timeout <seconds>",
+      "Max wait seconds for --watch (default 900)",
+      "900",
+    )
     .addHelpText(
       "after",
       `
 Examples:
   # Fire and return — prints the runId; view results in the admin UI
-  $ thinkwork eval run --agent-template tpl-abc --category tool-safety
+  $ thinkwork eval run --computer comp-abc --category tool-safety
 
   # Pick categories + test cases interactively
   $ thinkwork eval run
 
   # Block until done
-  $ thinkwork eval run --agent-template tpl-abc --all --watch --timeout 1800
+  $ thinkwork eval run --computer comp-abc --all --watch --timeout 1800
 `,
     )
     .action(runEvalRun);
@@ -71,7 +77,11 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-r, --region <region>", "AWS region", "us-east-1")
-    .option("--results", "Also fetch per-test-case results (default: true)", true)
+    .option(
+      "--results",
+      "Also fetch per-test-case results (default: true)",
+      true,
+    )
     .option("--no-results", "Skip fetching per-test-case results")
     .action(runEvalGet);
 
@@ -95,7 +105,9 @@ Examples:
 
   evals
     .command("delete <runId>")
-    .description("Delete an eval run and its results. Requires confirmation unless --yes.")
+    .description(
+      "Delete an eval run and its results. Requires confirmation unless --yes.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-r, --region <region>", "AWS region", "us-east-1")
@@ -104,7 +116,9 @@ Examples:
 
   evals
     .command("categories")
-    .description("List distinct categories present across the tenant's test cases.")
+    .description(
+      "List distinct categories present across the tenant's test cases.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-r, --region <region>", "AWS region", "us-east-1")
@@ -113,7 +127,7 @@ Examples:
   evals
     .command("seed")
     .description(
-      "Idempotently seed the maniflow starter pack (96 test cases across 9 categories). Safe to re-run.",
+      "Idempotently seed the ThinkWork starter pack (210 test cases across 14 categories). Safe to re-run.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -127,8 +141,7 @@ Examples:
     .alias("test-cases")
     .description("Manage individual eval test cases (CRUD).");
 
-  tc
-    .command("list")
+  tc.command("list")
     .alias("ls")
     .description("List test cases, optionally filtered by category or search.")
     .option("-s, --stage <name>", "Deployment stage")
@@ -138,16 +151,14 @@ Examples:
     .option("--search <q>", "Substring match on test case name")
     .action(runEvalTestCaseList);
 
-  tc
-    .command("get <id>")
+  tc.command("get <id>")
     .description("Show a single test case.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-r, --region <region>", "AWS region", "us-east-1")
     .action(runEvalTestCaseGet);
 
-  tc
-    .command("create")
+  tc.command("create")
     .description("Create a new test case. Prompts for missing values in a TTY.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -161,11 +172,13 @@ Examples:
     .option("--tag <name...>", "Tags (repeatable)")
     .option("--enabled", "Mark enabled (default)", true)
     .option("--no-enabled", "Mark disabled")
-    .option("--assertions-file <path>", "JSON file containing an array of assertions")
+    .option(
+      "--assertions-file <path>",
+      "JSON file containing an array of assertions",
+    )
     .action(runEvalTestCaseCreate);
 
-  tc
-    .command("update <id>")
+  tc.command("update <id>")
     .description("Update a test case. Only supplied fields are changed.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -175,15 +188,20 @@ Examples:
     .option("--query <text>")
     .option("--system-prompt <text>")
     .option("--agent-template <id>")
-    .option("--evaluator <id...>", "Replace AgentCore evaluator IDs (repeatable)")
+    .option(
+      "--evaluator <id...>",
+      "Replace AgentCore evaluator IDs (repeatable)",
+    )
     .option("--tag <name...>", "Replace tags (repeatable)")
     .option("--enabled", "Mark enabled")
     .option("--no-enabled", "Mark disabled")
-    .option("--assertions-file <path>", "JSON file containing an array of assertions (replaces all)")
+    .option(
+      "--assertions-file <path>",
+      "JSON file containing an array of assertions (replaces all)",
+    )
     .action(runEvalTestCaseUpdate);
 
-  tc
-    .command("delete <id>")
+  tc.command("delete <id>")
     .description("Delete a test case. Requires confirmation unless --yes.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")

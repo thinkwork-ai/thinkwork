@@ -96,6 +96,9 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "computers.id",
     tenant_id: "computers.tenant_id",
     owner_user_id: "computers.owner_user_id",
+    template_id: "computers.template_id",
+    runtime_status: "computers.runtime_status",
+    primary_agent_id: "computers.primary_agent_id",
     migrated_from_agent_id: "computers.migrated_from_agent_id",
     status: "computers.status",
   },
@@ -511,16 +514,25 @@ describe("job-trigger skill_run misconfiguration", () => {
 });
 
 describe("job-trigger eval_scheduled", () => {
-  it("creates an eval run for a selected agent or computer template", async () => {
+  it("creates an eval run for a selected running Computer", async () => {
     mockSelect.mockReturnValueOnce([
       {
         enabled: true,
         name: "Daily eval",
         config: {
-          agentTemplateId: "computer-template-1",
+          computerId: "computer-1",
           model: "anthropic.claude-haiku-4-5",
           categories: ["performance-computer"],
         },
+      },
+    ]);
+    mockSelect.mockReturnValueOnce([
+      {
+        id: "computer-1",
+        templateId: "computer-template-1",
+        runtimeStatus: "running",
+        primaryAgentId: "computer-agent-1",
+        migratedFromAgentId: null,
       },
     ]);
     mockInsert.mockReturnValueOnce([{ id: "eval-run-1" }]);
@@ -534,7 +546,7 @@ describe("job-trigger eval_scheduled", () => {
     expect(mockInsertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: "T1",
-        agent_id: null,
+        agent_id: "computer-agent-1",
         agent_template_id: "computer-template-1",
         scheduled_job_id: "job-eval-1",
         status: "pending",

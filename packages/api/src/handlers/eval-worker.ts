@@ -43,6 +43,8 @@ const SPAN_WAIT_INITIAL_MS = 30_000;
 const SPAN_WAIT_INTERVAL_MS = 15_000;
 const SPAN_WAIT_MAX_MS = 120_000;
 const PASS_THRESHOLD = 0.7;
+const BUILT_IN_EVALUATOR_INPUT_USD_PER_1K = 0.0024;
+const BUILT_IN_EVALUATOR_OUTPUT_USD_PER_1K = 0.012;
 
 const ssm = new SSMClient({ region: REGION });
 const ac = new BedrockAgentCoreClient({
@@ -76,6 +78,7 @@ interface EvaluatorResult {
 	value: number | null;
 	label: string | null;
 	explanation: string | null;
+	skipped?: boolean;
 	token_usage?: {
 		inputTokens?: number;
 		outputTokens?: number;
@@ -132,11 +135,38 @@ export function summarizeEvalResults(
 	};
 }
 
+export function estimateAgentCoreEvaluatorCostUsd(
+	tokenUsage: EvaluatorResult["token_usage"] | undefined,
+): number {
+	if (!tokenUsage) return 0;
+	const inputTokens = tokenUsage.inputTokens ?? 0;
+	const outputTokens = tokenUsage.outputTokens ?? 0;
+	if (inputTokens > 0 || outputTokens > 0) {
+		return (
+			(inputTokens / 1000) * BUILT_IN_EVALUATOR_INPUT_USD_PER_1K +
+			(outputTokens / 1000) * BUILT_IN_EVALUATOR_OUTPUT_USD_PER_1K
+		);
+	}
+
+	return (
+		((tokenUsage.totalTokens ?? 0) / 1000) *
+		BUILT_IN_EVALUATOR_OUTPUT_USD_PER_1K
+	);
+}
+
+export function agentCoreEvaluatorsEnabled(
+	value = process.env.EVAL_AGENTCORE_EVALUATORS,
+): boolean {
+	return ["1", "true", "enabled", "always", "full"].includes(
+		(value ?? "disabled").toLowerCase(),
+	);
+}
+
 function evaluatorCostUsd(evaluatorResults: unknown): number {
 	if (!Array.isArray(evaluatorResults)) return 0;
 	return evaluatorResults.reduce((total, result) => {
 		const tokenUsage = (result as EvaluatorResult).token_usage;
-		return total + ((tokenUsage?.totalTokens ?? 0) / 1000) * 0.012;
+		return total + estimateAgentCoreEvaluatorCostUsd(tokenUsage);
 	}, 0);
 }
 
@@ -547,12 +577,25 @@ async function executeCase(
 
 		const evaluatorIds = (tc.agentcore_evaluator_ids ?? []) as string[];
 		if (evaluatorIds.length > 0) {
-			const sessionSpans = await waitForSpans(sessionId, runtimeLogGroup);
-			for (const evaluatorId of evaluatorIds) {
-				const result = await callEvaluator(evaluatorId, sessionSpans);
-				evaluatorResults.push(result);
-				const tu = result.token_usage;
-				if (tu?.totalTokens) costUsd += (tu.totalTokens / 1000) * 0.012;
+			if (agentCoreEvaluatorsEnabled()) {
+				const sessionSpans = await waitForSpans(sessionId, runtimeLogGroup);
+				for (const evaluatorId of evaluatorIds) {
+					const result = await callEvaluator(evaluatorId, sessionSpans);
+					evaluatorResults.push(result);
+					costUsd += estimateAgentCoreEvaluatorCostUsd(result.token_usage);
+				}
+			} else {
+				for (const evaluatorId of evaluatorIds) {
+					evaluatorResults.push({
+						evaluator_id: evaluatorId,
+						source: "agentcore",
+						value: null,
+						label: "skipped",
+						explanation:
+							"Skipped by eval-worker economy mode. Set EVAL_AGENTCORE_EVALUATORS=enabled for full AgentCore built-in evaluator scoring.",
+						skipped: true,
+					});
+				}
 			}
 		}
 	} catch (err) {
@@ -561,12 +604,13 @@ async function executeCase(
 	}
 
 	const assertionsPassed = assertionResults.every((a) => a.passed);
-	const evaluatorsPassed = evaluatorResults.every(
+	const scoredEvaluatorResults = evaluatorResults.filter((r) => !r.skipped);
+	const evaluatorsPassed = scoredEvaluatorResults.every(
 		(r) => typeof r.value === "number" && r.value >= PASS_THRESHOLD,
 	);
 	const contributingScores: number[] = [
 		...assertionResults.map((a) => a.score ?? (a.passed ? 1 : 0)),
-		...evaluatorResults
+		...scoredEvaluatorResults
 			.filter((r) => typeof r.value === "number")
 			.map((r) => r.value as number),
 	];

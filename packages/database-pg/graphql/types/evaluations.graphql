@@ -159,10 +159,14 @@ input UpdateEvalTestCaseInput {
 }
 
 input StartEvalRunInput {
+  # Preferred target: a concrete running Computer. The worker uses the
+  # Computer's primary agent/runtime identity so Computer evals exercise the
+  # same substrate users operate, and agent work happens through Computer
+  # delegation instead of a separate generic-agent eval target.
+  computerId: ID
+  # Legacy input fields retained for old generated clients. New eval runs must
+  # pass computerId; the resolver rejects template-only or agent-only targets.
   agentId: ID
-  # Run-level agent template — the eval test agent loads this template's
-  # workspace/tools/model for every test case in the run, unless the
-  # test case overrides via its own agent_template_id.
   agentTemplateId: ID
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.

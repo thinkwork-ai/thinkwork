@@ -1,11 +1,54 @@
 ---
-title: "Autopilot status: retire OSS Symphony and connectors"
-date: 2026-05-14
-plan: docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md
-status: completed
+title: "Autopilot status ledger"
+date: 2026-05-16
+status: active
 ---
 
-# Autopilot Status: Retire OSS Symphony And Connectors
+# Autopilot Status Ledger
+
+## Current Run: ThinkWork Slack Workspace App
+
+Plan: `docs/plans/2026-05-16-004-feat-thinkwork-computer-slack-workspace-app-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- **U3 — Slack signature verification and ingest helper**
+- Branch: `codex/slack-workspace-u3-signature`
+- Worktree: `.Codex/worktrees/slack-workspace-u3-signature`
+- PR: [#1277](https://github.com/thinkwork-ai/thinkwork/pull/1277)
+- Status: PR open; waiting on CI
+
+### Progress Log
+
+| Date       | Unit | Branch                               | PR                                                           | Status              | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------- | ---- | ------------------------------------ | ------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-16 | U1   | `codex/slack-workspace-u1-schema`    | [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273) | Merged              | `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0094_slack_workspace_app.sql`; touched-file Prettier check; dev `psql -f packages/database-pg/drizzle/0094_slack_workspace_app.sql`; GitHub checks; post-merge Deploy run                                                                                                                                                                             | Added `slack_workspaces`, `slack_user_links`, and `slack_threads` schema plus migration tests. `db:generate` attempted but Drizzle stopped at an existing interactive schema-conflict prompt before writing files. Migration Drift Precheck initially failed because `0094` had not yet been applied to dev; applied it to dev and reran the failed check. Squash merged after CI passed; deleted the branch/worktree; post-merge Deploy passed.                                                                                                  |
+| 2026-05-16 | U2   | `codex/slack-workspace-u2-terraform` | [#1275](https://github.com/thinkwork-ai/thinkwork/pull/1275) | Merged              | `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/lambda typecheck`; `pnpm -r --if-present typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/lambda test`; targeted Slack Lambda builds; `pnpm build:lambdas`; `terraform -chdir=terraform/examples/greenfield validate`; targeted no-refresh Terraform plan for Slack resources; touched-file Prettier check; `terraform fmt -check`; `bash -n scripts/build-lambdas.sh`; `git diff --check`; GitHub checks; post-merge Deploy run | Added Slack app credentials secret, five Lambda registrations, five public API Gateway routes, build entries, inert handler stubs, and a handler README. Full greenfield plan is not clean locally because this shell lacks Cloudflare credentials and the ignored local tfvars do not mirror deployed custom-domain toggles; targeted Slack plan with `lambda_zips_dir` confirmed the new secret, Lambdas, route integrations, and routes are addressable. Squash merged after CI passed; deleted the branch/worktree; post-merge Deploy passed. |
+| 2026-05-16 | U3   | `codex/slack-workspace-u3-signature` | [#1277](https://github.com/thinkwork-ai/thinkwork/pull/1277) | PR open; CI pending | `pnpm --filter @thinkwork/api test -- src/handlers/slack/_shared.test.ts src/lib/slack/workspace-store.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; touched-file Prettier check; `git diff --check`                                                                                                                                                                                                                                              | Adding Slack v0 signature verification, replay-window enforcement, retry short-circuiting, workspace lookup dispatch wrapper, and Secrets Manager-backed Slack app/bot-token cache.                                                                                                                                                                                                                                                                                                                                                               |
+
+### CI / Merge Log
+
+- Opened [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273).
+- First CI run: `cla`, `lint`, `typecheck`, and `verify` passed; `Migration Drift Precheck (dev)` failed because the new hand-rolled migration objects were missing in dev.
+- Applied `packages/database-pg/drizzle/0094_slack_workspace_app.sql` to dev and verified the scoped drift reporter returned all markers present; reran the failed precheck.
+- Rerun checks on [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273) passed (`cla`, `lint`, `Migration Drift Precheck (dev)`, `verify`, `test`, `typecheck`).
+- Squash merged [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273) into `main` as `505bdebc1e4c7fc21a93098137323761f8b5a1a0`; deleted the local worktree/branch and confirmed the remote branch was gone.
+- Watched the post-merge Deploy run for `main`; it passed.
+- Opened [#1275](https://github.com/thinkwork-ai/thinkwork/pull/1275) for U2.
+- GitHub required checks for [#1275](https://github.com/thinkwork-ai/thinkwork/pull/1275) passed after a clean rebase onto `origin/main`.
+- Squash merged [#1275](https://github.com/thinkwork-ai/thinkwork/pull/1275) into `main` as `61e0feb7029e9eeb89c1bdbc19931b2b3779293d`; deleted the local worktree/branch and confirmed the remote branch was gone.
+- Watched the post-merge Deploy run for `main`; it passed.
+- Opened [#1277](https://github.com/thinkwork-ai/thinkwork/pull/1277) for U3.
+
+### Blockers
+
+- None.
+
+---
+
+# Prior Run: Retire OSS Symphony And Connectors
 
 ## Current State
 
@@ -38,8 +81,8 @@ status: completed
 
 ## Pull Requests
 
-| Unit | Branch | PR | Status | Notes |
-| --- | --- | --- | --- | --- |
+| Unit  | Branch                           | PR                                                           | Status | Notes                                                                                                                                                                               |
+| ----- | -------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | Merged | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
 
 ## CI / Verification Log

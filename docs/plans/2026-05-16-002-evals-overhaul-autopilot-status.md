@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U11. Schedule provenance
-- Branch: `codex/evals-overhaul-u11-provenance`
-- Worktree: `.Codex/worktrees/evals-overhaul-u11-provenance`
-- State: PR #1268 open; waiting for required checks
+- Unit: U14. Eval cost/runtime optimization follow-up
+- Branch: `codex/evals-cost-runtime-optimization`
+- Worktree: `.Codex/worktrees/evals-cost-runtime-optimization`
+- State: PR #1274 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -91,23 +91,46 @@ status: active
 - 2026-05-16: Wired scheduled eval provenance into `job-trigger` and manual schedule fire, exposed `scheduledJobId` on `EvalRun`, regenerated CLI/mobile GraphQL types, and added the Admin Recent Runs schedule badge linking to the scheduled job detail.
 - 2026-05-16: Local U11 verification passed: schema build, database/API/Lambda/Admin builds, focused Admin/API/Lambda tests, CLI typecheck, mobile tests, job-trigger Lambda bundle, dev manual-migration drift probe, and `git diff --check`. Admin codegen remains blocked by the same pre-existing configured-extension GraphQL documents noted in U9.
 - 2026-05-16: Opened PR #1268 for U11.
+- 2026-05-16: PR #1268 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Created clean U12 worktree from `origin/main`.
+- 2026-05-16: Updated CLI eval seed help text from the stale maniflow 96/9 copy to the current ThinkWork 210 test cases across 14 categories.
+- 2026-05-16: Local U12 verification passed: CLI eval seed help output, CLI typecheck, CLI build, and `git diff --check`.
+- 2026-05-16: Opened PR #1270 for U12.
+- 2026-05-16: PR #1270 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Seeded the dev eval corpus after the cleanup; 210 current ThinkWork test cases were inserted for `sleek-squirrel-230`.
+- 2026-05-16: Final Admin UI proof started and completed two end-to-end runs: generic Agent template `Default` on `performance-agents` completed 0/5 with 0.0% pass rate and $0.808716 cost; Computer template `Thinkwork Computer` on `performance-computer` completed 4/5 with 80.0% pass rate and $0.757188 cost.
+- 2026-05-16: Operator follow-up: running run detail pages must show every selected eval row with an individual status instead of an empty "No results" table until workers finish.
+- 2026-05-16: Created clean U13 follow-up worktree from `origin/main`.
+- 2026-05-16: Updated `evalRunResults` to merge completed result rows with planned test-case placeholder rows, so pending/running/cancelled/failed runs expose all selected cases immediately and completed rows replace placeholders as they arrive.
+- 2026-05-16: Local U13 verification passed: focused API resolver test, API typecheck, API build, and `git diff --check`.
+- 2026-05-16: Opened PR #1272 for U13.
+- 2026-05-16: PR #1272 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Operator follow-up: five-test proof runs were too slow and displayed roughly $0.76-$0.81 cost; investigation found 10 AgentCore built-in evaluator calls per run and a cost estimator that charged all evaluator tokens at the output-token rate.
+- 2026-05-16: Created clean U14 follow-up worktree from `origin/main`.
+- 2026-05-16: Operator follow-up: evals should target a running Computer; agent behavior should be evaluated through Computer delegation instead of a separate generic-agent eval target.
+- 2026-05-16: Implemented U14: Admin manual evals and scheduled evals now target running Computers, scheduled trigger execution resolves the Computer's primary agent/template, interactive worker scoring skips expensive AgentCore built-in evaluators by default, and built-in evaluator cost accounting now uses AWS input/output token rates.
+- 2026-05-16: Local U14 verification passed: schema build, API resolver/worker tests, scheduled-job Admin test, job-trigger Lambda test, API/Admin/CLI/Lambda/database builds or typechecks, mobile codegen/test, Lambda bundles for graphql-http/eval-worker/job-trigger, Terraform fmt, and `git diff --check`. Admin codegen remains blocked by the pre-existing configured-extension GraphQL documents noted in U9/U11.
+- 2026-05-16: Opened PR #1274 for U14.
 
 ## Pull Requests
 
-| Unit   | Branch                                         | PR                                                           | CI      | Merge   | Notes                                                                                                                            |
-| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed  | merged  | Stall probe script + findings doc                                                                                                |
-| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                       |
-| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
-| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
-| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                    |
-| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                 |
-| U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                      |
-| U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                   |
-| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                             |
-| U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                       |
-| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed        |
-| U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | pending | pending | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge                         |
+| Unit   | Branch                                         | PR                                                           | CI      | Merge   | Notes                                                                                                                              |
+| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed  | merged  | Stall probe script + findings doc                                                                                                  |
+| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                         |
+| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index   |
+| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed   |
+| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                      |
+| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                   |
+| U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                        |
+| U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                     |
+| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                               |
+| U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                         |
+| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
+| U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
+| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
+| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
+| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | pending | pending | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring   |
 
 ## CI Failures
 
@@ -199,6 +222,16 @@ status: active
 - `bash scripts/build-lambdas.sh job-trigger` - passed for U11.
 - Prettier check for newly formatted admin/Lambda files - passed for U11. Full touched-file check intentionally skipped for pre-existing non-Prettier files and SQL parser limits.
 - `git diff --check` - passed for U11.
+- `pnpm --filter thinkwork-cli exec tsx src/cli.ts eval seed --help` - passed for U12 and showed the current 210 test cases across 14 categories copy.
+- `pnpm --filter thinkwork-cli typecheck` - passed for U12.
+- `pnpm --filter thinkwork-cli build` - passed for U12.
+- `git diff --check` - passed for U12.
+- Admin UI proof run, generic Agent template `Default`, `performance-agents` category - completed 0/5 with 0.0% pass rate and visible result rows.
+- Admin UI proof run, Computer template `Thinkwork Computer`, `performance-computer` category - completed 4/5 with 80.0% pass rate.
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/evaluations/index.test.ts` - passed for U13.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U13.
+- `pnpm --filter @thinkwork/api build` - passed for U13.
+- `git diff --check` - passed for U13.
 - `git diff --check` - passed for U7.
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
 - `pnpm --filter @thinkwork/api build` - passed for U8.
