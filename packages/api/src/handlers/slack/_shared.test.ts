@@ -207,6 +207,48 @@ describe("createSlackHandler", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("allows signed requests to respond before workspace lookup", async () => {
+    const preDispatch = vi.fn(async () => ({
+      statusCode: 200,
+      body: JSON.stringify({ challenge: "challenge-1" }),
+    }));
+    const { handler, dispatch, lookupWorkspace } = makeHandler({
+      lookupWorkspace: async () => {
+        throw new Error("lookup should not run");
+      },
+    });
+    const rawBody = JSON.stringify({
+      type: "url_verification",
+      team_id: "T123",
+      challenge: "challenge-1",
+    });
+    const signedHandler = createSlackHandler(
+      {
+        name: "events",
+        extractTeamId: ({ rawBodyText }) =>
+          (JSON.parse(rawBodyText) as { team_id?: string }).team_id ?? null,
+        preDispatch,
+        dispatch,
+      },
+      {
+        loadSigningSecret: async () => SIGNING_SECRET,
+        lookupWorkspace,
+        loadBotToken: async () => "xoxb-token",
+        nowMs: () => NOW_MS,
+      },
+    );
+
+    const res = await signedHandler(makeEvent(rawBody));
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body || "{}")).toEqual({ challenge: "challenge-1" });
+    expect(preDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ rawBodyText: rawBody }),
+    );
+    expect(lookupWorkspace).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("uses raw form-encoded bytes for signature verification", async () => {
     const dispatch = vi.fn(async () => ({
       statusCode: 200,

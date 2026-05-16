@@ -59,7 +59,9 @@ export async function enqueueComputerTask(input: {
       computerId: input.computerId,
       idempotencyKey: input.idempotencyKey,
     });
-    if (existing) return toGraphqlComputerTask(existing);
+    if (existing) {
+      return { ...toGraphqlComputerTask(existing), wasCreated: false };
+    }
   }
 
   const [task] = await insertTask({
@@ -79,7 +81,7 @@ export async function enqueueComputerTask(input: {
     },
   });
 
-  return toGraphqlComputerTask(task);
+  return { ...toGraphqlComputerTask(task), wasCreated: true };
 }
 
 async function insertTask(input: {
@@ -238,13 +240,16 @@ export function validateWorkspaceRelativePath(path: string): string {
 
 function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
   const payload = coerceObject(input);
+  const source =
+    typeof payload.source === "string" && payload.source.trim()
+      ? payload.source.trim()
+      : "chat_message";
+  if (source === "slack") return normalizeSlackThreadTurnInput(payload);
+
   return {
     threadId: requiredString(payload.threadId, "threadId"),
     messageId: requiredString(payload.messageId, "messageId"),
-    source:
-      typeof payload.source === "string" && payload.source.trim()
-        ? payload.source.trim()
-        : "chat_message",
+    source,
     actorType:
       typeof payload.actorType === "string" && payload.actorType.trim()
         ? payload.actorType.trim()
@@ -257,6 +262,36 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
       typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
         ? payload.runbookRunId.trim()
         : null,
+  };
+}
+
+function normalizeSlackThreadTurnInput(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    source: "slack",
+    channelType: requiredString(payload.channelType, "channelType"),
+    slackTeamId: requiredString(payload.slackTeamId, "slackTeamId"),
+    slackUserId: requiredString(payload.slackUserId, "slackUserId"),
+    channelId: requiredString(payload.channelId, "channelId"),
+    threadTs: requiredString(payload.threadTs, "threadTs"),
+    messageTs: requiredString(payload.messageTs, "messageTs"),
+    eventId: requiredString(payload.eventId, "eventId"),
+    sourceMessage: coerceObject(payload.sourceMessage),
+    threadContext: Array.isArray(payload.threadContext)
+      ? payload.threadContext
+      : [],
+    fileRefs: Array.isArray(payload.fileRefs) ? payload.fileRefs : [],
+    responseUrl: null,
+    placeholderTs:
+      typeof payload.placeholderTs === "string" && payload.placeholderTs.trim()
+        ? payload.placeholderTs.trim()
+        : null,
+    actorType:
+      typeof payload.actorType === "string" && payload.actorType.trim()
+        ? payload.actorType.trim()
+        : "user",
+    actorId: requiredString(payload.actorId, "actorId"),
   };
 }
 

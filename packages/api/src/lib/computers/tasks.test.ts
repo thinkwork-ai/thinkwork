@@ -97,6 +97,55 @@ describe("Computer task helpers", () => {
     });
   });
 
+  it("normalizes Slack-originated thread turn input without Computer thread ids", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "app_mention",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "1710000001.000000",
+        messageTs: "1710000001.000000",
+        eventId: "Ev123",
+        sourceMessage: {
+          text: "help",
+          ts: "1710000001.000000",
+          user: "U123",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        threadContext: [{ user: "U123", botId: null, ts: "1", text: "help" }],
+        fileRefs: [{ id: "F123", name: "brief.pdf" }],
+        actorId: "user-1",
+      }),
+    ).toEqual({
+      source: "slack",
+      channelType: "app_mention",
+      slackTeamId: "T123",
+      slackUserId: "U123",
+      channelId: "C123",
+      threadTs: "1710000001.000000",
+      messageTs: "1710000001.000000",
+      eventId: "Ev123",
+      sourceMessage: {
+        text: "help",
+        ts: "1710000001.000000",
+        user: "U123",
+        channel: "C123",
+        team: "T123",
+        permalink: null,
+      },
+      threadContext: [{ user: "U123", botId: null, ts: "1", text: "help" }],
+      fileRefs: [{ id: "F123", name: "brief.pdf" }],
+      responseUrl: null,
+      placeholderTs: null,
+      actorType: "user",
+      actorId: "user-1",
+    });
+  });
+
   it("normalizes runbook execution input", () => {
     expect(
       normalizeTaskInput("runbook_execute", {
