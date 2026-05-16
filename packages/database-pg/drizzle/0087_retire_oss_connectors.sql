@@ -1,5 +1,13 @@
 -- Retire the OSS connector framework.
 --
+-- ⚠️  SUPERSEDED by 0090 + 0092. Do NOT apply this file directly anymore —
+-- the ALTER TABLE public.tenant_entity_external_refs statements below
+-- will fail because 0090 (brain schema extraction) moved that table to
+-- brain.external_refs. 0090 absorbed this migration's tracker DELETE +
+-- constraint work, and 0092_finish_oss_connector_retirement.sql does
+-- the DROP TABLE portion. The markers below have been updated to point
+-- at the post-0090 location so the drift reporter resolves cleanly.
+--
 -- Removes the connector data model now that the private extension runtime
 -- is moving out of OSS Thinkwork. Workflow Customize catalog, OAuth
 -- credentials, MCP state, Computers, and Threads remain.
@@ -7,7 +15,8 @@
 -- Plan:
 --   docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md
 --
--- Apply manually:
+-- Apply manually: DO NOT APPLY DIRECTLY — see superseded note above.
+--   Original command (now broken):
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0087_retire_oss_connectors.sql
 --
 -- drops: public.computer_delegations
@@ -28,7 +37,9 @@
 -- drops: public.idx_tenant_connector_catalog_tenant_status
 -- drops: public.idx_computer_delegations_computer_status
 -- drops: public.idx_computer_delegations_agent
--- creates-constraint: public.tenant_entity_external_refs.tenant_entity_external_refs_kind_allowed
+-- Constraint location updated post-0090 (brain schema extraction moved the
+-- table to brain.external_refs and renamed the constraint).
+-- creates-constraint: brain.external_refs.external_refs_kind_allowed
 
 \set ON_ERROR_STOP on
 
