@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U13. Running run detail rows
-- Branch: `codex/evals-running-detail-rows`
-- Worktree: `.Codex/worktrees/evals-running-detail-rows`
-- State: PR #1272 open; waiting for required checks
+- Unit: U14. Eval cost/runtime optimization follow-up
+- Branch: `codex/evals-cost-runtime-optimization`
+- Worktree: `.Codex/worktrees/evals-cost-runtime-optimization`
+- State: PR #1274 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -104,6 +104,13 @@ status: active
 - 2026-05-16: Updated `evalRunResults` to merge completed result rows with planned test-case placeholder rows, so pending/running/cancelled/failed runs expose all selected cases immediately and completed rows replace placeholders as they arrive.
 - 2026-05-16: Local U13 verification passed: focused API resolver test, API typecheck, API build, and `git diff --check`.
 - 2026-05-16: Opened PR #1272 for U13.
+- 2026-05-16: PR #1272 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Operator follow-up: five-test proof runs were too slow and displayed roughly $0.76-$0.81 cost; investigation found 10 AgentCore built-in evaluator calls per run and a cost estimator that charged all evaluator tokens at the output-token rate.
+- 2026-05-16: Created clean U14 follow-up worktree from `origin/main`.
+- 2026-05-16: Operator follow-up: evals should target a running Computer; agent behavior should be evaluated through Computer delegation instead of a separate generic-agent eval target.
+- 2026-05-16: Implemented U14: Admin manual evals and scheduled evals now target running Computers, scheduled trigger execution resolves the Computer's primary agent/template, interactive worker scoring skips expensive AgentCore built-in evaluators by default, and built-in evaluator cost accounting now uses AWS input/output token rates.
+- 2026-05-16: Local U14 verification passed: schema build, API resolver/worker tests, scheduled-job Admin test, job-trigger Lambda test, API/Admin/CLI/Lambda/database builds or typechecks, mobile codegen/test, Lambda bundles for graphql-http/eval-worker/job-trigger, Terraform fmt, and `git diff --check`. Admin codegen remains blocked by the pre-existing configured-extension GraphQL documents noted in U9/U11.
+- 2026-05-16: Opened PR #1274 for U14.
 
 ## Pull Requests
 
@@ -122,7 +129,8 @@ status: active
 | U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
 | U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
-| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | pending | pending | Follow-up: show planned eval rows and per-test statuses while a run is still in progress                                           |
+| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
+| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | pending | pending | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring   |
 
 ## CI Failures
 

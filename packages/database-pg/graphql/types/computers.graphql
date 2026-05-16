@@ -73,6 +73,7 @@ type Computer {
   budgetPausedAt: AWSDateTime
   budgetPausedReason: String
   migratedFromAgentId: ID
+  primaryAgentId: ID
   migrationMetadata: AWSJSON
   createdBy: ID
   createdAt: AWSDateTime!

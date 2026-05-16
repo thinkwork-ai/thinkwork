@@ -439,15 +439,73 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       const cfg = (job?.config ?? {}) as {
         agentId?: string;
         agentTemplateId?: string;
+        computerId?: string;
         model?: string;
         categories?: string[];
       };
+      let targetAgentId: string | null = null;
+      let targetTemplateId: string | null = null;
+
+      if (cfg.computerId) {
+        const [computer] = await db
+          .select({
+            id: computers.id,
+            tenantId: computers.tenant_id,
+            templateId: computers.template_id,
+            runtimeStatus: computers.runtime_status,
+            primaryAgentId: computers.primary_agent_id,
+            migratedFromAgentId: computers.migrated_from_agent_id,
+          })
+          .from(computers)
+          .where(
+            and(
+              eq(computers.id, cfg.computerId),
+              eq(computers.tenant_id, tenantId),
+            ),
+          );
+        if (!computer || computer.runtimeStatus !== "running") {
+          const message = !computer
+            ? "Scheduled eval Computer not found"
+            : "Scheduled eval Computer is not running";
+          await db.insert(evalRuns).values({
+            tenant_id: tenantId,
+            scheduled_job_id: triggerId,
+            status: "failed",
+            model: cfg.model ?? null,
+            categories: cfg.categories ?? [],
+            completed_at: new Date(),
+            error_message: message,
+          });
+          console.warn(`[job-trigger] ${message} for trigger ${triggerId}`);
+          return;
+        }
+        targetAgentId =
+          computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
+        targetTemplateId = computer.templateId;
+      }
+
+      if (!targetAgentId) {
+        const message =
+          "Scheduled evals must target a running Computer with a primary agent";
+        await db.insert(evalRuns).values({
+          tenant_id: tenantId,
+          scheduled_job_id: triggerId,
+          status: "failed",
+          model: cfg.model ?? null,
+          categories: cfg.categories ?? [],
+          completed_at: new Date(),
+          error_message: message,
+        });
+        console.warn(`[job-trigger] ${message} for trigger ${triggerId}`);
+        return;
+      }
+
       const [run] = await db
         .insert(evalRuns)
         .values({
           tenant_id: tenantId,
-          agent_id: cfg.agentId ?? agentId ?? null,
-          agent_template_id: cfg.agentTemplateId ?? null,
+          agent_id: targetAgentId,
+          agent_template_id: targetTemplateId,
           scheduled_job_id: triggerId,
           status: "pending",
           model: cfg.model ?? null,

@@ -1,11 +1,20 @@
 import { select, checkbox, confirm, input } from "@inquirer/prompts";
 import ora from "ora";
 import { gqlQuery, gqlMutate } from "../../lib/gql-client.js";
-import { isInteractive, requireTty, promptOrExit } from "../../lib/interactive.js";
-import { isJsonMode, printJson, printKeyValue, logStderr } from "../../lib/output.js";
+import {
+  isInteractive,
+  requireTty,
+  promptOrExit,
+} from "../../lib/interactive.js";
+import {
+  isJsonMode,
+  printJson,
+  printKeyValue,
+  logStderr,
+} from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
 import {
-  AgentTemplatesForEvalDoc,
+  ComputersForEvalDoc,
   EvalTestCasesDoc,
   EvalRunDoc,
   StartEvalRunDoc,
@@ -18,8 +27,7 @@ import {
 } from "./helpers.js";
 
 interface RunOptions extends EvalCliOptions {
-  agentTemplate?: string;
-  agent?: string;
+  computer?: string;
   model?: string;
   category?: string[];
   testCase?: string[];
@@ -32,7 +40,7 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const interactive = isInteractive();
 
-  let agentTemplateId = opts.agentTemplate ?? null;
+  let computerId = opts.computer ?? null;
   let categories = opts.category ?? null;
   let testCaseIds = opts.testCase ?? null;
 
@@ -41,11 +49,12 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
     (categories && categories.length > 0) ||
     opts.all === true;
 
-  if (!agentTemplateId || !scopeSatisfied) {
+  if (!computerId || !scopeSatisfied) {
     if (!interactive) {
       const missing: string[] = [];
-      if (!agentTemplateId) missing.push("--agent-template");
-      if (!scopeSatisfied) missing.push("one of --all | --category | --test-case");
+      if (!computerId) missing.push("--computer");
+      if (!scopeSatisfied)
+        missing.push("one of --all | --category | --test-case");
       printError(
         `Missing required flag(s) in non-interactive session: ${missing.join(", ")}.`,
       );
@@ -53,22 +62,26 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
     }
   }
 
-  if (!agentTemplateId) {
-    const data = await gqlQuery(ctx.client, AgentTemplatesForEvalDoc, {
+  if (!computerId) {
+    const data = await gqlQuery(ctx.client, ComputersForEvalDoc, {
       tenantId: ctx.tenantId,
     });
-    const templates = data.agentTemplates ?? [];
-    if (templates.length === 0) {
-      printError("No agent templates defined for this tenant. Create one first.");
+    const computers = (data.computers ?? []).filter(
+      (computer) => computer.runtimeStatus === "RUNNING",
+    );
+    if (computers.length === 0) {
+      printError(
+        "No running Computers found for this tenant. Start a Computer first.",
+      );
       process.exit(1);
     }
-    requireTty("Agent template");
-    agentTemplateId = await promptOrExit(() =>
+    requireTty("Computer");
+    computerId = await promptOrExit(() =>
       select({
-        message: "Agent template to run against?",
-        choices: templates.map((t) => ({
-          name: `${t.name}${t.model ? `  (${t.model})` : ""}${t.isPublished ? "" : "  [draft]"}`,
-          value: t.id,
+        message: "Computer to run against?",
+        choices: computers.map((computer) => ({
+          name: `${computer.name}  (${computer.slug})`,
+          value: computer.id,
         })),
         loop: false,
       }),
@@ -141,7 +154,7 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   if (!opts.model && interactive) {
     const entered = await promptOrExit(() =>
       input({
-        message: "Model override? (blank for template default)",
+        message: "Model override? (blank for Computer default)",
         default: "",
       }),
     );
@@ -152,10 +165,11 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
     const summaryLines: Array<[string, string]> = [
       ["Stage", ctx.stage],
       ["Tenant", ctx.tenantSlug],
-      ["Agent template", agentTemplateId],
+      ["Computer", computerId],
     ];
     if (opts.model) summaryLines.push(["Model", opts.model]);
-    if (categories && categories.length) summaryLines.push(["Categories", categories.join(", ")]);
+    if (categories && categories.length)
+      summaryLines.push(["Categories", categories.join(", ")]);
     if (testCaseIds && testCaseIds.length)
       summaryLines.push(["Test cases", `${testCaseIds.length} picked`]);
     if (opts.all && !categories?.length && !testCaseIds?.length)
@@ -174,8 +188,7 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   const mutRes = await gqlMutate(ctx.client, StartEvalRunDoc, {
     tenantId: ctx.tenantId,
     input: {
-      agentTemplateId,
-      agentId: opts.agent ?? null,
+      computerId,
       model: opts.model ?? null,
       categories: categories ?? null,
       testCaseIds: testCaseIds ?? null,
@@ -185,7 +198,12 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   const run = mutRes.startEvalRun;
 
   if (isJsonMode()) {
-    printJson({ runId: run.id, status: run.status, model: run.model, categories: run.categories });
+    printJson({
+      runId: run.id,
+      status: run.status,
+      model: run.model,
+      categories: run.categories,
+    });
   } else {
     printSuccess(`Started eval run ${run.id} (status: ${run.status}).`);
   }
@@ -203,7 +221,9 @@ async function pollUntilTerminal(
   timeoutSec: number,
 ): Promise<void> {
   const deadline = Date.now() + timeoutSec * 1000;
-  const spinner = isJsonMode() ? null : ora({ text: "Waiting for run to complete…" }).start();
+  const spinner = isJsonMode()
+    ? null
+    : ora({ text: "Waiting for run to complete…" }).start();
   try {
     while (Date.now() < deadline) {
       const data = await gqlQuery(client, EvalRunDoc, { id: runId });
@@ -217,8 +237,12 @@ async function pollUntilTerminal(
       }
       if (isTerminalStatus(run.status)) {
         if (spinner) {
-          if (run.status === "completed") spinner.succeed(`completed — ${run.passed}/${run.totalTests} (${fmtPercent(run.passRate)})`);
-          else if (run.status === "failed") spinner.fail(`failed — ${run.errorMessage ?? "unknown error"}`);
+          if (run.status === "completed")
+            spinner.succeed(
+              `completed — ${run.passed}/${run.totalTests} (${fmtPercent(run.passRate)})`,
+            );
+          else if (run.status === "failed")
+            spinner.fail(`failed — ${run.errorMessage ?? "unknown error"}`);
           else spinner.warn("cancelled");
         }
         if (isJsonMode()) {

@@ -19,24 +19,24 @@ describe("ScheduledJobFormDialog eval schedule helpers", () => {
     ).toBe(EVAL_SCHEDULE_TRIGGER_TYPE);
   });
 
-  it("validates that scheduled evals have a target template and category", () => {
+  it("validates that scheduled evals have a running Computer and category", () => {
     expect(
       validateScheduledJobForm(
         { name: "Daily eval", categories: [] },
         EVAL_SCHEDULE_TRIGGER_TYPE,
       ),
     ).toEqual([
-      { field: "agentTemplateId", message: "Select a target template" },
+      { field: "computerId", message: "Select a running Computer" },
       { field: "categories", message: "Select at least one category" },
     ]);
   });
 
-  it("builds scheduled eval payloads for agent or computer template ids", () => {
+  it("builds scheduled eval payloads for running Computer ids", () => {
     expect(
       buildScheduledJobPayload(
         {
           name: "Daily computer eval ",
-          agentTemplateId: "computer-template-1",
+          computerId: "computer-1",
           model: "anthropic.claude-haiku-4-5",
           categories: ["performance-computer"],
         },
@@ -47,7 +47,7 @@ describe("ScheduledJobFormDialog eval schedule helpers", () => {
       name: "Daily computer eval",
       trigger_type: "eval_scheduled",
       config: {
-        agentTemplateId: "computer-template-1",
+        computerId: "computer-1",
         model: "anthropic.claude-haiku-4-5",
         categories: ["performance-computer"],
       },
