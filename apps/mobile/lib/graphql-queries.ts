@@ -186,6 +186,38 @@ export const DeleteMessageMutation = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
+// Slack
+// ---------------------------------------------------------------------------
+
+export const MySlackLinksQuery = graphql(`
+  query MySlackLinks($tenantId: ID!) {
+    mySlackLinks(tenantId: $tenantId) {
+      id
+      tenantId
+      slackTeamId
+      slackTeamName
+      slackUserId
+      slackUserName
+      slackUserEmail
+      userId
+      status
+      linkedAt
+      unlinkedAt
+    }
+  }
+`);
+
+export const UnlinkSlackIdentityMutation = graphql(`
+  mutation UnlinkSlackIdentity($id: ID!) {
+    unlinkSlackIdentity(id: $id) {
+      id
+      status
+      unlinkedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
 
@@ -1363,8 +1395,16 @@ export const DeleteMemoryRecordMutation = graphql(`
 `);
 
 export const UpdateMemoryRecordMutation = graphql(`
-  mutation UpdateMemoryRecord($userId: ID!, $memoryRecordId: ID!, $content: String!) {
-    updateMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId, content: $content)
+  mutation UpdateMemoryRecord(
+    $userId: ID!
+    $memoryRecordId: ID!
+    $content: String!
+  ) {
+    updateMemoryRecord(
+      userId: $userId
+      memoryRecordId: $memoryRecordId
+      content: $content
+    )
   }
 `);
 

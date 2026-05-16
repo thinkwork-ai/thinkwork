@@ -26,6 +26,8 @@ type Documents = {
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": typeof types.SetAgentBudgetPolicyDocument,
     "\n  mutation SendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      tenantId\n      role\n      content\n      senderType\n      senderId\n      createdAt\n    }\n  }\n": typeof types.SendMessageDocument,
     "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n": typeof types.DeleteMessageDocument,
+    "\n  query MySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      userId\n      status\n      linkedAt\n      unlinkedAt\n    }\n  }\n": typeof types.MySlackLinksDocument,
+    "\n  mutation UnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n      unlinkedAt\n    }\n  }\n": typeof types.UnlinkSlackIdentityDocument,
     "\n  query Messages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        node {\n          id\n          threadId\n          tenantId\n          role\n          content\n          senderType\n          senderId\n          toolCalls\n          toolResults\n          metadata\n          tokenCount\n          durableArtifact {\n            id\n            title\n            type\n            status\n            content\n            summary\n          }\n          createdAt\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": typeof types.MessagesDocument,
     "\n  query MyComputer {\n    myComputer {\n      id\n      name\n      slug\n      status\n      runtimeStatus\n    }\n  }\n": typeof types.MyComputerDocument,
     "\n  query Computers($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      name\n      slug\n      status\n      runtimeStatus\n      ownerUserId\n    }\n  }\n": typeof types.ComputersDocument,
@@ -116,6 +118,8 @@ const documents: Documents = {
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": types.SetAgentBudgetPolicyDocument,
     "\n  mutation SendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      tenantId\n      role\n      content\n      senderType\n      senderId\n      createdAt\n    }\n  }\n": types.SendMessageDocument,
     "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n": types.DeleteMessageDocument,
+    "\n  query MySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      userId\n      status\n      linkedAt\n      unlinkedAt\n    }\n  }\n": types.MySlackLinksDocument,
+    "\n  mutation UnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n      unlinkedAt\n    }\n  }\n": types.UnlinkSlackIdentityDocument,
     "\n  query Messages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        node {\n          id\n          threadId\n          tenantId\n          role\n          content\n          senderType\n          senderId\n          toolCalls\n          toolResults\n          metadata\n          tokenCount\n          durableArtifact {\n            id\n            title\n            type\n            status\n            content\n            summary\n          }\n          createdAt\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": types.MessagesDocument,
     "\n  query MyComputer {\n    myComputer {\n      id\n      name\n      slug\n      status\n      runtimeStatus\n    }\n  }\n": types.MyComputerDocument,
     "\n  query Computers($tenantId: ID!) {\n    computers(tenantId: $tenantId) {\n      id\n      name\n      slug\n      status\n      runtimeStatus\n      ownerUserId\n    }\n  }\n": types.ComputersDocument,
@@ -256,6 +260,14 @@ export function graphql(source: "\n  mutation SendMessage($input: SendMessageInp
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      userId\n      status\n      linkedAt\n      unlinkedAt\n    }\n  }\n"): (typeof documents)["\n  query MySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      userId\n      status\n      linkedAt\n      unlinkedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n      unlinkedAt\n    }\n  }\n"): (typeof documents)["\n  mutation UnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n      unlinkedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

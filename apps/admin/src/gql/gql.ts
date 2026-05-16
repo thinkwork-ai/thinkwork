@@ -82,7 +82,7 @@ type Documents = {
     "\n  mutation RotateTenantCredential($input: RotateTenantCredentialInput!) {\n    rotateTenantCredential(input: $input) {\n      id\n      status\n      lastValidatedAt\n      updatedAt\n    }\n  }\n": typeof types.RotateTenantCredentialDocument,
     "\n  mutation DeleteTenantCredential($id: ID!) {\n    deleteTenantCredential(id: $id)\n  }\n": typeof types.DeleteTenantCredentialDocument,
     "\n  query SlackWorkspaces($tenantId: ID!) {\n    slackWorkspaces(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      botUserId\n      appId\n      installedByUserId\n      status\n      installedAt\n      uninstalledAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.SlackWorkspacesDocument,
-    "\n  mutation StartSlackWorkspaceInstall($input: StartSlackWorkspaceInstallInput!) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n": typeof types.StartSlackWorkspaceInstallDocument,
+    "\n  mutation StartSlackWorkspaceInstall(\n    $input: StartSlackWorkspaceInstallInput!\n  ) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n": typeof types.StartSlackWorkspaceInstallDocument,
     "\n  mutation UninstallSlackWorkspace($id: ID!) {\n    uninstallSlackWorkspace(id: $id) {\n      id\n      status\n      uninstalledAt\n      updatedAt\n    }\n  }\n": typeof types.UninstallSlackWorkspaceDocument,
     "\n  mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      triggerSource\n      startedAt\n    }\n  }\n": typeof types.TriggerRoutineRunDocument,
     "\n  mutation RebuildRoutineVersion($input: RebuildRoutineVersionInput!) {\n    rebuildRoutineVersion(input: $input) {\n      id\n      versionNumber\n    }\n  }\n": typeof types.RebuildRoutineVersionDocument,
@@ -246,7 +246,7 @@ const documents: Documents = {
     "\n  mutation RotateTenantCredential($input: RotateTenantCredentialInput!) {\n    rotateTenantCredential(input: $input) {\n      id\n      status\n      lastValidatedAt\n      updatedAt\n    }\n  }\n": types.RotateTenantCredentialDocument,
     "\n  mutation DeleteTenantCredential($id: ID!) {\n    deleteTenantCredential(id: $id)\n  }\n": types.DeleteTenantCredentialDocument,
     "\n  query SlackWorkspaces($tenantId: ID!) {\n    slackWorkspaces(tenantId: $tenantId) {\n      id\n      tenantId\n      slackTeamId\n      slackTeamName\n      botUserId\n      appId\n      installedByUserId\n      status\n      installedAt\n      uninstalledAt\n      createdAt\n      updatedAt\n    }\n  }\n": types.SlackWorkspacesDocument,
-    "\n  mutation StartSlackWorkspaceInstall($input: StartSlackWorkspaceInstallInput!) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n": types.StartSlackWorkspaceInstallDocument,
+    "\n  mutation StartSlackWorkspaceInstall(\n    $input: StartSlackWorkspaceInstallInput!\n  ) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n": types.StartSlackWorkspaceInstallDocument,
     "\n  mutation UninstallSlackWorkspace($id: ID!) {\n    uninstallSlackWorkspace(id: $id) {\n      id\n      status\n      uninstalledAt\n      updatedAt\n    }\n  }\n": types.UninstallSlackWorkspaceDocument,
     "\n  mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      triggerSource\n      startedAt\n    }\n  }\n": types.TriggerRoutineRunDocument,
     "\n  mutation RebuildRoutineVersion($input: RebuildRoutineVersionInput!) {\n    rebuildRoutineVersion(input: $input) {\n      id\n      versionNumber\n    }\n  }\n": types.RebuildRoutineVersionDocument,
@@ -631,7 +631,7 @@ export function graphql(source: "\n  query SlackWorkspaces($tenantId: ID!) {\n  
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation StartSlackWorkspaceInstall($input: StartSlackWorkspaceInstallInput!) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n"): (typeof documents)["\n  mutation StartSlackWorkspaceInstall($input: StartSlackWorkspaceInstallInput!) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n"];
+export function graphql(source: "\n  mutation StartSlackWorkspaceInstall(\n    $input: StartSlackWorkspaceInstallInput!\n  ) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n"): (typeof documents)["\n  mutation StartSlackWorkspaceInstall(\n    $input: StartSlackWorkspaceInstallInput!\n  ) {\n    startSlackWorkspaceInstall(input: $input) {\n      authorizeUrl\n      state\n      expiresAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

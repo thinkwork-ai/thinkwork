@@ -2079,6 +2079,7 @@ export type Mutation = {
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineExecution;
   uninstallSlackWorkspace: SlackWorkspace;
+  unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgent: Agent;
@@ -2900,6 +2901,11 @@ export type MutationUninstallSlackWorkspaceArgs = {
 };
 
 
+export type MutationUnlinkSlackIdentityArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationUnpauseAgentArgs = {
   agentId: Scalars['ID']['input'];
 };
@@ -3294,6 +3300,7 @@ export type Query = {
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
   myComputer?: Maybe<Computer>;
+  mySlackLinks: Array<SlackUserLink>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
@@ -3794,6 +3801,11 @@ export type QueryMobileWikiSearchArgs = {
   query: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMySlackLinksArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4708,6 +4720,23 @@ export type SkillRun = {
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SlackUserLink = {
+  __typename?: 'SlackUserLink';
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  linkedAt: Scalars['AWSDateTime']['output'];
+  slackTeamId: Scalars['String']['output'];
+  slackTeamName?: Maybe<Scalars['String']['output']>;
+  slackUserEmail?: Maybe<Scalars['String']['output']>;
+  slackUserId: Scalars['String']['output'];
+  slackUserName?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  unlinkedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type SlackWorkspace = {
