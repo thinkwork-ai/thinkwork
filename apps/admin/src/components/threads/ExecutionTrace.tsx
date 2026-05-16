@@ -13,6 +13,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { formatCost } from "@/lib/activity-utils";
+import { extractSkillName } from "./skill-row-label";
 import {
   ThreadTurnsForThreadQuery,
   ThreadTurnEventsQuery,
@@ -723,6 +724,8 @@ function ExecutionTimeline({
             clickContent = parts.join("\n\n");
           } else if (ev.type === "tool_call") {
             const isSub = ev.toolType === "sub_agent";
+            const skillName = extractSkillName(ev.toolName, ev.toolInput);
+            const isSkill = skillName !== null;
             icon = isSub ? (
               <Bot
                 className="h-3.5 w-3.5"
@@ -731,7 +734,9 @@ function ExecutionTimeline({
             ) : (
               <Zap className="h-3.5 w-3.5 text-amber-400" />
             );
-            label = ev.toolName || "tool";
+            label = isSkill
+              ? `Skill: ${skillName}`
+              : ev.toolName || "tool";
 
             if (isSub && branch) {
               const branchEvents = branch.eventIndices
@@ -772,17 +777,23 @@ function ExecutionTimeline({
                   variant="outline"
                   className="text-[9px] px-1.5 py-0 text-muted-foreground"
                 >
-                  {isSub ? "sub-agent" : "tool"}
+                  {isSub ? "sub-agent" : isSkill ? "skill" : "tool"}
                 </Badge>
               );
             }
             const parts: string[] = [];
-            parts.push(
-              `${isSub ? "Sub-Agent" : "MCP Tool"}  ·  ${ev.toolName}`,
-            );
+            const detailHeader = isSub
+              ? "Sub-Agent"
+              : isSkill
+                ? "Skill"
+                : "MCP Tool";
+            const detailName = isSkill ? skillName : ev.toolName;
+            parts.push(`${detailHeader}  ·  ${detailName}`);
             if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
-            clickTitle = `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
+            clickTitle = isSkill
+              ? `Skill: ${skillName}`
+              : `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
             icon = (
