@@ -3,17 +3,17 @@ title: Evals Overhaul Autopilot Status
 date_started: 2026-05-16
 plan: docs/plans/2026-05-16-002-feat-evals-overhaul-redteam-library-and-substrate-fix-plan.md
 target_branch: main
-status: active
+status: complete
 ---
 
 # Evals Overhaul Autopilot Status
 
 ## Current Unit
 
-- Unit: U16. Eval worker Computer-task timeout follow-up
-- Branch: `codex/evals-worker-timeout`
-- Worktree: `.Codex/worktrees/evals-worker-timeout`
-- State: PR #1281 open; waiting for required checks
+- Unit: Final proof and status closeout
+- Branch: `codex/evals-final-proof`
+- Worktree: `.Codex/worktrees/evals-final-proof`
+- State: Implementation complete; final status PR in progress
 
 ## Final Proof Request
 
@@ -127,6 +127,9 @@ status: active
 - 2026-05-16: Started U16 by lowering the default Computer task wait timeout to 210s so slow turns become recorded per-case eval errors before the Lambda timeout.
 - 2026-05-16: Local U16 verification passed: focused eval-worker test, API typecheck, eval-worker Lambda bundle, and `git diff --check`.
 - 2026-05-16: Opened PR #1281 for U16.
+- 2026-05-16: PR #1281 required checks passed after a clean rebase, was squash-merged to `main`, the U16 branch/worktree was cleaned up, and post-merge `main` Deploy passed.
+- 2026-05-16: Final Admin UI proof against the Marco running Computer used the small RedTeam `red-team-safety-scope` category. Run `cbea7dd8-e329-4441-aa0e-ea5679132d5d` immediately showed all 47 selected eval rows with per-test `running` statuses in the detail page, then finalized as `completed` in 505s with 27 pass, 17 fail, 3 error, 57.45% pass rate, and `$0.000000` recorded cost.
+- 2026-05-16: Final proof remaining issues are case-level, not substrate-level: one AgentCore adapter 500 and two Computer-task waits hit the 210s bounded timeout. The run still reached terminal state and preserved all 47 per-case outcomes.
 
 ## Pull Requests
 
@@ -148,7 +151,7 @@ status: active
 | U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
 | U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | passed  | merged  | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring; post-merge Deploy passed |
 | U15    | `codex/evals-computer-task-execution`          | [#1278](https://github.com/thinkwork-ai/thinkwork/pull/1278) | passed  | merged  | Follow-up: execute eval cases through the selected running Computer's thread/task path; dev migration applied and verified; post-merge Deploy passed |
-| U16    | `codex/evals-worker-timeout`                   | [#1281](https://github.com/thinkwork-ai/thinkwork/pull/1281) | pending | pending | Follow-up: keep Computer-task wait timeout below Lambda timeout so slow cases record eval errors instead of stranding runs        |
+| U16    | `codex/evals-worker-timeout`                   | [#1281](https://github.com/thinkwork-ai/thinkwork/pull/1281) | passed  | merged  | Follow-up: keep Computer-task wait timeout below Lambda timeout so slow cases record eval errors instead of stranding runs; post-merge Deploy passed |
 
 ## CI Failures
 
@@ -274,6 +277,12 @@ status: active
 - `bash scripts/build-lambdas.sh eval-worker && bash scripts/build-lambdas.sh graphql-http && bash scripts/build-lambdas.sh job-trigger` - passed for U15.
 - Dev apply and drift probe for `packages/database-pg/drizzle/0095_eval_runs_computer_id.sql` - passed for U15.
 - `git diff --check` - passed for U15.
+- `pnpm --filter @thinkwork/api test -- eval-worker.test.ts` - passed for U16.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U16.
+- `bash scripts/build-lambdas.sh eval-worker` - passed for U16.
+- `git diff --check` - passed for U16.
+- PR #1281 required checks and post-merge Deploy - passed for U16.
+- Admin UI proof run `cbea7dd8-e329-4441-aa0e-ea5679132d5d` against Marco / `red-team-safety-scope` - passed for substrate proof: detail rows visible while running; run completed with all 47 outcomes persisted.
 
 ## Blockers
 
