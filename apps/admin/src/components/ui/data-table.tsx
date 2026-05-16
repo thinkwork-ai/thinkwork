@@ -21,6 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { cn } from "@/lib/utils";
+
+const ROW_HEIGHT_40PX_CLASSES =
+  "h-10 border-b-0 shadow-[inset_0_-1px_0_var(--color-border)] [&>td]:py-0 [&>td]:overflow-hidden";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -175,10 +179,10 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={[
-              "h-10 [&>td]:py-0 [&>td]:overflow-hidden",
-              onRowClick ? "cursor-pointer" : undefined,
-            ].filter(Boolean).join(" ")}
+            className={cn(
+              ROW_HEIGHT_40PX_CLASSES,
+              onRowClick && "cursor-pointer",
+            )}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
@@ -192,7 +196,7 @@ export function DataTable<TData, TValue>({
           </TableRow>
         ))
       ) : (
-        <TableRow className="h-10 [&>td]:py-0 [&>td]:overflow-hidden">
+        <TableRow className={ROW_HEIGHT_40PX_CLASSES}>
           <TableCell
             colSpan={columns.length}
             className="text-center text-muted-foreground"

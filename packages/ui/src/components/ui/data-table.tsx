@@ -23,6 +23,10 @@ import {
 } from "./table.js";
 import { Badge } from "./badge.js";
 import { DataTablePagination } from "./data-table-pagination.js";
+import { cn } from "../../lib/utils.js";
+
+const ROW_HEIGHT_40PX_CLASSES =
+  "h-10 border-b-0 shadow-[inset_0_-1px_0_var(--color-border)] [&>td]:py-0 [&>td]:overflow-hidden";
 
 export interface GeneratedDataTableColumn<TData> {
   key: Extract<keyof TData, string> | string;
@@ -211,10 +215,10 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={[
-              "h-10 [&>td]:py-0 [&>td]:overflow-hidden",
-              onRowClick ? "cursor-pointer" : undefined,
-            ].filter(Boolean).join(" ")}
+            className={cn(
+              ROW_HEIGHT_40PX_CLASSES,
+              onRowClick && "cursor-pointer",
+            )}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
@@ -232,7 +236,7 @@ export function DataTable<TData, TValue>({
           </TableRow>
         ))
       ) : (
-        <TableRow className="h-10 [&>td]:py-0 [&>td]:overflow-hidden">
+        <TableRow className={ROW_HEIGHT_40PX_CLASSES}>
           <TableCell
             colSpan={columns.length}
             className="text-center text-muted-foreground"

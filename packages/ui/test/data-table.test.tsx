@@ -50,10 +50,28 @@ describe("DataTable", () => {
     );
 
     // renderToStaticMarkup HTML-encodes `&` and `>` inside class attrs.
-    const rowClassFragment =
-      "h-10 [&amp;&gt;td]:py-0 [&amp;&gt;td]:overflow-hidden";
-    const occurrences = html.split(rowClassFragment).length - 1;
-    expect(occurrences).toBeGreaterThanOrEqual(2);
+    // Body rows must drop border-b and use an inset shadow so the row's
+    // 40px height is the true visual height (no +1px from a bottom border).
+    const tbodyRowOpens = [
+      ...html.matchAll(/<tr[^>]*data-slot="table-row"[^>]*>/g),
+    ];
+    // tbody contains body rows; thead contains the header row.
+    // Filter to rows that come after the <tbody> open tag.
+    const tbodyStart = html.indexOf('data-slot="table-body"');
+    const bodyRowClasses = tbodyRowOpens
+      .filter((m) => (m.index ?? 0) > tbodyStart)
+      .map((m) => m[0]);
+
+    expect(bodyRowClasses.length).toBeGreaterThanOrEqual(2);
+    for (const row of bodyRowClasses) {
+      expect(row).toContain("h-10");
+      expect(row).toContain("border-b-0");
+      expect(row).toContain(
+        "shadow-[inset_0_-1px_0_var(--color-border)]",
+      );
+      expect(row).toContain("[&amp;&gt;td]:py-0");
+      expect(row).toContain("[&amp;&gt;td]:overflow-hidden");
+    }
   });
 
   it("pins the empty-state row to 40px (h-10)", () => {
@@ -65,9 +83,16 @@ describe("DataTable", () => {
       />,
     );
 
-    expect(html).toContain(
-      "h-10 [&amp;&gt;td]:py-0 [&amp;&gt;td]:overflow-hidden",
+    const tbodyStart = html.indexOf('data-slot="table-body"');
+    expect(tbodyStart).toBeGreaterThan(-1);
+    const tbodyHtml = html.slice(tbodyStart);
+    expect(tbodyHtml).toContain("h-10");
+    expect(tbodyHtml).toContain("border-b-0");
+    expect(tbodyHtml).toContain(
+      "shadow-[inset_0_-1px_0_var(--color-border)]",
     );
-    expect(html).not.toContain("h-24");
+    expect(tbodyHtml).toContain("[&amp;&gt;td]:py-0");
+    expect(tbodyHtml).toContain("[&amp;&gt;td]:overflow-hidden");
+    expect(tbodyHtml).not.toContain("h-24");
   });
 });
