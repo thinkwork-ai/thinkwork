@@ -383,6 +383,21 @@ build_handler "email-inbound" \
 build_handler "email-send" \
   "$REPO_ROOT/packages/api/src/handlers/email-send.ts"
 
+build_handler "slack-events" \
+  "$REPO_ROOT/packages/api/src/handlers/slack/events.ts"
+
+build_handler "slack-slash-command" \
+  "$REPO_ROOT/packages/api/src/handlers/slack/slash-command.ts"
+
+build_handler "slack-interactivity" \
+  "$REPO_ROOT/packages/api/src/handlers/slack/interactivity.ts"
+
+build_handler "slack-oauth-install" \
+  "$REPO_ROOT/packages/api/src/handlers/slack/oauth-install.ts"
+
+build_handler "slack-dispatch" \
+  "$REPO_ROOT/packages/lambda/slack-dispatch.ts"
+
 build_handler "webhooks" \
   "$REPO_ROOT/packages/api/src/handlers/webhooks.ts"
 

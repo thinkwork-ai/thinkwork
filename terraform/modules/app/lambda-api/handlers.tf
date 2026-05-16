@@ -124,6 +124,10 @@ locals {
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
+  slack_handler_env = {
+    SLACK_APP_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.slack_app_credentials.arn
+  }
+
   handler_extra_env = {
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
@@ -160,6 +164,11 @@ locals {
     "workspace-files" = {
       WORKSPACE_FILES_EFS_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs"
     }
+    "slack-events"        = local.slack_handler_env
+    "slack-slash-command" = local.slack_handler_env
+    "slack-interactivity" = local.slack_handler_env
+    "slack-oauth-install" = local.slack_handler_env
+    "slack-dispatch"      = local.slack_handler_env
     # computer-terminal-start needs the cluster name to scope its
     # ECS ListTasks / DescribeTasks / ExecuteCommand calls.
     "computer-terminal-start" = {
@@ -307,6 +316,11 @@ resource "aws_lambda_function" "handler" {
     "knowledge-base-files",
     "email-send",
     "email-inbound",
+    "slack-events",
+    "slack-slash-command",
+    "slack-interactivity",
+    "slack-oauth-install",
+    "slack-dispatch",
     "github-app",
     "github-repos",
     "memory",
@@ -802,6 +816,14 @@ locals {
 
     # Email
     "POST /api/email/send" = "email-send"
+
+    # Slack workspace app ingress. These unauthenticated public endpoints
+    # verify Slack signatures in handler code before any tenant work happens.
+    "POST /slack/events"        = "slack-events"
+    "POST /slack/slash-command" = "slack-slash-command"
+    "POST /slack/interactivity" = "slack-interactivity"
+    "GET /slack/oauth/install"  = "slack-oauth-install"
+    "POST /slack/oauth/install" = "slack-oauth-install"
 
     # Memory
     "ANY /api/memory/{proxy+}" = "memory"
