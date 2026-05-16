@@ -268,38 +268,62 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
 function normalizeSlackThreadTurnInput(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
+  const slackPayload = coerceObject(payload.slack ?? payload);
+  const sourceMessage =
+    slackPayload.sourceMessage === null
+      ? null
+      : coerceObject(slackPayload.sourceMessage);
+  const slack = {
+    slackTeamId: requiredString(slackPayload.slackTeamId, "slackTeamId"),
+    slackUserId: requiredString(slackPayload.slackUserId, "slackUserId"),
+    slackWorkspaceRowId: optionalString(slackPayload.slackWorkspaceRowId),
+    channelId: requiredString(slackPayload.channelId, "channelId"),
+    channelType: requiredString(slackPayload.channelType, "channelType"),
+    rootThreadTs: optionalString(slackPayload.rootThreadTs),
+    responseUrl: optionalString(slackPayload.responseUrl),
+    triggerSurface: requiredString(
+      slackPayload.triggerSurface,
+      "triggerSurface",
+    ),
+    sourceMessage,
+    threadContext: Array.isArray(slackPayload.threadContext)
+      ? slackPayload.threadContext
+      : [],
+    fileRefs: Array.isArray(slackPayload.fileRefs) ? slackPayload.fileRefs : [],
+    placeholderTs: optionalString(slackPayload.placeholderTs),
+    modalViewId: optionalString(slackPayload.modalViewId),
+  };
   return {
     source: "slack",
+    threadId: requiredString(payload.threadId, "threadId"),
+    messageId: requiredString(payload.messageId, "messageId"),
+    slack,
     channelType: requiredString(payload.channelType, "channelType"),
-    slackTeamId: requiredString(payload.slackTeamId, "slackTeamId"),
-    slackUserId: requiredString(payload.slackUserId, "slackUserId"),
-    channelId: requiredString(payload.channelId, "channelId"),
+    slackTeamId: slack.slackTeamId,
+    slackUserId: slack.slackUserId,
+    slackWorkspaceRowId: slack.slackWorkspaceRowId,
+    triggerSurface: slack.triggerSurface,
+    rootThreadTs: slack.rootThreadTs,
+    channelId: slack.channelId,
     threadTs: requiredString(payload.threadTs, "threadTs"),
     messageTs: requiredString(payload.messageTs, "messageTs"),
     eventId: requiredString(payload.eventId, "eventId"),
-    sourceMessage: coerceObject(payload.sourceMessage),
-    threadContext: Array.isArray(payload.threadContext)
-      ? payload.threadContext
-      : [],
-    fileRefs: Array.isArray(payload.fileRefs) ? payload.fileRefs : [],
-    responseUrl:
-      typeof payload.responseUrl === "string" && payload.responseUrl.trim()
-        ? payload.responseUrl.trim()
-        : null,
-    placeholderTs:
-      typeof payload.placeholderTs === "string" && payload.placeholderTs.trim()
-        ? payload.placeholderTs.trim()
-        : null,
-    modalViewId:
-      typeof payload.modalViewId === "string" && payload.modalViewId.trim()
-        ? payload.modalViewId.trim()
-        : null,
+    sourceMessage,
+    threadContext: slack.threadContext,
+    fileRefs: slack.fileRefs,
+    responseUrl: slack.responseUrl,
+    placeholderTs: slack.placeholderTs,
+    modalViewId: slack.modalViewId,
     actorType:
       typeof payload.actorType === "string" && payload.actorType.trim()
         ? payload.actorType.trim()
         : "user",
     actorId: requiredString(payload.actorId, "actorId"),
   };
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function normalizeRunbookExecuteInput(input: unknown): Record<string, unknown> {

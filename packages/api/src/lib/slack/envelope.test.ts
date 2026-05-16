@@ -25,6 +25,7 @@ describe("Slack event envelope helpers", () => {
         name: "brief.pdf",
         mimetype: "application/pdf",
         urlPrivate: "https://files.slack.com/files-pri/F123",
+        permalink: null,
       },
     ]);
   });

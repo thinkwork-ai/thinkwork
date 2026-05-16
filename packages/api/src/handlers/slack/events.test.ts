@@ -6,6 +6,7 @@ import {
 } from "./events.js";
 
 const WORKSPACE: SlackWorkspaceContext = {
+  id: "workspace-1",
   tenantId: "tenant-1",
   slackTeamId: "T123",
   slackTeamName: "Acme",
@@ -46,6 +47,11 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   }));
   const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
   const updateTaskInput = vi.fn(async () => {});
+  const resolveSlackThread = vi.fn(async () => ({
+    threadId: "thread-1",
+    messageId: "message-1",
+    wasCreated: true,
+  }));
   const slackApi = {
     fetchThreadMessages: vi.fn(async () => [
       { user: "U123", botId: null, ts: "1710000000.000000", text: "Earlier" },
@@ -58,6 +64,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     enqueueTask,
     loadLinkedComputer,
     updateTaskInput,
+    resolveSlackThread,
     slackApi,
     ...overrides,
   };
@@ -130,6 +137,9 @@ describe("Slack events handler", () => {
           channelType: "app_mention",
           slackTeamId: "T123",
           slackUserId: "U123",
+          threadId: "thread-1",
+          messageId: "message-1",
+          triggerSurface: "app_mention",
           channelId: "C123",
           threadTs: "1710000001.000000",
           sourceMessage: expect.objectContaining({ text: "<@B123> help" }),
@@ -142,8 +152,13 @@ describe("Slack events handler", () => {
               name: "brief.pdf",
               mimetype: "application/pdf",
               urlPrivate: "https://files.slack.com/files-pri/F123",
+              permalink: null,
             },
           ],
+          slack: expect.objectContaining({
+            slackWorkspaceRowId: "workspace-1",
+            triggerSurface: "app_mention",
+          }),
         }),
       }),
     );

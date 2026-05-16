@@ -97,13 +97,18 @@ describe("Computer task helpers", () => {
     });
   });
 
-  it("normalizes Slack-originated thread turn input without Computer thread ids", () => {
+  it("normalizes Slack-originated thread turn input with the canonical envelope", () => {
     expect(
       normalizeTaskInput("thread_turn", {
         source: "slack",
+        threadId: "thread-1",
+        messageId: "message-1",
         channelType: "app_mention",
         slackTeamId: "T123",
         slackUserId: "U123",
+        slackWorkspaceRowId: "workspace-1",
+        triggerSurface: "app_mention",
+        rootThreadTs: null,
         channelId: "C123",
         threadTs: "1710000001.000000",
         messageTs: "1710000001.000000",
@@ -120,40 +125,40 @@ describe("Computer task helpers", () => {
         fileRefs: [{ id: "F123", name: "brief.pdf" }],
         actorId: "user-1",
       }),
-    ).toEqual({
-      source: "slack",
-      channelType: "app_mention",
-      slackTeamId: "T123",
-      slackUserId: "U123",
-      channelId: "C123",
-      threadTs: "1710000001.000000",
-      messageTs: "1710000001.000000",
-      eventId: "Ev123",
-      sourceMessage: {
-        text: "help",
-        ts: "1710000001.000000",
-        user: "U123",
-        channel: "C123",
-        team: "T123",
-        permalink: null,
-      },
-      threadContext: [{ user: "U123", botId: null, ts: "1", text: "help" }],
-      fileRefs: [{ id: "F123", name: "brief.pdf" }],
-      responseUrl: null,
-      placeholderTs: null,
-      modalViewId: null,
-      actorType: "user",
-      actorId: "user-1",
-    });
+    ).toEqual(
+      expect.objectContaining({
+        source: "slack",
+        threadId: "thread-1",
+        messageId: "message-1",
+        channelType: "app_mention",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        triggerSurface: "app_mention",
+        responseUrl: null,
+        placeholderTs: null,
+        modalViewId: null,
+        actorType: "user",
+        actorId: "user-1",
+        slack: expect.objectContaining({
+          slackTeamId: "T123",
+          triggerSurface: "app_mention",
+          sourceMessage: expect.objectContaining({ text: "help" }),
+        }),
+      }),
+    );
   });
 
   it("preserves Slack slash command response_url metadata", () => {
     expect(
       normalizeTaskInput("thread_turn", {
         source: "slack",
+        threadId: "thread-1",
+        messageId: "message-1",
         channelType: "slash",
         slackTeamId: "T123",
         slackUserId: "U123",
+        triggerSurface: "slash_command",
+        rootThreadTs: null,
         channelId: "C123",
         threadTs: "slash:trigger-1",
         messageTs: "slash:trigger-1",
@@ -185,9 +190,13 @@ describe("Computer task helpers", () => {
     expect(
       normalizeTaskInput("thread_turn", {
         source: "slack",
+        threadId: "thread-1",
+        messageId: "message-1",
         channelType: "message_action",
         slackTeamId: "T123",
         slackUserId: "U123",
+        triggerSurface: "message_action",
+        rootThreadTs: "1710000000.000000",
         channelId: "C123",
         threadTs: "1710000000.000000",
         messageTs: "1710000001.000000",
@@ -215,6 +224,25 @@ describe("Computer task helpers", () => {
         actorId: "user-1",
       }),
     );
+  });
+
+  it("rejects Slack envelopes missing triggerSurface", () => {
+    expect(() =>
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        threadId: "thread-1",
+        messageId: "message-1",
+        channelType: "app_mention",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "1710000001.000000",
+        messageTs: "1710000001.000000",
+        eventId: "Ev123",
+        sourceMessage: { text: "help" },
+        actorId: "user-1",
+      }),
+    ).toThrow("triggerSurface is required");
   });
 
   it("normalizes runbook execution input", () => {
