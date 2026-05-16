@@ -13,7 +13,7 @@ status: active
 - Unit: U4. Red-team library — default Strands agents
 - Branch: `codex/evals-overhaul-u4-agents-redteam`
 - Worktree: `.Codex/worktrees/evals-overhaul-u4-agents-redteam`
-- State: locally verified, PR pending
+- State: PR open, CI pending
 
 ## Progress Log
 
@@ -43,6 +43,7 @@ status: active
 - 2026-05-16: Created clean U4 worktree from `origin/main`.
 - 2026-05-16: Started U4 agent red-team starter pack with four new default-agent files and shape-invariant tests.
 - 2026-05-16: Local U4 verification passed: seed shape-invariant test, API build, touched-file Prettier check, and `git diff --check`.
+- 2026-05-16: Opened PR #1256 for U4.
 
 ## Pull Requests
 
@@ -52,7 +53,7 @@ status: active
 | U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                       |
 | U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
 | U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
-| U4     | `codex/evals-overhaul-u4-agents-redteam`       | pending                                                      | pending | pending | Default-agent red-team starter pack                                                                                              |
+| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | pending | pending | Default-agent red-team starter pack                                                                                              |
 
 ## CI Failures
 
