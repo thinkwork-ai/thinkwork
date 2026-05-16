@@ -252,7 +252,7 @@ const evalTestCasesQuery = async (
   args: { tenantId: string; category?: string | null; search?: string | null },
   _ctx: GraphQLContext,
 ) => {
-  // Auto-seed the maniflow starter pack on first visit. We check for the
+  // Auto-seed the Thinkwork starter pack on first visit. We check for the
   // presence of ANY yaml-seed row for this tenant — if zero, run the seed.
   // The partial unique index makes this idempotent on the off-chance two
   // concurrent first-visit queries race. Seeded rows then show up
@@ -283,7 +283,7 @@ const evalTestCasesQuery = async (
 };
 
 /**
- * Lazy-seed the maniflow starter pack on a tenant's first visit to the
+ * Lazy-seed the Thinkwork starter pack on a tenant's first visit to the
  * Studio. Cached in-memory per Lambda container so subsequent queries
  * for the same tenant skip the COUNT(*) probe.
  */
@@ -315,7 +315,11 @@ async function ensureTenantSeeded(tenantId: string): Promise<void> {
         query: s.query,
         assertions: s.assertions,
         source: "yaml-seed" as const,
-        agentcore_evaluator_ids: ["Builtin.Helpfulness"],
+        tags: seedTags(s),
+        agentcore_evaluator_ids:
+          s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
+            ? s.agentcore_evaluator_ids
+            : ["Builtin.Helpfulness"],
       })),
     )
     .onConflictDoNothing();
@@ -423,9 +427,8 @@ async function invokeEvalRunner(
       "EVAL_RUNNER_FN is not configured (set EVAL_RUNNER_FN or STAGE).",
     );
   }
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const payload: { runId: string; input?: { testCaseIds: string[] } } = {
     runId,
@@ -566,9 +569,11 @@ const seedEvalTestCases = async (
     query: s.query,
     assertions: s.assertions,
     source: "yaml-seed" as const,
-    // Default Helpfulness evaluator on every seeded test — gives the
-    // user a working scoring loop out of the box.
-    agentcore_evaluator_ids: ["Builtin.Helpfulness"],
+    tags: seedTags(s),
+    agentcore_evaluator_ids:
+      s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
+        ? s.agentcore_evaluator_ids
+        : ["Builtin.Helpfulness"],
   }));
   // onConflictDoNothing() with no `target` triggers Postgres's generic
   // "any unique violation" handling, which catches the partial index
@@ -581,6 +586,18 @@ const seedEvalTestCases = async (
     .returning({ id: evalTestCases.id });
   return inserted.length;
 };
+
+function seedTags(seed: {
+  target_surface?: string;
+  target_skill?: string;
+  threshold?: number;
+}) {
+  return [
+    seed.target_surface ? `surface:${seed.target_surface}` : null,
+    seed.target_skill ? `skill:${seed.target_skill}` : null,
+    typeof seed.threshold === "number" ? `threshold:${seed.threshold}` : null,
+  ].filter((tag): tag is string => Boolean(tag));
+}
 
 // ---------------------------------------------------------------------------
 // Exports

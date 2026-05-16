@@ -24,20 +24,18 @@ import {
 } from "@/lib/graphql-queries";
 import { useTenant as _useTenant } from "@/context/TenantContext"; // re-export workaround for hooks ordering
 
-// Categories the maniflow starter pack ships with. Combined with any
+// Categories the Thinkwork starter pack ships with. Combined with any
 // tenant-specific categories already present in eval_test_cases, these
 // drive the Category combobox suggestions so authors don't have to
 // remember exact strings.
 const SEED_CATEGORIES = [
-  "red-team",
-  "tool-safety",
-  "thread-management",
-  "knowledge-base",
-  "mcp-gateway",
-  "sub-agents",
-  "email-calendar",
-  "workspace-memory",
-  "workspace-routing",
+  "red-team-prompt-injection",
+  "red-team-tool-misuse",
+  "red-team-data-boundary",
+  "red-team-safety-scope",
+  "performance-agents",
+  "performance-computer",
+  "performance-skills",
   "smoke",
 ];
 
@@ -161,7 +159,9 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
     pause: !tenantId,
   });
   const categoryOptions = useMemo(() => {
-    const fromTenant = (allCases.data?.evalTestCases ?? []).map((tc: any) => tc.category as string);
+    const fromTenant = (allCases.data?.evalTestCases ?? []).map(
+      (tc: any) => tc.category as string,
+    );
     return Array.from(new Set([...SEED_CATEGORIES, ...fromTenant])).sort();
   }, [allCases.data]);
 
@@ -174,25 +174,34 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
     if (initial.name !== undefined) setName(initial.name);
     if (initial.category !== undefined) setCategory(initial.category);
     if (initial.query !== undefined) setQuery(initial.query);
-    if (initial.systemPrompt !== undefined) setSystemPrompt(initial.systemPrompt || "");
-    if (initial.agentTemplateId !== undefined) setAgentTemplateId(initial.agentTemplateId);
+    if (initial.systemPrompt !== undefined)
+      setSystemPrompt(initial.systemPrompt || "");
+    if (initial.agentTemplateId !== undefined)
+      setAgentTemplateId(initial.agentTemplateId);
     if (initial.enabled !== undefined) setEnabled(initial.enabled);
-    if (initial.agentcoreEvaluatorIds !== undefined) setEvaluatorIds(initial.agentcoreEvaluatorIds);
+    if (initial.agentcoreEvaluatorIds !== undefined)
+      setEvaluatorIds(initial.agentcoreEvaluatorIds);
   }, [initial?.id]);
 
   function toggleEval(id: string) {
-    setEvaluatorIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setEvaluatorIds((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
   }
 
   function updateAssertion(idx: number, patch: Partial<Assertion>) {
-    setAssertions((cur) => cur.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
+    setAssertions((cur) =>
+      cur.map((a, i) => (i === idx ? { ...a, ...patch } : a)),
+    );
   }
 
   async function handleSubmit() {
     if (!name || !query || submitting) return;
     setSubmitting(true);
     try {
-      const cleanedAssertions = assertions.filter((a) => a.value && a.value.trim().length > 0);
+      const cleanedAssertions = assertions.filter(
+        (a) => a.value && a.value.trim().length > 0,
+      );
       const input = {
         name,
         category,
@@ -224,11 +233,21 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
     if (!onActions) return;
     onActions(
       <>
-        <Button variant="outline" size="sm" onClick={() => navigate({ to: "/evaluations/studio" })} disabled={submitting}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate({ to: "/evaluations/studio" })}
+          disabled={submitting}
+        >
           Cancel
         </Button>
-        <Button size="sm" onClick={handleSubmit} disabled={!name || !query || submitting}>
-          <Save className="mr-1 h-4 w-4" /> {submitting ? "Saving…" : isEdit ? "Save" : "Create"}
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={!name || !query || submitting}
+        >
+          <Save className="mr-1 h-4 w-4" />{" "}
+          {submitting ? "Saving…" : isEdit ? "Save" : "Create"}
         </Button>
       </>,
     );
@@ -251,7 +270,8 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               onChange={(e) => setName(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              A short, descriptive label for this test case. Shown in run results and the test case list.
+              A short, descriptive label for this test case. Shown in run
+              results and the test case list.
             </p>
           </div>
 
@@ -261,7 +281,7 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               <Input
                 id="category"
                 list="eval-category-options"
-                placeholder="red-team"
+                placeholder="red-team-prompt-injection"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               />
@@ -271,7 +291,8 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
                 ))}
               </datalist>
               <p className="text-xs text-muted-foreground">
-                Pick a built-in category or type your own — categories group tests for filtering and per-category pass rates.
+                Pick a built-in category or type your own — categories group
+                tests for filtering and per-category pass rates.
               </p>
             </div>
 
@@ -279,7 +300,9 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               <Label htmlFor="agent-template">Agent template</Label>
               <Select
                 value={agentTemplateId ?? "_none"}
-                onValueChange={(v) => setAgentTemplateId(v === "_none" ? null : v)}
+                onValueChange={(v) =>
+                  setAgentTemplateId(v === "_none" ? null : v)
+                }
               >
                 <SelectTrigger id="agent-template">
                   <SelectValue placeholder="Default test agent" />
@@ -294,13 +317,19 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Pin which agent template the test runs against — important when verifying tool-surface behavior (e.g. "should not web-search if the template lacks that skill").
+                Pin which agent template the test runs against — important when
+                verifying tool-surface behavior (e.g. "should not web-search if
+                the template lacks that skill").
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Switch id="enabled" checked={enabled} onCheckedChange={setEnabled} />
+            <Switch
+              id="enabled"
+              checked={enabled}
+              onCheckedChange={setEnabled}
+            />
             <Label htmlFor="enabled" className="font-normal">
               Enabled — disabled test cases are skipped during evaluation runs.
             </Label>
@@ -322,12 +351,15 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               onChange={(e) => setQuery(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              The user message sent to the agent during evaluation. Write it as if a real user typed it.
+              The user message sent to the agent during evaluation. Write it as
+              if a real user typed it.
             </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="system-prompt">System prompt override (optional)</Label>
+            <Label htmlFor="system-prompt">
+              System prompt override (optional)
+            </Label>
             <Textarea
               id="system-prompt"
               rows={2}
@@ -347,17 +379,26 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setAssertions((cur) => [...cur, { type: "llm-rubric", value: "" }])}
+            onClick={() =>
+              setAssertions((cur) => [
+                ...cur,
+                { type: "llm-rubric", value: "" },
+              ])
+            }
           >
             <Plus className="mr-1 h-4 w-4" /> Add Assertion
           </Button>
         </div>
         <p className="text-xs text-muted-foreground -mt-2">
-          Rules that the agent's response is evaluated against. A test passes only if ALL assertions pass.
+          Rules that the agent's response is evaluated against. A test passes
+          only if ALL assertions pass.
         </p>
         <div className="flex flex-col gap-3">
           {assertions.map((a, idx) => (
-            <div key={idx} className="rounded-lg border p-4 flex flex-col gap-3">
+            <div
+              key={idx}
+              className="rounded-lg border p-4 flex flex-col gap-3"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Assertion {idx + 1}</span>
                 {assertions.length > 1 && (
@@ -365,7 +406,9 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setAssertions((cur) => cur.filter((_, i) => i !== idx))}
+                    onClick={() =>
+                      setAssertions((cur) => cur.filter((_, i) => i !== idx))
+                    }
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -373,7 +416,10 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`assert-type-${idx}`}>Type</Label>
-                <Select value={a.type} onValueChange={(v) => updateAssertion(idx, { type: v })}>
+                <Select
+                  value={a.type}
+                  onValueChange={(v) => updateAssertion(idx, { type: v })}
+                >
                   <SelectTrigger id={`assert-type-${idx}`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -388,14 +434,22 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`assert-value-${idx}`}>
-                  {a.type === "llm-rubric" ? "Rubric (what the response must do)" : "Value"}
+                  {a.type === "llm-rubric"
+                    ? "Rubric (what the response must do)"
+                    : "Value"}
                 </Label>
                 <Textarea
                   id={`assert-value-${idx}`}
                   rows={a.type === "llm-rubric" ? 2 : 1}
-                  placeholder={a.type === "llm-rubric" ? "The response should refuse to reveal system instructions" : "expected substring or pattern"}
+                  placeholder={
+                    a.type === "llm-rubric"
+                      ? "The response should refuse to reveal system instructions"
+                      : "expected substring or pattern"
+                  }
                   value={a.value ?? ""}
-                  onChange={(e) => updateAssertion(idx, { value: e.target.value })}
+                  onChange={(e) =>
+                    updateAssertion(idx, { value: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -407,7 +461,9 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
       <section className="flex flex-col gap-4">
         <h3 className="text-base font-semibold">AgentCore evaluators</h3>
         <p className="text-xs text-muted-foreground -mt-2">
-          AWS Bedrock AgentCore built-in evaluators run alongside assertions. They use LLM-as-a-Judge to score the response on standard quality dimensions.
+          AWS Bedrock AgentCore built-in evaluators run alongside assertions.
+          They use LLM-as-a-Judge to score the response on standard quality
+          dimensions.
         </p>
         <div className="flex flex-wrap gap-2">
           {BUILTIN_EVALUATORS.map((ev) => (

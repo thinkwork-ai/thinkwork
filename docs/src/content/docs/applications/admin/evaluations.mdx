@@ -3,7 +3,7 @@ title: Admin — Evaluations
 description: The operator-facing Evaluations UI — dashboard, Studio, Run Evaluation dialog, Run Results, and Test Case detail. Authored test cases, started runs, and drilled into results without leaving the admin app.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Evaluations pages are where operators author test cases, start runs, and drill into per-test results. They sit on top of the same GraphQL + `eval-runner` Lambda path the [`thinkwork eval` CLI](/guides/evaluations/#from-the-cli) uses, so runs started in the UI show up in the CLI and vice versa.
 
@@ -43,12 +43,12 @@ The model column shortens Bedrock IDs so `us.anthropic.claude-haiku-4-5-20251001
 
 The dialog is where a run gets started. It has four inputs, in this order:
 
-| Field | Purpose |
-|---|---|
+| Field                         | Purpose                                                                                                                                                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Agent template** (required) | The eval test agent is a generic AgentCore runtime; this template determines the workspace, tools, and default model it loads. Different templates expose different tool surfaces — that matters for tests like "should refuse to web-search." |
-| **Model** | Optional override of the template's default model. Leave blank to use the template's. |
-| **Invocation Mode** | `End-to-End (full agent runtime)` is the default and the only mode currently wired. `Direct (Bedrock only)` is a UI-only scaffold for a future path that skips the agent runtime. |
-| **Categories** | Multi-select pills. Click **All Categories** to run every enabled test case; click individual chips to run a subset. |
+| **Model**                     | Optional override of the template's default model. Leave blank to use the template's.                                                                                                                                                          |
+| **Invocation Mode**           | `End-to-End (full agent runtime)` is the default and the only mode currently wired. `Direct (Bedrock only)` is a UI-only scaffold for a future path that skips the agent runtime.                                                              |
+| **Categories**                | Multi-select pills. Click **All Categories** to run every enabled test case; click individual chips to run a subset.                                                                                                                           |
 
 **Start Evaluation** is disabled until a template is picked. On submit the dialog calls `startEvalRun`, the row shows up in Recent Runs as `pending`, and the `eval-runner` Lambda picks it up asynchronously.
 
@@ -62,14 +62,14 @@ Columns: Name (clickable → [Test Case detail](#test-case-detail)), Category, E
 
 Actions:
 
-- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the 96-test maniflow pack across 9 categories. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
+- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the 210-test ThinkWork red-team and performance pack across 7 categories. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
 - **New test case** → `/evaluations/studio/new` — the form described below.
 - **Search by name** — free-text filter over `evalTestCases(tenantId, search)`.
 - **Trash icon** per row — `deleteEvalTestCase` mutation, confirms first.
 
 ### First-visit auto-seed
 
-The Studio auto-seeds the 96-case starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent so re-visits don't duplicate.
+The Studio auto-seeds the 210-case starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent so re-visits don't duplicate.
 
 ## Test Case detail
 
@@ -102,7 +102,7 @@ See the [Evaluations guide](/guides/evaluations/#authoring-test-cases) for the a
 The run-detail page is the operator's drill-in view. It has three layers:
 
 1. **Header** — status badge, pass rate, total cost, agent template name, timestamp. Live while `pending`/`running` — subscription-driven with a 3s poll fallback. The trailing action button is **Cancel** while running, **Delete** otherwise.
-2. **Category filter badges** — one per category present in the run, each coloured by its per-category pass rate (green ≥ 90%, yellow ≥ 70%, red below) and showing the percentage inline (`red-team 21%`). Click to filter; click again to clear.
+2. **Category filter badges** — one per category present in the run, each coloured by its per-category pass rate (green ≥ 90%, yellow ≥ 70%, red below) and showing the percentage inline (`red-team-prompt-injection 21%`). Click to filter; click again to clear.
 3. **Results DataTable** — per-test rows with test name, category badge, status, score, duration. **Click any row to open the [Result Detail Sheet](#result-detail-sheet)**.
 
 ### Result Detail Sheet
@@ -117,7 +117,12 @@ Clicking a row slides a right-docked Sheet over the table with:
 - **Error** — stack trace if the test errored out (rare; errors usually fail gracefully into fail/0-score results).
 
 <Aside type="tip" title="Reading an llm-rubric result">
-The `reason` string is your friend. Look for the prefix: `LLM judge: ...` means the Bedrock judge ran and returned a verdict; `Heuristic rubric check ...` means Bedrock rejected the invoke and the keyword-fallback ran. If you see heuristic fallbacks across a run, check the `eval-runner` Lambda's IAM — see the [Architecture section](/guides/evaluations/#architecture) for the Bedrock access model.
+  The `reason` string is your friend. Look for the prefix: `LLM judge: ...`
+  means the Bedrock judge ran and returned a verdict; `Heuristic rubric check
+  ...` means Bedrock rejected the invoke and the keyword-fallback ran. If you
+  see heuristic fallbacks across a run, check the `eval-runner` Lambda's IAM —
+  see the [Architecture section](/guides/evaluations/#architecture) for the
+  Bedrock access model.
 </Aside>
 
 ## Scheduled runs
