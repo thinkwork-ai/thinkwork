@@ -1,8 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Play, Pause, Zap, Trash2, Loader2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
-import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+import { Play, Pause, Zap, Trash2, Loader2, Pencil } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useSubscription } from "urql";
-import { type ColumnDef } from "@tanstack/react-table";
+import {
+  PromptSection,
+  RunDetailSheet,
+  RunHistoryTable,
+  type ScheduledJobRunRow,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -12,14 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { DataTable } from "@/components/ui/data-table";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -54,17 +51,7 @@ type ScheduledJob = {
   updated_at: string;
 };
 
-type RunRow = {
-  id: string;
-  invocation_source: string;
-  status: string;
-  started_at: string | null;
-  finished_at: string | null;
-  error: string | null;
-  result_json: Record<string, unknown> | null;
-  usage_json: Record<string, unknown> | null;
-  created_at: string;
-};
+type RunRow = ScheduledJobRunRow;
 
 async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
   const { headers, ...rest } = options;
@@ -82,14 +69,6 @@ const TYPE_LABELS: Record<string, string> = {
   routine_one_time: "Routine One-time",
 };
 
-const RUN_STATUS_COLORS: Record<string, string> = {
-  queued: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400",
-  running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  succeeded: "bg-green-500/15 text-green-600 dark:text-green-400",
-  failed: "bg-red-500/15 text-red-600 dark:text-red-400",
-  cancelled: "bg-muted text-muted-foreground",
-};
-
 function formatSchedule(expr: string | null): string {
   if (!expr) return "—";
   if (expr.startsWith("rate(")) return expr.slice(5, -1);
@@ -100,116 +79,8 @@ function formatSchedule(expr: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Run helpers
-// ---------------------------------------------------------------------------
-
-function runDurationMs(run: RunRow): number | null {
-  const fromUsage = run.usage_json?.duration_ms;
-  if (typeof fromUsage === "number" && Number.isFinite(fromUsage)) return fromUsage;
-  if (run.started_at && run.finished_at) {
-    const ms = new Date(run.finished_at).getTime() - new Date(run.started_at).getTime();
-    return Number.isFinite(ms) ? ms : null;
-  }
-  return null;
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function formatAbsoluteTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function runResponseText(run: RunRow): string | undefined {
-  const raw = run.result_json?.response as string | undefined;
-  // Strip code-fence wrappers so the markdown inside renders properly.
-  return raw?.replace(/```[\w]*\n?/g, "");
-}
-
-// ---------------------------------------------------------------------------
 // Prompt panel — collapsed to ~5 lines by default with a Show all toggle.
 // ---------------------------------------------------------------------------
-
-/**
- * Long-form prompts on a scheduled job easily run 20+ lines, which pushed
- * Run History far below the fold. The collapsed view caps the visible
- * prompt at roughly five lines (100px ≈ 5 × text-sm line-height of 20px)
- * and exposes a Show all toggle. The toggle hides itself when the prompt
- * fits within the cap so short prompts don't carry empty chrome.
- */
-function PromptSection({ prompt }: { prompt: string }) {
-  const preRef = useRef<HTMLPreElement | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
-
-  // Measure after layout so the first paint reflects the real overflow
-  // state — useEffect would briefly render the toggle visible/invisible.
-  useLayoutEffect(() => {
-    const el = preRef.current;
-    if (!el) return;
-    setOverflowing(el.scrollHeight > el.clientHeight + 1);
-  }, [prompt]);
-
-  const collapsedClass = "max-h-[6.25rem] overflow-hidden";
-
-  return (
-    <Card className="gap-2 py-3">
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">Prompt</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="relative">
-          <pre
-            ref={preRef}
-            className={`text-sm whitespace-pre-wrap bg-muted/50 rounded-md p-3 ${expanded ? "" : collapsedClass}`}
-          >
-            {prompt}
-          </pre>
-          {!expanded && overflowing && (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-md bg-gradient-to-b from-transparent to-muted/80"
-            />
-          )}
-        </div>
-        {overflowing && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-2 h-7 px-2 text-xs"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? (
-              <>
-                <ChevronUp className="h-3.5 w-3.5 mr-1" /> Show less
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-3.5 w-3.5 mr-1" /> Show all
-              </>
-            )}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Edit Dialog
-// ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Edit Scheduled Job (uses shared dialog)
@@ -492,6 +363,7 @@ function ScheduledJobDetailPage() {
           ) : (
             <RunHistoryTable
               runs={runs}
+              formatRelativeTime={relativeTime}
               onRowClick={(run) => {
                 setSelectedRun(run);
                 setRunSheetOpen(true);
@@ -508,187 +380,11 @@ function ScheduledJobDetailPage() {
           setRunSheetOpen(open);
           if (!open) setSelectedRun(null);
         }}
+        renderResponse={(text) => (
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+        )}
       />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Run History table
-// ---------------------------------------------------------------------------
-
-function RunHistoryTable({
-  runs,
-  onRowClick,
-}: {
-  runs: RunRow[];
-  onRowClick: (run: RunRow) => void;
-}) {
-  const columns: ColumnDef<RunRow>[] = [
-    {
-      accessorKey: "status",
-      header: "Status",
-      size: 110,
-      cell: ({ row }) => (
-        <Badge
-          variant="secondary"
-          className={`text-xs capitalize ${RUN_STATUS_COLORS[row.original.status] || ""}`}
-        >
-          {row.original.status}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: "invocation_source",
-      header: "Source",
-      size: 130,
-      cell: ({ row }) => (
-        <Badge variant="outline" className="text-xs capitalize">
-          {row.original.invocation_source.replace(/_/g, " ")}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: "started_at",
-      header: "Started",
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {row.original.started_at ? relativeTime(row.original.started_at) : "Queued"}
-        </span>
-      ),
-    },
-    {
-      id: "duration",
-      header: "Duration",
-      size: 100,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {formatDuration(runDurationMs(row.original))}
-        </span>
-      ),
-    },
-  ];
-
-  return (
-    <DataTable
-      columns={columns}
-      data={runs}
-      onRowClick={onRowClick}
-      pageSize={10}
-      tableClassName="table-fixed"
-    />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Run Detail side sheet — mirrors Memory Detail's layout for consistency.
-// ---------------------------------------------------------------------------
-
-function RunDetailSheet({
-  run,
-  open,
-  onOpenChange,
-}: {
-  run: RunRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const responseText = run ? runResponseText(run) : undefined;
-  const durationMs = run ? runDurationMs(run) : null;
-  const usageTokens = run?.usage_json?.tokens as
-    | { input?: number; output?: number; total?: number }
-    | undefined;
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg flex flex-col">
-        <SheetHeader className="p-6 pb-0">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <SheetTitle>Run Detail</SheetTitle>
-              <SheetDescription>
-                {run?.started_at ? `Started ${formatAbsoluteTime(run.started_at)}` : "Run record"}
-              </SheetDescription>
-            </div>
-            {run && (
-              <Badge
-                variant="secondary"
-                className={`text-xs capitalize ${RUN_STATUS_COLORS[run.status] || ""}`}
-              >
-                {run.status}
-              </Badge>
-            )}
-          </div>
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6 space-y-4">
-          {run && (
-            <>
-              {run.error && (
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
-                    Error
-                  </p>
-                  <pre className="text-sm whitespace-pre-wrap text-destructive bg-destructive/5 rounded-md p-3 border border-destructive/20">
-                    {run.error}
-                  </pre>
-                </div>
-              )}
-
-              {responseText && (
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
-                    Response
-                  </p>
-                  <div className="text-sm bg-muted/50 rounded-md p-3 prose prose-sm dark:prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseText}</ReactMarkdown>
-                  </div>
-                </div>
-              )}
-
-              <div className="border-t border-muted pt-4 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <p className="text-muted-foreground uppercase tracking-wider font-medium">Source</p>
-                  <p className="mt-0.5 capitalize">{run.invocation_source.replace(/_/g, " ")}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground uppercase tracking-wider font-medium">Duration</p>
-                  <p className="mt-0.5 tabular-nums">{formatDuration(durationMs)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground uppercase tracking-wider font-medium">Started</p>
-                  <p className="mt-0.5">{formatAbsoluteTime(run.started_at)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground uppercase tracking-wider font-medium">Finished</p>
-                  <p className="mt-0.5">{formatAbsoluteTime(run.finished_at)}</p>
-                </div>
-                {usageTokens && (usageTokens.input != null || usageTokens.output != null || usageTokens.total != null) && (
-                  <div className="col-span-2">
-                    <p className="text-muted-foreground uppercase tracking-wider font-medium">Tokens</p>
-                    <p className="mt-0.5 tabular-nums">
-                      {usageTokens.input ?? 0} in · {usageTokens.output ?? 0} out
-                      {usageTokens.total != null ? ` · ${usageTokens.total} total` : ""}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {run.usage_json && Object.keys(run.usage_json).length > 0 && (
-                <details className="text-xs">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    Raw usage JSON
-                  </summary>
-                  <pre className="mt-2 whitespace-pre-wrap bg-muted/50 rounded-md p-3 font-mono text-xs">
-                    {JSON.stringify(run.usage_json, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}

@@ -25,7 +25,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  PromptSection,
+  RunDetailSheet,
+  RunHistoryTable,
+  type ScheduledJobRunRow,
 } from "@thinkwork/ui";
+import { Response } from "@/components/ai-elements/response";
 import { useTenant } from "@/context/TenantContext";
 import {
   MyComputerQuery,
@@ -39,6 +44,7 @@ import {
   type ScheduledJobFormData,
 } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import {
+  JOB_TYPE_LABELS,
   formatSchedule,
   relativeTime,
   type ScheduledJobRow,
@@ -74,39 +80,6 @@ async function apiFetch<T>(
   });
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === "succeeded"
-      ? "bg-green-500/15 text-green-600 dark:text-green-400"
-      : status === "failed"
-        ? "bg-destructive/15 text-destructive"
-        : status === "running" || status === "queued"
-          ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
-          : "bg-muted text-muted-foreground";
-  return (
-    <Badge variant="secondary" className={`text-xs gap-1 ${tone}`}>
-      {status}
-    </Badge>
-  );
-}
-
-function RunRowCard({ run }: { run: ThreadTurnRow }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-      <div className="flex items-center gap-2">
-        <StatusBadge status={run.status} />
-        <span className="text-xs text-muted-foreground">
-          {run.started_at ? relativeTime(run.started_at) : "—"}
-        </span>
-      </div>
-      {run.error ? (
-        <span className="text-xs text-destructive line-clamp-1 max-w-md">
-          {run.error}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 function ScheduledJobDetailPage() {
   const { scheduledJobId } = Route.useParams();
@@ -131,6 +104,8 @@ function ScheduledJobDetailPage() {
     "toggle" | "fire" | "delete" | null
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedRun, setSelectedRun] = useState<ScheduledJobRunRow | null>(null);
+  const [runSheetOpen, setRunSheetOpen] = useState(false);
 
   const [subResult] = useSubscription({
     query: ThreadTurnUpdatedSubscription,
@@ -273,53 +248,62 @@ function ScheduledJobDetailPage() {
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
-        <header className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={pendingAction !== null}
-            onClick={handleToggle}
-          >
-            {pendingAction === "toggle" ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : job.enabled ? (
-              <Pause className="h-4 w-4 mr-1" />
-            ) : (
-              <Play className="h-4 w-4 mr-1" />
-            )}
-            {job.enabled ? "Disable" : "Enable"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={pendingAction !== null || !sourceAgent}
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="h-4 w-4 mr-1" /> Edit
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={pendingAction !== null || !job.enabled}
-            onClick={handleFire}
-          >
-            {pendingAction === "fire" ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4 mr-1" />
-            )}
-            Fire Now
-          </Button>
+      <div className="shrink-0 px-4 pt-4 pb-4 border-b border-border bg-background sm:px-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight leading-tight text-foreground">
+              {job.name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {job.description ||
+                JOB_TYPE_LABELS[job.trigger_type] ||
+                job.trigger_type}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pendingAction !== null || !sourceAgent}
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-4 w-4 mr-1" /> Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pendingAction !== null}
+              onClick={handleToggle}
+            >
+              {pendingAction === "toggle" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : job.enabled ? (
+                <>
+                  <Pause className="h-4 w-4 mr-1" /> Disable
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-1" /> Enable
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              disabled={pendingAction !== null || !job.enabled}
+              onClick={handleFire}
+            >
+              {pendingAction === "fire" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4 mr-1" />
+              )}
+              Trigger Now
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
-                  variant="ghost"
+                  variant="destructive"
                   size="sm"
-                  className="text-destructive"
                   disabled={pendingAction !== null}
                 >
                   <Trash2 className="h-4 w-4 mr-1" /> Delete
@@ -344,47 +328,120 @@ function ScheduledJobDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-        </header>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-6 sm:px-6 space-y-6">
         {actionError && (
-          <p className="shrink-0 text-sm text-destructive">{actionError}</p>
+          <p className="text-sm text-destructive">{actionError}</p>
         )}
 
-        <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div>
-            <span className="text-muted-foreground">Status:</span>{" "}
-            <Badge
-              variant="secondary"
-              className={`text-xs gap-1 ${job.enabled ? "bg-green-500/15 text-green-600" : "bg-muted text-muted-foreground"}`}
-            >
-              {job.enabled ? "Enabled" : "Disabled"}
-            </Badge>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Schedule:</span>{" "}
-            {formatSchedule(job.schedule_expression)} · {job.timezone}
-          </div>
-          {job.prompt && (
-            <div className="space-y-1">
-              <span className="text-muted-foreground">Prompt:</span>
-              <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
-                {job.prompt}
-              </pre>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="gap-2 py-3">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Schedule</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Type</span>
+                <Badge variant="outline" className="capitalize">
+                  {job.schedule_type || "—"}
+                </Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Expression</span>
+                <span className="font-mono text-xs">
+                  {formatSchedule(job.schedule_expression)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Timezone</span>
+                <span>{job.timezone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status</span>
+                {job.enabled ? (
+                  <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <Play className="h-3 w-3 fill-current" /> Active
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Pause className="h-3 w-3" /> Disabled
+                  </span>
+                )}
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">EB Schedule</span>
+                {job.eb_schedule_name ? (
+                  <span className="font-mono text-xs text-green-600 dark:text-green-400">
+                    {job.eb_schedule_name}
+                  </span>
+                ) : job.enabled && job.schedule_expression ? (
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    Not provisioned
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    No schedule
+                  </span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Run History</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+          <Card className="gap-2 py-3">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Job Type</span>
+                <Badge variant="secondary" className="text-xs">
+                  {JOB_TYPE_LABELS[job.trigger_type] || job.trigger_type}
+                </Badge>
+              </div>
+              {sourceAgent && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Agent</span>
+                  <Badge variant="outline" className="text-xs">
+                    {sourceAgent.name}
+                  </Badge>
+                </div>
+              )}
+              {job.routine_id && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Routine</span>
+                  <span className="font-mono text-xs">
+                    {job.routine_id.slice(0, 8)}...
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Last Run</span>
+                <span>
+                  {job.last_run_at ? relativeTime(job.last_run_at) : "Never"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Created</span>
+                <span>{relativeTime(job.created_at)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {job.prompt && <PromptSection prompt={job.prompt} />}
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Run History</h2>
+            <Button variant="outline" size="sm" onClick={fetchRuns}>
+              Refresh
+            </Button>
+          </div>
           {runsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading runs…</p>
+            <p className="text-sm text-muted-foreground py-4">Loading runs…</p>
           ) : runsError ? (
             <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
               <p className="text-sm text-destructive">
@@ -395,12 +452,29 @@ function ScheduledJobDetailPage() {
               </Button>
             </div>
           ) : runs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No runs yet.</p>
+            <p className="text-sm text-muted-foreground py-4">No runs yet.</p>
           ) : (
-            runs.map((run) => <RunRowCard key={run.id} run={run} />)
+            <RunHistoryTable
+              runs={runs as ScheduledJobRunRow[]}
+              formatRelativeTime={relativeTime}
+              onRowClick={(run) => {
+                setSelectedRun(run);
+                setRunSheetOpen(true);
+              }}
+            />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      <RunDetailSheet
+        run={selectedRun}
+        open={runSheetOpen}
+        onOpenChange={(open) => {
+          setRunSheetOpen(open);
+          if (!open) setSelectedRun(null);
+        }}
+        renderResponse={(text) => <Response>{text}</Response>}
+      />
 
       {sourceAgent && (
         <ScheduledJobFormDialog
@@ -419,7 +493,6 @@ function ScheduledJobDetailPage() {
           onSubmit={handleEditSubmit}
         />
       )}
-      </div>
     </main>
   );
 }

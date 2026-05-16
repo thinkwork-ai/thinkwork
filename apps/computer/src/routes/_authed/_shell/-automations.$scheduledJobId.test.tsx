@@ -183,7 +183,7 @@ describe("apps/computer scheduled-job detail route", () => {
     });
   });
 
-  it("Fire Now POSTs to /:id/fire and does not collapse the page on success", async () => {
+  it("Trigger Now POSTs to /:id/fire and does not collapse the page on success", async () => {
     apiFetchMock.mockImplementation(async (path: string, opts: { method?: string } = {}) => {
       if (path.startsWith("/api/scheduled-jobs/job-1/fire") && opts.method === "POST") {
         return { ok: true };
@@ -198,7 +198,7 @@ describe("apps/computer scheduled-job detail route", () => {
       expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Fire Now/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Trigger Now/ }));
 
     await waitFor(() => {
       const fireCall = apiFetchMock.mock.calls.find(
