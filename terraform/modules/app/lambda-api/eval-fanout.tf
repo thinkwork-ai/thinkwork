@@ -1,10 +1,9 @@
 # ---------------------------------------------------------------------------
-# Evals per-case fan-out substrate (U2, INERT)
+# Evals per-case fan-out substrate
 #
-# eval-runner does not dispatch to this queue until U3. eval-worker is a
-# throwing stub in U2: accidental traffic retries through SQS, lands in the
-# DLQ after maxReceiveCount=3, and trips the DLQ depth alarm. This keeps the
-# inert state operator-visible instead of silently acknowledging work.
+# eval-runner dispatches one message per test case. eval-worker catches
+# application-level case failures and writes eval_results.status='error';
+# infrastructure failures redrive through SQS to the DLQ after maxReceiveCount=3.
 # ---------------------------------------------------------------------------
 
 resource "aws_sqs_queue" "eval_fanout_dlq" {
@@ -105,7 +104,7 @@ resource "aws_cloudwatch_metric_alarm" "eval_fanout_dlq_depth" {
   count = local.use_local_zips ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-eval-fanout-dlq-depth"
-  alarm_description   = "Eval fan-out DLQ has messages — eval-worker crashed or is still inert pre-U3; operator must inspect."
+  alarm_description   = "Eval fan-out DLQ has messages — eval-worker crashed before recording a case result; operator must inspect."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
   statistic           = "Maximum"

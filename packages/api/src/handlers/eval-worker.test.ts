@@ -1,29 +1,45 @@
-import { describe, expect, it, vi } from "vitest";
-import { handler } from "./eval-worker.js";
+import { describe, expect, it } from "vitest";
+import {
+	parseEvalWorkerMessage,
+	summarizeEvalResults,
+} from "./eval-worker.js";
 
-describe("eval-worker inert substrate", () => {
-	it("throws so accidental SQS traffic reaches the DLQ during U2", async () => {
-		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+describe("eval-worker message parsing", () => {
+	it("requires both runId and testCaseId", () => {
+		expect(
+			parseEvalWorkerMessage(
+				JSON.stringify({ runId: "run-1", testCaseId: "tc-1", index: 2 }),
+			),
+		).toEqual({ runId: "run-1", testCaseId: "tc-1", index: 2 });
 
-		await expect(
-			handler({
-				Records: [
-					{
-						body: JSON.stringify({
-							runId: "run-1",
-							testCaseId: "case-1",
-						}),
-					},
+		expect(() =>
+			parseEvalWorkerMessage(JSON.stringify({ runId: "run-1" })),
+		).toThrow(/runId and testCaseId/);
+	});
+});
+
+describe("eval-worker finalization summary", () => {
+	it("aggregates pass/fail totals and evaluator token cost", () => {
+		const summary = summarizeEvalResults([
+			{
+				status: "pass",
+				evaluator_results: [
+					{ token_usage: { totalTokens: 1000 } },
+					{ token_usage: { totalTokens: 500 } },
 				],
-			}),
-		).rejects.toThrow(/eval-worker inert stub/);
+			},
+			{
+				status: "fail",
+				evaluator_results: [{ token_usage: { totalTokens: 250 } }],
+			},
+			{ status: "error", evaluator_results: [] },
+		]);
 
-		expect(errorSpy).toHaveBeenCalledWith(
-			"[eval-worker] inert stub invoked",
-			expect.objectContaining({
-				message: expect.stringContaining("live per-case evaluator"),
-			}),
-		);
-		errorSpy.mockRestore();
+		expect(summary).toEqual({
+			passed: 1,
+			failed: 2,
+			passRate: 1 / 3,
+			totalCostUsd: 0.021,
+		});
 	});
 });
