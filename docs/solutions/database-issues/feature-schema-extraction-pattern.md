@@ -137,7 +137,17 @@ ALTER TABLE <feature>.<prefix>_<leaf_table> RENAME TO <leaf_table>;
 -- ... repeat for every table
 
 -- Compat views: each table gets a view in public.* aliasing the new location.
--- Postgres simple views are auto-updatable, so old write paths continue to work.
+-- Postgres simple views are auto-updatable for plain INSERT/UPDATE/DELETE,
+-- so most old write paths continue to work.
+--
+-- IMPORTANT: views do NOT support `INSERT ... ON CONFLICT` or
+-- `SELECT ... FOR UPDATE` — Postgres rejects both at parse time, and
+-- INSTEAD OF triggers do not help. See:
+--   docs/solutions/database-issues/postgres-compat-views-reject-on-conflict-and-for-update-2026-05-16.md
+-- Before relying on the bridge for live writes, inventory the moving
+-- tables for ON CONFLICT / FOR UPDATE usage; for any matches, plan to
+-- pause those write paths during the deploy window (schedule disable +
+-- admin-action hold).
 CREATE VIEW public.<prefix>_<leaf_table> AS SELECT * FROM <feature>.<leaf_table>;
 -- ... repeat for every table
 
