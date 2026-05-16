@@ -1,11 +1,41 @@
 ---
-title: "Autopilot status: retire OSS Symphony and connectors"
-date: 2026-05-14
-plan: docs/plans/2026-05-14-001-refactor-retire-oss-symphony-connectors-plan.md
-status: completed
+title: "Autopilot status ledger"
+date: 2026-05-16
+status: active
 ---
 
-# Autopilot Status: Retire OSS Symphony And Connectors
+# Autopilot Status Ledger
+
+## Current Run: ThinkWork Slack Workspace App
+
+Plan: `docs/plans/2026-05-16-004-feat-thinkwork-computer-slack-workspace-app-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- **U1 — Database schema: Slack tables**
+- Branch: `codex/slack-workspace-u1-schema`
+- Worktree: `.Codex/worktrees/slack-workspace-u1-schema`
+- Status: locally verified; preparing PR
+
+### Progress Log
+
+| Date       | Unit | Branch                            | PR  | Status           | Verification                                                                                                                                                                                                                        | Notes                                                                                                                                                                                                              |
+| ---------- | ---- | --------------------------------- | --- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-05-16 | U1   | `codex/slack-workspace-u1-schema` | TBD | Locally verified | `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0094_slack_workspace_app.sql`; touched-file Prettier check | Added `slack_workspaces`, `slack_user_links`, and `slack_threads` schema plus migration tests. `db:generate` attempted but Drizzle stopped at an existing interactive schema-conflict prompt before writing files. |
+
+### CI / Merge Log
+
+- No PRs opened yet.
+
+### Blockers
+
+- None.
+
+---
+
+# Prior Run: Retire OSS Symphony And Connectors
 
 ## Current State
 
@@ -38,8 +68,8 @@ status: completed
 
 ## Pull Requests
 
-| Unit | Branch | PR | Status | Notes |
-| --- | --- | --- | --- | --- |
+| Unit  | Branch                           | PR                                                           | Status | Notes                                                                                                                                                                               |
+| ----- | -------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1-U7 | `codex/retire-oss-connectors-u1` | [#1226](https://github.com/thinkwork-ai/thinkwork/pull/1226) | Merged | Grouped because deleting the database connector schema breaks API, admin, computer, generated clients, and rollout verification until the connector contract is removed everywhere. |
 
 ## CI / Verification Log
