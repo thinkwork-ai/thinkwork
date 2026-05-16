@@ -13,7 +13,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "node": "20.19.5",
+      "node": "22.13.1",
       "ios": {
         "simulator": false
       },
@@ -30,7 +30,7 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "node": "20.19.5",
+      "node": "22.13.1",
       "env": {
         "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_L4DhLVKis",
         "EXPO_PUBLIC_COGNITO_CLIENT_ID": "4hmooifj2surt62sjks45kemuh",

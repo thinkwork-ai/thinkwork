@@ -2,13 +2,18 @@ const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 
 const monorepoRoot = path.resolve(__dirname, "../..");
+const workspacePackages = [
+  path.resolve(monorepoRoot, "node_modules"),
+  path.resolve(monorepoRoot, "packages/react-native-sdk"),
+  path.resolve(monorepoRoot, "packages/pricing-config"),
+];
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname, {
   isCSSEnabled: true,
 });
 
-config.watchFolders = [monorepoRoot];
+config.watchFolders = workspacePackages;
 config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, "node_modules"),
   path.resolve(monorepoRoot, "node_modules"),
