@@ -42,6 +42,12 @@ export interface SlackHandlerConfig {
     rawBody: Buffer;
     rawBodyText: string;
   }): string | null;
+  preDispatch?(args: {
+    event: APIGatewayProxyEventV2;
+    headers: Record<string, string>;
+    rawBody: Buffer;
+    rawBodyText: string;
+  }): Promise<APIGatewayProxyStructuredResultV2 | null>;
   dispatch(args: SlackHandlerArgs): Promise<APIGatewayProxyStructuredResultV2>;
   allowedMethods?: string[];
 }
@@ -112,6 +118,14 @@ export function createSlackHandler(
       );
       return json({ ok: true, retried: true });
     }
+
+    const earlyResponse = await config.preDispatch?.({
+      event,
+      headers,
+      rawBody,
+      rawBodyText,
+    });
+    if (earlyResponse) return earlyResponse;
 
     const slackTeamId = config.extractTeamId({
       event,
