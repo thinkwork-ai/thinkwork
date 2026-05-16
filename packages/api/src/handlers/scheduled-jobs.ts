@@ -23,7 +23,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq, and, desc, gt } from "drizzle-orm";
+import { eq, and, desc, gt, sql } from "drizzle-orm";
 import {
 	scheduledJobs,
 	threadTurns,
@@ -31,7 +31,10 @@ import {
 	agentWakeupRequests,
 	agents,
 	computers,
+	computerTasks,
+	computerEvents,
 	evalRuns,
+	messages,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { requireTenantMembership, type TenantMemberRole } from "../lib/tenant-membership.js";
@@ -132,7 +135,7 @@ async function checkMembership(
 	event: APIGatewayProxyEventV2,
 	method: string,
 ): Promise<
-	| { ok: true; tenantId: string }
+	| { ok: true; tenantId: string; userId: string | null }
 	| { ok: false; response: APIGatewayProxyStructuredResultV2 }
 > {
 	const tenantHeader = event.headers["x-tenant-id"];
@@ -147,7 +150,7 @@ async function checkMembership(
 		requiredRoles,
 	});
 	if (!verdict.ok) return { ok: false, response: error(verdict.reason, verdict.status) };
-	return { ok: true, tenantId: verdict.tenantId };
+	return { ok: true, tenantId: verdict.tenantId, userId: verdict.userId };
 }
 
 export async function handler(
@@ -167,7 +170,12 @@ export async function handler(
 			if (method !== "POST") return error("Method not allowed", 405);
 			const check = await checkMembership(event, method);
 			if (!check.ok) return check.response;
-			return fireScheduledJob(fireMatch[1], event, check.tenantId);
+			return fireScheduledJob(
+				fireMatch[1],
+				event,
+				check.tenantId,
+				check.userId,
+			);
 		}
 
 		// GET/PUT/DELETE /api/scheduled-jobs/:id
@@ -467,6 +475,7 @@ async function fireScheduledJob(
 	triggerId: string,
 	event: APIGatewayProxyEventV2,
 	tenantId: string,
+	firingUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const [trig] = await db
 		.select()
@@ -511,37 +520,195 @@ async function fireScheduledJob(
 		return json({ ok: true, runId: run.id }, 201);
 	}
 
-	if (isAgentTrigger && trig.agent_id) {
-		// Create a thread to track this scheduled job execution
-		let threadId: string | undefined;
-		try {
-			const result = await ensureThreadForWork({
-				tenantId,
-				agentId: trig.agent_id,
-				title: trig.name,
-				channel: "schedule",
-			});
-			threadId = result.threadId;
-		} catch (err) {
-			console.warn("[scheduled-jobs] Failed to create thread for manual fire:", err);
+	if (isAgentTrigger && (trig.agent_id || trig.computer_id)) {
+		// Manual fires for agent-typed schedules MUST route through the linked
+		// Computer's task queue — never through the legacy `agent_wakeup_requests`
+		// path. The legacy path lands at wakeup-processor, which reads the
+		// agent's `runtime` column and can dispatch to the Flue Lambda; Flue is
+		// an experimental runtime that does not belong in any automation hot
+		// path. The scheduled (cron) firing path in
+		// `packages/lambda/job-trigger.ts` already routes through Computers —
+		// this branch is the manual-fire mirror so behavior matches whichever
+		// way the schedule was triggered.
+
+		// Prefer the explicit `scheduled_jobs.computer_id` link. Fall back to
+		// the `computers.migrated_from_agent_id` lookup used by the cron path
+		// so legacy agent-only schedules that were migrated to a Computer keep
+		// working without re-creating the row.
+		let computer: {
+			id: string;
+			ownerUserId: string;
+			migratedAgentId: string | null;
+		} | null = null;
+
+		if (trig.computer_id) {
+			const [row] = await db
+				.select({
+					id: computers.id,
+					ownerUserId: computers.owner_user_id,
+					migratedAgentId: computers.migrated_from_agent_id,
+				})
+				.from(computers)
+				.where(
+					and(
+						eq(computers.id, trig.computer_id),
+						eq(computers.tenant_id, tenantId),
+						sql`${computers.status} <> 'archived'`,
+					),
+				)
+				.limit(1);
+			computer = row ?? null;
 		}
 
-		const [wakeup] = await db
-			.insert(agentWakeupRequests)
+		if (!computer && trig.agent_id) {
+			const [row] = await db
+				.select({
+					id: computers.id,
+					ownerUserId: computers.owner_user_id,
+					migratedAgentId: computers.migrated_from_agent_id,
+				})
+				.from(computers)
+				.where(
+					and(
+						eq(computers.tenant_id, tenantId),
+						eq(computers.migrated_from_agent_id, trig.agent_id),
+						sql`${computers.status} <> 'archived'`,
+					),
+				)
+				.limit(1);
+			computer = row ?? null;
+		}
+
+		if (!computer) {
+			return error(
+				"This scheduled job has no Computer linked to it. Automations must run through a Computer — attach one to this schedule before firing.",
+				409,
+			);
+		}
+
+		// Identity for the run: the firing operator is the actor. Without it
+		// the Computer task lands with no `created_by_user_id`, which means
+		// downstream skills/memory cannot scope to a human — the same defect
+		// that caused the Flue 400 in the legacy path.
+		if (!firingUserId) {
+			return error(
+				"Manual fire requires an authenticated user identity.",
+				401,
+			);
+		}
+
+		const { threadId } = await ensureThreadForWork({
+			tenantId,
+			computerId: computer.id,
+			userId: firingUserId,
+			title: trig.name,
+			channel: "schedule",
+		});
+
+		const messageContent =
+			(trig.prompt && trig.prompt.trim()) ||
+			`Manual fire of ${trig.name}. Handle the scheduled work for this Computer.`;
+
+		const [message] = await db
+			.insert(messages)
+			.values({
+				thread_id: threadId,
+				tenant_id: tenantId,
+				role: "user",
+				content: messageContent,
+				sender_type: "user",
+				sender_id: firingUserId,
+				metadata: {
+					source: "scheduled_job_manual_fire",
+					triggerId,
+					triggerType: trig.trigger_type,
+				},
+			})
+			.returning({ id: messages.id });
+
+		// Idempotency key mirrors `enqueueScheduledComputerThreadTurn` in
+		// job-trigger.ts so a duplicated request (double-clicked button,
+		// API retry) collapses cleanly.
+		const idempotencyKey = [
+			"manual-fire-thread-turn",
+			triggerId,
+			message.id,
+		].join(":");
+
+		const [task] = await db
+			.insert(computerTasks)
 			.values({
 				tenant_id: tenantId,
-				agent_id: trig.agent_id,
-				source: "on_demand",
-				trigger_detail: `manual_fire:trigger:${triggerId}`,
-				reason: `Manual fire of ${trig.name}`,
-				payload: trig.prompt
-					? { message: trig.prompt, triggerId, ...(threadId && { threadId }) }
-					: { triggerId, ...(threadId && { threadId }) },
-				requested_by_actor_type: "user",
+				computer_id: computer.id,
+				task_type: "thread_turn",
+				status: "pending",
+				input: {
+					threadId,
+					messageId: message.id,
+					source: "schedule",
+					actorType: "user",
+					actorId: firingUserId,
+					triggerId,
+					triggerType: trig.trigger_type,
+				},
+				idempotency_key: idempotencyKey,
+				created_by_user_id: firingUserId,
 			})
-			.returning();
+			.onConflictDoNothing({
+				target: [
+					computerTasks.tenant_id,
+					computerTasks.computer_id,
+					computerTasks.idempotency_key,
+				],
+				where: sql`${computerTasks.idempotency_key} IS NOT NULL`,
+			})
+			.returning({ id: computerTasks.id });
 
-		return json({ ok: true, wakeupRequestId: wakeup.id }, 201);
+		if (task) {
+			await db.insert(computerEvents).values({
+				tenant_id: tenantId,
+				computer_id: computer.id,
+				task_id: task.id,
+				event_type: "manual_fire_thread_turn_enqueued",
+				level: "info",
+				payload: {
+					threadId,
+					messageId: message.id,
+					triggerId,
+					triggerType: trig.trigger_type,
+				},
+			});
+		}
+
+		// Keep the migrated Agent heartbeat fresh for visibility parity with
+		// the cron path. Best-effort — a heartbeat write failure must not
+		// fail the fire.
+		const heartbeatAgentId = trig.agent_id || computer.migratedAgentId;
+		if (heartbeatAgentId) {
+			try {
+				await db
+					.update(agents)
+					.set({ last_heartbeat_at: new Date() })
+					.where(eq(agents.id, heartbeatAgentId));
+			} catch (err) {
+				console.warn(
+					"[scheduled-jobs] Failed to bump agent heartbeat on manual fire:",
+					err,
+				);
+			}
+		}
+
+		return json(
+			{
+				ok: true,
+				computerId: computer.id,
+				threadId,
+				messageId: message.id,
+				taskId: task?.id ?? null,
+				dedup: task ? false : true,
+			},
+			201,
+		);
 	} else if (trig.routine_id) {
 		const [run] = await db
 			.insert(threadTurns)
