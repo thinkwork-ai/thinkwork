@@ -245,9 +245,9 @@ export async function findPageSourcesAcrossSurfaces(
 			tep.title,
 			tep.slug,
 			tep.entity_subtype AS "entitySubtype"
-		FROM tenant_entity_section_sources tess
-		INNER JOIN tenant_entity_page_sections teps ON teps.id = tess.section_id
-		INNER JOIN tenant_entity_pages tep ON tep.id = teps.page_id
+		FROM brain.section_sources tess
+		INNER JOIN brain.page_sections teps ON teps.id = tess.section_id
+		INNER JOIN brain.pages tep ON tep.id = teps.page_id
 		WHERE tess.tenant_id = ${args.tenantId}
 			AND tep.status = 'active'
 			AND tess.source_kind = ${args.sourceKind}
