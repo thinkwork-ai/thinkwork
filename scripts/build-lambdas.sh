@@ -531,6 +531,9 @@ build_handler "eval-runner" \
 build_handler "eval-worker" \
   "$REPO_ROOT/packages/api/src/handlers/eval-worker.ts"
 
+build_handler "eval-runs-reconciler" \
+  "$REPO_ROOT/packages/api/src/handlers/eval-runs-reconciler.ts"
+
 # ---------------------------------------------------------------------------
 # P2: Cron handlers
 # ---------------------------------------------------------------------------

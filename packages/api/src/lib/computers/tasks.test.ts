@@ -97,6 +97,126 @@ describe("Computer task helpers", () => {
     });
   });
 
+  it("normalizes Slack-originated thread turn input without Computer thread ids", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "app_mention",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "1710000001.000000",
+        messageTs: "1710000001.000000",
+        eventId: "Ev123",
+        sourceMessage: {
+          text: "help",
+          ts: "1710000001.000000",
+          user: "U123",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        threadContext: [{ user: "U123", botId: null, ts: "1", text: "help" }],
+        fileRefs: [{ id: "F123", name: "brief.pdf" }],
+        actorId: "user-1",
+      }),
+    ).toEqual({
+      source: "slack",
+      channelType: "app_mention",
+      slackTeamId: "T123",
+      slackUserId: "U123",
+      channelId: "C123",
+      threadTs: "1710000001.000000",
+      messageTs: "1710000001.000000",
+      eventId: "Ev123",
+      sourceMessage: {
+        text: "help",
+        ts: "1710000001.000000",
+        user: "U123",
+        channel: "C123",
+        team: "T123",
+        permalink: null,
+      },
+      threadContext: [{ user: "U123", botId: null, ts: "1", text: "help" }],
+      fileRefs: [{ id: "F123", name: "brief.pdf" }],
+      responseUrl: null,
+      placeholderTs: null,
+      modalViewId: null,
+      actorType: "user",
+      actorId: "user-1",
+    });
+  });
+
+  it("preserves Slack slash command response_url metadata", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "slash",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "slash:trigger-1",
+        messageTs: "slash:trigger-1",
+        eventId: "slash:trigger-1",
+        sourceMessage: {
+          text: "summarize",
+          ts: "slash:trigger-1",
+          user: "U123",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        responseUrl: "https://hooks.slack.com/commands/response",
+        actorId: "user-1",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        source: "slack",
+        channelType: "slash",
+        eventId: "slash:trigger-1",
+        responseUrl: "https://hooks.slack.com/commands/response",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    );
+  });
+
+  it("preserves Slack message-action modal metadata", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "message_action",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "1710000000.000000",
+        messageTs: "1710000001.000000",
+        eventId: "message_action:trigger-1",
+        sourceMessage: {
+          text: "review this",
+          ts: "1710000001.000000",
+          user: "U456",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        responseUrl: "https://hooks.slack.com/actions/response",
+        modalViewId: "V123",
+        actorId: "user-1",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        source: "slack",
+        channelType: "message_action",
+        eventId: "message_action:trigger-1",
+        responseUrl: "https://hooks.slack.com/actions/response",
+        modalViewId: "V123",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    );
+  });
+
   it("normalizes runbook execution input", () => {
     expect(
       normalizeTaskInput("runbook_execute", {

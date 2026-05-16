@@ -10,14 +10,14 @@ status: active
 
 ## Current Unit
 
-- Unit: U15. Computer task eval execution follow-up
-- Branch: `codex/evals-computer-task-execution`
-- Worktree: `.Codex/worktrees/evals-computer-task-execution`
-- State: PR #1278 open; waiting for required checks
+- Unit: U18 - RedTeam assertion scoring follow-up
+- Branch: `codex/evals-redteam-assertions`
+- Worktree: `.Codex/worktrees/evals-redteam-assertions`
+- State: Local verification complete; PR in progress
 
 ## Final Proof Request
 
-- After U15 is merged and deployed, run a small RedTeam category from the Admin UI against the Marco running Computer in the Marco workspace, watch the detail view show per-test status rows while running, wait for a terminal state, and capture the result surface so the current RedTeam eval state is visible.
+- After U16 is merged and deployed, rerun a small RedTeam category from the Admin UI against the Marco running Computer in the Marco workspace, watch the detail view show per-test status rows while running, wait for a terminal state, and capture the result surface so the current RedTeam eval state is visible.
 
 ## Progress Log
 
@@ -120,27 +120,47 @@ status: active
 - 2026-05-16: Added manual migration `0095_eval_runs_computer_id.sql`, applied it to dev, and verified the `computer_id` column, FK, and tenant/computer/created index exist.
 - 2026-05-16: Local U15 verification passed: schema build, focused API resolver/worker/scheduled-job tests, Lambda job-trigger test, API/database/API/Lambda/CLI builds or typechecks, CLI/mobile codegen, mobile tests, eval-worker/graphql-http/job-trigger Lambda bundles, dev manual-migration drift probe, touched-file Prettier check for formatted files, and `git diff --check`.
 - 2026-05-16: Opened PR #1278 for U15.
+- 2026-05-16: PR #1278 required checks passed after a clean rebase, was squash-merged to `main`, the U15 branch/worktree was cleaned up, and post-merge `main` Deploy passed.
+- 2026-05-16: Admin UI proof against Marco on `red-team-safety-scope` started as run `6ba4d5bb-25a8-4495-b1ad-09172b54452d`. The run-detail page immediately showed all 47 selected eval rows with per-test `running` statuses, satisfying the running-state visibility requirement.
+- 2026-05-16: The Marco proof exposed a timeout mismatch: `eval-worker` waits up to 480s for a Computer task, but the deployed Lambda timeout is 240s. Slow/throttled Computer tasks can therefore kill the worker before it records an eval error, leaving the run stuck in `running` with missing result rows.
+- 2026-05-16: Created clean U16 worktree from `origin/main`.
+- 2026-05-16: Started U16 by lowering the default Computer task wait timeout to 210s so slow turns become recorded per-case eval errors before the Lambda timeout.
+- 2026-05-16: Local U16 verification passed: focused eval-worker test, API typecheck, eval-worker Lambda bundle, and `git diff --check`.
+- 2026-05-16: Opened PR #1281 for U16.
+- 2026-05-16: PR #1281 required checks passed after a clean rebase, was squash-merged to `main`, the U16 branch/worktree was cleaned up, and post-merge `main` Deploy passed.
+- 2026-05-16: Final Admin UI proof against the Marco running Computer used the small RedTeam `red-team-safety-scope` category. Run `cbea7dd8-e329-4441-aa0e-ea5679132d5d` immediately showed all 47 selected eval rows with per-test `running` statuses in the detail page, then finalized as `completed` in 505s with 27 pass, 17 fail, 3 error, 57.45% pass rate, and `$0.000000` recorded cost.
+- 2026-05-16: Final proof remaining issues are case-level, not substrate-level: one AgentCore adapter 500 and two Computer-task waits hit the 210s bounded timeout. The run still reached terminal state and preserved all 47 per-case outcomes.
+- 2026-05-16: Operator follow-up: the earlier `red-team-safety-scope` proof run still appeared as `running`; investigation found two worker invocations had died before writing result rows, so no final writer remained to close the run.
+- 2026-05-16: Implemented U17 stale-run reconciliation: a scheduled `eval-runs-reconciler` Lambda scans stale running eval runs, reconstructs expected category-selected cases, writes synthetic per-case error rows for missing results, finalizes the run, and publishes the normal eval-run subscription update.
+- 2026-05-16: Local U17 verification passed: focused reconciler tests, API typecheck, API build, eval-runs-reconciler Lambda bundle, Terraform fmt/validate, and `git diff --check`.
+- 2026-05-16: PR #1286 required checks passed, was squash-merged to `main`, the U17 branch/worktree was cleaned up, post-merge Deploy passed, and the reconciler completed stale run `6ba4d5bb-25a8-4495-b1ad-09172b54452d` as 26 pass, 18 fail, 3 error with `Reconciled 2 missing eval result(s)`.
+- 2026-05-16: Started U18 RedTeam assertion scoring follow-up after triaging clean proof run `cbea7dd8-e329-4441-aa0e-ea5679132d5d`; most failures were safe refusals incorrectly failed by deterministic `not-contains` checks when the Computer quoted a phrase from the unsafe user request and the semantic rubric passed.
+- 2026-05-16: Implemented U18 scoring fix: `eval-worker` now softens failed `not-contains` / `not-icontains` assertions only when the forbidden phrase appears in the original user query and a semantic `llm-rubric` assertion passed, preserving deterministic failures for actual unsafe compliance.
+- 2026-05-16: Local U18 verification passed: focused eval-worker tests, API typecheck, API build, eval-worker Lambda bundle, touched-file Prettier check, and `git diff --check`.
 
 ## Pull Requests
 
-| Unit   | Branch                                         | PR                                                           | CI      | Merge   | Notes                                                                                                                              |
-| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed  | merged  | Stall probe script + findings doc                                                                                                  |
-| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                         |
-| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index   |
-| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed   |
-| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                      |
-| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                   |
-| U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                        |
-| U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                     |
-| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                               |
-| U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                         |
-| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
-| U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
-| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
-| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
+| Unit   | Branch                                         | PR                                                           | CI      | Merge   | Notes                                                                                                                                                      |
+| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed  | merged  | Stall probe script + findings doc                                                                                                                          |
+| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                                                 |
+| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index                           |
+| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed                           |
+| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                                              |
+| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                                           |
+| U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                                                |
+| U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                                             |
+| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                                                       |
+| U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                                                 |
+| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed                                   |
+| U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed                         |
+| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                                             |
+| U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                                         |
 | U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | passed  | merged  | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring; post-merge Deploy passed |
-| U15    | `codex/evals-computer-task-execution`          | [#1278](https://github.com/thinkwork-ai/thinkwork/pull/1278) | pending | pending | Follow-up: execute eval cases through the selected running Computer's thread/task path; dev migration applied and verified         |
+| U15    | `codex/evals-computer-task-execution`          | [#1278](https://github.com/thinkwork-ai/thinkwork/pull/1278) | passed  | merged  | Follow-up: execute eval cases through the selected running Computer's thread/task path; dev migration applied and verified; post-merge Deploy passed       |
+| U16    | `codex/evals-worker-timeout`                   | [#1281](https://github.com/thinkwork-ai/thinkwork/pull/1281) | passed  | merged  | Follow-up: keep Computer-task wait timeout below Lambda timeout so slow cases record eval errors instead of stranding runs; post-merge Deploy passed       |
+| U17    | `codex/evals-reconcile-stale-runs`             | [#1286](https://github.com/thinkwork-ai/thinkwork/pull/1286) | passed  | merged  | Follow-up: reconcile stale running eval runs that are missing result rows; post-merge Deploy passed and completed the stale Marco proof run                |
+| U18    | `codex/evals-redteam-assertions`               | TBD                                                          | pending | pending | Follow-up: avoid false RedTeam failures when safe refusals quote unsafe request phrases and the semantic rubric passed                                     |
 
 ## CI Failures
 
@@ -266,6 +286,26 @@ status: active
 - `bash scripts/build-lambdas.sh eval-worker && bash scripts/build-lambdas.sh graphql-http && bash scripts/build-lambdas.sh job-trigger` - passed for U15.
 - Dev apply and drift probe for `packages/database-pg/drizzle/0095_eval_runs_computer_id.sql` - passed for U15.
 - `git diff --check` - passed for U15.
+- `pnpm --filter @thinkwork/api test -- eval-worker.test.ts` - passed for U16.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U16.
+- `bash scripts/build-lambdas.sh eval-worker` - passed for U16.
+- `git diff --check` - passed for U16.
+- PR #1281 required checks and post-merge Deploy - passed for U16.
+- Admin UI proof run `cbea7dd8-e329-4441-aa0e-ea5679132d5d` against Marco / `red-team-safety-scope` - passed for substrate proof: detail rows visible while running; run completed with all 47 outcomes persisted.
+- `pnpm --filter @thinkwork/api test -- eval-runs-reconciler.test.ts` - passed for U17.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U17.
+- `pnpm --filter @thinkwork/api build` - passed for U17.
+- `bash scripts/build-lambdas.sh eval-runs-reconciler` - passed for U17.
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf` - passed for U17.
+- `terraform -chdir=terraform/modules/app/lambda-api validate` - passed for U17 after `terraform init -backend=false`.
+- PR #1286 required checks and post-merge Deploy - passed for U17.
+- Live DB verification confirmed stale run `6ba4d5bb-25a8-4495-b1ad-09172b54452d` was finalized by the reconciler.
+- `pnpm --filter @thinkwork/api test -- eval-worker.test.ts` - passed for U18.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U18.
+- `pnpm --filter @thinkwork/api build` - passed for U18.
+- `bash scripts/build-lambdas.sh eval-worker` - passed for U18.
+- `node_modules/.pnpm/node_modules/.bin/prettier --check <U18 touched files>` - passed for U18.
+- `git diff --check` - passed for U18.
 
 ## Blockers
 
