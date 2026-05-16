@@ -1082,6 +1082,52 @@ export const DeleteTenantCredentialMutation = graphql(`
   }
 `);
 
+// ---------------------------------------------------------------------------
+// Slack Workspace App
+// ---------------------------------------------------------------------------
+
+export const SlackWorkspacesQuery = graphql(`
+  query SlackWorkspaces($tenantId: ID!) {
+    slackWorkspaces(tenantId: $tenantId) {
+      id
+      tenantId
+      slackTeamId
+      slackTeamName
+      botUserId
+      appId
+      installedByUserId
+      status
+      installedAt
+      uninstalledAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const StartSlackWorkspaceInstallMutation = graphql(`
+  mutation StartSlackWorkspaceInstall(
+    $input: StartSlackWorkspaceInstallInput!
+  ) {
+    startSlackWorkspaceInstall(input: $input) {
+      authorizeUrl
+      state
+      expiresAt
+    }
+  }
+`);
+
+export const UninstallSlackWorkspaceMutation = graphql(`
+  mutation UninstallSlackWorkspace($id: ID!) {
+    uninstallSlackWorkspace(id: $id) {
+      id
+      status
+      uninstalledAt
+      updatedAt
+    }
+  }
+`);
+
 export const TriggerRoutineRunMutation = graphql(`
   mutation TriggerRoutineRun($routineId: ID!, $input: AWSJSON) {
     triggerRoutineRun(routineId: $routineId, input: $input) {
