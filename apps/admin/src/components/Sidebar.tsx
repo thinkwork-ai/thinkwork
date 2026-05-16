@@ -13,6 +13,7 @@ import {
   Puzzle,
   Brain,
   Webhook,
+  Slack,
   Shield,
   CalendarClock,
   LayoutTemplate,
@@ -242,6 +243,11 @@ export function AppSidebar() {
       to: "/automations/webhooks",
       icon: Webhook,
       label: "Webhooks",
+    },
+    {
+      to: "/slack",
+      icon: Slack,
+      label: "Slack",
     },
     ...extensionItemsFor("integrations"),
   ];

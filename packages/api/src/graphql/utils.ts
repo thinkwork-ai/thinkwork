@@ -110,6 +110,8 @@ import {
   skillCatalog,
   tenantSkills,
   tenantWorkflowCatalog,
+  slackWorkspaces,
+  slackUserLinks,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -197,6 +199,8 @@ export {
   skillCatalog,
   tenantSkills,
   tenantWorkflowCatalog,
+  slackWorkspaces,
+  slackUserLinks,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

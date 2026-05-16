@@ -1,0 +1,37 @@
+type SlackWorkspace {
+  id: ID!
+  tenantId: ID!
+  slackTeamId: String!
+  slackTeamName: String
+  botUserId: String!
+  appId: String!
+  installedByUserId: ID
+  status: String!
+  installedAt: AWSDateTime!
+  uninstalledAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type SlackWorkspaceInstallStart {
+  authorizeUrl: AWSURL!
+  state: String!
+  expiresAt: AWSDateTime!
+}
+
+input StartSlackWorkspaceInstallInput {
+  tenantId: ID!
+  returnUrl: AWSURL
+  redirectUri: AWSURL
+}
+
+extend type Query {
+  slackWorkspaces(tenantId: ID!): [SlackWorkspace!]!
+}
+
+extend type Mutation {
+  startSlackWorkspaceInstall(
+    input: StartSlackWorkspaceInstallInput!
+  ): SlackWorkspaceInstallStart!
+  uninstallSlackWorkspace(id: ID!): SlackWorkspace!
+}

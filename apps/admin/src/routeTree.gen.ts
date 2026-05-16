@@ -29,6 +29,7 @@ import { Route as AuthedTenantWorkspaceReviewsIndexRouteImport } from "./routes/
 import { Route as AuthedTenantWikiIndexRouteImport } from "./routes/_authed/_tenant/wiki/index";
 import { Route as AuthedTenantWebhooksIndexRouteImport } from "./routes/_authed/_tenant/webhooks/index";
 import { Route as AuthedTenantThreadsIndexRouteImport } from "./routes/_authed/_tenant/threads/index";
+import { Route as AuthedTenantSlackIndexRouteImport } from "./routes/_authed/_tenant/slack/index";
 import { Route as AuthedTenantSecurityIndexRouteImport } from "./routes/_authed/_tenant/security/index";
 import { Route as AuthedTenantScheduledJobsIndexRouteImport } from "./routes/_authed/_tenant/scheduled-jobs/index";
 import { Route as AuthedTenantRoutinesIndexRouteImport } from "./routes/_authed/_tenant/routines/index";
@@ -209,6 +210,11 @@ const AuthedTenantThreadsIndexRoute =
     path: "/threads/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
+const AuthedTenantSlackIndexRoute = AuthedTenantSlackIndexRouteImport.update({
+  id: "/slack/",
+  path: "/slack/",
+  getParentRoute: () => AuthedTenantRoute,
+} as any);
 const AuthedTenantSecurityIndexRoute =
   AuthedTenantSecurityIndexRouteImport.update({
     id: "/security/",
@@ -720,6 +726,7 @@ export interface FileRoutesByFullPath {
   "/routines/": typeof AuthedTenantRoutinesIndexRoute;
   "/scheduled-jobs/": typeof AuthedTenantScheduledJobsIndexRoute;
   "/security/": typeof AuthedTenantSecurityIndexRoute;
+  "/slack/": typeof AuthedTenantSlackIndexRoute;
   "/threads/": typeof AuthedTenantThreadsIndexRoute;
   "/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki/": typeof AuthedTenantWikiIndexRoute;
@@ -812,6 +819,7 @@ export interface FileRoutesByTo {
   "/routines": typeof AuthedTenantRoutinesIndexRoute;
   "/scheduled-jobs": typeof AuthedTenantScheduledJobsIndexRoute;
   "/security": typeof AuthedTenantSecurityIndexRoute;
+  "/slack": typeof AuthedTenantSlackIndexRoute;
   "/threads": typeof AuthedTenantThreadsIndexRoute;
   "/webhooks": typeof AuthedTenantWebhooksIndexRoute;
   "/wiki": typeof AuthedTenantWikiIndexRoute;
@@ -911,6 +919,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/routines/": typeof AuthedTenantRoutinesIndexRoute;
   "/_authed/_tenant/scheduled-jobs/": typeof AuthedTenantScheduledJobsIndexRoute;
   "/_authed/_tenant/security/": typeof AuthedTenantSecurityIndexRoute;
+  "/_authed/_tenant/slack/": typeof AuthedTenantSlackIndexRoute;
   "/_authed/_tenant/threads/": typeof AuthedTenantThreadsIndexRoute;
   "/_authed/_tenant/webhooks/": typeof AuthedTenantWebhooksIndexRoute;
   "/_authed/_tenant/wiki/": typeof AuthedTenantWikiIndexRoute;
@@ -1009,6 +1018,7 @@ export interface FileRouteTypes {
     | "/routines/"
     | "/scheduled-jobs/"
     | "/security/"
+    | "/slack/"
     | "/threads/"
     | "/webhooks/"
     | "/wiki/"
@@ -1101,6 +1111,7 @@ export interface FileRouteTypes {
     | "/routines"
     | "/scheduled-jobs"
     | "/security"
+    | "/slack"
     | "/threads"
     | "/webhooks"
     | "/wiki"
@@ -1199,6 +1210,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/routines/"
     | "/_authed/_tenant/scheduled-jobs/"
     | "/_authed/_tenant/security/"
+    | "/_authed/_tenant/slack/"
     | "/_authed/_tenant/threads/"
     | "/_authed/_tenant/webhooks/"
     | "/_authed/_tenant/wiki/"
@@ -1389,6 +1401,13 @@ declare module "@tanstack/react-router" {
       path: "/threads";
       fullPath: "/threads/";
       preLoaderRoute: typeof AuthedTenantThreadsIndexRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/slack/": {
+      id: "/_authed/_tenant/slack/";
+      path: "/slack";
+      fullPath: "/slack/";
+      preLoaderRoute: typeof AuthedTenantSlackIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/security/": {
@@ -2076,6 +2095,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantRoutinesIndexRoute: typeof AuthedTenantRoutinesIndexRoute;
   AuthedTenantScheduledJobsIndexRoute: typeof AuthedTenantScheduledJobsIndexRoute;
   AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute;
+  AuthedTenantSlackIndexRoute: typeof AuthedTenantSlackIndexRoute;
   AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute;
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute;
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute;
@@ -2150,6 +2170,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantRoutinesIndexRoute: AuthedTenantRoutinesIndexRoute,
   AuthedTenantScheduledJobsIndexRoute: AuthedTenantScheduledJobsIndexRoute,
   AuthedTenantSecurityIndexRoute: AuthedTenantSecurityIndexRoute,
+  AuthedTenantSlackIndexRoute: AuthedTenantSlackIndexRoute,
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,

@@ -2069,6 +2069,7 @@ export type Mutation = {
   setRoutineTrigger: RoutineTrigger;
   startEvalRun: EvalRun;
   startSkillRun: SkillRun;
+  startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   /** Sync template config + workspace files to a linked agent. idempotencyKey optional. */
@@ -2077,6 +2078,7 @@ export type Mutation = {
   syncTemplateToAllAgents: SyncSummary;
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineExecution;
+  uninstallSlackWorkspace: SlackWorkspace;
   unpauseAgent: Agent;
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgent: Agent;
@@ -2853,6 +2855,11 @@ export type MutationStartSkillRunArgs = {
 };
 
 
+export type MutationStartSlackWorkspaceInstallArgs = {
+  input: StartSlackWorkspaceInstallInput;
+};
+
+
 export type MutationSubmitRunFeedbackArgs = {
   input: SubmitRunFeedbackInput;
 };
@@ -2885,6 +2892,11 @@ export type MutationToggleAgentEmailChannelArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationUninstallSlackWorkspaceArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -3313,6 +3325,7 @@ export type Query = {
   skillCatalog: Array<SkillCatalogItem>;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
+  slackWorkspaces: Array<SlackWorkspace>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -3929,6 +3942,11 @@ export type QuerySkillRunsArgs = {
   skillId?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySlackWorkspacesArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4692,6 +4710,29 @@ export type SkillRun = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type SlackWorkspace = {
+  __typename?: 'SlackWorkspace';
+  appId: Scalars['String']['output'];
+  botUserId: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  installedAt: Scalars['AWSDateTime']['output'];
+  installedByUserId?: Maybe<Scalars['ID']['output']>;
+  slackTeamId: Scalars['String']['output'];
+  slackTeamName?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  uninstalledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SlackWorkspaceInstallStart = {
+  __typename?: 'SlackWorkspaceInstallStart';
+  authorizeUrl: Scalars['AWSURL']['output'];
+  expiresAt: Scalars['AWSDateTime']['output'];
+  state: Scalars['String']['output'];
+};
+
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
@@ -4709,6 +4750,12 @@ export type StartSkillRunInput = {
   skillId: Scalars['String']['input'];
   skillVersion?: InputMaybe<Scalars['Int']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export type StartSlackWorkspaceInstallInput = {
+  redirectUri?: InputMaybe<Scalars['AWSURL']['input']>;
+  returnUrl?: InputMaybe<Scalars['AWSURL']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type StatusCount = {
