@@ -2547,6 +2547,7 @@ export const EvalRunsQuery = gql`
         agentName
         agentTemplateId
         agentTemplateName
+        scheduledJobId
         startedAt
         completedAt
         createdAt
@@ -2572,6 +2573,9 @@ export const EvalRunQuery = gql`
       errorMessage
       agentId
       agentName
+      agentTemplateId
+      agentTemplateName
+      scheduledJobId
       startedAt
       completedAt
       createdAt

@@ -536,6 +536,7 @@ describe("job-trigger eval_scheduled", () => {
         tenant_id: "T1",
         agent_id: null,
         agent_template_id: "computer-template-1",
+        scheduled_job_id: "job-eval-1",
         status: "pending",
         model: "anthropic.claude-haiku-4-5",
         categories: ["performance-computer"],

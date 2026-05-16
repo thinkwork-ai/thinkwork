@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U10. Eval schedule form on existing ScheduledJobFormDialog
-- Branch: `codex/evals-overhaul-u10-schedules`
-- Worktree: `.Codex/worktrees/evals-overhaul-u10-schedules`
-- State: PR #1267 open; waiting for required checks
+- Unit: U11. Schedule provenance
+- Branch: `codex/evals-overhaul-u11-provenance`
+- Worktree: `.Codex/worktrees/evals-overhaul-u11-provenance`
+- State: PR #1268 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -85,6 +85,12 @@ status: active
 - 2026-05-16: Extended `/automations/schedules?type=eval_scheduled` filtering, row labeling, edit prefill, and the immediate Admin UI "Run Evaluation" dialog so both Computer templates and Agent templates can be evaluated.
 - 2026-05-16: Local U10 verification passed: focused admin/API/Lambda tests, Admin/API/Lambda builds, `git diff --check`, and Prettier check for the newly formatted admin/Lambda files. Full touched-file Prettier check was skipped for pre-existing non-Prettier files (`scheduled-jobs.ts`, `scheduled-jobs.fire.test.ts`, and the schedule detail route) to avoid formatting-only churn.
 - 2026-05-16: Opened PR #1267 for U10.
+- 2026-05-16: PR #1267 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Created clean U11 worktree from `origin/main`.
+- 2026-05-16: Added manual migration `0093_eval_runs_scheduled_job_id.sql` with column, FK constraint, and index drift markers; applied it to dev and verified the column, FK, and index exist.
+- 2026-05-16: Wired scheduled eval provenance into `job-trigger` and manual schedule fire, exposed `scheduledJobId` on `EvalRun`, regenerated CLI/mobile GraphQL types, and added the Admin Recent Runs schedule badge linking to the scheduled job detail.
+- 2026-05-16: Local U11 verification passed: schema build, database/API/Lambda/Admin builds, focused Admin/API/Lambda tests, CLI typecheck, mobile tests, job-trigger Lambda bundle, dev manual-migration drift probe, and `git diff --check`. Admin codegen remains blocked by the same pre-existing configured-extension GraphQL documents noted in U9.
+- 2026-05-16: Opened PR #1268 for U11.
 
 ## Pull Requests
 
@@ -100,7 +106,8 @@ status: active
 | U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                   |
 | U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                             |
 | U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                       |
-| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | pending | pending | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection                                  |
+| U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed        |
+| U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | pending | pending | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge                         |
 
 ## CI Failures
 
@@ -174,6 +181,24 @@ status: active
 - `pnpm --filter @thinkwork/lambda build` - passed for U10.
 - Prettier check for newly formatted admin/Lambda files - passed for U10. Full touched-file check intentionally skipped for pre-existing non-Prettier files to avoid formatting-only churn.
 - `git diff --check` - passed for U10.
+- `pnpm schema:build` - passed for U11.
+- `pnpm --filter @thinkwork/database-pg build` - passed for U11.
+- `pnpm --filter thinkwork-cli codegen` - passed for U11.
+- `pnpm --filter @thinkwork/mobile codegen` - passed for U11.
+- `pnpm --filter @thinkwork/admin codegen` - blocked for U11 by pre-existing configured-extension documents (`SpendPeriod`, `currentQueue`, `dispatchState`, `workflowVersions`, `currentSpend`, `pauseDispatch`, `resumeDispatch`) not present in the checked-in GraphQL schema.
+- Dev apply of `packages/database-pg/drizzle/0093_eval_runs_scheduled_job_id.sql` - passed for U11; verified column type `uuid`, FK `eval_runs_scheduled_job_id_scheduled_jobs_id_fk`, and index `idx_eval_runs_scheduled_job_id`.
+- `DATABASE_URL="$DATABASE_URL" bash scripts/db-migrate-manual.sh | rg -A3 -B2 "0093_eval_runs_scheduled_job_id|idx_eval_runs_scheduled_job_id|scheduled_job_id"` - passed for U11 marker visibility.
+- `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/evaluations/-result-detail.test.ts` - passed for U11.
+- `pnpm --filter @thinkwork/api test -- index.test.ts scheduled-jobs.fire.test.ts` - passed for U11.
+- `pnpm --filter @thinkwork/lambda test -- job-trigger.skill-run.test.ts` - passed for U11.
+- `pnpm --filter @thinkwork/admin build` - passed for U11 with pre-existing Vite sourcemap/chunk warnings.
+- `pnpm --filter @thinkwork/api build` - passed for U11.
+- `pnpm --filter @thinkwork/lambda build` - passed for U11.
+- `pnpm --filter thinkwork-cli typecheck` - passed for U11.
+- `pnpm --filter @thinkwork/mobile test` - passed for U11.
+- `bash scripts/build-lambdas.sh job-trigger` - passed for U11.
+- Prettier check for newly formatted admin/Lambda files - passed for U11. Full touched-file check intentionally skipped for pre-existing non-Prettier files and SQL parser limits.
+- `git diff --check` - passed for U11.
 - `git diff --check` - passed for U7.
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
 - `pnpm --filter @thinkwork/api build` - passed for U8.

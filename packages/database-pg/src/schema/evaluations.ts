@@ -27,6 +27,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
 import { agentTemplates } from "./agent-templates";
+import { scheduledJobs } from "./scheduled-jobs";
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -103,6 +104,9 @@ export const evalRuns = pgTable(
 		// agent loads for every test case in this run, unless the test
 		// case overrides via its own agent_template_id.
 		agent_template_id: uuid("agent_template_id").references(() => agentTemplates.id),
+		scheduled_job_id: uuid("scheduled_job_id").references(() => scheduledJobs.id, {
+			onDelete: "set null",
+		}),
 		status: text("status").notNull().default("pending"), // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 		model: text("model"), // model_id used for the agent under test (informational)
 		categories: text("categories").array().notNull().default(sql`'{}'::text[]`),
@@ -131,6 +135,7 @@ export const evalRuns = pgTable(
 			table.created_at,
 		),
 		index("idx_eval_runs_tenant_status").on(table.tenant_id, table.status),
+		index("idx_eval_runs_scheduled_job_id").on(table.scheduled_job_id),
 	],
 );
 
@@ -213,6 +218,10 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
 	agentTemplate: one(agentTemplates, {
 		fields: [evalRuns.agent_template_id],
 		references: [agentTemplates.id],
+	}),
+	scheduledJob: one(scheduledJobs, {
+		fields: [evalRuns.scheduled_job_id],
+		references: [scheduledJobs.id],
 	}),
 	results: many(evalResults),
 }));

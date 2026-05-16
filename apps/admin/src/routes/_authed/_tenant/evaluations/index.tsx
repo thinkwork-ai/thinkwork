@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Beaker,
   Calendar,
+  CalendarClock,
   Loader2,
   Play,
   ShieldCheck,
@@ -118,6 +119,7 @@ type RunRow = {
   categories: string[];
   agentTemplateId: string | null;
   agentTemplateName: string | null;
+  scheduledJobId: string | null;
   passed: number | null;
   failed: number | null;
   totalTests: number | null;
@@ -164,6 +166,30 @@ const runsColumns: ColumnDef<RunRow>[] = [
       if (!name)
         return <span className="text-xs text-muted-foreground">—</span>;
       return <span className="text-sm whitespace-nowrap">{name}</span>;
+    },
+  },
+  {
+    accessorKey: "scheduledJobId",
+    header: "Source",
+    cell: ({ row }) => {
+      const scheduledJobId = row.original.scheduledJobId;
+      if (!scheduledJobId)
+        return <span className="text-xs text-muted-foreground">Manual</span>;
+      return (
+        <Link
+          to="/automations/schedules/$scheduledJobId"
+          params={{ scheduledJobId }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400"
+          >
+            <CalendarClock className="h-3 w-3" />
+            Schedule
+          </Badge>
+        </Link>
+      );
     },
   },
   {

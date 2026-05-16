@@ -500,6 +500,7 @@ async function fireScheduledJob(
 			tenant_id: tenantId,
 			agent_id: cfg.agentId ?? trig.agent_id ?? null,
 			agent_template_id: cfg.agentTemplateId ?? null,
+			scheduled_job_id: trig.id,
 			status: "pending",
 			model: cfg.model ?? null,
 			categories: cfg.categories ?? [],

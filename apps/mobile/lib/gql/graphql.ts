@@ -1457,6 +1457,7 @@ export type EvalRun = {
   passRate?: Maybe<Scalars['Float']['output']>;
   passed: Scalars['Int']['output'];
   regression: Scalars['Boolean']['output'];
+  scheduledJobId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
