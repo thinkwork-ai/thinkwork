@@ -17,17 +17,18 @@ Target branch: `main`
 - **U1 — Database schema: Slack tables**
 - Branch: `codex/slack-workspace-u1-schema`
 - Worktree: `.Codex/worktrees/slack-workspace-u1-schema`
-- Status: locally verified; preparing PR
+- PR: [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273)
+- Status: PR open; watching CI
 
 ### Progress Log
 
-| Date       | Unit | Branch                            | PR  | Status           | Verification                                                                                                                                                                                                                        | Notes                                                                                                                                                                                                              |
-| ---------- | ---- | --------------------------------- | --- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-05-16 | U1   | `codex/slack-workspace-u1-schema` | TBD | Locally verified | `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0094_slack_workspace_app.sql`; touched-file Prettier check | Added `slack_workspaces`, `slack_user_links`, and `slack_threads` schema plus migration tests. `db:generate` attempted but Drizzle stopped at an existing interactive schema-conflict prompt before writing files. |
+| Date       | Unit | Branch                            | PR                                                           | Status               | Verification                                                                                                                                                                                                                        | Notes                                                                                                                                                                                                              |
+| ---------- | ---- | --------------------------------- | ------------------------------------------------------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-05-16 | U1   | `codex/slack-workspace-u1-schema` | [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273) | PR open; watching CI | `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0094_slack_workspace_app.sql`; touched-file Prettier check | Added `slack_workspaces`, `slack_user_links`, and `slack_threads` schema plus migration tests. `db:generate` attempted but Drizzle stopped at an existing interactive schema-conflict prompt before writing files. |
 
 ### CI / Merge Log
 
-- No PRs opened yet.
+- Opened [#1273](https://github.com/thinkwork-ai/thinkwork/pull/1273); checks pending.
 
 ### Blockers
 
