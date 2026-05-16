@@ -28,8 +28,11 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 const PASS_THRESHOLD = 0.7;
 const BUILT_IN_EVALUATOR_INPUT_USD_PER_1K = 0.0024;
 const BUILT_IN_EVALUATOR_OUTPUT_USD_PER_1K = 0.012;
+// Keep this below the eval-worker Lambda timeout so slow Computer turns
+// are recorded as per-case eval errors instead of timing out the worker
+// process and leaving the run permanently "running".
 const COMPUTER_TASK_TIMEOUT_MS = Number(
-  process.env.EVAL_COMPUTER_TASK_TIMEOUT_MS ?? 480_000,
+  process.env.EVAL_COMPUTER_TASK_TIMEOUT_MS ?? 210_000,
 );
 const COMPUTER_TASK_POLL_INTERVAL_MS = Number(
   process.env.EVAL_COMPUTER_TASK_POLL_INTERVAL_MS ?? 2_000,
