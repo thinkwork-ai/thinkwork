@@ -141,6 +141,7 @@ describe("Computer task helpers", () => {
       fileRefs: [{ id: "F123", name: "brief.pdf" }],
       responseUrl: null,
       placeholderTs: null,
+      modalViewId: null,
       actorType: "user",
       actorId: "user-1",
     });
@@ -174,6 +175,42 @@ describe("Computer task helpers", () => {
         channelType: "slash",
         eventId: "slash:trigger-1",
         responseUrl: "https://hooks.slack.com/commands/response",
+        actorType: "user",
+        actorId: "user-1",
+      }),
+    );
+  });
+
+  it("preserves Slack message-action modal metadata", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        source: "slack",
+        channelType: "message_action",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        channelId: "C123",
+        threadTs: "1710000000.000000",
+        messageTs: "1710000001.000000",
+        eventId: "message_action:trigger-1",
+        sourceMessage: {
+          text: "review this",
+          ts: "1710000001.000000",
+          user: "U456",
+          channel: "C123",
+          team: "T123",
+          permalink: null,
+        },
+        responseUrl: "https://hooks.slack.com/actions/response",
+        modalViewId: "V123",
+        actorId: "user-1",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        source: "slack",
+        channelType: "message_action",
+        eventId: "message_action:trigger-1",
+        responseUrl: "https://hooks.slack.com/actions/response",
+        modalViewId: "V123",
         actorType: "user",
         actorId: "user-1",
       }),
