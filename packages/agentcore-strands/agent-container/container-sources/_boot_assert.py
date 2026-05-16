@@ -66,6 +66,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "skill_resolver",
     "skill_runner",
     "skill_session_pool",
+    "slack_post_back",
     "ui_message_publisher",
     "update_agent_name_tool",
     "update_identity_tool",

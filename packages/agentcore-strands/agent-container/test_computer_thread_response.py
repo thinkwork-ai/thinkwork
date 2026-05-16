@@ -57,8 +57,7 @@ def test_record_thread_turn_response_posts_to_runtime_endpoint():
 
     assert result["responseMessageId"] == "assistant-message-1"
     assert captured["url"] == (
-        "https://api.example.test/api/computers/runtime/tasks/"
-        "task-1/thread-turn-response"
+        "https://api.example.test/api/computers/runtime/tasks/task-1/thread-turn-response"
     )
     assert captured["headers"]["Authorization"] == "Bearer service-secret"
     assert captured["body"] == {
@@ -68,6 +67,27 @@ def test_record_thread_turn_response_posts_to_runtime_endpoint():
         "model": "model-1",
         "usage": {"input_tokens": 3},
     }
+
+
+def test_record_thread_turn_response_can_tag_source():
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse({"responded": True})
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        record_thread_turn_response(
+            tenant_id="tenant-1",
+            computer_id="computer-1",
+            task_id="task-1",
+            content="Final answer",
+            source="slack",
+            api_url="https://api.example.test/",
+            api_secret="service-secret",
+        )
+
+    assert captured["body"]["source"] == "slack"
 
 
 def test_record_thread_turn_response_rejects_4xx_without_retry():

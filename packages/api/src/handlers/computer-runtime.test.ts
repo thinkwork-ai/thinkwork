@@ -436,6 +436,7 @@ describe("computer-runtime handler", () => {
       taskId: TASK_ID,
       content: "Assistant reply",
       model: "model-1",
+      source: null,
       usage: { inputTokens: 3 },
     });
     expect(JSON.parse(response.body ?? "{}")).toMatchObject({
@@ -467,6 +468,7 @@ describe("computer-runtime handler", () => {
       taskId: TASK_ID,
       content: "",
       model: null,
+      source: null,
       usage: undefined,
     });
   });

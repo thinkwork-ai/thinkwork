@@ -634,6 +634,7 @@ export async function recordThreadTurnResponse(input: {
   taskId: string;
   content: string;
   model?: string | null;
+  source?: string | null;
   usage?: unknown;
 }) {
   const task = await loadTask(input.tenantId, input.computerId, input.taskId);
@@ -644,6 +645,11 @@ export async function recordThreadTurnResponse(input: {
   }
 
   const payload = threadTurnPayload(task.input);
+  if (input.source && input.source !== payload.source) {
+    throw new ComputerTaskDelegationError(
+      `Thread response source ${input.source} does not match task source ${payload.source}`,
+    );
+  }
   const { thread, message } = await loadComputerThreadTurn({
     tenantId: input.tenantId,
     computerId: input.computerId,
@@ -848,6 +854,7 @@ export async function recordThreadTurnResponse(input: {
     payload: {
       responseMessageId: assistantMessage.id,
       threadId: thread.id,
+      source: payload.source,
     },
   });
 

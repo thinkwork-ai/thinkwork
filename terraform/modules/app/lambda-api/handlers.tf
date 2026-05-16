@@ -1179,6 +1179,25 @@ resource "aws_scheduler_schedule" "computer_runtime_reconciler" {
   }
 }
 
+resource "aws_scheduler_schedule" "slack_dispatch" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-slack-dispatch"
+  group_name          = "default"
+  schedule_expression = "rate(1 minute)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["slack-dispatch"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ limit = 25 })
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Compounding Memory — nightly hygiene + export
 # ---------------------------------------------------------------------------
