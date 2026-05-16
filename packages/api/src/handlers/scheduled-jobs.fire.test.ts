@@ -290,19 +290,28 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 		expect(mocks.insertIntoAgentWakeupRequests).not.toHaveBeenCalled();
 	});
 
-	it("manual-fires eval schedules against agent or computer template ids", async () => {
+	it("manual-fires eval schedules against running Computers", async () => {
 		mocks.selectFromScheduledJobs.mockResolvedValue(
 			schedRow({
 				trigger_type: "eval_scheduled",
 				agent_id: null,
 				computer_id: null,
 				config: {
-					agentTemplateId: "computer-template-1",
+					computerId: COMPUTER_ID,
 					model: "anthropic.claude-haiku-4-5",
 					categories: ["performance-computer"],
 				},
 			}),
 		);
+		mocks.selectFromComputers.mockResolvedValue([
+			{
+				id: COMPUTER_ID,
+				templateId: "computer-template-1",
+				runtimeStatus: "running",
+				primaryAgentId: "computer-agent-1",
+				migratedFromAgentId: null,
+			},
+		]);
 
 		const response = await handler(fireEvent());
 
@@ -310,7 +319,8 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 		expect(mocks.insertIntoEvalRuns).toHaveBeenCalledWith({
 			values: expect.objectContaining({
 				tenant_id: TENANT_ID,
-				agent_id: null,
+				agent_id: "computer-agent-1",
+				computer_id: COMPUTER_ID,
 				agent_template_id: "computer-template-1",
 				scheduled_job_id: TRIGGER_ID,
 				status: "pending",

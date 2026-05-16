@@ -10,14 +10,14 @@ status: active
 
 ## Current Unit
 
-- Unit: U14. Eval cost/runtime optimization follow-up
-- Branch: `codex/evals-cost-runtime-optimization`
-- Worktree: `.Codex/worktrees/evals-cost-runtime-optimization`
-- State: PR #1274 open; waiting for required checks
+- Unit: U15. Computer task eval execution follow-up
+- Branch: `codex/evals-computer-task-execution`
+- Worktree: `.Codex/worktrees/evals-computer-task-execution`
+- State: PR #1278 open; waiting for required checks
 
 ## Final Proof Request
 
-- After all implementation units are merged and deployed, run a full end-to-end evaluation from the Admin UI, watch it reach a terminal state, open the run detail, and capture the result surface so the current eval system state is visible.
+- After U15 is merged and deployed, run a small RedTeam category from the Admin UI against the Marco running Computer in the Marco workspace, watch the detail view show per-test status rows while running, wait for a terminal state, and capture the result surface so the current RedTeam eval state is visible.
 
 ## Progress Log
 
@@ -111,6 +111,15 @@ status: active
 - 2026-05-16: Implemented U14: Admin manual evals and scheduled evals now target running Computers, scheduled trigger execution resolves the Computer's primary agent/template, interactive worker scoring skips expensive AgentCore built-in evaluators by default, and built-in evaluator cost accounting now uses AWS input/output token rates.
 - 2026-05-16: Local U14 verification passed: schema build, API resolver/worker tests, scheduled-job Admin test, job-trigger Lambda test, API/Admin/CLI/Lambda/database builds or typechecks, mobile codegen/test, Lambda bundles for graphql-http/eval-worker/job-trigger, Terraform fmt, and `git diff --check`. Admin codegen remains blocked by the pre-existing configured-extension GraphQL documents noted in U9/U11.
 - 2026-05-16: Opened PR #1274 for U14.
+- 2026-05-16: PR #1274 required checks passed, was squash-merged to `main`, the U14 branch/worktree was cleaned up, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Admin UI hard-refresh confirmed U14 was deployed: the run dialog targets running Computers and no longer offers invocation mode or generic Agent-template eval targets.
+- 2026-05-16: A small Marco proof run against `performance-computer` exposed a substrate bug before the operator redirected proof to RedTeam: run `0cd95526-54a7-4e4a-8429-3b7f5d28364c` completed 0/5 with zero cost because every worker result errored. CloudWatch showed Marco's Flue runtime rejected the direct eval-worker payload with missing `tenant_id`, `user_id`, and `thread_id`, confirming eval workers must execute through the selected Computer's normal thread/task delegation path.
+- 2026-05-16: Operator follow-up: focus proof and optimization on RedTeam evals, use the Marco workspace, start with a small category, and evaluate agent behavior only through the running Computer.
+- 2026-05-16: Created clean U15 worktree from `origin/main`.
+- 2026-05-16: Implemented U15: `eval_runs` now persists `computer_id`; manual and scheduled eval creation record the selected Computer; eval-worker now creates an eval thread/message, enqueues the Computer thread turn, waits for the resulting `computer_tasks` row, and scores the completed Computer response instead of invoking AgentCore directly. The Computer dispatcher now also prefers `primary_agent_id` and falls back to `migrated_from_agent_id`, so evals are not limited to migrated Computers.
+- 2026-05-16: Added manual migration `0095_eval_runs_computer_id.sql`, applied it to dev, and verified the `computer_id` column, FK, and tenant/computer/created index exist.
+- 2026-05-16: Local U15 verification passed: schema build, focused API resolver/worker/scheduled-job tests, Lambda job-trigger test, API/database/API/Lambda/CLI builds or typechecks, CLI/mobile codegen, mobile tests, eval-worker/graphql-http/job-trigger Lambda bundles, dev manual-migration drift probe, touched-file Prettier check for formatted files, and `git diff --check`.
+- 2026-05-16: Opened PR #1278 for U15.
 
 ## Pull Requests
 
@@ -130,7 +139,8 @@ status: active
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
 | U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
 | U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
-| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | pending | pending | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring   |
+| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | passed  | merged  | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring; post-merge Deploy passed |
+| U15    | `codex/evals-computer-task-execution`          | [#1278](https://github.com/thinkwork-ai/thinkwork/pull/1278) | pending | pending | Follow-up: execute eval cases through the selected running Computer's thread/task path; dev migration applied and verified         |
 
 ## CI Failures
 
@@ -241,6 +251,21 @@ status: active
 - `bash scripts/db-migrate-manual.sh --dry-run | rg -A2 -B1 "0089_remove_maniflow_eval_seeds|view_eval_seed_maniflow_cleanup"` - passed for U8 marker visibility.
 - Dev U8 cleanup SQL apply - passed; final legacy `yaml-seed` category count is 0 and marker view row count is 1.
 - `git diff --check` - passed for U8.
+- `pnpm schema:build` - passed for U15.
+- `pnpm --filter @thinkwork/api test -- eval-worker.test.ts src/graphql/resolvers/evaluations/index.test.ts scheduled-jobs.fire.test.ts` - passed for U15.
+- `pnpm --filter @thinkwork/lambda test -- job-trigger.skill-run.test.ts` - passed for U15.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U15.
+- `pnpm --filter @thinkwork/database-pg build` - passed for U15.
+- `pnpm --filter @thinkwork/api build` - passed for U15.
+- `pnpm --filter @thinkwork/lambda build` - passed for U15.
+- `pnpm --filter thinkwork-cli codegen` - passed for U15.
+- `pnpm --filter @thinkwork/mobile codegen` - passed for U15.
+- `pnpm --filter thinkwork-cli typecheck` - passed for U15.
+- `pnpm --filter thinkwork-cli build` - passed for U15.
+- `pnpm --filter @thinkwork/mobile test` - passed for U15.
+- `bash scripts/build-lambdas.sh eval-worker && bash scripts/build-lambdas.sh graphql-http && bash scripts/build-lambdas.sh job-trigger` - passed for U15.
+- Dev apply and drift probe for `packages/database-pg/drizzle/0095_eval_runs_computer_id.sql` - passed for U15.
+- `git diff --check` - passed for U15.
 
 ## Blockers
 

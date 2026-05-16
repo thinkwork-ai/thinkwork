@@ -38,8 +38,10 @@ describe("Computer-owned thread turn routing", () => {
 
     expect(threadCutoverSource).toContain("invokeChatAgent");
     expect(threadCutoverSource).toContain("ensureArtifactBuilderDefaults");
-    expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
-    expect(threadCutoverSource).toContain('runtime: "strands"');
+		expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
+		expect(threadCutoverSource).toContain("computer?.primary_agent_id");
+		expect(threadCutoverSource).toContain("computer?.migrated_from_agent_id");
+		expect(threadCutoverSource).toContain('runtime: "strands"');
     expect(threadCutoverSource).toContain("artifact_builder_defaults_seeded");
     expect(threadCutoverSource).toContain("thread_turn_dispatched");
     expect(chatInvokeSource).toMatch(

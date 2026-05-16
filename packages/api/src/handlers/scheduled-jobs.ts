@@ -493,13 +493,54 @@ async function fireScheduledJob(
 		const cfg = (trig.config ?? {}) as {
 			agentId?: string;
 			agentTemplateId?: string;
+			computerId?: string;
 			model?: string;
 			categories?: string[];
 		};
+		let targetComputerId: string | null = null;
+		let targetAgentId: string | null = null;
+		let targetTemplateId: string | null = null;
+		if (cfg.computerId) {
+			const [computer] = await db
+				.select({
+					id: computers.id,
+					templateId: computers.template_id,
+					runtimeStatus: computers.runtime_status,
+					primaryAgentId: computers.primary_agent_id,
+					migratedFromAgentId: computers.migrated_from_agent_id,
+				})
+				.from(computers)
+				.where(
+					and(
+						eq(computers.id, cfg.computerId),
+						eq(computers.tenant_id, tenantId),
+					),
+				)
+				.limit(1);
+			if (!computer || computer.runtimeStatus !== "running") {
+				return error(
+					!computer
+						? "Scheduled eval Computer not found"
+						: "Scheduled eval Computer is not running",
+					409,
+				);
+			}
+			targetComputerId = computer.id;
+			targetAgentId =
+				computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
+			targetTemplateId = computer.templateId;
+		}
+		if (!targetComputerId || !targetAgentId) {
+			return error(
+				"Scheduled evals must target a running Computer with a primary agent.",
+				409,
+			);
+		}
 		const [run] = await db.insert(evalRuns).values({
 			tenant_id: tenantId,
-			agent_id: cfg.agentId ?? trig.agent_id ?? null,
-			agent_template_id: cfg.agentTemplateId ?? null,
+			agent_id: targetAgentId,
+			computer_id: targetComputerId,
+			agent_template_id: targetTemplateId,
 			scheduled_job_id: trig.id,
 			status: "pending",
 			model: cfg.model ?? null,

@@ -547,6 +547,7 @@ describe("job-trigger eval_scheduled", () => {
       expect.objectContaining({
         tenant_id: "T1",
         agent_id: "computer-agent-1",
+        computer_id: "computer-1",
         agent_template_id: "computer-template-1",
         scheduled_job_id: "job-eval-1",
         status: "pending",
