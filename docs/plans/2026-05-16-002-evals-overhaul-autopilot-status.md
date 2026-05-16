@@ -10,14 +10,15 @@ status: active
 
 ## Current Unit
 
-- Unit: U14. Eval cost/runtime optimization follow-up
-- Branch: `codex/evals-cost-runtime-optimization`
-- Worktree: `.Codex/worktrees/evals-cost-runtime-optimization`
-- State: PR #1274 open; waiting for required checks
+- Unit: Final proof
+- Branch: `codex/evals-status-finalize`
+- Worktree: `.Codex/worktrees/evals-status-finalize`
+- State: U14 merged and deployed; preparing final Admin UI proof against a running Computer
 
 ## Final Proof Request
 
 - After all implementation units are merged and deployed, run a full end-to-end evaluation from the Admin UI, watch it reach a terminal state, open the run detail, and capture the result surface so the current eval system state is visible.
+- Proof runs should target a running Computer. Agent behavior is covered through Computer delegation, not through separate generic-agent eval runs.
 
 ## Progress Log
 
@@ -111,6 +112,7 @@ status: active
 - 2026-05-16: Implemented U14: Admin manual evals and scheduled evals now target running Computers, scheduled trigger execution resolves the Computer's primary agent/template, interactive worker scoring skips expensive AgentCore built-in evaluators by default, and built-in evaluator cost accounting now uses AWS input/output token rates.
 - 2026-05-16: Local U14 verification passed: schema build, API resolver/worker tests, scheduled-job Admin test, job-trigger Lambda test, API/Admin/CLI/Lambda/database builds or typechecks, mobile codegen/test, Lambda bundles for graphql-http/eval-worker/job-trigger, Terraform fmt, and `git diff --check`. Admin codegen remains blocked by the pre-existing configured-extension GraphQL documents noted in U9/U11.
 - 2026-05-16: Opened PR #1274 for U14.
+- 2026-05-16: PR #1274 required checks passed, was squash-merged to `main`, the remote and local branches/worktree were cleaned up, and post-merge `main` Deploy passed.
 
 ## Pull Requests
 
@@ -130,7 +132,7 @@ status: active
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
 | U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
 | U13    | `codex/evals-running-detail-rows`              | [#1272](https://github.com/thinkwork-ai/thinkwork/pull/1272) | passed  | merged  | Follow-up: show planned eval rows and per-test statuses while a run is still in progress; post-merge Deploy passed                 |
-| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | pending | pending | Follow-up: target running Computers, correct built-in evaluator token pricing, and default interactive evals to in-house scoring   |
+| U14    | `codex/evals-cost-runtime-optimization`        | [#1274](https://github.com/thinkwork-ai/thinkwork/pull/1274) | passed  | merged  | Follow-up: target running Computers, correct built-in evaluator token pricing, default interactive evals to in-house scoring, and post-merge Deploy passed |
 
 ## CI Failures
 
