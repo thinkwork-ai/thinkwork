@@ -13,7 +13,7 @@ status: active
 - Unit: U1. Stall-probe and findings doc
 - Branch: `codex/evals-overhaul-u1-stall-probe`
 - Worktree: `.Codex/worktrees/evals-overhaul-u1-stall-probe`
-- State: PR open, waiting for CI
+- State: PR open, CI passed, ready to merge
 
 ## Progress Log
 
@@ -22,12 +22,13 @@ status: active
 - 2026-05-16: Ran dev probes against stuck run `b945fc4d-c811-4c60-bec5-56e5bd2aabad`; findings recorded in `docs/solutions/diagnostics/eval-runner-stall-findings-2026-05-16.md`.
 - 2026-05-16: Local verification passed: probe help, live dev probe, API typecheck, eval-runner unit test, and `git diff --check`.
 - 2026-05-16: Opened PR #1252 for U1.
+- 2026-05-16: PR #1252 required checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.
 
 ## Pull Requests
 
 | Unit | Branch | PR | CI | Merge | Notes |
 | --- | --- | --- | --- | --- | --- |
-| U1 | `codex/evals-overhaul-u1-stall-probe` | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | pending | pending | Stall probe script + findings doc |
+| U1 | `codex/evals-overhaul-u1-stall-probe` | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed | pending | Stall probe script + findings doc |
 
 ## CI Failures
 
