@@ -1,7 +1,9 @@
 import {
   ArrowUp,
   Bot,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Code2,
   Database,
   ListChecks,
@@ -13,6 +15,7 @@ import {
 import {
   Children,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -492,6 +495,71 @@ function ProcessingShimmer() {
   );
 }
 
+// 10 lines × leading-7 (28px) of the user bubble's text rhythm.
+const COLLAPSE_MAX_HEIGHT_PX = 280;
+
+function CollapsibleUserMessageBody({ body }: { body: string }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      setIsOverflowing(el.scrollHeight > COLLAPSE_MAX_HEIGHT_PX);
+    };
+
+    measure();
+
+    if (typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [body]);
+
+  if (!body) {
+    return <>(No message content)</>;
+  }
+
+  const collapsed = !isExpanded && isOverflowing;
+
+  return (
+    <>
+      <div
+        ref={wrapperRef}
+        data-testid="collapsible-user-body"
+        data-collapsed={collapsed ? "true" : "false"}
+        className={cn("relative", collapsed && "overflow-hidden")}
+        style={collapsed ? { maxHeight: COLLAPSE_MAX_HEIGHT_PX } : undefined}
+      >
+        {body}
+        {collapsed ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-muted to-transparent"
+          />
+        ) : null}
+      </div>
+      {isOverflowing ? (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {isExpanded ? "Show less" : "Show more"}
+          {isExpanded ? (
+            <ChevronUp className="size-4" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="size-4" aria-hidden="true" />
+          )}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
@@ -517,7 +585,7 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
         }
       >
         {isUser ? (
-          body || "(No message content)"
+          <CollapsibleUserMessageBody body={body} />
         ) : (
           <>
             {actions.length > 0 ? (
