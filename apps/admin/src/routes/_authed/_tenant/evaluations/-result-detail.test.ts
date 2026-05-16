@@ -1,0 +1,85 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  deriveEvalFailureMode,
+  expectedSummary,
+  parseEvaluatorResults,
+  sortEvalSpans,
+} from "./-result-detail";
+
+describe("evaluation result detail helpers", () => {
+  it("classifies a low-scoring evaluator result as judge-fail", () => {
+    const result = {
+      assertions: [],
+      errorMessage: null,
+      evaluatorResults: JSON.stringify([
+        {
+          evaluator_id: "Builtin.Helpfulness",
+          value: 0.4,
+          explanation: "response lacks specificity",
+        },
+      ]),
+      score: 0.4,
+      status: "fail",
+    };
+
+    expect(deriveEvalFailureMode(result)).toBe("judge-fail");
+    expect(parseEvaluatorResults(result.evaluatorResults)[0]?.explanation).toBe(
+      "response lacks specificity",
+    );
+  });
+
+  it("classifies runner timeouts and assertion-only failures distinctly", () => {
+    expect(
+      deriveEvalFailureMode({
+        assertions: [],
+        errorMessage: "AgentCore invocation timeout after 240s",
+        evaluatorResults: [],
+        score: null,
+        status: "error",
+      }),
+    ).toBe("timeout");
+
+    expect(
+      deriveEvalFailureMode({
+        assertions: [{ type: "contains", value: "done", passed: false }],
+        errorMessage: null,
+        evaluatorResults: [],
+        score: 0,
+        status: "fail",
+      }),
+    ).toBe("assertion-fail");
+  });
+
+  it("summarizes assertions and sorts spans chronologically", () => {
+    expect(
+      expectedSummary([
+        { type: "contains", value: "approved" },
+        { type: "llm-rubric", value: "must cite sources" },
+      ]),
+    ).toBe("contains: approved; llm-rubric: must cite sources");
+
+    expect(
+      sortEvalSpans([
+        { timestamp: "2026-05-16T14:02:00.000Z", name: "b", attributes: {} },
+        { timestamp: "2026-05-16T14:01:00.000Z", name: "a", attributes: {} },
+      ]).map((span) => span.name),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("keeps trace loading lazy in the run-detail sheet", () => {
+    const routeSource = readFileSync(
+      new URL("./$runId.tsx", import.meta.url),
+      "utf8",
+    );
+    const querySource = readFileSync(
+      new URL("../../../../lib/graphql-queries.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(routeSource).toContain("EvalResultSpansQuery");
+    expect(routeSource).toContain("setShowTrace((value) => !value)");
+    expect(routeSource).toContain("pause: !traceEnabled");
+    expect(querySource).toContain("query EvalResultSpans");
+  });
+});

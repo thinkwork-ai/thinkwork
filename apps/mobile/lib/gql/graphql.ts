@@ -1483,6 +1483,13 @@ export type EvalRunsPage = {
   totalCount: Scalars['Int']['output'];
 };
 
+export type EvalSpan = {
+  __typename?: 'EvalSpan';
+  attributes: Scalars['AWSJSON']['output'];
+  name: Scalars['String']['output'];
+  timestamp?: Maybe<Scalars['AWSDateTime']['output']>;
+};
+
 export type EvalSummary = {
   __typename?: 'EvalSummary';
   avgPassRate?: Maybe<Scalars['Float']['output']>;
@@ -3226,6 +3233,7 @@ export type Query = {
   costTimeSeries: Array<DailyCostPoint>;
   customizeBindings?: Maybe<CustomizeBindings>;
   deploymentStatus: DeploymentStatus;
+  evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
   evalRuns: EvalRunsPage;
@@ -3630,6 +3638,12 @@ export type QueryCostSummaryArgs = {
 export type QueryCostTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalResultSpansArgs = {
+  runId: Scalars['ID']['input'];
+  testCaseId: Scalars['ID']['input'];
 };
 
 

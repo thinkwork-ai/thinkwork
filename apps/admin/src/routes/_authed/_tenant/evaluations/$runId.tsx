@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Trash2, Square } from "lucide-react";
+import { Activity, ChevronDown, Loader2, Trash2, Square } from "lucide-react";
 import { toast } from "sonner";
 
 import { useTenant } from "@/context/TenantContext";
@@ -33,10 +33,20 @@ import { relativeTime } from "@/lib/utils";
 import {
   EvalRunQuery,
   EvalRunResultsQuery,
+  EvalResultSpansQuery,
   DeleteEvalRunMutation,
   CancelEvalRunMutation,
   OnEvalRunUpdatedSubscription,
 } from "@/lib/graphql-queries";
+import {
+  deriveEvalFailureMode,
+  expectedSummary,
+  parseAssertions,
+  parseEvaluatorResults,
+  parseSpanAttributes,
+  sortEvalSpans,
+  type EvalSpanRow,
+} from "./-result-detail";
 
 export const Route = createFileRoute("/_authed/_tenant/evaluations/$runId")({
   component: EvalRunDetailPage,
@@ -50,6 +60,7 @@ interface EvalResultRow {
   status: string;
   score: number | null;
   durationMs: number | null;
+  agentSessionId: string | null;
   input: string | null;
   expected: string | null;
   actualOutput: string | null;
@@ -63,7 +74,11 @@ function statusBadge(status: string) {
   switch (status) {
     case "pass":
     case "completed":
-      return <Badge className="bg-green-600 hover:bg-green-600 text-white">{status}</Badge>;
+      return (
+        <Badge className="bg-green-600 hover:bg-green-600 text-white">
+          {status}
+        </Badge>
+      );
     case "fail":
     case "failed":
       return <Badge variant="destructive">{status}</Badge>;
@@ -82,7 +97,11 @@ function statusBadge(status: string) {
         </Badge>
       );
     case "waiting":
-      return <Badge variant="secondary" className="text-muted-foreground">waiting</Badge>;
+      return (
+        <Badge variant="secondary" className="text-muted-foreground">
+          waiting
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -93,7 +112,10 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     accessorKey: "testCaseName",
     header: "Test Name",
     cell: ({ row }) => (
-      <p className="text-sm font-medium truncate" title={row.original.testCaseName ?? ""}>
+      <p
+        className="text-sm font-medium truncate"
+        title={row.original.testCaseName ?? ""}
+      >
         {row.original.testCaseName ?? "(unnamed)"}
       </p>
     ),
@@ -104,7 +126,9 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     size: 140,
     cell: ({ row }) =>
       row.original.category ? (
-        <Badge variant="outline" className="text-xs whitespace-nowrap">{row.original.category}</Badge>
+        <Badge variant="outline" className="text-xs whitespace-nowrap">
+          {row.original.category}
+        </Badge>
       ) : null,
   },
   {
@@ -119,7 +143,9 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     size: 70,
     cell: ({ row }) => (
       <span className="text-right tabular-nums">
-        {row.original.score != null ? Number(row.original.score).toFixed(2) : "—"}
+        {row.original.score != null
+          ? Number(row.original.score).toFixed(2)
+          : "—"}
       </span>
     ),
   },
@@ -143,7 +169,9 @@ function EvalRunDetailPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const [, deleteRun] = useMutation(DeleteEvalRunMutation);
-  const [{ fetching: cancelling }, cancelRun] = useMutation(CancelEvalRunMutation);
+  const [{ fetching: cancelling }, cancelRun] = useMutation(
+    CancelEvalRunMutation,
+  );
 
   const [runResult, refetchRun] = useQuery({
     query: EvalRunQuery,
@@ -170,14 +198,18 @@ function EvalRunDetailPage() {
     pause: !tenantId,
   });
   useEffect(() => {
-    if ((evalSub.data as { onEvalRunUpdated?: { runId?: string } } | undefined)?.onEvalRunUpdated?.runId === runId) {
+    if (
+      (evalSub.data as { onEvalRunUpdated?: { runId?: string } } | undefined)
+        ?.onEvalRunUpdated?.runId === runId
+    ) {
       silentRefetch();
     }
   }, [evalSub.data, runId, silentRefetch]);
 
   // Poll every 3s while running
   const runDetail = runResult.data?.evalRun;
-  const isRunning = runDetail?.status === "pending" || runDetail?.status === "running";
+  const isRunning =
+    runDetail?.status === "pending" || runDetail?.status === "running";
   useEffect(() => {
     if (!isRunning) return;
     const interval = setInterval(silentRefetch, 3000);
@@ -192,14 +224,19 @@ function EvalRunDetailPage() {
   const runResults: EvalResultRow[] = resultsResult.data?.evalRunResults ?? [];
 
   const categories = useMemo(
-    () => Array.from(new Set(runResults.map((r) => r.category).filter(Boolean))) as string[],
+    () =>
+      Array.from(
+        new Set(runResults.map((r) => r.category).filter(Boolean)),
+      ) as string[],
     [runResults],
   );
 
   const categoryPassRates = useMemo(() => {
     const map: Record<string, number> = {};
     for (const cat of categories) {
-      const catResults = runResults.filter((r) => r.category === cat && r.status !== "waiting");
+      const catResults = runResults.filter(
+        (r) => r.category === cat && r.status !== "waiting",
+      );
       const catPassed = catResults.filter((r) => r.status === "pass").length;
       map[cat] = catResults.length > 0 ? catPassed / catResults.length : -1;
     }
@@ -230,7 +267,9 @@ function EvalRunDetailPage() {
 
   const completed = (runDetail.passed ?? 0) + (runDetail.failed ?? 0);
   const passRate =
-    completed > 0 ? `${(((runDetail.passed ?? 0) / completed) * 100).toFixed(1)}%` : "—";
+    completed > 0
+      ? `${(((runDetail.passed ?? 0) / completed) * 100).toFixed(1)}%`
+      : "—";
   const dateLabel = runDetail.completedAt
     ? relativeTime(runDetail.completedAt)
     : runDetail.startedAt
@@ -251,11 +290,19 @@ function EvalRunDetailPage() {
           actions={
             <div className="flex items-center gap-2">
               {statusBadge(runDetail.status)}
-              <span className="text-sm text-muted-foreground tabular-nums">{passRate} pass rate</span>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                {passRate} pass rate
+              </span>
               {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
-                <span className="text-xs text-muted-foreground tabular-nums">${Number(runDetail.costUsd).toFixed(4)}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  ${Number(runDetail.costUsd).toFixed(4)}
+                </span>
               )}
-              {dateLabel && <span className="text-xs text-muted-foreground">{dateLabel}</span>}
+              {dateLabel && (
+                <span className="text-xs text-muted-foreground">
+                  {dateLabel}
+                </span>
+              )}
               {isRunning ? (
                 <Button
                   variant="ghost"
@@ -264,12 +311,20 @@ function EvalRunDetailPage() {
                   onClick={handleCancel}
                   disabled={cancelling}
                 >
-                  {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                  {cancelling ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Square className="h-4 w-4" />
+                  )}
                 </Button>
               ) : (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive h-8 w-8">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive h-8 w-8"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </AlertDialogTrigger>
@@ -277,7 +332,8 @@ function EvalRunDetailPage() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete Evaluation Run</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently delete this evaluation run and all its test results. This action cannot be undone.
+                        This will permanently delete this evaluation run and all
+                        its test results. This action cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -312,12 +368,20 @@ function EvalRunDetailPage() {
               let colorClass = "";
               if (rate >= 0) {
                 if (isSelected) {
-                  if (rate >= 0.9) colorClass = "bg-green-600 hover:bg-green-600 text-white border-green-600";
-                  else if (rate >= 0.7) colorClass = "bg-yellow-500 hover:bg-yellow-500 text-black border-yellow-500";
-                  else colorClass = "bg-red-600 hover:bg-red-600 text-white border-red-600";
+                  if (rate >= 0.9)
+                    colorClass =
+                      "bg-green-600 hover:bg-green-600 text-white border-green-600";
+                  else if (rate >= 0.7)
+                    colorClass =
+                      "bg-yellow-500 hover:bg-yellow-500 text-black border-yellow-500";
+                  else
+                    colorClass =
+                      "bg-red-600 hover:bg-red-600 text-white border-red-600";
                 } else {
-                  if (rate >= 0.9) colorClass = "border-green-600 text-green-500";
-                  else if (rate >= 0.7) colorClass = "border-yellow-600 text-yellow-500";
+                  if (rate >= 0.9)
+                    colorClass = "border-green-600 text-green-500";
+                  else if (rate >= 0.7)
+                    colorClass = "border-yellow-600 text-yellow-500";
                   else colorClass = "border-red-600 text-red-500";
                 }
               }
@@ -327,9 +391,12 @@ function EvalRunDetailPage() {
                   key={cat}
                   variant={isSelected && rate < 0 ? "default" : "outline"}
                   className={`cursor-pointer ${colorClass}`}
-                  onClick={() => setCategoryFilter(cat === categoryFilter ? null : cat)}
+                  onClick={() =>
+                    setCategoryFilter(cat === categoryFilter ? null : cat)
+                  }
                 >
-                  {cat}{pct}
+                  {cat}
+                  {pct}
                 </Badge>
               );
             })}
@@ -349,6 +416,7 @@ function EvalRunDetailPage() {
       </div>
 
       <ResultDetailSheet
+        runId={runId}
         result={runResults.find((r) => r.id === selectedResultId)}
         open={!!selectedResultId}
         onOpenChange={(open) => {
@@ -360,36 +428,43 @@ function EvalRunDetailPage() {
 }
 
 function ResultDetailSheet({
+  runId,
   result,
   open,
   onOpenChange,
 }: {
+  runId: string;
   result: EvalResultRow | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [showTrace, setShowTrace] = useState(false);
+  const traceEnabled = Boolean(open && showTrace && result?.testCaseId);
+  const [traceResult] = useQuery({
+    query: EvalResultSpansQuery,
+    variables: { runId, testCaseId: result?.testCaseId ?? "" },
+    pause: !traceEnabled,
+    requestPolicy: "network-only",
+  });
+
+  useEffect(() => {
+    setShowTrace(false);
+  }, [result?.id]);
+
   if (!result) return null;
 
-  const parseAssertions = (raw: unknown): Array<{ type?: string; value?: string; passed?: boolean; reason?: string; score?: number }> => {
-    if (!raw) return [];
-    let p: unknown = raw;
-    while (typeof p === "string") {
-      try { p = JSON.parse(p); } catch { return []; }
-    }
-    return Array.isArray(p) ? p : [];
-  };
-
   const assertions = parseAssertions(result.assertions);
-
-  // Build the maniflow-style "Expected" summary by joining assertion specs.
-  const expectedSummary = assertions
-    .map((a) => {
-      if (!a.type) return null;
-      if (a.type === "llm-rubric") return `llm-rubric: ${a.value ?? ""}`;
-      return `${a.type}: ${a.value ?? ""}`;
-    })
-    .filter(Boolean)
-    .join("; ");
+  const evaluatorResults = parseEvaluatorResults(result.evaluatorResults);
+  const failureMode = deriveEvalFailureMode(result);
+  const expected = expectedSummary(assertions);
+  const spans = sortEvalSpans(
+    ((traceResult.data?.evalResultSpans ?? []) as EvalSpanRow[]).map(
+      (span) => ({
+        ...span,
+        attributes: parseSpanAttributes(span.attributes),
+      }),
+    ),
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -402,7 +477,16 @@ function ResultDetailSheet({
         <div className="space-y-4 px-6 pb-6">
           <div className="flex items-center gap-2">
             {statusBadge(result.status)}
-            {result.category && <Badge variant="outline">{result.category}</Badge>}
+            {result.category && (
+              <Badge variant="outline">{result.category}</Badge>
+            )}
+            {failureMode && (
+              <Badge
+                variant={failureMode === "timeout" ? "outline" : "destructive"}
+              >
+                {failureMode}
+              </Badge>
+            )}
             {result.score != null && (
               <span className="text-sm text-muted-foreground tabular-nums">
                 Score: {Number(result.score).toFixed(2)}
@@ -424,11 +508,11 @@ function ResultDetailSheet({
             </div>
           )}
 
-          {expectedSummary && (
+          {expected && (
             <div>
               <h4 className="text-sm font-medium mb-1">Expected</h4>
               <pre className="text-xs bg-muted/50 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
-                {expectedSummary}
+                {expected}
               </pre>
             </div>
           )}
@@ -450,6 +534,123 @@ function ResultDetailSheet({
               </pre>
             </div>
           )}
+
+          {evaluatorResults.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Evaluator Results</h4>
+              <div className="space-y-2">
+                {evaluatorResults.map((evaluator, index) => {
+                  const score =
+                    typeof evaluator.value === "number"
+                      ? evaluator.value
+                      : null;
+                  const passed = score !== null && score >= 0.7;
+                  return (
+                    <div
+                      key={`${evaluator.evaluator_id ?? evaluator.evaluatorId ?? index}`}
+                      className="rounded-md border bg-background p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {evaluator.evaluator_id ??
+                              evaluator.evaluatorId ??
+                              "Evaluator"}
+                          </p>
+                          {evaluator.label && (
+                            <p className="text-xs text-muted-foreground">
+                              {evaluator.label}
+                            </p>
+                          )}
+                        </div>
+                        <Badge
+                          variant={passed ? "default" : "destructive"}
+                          className="shrink-0 tabular-nums"
+                        >
+                          {score !== null ? score.toFixed(2) : "error"}
+                        </Badge>
+                      </div>
+                      {evaluator.explanation && (
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {evaluator.explanation}
+                        </p>
+                      )}
+                      {evaluator.error && (
+                        <p className="mt-2 text-xs text-destructive">
+                          {evaluator.error}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-sm font-medium">Trace</h4>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                disabled={!result.testCaseId}
+                onClick={() => setShowTrace((value) => !value)}
+              >
+                {traceResult.fetching ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Activity className="h-3.5 w-3.5" />
+                )}
+                {showTrace ? "Hide trace" : "Show trace"}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${showTrace ? "rotate-180" : ""}`}
+                />
+              </Button>
+            </div>
+            {showTrace && (
+              <div className="mt-2 space-y-2">
+                {traceResult.error ? (
+                  <div className="rounded border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                    Trace unavailable
+                  </div>
+                ) : traceResult.fetching ? (
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading trace
+                  </div>
+                ) : spans.length === 0 ? (
+                  <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    No spans found
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {spans.map((span, index) => (
+                      <div
+                        key={`${span.timestamp ?? "untimed"}-${span.name}-${index}`}
+                        className="rounded-md border bg-muted/30 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-xs font-medium">
+                            {span.name}
+                          </p>
+                          {span.timestamp && (
+                            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                              {new Date(span.timestamp).toLocaleTimeString()}
+                            </span>
+                          )}
+                        </div>
+                        <pre className="mt-2 max-h-48 overflow-auto text-[11px] leading-relaxed text-muted-foreground">
+                          {JSON.stringify(span.attributes, null, 2)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {result.errorMessage && (
             <div className="rounded border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">

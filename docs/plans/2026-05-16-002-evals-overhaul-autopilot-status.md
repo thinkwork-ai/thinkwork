@@ -10,10 +10,14 @@ status: active
 
 ## Current Unit
 
-- Unit: U8. Seed plumbing + maniflow cleanup migration
-- Branch: `codex/evals-overhaul-u8-seed-plumbing`
-- Worktree: `.Codex/worktrees/evals-overhaul-u8-seed-plumbing`
-- State: PR open, CI pending
+- Unit: U9. Drill-in surface
+- Branch: `codex/evals-overhaul-u9-drill-in`
+- Worktree: `.Codex/worktrees/evals-overhaul-u9-drill-in`
+- State: implementation in progress
+
+## Final Proof Request
+
+- After all implementation units are merged and deployed, run a full end-to-end evaluation from the Admin UI, watch it reach a terminal state, open the run detail, and capture the result surface so the current eval system state is visible.
 
 ## Progress Log
 
@@ -70,6 +74,11 @@ status: active
 - 2026-05-16: Applied the U8 cleanup SQL to dev pre-merge. First apply deleted 96 legacy `yaml-seed` test cases and created `view_eval_seed_maniflow_cleanup_0089`; a deployed-old-code CLI seed probe briefly reinserted 100 legacy cases, then the cleanup was rerun and verified legacy seed count returned to 0.
 - 2026-05-16: Local U8 verification passed: API seed tests, API build, Admin build, docs build, touched-file Prettier check, manual-migration dry-run marker check, and `git diff --check`.
 - 2026-05-16: Opened PR #1263 for U8.
+- 2026-05-16: PR #1263 required checks passed and was squash-merged to `main`; the local merge command printed a worktree checkout error after GitHub completed the merge, so PR state was verified directly.
+- 2026-05-16: Confirmed post-merge `main` workflows including Deploy passed for U8, deleted the U8 branch/worktree, and synced from `origin/main`.
+- 2026-05-16: Created clean U9 worktree from `origin/main`.
+- 2026-05-16: Started U9 drill-in surface: extracting shared AgentCore span loading, adding the `evalResultSpans` GraphQL query, and extending the admin run-detail sheet with evaluator reasoning plus lazy trace loading.
+- 2026-05-16: Local U9 verification passed: schema build, CLI/mobile codegen, API/admin/mobile tests, API/admin/CLI builds or typechecks, graphql-http/eval-worker Lambda bundles, non-generated touched-file Prettier check, and `git diff --check`. Admin codegen remains blocked by pre-existing configured-extension GraphQL documents that reference fields absent from the checked-in schema.
 
 ## Pull Requests
 
@@ -83,7 +92,8 @@ status: active
 | U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                 |
 | U6     | `codex/evals-overhaul-u6-skill-redteam`        | [#1260](https://github.com/thinkwork-ai/thinkwork/pull/1260) | passed  | merged  | Skill red-team starter pack for GitHub, filesystem, and workspace; post-merge Deploy passed                                      |
 | U7     | `codex/evals-overhaul-u7-performance`          | [#1261](https://github.com/thinkwork-ai/thinkwork/pull/1261) | passed  | merged  | Performance v1 slice; post-merge Deploy passed                                                                                   |
-| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | pending | pending | Seed import replacement, maniflow cleanup migration, deploy hook, and docs                                                       |
+| U8     | `codex/evals-overhaul-u8-seed-plumbing`        | [#1263](https://github.com/thinkwork-ai/thinkwork/pull/1263) | passed  | merged  | Seed import replacement, maniflow cleanup migration, deploy hook, docs, and post-merge Deploy passed                             |
+| U9     | `codex/evals-overhaul-u9-drill-in`             | pending                                                      | pending | pending | Drill-in sheet evaluator reasoning and lazy AgentCore span trace                                                                 |
 
 ## CI Failures
 
@@ -128,6 +138,27 @@ status: active
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts` - passed for U7.
 - `pnpm --filter @thinkwork/api build` - passed for U7.
 - `node_modules/.pnpm/node_modules/.bin/prettier --check <U7 touched files>` - passed for U7.
+- `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
+- `pnpm --filter @thinkwork/api build` - passed for U8.
+- `pnpm --filter @thinkwork/admin build` - passed for U8.
+- `pnpm --filter @thinkwork/docs build` - passed for U8.
+- U8 post-merge Deploy workflow - passed.
+- `pnpm schema:build` - passed for U9.
+- `pnpm --filter thinkwork-cli codegen` - passed for U9.
+- `pnpm --filter @thinkwork/mobile codegen` - passed for U9.
+- `pnpm --filter @thinkwork/admin codegen` - blocked for U9 by pre-existing external-extension documents (`SpendPeriod`, `currentQueue`, `dispatchState`, `workflowVersions`, `currentSpend`, `pauseDispatch`, `resumeDispatch`) not present in the checked-in GraphQL schema.
+- `pnpm --filter @thinkwork/api test -- agentcore-spans.test.ts index.test.ts eval-worker.test.ts` - passed for U9.
+- `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/evaluations/-result-detail.test.ts` - passed for U9.
+- `pnpm --filter @thinkwork/api build` - passed for U9.
+- `pnpm --filter @thinkwork/admin build` - passed for U9.
+- `pnpm --filter thinkwork-cli build` - passed for U9.
+- `pnpm --filter thinkwork-cli typecheck` - passed for U9.
+- `bash scripts/build-lambdas.sh graphql-http && bash scripts/build-lambdas.sh eval-worker` - passed for U9.
+- `pnpm --filter @thinkwork/api test` - passed for U9.
+- `pnpm --filter @thinkwork/admin test` - passed for U9.
+- `pnpm --filter @thinkwork/mobile test` - passed for U9.
+- Non-generated touched-file Prettier check - passed for U9.
+- `git diff --check` - passed for U9.
 - `git diff --check` - passed for U7.
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
 - `pnpm --filter @thinkwork/api build` - passed for U8.

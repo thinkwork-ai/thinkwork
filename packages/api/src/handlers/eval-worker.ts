@@ -23,12 +23,9 @@ import {
 	EvaluateCommand,
 	InvokeAgentRuntimeCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
-import {
-	CloudWatchLogsClient,
-	FilterLogEventsCommand,
-} from "@aws-sdk/client-cloudwatch-logs";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { createHash } from "crypto";
+import { fetchSpansForSession } from "../lib/agentcore-spans.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 import {
 	normalizeAgentRuntimeType,
@@ -41,7 +38,6 @@ const SSM_RUNTIME_ID_STRANDS =
 	process.env.AGENTCORE_RUNTIME_SSM_STRANDS ||
 	"/thinkwork/dev/agentcore/runtime-id-strands";
 const SSM_RUNTIME_ID_FLUE = process.env.AGENTCORE_RUNTIME_SSM_FLUE || "";
-const SPANS_LOG_GROUP = process.env.SPANS_LOG_GROUP || "aws/spans";
 const RUNTIME_LOG_GROUP_PREFIX = "/aws/bedrock-agentcore/runtimes/";
 const SPAN_WAIT_INITIAL_MS = 30_000;
 const SPAN_WAIT_INTERVAL_MS = 15_000;
@@ -53,7 +49,6 @@ const ac = new BedrockAgentCoreClient({
 	region: REGION,
 	requestHandler: { requestTimeout: 660_000 },
 });
-const cw = new CloudWatchLogsClient({ region: REGION });
 
 const cachedRuntimeIds: Partial<Record<AgentRuntimeType, string>> = {};
 
@@ -416,48 +411,6 @@ async function invokeAgent(
 	};
 }
 
-async function fetchSpansForSession(
-	sessionId: string,
-	runtimeLogGroup: string,
-): Promise<unknown[]> {
-	const startTime = Date.now() - 60 * 60 * 1000;
-	const filterPattern = `"${sessionId}"`;
-	const [spansResp, logsResp] = await Promise.all([
-		cw.send(
-			new FilterLogEventsCommand({
-				logGroupName: SPANS_LOG_GROUP,
-				startTime,
-				filterPattern,
-				limit: 200,
-			}),
-		),
-		cw.send(
-			new FilterLogEventsCommand({
-				logGroupName: runtimeLogGroup,
-				startTime,
-				filterPattern,
-				limit: 200,
-			}),
-		),
-	]);
-	const spans = (spansResp.events || []).map((e) => JSON.parse(e.message!));
-	const logs = (logsResp.events || [])
-		.map((e) => {
-			try {
-				return JSON.parse(e.message!);
-			} catch {
-				return null;
-			}
-		})
-		.filter(
-			(r): r is { scope?: { name?: string }; spanId?: string } =>
-				r !== null &&
-				r.scope?.name === "strands.telemetry.tracer" &&
-				Boolean(r.spanId),
-		);
-	return [...spans, ...logs];
-}
-
 async function waitForSpans(
 	sessionId: string,
 	runtimeLogGroup: string,
@@ -466,7 +419,7 @@ async function waitForSpans(
 	const start = Date.now();
 	await new Promise((r) => setTimeout(r, SPAN_WAIT_INITIAL_MS));
 	while (Date.now() - start < SPAN_WAIT_MAX_MS) {
-		const data = await fetchSpansForSession(sessionId, runtimeLogGroup);
+		const data = await fetchSpansForSession(sessionId, { runtimeLogGroup });
 		const hasInvokeAgent = data.some(
 			(d) =>
 				typeof (d as { name?: string }).name === "string" &&
@@ -475,7 +428,7 @@ async function waitForSpans(
 		if (hasInvokeAgent) return data;
 		await new Promise((r) => setTimeout(r, SPAN_WAIT_INTERVAL_MS));
 	}
-	return await fetchSpansForSession(sessionId, runtimeLogGroup);
+	return await fetchSpansForSession(sessionId, { runtimeLogGroup });
 }
 
 async function callEvaluator(

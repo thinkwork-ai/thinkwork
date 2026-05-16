@@ -93,6 +93,12 @@ type EvalResult {
   createdAt: AWSDateTime!
 }
 
+type EvalSpan {
+  timestamp: AWSDateTime
+  name: String!
+  attributes: AWSJSON!
+}
+
 # ────────────────────────────────────────────────────────────────────
 # Aggregates for dashboard
 # ────────────────────────────────────────────────────────────────────
@@ -170,14 +176,10 @@ input StartEvalRunInput {
 
 extend type Query {
   evalSummary(tenantId: ID!): EvalSummary!
-  evalRuns(
-    tenantId: ID!
-    agentId: ID
-    limit: Int
-    offset: Int
-  ): EvalRunsPage!
+  evalRuns(tenantId: ID!, agentId: ID, limit: Int, offset: Int): EvalRunsPage!
   evalRun(id: ID!): EvalRun
   evalRunResults(runId: ID!): [EvalResult!]!
+  evalResultSpans(runId: ID!, testCaseId: ID!): [EvalSpan!]!
   evalTimeSeries(tenantId: ID!, days: Int): [EvalTimeSeriesPoint!]!
   evalTestCases(
     tenantId: ID!
@@ -198,10 +200,8 @@ extend type Mutation {
   ): EvalTestCase!
   updateEvalTestCase(id: ID!, input: UpdateEvalTestCaseInput!): EvalTestCase!
   deleteEvalTestCase(id: ID!): Boolean!
-  # Bulk-import the maniflow starter pack — 96 test cases across red-team,
-  # tool-safety, thread-management, knowledge-base, mcp-gateway, sub-agents,
-  # email-calendar, workspace-memory, workspace-routing. Idempotent at the
-  # (tenant_id, name) level via INSERT ON CONFLICT DO NOTHING. Returns
-  # count of new rows inserted (existing rows skipped).
+  # Bulk-import the Thinkwork starter pack. Idempotent at the (tenant_id, name)
+  # level via INSERT ON CONFLICT DO NOTHING. Returns count of new rows inserted
+  # (existing rows skipped).
   seedEvalTestCases(tenantId: ID!, categories: [String!]): Int!
 }

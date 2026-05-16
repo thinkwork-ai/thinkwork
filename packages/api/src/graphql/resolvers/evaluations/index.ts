@@ -16,6 +16,10 @@ import {
   agents,
   agentTemplates,
 } from "@thinkwork/database-pg/schema";
+import {
+  fetchSpansForSession,
+  type AgentCoreSpanRecord,
+} from "../../../lib/agentcore-spans.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,6 +77,56 @@ function resultToGraphql(
     errorMessage: row.error_message,
     createdAt: row.created_at,
   };
+}
+
+export function spanToGraphql(row: AgentCoreSpanRecord) {
+  const timestampMs = spanTimestampMs(row);
+  const attributes = isRecord(row.attributes) ? row.attributes : row;
+  return {
+    timestamp: timestampMs ? new Date(timestampMs).toISOString() : null,
+    name: spanName(row),
+    attributes: JSON.stringify(attributes),
+  };
+}
+
+function spanName(row: AgentCoreSpanRecord): string {
+  for (const key of ["name", "spanName", "span_name"]) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "unknown span";
+}
+
+function spanTimestampMs(row: AgentCoreSpanRecord): number | null {
+  for (const key of [
+    "timestamp",
+    "cloudWatchTimestamp",
+    "startTime",
+    "start_time",
+    "startTimeUnixNano",
+  ]) {
+    const value = row[key];
+    const parsed = parseTimestampMs(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function parseTimestampMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 10_000_000_000_000 ? Math.floor(value / 1_000_000) : value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return parseTimestampMs(numeric);
+    const dateMs = Date.parse(value);
+    return Number.isFinite(dateMs) ? dateMs : null;
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function testCaseToGraphql(
@@ -215,6 +269,45 @@ const evalRunResults = async (
         : null,
     ),
   );
+};
+
+export const evalResultSpans = async (
+  _p: any,
+  args: { runId: string; testCaseId: string },
+  _ctx: GraphQLContext,
+) => {
+  const [row] = await db
+    .select({ agentSessionId: evalResults.agent_session_id })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.run_id, args.runId),
+        eq(evalResults.test_case_id, args.testCaseId),
+      ),
+    )
+    .orderBy(desc(evalResults.created_at))
+    .limit(1);
+
+  if (!row?.agentSessionId) return [];
+
+  try {
+    const runtimeLogGroup = process.env.EVAL_TRACE_RUNTIME_LOG_GROUP || null;
+    const spans = await fetchSpansForSession(row.agentSessionId, {
+      runtimeLogGroup,
+    });
+    return spans.map(spanToGraphql).sort((a, b) => {
+      if (!a.timestamp) return 1;
+      if (!b.timestamp) return -1;
+      return Date.parse(a.timestamp) - Date.parse(b.timestamp);
+    });
+  } catch (err) {
+    console.warn("[evalResultSpans] unable to load trace spans", {
+      runId: args.runId,
+      testCaseId: args.testCaseId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 };
 
 const evalTimeSeries = async (
@@ -608,6 +701,7 @@ export const evaluationsQueries = {
   evalRuns: evalRunsQuery,
   evalRun,
   evalRunResults,
+  evalResultSpans,
   evalTimeSeries,
   evalTestCases: evalTestCasesQuery,
   evalTestCase,

@@ -2589,12 +2589,23 @@ export const EvalRunResultsQuery = gql`
       status
       score
       durationMs
+      agentSessionId
       input
       actualOutput
       evaluatorResults
       assertions
       errorMessage
       createdAt
+    }
+  }
+`;
+
+export const EvalResultSpansQuery = gql`
+  query EvalResultSpans($runId: ID!, $testCaseId: ID!) {
+    evalResultSpans(runId: $runId, testCaseId: $testCaseId) {
+      timestamp
+      name
+      attributes
     }
   }
 `;
