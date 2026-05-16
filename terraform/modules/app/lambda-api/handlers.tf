@@ -164,6 +164,8 @@ locals {
     "workspace-files" = {
       WORKSPACE_FILES_EFS_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs"
     }
+    "oauth-authorize"     = local.slack_handler_env
+    "oauth-callback"      = local.slack_handler_env
     "slack-events"        = local.slack_handler_env
     "slack-slash-command" = local.slack_handler_env
     "slack-interactivity" = local.slack_handler_env

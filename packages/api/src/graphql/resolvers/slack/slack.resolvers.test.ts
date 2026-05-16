@@ -2,19 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockRequireTenantAdmin,
+  mockRequireTenantMember,
   mockResolveCallerUserId,
   mockGetSlackAppCredentials,
   mockDeleteSlackBotToken,
   mockSelectRows,
   mockUpdateReturning,
+  mockInsertValues,
   updateCalls,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
+  mockRequireTenantMember: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockGetSlackAppCredentials: vi.fn(),
   mockDeleteSlackBotToken: vi.fn(),
   mockSelectRows: vi.fn(),
   mockUpdateReturning: vi.fn(),
+  mockInsertValues: vi.fn(),
   updateCalls: [] as unknown[],
 }));
 
@@ -22,11 +26,20 @@ vi.mock("../../utils.js", () => ({
   db: {
     select: vi.fn(() => ({
       from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            orderBy: () => Promise.resolve(mockSelectRows()),
+          }),
+        }),
         where: () => ({
           limit: () => Promise.resolve(mockSelectRows()),
+          orderBy: () => Promise.resolve(mockSelectRows()),
         }),
         orderBy: () => Promise.resolve(mockSelectRows()),
       }),
+    })),
+    insert: vi.fn(() => ({
+      values: () => Promise.resolve(mockInsertValues()),
     })),
     update: vi.fn((table: unknown) => {
       updateCalls.push(table);
@@ -57,13 +70,27 @@ vi.mock("../../utils.js", () => ({
     slack_team_name: "slack_workspaces.slack_team_name",
   },
   slackUserLinks: {
+    id: "slack_user_links.id",
     tenant_id: "slack_user_links.tenant_id",
     slack_team_id: "slack_user_links.slack_team_id",
+    slack_user_id: "slack_user_links.slack_user_id",
+    slack_user_name: "slack_user_links.slack_user_name",
+    slack_user_email: "slack_user_links.slack_user_email",
+    user_id: "slack_user_links.user_id",
+    status: "slack_user_links.status",
+    linked_at: "slack_user_links.linked_at",
+    unlinked_at: "slack_user_links.unlinked_at",
+    created_at: "slack_user_links.created_at",
+    updated_at: "slack_user_links.updated_at",
+  },
+  activityLog: {
+    id: "activity_log.id",
   },
 }));
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  requireTenantMember: mockRequireTenantMember,
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({
@@ -79,15 +106,21 @@ vi.mock("../../../lib/slack/workspace-store.js", () => ({
 import { startSlackWorkspaceInstall } from "./installSlackWorkspace.mutation.js";
 // eslint-disable-next-line import/first
 import { uninstallSlackWorkspace } from "./uninstallSlackWorkspace.mutation.js";
+// eslint-disable-next-line import/first
+import { mySlackLinks } from "./mySlackLinks.query.js";
+// eslint-disable-next-line import/first
+import { unlinkSlackIdentity } from "./unlinkSlackIdentity.mutation.js";
 
 describe("Slack GraphQL resolvers", () => {
   beforeEach(() => {
     mockRequireTenantAdmin.mockReset();
+    mockRequireTenantMember.mockReset();
     mockResolveCallerUserId.mockReset();
     mockGetSlackAppCredentials.mockReset();
     mockDeleteSlackBotToken.mockReset();
     mockSelectRows.mockReset();
     mockUpdateReturning.mockReset();
+    mockInsertValues.mockReset();
     updateCalls.length = 0;
     process.env.THINKWORK_API_URL = "https://api.example.com";
   });
@@ -178,5 +211,108 @@ describe("Slack GraphQL resolvers", () => {
     expect(updateCalls).toHaveLength(2);
     expect(result).toMatchObject({ id: "workspace-1", status: "uninstalled" });
     expect(result).not.toHaveProperty("botTokenSecretPath");
+  });
+
+  it("lists only the caller's active Slack identity links", async () => {
+    mockRequireTenantMember.mockResolvedValue("member");
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+    mockSelectRows.mockReturnValue([
+      {
+        id: "link-1",
+        tenant_id: "tenant-1",
+        slack_team_id: "T-1",
+        slack_team_name: "Acme",
+        slack_user_id: "U-1",
+        slack_user_name: "eric",
+        slack_user_email: "eric@example.com",
+        user_id: "user-1",
+        status: "active",
+        linked_at: new Date("2026-05-16T00:00:00Z"),
+        unlinked_at: null,
+        created_at: new Date("2026-05-16T00:00:00Z"),
+        updated_at: new Date("2026-05-16T00:00:00Z"),
+      },
+    ]);
+
+    const result = await mySlackLinks(null, { tenantId: "tenant-1" }, {
+      auth: { authType: "cognito" },
+    } as any);
+
+    expect(mockRequireTenantMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+    );
+    expect(result).toMatchObject([
+      {
+        id: "link-1",
+        slackTeamId: "T-1",
+        slackTeamName: "Acme",
+        slackUserId: "U-1",
+      },
+    ]);
+  });
+
+  it("refuses to unlink another user's Slack identity", async () => {
+    mockSelectRows.mockReturnValue([
+      {
+        id: "link-1",
+        tenant_id: "tenant-1",
+        slack_team_id: "T-1",
+        slack_user_id: "U-1",
+        user_id: "user-2",
+        status: "active",
+      },
+    ]);
+    mockRequireTenantMember.mockResolvedValue("member");
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+
+    await expect(
+      unlinkSlackIdentity(null, { id: "link-1" }, {
+        auth: { authType: "cognito" },
+      } as any),
+    ).rejects.toThrow(/another user's Slack identity/);
+
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("unlinks the caller's Slack identity and writes an audit event", async () => {
+    mockSelectRows.mockReturnValue([
+      {
+        id: "link-1",
+        tenant_id: "tenant-1",
+        slack_team_id: "T-1",
+        slack_user_id: "U-1",
+        user_id: "user-1",
+        status: "active",
+      },
+    ]);
+    mockRequireTenantMember.mockResolvedValue("member");
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+    mockUpdateReturning.mockReturnValue([
+      {
+        id: "link-1",
+        tenant_id: "tenant-1",
+        slack_team_id: "T-1",
+        slack_user_id: "U-1",
+        user_id: "user-1",
+        status: "unlinked",
+        linked_at: new Date("2026-05-16T00:00:00Z"),
+        unlinked_at: new Date("2026-05-16T01:00:00Z"),
+        created_at: new Date("2026-05-16T00:00:00Z"),
+        updated_at: new Date("2026-05-16T01:00:00Z"),
+      },
+    ]);
+
+    const result = await unlinkSlackIdentity(null, { id: "link-1" }, {
+      auth: { authType: "cognito" },
+    } as any);
+
+    expect(mockRequireTenantMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+    );
+    expect(updateCalls).toHaveLength(1);
+    expect(mockInsertValues).toHaveBeenCalled();
+    expect(result).toMatchObject({ id: "link-1", status: "unlinked" });
   });
 });

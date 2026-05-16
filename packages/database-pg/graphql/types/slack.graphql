@@ -19,6 +19,22 @@ type SlackWorkspaceInstallStart {
   expiresAt: AWSDateTime!
 }
 
+type SlackUserLink {
+  id: ID!
+  tenantId: ID!
+  slackTeamId: String!
+  slackTeamName: String
+  slackUserId: String!
+  slackUserName: String
+  slackUserEmail: String
+  userId: ID!
+  status: String!
+  linkedAt: AWSDateTime!
+  unlinkedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
 input StartSlackWorkspaceInstallInput {
   tenantId: ID!
   returnUrl: AWSURL
@@ -27,6 +43,7 @@ input StartSlackWorkspaceInstallInput {
 
 extend type Query {
   slackWorkspaces(tenantId: ID!): [SlackWorkspace!]!
+  mySlackLinks(tenantId: ID!): [SlackUserLink!]!
 }
 
 extend type Mutation {
@@ -34,4 +51,5 @@ extend type Mutation {
     input: StartSlackWorkspaceInstallInput!
   ): SlackWorkspaceInstallStart!
   uninstallSlackWorkspace(id: ID!): SlackWorkspace!
+  unlinkSlackIdentity(id: ID!): SlackUserLink!
 }

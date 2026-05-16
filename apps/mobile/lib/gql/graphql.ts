@@ -2079,6 +2079,7 @@ export type Mutation = {
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineExecution;
   uninstallSlackWorkspace: SlackWorkspace;
+  unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgent: Agent;
@@ -2900,6 +2901,11 @@ export type MutationUninstallSlackWorkspaceArgs = {
 };
 
 
+export type MutationUnlinkSlackIdentityArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationUnpauseAgentArgs = {
   agentId: Scalars['ID']['input'];
 };
@@ -3294,6 +3300,7 @@ export type Query = {
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
   myComputer?: Maybe<Computer>;
+  mySlackLinks: Array<SlackUserLink>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
@@ -3794,6 +3801,11 @@ export type QueryMobileWikiSearchArgs = {
   query: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMySlackLinksArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4708,6 +4720,23 @@ export type SkillRun = {
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SlackUserLink = {
+  __typename?: 'SlackUserLink';
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  linkedAt: Scalars['AWSDateTime']['output'];
+  slackTeamId: Scalars['String']['output'];
+  slackTeamName?: Maybe<Scalars['String']['output']>;
+  slackUserEmail?: Maybe<Scalars['String']['output']>;
+  slackUserId: Scalars['String']['output'];
+  slackUserName?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  unlinkedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type SlackWorkspace = {
@@ -5959,6 +5988,20 @@ export type DeleteMessageMutationVariables = Exact<{
 
 export type DeleteMessageMutation = { __typename?: 'Mutation', deleteMessage: boolean };
 
+export type MySlackLinksQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type MySlackLinksQuery = { __typename?: 'Query', mySlackLinks: Array<{ __typename?: 'SlackUserLink', id: string, tenantId: string, slackTeamId: string, slackTeamName?: string | null, slackUserId: string, slackUserName?: string | null, slackUserEmail?: string | null, userId: string, status: string, linkedAt: any, unlinkedAt?: any | null }> };
+
+export type UnlinkSlackIdentityMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type UnlinkSlackIdentityMutation = { __typename?: 'Mutation', unlinkSlackIdentity: { __typename?: 'SlackUserLink', id: string, status: string, unlinkedAt?: any | null } };
+
 export type MessagesQueryVariables = Exact<{
   threadId: Scalars['ID']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -6561,6 +6604,8 @@ export const SetAgentSkillsDocument = {"kind":"Document","definitions":[{"kind":
 export const SetAgentBudgetPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAgentBudgetPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetPolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentBudgetPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]} as unknown as DocumentNode<SetAgentBudgetPolicyMutation, SetAgentBudgetPolicyMutationVariables>;
 export const SendMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SendMessageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"senderType"}},{"kind":"Field","name":{"kind":"Name","value":"senderId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SendMessageMutation, SendMessageMutationVariables>;
 export const DeleteMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteMessageMutation, DeleteMessageMutationVariables>;
+export const MySlackLinksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MySlackLinks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mySlackLinks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"slackTeamId"}},{"kind":"Field","name":{"kind":"Name","value":"slackTeamName"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserId"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserName"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserEmail"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"linkedAt"}},{"kind":"Field","name":{"kind":"Name","value":"unlinkedAt"}}]}}]}}]} as unknown as DocumentNode<MySlackLinksQuery, MySlackLinksQueryVariables>;
+export const UnlinkSlackIdentityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UnlinkSlackIdentity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"unlinkSlackIdentity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"unlinkedAt"}}]}}]}}]} as unknown as DocumentNode<UnlinkSlackIdentityMutation, UnlinkSlackIdentityMutationVariables>;
 export const MessagesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Messages"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"messages"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"senderType"}},{"kind":"Field","name":{"kind":"Name","value":"senderId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"toolResults"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"tokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"durableArtifact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"cursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]} as unknown as DocumentNode<MessagesQuery, MessagesQueryVariables>;
 export const MyComputerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MyComputer"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myComputer"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}}]}}]}}]} as unknown as DocumentNode<MyComputerQuery, MyComputerQueryVariables>;
 export const ComputersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Computers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"ownerUserId"}}]}}]}}]} as unknown as DocumentNode<ComputersQuery, ComputersQueryVariables>;
