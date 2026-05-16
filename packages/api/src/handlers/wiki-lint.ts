@@ -73,8 +73,8 @@ export async function handler(
 		const dupAliases = await db.execute<{ count: number }>(sql`
 			SELECT COUNT(*)::int AS count FROM (
 				SELECT p.tenant_id, p.owner_id, p.type, pa.alias, COUNT(*)
-				FROM wiki_page_aliases pa
-				INNER JOIN wiki_pages p ON p.id = pa.page_id
+				FROM wiki.page_aliases pa
+				INNER JOIN wiki.pages p ON p.id = pa.page_id
 				WHERE p.status = 'active'
 				GROUP BY p.tenant_id, p.owner_id, p.type, pa.alias
 				HAVING COUNT(*) > 1

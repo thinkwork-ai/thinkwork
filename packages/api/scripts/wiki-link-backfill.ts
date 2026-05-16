@@ -240,8 +240,8 @@ async function fetchPageSourceRecords(
 	const result = await db.execute(sql`
 		SELECT DISTINCT m.id::text AS id, m.metadata
 		FROM hindsight.memory_units m
-		JOIN wiki_section_sources ss ON ss.source_ref = m.id::text
-		JOIN wiki_page_sections ps ON ps.id = ss.section_id
+		JOIN wiki.section_sources ss ON ss.source_ref = m.id::text
+		JOIN wiki.page_sections ps ON ps.id = ss.section_id
 		WHERE ps.page_id = ${pageId}::uuid
 			AND ss.source_kind = 'memory_unit'
 	`);

@@ -52,8 +52,12 @@
 -- creates: compliance.idx_export_jobs_tenant_requested
 -- creates: compliance.idx_export_jobs_actor_requested
 -- creates-constraint: compliance.audit_events.audit_events_actor_type_allowed
--- creates-constraint: compliance.audit_events.audit_events_event_type_prefix
--- creates-constraint: compliance.audit_outbox.audit_outbox_event_type_prefix
+-- These two prefix constraints were renamed to *_v2 by 0088 (finance pilot
+-- extended the event_type prefixes). Markers updated to the post-0088 names
+-- so the drift reporter resolves them via pg_constraint; the original names
+-- are guaranteed absent in any DB where 0088 has applied.
+-- creates-constraint: compliance.audit_events.audit_events_event_type_prefix_v2
+-- creates-constraint: compliance.audit_outbox.audit_outbox_event_type_prefix_v2
 -- creates-constraint: compliance.export_jobs.export_jobs_format_allowed
 -- creates-constraint: compliance.export_jobs.export_jobs_status_allowed
 -- creates-constraint: compliance.actor_pseudonym.actor_pseudonym_actor_type_allowed

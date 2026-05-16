@@ -62,21 +62,21 @@ export const wikiGraph = async (
 	const { userId } = await assertCanReadWikiScope(ctx, args);
 
 	// Pages + degree in one query. Degree counts distinct connected pages,
-	// NOT link rows — wiki_page_links can carry multiple rows per (from,
+	// NOT link rows — wiki.page_links can carry multiple rows per (from,
 	// to) pair (reference + parent_of under different `kind` values, see
-	// the unique index on wiki_page_links.kind). A page with two rows to
+	// the unique index on wiki.page_links.kind). A page with two rows to
 	// the same neighbor should still render as one edge with degree 1.
 	const pageResult = await db.execute(sql`
 		WITH scope_pages AS (
 			SELECT id, type, slug, title
-			FROM wiki_pages
+			FROM wiki.pages
 			WHERE tenant_id = ${args.tenantId}
 			  AND owner_id = ${userId}
 			  AND status = 'active'
 		),
 		scope_links AS (
 			SELECT DISTINCT l.from_page_id, l.to_page_id
-			FROM wiki_page_links l
+			FROM wiki.page_links l
 			JOIN scope_pages sp1 ON sp1.id = l.from_page_id
 			JOIN scope_pages sp2 ON sp2.id = l.to_page_id
 		),
@@ -102,9 +102,9 @@ export const wikiGraph = async (
 
 	const edgeResult = await db.execute(sql`
 		SELECT DISTINCT l.from_page_id AS source, l.to_page_id AS target
-		FROM wiki_page_links l
-		JOIN wiki_pages p1 ON p1.id = l.from_page_id
-		JOIN wiki_pages p2 ON p2.id = l.to_page_id
+		FROM wiki.page_links l
+		JOIN wiki.pages p1 ON p1.id = l.from_page_id
+		JOIN wiki.pages p2 ON p2.id = l.to_page_id
 		WHERE p1.tenant_id = ${args.tenantId}
 		  AND p1.owner_id = ${userId}
 		  AND p1.status = 'active'

@@ -196,7 +196,7 @@ export interface RunPhaseCPlaceBackfillArgs {
 	resolvePlaceForRecord: (
 		record: PhaseCSourceRecord,
 	) => Promise<PhaseCResolvedPlace | null>;
-	/** Wet-run only. UPDATE wiki_pages SET place_id = COALESCE(place_id, $new)
+	/** Wet-run only. UPDATE wiki.pages SET place_id = COALESCE(place_id, $new)
 	 * WHERE id = $page.id. Returns the canonical place_id now on the row
 	 * (may differ from the input when another writer got there first). */
 	setPagePlaceId: (args: {

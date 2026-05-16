@@ -780,7 +780,7 @@ export async function countDuplicateTitleCandidates(
  * deterministic parent linker's recall-extension path: candidate
  * `"Portland"` resolves to active page `"Portland, Oregon"`.
  *
- * Uses the `idx_wiki_pages_title_trgm` GIN index (migration 0015).
+ * Uses the `idx_pages_title_trgm` GIN index (created in 0015 as `idx_wiki_pages_title_trgm`; renamed in 0089).
  * Internal try/catch returns empty on `pg_trgm` errors so callers
  * degrade gracefully if the extension is missing.
  */
@@ -1371,8 +1371,9 @@ export const PARENT_TITLE_FUZZY_THRESHOLD = 0.5;
  * matched page's `type` + `status` so callers can apply the type-mismatch
  * gate without a second lookup.
  *
- * Relies on the `idx_wiki_page_aliases_alias_trgm` GIN index from migration
- * 0015 for query performance; the function itself falls back to sequential
+ * Relies on the `idx_page_aliases_alias_trgm` GIN index (created in 0015 as
+ * `idx_wiki_page_aliases_alias_trgm`; renamed in 0089) for query performance;
+ * the function itself falls back to sequential
  * scan + returns empty if `pg_trgm` isn't installed (see Unit 3 fallback).
  */
 export async function findAliasMatchesFuzzy(
@@ -1626,11 +1627,11 @@ export async function markUnresolvedPromoted(
 	const result = await db.execute(sql`
 		WITH target AS (
 			SELECT id, tenant_id, owner_id, alias_normalized
-			FROM wiki_unresolved_mentions
+			FROM wiki.unresolved_mentions
 			WHERE id = ${args.mentionId}
 		),
 		updated AS (
-			UPDATE wiki_unresolved_mentions mention
+			UPDATE wiki.unresolved_mentions mention
 			SET status = 'promoted',
 				promoted_page_id = ${args.pageId},
 				updated_at = now()
@@ -1638,7 +1639,7 @@ export async function markUnresolvedPromoted(
 			WHERE mention.id = target.id
 			  AND NOT EXISTS (
 				SELECT 1
-				FROM wiki_unresolved_mentions other
+				FROM wiki.unresolved_mentions other
 				WHERE other.tenant_id = target.tenant_id
 				  AND other.owner_id = target.owner_id
 				  AND other.alias_normalized = target.alias_normalized
@@ -1656,12 +1657,12 @@ export async function markUnresolvedPromoted(
 	// promoted mention in this scope. Remove the stale open mention so future
 	// planner passes do not keep trying to promote it into the same unique key.
 	await db.execute(sql`
-		DELETE FROM wiki_unresolved_mentions mention
+		DELETE FROM wiki.unresolved_mentions mention
 		WHERE mention.id = ${args.mentionId}
 		  AND mention.status = 'open'
 		  AND EXISTS (
 			SELECT 1
-			FROM wiki_unresolved_mentions other
+			FROM wiki.unresolved_mentions other
 			WHERE other.tenant_id = mention.tenant_id
 			  AND other.owner_id = mention.owner_id
 			  AND other.alias_normalized = mention.alias_normalized
