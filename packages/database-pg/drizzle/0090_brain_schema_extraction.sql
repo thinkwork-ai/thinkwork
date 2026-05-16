@@ -88,7 +88,7 @@
 -- creates-constraint: brain.pages.pages_type_allowed
 -- creates-constraint: brain.pages.pages_entity_subtype_allowed
 -- creates-constraint: brain.page_sections.page_sections_facet_type_allowed
--- creates-constraint: brain.external_refs.external_refs_kind_allowed_v2
+-- creates-constraint: brain.external_refs.external_refs_kind_allowed
 -- creates-constraint: brain.external_refs.external_refs_ttl_positive
 -- creates: public.tenant_entity_pages
 -- creates: public.tenant_entity_page_sections
@@ -225,29 +225,30 @@ ALTER TABLE brain.pages RENAME CONSTRAINT tenant_entity_pages_type_allowed TO pa
 ALTER TABLE brain.pages RENAME CONSTRAINT tenant_entity_pages_entity_subtype_allowed TO pages_entity_subtype_allowed;
 ALTER TABLE brain.page_sections RENAME CONSTRAINT tenant_entity_page_sections_facet_type_allowed TO page_sections_facet_type_allowed;
 
--- external_refs constraint: rename whichever exists. 0087 (OSS-connector
--- retirement) has not yet applied to dev — when it eventually does, it'll
--- drop the _v2 and re-add without _v2. The brain Drizzle source keeps the
--- _v2 name to match current dev state. If 0087 has applied (constraint is
--- named _kind_allowed), we'd still want to rename to the un-prefixed form.
-DO $$
-DECLARE
-  cname text;
-BEGIN
-  SELECT conname INTO cname
-    FROM pg_constraint
-   WHERE conrelid = 'brain.external_refs'::regclass
-     AND contype = 'c'
-     AND conname LIKE '%kind_allowed%'
-   LIMIT 1;
-  IF cname IS NOT NULL THEN
-    IF cname = 'tenant_entity_external_refs_kind_allowed_v2' THEN
-      EXECUTE 'ALTER TABLE brain.external_refs RENAME CONSTRAINT tenant_entity_external_refs_kind_allowed_v2 TO external_refs_kind_allowed_v2';
-    ELSIF cname = 'tenant_entity_external_refs_kind_allowed' THEN
-      EXECUTE 'ALTER TABLE brain.external_refs RENAME CONSTRAINT tenant_entity_external_refs_kind_allowed TO external_refs_kind_allowed_v2';
-    END IF;
-  END IF;
-END $$;
+-- external_refs constraint: absorb 0087's tracker cleanup. Whatever the
+-- existing constraint name is (_v2 or _kind_allowed — depends on whether
+-- 0087 has applied yet), delete tracker rows and replace with the final
+-- constraint named external_refs_kind_allowed (no _v2) excluding tracker_*.
+-- This matches what brain.ts declares as the canonical Drizzle source.
+DELETE FROM brain.external_refs
+ WHERE source_kind IN ('tracker_issue', 'tracker_ticket');
+
+ALTER TABLE brain.external_refs
+  DROP CONSTRAINT IF EXISTS tenant_entity_external_refs_kind_allowed_v2;
+ALTER TABLE brain.external_refs
+  DROP CONSTRAINT IF EXISTS tenant_entity_external_refs_kind_allowed;
+
+ALTER TABLE brain.external_refs
+  ADD CONSTRAINT external_refs_kind_allowed CHECK (
+    source_kind IN (
+      'erp_customer',
+      'crm_opportunity',
+      'erp_order',
+      'crm_person',
+      'support_case',
+      'bedrock_kb'
+    )
+  );
 
 ALTER TABLE brain.external_refs RENAME CONSTRAINT tenant_entity_external_refs_ttl_positive TO external_refs_ttl_positive;
 

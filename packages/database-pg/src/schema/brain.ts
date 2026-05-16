@@ -329,17 +329,18 @@ export const tenantEntityExternalRefs = brain.table(
 			table.tenant_id,
 			table.source_kind,
 		),
-		// Constraint name retains the `_v2` suffix from the public-schema days
-		// (0088 renamed `_kind_allowed` to `_v2` when the value set was extended
-		// for the finance pilot). The value set still includes `tracker_*` for
-		// any DB where 0087 (OSS-connector retirement) has not yet applied;
-		// once 0087 lands, the brain table will still carry this constraint
-		// with the tracker entries — those are unreachable but harmless. A
-		// follow-up rename to drop `_v2` + drop tracker_* can ride along with
-		// 0087's deploy.
+		// Constraint excludes tracker_issue / tracker_ticket per the OSS-connector
+		// retirement (originally 0087's responsibility). 0090 absorbs 0087's
+		// tracker cleanup as part of the schema move: DELETE tracker rows, drop
+		// the prior constraint (whichever name — _v2 or _kind_allowed), re-add
+		// without tracker entries and without the _v2 suffix. This makes 0087's
+		// connector-related schema work (specifically the external_refs piece)
+		// redundant — 0087's DROP TABLE statements for computer_delegations /
+		// connector_executions / connectors / tenant_connector_catalog remain
+		// out of scope here.
 		check(
-			"external_refs_kind_allowed_v2",
-			sql`${table.source_kind} IN ('erp_customer','crm_opportunity','erp_order','crm_person','support_case','bedrock_kb','tracker_issue','tracker_ticket')`,
+			"external_refs_kind_allowed",
+			sql`${table.source_kind} IN ('erp_customer','crm_opportunity','erp_order','crm_person','support_case','bedrock_kb')`,
 		),
 		check(
 			"external_refs_ttl_positive",
