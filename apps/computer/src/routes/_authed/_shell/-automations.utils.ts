@@ -15,6 +15,7 @@ export type ScheduledJobRow = {
   computer_id: string | null;
   routine_id: string | null;
   prompt: string | null;
+  eb_schedule_name: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
   created_at: string;

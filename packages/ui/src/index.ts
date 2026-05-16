@@ -50,3 +50,5 @@ export * from "./components/ui/toggle.js";
 export * from "./components/ui/toggle-group.js";
 export * from "./components/ui/tooltip.js";
 export * from "./components/ui/user-menu.js";
+
+export * from "./components/automations/index.js";

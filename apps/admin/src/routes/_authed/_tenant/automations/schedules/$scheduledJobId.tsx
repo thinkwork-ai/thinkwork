@@ -1,7 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Play, Pause, Zap, Trash2, Loader2, Pencil, ChevronDown, ChevronRight } from "lucide-react";
+import { Play, Pause, Zap, Trash2, Loader2, Pencil } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useSubscription } from "urql";
+import {
+  PromptSection,
+  RunDetailSheet,
+  RunHistoryTable,
+  type ScheduledJobRunRow,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -45,17 +51,7 @@ type ScheduledJob = {
   updated_at: string;
 };
 
-type RunRow = {
-  id: string;
-  invocation_source: string;
-  status: string;
-  started_at: string | null;
-  finished_at: string | null;
-  error: string | null;
-  result_json: Record<string, unknown> | null;
-  usage_json: Record<string, unknown> | null;
-  created_at: string;
-};
+type RunRow = ScheduledJobRunRow;
 
 async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
   const { headers, ...rest } = options;
@@ -73,14 +69,6 @@ const TYPE_LABELS: Record<string, string> = {
   routine_one_time: "Routine One-time",
 };
 
-const RUN_STATUS_COLORS: Record<string, string> = {
-  queued: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400",
-  running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  succeeded: "bg-green-500/15 text-green-600 dark:text-green-400",
-  failed: "bg-red-500/15 text-red-600 dark:text-red-400",
-  cancelled: "bg-muted text-muted-foreground",
-};
-
 function formatSchedule(expr: string | null): string {
   if (!expr) return "—";
   if (expr.startsWith("rate(")) return expr.slice(5, -1);
@@ -91,58 +79,8 @@ function formatSchedule(expr: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Run Row (expandable)
+// Prompt panel — collapsed to ~5 lines by default with a Show all toggle.
 // ---------------------------------------------------------------------------
-
-function RunRowCard({ run }: { run: RunRow }) {
-  const [expanded, setExpanded] = useState(false);
-  const rawResponse = run.result_json?.response as string | undefined;
-  // Strip code fences so the markdown inside renders properly
-  const responseText = rawResponse?.replace(/```[\w]*\n?/g, "");
-  const durationMs = run.usage_json?.duration_ms as number | undefined;
-
-  return (
-    <div className="border rounded-md">
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-        <Badge variant="secondary" className={`text-xs capitalize ${RUN_STATUS_COLORS[run.status] || ""}`}>
-          {run.status}
-        </Badge>
-        <Badge variant="outline" className="text-xs capitalize">
-          {run.invocation_source.replace(/_/g, " ")}
-        </Badge>
-        <span className="text-xs text-muted-foreground flex-1">
-          {run.started_at ? relativeTime(run.started_at) : "Queued"}
-        </span>
-        {durationMs != null && (
-          <span className="text-xs text-muted-foreground">{(durationMs / 1000).toFixed(1)}s</span>
-        )}
-      </button>
-      {expanded && (responseText || run.error) && (
-        <div className="px-3 pb-3 border-t">
-          {responseText && (
-            <div className="text-sm bg-muted/50 rounded-md p-3 mt-2 max-h-64 overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseText}</ReactMarkdown>
-            </div>
-          )}
-          {run.error && (
-            <pre className="text-sm whitespace-pre-wrap text-destructive bg-destructive/5 rounded-md p-3 mt-2">
-              {run.error}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Edit Dialog
-// ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Edit Scheduled Job (uses shared dialog)
@@ -193,6 +131,8 @@ function ScheduledJobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<RunRow | null>(null);
+  const [runSheetOpen, setRunSheetOpen] = useState(false);
 
   useBreadcrumbs([
     { label: "Automations", href: "/automations/schedules" },
@@ -396,16 +336,7 @@ function ScheduledJobDetailPage() {
           </Card>
         </div>
 
-        {job.prompt && (
-          <Card className="gap-2 py-3">
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Prompt</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-sm whitespace-pre-wrap bg-muted/50 rounded-md p-3">{job.prompt}</pre>
-            </CardContent>
-          </Card>
-        )}
+        {job.prompt && <PromptSection prompt={job.prompt} />}
 
         {job.config && Object.keys(job.config).length > 0 && (
           <Card className="gap-2 py-3">
@@ -430,14 +361,30 @@ function ScheduledJobDetailPage() {
           {runs.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">No runs yet.</p>
           ) : (
-            <div className="space-y-2">
-              {runs.map((run) => (
-                <RunRowCard key={run.id} run={run} />
-              ))}
-            </div>
+            <RunHistoryTable
+              runs={runs}
+              formatRelativeTime={relativeTime}
+              onRowClick={(run) => {
+                setSelectedRun(run);
+                setRunSheetOpen(true);
+              }}
+            />
           )}
         </div>
       </div>
+
+      <RunDetailSheet
+        run={selectedRun}
+        open={runSheetOpen}
+        onOpenChange={(open) => {
+          setRunSheetOpen(open);
+          if (!open) setSelectedRun(null);
+        }}
+        renderResponse={(text) => (
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+        )}
+      />
     </div>
   );
 }
+
