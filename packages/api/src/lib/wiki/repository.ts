@@ -780,7 +780,7 @@ export async function countDuplicateTitleCandidates(
  * deterministic parent linker's recall-extension path: candidate
  * `"Portland"` resolves to active page `"Portland, Oregon"`.
  *
- * Uses the `idx_wiki_pages_title_trgm` GIN index (migration 0015).
+ * Uses the `idx_pages_title_trgm` GIN index (created in 0015 as `idx_wiki_pages_title_trgm`; renamed in 0089).
  * Internal try/catch returns empty on `pg_trgm` errors so callers
  * degrade gracefully if the extension is missing.
  */
@@ -1371,8 +1371,9 @@ export const PARENT_TITLE_FUZZY_THRESHOLD = 0.5;
  * matched page's `type` + `status` so callers can apply the type-mismatch
  * gate without a second lookup.
  *
- * Relies on the `idx_wiki_page_aliases_alias_trgm` GIN index from migration
- * 0015 for query performance; the function itself falls back to sequential
+ * Relies on the `idx_page_aliases_alias_trgm` GIN index (created in 0015 as
+ * `idx_wiki_page_aliases_alias_trgm`; renamed in 0089) for query performance;
+ * the function itself falls back to sequential
  * scan + returns empty if `pg_trgm` isn't installed (see Unit 3 fallback).
  */
 export async function findAliasMatchesFuzzy(

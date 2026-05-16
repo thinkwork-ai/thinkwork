@@ -4,7 +4,7 @@
  * The resolver runs:
  *   1. A user-scope auth check, with legacy agent-id compatibility covered
  *      by the auth tests.
- *   2. A raw `db.execute(sql`…`)` FTS query over `wiki_pages`.
+ *   2. A raw `db.execute(sql`…`)` FTS query over `wiki.pages`.
  *
  * We mock both paths so we can exercise argument handling, auth failures,
  * empty-query short-circuit, result shaping, and the regression guard that

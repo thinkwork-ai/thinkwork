@@ -46,13 +46,16 @@
 --   psql -c "\dt public.wiki_*"  -- 0 tables expected
 --
 -- Inverse runbook (rollback): drop the views, then SET SCHEMA back, then
--- RENAME back. Indexes and constraints follow automatically.
+-- RENAME back. Indexes and constraints follow their parent table's schema
+-- automatically. After SET SCHEMA moves the table to public, its indexes
+-- live in public — so ALTER INDEX statements must qualify with `public.`,
+-- not `wiki.`.
 --   DROP VIEW IF EXISTS public.wiki_pages, public.wiki_page_sections, ...;
---   ALTER TABLE wiki.pages SET SCHEMA public;
+--   ALTER TABLE wiki.pages SET SCHEMA public;    -- index moves to public too
 --   ALTER TABLE public.pages RENAME TO wiki_pages;
---   ... (× 9 tables, leaf-last)
---   ALTER INDEX wiki.idx_pages_owner RENAME TO idx_wiki_pages_owner;  -- × 28 indexes
---   DROP SCHEMA wiki;
+--   ALTER INDEX public.idx_pages_owner RENAME TO idx_wiki_pages_owner;  -- × 28 indexes
+--   ... (× 9 tables, parent-last so FKs into pages are still valid through the move)
+--   DROP SCHEMA wiki;   -- last step; fails if any objects remain in wiki schema
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh):
 --
