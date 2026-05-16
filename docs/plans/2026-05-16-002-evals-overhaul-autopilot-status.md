@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U12. CLI polish
-- Branch: `codex/evals-overhaul-u12-cli-polish`
-- Worktree: `.Codex/worktrees/evals-overhaul-u12-cli-polish`
-- State: PR #1270 open; waiting for required checks
+- Unit: U13. Running run detail rows
+- Branch: `codex/evals-running-detail-rows`
+- Worktree: `.Codex/worktrees/evals-running-detail-rows`
+- State: local verification passed; preparing PR
 
 ## Final Proof Request
 
@@ -96,6 +96,13 @@ status: active
 - 2026-05-16: Updated CLI eval seed help text from the stale maniflow 96/9 copy to the current ThinkWork 210 test cases across 14 categories.
 - 2026-05-16: Local U12 verification passed: CLI eval seed help output, CLI typecheck, CLI build, and `git diff --check`.
 - 2026-05-16: Opened PR #1270 for U12.
+- 2026-05-16: PR #1270 required checks passed, was squash-merged to `main`, and post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Seeded the dev eval corpus after the cleanup; 210 current ThinkWork test cases were inserted for `sleek-squirrel-230`.
+- 2026-05-16: Final Admin UI proof started and completed two end-to-end runs: generic Agent template `Default` on `performance-agents` completed 0/5 with 0.0% pass rate and $0.808716 cost; Computer template `Thinkwork Computer` on `performance-computer` completed 4/5 with 80.0% pass rate and $0.757188 cost.
+- 2026-05-16: Operator follow-up: running run detail pages must show every selected eval row with an individual status instead of an empty "No results" table until workers finish.
+- 2026-05-16: Created clean U13 follow-up worktree from `origin/main`.
+- 2026-05-16: Updated `evalRunResults` to merge completed result rows with planned test-case placeholder rows, so pending/running/cancelled/failed runs expose all selected cases immediately and completed rows replace placeholders as they arrive.
+- 2026-05-16: Local U13 verification passed: focused API resolver test, API typecheck, API build, and `git diff --check`.
 
 ## Pull Requests
 
@@ -113,7 +120,8 @@ status: active
 | U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                         |
 | U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
-| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | pending | pending | CLI eval seed help text reflects current seed corpus                                                                               |
+| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | passed  | merged  | CLI eval seed help text reflects current seed corpus; post-merge Deploy passed                                                     |
+| U13    | `codex/evals-running-detail-rows`              | pending                                                      | pending | pending | Follow-up: show planned eval rows and per-test statuses while a run is still in progress                                           |
 
 ## CI Failures
 
@@ -209,6 +217,12 @@ status: active
 - `pnpm --filter thinkwork-cli typecheck` - passed for U12.
 - `pnpm --filter thinkwork-cli build` - passed for U12.
 - `git diff --check` - passed for U12.
+- Admin UI proof run, generic Agent template `Default`, `performance-agents` category - completed 0/5 with 0.0% pass rate and visible result rows.
+- Admin UI proof run, Computer template `Thinkwork Computer`, `performance-computer` category - completed 4/5 with 80.0% pass rate.
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/evaluations/index.test.ts` - passed for U13.
+- `pnpm --filter @thinkwork/api typecheck` - passed for U13.
+- `pnpm --filter @thinkwork/api build` - passed for U13.
+- `git diff --check` - passed for U13.
 - `git diff --check` - passed for U7.
 - `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts eval-seeds.test.ts` - passed for U8.
 - `pnpm --filter @thinkwork/api build` - passed for U8.
