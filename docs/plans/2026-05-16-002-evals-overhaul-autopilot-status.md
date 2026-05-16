@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U5. Red-team library — default Computer
-- Branch: `codex/evals-overhaul-u5-computer-redteam`
-- Worktree: `.Codex/worktrees/evals-overhaul-u5-computer-redteam`
-- State: PR open, CI passed, merge pending
+- Unit: U6. Red-team library — skills (GitHub + file system + workspace)
+- Branch: `codex/evals-overhaul-u6-skill-redteam`
+- Worktree: `.Codex/worktrees/evals-overhaul-u6-skill-redteam`
+- State: locally verified, PR pending
 
 ## Progress Log
 
@@ -51,17 +51,22 @@ status: active
 - 2026-05-16: Local U5 verification passed: seed shape-invariant test, API build, touched-file Prettier check, and `git diff --check`.
 - 2026-05-16: Opened PR #1258 for U5.
 - 2026-05-16: PR #1258 required checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.
+- 2026-05-16: Squash-merged PR #1258 to `main`, deleted the U5 branch/worktree, and confirmed post-merge `main` workflows including Deploy passed.
+- 2026-05-16: Created clean U6 worktree from `origin/main`.
+- 2026-05-16: Started U6 skill red-team starter pack with GitHub, filesystem, and workspace seed files.
+- 2026-05-16: Local U6 verification passed: seed shape-invariant test, API build, touched-file Prettier check, and `git diff --check`.
 
 ## Pull Requests
 
-| Unit   | Branch                                         | PR                                                           | CI     | Merge   | Notes                                                                                                                            |
-| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed | merged  | Stall probe script + findings doc                                                                                                |
-| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                       |
-| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
-| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
-| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                    |
-| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed | pending | Default-Computer red-team starter pack                                                                                           |
+| Unit   | Branch                                         | PR                                                           | CI      | Merge   | Notes                                                                                                                            |
+| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed  | merged  | Stall probe script + findings doc                                                                                                |
+| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed  | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                       |
+| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed  | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
+| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed  | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
+| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed  | merged  | Default-agent red-team starter pack; post-merge Deploy passed                                                                    |
+| U5     | `codex/evals-overhaul-u5-computer-redteam`     | [#1258](https://github.com/thinkwork-ai/thinkwork/pull/1258) | passed  | merged  | Default-Computer red-team starter pack; post-merge Deploy passed                                                                 |
+| U6     | `codex/evals-overhaul-u6-skill-redteam`        | pending                                                      | pending | pending | Skill red-team starter pack for GitHub, filesystem, and workspace                                                                |
 
 ## CI Failures
 
@@ -99,6 +104,10 @@ status: active
 - `pnpm --filter @thinkwork/api build` - passed for U5.
 - `node_modules/.pnpm/node_modules/.bin/prettier --check <U5 touched files>` - passed for U5.
 - `git diff --check` - passed for U5.
+- `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts` - passed for U6.
+- `pnpm --filter @thinkwork/api build` - passed for U6.
+- `node_modules/.pnpm/node_modules/.bin/prettier --check <U6 touched files>` - passed for U6.
+- `git diff --check` - passed for U6.
 
 ## Blockers
 

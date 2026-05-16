@@ -19,6 +19,12 @@ const NEW_COMPUTER_FILES = [
   "red-team-computer-safety-scope.json",
 ] as const;
 
+const NEW_SKILL_FILES = [
+  "red-team-skill-github.json",
+  "red-team-skill-filesystem.json",
+  "red-team-skill-workspace.json",
+] as const;
+
 const CATEGORY_BY_FILE: Record<string, string> = {
   "red-team-agents-prompt-injection.json": "red-team-prompt-injection",
   "red-team-agents-tool-misuse.json": "red-team-tool-misuse",
@@ -29,6 +35,19 @@ const CATEGORY_BY_FILE: Record<string, string> = {
   "red-team-computer-data-boundary.json": "red-team-data-boundary",
   "red-team-computer-safety-scope.json": "red-team-safety-scope",
 };
+
+const TARGET_SKILL_BY_FILE: Record<string, string> = {
+  "red-team-skill-github.json": "github",
+  "red-team-skill-filesystem.json": "filesystem",
+  "red-team-skill-workspace.json": "workspace",
+};
+
+const ALLOWED_RED_TEAM_CATEGORIES = new Set([
+  "red-team-prompt-injection",
+  "red-team-tool-misuse",
+  "red-team-data-boundary",
+  "red-team-safety-scope",
+]);
 
 const ALLOWED_EVALUATORS = new Set([
   "Builtin.Helpfulness",
@@ -67,6 +86,7 @@ interface SeedCase {
   name?: unknown;
   category?: unknown;
   target_surface?: unknown;
+  target_skill?: unknown;
   prompt?: unknown;
   query?: unknown;
   expected_behavior?: unknown;
@@ -85,13 +105,23 @@ function readSeedFile(fileName: string): SeedCase[] {
 
 function expectNewRedTeamShape(
   fileName: string,
-  targetSurface: "agent" | "computer",
+  targetSurface: "agent" | "computer" | "skill",
 ) {
   const cases = readSeedFile(fileName);
-  expect(cases, `${fileName} should ship 15 cases`).toHaveLength(15);
+  expect(cases, `${fileName} should ship the planned case count`).toHaveLength(
+    targetSurface === "skill" ? 25 : 15,
+  );
 
   for (const testCase of cases) {
-    expect(testCase.category).toBe(CATEGORY_BY_FILE[fileName]);
+    if (targetSurface === "skill") {
+      expect(ALLOWED_RED_TEAM_CATEGORIES.has(testCase.category as string)).toBe(
+        true,
+      );
+      expect(testCase.target_skill).toBe(TARGET_SKILL_BY_FILE[fileName]);
+    } else {
+      expect(testCase.category).toBe(CATEGORY_BY_FILE[fileName]);
+      expect(testCase.target_skill).toBeUndefined();
+    }
     expect(testCase.target_surface).toBe(targetSurface);
     expect(typeof testCase.name).toBe("string");
     expect((testCase.name as string).length).toBeGreaterThan(0);
@@ -162,6 +192,12 @@ describe("eval seed shape invariants", () => {
   it("validates the default-Computer red-team corpus shape", () => {
     for (const fileName of NEW_COMPUTER_FILES) {
       expectNewRedTeamShape(fileName, "computer");
+    }
+  });
+
+  it("validates the skill red-team corpus shape", () => {
+    for (const fileName of NEW_SKILL_FILES) {
+      expectNewRedTeamShape(fileName, "skill");
     }
   });
 });
