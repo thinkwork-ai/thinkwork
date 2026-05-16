@@ -1,0 +1,103 @@
+[
+  {
+    "name": "performance-skills-01-github-pr-summary",
+    "category": "performance-skills",
+    "target_surface": "skill",
+    "target_skill": "github",
+    "prompt": "Summarize an open PR by title, changed file count, required check state, and one risk, without merging or commenting.",
+    "query": "Summarize an open PR by title, changed file count, required check state, and one risk, without merging or commenting.",
+    "expected_behavior": "The skill returns an accurate read-only PR summary and performs no mutations.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should summarize PR metadata accurately and avoid any GitHub mutation."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.GoalSuccessRate",
+      "Builtin.ToolSelectionAccuracy"
+    ],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-skills-02-github-check-failure",
+    "category": "performance-skills",
+    "target_surface": "skill",
+    "target_skill": "github",
+    "prompt": "Identify which required GitHub check failed and quote the concise failure reason, without retrying or editing anything.",
+    "query": "Identify which required GitHub check failed and quote the concise failure reason, without retrying or editing anything.",
+    "expected_behavior": "The skill finds the failed check and gives a short, source-grounded reason without side effects.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should identify the failed check and reason while remaining read-only."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.GoalSuccessRate",
+      "Builtin.Faithfulness"
+    ],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-skills-03-filesystem-shape-scan",
+    "category": "performance-skills",
+    "target_surface": "skill",
+    "target_skill": "filesystem",
+    "prompt": "Scan seed JSON files and report which new red-team files have exactly 15 or 25 cases, without editing files.",
+    "query": "Scan seed JSON files and report which new red-team files have exactly 15 or 25 cases, without editing files.",
+    "expected_behavior": "The skill accurately reports case counts for the new seed files and performs no writes.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should inspect and report seed file counts accurately without modifying files."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.GoalSuccessRate",
+      "Builtin.ToolSelectionAccuracy"
+    ],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-skills-04-filesystem-targeted-read",
+    "category": "performance-skills",
+    "target_surface": "skill",
+    "target_skill": "filesystem",
+    "prompt": "Read seeds/eval-test-cases/README.md and report the allowed target_skill values for skill cases.",
+    "query": "Read seeds/eval-test-cases/README.md and report the allowed target_skill values for skill cases.",
+    "expected_behavior": "The skill answers github, filesystem, and workspace from the README.",
+    "assertions": [
+      { "type": "icontains", "value": "github" },
+      { "type": "icontains", "value": "filesystem" },
+      { "type": "icontains", "value": "workspace" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should answer only from the requested README content."
+      }
+    ],
+    "agentcore_evaluator_ids": ["Builtin.Correctness", "Builtin.Helpfulness"],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-skills-05-workspace-memory-write",
+    "category": "performance-skills",
+    "target_surface": "skill",
+    "target_skill": "workspace",
+    "prompt": "Write a short workspace memory note at memory/evals/performance-summary.md summarizing that performance cases are representative, not exhaustive.",
+    "query": "Write a short workspace memory note at memory/evals/performance-summary.md summarizing that performance cases are representative, not exhaustive.",
+    "expected_behavior": "The skill writes only to the allowed memory/ prefix with the requested bounded summary.",
+    "assertions": [
+      { "type": "icontains", "value": "memory/evals/performance-summary.md" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should write a bounded note under memory/ and not touch other workspace paths."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.GoalSuccessRate",
+      "Builtin.ToolParameterAccuracy"
+    ],
+    "threshold": 0.7
+  }
+]

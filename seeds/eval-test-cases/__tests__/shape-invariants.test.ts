@@ -25,6 +25,12 @@ const NEW_SKILL_FILES = [
   "red-team-skill-workspace.json",
 ] as const;
 
+const PERFORMANCE_FILES = [
+  "performance-agents.json",
+  "performance-computer.json",
+  "performance-skills.json",
+] as const;
+
 const CATEGORY_BY_FILE: Record<string, string> = {
   "red-team-agents-prompt-injection.json": "red-team-prompt-injection",
   "red-team-agents-tool-misuse.json": "red-team-tool-misuse",
@@ -48,6 +54,15 @@ const ALLOWED_RED_TEAM_CATEGORIES = new Set([
   "red-team-data-boundary",
   "red-team-safety-scope",
 ]);
+
+const PERFORMANCE_SURFACE_BY_FILE: Record<
+  string,
+  "agent" | "computer" | "skill"
+> = {
+  "performance-agents.json": "agent",
+  "performance-computer.json": "computer",
+  "performance-skills.json": "skill",
+};
 
 const ALLOWED_EVALUATORS = new Set([
   "Builtin.Helpfulness",
@@ -162,6 +177,42 @@ function expectNewRedTeamShape(
   }
 }
 
+function expectPerformanceShape(fileName: string) {
+  const cases = readSeedFile(fileName);
+  expect(cases, `${fileName} should ship 5 cases`).toHaveLength(5);
+
+  for (const testCase of cases) {
+    expect(testCase.category).toMatch(/^performance-/);
+    expect(testCase.target_surface).toBe(PERFORMANCE_SURFACE_BY_FILE[fileName]);
+    if (testCase.target_surface === "skill") {
+      expect(["github", "filesystem", "workspace"]).toContain(
+        testCase.target_skill,
+      );
+    } else {
+      expect(testCase.target_skill).toBeUndefined();
+    }
+    expect(typeof testCase.name).toBe("string");
+    expect(typeof testCase.prompt).toBe("string");
+    expect(testCase.query).toBe(testCase.prompt);
+    expect(typeof testCase.expected_behavior).toBe("string");
+    expect(typeof testCase.threshold).toBe("number");
+    expect(testCase.threshold as number).toBeGreaterThan(0);
+    expect(testCase.threshold as number).toBeLessThanOrEqual(1);
+    expect(Array.isArray(testCase.assertions)).toBe(true);
+    expect((testCase.assertions as unknown[]).length).toBeGreaterThan(0);
+    expect(Array.isArray(testCase.agentcore_evaluator_ids)).toBe(true);
+    expect(
+      (testCase.agentcore_evaluator_ids as unknown[]).length,
+    ).toBeGreaterThan(0);
+    for (const evaluatorId of testCase.agentcore_evaluator_ids as unknown[]) {
+      expect(
+        ALLOWED_EVALUATORS.has(evaluatorId as string),
+        `${evaluatorId}`,
+      ).toBe(true);
+    }
+  }
+}
+
 describe("eval seed shape invariants", () => {
   it("keeps all seed case names globally unique", () => {
     const seen = new Map<string, string>();
@@ -198,6 +249,12 @@ describe("eval seed shape invariants", () => {
   it("validates the skill red-team corpus shape", () => {
     for (const fileName of NEW_SKILL_FILES) {
       expectNewRedTeamShape(fileName, "skill");
+    }
+  });
+
+  it("validates the performance corpus shape", () => {
+    for (const fileName of PERFORMANCE_FILES) {
+      expectPerformanceShape(fileName);
     }
   });
 });

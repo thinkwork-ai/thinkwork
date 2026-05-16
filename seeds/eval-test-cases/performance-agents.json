@@ -1,0 +1,96 @@
+[
+  {
+    "name": "performance-agents-01-repo-prereqs",
+    "category": "performance-agents",
+    "target_surface": "agent",
+    "prompt": "What Node.js and package manager versions does this repository require? Answer with the exact minimums.",
+    "query": "What Node.js and package manager versions does this repository require? Answer with the exact minimums.",
+    "expected_behavior": "The agent identifies Node.js >=22 and pnpm >=9 from repository guidance.",
+    "assertions": [
+      { "type": "icontains", "value": "Node" },
+      { "type": "icontains", "value": "22" },
+      { "type": "icontains", "value": "pnpm" },
+      { "type": "icontains", "value": "9" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should give exact repository prerequisite versions without inventing unrelated tooling."
+      }
+    ],
+    "agentcore_evaluator_ids": ["Builtin.Correctness", "Builtin.Helpfulness"],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-agents-02-admin-dev-port",
+    "category": "performance-agents",
+    "target_surface": "agent",
+    "prompt": "Which local dev port should the admin app use by default, and what env file must be copied when running from a worktree?",
+    "query": "Which local dev port should the admin app use by default, and what env file must be copied when running from a worktree?",
+    "expected_behavior": "The agent answers that admin uses port 5174 by default and worktrees need apps/admin/.env copied from the main checkout.",
+    "assertions": [
+      { "type": "icontains", "value": "5174" },
+      { "type": "icontains", "value": "apps/admin/.env" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should identify the correct admin dev port and ignored env file requirement."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.Correctness",
+      "Builtin.ResponseRelevance"
+    ],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-agents-03-graphql-schema-source",
+    "category": "performance-agents",
+    "target_surface": "agent",
+    "prompt": "Where is the canonical GraphQL schema source for this repository, and which command regenerates the AppSync subscription schema?",
+    "query": "Where is the canonical GraphQL schema source for this repository, and which command regenerates the AppSync subscription schema?",
+    "expected_behavior": "The agent identifies packages/database-pg/graphql/types/*.graphql and pnpm schema:build.",
+    "assertions": [
+      { "type": "icontains", "value": "packages/database-pg/graphql/types" },
+      { "type": "icontains", "value": "pnpm schema:build" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should locate the canonical GraphQL source and correct regeneration command."
+      }
+    ],
+    "agentcore_evaluator_ids": ["Builtin.Correctness", "Builtin.Helpfulness"],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-agents-04-eval-runner-substrate",
+    "category": "performance-agents",
+    "target_surface": "agent",
+    "prompt": "Briefly explain the eval runner substrate after the overhaul: who dispatches work, who processes cases, and how runs finalize.",
+    "query": "Briefly explain the eval runner substrate after the overhaul: who dispatches work, who processes cases, and how runs finalize.",
+    "expected_behavior": "The agent describes eval-runner as the SQS dispatcher, eval-worker as the per-case processor, and worker-side last-write/CAS finalization.",
+    "assertions": [
+      { "type": "icontains", "value": "SQS" },
+      { "type": "icontains", "value": "eval-worker" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should accurately summarize the dispatcher, worker, and finalization responsibilities."
+      }
+    ],
+    "agentcore_evaluator_ids": ["Builtin.Correctness", "Builtin.Coherence"],
+    "threshold": 0.7
+  },
+  {
+    "name": "performance-agents-05-manual-migration-marker",
+    "category": "performance-agents",
+    "target_surface": "agent",
+    "prompt": "When adding a hand-rolled Drizzle SQL migration that creates a column, what marker should appear in the header?",
+    "query": "When adding a hand-rolled Drizzle SQL migration that creates a column, what marker should appear in the header?",
+    "expected_behavior": "The agent answers that the header should include a creates-column marker such as -- creates-column: public.table.column.",
+    "assertions": [
+      { "type": "icontains", "value": "creates-column" },
+      {
+        "type": "llm-rubric",
+        "value": "The response should identify the manual migration marker used by the drift reporter."
+      }
+    ],
+    "agentcore_evaluator_ids": ["Builtin.Correctness", "Builtin.Conciseness"],
+    "threshold": 0.7
+  }
+]
