@@ -60,9 +60,9 @@ export const wikiConnectedPages = async (
 	// connected page regardless of link kind.
 	const byId = new Map<string, (typeof rows)[number]>();
 	for (const r of rows) {
-		byId.set(r.wiki_pages.id, r);
+		byId.set(r.pages.id, r);
 	}
 	return Array.from(byId.values()).map((r) =>
-		toGraphQLPage(r.wiki_pages, { sections: [], aliases: [] }),
+		toGraphQLPage(r.pages, { sections: [], aliases: [] }),
 	);
 };
