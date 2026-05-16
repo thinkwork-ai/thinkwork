@@ -1,0 +1,89 @@
+name: Migration Precheck
+
+# Pre-merge gate for hand-rolled SQL migrations. Runs on every PR that
+# touches packages/database-pg/drizzle/*.sql and verifies the operator
+# has applied the migration to the dev DB before merge by running
+# `pnpm db:migrate-manual` against dev.
+#
+# Why this gate exists: five documented drift incidents
+# (0008, 0012, 0018/0019, 0036-0039, 0833/0835) all traced to the same
+# root cause — hand-rolled migrations land in PRs without being applied
+# to dev first, and the failure mode is silent until runtime. See
+# docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md.
+#
+# Distinct from .github/workflows/deploy.yml's `migration-drift-check`
+# job (currently `if: false`): that gate fires ~150 separate psql
+# connections per deploy and is flake-prone. This gate runs ONCE per PR,
+# opens a SINGLE connection, and fails the PR check on MISSING /
+# UNVERIFIED markers — the mechanical replacement for the
+# operator-discipline-only regime.
+
+on:
+  pull_request:
+    paths:
+      - "packages/database-pg/drizzle/*.sql"
+      - "scripts/db-migrate-manual.sh"
+      - ".github/workflows/migration-precheck.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/database-pg/drizzle/*.sql"
+      - "scripts/db-migrate-manual.sh"
+      - ".github/workflows/migration-precheck.yml"
+
+concurrency:
+  group: migration-precheck-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  STAGE: dev
+
+jobs:
+  migration-drift-precheck:
+    name: Migration Drift Precheck (dev)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve dev DB endpoint + secret
+        id: outputs
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+          source ../../../scripts/lib/terraform-output.sh
+          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client jq
+
+      - name: Verify hand-rolled migrations are applied to dev
+        run: |
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" \
+            --query SecretString --output text | jq -r .password)
+          # psql rejects sslmode=no-verify (a Node pg-driver value).
+          # Use sslmode=require — same RDS-compatible behavior, accepted by psql.
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=require"
+          bash scripts/db-migrate-manual.sh
