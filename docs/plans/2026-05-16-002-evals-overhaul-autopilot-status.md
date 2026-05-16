@@ -10,10 +10,10 @@ status: active
 
 ## Current Unit
 
-- Unit: U3. Worker live + dispatcher rewrite + run finalizer
-- Branch: `codex/evals-overhaul-u3-advisory-idempotency`
-- Worktree: `.Codex/worktrees/evals-overhaul-u3-advisory-idempotency`
-- State: PR open, CI pending
+- Unit: U4. Red-team library — default Strands agents
+- Branch: `codex/evals-overhaul-u4-agents-redteam`
+- Worktree: `.Codex/worktrees/evals-overhaul-u4-agents-redteam`
+- State: PR open, CI passed, merge pending
 
 ## Progress Log
 
@@ -38,15 +38,23 @@ status: active
 - 2026-05-16: Created fix-forward worktree `codex/evals-overhaul-u3-advisory-idempotency`. Removed the unique-index migration/deploy step and changed worker idempotency to use `pg_advisory_xact_lock(hashtext(runId), hashtext(testCaseId))` plus a transaction-local duplicate check before insert.
 - 2026-05-16: Local U3 fix verification passed: API typecheck, database build, eval-runner/eval-worker/integration tests, eval-worker Lambda build, and `git diff --check`.
 - 2026-05-16: Opened PR #1255 for the U3 deploy fix.
+- 2026-05-16: PR #1255 required checks passed, was squash-merged to `main`, and post-merge Deploy passed.
+- 2026-05-16: Removed meaningless dev eval run data at operator request: deleted 9 `eval_runs`, 488 cascading `eval_results`, and 0 eval-related `cost_events`; remaining dev counts are 0 eval runs, 0 eval results, and 0 eval cost events.
+- 2026-05-16: Created clean U4 worktree from `origin/main`.
+- 2026-05-16: Started U4 agent red-team starter pack with four new default-agent files and shape-invariant tests.
+- 2026-05-16: Local U4 verification passed: seed shape-invariant test, API build, touched-file Prettier check, and `git diff --check`.
+- 2026-05-16: Opened PR #1256 for U4.
+- 2026-05-16: PR #1256 required checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.
 
 ## Pull Requests
 
-| Unit | Branch | PR | CI | Merge | Notes |
-| --- | --- | --- | --- | --- | --- |
-| U1 | `codex/evals-overhaul-u1-stall-probe` | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed | merged | Stall probe script + findings doc |
-| U2 | `codex/evals-overhaul-u2-sqs-substrate` | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed | merged | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry |
-| U3 | `codex/evals-overhaul-u3-worker-live` | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed | merged | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
-| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | pending | pending | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; locally verified |
+| Unit   | Branch                                         | PR                                                           | CI     | Merge   | Notes                                                                                                                            |
+| ------ | ---------------------------------------------- | ------------------------------------------------------------ | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| U1     | `codex/evals-overhaul-u1-stall-probe`          | [#1252](https://github.com/thinkwork-ai/thinkwork/pull/1252) | passed | merged  | Stall probe script + findings doc                                                                                                |
+| U2     | `codex/evals-overhaul-u2-sqs-substrate`        | [#1253](https://github.com/thinkwork-ai/thinkwork/pull/1253) | passed | merged  | Inert SQS queue, DLQ, alarm, worker stub, IAM, build entry                                                                       |
+| U3     | `codex/evals-overhaul-u3-worker-live`          | [#1254](https://github.com/thinkwork-ai/thinkwork/pull/1254) | passed | merged  | Worker live body, dispatcher rewrite, run finalizer; post-merge deploy failed on duplicate historical rows blocking unique index |
+| U3 fix | `codex/evals-overhaul-u3-advisory-idempotency` | [#1255](https://github.com/thinkwork-ai/thinkwork/pull/1255) | passed | merged  | Replace unique-index idempotency with advisory-lock idempotency to avoid destructive duplicate cleanup; post-merge Deploy passed |
+| U4     | `codex/evals-overhaul-u4-agents-redteam`       | [#1256](https://github.com/thinkwork-ai/thinkwork/pull/1256) | passed | pending | Default-agent red-team starter pack                                                                                              |
 
 ## CI Failures
 
@@ -75,6 +83,11 @@ status: active
 - `pnpm --filter @thinkwork/api typecheck` - passed for U3 fix.
 - `pnpm --filter @thinkwork/database-pg build` - passed for U3 fix.
 - `bash scripts/build-lambdas.sh eval-worker` - passed for U3 fix.
+- Dev eval data cleanup verification query - passed; remaining eval run/result/cost-event counts are zero.
+- `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts` - passed for U4.
+- `pnpm --filter @thinkwork/api build` - passed for U4.
+- `node_modules/.pnpm/node_modules/.bin/prettier --check <U4 touched files>` - passed for U4.
+- `git diff --check` - passed for U4.
 
 ## Blockers
 
