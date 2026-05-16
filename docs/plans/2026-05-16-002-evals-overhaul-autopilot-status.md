@@ -13,7 +13,7 @@ status: active
 - Unit: U12. CLI polish
 - Branch: `codex/evals-overhaul-u12-cli-polish`
 - Worktree: `.Codex/worktrees/evals-overhaul-u12-cli-polish`
-- State: local verification passed; preparing PR
+- State: PR #1270 open; waiting for required checks
 
 ## Final Proof Request
 
@@ -95,6 +95,7 @@ status: active
 - 2026-05-16: Created clean U12 worktree from `origin/main`.
 - 2026-05-16: Updated CLI eval seed help text from the stale maniflow 96/9 copy to the current ThinkWork 210 test cases across 14 categories.
 - 2026-05-16: Local U12 verification passed: CLI eval seed help output, CLI typecheck, CLI build, and `git diff --check`.
+- 2026-05-16: Opened PR #1270 for U12.
 
 ## Pull Requests
 
@@ -112,7 +113,7 @@ status: active
 | U9     | `codex/evals-overhaul-u9-drill-in`             | [#1266](https://github.com/thinkwork-ai/thinkwork/pull/1266) | passed  | merged  | Drill-in sheet evaluator reasoning and lazy AgentCore span trace; post-merge Deploy passed                                         |
 | U10    | `codex/evals-overhaul-u10-schedules`           | [#1267](https://github.com/thinkwork-ai/thinkwork/pull/1267) | passed  | merged  | Eval schedule authoring, eval schedule filtering, and Agent/Computer template target selection; post-merge Deploy passed           |
 | U11    | `codex/evals-overhaul-u11-provenance`          | [#1268](https://github.com/thinkwork-ai/thinkwork/pull/1268) | passed  | merged  | Scheduled eval provenance column, resolver field, job-trigger population, and Recent Runs schedule badge; post-merge Deploy passed |
-| U12    | `codex/evals-overhaul-u12-cli-polish`          | pending                                                      | pending | pending | CLI eval seed help text reflects current seed corpus                                                                               |
+| U12    | `codex/evals-overhaul-u12-cli-polish`          | [#1270](https://github.com/thinkwork-ai/thinkwork/pull/1270) | pending | pending | CLI eval seed help text reflects current seed corpus                                                                               |
 
 ## CI Failures
 
