@@ -122,7 +122,6 @@ export function TaskDashboard({
               columns={columns}
               data={threads}
               hideHeader
-              compact
               scrollable
               pageSize={pageSize}
               totalCount={totalCount}

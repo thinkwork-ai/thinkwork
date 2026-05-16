@@ -23,6 +23,10 @@ import {
 } from "./table.js";
 import { Badge } from "./badge.js";
 import { DataTablePagination } from "./data-table-pagination.js";
+import { cn } from "../../lib/utils.js";
+
+const ROW_HEIGHT_40PX_CLASSES =
+  "h-10 border-b-0 shadow-[inset_0_-1px_0_var(--color-border)] [&>td]:py-0 [&>td]:overflow-hidden";
 
 export interface GeneratedDataTableColumn<TData> {
   key: Extract<keyof TData, string> | string;
@@ -61,8 +65,6 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number;
   /** Hide the table header row */
   hideHeader?: boolean;
-  /** Compact row height (~40px) */
-  compact?: boolean;
   /** Enable row selection with checkboxes */
   enableRowSelection?: boolean;
   /** Render prop for toolbar content above the table */
@@ -96,7 +98,6 @@ export function DataTable<TData, TValue>({
   onRowClick,
   pageSize = 10,
   hideHeader = false,
-  compact = false,
   enableRowSelection = false,
   toolbar,
   tableClassName,
@@ -214,25 +215,19 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={[
-              "max-h-10 [&>td]:max-h-10 [&>td]:overflow-hidden",
-              compact ? "h-10" : undefined,
-              onRowClick ? "cursor-pointer" : undefined,
-            ].filter(Boolean).join(" ")}
+            className={cn(
+              ROW_HEIGHT_40PX_CLASSES,
+              onRowClick && "cursor-pointer",
+            )}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
               <TableCell
                 key={cell.id}
                 className={
-                  [
-                    compact ? "h-10 p-0" : undefined,
-                    tableClassName?.includes("table-fixed")
-                      ? "overflow-hidden"
-                      : undefined,
-                  ]
-                    .filter(Boolean)
-                    .join(" ") || undefined
+                  tableClassName?.includes("table-fixed")
+                    ? "overflow-hidden"
+                    : undefined
                 }
               >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -241,10 +236,10 @@ export function DataTable<TData, TValue>({
           </TableRow>
         ))
       ) : (
-        <TableRow>
+        <TableRow className={ROW_HEIGHT_40PX_CLASSES}>
           <TableCell
             colSpan={columns.length}
-            className="h-24 text-center text-muted-foreground"
+            className="text-center text-muted-foreground"
           >
             {emptyState}
           </TableCell>

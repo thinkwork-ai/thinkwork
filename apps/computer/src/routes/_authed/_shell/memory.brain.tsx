@@ -341,7 +341,6 @@ function BrainPage() {
             data={rows}
             onRowClick={handleRowClick}
             scrollable
-            compact
             pageSize={25}
             tableClassName="table-fixed"
           />

@@ -192,7 +192,6 @@ function KbsIndexPage() {
               navigate({ to: "/memory/kbs/$kbId", params: { kbId: row.id } })
             }
             scrollable
-            compact
             pageSize={25}
           />
         )}

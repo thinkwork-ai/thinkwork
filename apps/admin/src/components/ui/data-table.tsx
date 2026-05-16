@@ -21,6 +21,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { cn } from "@/lib/utils";
+
+const ROW_HEIGHT_40PX_CLASSES =
+  "h-10 border-b-0 shadow-[inset_0_-1px_0_var(--color-border)] [&>td]:py-0 [&>td]:overflow-hidden";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -35,8 +39,6 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number;
   /** Hide the table header row */
   hideHeader?: boolean;
-  /** Compact row height (~40px) */
-  compact?: boolean;
   /** Enable row selection with checkboxes */
   enableRowSelection?: boolean;
   /** Render prop for toolbar content above the table */
@@ -65,7 +67,6 @@ export function DataTable<TData, TValue>({
   onRowClick,
   pageSize = 10,
   hideHeader = false,
-  compact = false,
   enableRowSelection = false,
   toolbar,
   tableClassName,
@@ -178,11 +179,14 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={onRowClick ? "cursor-pointer" : undefined}
+            className={cn(
+              ROW_HEIGHT_40PX_CLASSES,
+              onRowClick && "cursor-pointer",
+            )}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id} className={[compact ? "p-0 h-auto" : undefined, tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined].filter(Boolean).join(" ") || undefined}>
+              <TableCell key={cell.id} className={tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined}>
                 {flexRender(
                   cell.column.columnDef.cell,
                   cell.getContext(),
@@ -192,10 +196,10 @@ export function DataTable<TData, TValue>({
           </TableRow>
         ))
       ) : (
-        <TableRow>
+        <TableRow className={ROW_HEIGHT_40PX_CLASSES}>
           <TableCell
             colSpan={columns.length}
-            className="h-24 text-center text-muted-foreground"
+            className="text-center text-muted-foreground"
           >
             No results.
           </TableCell>

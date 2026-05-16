@@ -88,7 +88,6 @@ export interface ThreadsTableProps {
   /** Pass-through `DataTable` chrome flags. */
   hideHeader?: boolean;
   scrollable?: boolean;
-  compact?: boolean;
   /**
    * Future divergence point. v1 keeps column set identical — see
    * component-doc rationale.
@@ -105,7 +104,6 @@ export function ThreadsTable({
   pagination,
   hideHeader = true,
   scrollable = false,
-  compact = true,
   scope: _scope = "tenant",
 }: ThreadsTableProps) {
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<
@@ -284,7 +282,6 @@ export function ThreadsTable({
       columns={columns}
       data={items as ThreadsTableItem[]}
       hideHeader={hideHeader}
-      compact={compact}
       scrollable={scrollable}
       tableClassName="table-fixed"
       {...(pagination

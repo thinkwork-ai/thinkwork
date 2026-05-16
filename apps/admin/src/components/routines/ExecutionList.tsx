@@ -394,7 +394,6 @@ export function ExecutionList({
       <DataTable
         columns={columns}
         data={rows}
-        compact
         tableClassName="table-fixed"
         pageSize={pageSize}
         totalCount={Math.max(syntheticTotalCount, 1)}

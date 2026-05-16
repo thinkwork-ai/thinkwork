@@ -114,7 +114,6 @@ export function AgentActivity({ items, onRefresh, agentId, agentName }: AgentAct
             columns={columns}
             data={items}
             hideHeader
-            compact
             onRowClick={handleRowClick}
             tableClassName="table-fixed"
           />
