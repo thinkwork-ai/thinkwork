@@ -91,13 +91,13 @@ async function snapshot(
 			p.slug AS "slug",
 			p.title AS "title",
 			coalesce(
-				(SELECT count(*) FROM wiki_page_links l
+				(SELECT count(*) FROM wiki.page_links l
 				 WHERE l.to_page_id = p.id AND l.kind = 'reference'),
 				0
 			) AS "inbound_link_count",
 			coalesce(
 				(SELECT array_agg(l.from_page_id::text ORDER BY l.from_page_id::text)
-				 FROM wiki_page_links l
+				 FROM wiki.page_links l
 				 WHERE l.to_page_id = p.id AND l.kind = 'reference'),
 				ARRAY[]::text[]
 			) AS "inbound_link_ids",
@@ -109,11 +109,11 @@ async function snapshot(
 					)
 					ORDER BY s.section_slug
 				)
-				FROM wiki_page_sections s
+				FROM wiki.page_sections s
 				WHERE s.page_id = p.id AND s.aggregation IS NOT NULL),
 				'[]'::jsonb
 			) AS "section_aggregations"
-		FROM wiki_pages p
+		FROM wiki.pages p
 		WHERE p.tenant_id = ${tenantId}::uuid
 			AND p.owner_id = ${ownerId}::uuid
 			AND p.status = 'active'

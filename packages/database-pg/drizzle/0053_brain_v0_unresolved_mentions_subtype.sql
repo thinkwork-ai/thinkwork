@@ -6,8 +6,12 @@
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0053_brain_v0_unresolved_mentions_subtype.sql
 --
--- creates-column: public.wiki_unresolved_mentions.entity_subtype
--- creates-constraint: public.wiki_unresolved_mentions.wiki_unresolved_mentions_entity_subtype_allowed
+-- creates-column: wiki.unresolved_mentions.entity_subtype
+-- creates-constraint: wiki.unresolved_mentions.unresolved_mentions_entity_subtype_allowed
+-- Note: column + constraint were originally created on public.wiki_unresolved_mentions;
+-- 0089_wiki_schema_extraction.sql moved the table to wiki.unresolved_mentions and renamed
+-- the constraint. Markers updated to track post-0089 location so the drift reporter resolves
+-- them via pg_class/pg_constraint in the new schema.
 
 \set ON_ERROR_STOP on
 

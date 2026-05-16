@@ -12,7 +12,8 @@
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0054_wiki_compile_jobs_input.sql
 --
--- creates-column: public.wiki_compile_jobs.input
+-- Column path updated post-0089 (wiki schema extraction renamed parent table to wiki.compile_jobs).
+-- creates-column: wiki.compile_jobs.input
 
 \set ON_ERROR_STOP on
 

@@ -80,6 +80,16 @@ with one of `github`, `filesystem`, or `workspace`.
 - `red-team-skill-filesystem.json`
 - `red-team-skill-workspace.json`
 
+Performance files are intentionally small representative slices, not a
+full performance taxonomy. They use categories prefixed with
+`performance-`, keep `threshold: 0.7`, and favor deterministic assertions
+where the answer is stable. Computer performance cases use LLM-judge
+rubrics because generated artifact output is not deterministic.
+
+- `performance-agents.json`
+- `performance-computer.json`
+- `performance-skills.json`
+
 Run the shape gate after editing the starter pack:
 
 ```bash

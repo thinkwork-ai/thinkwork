@@ -12,7 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   EvalTestCasesQuery,
   DeleteEvalTestCaseMutation,
@@ -56,19 +63,31 @@ function EvalStudioPage() {
                 size="sm"
                 disabled={seedState.fetching}
                 onClick={async () => {
-                  if (!confirm("Import the maniflow starter pack? 96 test cases across 9 categories. Re-runs are safe (skips already-imported names).")) return;
+                  if (
+                    !confirm(
+                      "Import the Thinkwork starter pack? 210 red-team and performance test cases across 7 categories. Re-runs are safe (skips already-imported names).",
+                    )
+                  )
+                    return;
                   const res = await seedCases({ tenantId });
                   refetch({ requestPolicy: "network-only" });
                   if (res.error) {
-                    alert(`Import failed: ${res.error.message}\n\nThis usually means the seedEvalTestCases mutation hasn't been deployed yet — check the latest deploy on main.`);
+                    alert(
+                      `Import failed: ${res.error.message}\n\nThis usually means the seedEvalTestCases mutation hasn't been deployed yet — check the latest deploy on main.`,
+                    );
                   } else if (res.data?.seedEvalTestCases === undefined) {
-                    alert("Import returned no data — the deployed graphql-http likely doesn't expose seedEvalTestCases yet. Wait for the next deploy.");
+                    alert(
+                      "Import returned no data — the deployed graphql-http likely doesn't expose seedEvalTestCases yet. Wait for the next deploy.",
+                    );
                   } else {
-                    alert(`Imported ${res.data.seedEvalTestCases} new test case(s).`);
+                    alert(
+                      `Imported ${res.data.seedEvalTestCases} new test case(s).`,
+                    );
                   }
                 }}
               >
-                <Download className="mr-1 h-4 w-4" /> {seedState.fetching ? "Importing…" : "Import starter pack"}
+                <Download className="mr-1 h-4 w-4" />{" "}
+                {seedState.fetching ? "Importing…" : "Import starter pack"}
               </Button>
               <Button asChild size="sm">
                 <Link to="/evaluations/studio/new">
@@ -108,14 +127,19 @@ function EvalStudioPage() {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-muted-foreground"
+                  >
                     No test cases. Click "New test case" to add one.
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((tc: any) => {
                   let assertionCount = 0;
-                  try { assertionCount = JSON.parse(tc.assertions || "[]").length; } catch {}
+                  try {
+                    assertionCount = JSON.parse(tc.assertions || "[]").length;
+                  } catch {}
                   return (
                     <TableRow key={tc.id} className="h-10 max-h-10 [&>td]:py-1">
                       <TableCell className="font-medium">
@@ -127,17 +151,23 @@ function EvalStudioPage() {
                           {tc.name}
                         </Link>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{tc.category}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{tc.category}</Badge>
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {tc.agentcoreEvaluatorIds?.length ?? 0}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{assertionCount}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {assertionCount}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={tc.enabled ? "default" : "secondary"}>
                           {tc.enabled ? "on" : "off"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{relativeTime(tc.updatedAt)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {relativeTime(tc.updatedAt)}
+                      </TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -162,4 +192,3 @@ function EvalStudioPage() {
     </PageLayout>
   );
 }
-

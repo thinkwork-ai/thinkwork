@@ -227,9 +227,9 @@ export async function findPageSourcesAcrossSurfaces(
 			wp.title,
 			wp.slug,
 			wp.entity_subtype AS "entitySubtype"
-		FROM wiki_section_sources wss
-		INNER JOIN wiki_page_sections ws ON ws.id = wss.section_id
-		INNER JOIN wiki_pages wp ON wp.id = ws.page_id
+		FROM wiki.section_sources wss
+		INNER JOIN wiki.page_sections ws ON ws.id = wss.section_id
+		INNER JOIN wiki.pages wp ON wp.id = ws.page_id
 		WHERE wp.tenant_id = ${args.tenantId}
 			${ownerPredicate}
 			AND wp.status = 'active'
@@ -245,9 +245,9 @@ export async function findPageSourcesAcrossSurfaces(
 			tep.title,
 			tep.slug,
 			tep.entity_subtype AS "entitySubtype"
-		FROM tenant_entity_section_sources tess
-		INNER JOIN tenant_entity_page_sections teps ON teps.id = tess.section_id
-		INNER JOIN tenant_entity_pages tep ON tep.id = teps.page_id
+		FROM brain.section_sources tess
+		INNER JOIN brain.page_sections teps ON teps.id = tess.section_id
+		INNER JOIN brain.pages tep ON tep.id = teps.page_id
 		WHERE tess.tenant_id = ${args.tenantId}
 			AND tep.status = 'active'
 			AND tess.source_kind = ${args.sourceKind}

@@ -10,8 +10,10 @@
 -- in place on all supported Postgres/Aurora versions. search_tsv is derived
 -- data, so rebuilding the column and its GIN index is safe.
 --
--- creates-column: public.wiki_pages.search_tsv
--- creates: public.idx_wiki_pages_search_tsv
+-- Schema/index paths updated post-0089 (wiki schema extraction renamed the column's
+-- parent table to wiki.pages and renamed the index to idx_pages_search_tsv).
+-- creates-column: wiki.pages.search_tsv
+-- creates: wiki.idx_pages_search_tsv
 
 \set ON_ERROR_STOP on
 

@@ -6,7 +6,8 @@
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0050_brain_v0_entity_subtype.sql
 --
--- creates-column: public.wiki_pages.entity_subtype
+-- Column path updated post-0089 (wiki schema extraction renamed parent table to wiki.pages).
+-- creates-column: wiki.pages.entity_subtype
 
 \set ON_ERROR_STOP on
 

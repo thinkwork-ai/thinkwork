@@ -1,6 +1,14 @@
 /**
  * Compounding Memory (wiki) domain tables.
  *
+ * Lives in the `wiki.*` Postgres schema (extracted from `public.*` in
+ * 2026-05 — see docs/solutions/database-issues/feature-schema-extraction-pattern.md
+ * and packages/database-pg/drizzle/NNNN_wiki_schema_extraction.sql).
+ *
+ * TS export identifiers (`wikiPages`, `wikiPageSections`, etc.) remain stable
+ * across the schema move so consumer imports don't churn; only the in-DB
+ * names changed (e.g., `public.wiki_pages` → `wiki.pages`).
+ *
  * Canonical memory lives in Hindsight (normalized warehouse). The compile
  * pipeline reads changed memory records by cursor and materializes compiled
  * wiki pages into these tables. Pages are rebuildable from canonical memory;
@@ -22,7 +30,7 @@
  */
 
 import {
-	pgTable,
+	pgSchema,
 	uuid,
 	text,
 	integer,
@@ -40,6 +48,12 @@ import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 
 // ---------------------------------------------------------------------------
+// Schema handle
+// ---------------------------------------------------------------------------
+
+export const wiki = pgSchema("wiki");
+
+// ---------------------------------------------------------------------------
 // Custom tsvector column helper
 //
 // Drizzle has no native `tsvector` column type; this helper emits the right
@@ -55,11 +69,11 @@ const tsvector = (name: string) =>
 	})(name);
 
 // ---------------------------------------------------------------------------
-// wiki_pages — compiled pages (entity / topic / decision)
+// wiki.pages — compiled pages (entity / topic / decision)
 // ---------------------------------------------------------------------------
 
-export const wikiPages = pgTable(
-	"wiki_pages",
+export const wikiPages = wiki.table(
+	"pages",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -86,10 +100,10 @@ export const wikiPages = pgTable(
 		parent_page_id: uuid("parent_page_id").references(
 			(): AnyPgColumn => wikiPages.id,
 		),
-		// Optional pointer into wiki_places. Zero or one place per page. Set by
+		// Optional pointer into wiki.places. Zero or one place per page. Set by
 		// the compile pipeline when a source record carries
 		// place_google_place_id, and by the Phase C backfill for pre-existing
-		// pages. Forward-declared here; wiki_places is defined below and the FK
+		// pages. Forward-declared here; wiki.places is defined below and the FK
 		// is expressed via the `.references()` callback to break the circular
 		// declaration order.
 		place_id: uuid("place_id").references((): AnyPgColumn => wikiPlaces.id, {
@@ -112,36 +126,36 @@ export const wikiPages = pgTable(
 	},
 	(table) => [
 		// Slug uniqueness within a single (tenant, owner, type) scope.
-		uniqueIndex("uq_wiki_pages_tenant_owner_type_slug").on(
+		uniqueIndex("uq_pages_tenant_owner_type_slug").on(
 			table.tenant_id,
 			table.owner_id,
 			table.type,
 			table.slug,
 		),
 		// Read-path access is always (tenant, owner) first.
-		index("idx_wiki_pages_tenant_owner_type_status").on(
+		index("idx_pages_tenant_owner_type_status").on(
 			table.tenant_id,
 			table.owner_id,
 			table.type,
 			table.status,
 		),
-		index("idx_wiki_pages_owner").on(table.owner_id),
-		index("idx_wiki_pages_last_compiled").on(table.last_compiled_at),
-		index("idx_wiki_pages_entity_subtype")
+		index("idx_pages_owner").on(table.owner_id),
+		index("idx_pages_last_compiled").on(table.last_compiled_at),
+		index("idx_pages_entity_subtype")
 			.on(table.entity_subtype)
 			.where(sql`${table.entity_subtype} IS NOT NULL`),
 		// Full-text search: GIN on the generated tsvector column.
-		index("idx_wiki_pages_search_tsv").using("gin", table.search_tsv),
+		index("idx_pages_search_tsv").using("gin", table.search_tsv),
 		// Fast lookup of child pages for hierarchy navigation.
-		index("idx_wiki_pages_parent").on(table.parent_page_id),
+		index("idx_pages_parent").on(table.parent_page_id),
 		// Reverse lookup "page for a place". Partial — most pages don't carry
 		// place_id, so the non-null partial keeps the index tight.
-		index("idx_wiki_pages_place_id")
+		index("idx_pages_place_id")
 			.on(table.place_id)
 			.where(sql`${table.place_id} IS NOT NULL`),
 		// Trigram GIN index on title — powers fuzzy page lookup in the
 		// compiler's newPage dedupe path. Requires `pg_trgm` extension.
-		index("idx_wiki_pages_title_trgm").using(
+		index("idx_pages_title_trgm").using(
 			"gin",
 			sql`${table.title} gin_trgm_ops`,
 		),
@@ -149,11 +163,11 @@ export const wikiPages = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// wiki_page_sections — one row per section; body_md patched incrementally
+// wiki.page_sections — one row per section; body_md patched incrementally
 // ---------------------------------------------------------------------------
 
-export const wikiPageSections = pgTable(
-	"wiki_page_sections",
+export const wikiPageSections = wiki.table(
+	"page_sections",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -187,11 +201,11 @@ export const wikiPageSections = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_wiki_page_sections_page_slug").on(
+		uniqueIndex("uq_page_sections_page_slug").on(
 			table.page_id,
 			table.section_slug,
 		),
-		index("idx_wiki_page_sections_page_position").on(
+		index("idx_page_sections_page_position").on(
 			table.page_id,
 			table.position,
 		),
@@ -199,11 +213,11 @@ export const wikiPageSections = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// wiki_page_links — explicit page-to-page references ([[Foo]] resolution)
+// wiki.page_links — explicit page-to-page references ([[Foo]] resolution)
 // ---------------------------------------------------------------------------
 
-export const wikiPageLinks = pgTable(
-	"wiki_page_links",
+export const wikiPageLinks = wiki.table(
+	"page_links",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -226,22 +240,22 @@ export const wikiPageLinks = pgTable(
 	(table) => [
 		// Uniqueness now includes kind so we can carry both a 'reference' and a
 		// 'parent_of' between the same pages when that's semantically correct.
-		uniqueIndex("uq_wiki_page_links_from_to_kind").on(
+		uniqueIndex("uq_page_links_from_to_kind").on(
 			table.from_page_id,
 			table.to_page_id,
 			table.kind,
 		),
-		index("idx_wiki_page_links_to").on(table.to_page_id),
-		index("idx_wiki_page_links_kind").on(table.kind),
+		index("idx_page_links_to").on(table.to_page_id),
+		index("idx_page_links_kind").on(table.kind),
 	],
 );
 
 // ---------------------------------------------------------------------------
-// wiki_page_aliases — alternate names that resolve to a page
+// wiki.page_aliases — alternate names that resolve to a page
 // ---------------------------------------------------------------------------
 
-export const wikiPageAliases = pgTable(
-	"wiki_page_aliases",
+export const wikiPageAliases = wiki.table(
+	"page_aliases",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -256,15 +270,15 @@ export const wikiPageAliases = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_wiki_page_aliases_page_alias").on(
+		uniqueIndex("uq_page_aliases_page_alias").on(
 			table.page_id,
 			table.alias,
 		),
-		index("idx_wiki_page_aliases_alias").on(table.alias),
+		index("idx_page_aliases_alias").on(table.alias),
 		// Trigram GIN on alias — powers fuzzy alias matching
 		// (`findAliasMatchesFuzzy`) so variants like "Paris, France" collapse
 		// onto existing "Paris" pages instead of splintering the wiki.
-		index("idx_wiki_page_aliases_alias_trgm").using(
+		index("idx_page_aliases_alias_trgm").using(
 			"gin",
 			sql`${table.alias} gin_trgm_ops`,
 		),
@@ -272,11 +286,11 @@ export const wikiPageAliases = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// wiki_unresolved_mentions — first-class middle state; promote when trusted
+// wiki.unresolved_mentions — first-class middle state; promote when trusted
 // ---------------------------------------------------------------------------
 
-export const wikiUnresolvedMentions = pgTable(
-	"wiki_unresolved_mentions",
+export const wikiUnresolvedMentions = wiki.table(
+	"unresolved_mentions",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -306,34 +320,34 @@ export const wikiUnresolvedMentions = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_wiki_unresolved_mentions_scope_alias_status").on(
+		uniqueIndex("uq_unresolved_mentions_scope_alias_status").on(
 			table.tenant_id,
 			table.owner_id,
 			table.alias_normalized,
 			table.status,
 		),
-		index("idx_wiki_unresolved_mentions_tenant_owner_status").on(
+		index("idx_unresolved_mentions_tenant_owner_status").on(
 			table.tenant_id,
 			table.owner_id,
 			table.status,
 		),
-		index("idx_wiki_unresolved_mentions_status_last_seen").on(
+		index("idx_unresolved_mentions_status_last_seen").on(
 			table.status,
 			table.last_seen_at,
 		),
 		check(
-			"wiki_unresolved_mentions_entity_subtype_allowed",
+			"unresolved_mentions_entity_subtype_allowed",
 			sql`${table.entity_subtype} IS NULL OR ${table.entity_subtype} IN ('customer','opportunity','order','person','concept','reflection')`,
 		),
 	],
 );
 
 // ---------------------------------------------------------------------------
-// wiki_section_sources — provenance: which memory records built a section
+// wiki.section_sources — provenance: which memory records built a section
 // ---------------------------------------------------------------------------
 
-export const wikiSectionSources = pgTable(
-	"wiki_section_sources",
+export const wikiSectionSources = wiki.table(
+	"section_sources",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -348,12 +362,12 @@ export const wikiSectionSources = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_wiki_section_sources_section_kind_ref").on(
+		uniqueIndex("uq_section_sources_section_kind_ref").on(
 			table.section_id,
 			table.source_kind,
 			table.source_ref,
 		),
-		index("idx_wiki_section_sources_kind_ref").on(
+		index("idx_section_sources_kind_ref").on(
 			table.source_kind,
 			table.source_ref,
 		),
@@ -361,11 +375,11 @@ export const wikiSectionSources = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// wiki_compile_jobs — job ledger (idempotency, retries, observability)
+// wiki.compile_jobs — job ledger (idempotency, retries, observability)
 // ---------------------------------------------------------------------------
 
-export const wikiCompileJobs = pgTable(
-	"wiki_compile_jobs",
+export const wikiCompileJobs = wiki.table(
+	"compile_jobs",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -395,13 +409,13 @@ export const wikiCompileJobs = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		index("idx_wiki_compile_jobs_scope_status_created").on(
+		index("idx_compile_jobs_scope_status_created").on(
 			table.tenant_id,
 			table.owner_id,
 			table.status,
 			table.created_at,
 		),
-		index("idx_wiki_compile_jobs_status_created").on(
+		index("idx_compile_jobs_status_created").on(
 			table.status,
 			table.created_at,
 		),
@@ -409,11 +423,11 @@ export const wikiCompileJobs = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// wiki_compile_cursors — one row per (tenant, owner) scope (both required)
+// wiki.compile_cursors — one row per (tenant, owner) scope (both required)
 // ---------------------------------------------------------------------------
 
-export const wikiCompileCursors = pgTable(
-	"wiki_compile_cursors",
+export const wikiCompileCursors = wiki.table(
+	"compile_cursors",
 	{
 		tenant_id: uuid("tenant_id")
 			.references(() => tenants.id)
@@ -431,28 +445,28 @@ export const wikiCompileCursors = pgTable(
 	},
 	(table) => [
 		primaryKey({
-			name: "wiki_compile_cursors_pkey",
+			name: "compile_cursors_pkey",
 			columns: [table.tenant_id, table.owner_id],
 		}),
 	],
 );
 
 // ---------------------------------------------------------------------------
-// wiki_places — canonical location identity (POI, city, state, country)
+// wiki.places — canonical location identity (POI, city, state, country)
 //
 // First-class place records. Scoped per (tenant, owner) like every other
-// wiki table. Pages reference places via the nullable
-// `wiki_pages.place_id` FK declared above. Hierarchy is expressed by the
-// `parent_place_id` self-FK (POI → city → state → country, with state only
-// populated for US/CA).
+// wiki table. Pages reference places via the nullable `wiki.pages.place_id`
+// FK declared above. Hierarchy is expressed by the `parent_place_id`
+// self-FK (POI → city → state → country, with state only populated for
+// US/CA).
 //
 // See docs/brainstorms/2026-04-21-wiki-place-capability-requirements.md and
 // docs/plans/2026-04-21-005-feat-wiki-place-capability-v2-plan.md for the
 // architectural rationale.
 // ---------------------------------------------------------------------------
 
-export const wikiPlaces = pgTable(
-	"wiki_places",
+export const wikiPlaces = wiki.table(
+	"places",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -505,16 +519,16 @@ export const wikiPlaces = pgTable(
 	},
 	(table) => [
 		// Read-path access is always (tenant, owner) first.
-		index("idx_wiki_places_tenant_owner").on(
+		index("idx_places_tenant_owner").on(
 			table.tenant_id,
 			table.owner_id,
 		),
 		// Hierarchy walk from parent → children.
-		index("idx_wiki_places_parent").on(table.parent_place_id),
+		index("idx_places_parent").on(table.parent_place_id),
 		// Partial unique: enforces first-seen-wins for Google-sourced places
 		// within a (tenant, owner) scope, while allowing many metadata-only
 		// rows (source='journal_metadata', google_place_id IS NULL).
-		uniqueIndex("uq_wiki_places_scope_google_place_id")
+		uniqueIndex("uq_places_scope_google_place_id")
 			.on(table.tenant_id, table.owner_id, table.google_place_id)
 			.where(sql`${table.google_place_id} IS NOT NULL`),
 	],

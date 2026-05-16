@@ -84,7 +84,7 @@ async function nextPendingJob(
 ): Promise<WikiCompileJobRow | null> {
 	const result = await db.execute(sql`
 		SELECT *
-		FROM wiki_compile_jobs
+		FROM wiki.compile_jobs
 		WHERE tenant_id = ${args.tenantId}
 		  AND owner_id = ${args.ownerId}
 		  AND status = 'pending'
@@ -100,7 +100,7 @@ async function latestFailedJob(
 ): Promise<WikiCompileJobRow | null> {
 	const result = await db.execute(sql`
 		SELECT *
-		FROM wiki_compile_jobs
+		FROM wiki.compile_jobs
 		WHERE tenant_id = ${args.tenantId}
 		  AND owner_id = ${args.ownerId}
 		  AND status = 'failed'
@@ -118,7 +118,7 @@ async function countOpenJobs(
 		SELECT
 			COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_jobs,
 			COUNT(*) FILTER (WHERE status = 'running')::int AS running_jobs
-		FROM wiki_compile_jobs
+		FROM wiki.compile_jobs
 		WHERE tenant_id = ${args.tenantId}
 		  AND owner_id = ${args.ownerId}
 		  AND status IN ('pending', 'running')

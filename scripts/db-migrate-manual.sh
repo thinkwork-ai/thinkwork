@@ -54,6 +54,13 @@ DRIZZLE_DIR="$REPO_ROOT/packages/database-pg/drizzle"
 JOURNAL="$DRIZZLE_DIR/meta/_journal.json"
 
 DRY_RUN=0
+# Positional file paths constrain the walk to a specific subset. When empty,
+# walk the full DRIZZLE_DIR/*.sql set (original behavior). Paths can be
+# absolute, or relative to repo root, or bare basenames — they're resolved
+# against DRIZZLE_DIR. Use case: pre-merge CI gates that only want to verify
+# the migration(s) the PR changed, not every prior file (which would surface
+# pre-existing drift unrelated to the current change).
+SCOPED_FILES=()
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
@@ -61,10 +68,14 @@ for arg in "$@"; do
       sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
-    *)
-      echo "unknown argument: $arg" >&2
+    -*)
+      echo "unknown flag: $arg" >&2
       echo "  try --help" >&2
       exit 2
+      ;;
+    *)
+      # Treat as a positional file path to scope the walk to.
+      SCOPED_FILES+=("$arg")
       ;;
   esac
 done
@@ -274,8 +285,27 @@ probe_role() {
 any_missing=0
 any_unverified=0
 
-echo "Unindexed .sql files in packages/database-pg/drizzle/:"
-for f in "$DRIZZLE_DIR"/*.sql; do
+# Resolve the file list. SCOPED_FILES (positional args) constrains the walk;
+# without args, default to every *.sql in DRIZZLE_DIR.
+if [[ ${#SCOPED_FILES[@]} -gt 0 ]]; then
+  echo "Unindexed .sql files (scoped to ${#SCOPED_FILES[@]} input paths):"
+  WALK_FILES=()
+  for raw in "${SCOPED_FILES[@]}"; do
+    if [[ -f "$raw" ]]; then
+      WALK_FILES+=("$raw")
+    elif [[ -f "$DRIZZLE_DIR/$raw" ]]; then
+      WALK_FILES+=("$DRIZZLE_DIR/$raw")
+    elif [[ -f "$DRIZZLE_DIR/$(basename "$raw")" ]]; then
+      WALK_FILES+=("$DRIZZLE_DIR/$(basename "$raw")")
+    else
+      echo "  warning: $raw not found — skipping" >&2
+    fi
+  done
+else
+  echo "Unindexed .sql files in packages/database-pg/drizzle/:"
+  WALK_FILES=("$DRIZZLE_DIR"/*.sql)
+fi
+for f in "${WALK_FILES[@]}"; do
   base="$(basename "$f")"
   # Rollback companions document manual reversal commands. They are not part
   # of the forward drift gate, where their drop markers would be expected to
