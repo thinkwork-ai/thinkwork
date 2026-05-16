@@ -776,9 +776,25 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
 		.where(eq(evalRuns.id, message.runId));
 	if (freshRun?.status === "cancelled") return;
 
-	await db
-		.insert(evalResults)
-		.values({
+	await db.transaction(async (tx) => {
+		await tx.execute(sql`
+			SELECT pg_advisory_xact_lock(
+				hashtext(${message.runId}),
+				hashtext(${message.testCaseId})
+			)
+		`);
+		const [duplicate] = await tx
+			.select({ id: evalResults.id })
+			.from(evalResults)
+			.where(
+				and(
+					eq(evalResults.run_id, message.runId),
+					eq(evalResults.test_case_id, message.testCaseId),
+				),
+			);
+		if (duplicate) return;
+
+		await tx.insert(evalResults).values({
 			run_id: message.runId,
 			test_case_id: message.testCaseId,
 			status: outcome.status,
@@ -791,10 +807,8 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
 			evaluator_results: outcome.evaluatorResults,
 			assertions: outcome.assertionResults,
 			error_message: outcome.errorMessage,
-		})
-		.onConflictDoNothing({
-			target: [evalResults.run_id, evalResults.test_case_id],
 		});
+	});
 
 	await maybeFinalizeRun(message.runId);
 }
