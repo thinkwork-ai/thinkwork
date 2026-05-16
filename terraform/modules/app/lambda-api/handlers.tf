@@ -348,6 +348,7 @@ resource "aws_lambda_function" "handler" {
     "code-factory",
     "eval-runner",
     "eval-worker",
+    "eval-runs-reconciler",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
     # Both are service-endpoint shape: the Strands container POSTs with
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
@@ -1100,6 +1101,31 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
 
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# eval_runs reconciler — finalizes stuck-running eval runs every 5 min.
+# Guards against worker crashes/timeouts that occur before a per-case result
+# row is written. Missing category-selected cases are recorded as error rows,
+# then the run is finalized so the Admin UI cannot remain "running" forever.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "eval_runs_reconciler" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-eval-runs-reconciler"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["eval-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
