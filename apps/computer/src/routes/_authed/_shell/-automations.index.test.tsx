@@ -130,15 +130,13 @@ describe("apps/computer Automations route", () => {
     );
   });
 
-  it("uses compact 40px table rows", async () => {
+  it("uses 40px table rows", async () => {
     render(<AutomationsPage />);
     const name = await screen.findByText("Things to do with Kids");
     const row = name.closest("tr");
     expect(row?.className).toContain("h-10");
-    for (const cell of row?.querySelectorAll("td") ?? []) {
-      expect(cell.className).toContain("h-10");
-      expect(cell.className).toContain("p-0");
-    }
+    expect(row?.className).toContain("[&>td]:py-0");
+    expect(row?.className).toContain("[&>td]:overflow-hidden");
   });
 
   it("filters in-memory by job name when the search input changes", async () => {

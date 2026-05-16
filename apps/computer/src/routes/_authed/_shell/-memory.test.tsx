@@ -145,9 +145,7 @@ describe("apps/computer Memory in-page tab strip", () => {
     const memory = await screen.findByText("A compact table fact.");
     const row = memory.closest("tr");
     expect(row?.className).toContain("h-10");
-    for (const cell of row?.querySelectorAll("td") ?? []) {
-      expect(cell.className).toContain("h-10");
-      expect(cell.className).toContain("p-0");
-    }
+    expect(row?.className).toContain("[&>td]:py-0");
+    expect(row?.className).toContain("[&>td]:overflow-hidden");
   });
 });

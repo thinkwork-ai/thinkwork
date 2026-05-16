@@ -293,7 +293,6 @@ export function ActivityView() {
           columns={columns}
           data={filtered}
           hideHeader
-          compact
           scrollable
           onRowClick={handleRowClick}
           tableClassName="table-fixed"

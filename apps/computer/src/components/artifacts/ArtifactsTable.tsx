@@ -122,7 +122,6 @@ export function ArtifactsTable({
         data={items}
         onRowClick={onRowClick}
         scrollable
-        compact
         pageSize={50}
         tableClassName="table-fixed"
       />

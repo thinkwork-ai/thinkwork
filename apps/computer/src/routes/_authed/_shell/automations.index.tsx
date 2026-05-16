@@ -403,7 +403,6 @@ function AutomationsPage() {
           filterValue={search}
           filterColumn="name"
           pageSize={10}
-          compact
           onRowClick={(row) =>
             navigate({
               to: "/automations/$scheduledJobId",

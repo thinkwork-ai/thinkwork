@@ -35,8 +35,6 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number;
   /** Hide the table header row */
   hideHeader?: boolean;
-  /** Compact row height (~40px) */
-  compact?: boolean;
   /** Enable row selection with checkboxes */
   enableRowSelection?: boolean;
   /** Render prop for toolbar content above the table */
@@ -65,7 +63,6 @@ export function DataTable<TData, TValue>({
   onRowClick,
   pageSize = 10,
   hideHeader = false,
-  compact = false,
   enableRowSelection = false,
   toolbar,
   tableClassName,
@@ -178,11 +175,14 @@ export function DataTable<TData, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={onRowClick ? "cursor-pointer" : undefined}
+            className={[
+              "h-10 [&>td]:py-0 [&>td]:overflow-hidden",
+              onRowClick ? "cursor-pointer" : undefined,
+            ].filter(Boolean).join(" ")}
             onClick={() => onRowClick?.(row.original)}
           >
             {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id} className={[compact ? "p-0 h-auto" : undefined, tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined].filter(Boolean).join(" ") || undefined}>
+              <TableCell key={cell.id} className={tableClassName?.includes("table-fixed") ? "overflow-hidden" : undefined}>
                 {flexRender(
                   cell.column.columnDef.cell,
                   cell.getContext(),
