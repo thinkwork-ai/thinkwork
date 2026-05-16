@@ -104,6 +104,7 @@ function EditScheduledJobButton({ scheduledJob, tenantId, onSaved }: { scheduled
           trigger_type: scheduledJob.trigger_type,
           agent_id: scheduledJob.agent_id || undefined,
           prompt: scheduledJob.prompt || undefined,
+          config: scheduledJob.config || undefined,
           schedule_type: scheduledJob.schedule_type || "rate",
           schedule_expression: scheduledJob.schedule_expression || "",
           timezone: scheduledJob.timezone,
@@ -119,6 +120,7 @@ function EditScheduledJobButton({ scheduledJob, tenantId, onSaved }: { scheduled
     </>
   );
 }
+
 
 function ScheduledJobDetailPage() {
   const { scheduledJobId } = Route.useParams();
@@ -387,4 +389,3 @@ function ScheduledJobDetailPage() {
     </div>
   );
 }
-

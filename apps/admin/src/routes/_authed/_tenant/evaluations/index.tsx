@@ -40,7 +40,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -54,8 +57,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn, relativeTime } from "@/lib/utils";
+import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
   AgentTemplatesListQuery,
+  ComputerTemplatesListQuery,
   ModelCatalogQuery,
   EvalSummaryQuery,
   EvalRunsQuery,
@@ -63,18 +68,6 @@ import {
   StartEvalRunMutation,
   OnEvalRunUpdatedSubscription,
 } from "@/lib/graphql-queries";
-
-// Labels are title-case versions of the Thinkwork seed-pack category slugs
-// (see seeds/eval-test-cases/*.json).
-const CATEGORIES: Array<{ id: string; label: string }> = [
-  { id: "red-team-prompt-injection", label: "Prompt Injection" },
-  { id: "red-team-tool-misuse", label: "Tool Misuse" },
-  { id: "red-team-data-boundary", label: "Data Boundary" },
-  { id: "red-team-safety-scope", label: "Safety & Scope" },
-  { id: "performance-agents", label: "Agent Performance" },
-  { id: "performance-computer", label: "Computer Performance" },
-  { id: "performance-skills", label: "Skill Performance" },
-];
 
 // ---------------------------------------------------------------------------
 // Recent Runs table — ported from maniflow for row clickability, colour-coded
@@ -456,8 +449,8 @@ function RunEvaluationButton({
 }) {
   const [open, setOpen] = useState(false);
   // The agent itself is always the eval test agent (a generic AgentCore
-  // Runtime instance). What the user picks here is which template the
-  // test agent loads — that determines workspace / tools / model.
+  // Runtime instance). What the user picks here is which agent/computer
+  // template the test agent loads — that determines workspace / tools / model.
   const [agentTemplateId, setAgentTemplateId] = useState<string>("");
   const [model, setModel] = useState<string>("");
   const [invocationMode, setInvocationMode] = useState<string>("end_to_end");
@@ -465,15 +458,25 @@ function RunEvaluationButton({
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
-  // Pull agent templates and the model catalog (separate queries — the
-  // codegen-typed AgentTemplatesListQuery doesn't include modelCatalog).
+  // Pull target templates and the model catalog (separate queries — the
+  // codegen-typed template queries don't include modelCatalog).
   const [templatesRes] = useQuery({
     query: AgentTemplatesListQuery,
     variables: { tenantId },
     pause: !tenantId || !open,
   });
+  const [computerTemplatesRes] = useQuery({
+    query: ComputerTemplatesListQuery,
+    variables: { tenantId },
+    pause: !tenantId || !open,
+  });
   const [modelsRes] = useQuery({ query: ModelCatalogQuery, pause: !open });
-  const templates = (templatesRes.data?.agentTemplates ?? []) as Array<{
+  const agentTemplates = (templatesRes.data?.agentTemplates ?? []) as Array<{
+    id: string;
+    name: string;
+  }>;
+  const computerTemplates = (computerTemplatesRes.data?.computerTemplates ??
+    []) as Array<{
     id: string;
     name: string;
   }>;
@@ -531,22 +534,34 @@ function RunEvaluationButton({
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="re-template">Agent template</Label>
+            <Label htmlFor="re-template">Target template</Label>
             <Select value={agentTemplateId} onValueChange={setAgentTemplateId}>
               <SelectTrigger id="re-template">
                 <SelectValue placeholder="Pick a template" />
               </SelectTrigger>
               <SelectContent>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel>Computer Templates</SelectLabel>
+                  {computerTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel>Agent Templates</SelectLabel>
+                  {agentTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
               The eval test agent loads this template's workspace, skills, and
-              default model. Per-test-case template overrides still apply.
+              default model. Agent and Computer templates are both supported.
             </p>
           </div>
 
