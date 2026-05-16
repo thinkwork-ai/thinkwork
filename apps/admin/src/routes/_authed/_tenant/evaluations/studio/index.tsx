@@ -65,7 +65,7 @@ function EvalStudioPage() {
                 onClick={async () => {
                   if (
                     !confirm(
-                      "Import the Thinkwork starter pack? 210 red-team and performance test cases across 7 categories. Re-runs are safe (skips already-imported names).",
+                      "Import the Thinkwork RedTeam starter pack? 189 test cases across 4 categories. Re-runs are safe (skips already-imported names).",
                     )
                   )
                     return;

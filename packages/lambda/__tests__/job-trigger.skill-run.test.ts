@@ -522,7 +522,7 @@ describe("job-trigger eval_scheduled", () => {
         config: {
           computerId: "computer-1",
           model: "anthropic.claude-haiku-4-5",
-          categories: ["performance-computer"],
+          categories: ["red-team-safety-scope"],
         },
       },
     ]);
@@ -552,7 +552,7 @@ describe("job-trigger eval_scheduled", () => {
         scheduled_job_id: "job-eval-1",
         status: "pending",
         model: "anthropic.claude-haiku-4-5",
-        categories: ["performance-computer"],
+        categories: ["red-team-safety-scope"],
       }),
     );
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);

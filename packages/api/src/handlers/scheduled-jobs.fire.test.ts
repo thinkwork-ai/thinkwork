@@ -299,7 +299,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 				config: {
 					computerId: COMPUTER_ID,
 					model: "anthropic.claude-haiku-4-5",
-					categories: ["performance-computer"],
+					categories: ["red-team-safety-scope"],
 				},
 			}),
 		);
@@ -325,7 +325,7 @@ describe("scheduled-jobs handler — manual fire routes to Computer (never Flue)
 				scheduled_job_id: TRIGGER_ID,
 				status: "pending",
 				model: "anthropic.claude-haiku-4-5",
-				categories: ["performance-computer"],
+				categories: ["red-team-safety-scope"],
 			}),
 		});
 		expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);

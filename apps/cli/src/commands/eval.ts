@@ -127,7 +127,7 @@ Examples:
   evals
     .command("seed")
     .description(
-      "Idempotently seed the ThinkWork starter pack (210 test cases across 14 categories). Safe to re-run.",
+      "Idempotently seed the ThinkWork RedTeam starter pack (189 test cases across 4 categories). Safe to re-run.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")

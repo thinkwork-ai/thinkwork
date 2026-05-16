@@ -19,7 +19,7 @@ const LEGACY_CATEGORIES = [
 ];
 
 describe("eval seed pack", () => {
-  it("contains only the Thinkwork red-team and performance categories", () => {
+  it("contains only the Thinkwork red-team categories", () => {
     const categories = new Set(EVAL_SEEDS.map((seed) => seed.category));
 
     for (const category of LEGACY_CATEGORIES) {
@@ -27,10 +27,13 @@ describe("eval seed pack", () => {
     }
 
     expect([...categories].sort()).toEqual([...EVAL_SEED_CATEGORIES].sort());
+    expect(
+      [...categories].every((category) => category.startsWith("red-team-")),
+    ).toBe(true);
   });
 
   it("carries evaluator choices from seed content", () => {
-    expect(EVAL_SEEDS).toHaveLength(210);
+    expect(EVAL_SEEDS).toHaveLength(189);
     expect(
       EVAL_SEEDS.every((seed) => seed.agentcore_evaluator_ids?.length),
     ).toBe(true);

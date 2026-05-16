@@ -33,9 +33,6 @@ const SEED_CATEGORIES = [
   "red-team-tool-misuse",
   "red-team-data-boundary",
   "red-team-safety-scope",
-  "performance-agents",
-  "performance-computer",
-  "performance-skills",
   "smoke",
 ];
 

@@ -25,12 +25,6 @@ const NEW_SKILL_FILES = [
   "red-team-skill-workspace.json",
 ] as const;
 
-const PERFORMANCE_FILES = [
-  "performance-agents.json",
-  "performance-computer.json",
-  "performance-skills.json",
-] as const;
-
 const CATEGORY_BY_FILE: Record<string, string> = {
   "red-team-agents-prompt-injection.json": "red-team-prompt-injection",
   "red-team-agents-tool-misuse.json": "red-team-tool-misuse",
@@ -55,13 +49,18 @@ const ALLOWED_RED_TEAM_CATEGORIES = new Set([
   "red-team-safety-scope",
 ]);
 
-const PERFORMANCE_SURFACE_BY_FILE: Record<
-  string,
-  "agent" | "computer" | "skill"
-> = {
-  "performance-agents.json": "agent",
-  "performance-computer.json": "computer",
-  "performance-skills.json": "skill",
+const EXPECTED_CASE_COUNT_BY_FILE: Record<string, number> = {
+  "red-team-agents-prompt-injection.json": 15,
+  "red-team-agents-tool-misuse.json": 15,
+  "red-team-agents-data-boundary.json": 15,
+  "red-team-agents-safety-scope.json": 15,
+  "red-team-computer-prompt-injection.json": 15,
+  "red-team-computer-tool-misuse.json": 15,
+  "red-team-computer-data-boundary.json": 15,
+  "red-team-computer-safety-scope.json": 9,
+  "red-team-skill-github.json": 25,
+  "red-team-skill-filesystem.json": 25,
+  "red-team-skill-workspace.json": 25,
 };
 
 const ALLOWED_EVALUATORS = new Set([
@@ -124,7 +123,7 @@ function expectNewRedTeamShape(
 ) {
   const cases = readSeedFile(fileName);
   expect(cases, `${fileName} should ship the planned case count`).toHaveLength(
-    targetSurface === "skill" ? 25 : 15,
+    EXPECTED_CASE_COUNT_BY_FILE[fileName],
   );
 
   for (const testCase of cases) {
@@ -177,43 +176,27 @@ function expectNewRedTeamShape(
   }
 }
 
-function expectPerformanceShape(fileName: string) {
-  const cases = readSeedFile(fileName);
-  expect(cases, `${fileName} should ship 5 cases`).toHaveLength(5);
-
-  for (const testCase of cases) {
-    expect(testCase.category).toMatch(/^performance-/);
-    expect(testCase.target_surface).toBe(PERFORMANCE_SURFACE_BY_FILE[fileName]);
-    if (testCase.target_surface === "skill") {
-      expect(["github", "filesystem", "workspace"]).toContain(
-        testCase.target_skill,
-      );
-    } else {
-      expect(testCase.target_skill).toBeUndefined();
-    }
-    expect(typeof testCase.name).toBe("string");
-    expect(typeof testCase.prompt).toBe("string");
-    expect(testCase.query).toBe(testCase.prompt);
-    expect(typeof testCase.expected_behavior).toBe("string");
-    expect(typeof testCase.threshold).toBe("number");
-    expect(testCase.threshold as number).toBeGreaterThan(0);
-    expect(testCase.threshold as number).toBeLessThanOrEqual(1);
-    expect(Array.isArray(testCase.assertions)).toBe(true);
-    expect((testCase.assertions as unknown[]).length).toBeGreaterThan(0);
-    expect(Array.isArray(testCase.agentcore_evaluator_ids)).toBe(true);
-    expect(
-      (testCase.agentcore_evaluator_ids as unknown[]).length,
-    ).toBeGreaterThan(0);
-    for (const evaluatorId of testCase.agentcore_evaluator_ids as unknown[]) {
-      expect(
-        ALLOWED_EVALUATORS.has(evaluatorId as string),
-        `${evaluatorId}`,
-      ).toBe(true);
-    }
-  }
-}
-
 describe("eval seed shape invariants", () => {
+  it("ships only explicitly red-team seed files and categories", () => {
+    const fileNames = readdirSync(seedsDir).filter((name) =>
+      name.endsWith(".json"),
+    );
+
+    expect(fileNames.sort()).toEqual(
+      Object.keys(EXPECTED_CASE_COUNT_BY_FILE).sort(),
+    );
+
+    for (const fileName of fileNames) {
+      expect(fileName.startsWith("red-team-"), fileName).toBe(true);
+      for (const testCase of readSeedFile(fileName)) {
+        expect(
+          ALLOWED_RED_TEAM_CATEGORIES.has(testCase.category as string),
+          `${fileName}:${testCase.name}`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("keeps all seed case names globally unique", () => {
     const seen = new Map<string, string>();
 
@@ -249,12 +232,6 @@ describe("eval seed shape invariants", () => {
   it("validates the skill red-team corpus shape", () => {
     for (const fileName of NEW_SKILL_FILES) {
       expectNewRedTeamShape(fileName, "skill");
-    }
-  });
-
-  it("validates the performance corpus shape", () => {
-    for (const fileName of PERFORMANCE_FILES) {
-      expectPerformanceShape(fileName);
     }
   });
 });
