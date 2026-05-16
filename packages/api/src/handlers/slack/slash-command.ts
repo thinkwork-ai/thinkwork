@@ -9,8 +9,13 @@ import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import {
+  resolveOrCreateSlackThread,
+  type SlackThreadMappingResult,
+} from "../../lib/slack/thread-mapping.js";
 import { json } from "../../lib/response.js";
 import { createSlackHandler, type SlackHandlerArgs } from "./_shared.js";
+import { withSlackThreadMapping } from "../../lib/slack/envelope.js";
 
 type EnqueueTaskInput = Parameters<typeof enqueueComputerTask>[0];
 type EnqueueTask = (
@@ -33,12 +38,20 @@ export interface SlashCommandDeps {
     slackTeamId: string;
     slackUserId: string;
   }) => Promise<SlackLinkedComputer | null>;
+  resolveSlackThread?: (input: {
+    tenantId: string;
+    computerId: string;
+    actorId: string;
+    envelope: ReturnType<typeof buildSlackSlashCommandInput>;
+  }) => Promise<SlackThreadMappingResult>;
 }
 
 export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
   const enqueueTask = deps.enqueueTask ?? enqueueComputerTask;
   const loadLinkedComputer =
     deps.loadLinkedComputer ?? ((input) => loadLinkedSlackComputer(input));
+  const resolveSlackThread =
+    deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
 
   return async function dispatchSlashCommand(
     args: SlackHandlerArgs,
@@ -60,17 +73,24 @@ export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
     const taskInput = buildSlackSlashCommandInput({
       slackTeamId: form.teamId,
       slackUserId: form.userId,
+      slackWorkspaceRowId: args.workspace.id,
       channelId: form.channelId,
       text: form.text,
       responseUrl: form.responseUrl,
       triggerId: form.triggerId,
       actorId: link.userId,
     });
+    const mapping = await resolveSlackThread({
+      tenantId: args.workspace.tenantId,
+      computerId: link.computerId,
+      actorId: link.userId,
+      envelope: taskInput,
+    });
     await enqueueTask({
       tenantId: args.workspace.tenantId,
       computerId: link.computerId,
       taskType: "thread_turn",
-      taskInput,
+      taskInput: withSlackThreadMapping(taskInput, mapping),
       idempotencyKey: taskInput.eventId,
       createdByUserId: link.userId,
     });

@@ -16,6 +16,7 @@ const SLACK_SIGNATURE_VERSION = "v0";
 const REPLAY_WINDOW_SECONDS = 5 * 60;
 
 export interface SlackWorkspaceContext {
+  id: string;
   tenantId: string;
   slackTeamId: string;
   slackTeamName: string | null;
@@ -235,6 +236,7 @@ async function defaultLookupWorkspace(
 ): Promise<SlackWorkspaceContext | null> {
   const [row] = await db
     .select({
+      id: slackWorkspaces.id,
       tenantId: slackWorkspaces.tenant_id,
       slackTeamId: slackWorkspaces.slack_team_id,
       slackTeamName: slackWorkspaces.slack_team_name,

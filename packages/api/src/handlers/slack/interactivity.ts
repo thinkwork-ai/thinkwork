@@ -5,11 +5,18 @@ import {
   publicSlackResponseBlocks,
   publicSlackResponseText,
 } from "../../lib/slack/attribution.js";
-import { buildSlackMessageActionInput } from "../../lib/slack/envelope.js";
+import {
+  buildSlackMessageActionInput,
+  withSlackThreadMapping,
+} from "../../lib/slack/envelope.js";
 import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import {
+  resolveOrCreateSlackThread,
+  type SlackThreadMappingResult,
+} from "../../lib/slack/thread-mapping.js";
 import { createSlackHandler, type SlackHandlerArgs } from "./_shared.js";
 
 type EnqueueTaskInput = Parameters<typeof enqueueComputerTask>[0];
@@ -56,6 +63,12 @@ export interface SlackInteractivityDeps {
     slackUserId: string;
   }) => Promise<SlackLinkedComputer | null>;
   slackApi?: SlackInteractivityApi;
+  resolveSlackThread?: (input: {
+    tenantId: string;
+    computerId: string;
+    actorId: string;
+    envelope: ReturnType<typeof buildSlackMessageActionInput>;
+  }) => Promise<SlackThreadMappingResult>;
 }
 
 interface SlackMessageActionPayload {
@@ -91,6 +104,8 @@ export function createSlackInteractivityDispatcher(
   const loadLinkedComputer =
     deps.loadLinkedComputer ?? ((input) => loadLinkedSlackComputer(input));
   const slackApi = deps.slackApi ?? defaultSlackApi;
+  const resolveSlackThread =
+    deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
 
   return async function dispatchSlackInteractivity(
     args: SlackHandlerArgs,
@@ -105,6 +120,7 @@ export function createSlackInteractivityDispatcher(
             enqueueTask,
             loadLinkedComputer,
             slackApi,
+            resolveSlackThread,
           },
         );
       case "block_actions":
@@ -152,6 +168,12 @@ async function handleMessageAction(
       slackUserId: string;
     }) => Promise<SlackLinkedComputer | null>;
     slackApi: SlackInteractivityApi;
+    resolveSlackThread: (input: {
+      tenantId: string;
+      computerId: string;
+      actorId: string;
+      envelope: ReturnType<typeof buildSlackMessageActionInput>;
+    }) => Promise<SlackThreadMappingResult>;
   },
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const triggerId = requiredString(payload.trigger_id);
@@ -190,6 +212,7 @@ async function handleMessageAction(
   const taskInput = buildSlackMessageActionInput({
     slackTeamId,
     slackUserId,
+    slackWorkspaceRowId: args.workspace.id,
     channelId,
     triggerId,
     responseUrl: optionalString(payload.response_url),
@@ -197,11 +220,17 @@ async function handleMessageAction(
     message,
     actorId: link.userId,
   });
+  const mapping = await deps.resolveSlackThread({
+    tenantId: args.workspace.tenantId,
+    computerId: link.computerId,
+    actorId: link.userId,
+    envelope: taskInput,
+  });
   const task = await deps.enqueueTask({
     tenantId: args.workspace.tenantId,
     computerId: link.computerId,
     taskType: "thread_turn",
-    taskInput,
+    taskInput: withSlackThreadMapping(taskInput, mapping),
     idempotencyKey: taskInput.eventId,
     createdByUserId: link.userId,
   });
