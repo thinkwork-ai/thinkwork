@@ -161,6 +161,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/integrations" },
+                { label: "Slack Workspace App", slug: "integrations/slack" },
                 { label: "MCP Tools", slug: "concepts/mcp-tools" },
               ],
             },
@@ -200,6 +201,10 @@ export default defineConfig({
             { label: "Overview", slug: "compliance" },
             { label: "What it does", slug: "compliance/overview" },
             { label: "Architecture", slug: "compliance/architecture" },
+            {
+              label: "Slack data handling",
+              slug: "compliance/slack-data-handling",
+            },
             { label: "Operator runbook", slug: "compliance/operator-runbook" },
             {
               label: "Auditor walkthrough",
@@ -239,6 +244,16 @@ export default defineConfig({
                 {
                   label: "Operating Compiled Pages",
                   slug: "guides/compounding-memory-operations",
+                },
+              ],
+            },
+            {
+              label: "Operations",
+              collapsed: true,
+              items: [
+                {
+                  label: "Slack dispatch runbook",
+                  slug: "operations/slack-dispatch-runbook",
                 },
               ],
             },
