@@ -52,6 +52,7 @@ describe("direct AgentCore eval payload", () => {
       model: DEFAULT_EVAL_MODEL_ID,
       max_tokens: DEFAULT_EVAL_MAX_TOKENS,
       eval_mode: true,
+      eval_tools_enabled: false,
       use_memory: false,
       context_engine_enabled: false,
       context_engine_config: undefined,
