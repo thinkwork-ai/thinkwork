@@ -28,6 +28,7 @@ import { registerBudgetCommand } from "../src/commands/budget.js";
 import { registerPerformanceCommand } from "../src/commands/performance.js";
 import { registerTraceCommand } from "../src/commands/trace.js";
 import { registerDashboardCommand } from "../src/commands/dashboard.js";
+import { registerEvalCommand } from "../src/commands/eval.js";
 
 interface DomainCase {
   domain: string;
@@ -212,6 +213,25 @@ describe("stub registration (taxonomy smoke test)", () => {
     expect(dash!.description()).toBeTruthy();
     // Leaves shouldn't nest subcommands.
     expect(dash!.commands.length).toBe(0);
+  });
+
+  it("evals has a bare interactive run action and run-scope options", () => {
+    const program = new Command();
+    registerEvalCommand(program);
+    const evals = program.commands.find((c) => c.name() === "eval")!;
+
+    expect(evals.aliases()).toContain("evals");
+    expect(evals.options.map((option) => option.long)).toEqual(
+      expect.arrayContaining([
+        "--category",
+        "--test-case",
+        "--all",
+        "--watch",
+      ]),
+    );
+    expect(
+      typeof (evals as unknown as { _actionHandler?: unknown })._actionHandler,
+    ).toBe("function");
   });
 
   it("computer migration commands accept --tenant and --tenant-id aliases", () => {
