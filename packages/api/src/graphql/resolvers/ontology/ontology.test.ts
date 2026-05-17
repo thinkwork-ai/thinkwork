@@ -12,6 +12,8 @@ const {
   mockUpdateOntologyChangeSet,
   mockApproveOntologyChangeSet,
   mockRejectOntologyChangeSet,
+  mockUpdateOntologyEntityType,
+  mockUpdateOntologyRelationshipType,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
@@ -23,6 +25,8 @@ const {
   mockUpdateOntologyChangeSet: vi.fn(),
   mockApproveOntologyChangeSet: vi.fn(),
   mockRejectOntologyChangeSet: vi.fn(),
+  mockUpdateOntologyEntityType: vi.fn(),
+  mockUpdateOntologyRelationshipType: vi.fn(),
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -41,6 +45,8 @@ vi.mock("../../../lib/ontology/repository.js", () => ({
   updateOntologyChangeSet: mockUpdateOntologyChangeSet,
   approveOntologyChangeSet: mockApproveOntologyChangeSet,
   rejectOntologyChangeSet: mockRejectOntologyChangeSet,
+  updateOntologyEntityType: mockUpdateOntologyEntityType,
+  updateOntologyRelationshipType: mockUpdateOntologyRelationshipType,
 }));
 
 vi.mock("../../../lib/ontology/suggestions.js", () => ({
@@ -59,6 +65,8 @@ import { ontologySuggestionScanJob } from "./ontologySuggestionScanJob.query.js"
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
 import { startOntologySuggestionScanMutation } from "./startOntologySuggestionScan.mutation.js";
 import { updateOntologyChangeSetMutation } from "./updateOntologyChangeSet.mutation.js";
+import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
+import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as any;
 
@@ -74,6 +82,8 @@ describe("ontology GraphQL resolvers", () => {
     mockUpdateOntologyChangeSet.mockReset();
     mockApproveOntologyChangeSet.mockReset();
     mockRejectOntologyChangeSet.mockReset();
+    mockUpdateOntologyEntityType.mockReset();
+    mockUpdateOntologyRelationshipType.mockReset();
 
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("user-1");
@@ -255,6 +265,107 @@ describe("ontology GraphQL resolvers", () => {
       reason: "Too broad",
       actorUserId: "user-1",
     });
+  });
+
+  it("updates entity definitions through an admin-gated mutation", async () => {
+    mockUpdateOntologyEntityType.mockResolvedValue({
+      id: "entity-customer",
+      name: "Customer",
+      lifecycleStatus: "APPROVED",
+    });
+
+    const result = await updateOntologyEntityTypeMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          entityTypeId: "entity-customer",
+          name: "Customer",
+          description: "Commercial account",
+          broadType: "organization",
+          aliases: ["account", "client"],
+          guidanceNotes: "Compile account-facing facts.",
+          lifecycleStatus: "APPROVED",
+        },
+      },
+      ctx,
+    );
+
+    expect(result.name).toBe("Customer");
+    expect(mockUpdateOntologyEntityType).toHaveBeenCalledWith({
+      actorUserId: "user-1",
+      input: {
+        tenantId: "tenant-1",
+        entityTypeId: "entity-customer",
+        name: "Customer",
+        description: "Commercial account",
+        broadType: "organization",
+        aliases: ["account", "client"],
+        guidanceNotes: "Compile account-facing facts.",
+        lifecycleStatus: "approved",
+      },
+    });
+  });
+
+  it("updates relationship definitions through an admin-gated mutation", async () => {
+    mockUpdateOntologyRelationshipType.mockResolvedValue({
+      id: "rel-stakeholder",
+      name: "Stakeholder",
+      lifecycleStatus: "APPROVED",
+    });
+
+    await updateOntologyRelationshipTypeMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          relationshipTypeId: "rel-stakeholder",
+          name: "Stakeholder",
+          inverseName: "Has stakeholder",
+          sourceTypeSlugs: ["person"],
+          targetTypeSlugs: ["customer"],
+          aliases: ["contact"],
+          guidanceNotes: "Connect people to accounts.",
+          lifecycleStatus: "DEPRECATED",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockUpdateOntologyRelationshipType).toHaveBeenCalledWith({
+      actorUserId: "user-1",
+      input: {
+        tenantId: "tenant-1",
+        relationshipTypeId: "rel-stakeholder",
+        name: "Stakeholder",
+        inverseName: "Has stakeholder",
+        sourceTypeSlugs: ["person"],
+        targetTypeSlugs: ["customer"],
+        aliases: ["contact"],
+        guidanceNotes: "Connect people to accounts.",
+        lifecycleStatus: "deprecated",
+      },
+    });
+  });
+
+  it("does not mutate ontology definitions for non-admin callers", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new Error("forbidden"));
+
+    await expect(
+      updateOntologyEntityTypeMutation(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            entityTypeId: "entity-customer",
+            name: "Customer",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow("forbidden");
+
+    expect(mockUpdateOntologyEntityType).not.toHaveBeenCalled();
   });
 
   it("starts suggestion scans and exposes scan and reprocess jobs", async () => {

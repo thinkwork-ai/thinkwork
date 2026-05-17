@@ -169,6 +169,8 @@ describe("GraphQL Schema Contract", () => {
       "updateOntologyChangeSet",
       "approveOntologyChangeSet",
       "rejectOntologyChangeSet",
+      "updateOntologyEntityType",
+      "updateOntologyRelationshipType",
       // Inbox
       "createInboxItem",
       "approveInboxItem",
@@ -227,6 +229,8 @@ describe("GraphQL Schema Contract", () => {
       expect(sdl).toContain("ontologyDefinitions(");
       expect(sdl).toContain("startOntologySuggestionScan(");
       expect(sdl).toContain("approveOntologyChangeSet(");
+      expect(sdl).toContain("updateOntologyEntityType(");
+      expect(sdl).toContain("updateOntologyRelationshipType(");
     });
 
     // Eval types were originally cut from v1 but landed in PR #147

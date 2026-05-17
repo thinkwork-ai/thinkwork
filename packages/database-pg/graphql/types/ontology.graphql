@@ -258,6 +258,30 @@ input RejectOntologyChangeSetInput {
   reason: String
 }
 
+input UpdateOntologyEntityTypeInput {
+  tenantId: ID!
+  entityTypeId: ID!
+  name: String
+  description: String
+  broadType: String
+  aliases: [String!]
+  guidanceNotes: String
+  lifecycleStatus: OntologyLifecycleStatus
+}
+
+input UpdateOntologyRelationshipTypeInput {
+  tenantId: ID!
+  relationshipTypeId: ID!
+  name: String
+  description: String
+  inverseName: String
+  sourceTypeSlugs: [String!]
+  targetTypeSlugs: [String!]
+  aliases: [String!]
+  guidanceNotes: String
+  lifecycleStatus: OntologyLifecycleStatus
+}
+
 extend type Query {
   ontologyDefinitions(tenantId: ID!): OntologyDefinitions!
   ontologyChangeSets(
@@ -284,4 +308,10 @@ extend type Mutation {
   rejectOntologyChangeSet(
     input: RejectOntologyChangeSetInput!
   ): OntologyChangeSet!
+  updateOntologyEntityType(
+    input: UpdateOntologyEntityTypeInput!
+  ): OntologyEntityType!
+  updateOntologyRelationshipType(
+    input: UpdateOntologyRelationshipTypeInput!
+  ): OntologyRelationshipType!
 }

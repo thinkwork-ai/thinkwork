@@ -2156,6 +2156,8 @@ export type Mutation = {
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
   updateOntologyChangeSet: OntologyChangeSet;
+  updateOntologyEntityType: OntologyEntityType;
+  updateOntologyRelationshipType: OntologyRelationshipType;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
@@ -3070,6 +3072,16 @@ export type MutationUpdateMemoryRecordArgs = {
 
 export type MutationUpdateOntologyChangeSetArgs = {
   input: UpdateOntologyChangeSetInput;
+};
+
+
+export type MutationUpdateOntologyEntityTypeArgs = {
+  input: UpdateOntologyEntityTypeInput;
+};
+
+
+export type MutationUpdateOntologyRelationshipTypeArgs = {
+  input: UpdateOntologyRelationshipTypeInput;
 };
 
 
@@ -5858,6 +5870,30 @@ export type UpdateOntologyChangeSetItemInput = {
   editedValue?: InputMaybe<Scalars['AWSJSON']['input']>;
   id: Scalars['ID']['input'];
   status?: InputMaybe<OntologyChangeSetStatus>;
+};
+
+export type UpdateOntologyEntityTypeInput = {
+  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
+  broadType?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  entityTypeId: Scalars['ID']['input'];
+  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
+  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+export type UpdateOntologyRelationshipTypeInput = {
+  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
+  inverseName?: InputMaybe<Scalars['String']['input']>;
+  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  relationshipTypeId: Scalars['ID']['input'];
+  sourceTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
+  targetTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type UpdateQuickActionInput = {

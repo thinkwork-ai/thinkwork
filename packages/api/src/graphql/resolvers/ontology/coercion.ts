@@ -1,6 +1,7 @@
 import type {
   OntologyChangeSetItemStatus,
   OntologyChangeSetStatus,
+  OntologyLifecycleStatus,
 } from "../../../lib/ontology/repository.js";
 
 export function changeSetStatusFromGraphQL(
@@ -19,4 +20,11 @@ export function itemStatusFromGraphQL(
     throw new Error("Draft is not a valid ontology change-set item status");
   }
   return value as OntologyChangeSetItemStatus;
+}
+
+export function lifecycleStatusFromGraphQL(
+  status?: string | null,
+): OntologyLifecycleStatus | null {
+  if (!status) return null;
+  return status.toLowerCase() as OntologyLifecycleStatus;
 }

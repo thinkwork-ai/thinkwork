@@ -30,6 +30,19 @@ describe("ontology studio route", () => {
     expect(routeSource).toContain("const entityColumns");
     expect(routeSource).toContain("const relationshipColumns");
     expect(routeSource).toContain("<DataTable");
+    expect(routeSource).toContain("allowHorizontalScroll={false}");
+    expect(routeSource).toContain("onRowClick={onSelectEntity}");
+    expect(routeSource).toContain("onRowClick={onSelectRelationship}");
+    expect(routeSource).not.toContain('header: "Description"');
+    expect(routeSource).not.toContain('header: "Aliases"');
+  });
+
+  it("keeps definition detail in editable side sheets", () => {
+    expect(routeSource).toContain("<SheetContent");
+    expect(routeSource).toContain("function OntologyEntitySheet");
+    expect(routeSource).toContain("function OntologyRelationshipSheet");
+    expect(routeSource).toContain("saveEntityDefinition");
+    expect(routeSource).toContain("saveRelationshipDefinition");
   });
 
   it("wires the ontology GraphQL operations used by the page", () => {
@@ -37,6 +50,8 @@ describe("ontology studio route", () => {
     expect(queriesSource).toContain("query OntologyChangeSets");
     expect(queriesSource).toContain("mutation StartOntologySuggestionScan");
     expect(queriesSource).toContain("mutation UpdateOntologyChangeSet");
+    expect(queriesSource).toContain("mutation UpdateOntologyEntityType");
+    expect(queriesSource).toContain("mutation UpdateOntologyRelationshipType");
     expect(queriesSource).toContain("mutation ApproveOntologyChangeSet");
     expect(queriesSource).toContain("mutation RejectOntologyChangeSet");
     expect(queriesSource).toContain("query OntologyReprocessJob");

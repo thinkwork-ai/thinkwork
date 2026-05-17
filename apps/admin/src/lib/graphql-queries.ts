@@ -2527,6 +2527,75 @@ export const UpdateOntologyChangeSetMutation = graphql(`
   }
 `);
 
+export const UpdateOntologyEntityTypeMutation = graphql(`
+  mutation UpdateOntologyEntityType($input: UpdateOntologyEntityTypeInput!) {
+    updateOntologyEntityType(input: $input) {
+      id
+      slug
+      name
+      description
+      broadType
+      aliases
+      guidanceNotes
+      lifecycleStatus
+      approvedAt
+      updatedAt
+      facetTemplates {
+        id
+        slug
+        heading
+        facetType
+        position
+        sourcePriority
+        prompt
+        guidanceNotes
+        lifecycleStatus
+      }
+      externalMappings {
+        id
+        subjectKind
+        subjectId
+        mappingKind
+        vocabulary
+        externalUri
+        externalLabel
+        notes
+      }
+    }
+  }
+`);
+
+export const UpdateOntologyRelationshipTypeMutation = graphql(`
+  mutation UpdateOntologyRelationshipType(
+    $input: UpdateOntologyRelationshipTypeInput!
+  ) {
+    updateOntologyRelationshipType(input: $input) {
+      id
+      slug
+      name
+      description
+      inverseName
+      sourceTypeSlugs
+      targetTypeSlugs
+      aliases
+      guidanceNotes
+      lifecycleStatus
+      approvedAt
+      updatedAt
+      externalMappings {
+        id
+        subjectKind
+        subjectId
+        mappingKind
+        vocabulary
+        externalUri
+        externalLabel
+        notes
+      }
+    }
+  }
+`);
+
 export const ApproveOntologyChangeSetMutation = graphql(`
   mutation ApproveOntologyChangeSet($input: ApproveOntologyChangeSetInput!) {
     approveOntologyChangeSet(input: $input) {

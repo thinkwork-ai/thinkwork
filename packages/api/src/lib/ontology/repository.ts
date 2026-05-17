@@ -44,6 +44,12 @@ export type OntologyChangeSetItemStatus =
   | "rejected"
   | "applied";
 
+export type OntologyLifecycleStatus =
+  | "proposed"
+  | "approved"
+  | "deprecated"
+  | "rejected";
+
 const TERMINAL_CHANGE_SET_STATUSES = new Set<OntologyChangeSetStatus>([
   "approved",
   "rejected",
@@ -82,6 +88,30 @@ export interface UpdateOntologyChangeSetInput {
   summary?: string | null;
   status?: OntologyChangeSetStatus | null;
   items?: UpdateOntologyChangeSetItemInput[] | null;
+}
+
+export interface UpdateOntologyEntityTypeInput {
+  tenantId: string;
+  entityTypeId: string;
+  name?: string | null;
+  description?: string | null;
+  broadType?: string | null;
+  aliases?: string[] | null;
+  guidanceNotes?: string | null;
+  lifecycleStatus?: OntologyLifecycleStatus | null;
+}
+
+export interface UpdateOntologyRelationshipTypeInput {
+  tenantId: string;
+  relationshipTypeId: string;
+  name?: string | null;
+  description?: string | null;
+  inverseName?: string | null;
+  sourceTypeSlugs?: string[] | null;
+  targetTypeSlugs?: string[] | null;
+  aliases?: string[] | null;
+  guidanceNotes?: string | null;
+  lifecycleStatus?: OntologyLifecycleStatus | null;
 }
 
 export async function listOntologyDefinitions(args: {
@@ -176,6 +206,148 @@ export async function listOntologyDefinitions(args: {
     facetTemplates: facetRows.map(toOntologyFacetTemplate),
     externalMappings: activeMappingRows.map(toOntologyExternalMapping),
   };
+}
+
+export async function updateOntologyEntityType(args: {
+  input: UpdateOntologyEntityTypeInput;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  const now = new Date();
+  const patch: Record<string, unknown> = { updated_at: now };
+  if (args.input.name !== undefined && args.input.name !== null) {
+    patch.name = nonBlank(args.input.name, "Entity type name");
+  }
+  if (args.input.description !== undefined) {
+    patch.description = args.input.description;
+  }
+  if (args.input.broadType !== undefined && args.input.broadType !== null) {
+    patch.broad_type = nonBlank(args.input.broadType, "Entity broad type");
+  }
+  if (args.input.aliases !== undefined && args.input.aliases !== null) {
+    patch.aliases = args.input.aliases;
+  }
+  if (args.input.guidanceNotes !== undefined) {
+    patch.guidance_notes = args.input.guidanceNotes;
+  }
+  Object.assign(
+    patch,
+    lifecyclePatch(args.input.lifecycleStatus, args.actorUserId, now),
+  );
+
+  const [updated] = await db
+    .update(ontologyEntityTypes)
+    .set(patch)
+    .where(
+      and(
+        eq(ontologyEntityTypes.id, args.input.entityTypeId),
+        eq(ontologyEntityTypes.tenant_id, args.input.tenantId),
+      ),
+    )
+    .returning({ id: ontologyEntityTypes.id });
+  if (!updated) throw new Error("Ontology entity type not found");
+
+  await recordOntologyActivity({
+    db,
+    tenantId: args.input.tenantId,
+    actorUserId: args.actorUserId,
+    action: "ontology_entity_type_updated",
+    entityType: "ontology_entity_type",
+    entityId: updated.id,
+    metadata: {
+      lifecycleStatus: args.input.lifecycleStatus ?? null,
+    },
+  });
+
+  return loadOntologyEntityType({
+    tenantId: args.input.tenantId,
+    entityTypeId: updated.id,
+    db,
+  });
+}
+
+export async function updateOntologyRelationshipType(args: {
+  input: UpdateOntologyRelationshipTypeInput;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  const now = new Date();
+  const patch: Record<string, unknown> = { updated_at: now };
+  if (args.input.name !== undefined && args.input.name !== null) {
+    patch.name = nonBlank(args.input.name, "Relationship type name");
+  }
+  if (args.input.description !== undefined) {
+    patch.description = args.input.description;
+  }
+  if (args.input.inverseName !== undefined) {
+    patch.inverse_name = args.input.inverseName;
+  }
+  if (
+    args.input.sourceTypeSlugs !== undefined &&
+    args.input.sourceTypeSlugs !== null
+  ) {
+    patch.source_type_slugs = args.input.sourceTypeSlugs;
+    patch.source_entity_type_id = await entityTypeIdForFirstSlug({
+      db,
+      tenantId: args.input.tenantId,
+      slugs: args.input.sourceTypeSlugs,
+      label: "Source",
+    });
+  }
+  if (
+    args.input.targetTypeSlugs !== undefined &&
+    args.input.targetTypeSlugs !== null
+  ) {
+    patch.target_type_slugs = args.input.targetTypeSlugs;
+    patch.target_entity_type_id = await entityTypeIdForFirstSlug({
+      db,
+      tenantId: args.input.tenantId,
+      slugs: args.input.targetTypeSlugs,
+      label: "Target",
+    });
+  }
+  if (args.input.aliases !== undefined && args.input.aliases !== null) {
+    patch.aliases = args.input.aliases;
+  }
+  if (args.input.guidanceNotes !== undefined) {
+    patch.guidance_notes = args.input.guidanceNotes;
+  }
+  Object.assign(
+    patch,
+    lifecyclePatch(args.input.lifecycleStatus, args.actorUserId, now),
+  );
+
+  const [updated] = await db
+    .update(ontologyRelationshipTypes)
+    .set(patch)
+    .where(
+      and(
+        eq(ontologyRelationshipTypes.id, args.input.relationshipTypeId),
+        eq(ontologyRelationshipTypes.tenant_id, args.input.tenantId),
+      ),
+    )
+    .returning({ id: ontologyRelationshipTypes.id });
+  if (!updated) throw new Error("Ontology relationship type not found");
+
+  await recordOntologyActivity({
+    db,
+    tenantId: args.input.tenantId,
+    actorUserId: args.actorUserId,
+    action: "ontology_relationship_type_updated",
+    entityType: "ontology_relationship_type",
+    entityId: updated.id,
+    metadata: {
+      lifecycleStatus: args.input.lifecycleStatus ?? null,
+    },
+  });
+
+  return loadOntologyRelationshipType({
+    tenantId: args.input.tenantId,
+    relationshipTypeId: updated.id,
+    db,
+  });
 }
 
 export async function listOntologyChangeSets(args: {
@@ -607,7 +779,9 @@ async function recordOntologyActivity(args: {
   tenantId: string;
   actorUserId: string | null;
   action: string;
-  changeSetId: string;
+  changeSetId?: string;
+  entityType?: string;
+  entityId?: string;
   metadata?: Record<string, unknown>;
 }) {
   if (!args.actorUserId) return;
@@ -616,8 +790,141 @@ async function recordOntologyActivity(args: {
     actor_type: "user",
     actor_id: args.actorUserId,
     action: args.action,
-    entity_type: "ontology_change_set",
-    entity_id: args.changeSetId,
+    entity_type: args.entityType ?? "ontology_change_set",
+    entity_id: args.entityId ?? args.changeSetId,
     metadata: args.metadata ?? {},
   });
+}
+
+async function loadOntologyEntityType(args: {
+  tenantId: string;
+  entityTypeId: string;
+  db: DbLike;
+}) {
+  const [row] = await args.db
+    .select()
+    .from(ontologyEntityTypes)
+    .where(
+      and(
+        eq(ontologyEntityTypes.id, args.entityTypeId),
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("Ontology entity type not found");
+
+  const [facetRows, mappingRows] = await Promise.all([
+    args.db
+      .select()
+      .from(ontologyFacetTemplates)
+      .where(
+        and(
+          eq(ontologyFacetTemplates.entity_type_id, row.id),
+          eq(ontologyFacetTemplates.tenant_id, args.tenantId),
+        ),
+      )
+      .orderBy(
+        asc(ontologyFacetTemplates.position),
+        asc(ontologyFacetTemplates.slug),
+      ),
+    args.db
+      .select()
+      .from(ontologyExternalMappings)
+      .where(
+        and(
+          eq(ontologyExternalMappings.tenant_id, args.tenantId),
+          eq(ontologyExternalMappings.subject_kind, "entity_type"),
+          eq(ontologyExternalMappings.subject_id, row.id),
+        ),
+      ),
+  ]);
+
+  return toOntologyEntityType(row, facetRows, mappingRows);
+}
+
+async function loadOntologyRelationshipType(args: {
+  tenantId: string;
+  relationshipTypeId: string;
+  db: DbLike;
+}) {
+  const [row] = await args.db
+    .select()
+    .from(ontologyRelationshipTypes)
+    .where(
+      and(
+        eq(ontologyRelationshipTypes.id, args.relationshipTypeId),
+        eq(ontologyRelationshipTypes.tenant_id, args.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("Ontology relationship type not found");
+
+  const mappingRows = await args.db
+    .select()
+    .from(ontologyExternalMappings)
+    .where(
+      and(
+        eq(ontologyExternalMappings.tenant_id, args.tenantId),
+        eq(ontologyExternalMappings.subject_kind, "relationship_type"),
+        eq(ontologyExternalMappings.subject_id, row.id),
+      ),
+    );
+
+  return toOntologyRelationshipType(row, mappingRows);
+}
+
+function lifecyclePatch(
+  status: OntologyLifecycleStatus | null | undefined,
+  actorUserId: string | null,
+  now: Date,
+) {
+  if (!status) return {};
+  const patch: Record<string, unknown> = { lifecycle_status: status };
+  if (status === "approved") {
+    patch.approved_at = now;
+    patch.approved_by_user_id = actorUserId;
+    patch.deprecated_at = null;
+    patch.rejected_at = null;
+  }
+  if (status === "deprecated") {
+    patch.deprecated_at = now;
+  }
+  if (status === "rejected") {
+    patch.rejected_at = now;
+  }
+  if (status === "proposed") {
+    patch.approved_at = null;
+    patch.approved_by_user_id = null;
+    patch.deprecated_at = null;
+    patch.rejected_at = null;
+  }
+  return patch;
+}
+
+function nonBlank(value: string, label: string) {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error(`${label} cannot be blank`);
+  return trimmed;
+}
+
+async function entityTypeIdForFirstSlug(args: {
+  db: DbLike;
+  tenantId: string;
+  slugs: string[];
+  label: "Source" | "Target";
+}) {
+  const [slug] = args.slugs;
+  if (!slug) return null;
+  const [row] = await args.db
+    .select({ id: ontologyEntityTypes.id })
+    .from(ontologyEntityTypes)
+    .where(
+      and(
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+        eq(ontologyEntityTypes.slug, slug),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error(`${args.label} entity type slug not found`);
+  return row.id;
 }
