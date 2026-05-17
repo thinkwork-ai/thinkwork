@@ -253,6 +253,7 @@ export const ComputersListQuery = graphql(`
       }
       name
       slug
+      scope
       status
       desiredRuntimeStatus
       runtimeStatus
@@ -299,6 +300,7 @@ export const ComputerDetailQuery = graphql(`
       }
       name
       slug
+      scope
       status
       desiredRuntimeStatus
       runtimeStatus
@@ -343,6 +345,7 @@ export const CreateComputerMutation = graphql(`
       id
       name
       slug
+      scope
       status
       desiredRuntimeStatus
       runtimeStatus
@@ -372,6 +375,122 @@ export const UpdateComputerMutation = graphql(`
       budgetMonthlyCents
       spentMonthlyCents
       budgetPausedReason
+      updatedAt
+    }
+  }
+`);
+
+export const ComputerAssignmentsQuery = graphql(`
+  query ComputerAssignments($computerId: ID!) {
+    computerAssignments(computerId: $computerId) {
+      id
+      subjectType
+      userId
+      user {
+        id
+        name
+        email
+      }
+      teamId
+      team {
+        id
+        name
+        status
+      }
+      role
+      createdAt
+    }
+  }
+`);
+
+export const ComputerAccessUsersQuery = graphql(`
+  query ComputerAccessUsers($computerId: ID!) {
+    computerAccessUsers(computerId: $computerId) {
+      userId
+      user {
+        id
+        name
+        email
+      }
+      accessSource
+      directAssignment {
+        id
+        role
+      }
+      teams {
+        id
+        name
+        status
+      }
+      teamAssignments {
+        id
+        teamId
+        role
+      }
+    }
+  }
+`);
+
+export const UserComputerAssignmentsQuery = graphql(`
+  query UserComputerAssignments($userId: ID!) {
+    userComputerAssignments(userId: $userId) {
+      computerId
+      computer {
+        id
+        name
+        slug
+        scope
+        status
+        runtimeStatus
+        template {
+          id
+          name
+        }
+      }
+      accessSource
+      directAssignment {
+        id
+        role
+      }
+      teams {
+        id
+        name
+        status
+      }
+      teamAssignments {
+        id
+        teamId
+        role
+      }
+    }
+  }
+`);
+
+export const SetComputerAssignmentsMutation = graphql(`
+  mutation SetComputerAssignments($input: SetComputerAssignmentsInput!) {
+    setComputerAssignments(input: $input) {
+      id
+      computerId
+      subjectType
+      userId
+      teamId
+      role
+      updatedAt
+    }
+  }
+`);
+
+export const SetUserComputerAssignmentsMutation = graphql(`
+  mutation SetUserComputerAssignments(
+    $input: SetUserComputerAssignmentsInput!
+  ) {
+    setUserComputerAssignments(input: $input) {
+      id
+      computerId
+      subjectType
+      userId
+      teamId
+      role
       updatedAt
     }
   }

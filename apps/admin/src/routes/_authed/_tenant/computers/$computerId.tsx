@@ -8,6 +8,7 @@ import {
   Monitor,
   Server,
   User,
+  Users,
 } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
@@ -30,11 +31,13 @@ import {
 } from "@/components/threads/ThreadsTable";
 import { useActiveTurnsStore } from "@/stores/active-turns-store";
 import { formatUsd } from "@/lib/utils";
-import { ComputerStatus, type Computer } from "@/gql/graphql";
+import { ComputerScope, ComputerStatus, type Computer } from "@/gql/graphql";
 import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
 import { ComputerIdentityEditPanel } from "./-components/ComputerIdentityEditPanel";
+import { ComputerAssignmentsPanel } from "./-components/ComputerAssignmentsPanel";
+import { ComputerAccessUsersTable } from "./-components/ComputerAccessUsersTable";
 import { ComputerTerminal } from "./-components/ComputerTerminal";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 
@@ -68,6 +71,7 @@ function ComputerDetailPage() {
   const { computerId } = Route.useParams();
   const { tab } = Route.useSearch();
   const navigate = useNavigate();
+  const [accessRefreshKey, setAccessRefreshKey] = useState(0);
   const [result, reexecute] = useQuery({
     query: ComputerDetailQuery,
     variables: { id: computerId },
@@ -139,6 +143,8 @@ function ComputerDetailPage() {
   }
 
   const ownerLabel = computer.owner?.name ?? computer.owner?.email ?? "—";
+  const isHistoricalPersonal =
+    computer.scope === ComputerScope.HistoricalPersonal;
 
   return (
     <PageLayout
@@ -203,8 +209,12 @@ function ComputerDetailPage() {
           </div>
           <div className="flex flex-wrap items-center gap-1">
             <Badge variant="outline" className="gap-1">
-              <User className="h-3 w-3" />
-              {ownerLabel}
+              {isHistoricalPersonal ? (
+                <User className="h-3 w-3" />
+              ) : (
+                <Users className="h-3 w-3" />
+              )}
+              {isHistoricalPersonal ? ownerLabel : "Shared Computer"}
             </Badge>
             <Badge variant="outline" className="gap-1">
               <Monitor className="h-3 w-3" />
@@ -219,7 +229,10 @@ function ComputerDetailPage() {
               {centsToUsd(computer.spentMonthlyCents)}
             </Badge>
             {computer.status === ComputerStatus.Archived ? (
-              <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300">
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300"
+              >
                 <Archive className="h-3 w-3" />
                 Archived
               </Badge>
@@ -249,6 +262,15 @@ function ComputerDetailPage() {
           <ComputerIdentityEditPanel
             computer={computer}
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}
+          />
+          <ComputerAssignmentsPanel
+            computerId={computer.id}
+            tenantId={computer.tenantId}
+            onUpdated={() => setAccessRefreshKey((value) => value + 1)}
+          />
+          <ComputerAccessUsersTable
+            computerId={computer.id}
+            refreshKey={accessRefreshKey}
           />
           <ComputerRuntimePanel computer={computer} />
         </div>
@@ -313,9 +335,12 @@ function ComputerDashboardTab({
 
   const threadItems: ThreadsTableItem[] = useMemo(
     () =>
-      ((threadsResult.data?.threadsPaged?.items ?? []) as ThreadsTableItem[]).map(
-        (t) => ({ ...t, status: (t.status ?? "").toString().toLowerCase() }),
-      ),
+      (
+        (threadsResult.data?.threadsPaged?.items ?? []) as ThreadsTableItem[]
+      ).map((t) => ({
+        ...t,
+        status: (t.status ?? "").toString().toLowerCase(),
+      })),
     [threadsResult.data],
   );
   const totalCount = threadsResult.data?.threadsPaged?.totalCount ?? 0;

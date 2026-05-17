@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Monitor, Plus, RefreshCw, User } from "lucide-react";
+import { Archive, Monitor, Plus, RefreshCw, Users } from "lucide-react";
 import { ComputerFormDialog } from "@/components/computers/ComputerFormDialog";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -19,10 +19,9 @@ import {
   FilterBarSearch,
   FilterBarSort,
 } from "@/components/ui/data-table-filter-bar";
-import { Archive } from "lucide-react";
 import { ComputersListQuery } from "@/lib/graphql-queries";
 import { formatUsd, relativeTime } from "@/lib/utils";
-import { ComputerStatus } from "@/gql/graphql";
+import { ComputerScope, ComputerStatus } from "@/gql/graphql";
 
 export const Route = createFileRoute("/_authed/_tenant/computers/")({
   component: ComputersPage,
@@ -31,8 +30,8 @@ export const Route = createFileRoute("/_authed/_tenant/computers/")({
 type ComputerRow = {
   id: string;
   name: string;
-  ownerName: string | null;
-  ownerEmail: string | null;
+  accessLabel: string;
+  historicalOwner: string | null;
   templateName: string | null;
   status: string;
   budgetMonthlyCents: number | null;
@@ -41,7 +40,7 @@ type ComputerRow = {
   lastActiveAt: string | null;
 };
 
-type SortField = "name" | "ownerName" | "status" | "lastHeartbeatAt";
+type SortField = "name" | "accessLabel" | "status" | "lastHeartbeatAt";
 
 function formatBudget(spent: number | null, budget: number | null): string {
   if (spent == null && budget == null) return "—";
@@ -62,17 +61,19 @@ const columns: ColumnDef<ComputerRow>[] = [
     ),
   },
   {
-    accessorKey: "ownerName",
-    header: "Owner",
+    accessorKey: "accessLabel",
+    header: "Access",
     cell: ({ row }) => {
-      const owner = row.original.ownerName ?? row.original.ownerEmail;
-      return owner ? (
+      const historicalOwner = row.original.historicalOwner;
+      return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-          <User className="h-3 w-3 shrink-0" />
-          <span className="truncate max-w-[150px]">{owner}</span>
+          <Users className="h-3 w-3 shrink-0" />
+          <span className="truncate max-w-[170px]">
+            {historicalOwner
+              ? `Historical: ${historicalOwner}`
+              : row.original.accessLabel}
+          </span>
         </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">—</span>
       );
     },
   },
@@ -155,8 +156,14 @@ function ComputersPage() {
     const mapped = visibleComputers.map((computer) => ({
       id: computer.id,
       name: computer.name,
-      ownerName: computer.owner?.name ?? null,
-      ownerEmail: computer.owner?.email ?? null,
+      accessLabel:
+        computer.scope === ComputerScope.HistoricalPersonal
+          ? "Historical personal"
+          : "Shared",
+      historicalOwner:
+        computer.scope === ComputerScope.HistoricalPersonal
+          ? (computer.owner?.name ?? computer.owner?.email ?? null)
+          : null,
       templateName: computer.template?.name ?? null,
       status: computer.status,
       budgetMonthlyCents: computer.budgetMonthlyCents ?? null,
@@ -187,7 +194,7 @@ function ComputersPage() {
         <>
           <PageHeader
             title="Computers"
-            description="One durable AWS-native workplace per user, with live runtime state and migration provenance."
+            description="Shared AWS-native workplaces with central runtime, workspace, and access management."
             actions={
               <>
                 <Button
@@ -247,7 +254,7 @@ function ComputersPage() {
               <FilterBarSort
                 options={[
                   { value: "name", label: "Name" },
-                  { value: "ownerName", label: "Owner" },
+                  { value: "accessLabel", label: "Access" },
                   { value: "status", label: "Status" },
                   { value: "lastHeartbeatAt", label: "Heartbeat" },
                 ]}
@@ -271,7 +278,7 @@ function ComputersPage() {
         <EmptyState
           icon={Monitor}
           title="No Computers yet"
-          description="Provision the first Computer for a tenant member, or wait for auto-provision to fire on the next membership add."
+          description="Create a shared Computer and assign access to people or Teams."
           action={{
             label: "New Computer",
             onClick: () => setCreateOpen(true),
