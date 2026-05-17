@@ -4,6 +4,7 @@ import {
   estimateAgentCoreEvaluatorCostUsd,
   extractComputerTaskResponse,
   isRetryableEvalInfrastructureError,
+  llmJudgeEnabled,
   parseEvalWorkerMessage,
   softenEchoedForbiddenPhraseAssertions,
   summarizeEvalResults,
@@ -73,10 +74,17 @@ describe("eval-worker evaluator cost controls", () => {
     expect(agentCoreEvaluatorsEnabled("enabled")).toBe(true);
     expect(agentCoreEvaluatorsEnabled("FULL")).toBe(true);
   });
+
+  it("keeps the external LLM judge disabled unless explicitly enabled", () => {
+    expect(llmJudgeEnabled(undefined)).toBe(false);
+    expect(llmJudgeEnabled("heuristic")).toBe(false);
+    expect(llmJudgeEnabled("enabled")).toBe(true);
+    expect(llmJudgeEnabled("LLM")).toBe(true);
+  });
 });
 
 describe("eval-worker infrastructure retry classification", () => {
-  it("retries transient substrate errors instead of scoring them as eval failures", () => {
+  it("retries Computer queue stalls but records model throttles as case errors", () => {
     expect(
       isRetryableEvalInfrastructureError(
         new Error("Timed out waiting for Computer eval task after 210000ms"),
@@ -86,10 +94,15 @@ describe("eval-worker infrastructure retry classification", () => {
       isRetryableEvalInfrastructureError(
         new Error("ThrottlingException: Too many requests"),
       ),
-    ).toBe(true);
-    expect(isRetryableEvalInfrastructureError(new Error("policy violation"))).toBe(
-      false,
-    );
+    ).toBe(false);
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("AgentCore eval invocation timed out after 210000ms"),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableEvalInfrastructureError(new Error("policy violation")),
+    ).toBe(false);
   });
 });
 

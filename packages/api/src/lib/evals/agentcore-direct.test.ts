@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEvalAgentCorePayload,
+  DEFAULT_EVAL_MAX_TOKENS,
   DEFAULT_EVAL_MODEL_ID,
   evalAgentCoreInvokeTimeoutMs,
+  evalMaxTokens,
   evalModelId,
   extractAgentCoreResponseText,
 } from "./agentcore-direct.js";
@@ -48,6 +50,7 @@ describe("direct AgentCore eval payload", () => {
       thread_id: "session-1",
       trigger_channel: "eval",
       model: DEFAULT_EVAL_MODEL_ID,
+      max_tokens: DEFAULT_EVAL_MAX_TOKENS,
       use_memory: false,
     });
   });
@@ -79,6 +82,13 @@ describe("direct AgentCore eval helpers", () => {
     expect(evalAgentCoreInvokeTimeoutMs()).toBe(210_000);
     expect(evalAgentCoreInvokeTimeoutMs("5000")).toBe(5_000);
     expect(evalAgentCoreInvokeTimeoutMs("nope")).toBe(210_000);
+  });
+
+  it("normalizes eval max token overrides", () => {
+    expect(evalMaxTokens()).toBe(2_048);
+    expect(evalMaxTokens("4096")).toBe(4_096);
+    expect(evalMaxTokens("0")).toBe(2_048);
+    expect(evalMaxTokens("nope")).toBe(2_048);
   });
 
   it("extracts OpenAI-style AgentCore response text", () => {

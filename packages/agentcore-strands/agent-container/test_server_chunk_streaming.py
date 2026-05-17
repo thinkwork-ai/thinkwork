@@ -155,6 +155,7 @@ def test_execute_agent_turn_records_computer_thread_response(monkeypatch):
             "computer_task_id": "task-1",
             "thinkwork_api_url": "https://api.example.test",
             "thinkwork_api_secret": "service-secret",
+            "max_tokens": 2048,
             "messages_history": [],
         }
     )
@@ -382,6 +383,7 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
             "computer_task_id": "task-1",
             "thinkwork_api_url": "https://api.example.test",
             "thinkwork_api_secret": "service-secret",
+            "max_tokens": 2048,
             "messages_history": [],
         }
     )
@@ -408,6 +410,7 @@ def test_execute_agent_turn_adds_computer_applet_contract(monkeypatch):
     )
     assert "unless your own successful save_app tool call" in captured["system_prompt"]
     assert "Current threadId: thread-1" in captured["system_prompt"]
+    assert captured["max_tokens"] == 2048
     assert captured["suppress_app_build_helper_tools"] is True
     assert "COMPUTER_ID" not in server.os.environ
     assert "COMPUTER_TASK_ID" not in server.os.environ
