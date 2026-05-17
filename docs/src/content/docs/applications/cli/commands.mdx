@@ -600,26 +600,50 @@ Hard-deletes the thread (not just closes it). Prompts for confirmation in a TTY;
 
 ---
 
+## message
+
+Send messages to threads and list a thread's message history. Messages share the same surface as `thread comment` — both create `Message` rows on a thread, distinguished by `role` and `senderType`.
+
+```bash
+thinkwork message <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Aliases: `messages`, `msg`.
+
+### message send
+
+```bash
+thinkwork message send <threadId> [content] [--file <path>] [--as-agent <id>]
+```
+
+- Content comes from the positional arg, `--file <path>`, or an interactive prompt (TTY only).
+- Default role is `USER`. With `--as-agent <id>`, role becomes `ASSISTANT`, `senderType` becomes `agent`, and `senderId` becomes the supplied agent ID.
+- `--as-agent` requires an api-key session — the API enforces that only an agent's own bearer can post as that agent. Cognito sessions error with a clear message.
+
+### message list
+
+```bash
+thinkwork message list <threadId> [--limit <n>] [--cursor <c>]
+```
+
+- Paginated via cursor. `--limit` defaults to 50. The next-page cursor is printed below the table when more results exist.
+- JSON mode (`--json`) emits `{ messages, pageInfo }` directly for scripting.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
 
 | Phase | Commands |
 |-------|----------|
-| 1 — Work & approvals | ✅ [`thread`](#thread) shipped · [`message`](#message), [`label`](#label), [`inbox`](#inbox) next |
+| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message) shipped · [`label`](#label), [`inbox`](#inbox) next |
 | 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
-
-### message
-
-```bash
-thinkwork message send <threadId> [content] [--file] [--as-agent <id>]
-thinkwork message list <threadId> [--limit] [--cursor]
-```
 
 ### label
 
