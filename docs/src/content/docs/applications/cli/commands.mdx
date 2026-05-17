@@ -678,34 +678,90 @@ Deletes the label. Any existing thread-label assignments are removed automatical
 
 ---
 
+## inbox
+
+Approval flows for agent-proposed changes — list, view, approve/reject, request revisions, resubmit, cancel, comment.
+
+```bash
+thinkwork inbox <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`.
+
+### inbox list
+
+```bash
+thinkwork inbox list [--status <s>] [--entity-type <t>] [--entity-id <id>] [--mine]
+```
+
+- `--status` defaults to `PENDING`. Accepts `PENDING | APPROVED | REJECTED | REVISION_REQUESTED | EXPIRED | CANCELLED`.
+- `--mine` filters to items routed to the caller; requires a Cognito session (api-key sessions error with guidance).
+- `--entity-type` + `--entity-id` filter by what the inbox item targets (e.g. a specific thread).
+
+### inbox get
+
+```bash
+thinkwork inbox get <id>
+```
+
+Prints the full inbox item: metadata, attached comments, links, and any linked threads.
+
+### inbox approve / reject
+
+```bash
+thinkwork inbox approve <id> [--notes <text>]
+thinkwork inbox reject <id>  [--notes <text>]
+```
+
+`--notes` becomes `reviewNotes` on the decision. For inbox items whose recipe declared a structured `decisionSchema`, the CLI currently does not provide a way to supply matching values — use the admin UI for those.
+
+### inbox request-revision
+
+```bash
+thinkwork inbox request-revision <id> --notes <text>
+```
+
+`--notes` is **required** (the API mandates a non-null reason). In a TTY without `--notes`, prompts; non-TTY without `--notes` errors.
+
+### inbox resubmit
+
+```bash
+thinkwork inbox resubmit <id> [--notes <text>]
+```
+
+If `--notes` is provided, it lands in the resubmit's `description` field. The CLI does not currently surface `--title` or `--config` overrides — use the admin UI for richer payloads.
+
+### inbox cancel
+
+```bash
+thinkwork inbox cancel <id>
+```
+
+Cancels a pending item. Calling on an already-CANCELLED item surfaces the API error.
+
+### inbox comment
+
+```bash
+thinkwork inbox comment <id> [content] [--file <path>]
+```
+
+Adds a comment to the inbox item without deciding on it. Content from positional arg, `--file`, or interactive prompt. `authorType`/`authorId` are filled from the session when Cognito-authenticated.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
 
 | Phase | Commands |
 |-------|----------|
-| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label) shipped · [`inbox`](#inbox) next |
+| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
 | 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
-
-### inbox
-
-Approval flows for agent-proposed changes.
-
-```bash
-thinkwork inbox list [--status PENDING] [--mine]
-thinkwork inbox get <id>
-thinkwork inbox approve <id> [--notes]
-thinkwork inbox reject <id> [--notes]
-thinkwork inbox request-revision <id> --notes <text>
-thinkwork inbox resubmit <id> [--notes]
-thinkwork inbox cancel <id>
-thinkwork inbox comment <id> [content] [--file]
-```
 
 ### agent
 

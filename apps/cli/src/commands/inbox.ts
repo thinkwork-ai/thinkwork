@@ -2,12 +2,19 @@
  * `thinkwork inbox ...` — approval requests and revision flows.
  *
  * Inbox items are the human-in-the-loop surface: approve an agent's plan,
- * request changes, kick it back for revision. Scaffolded in Phase 0; ships
- * in Phase 1.
+ * request changes, kick it back for revision. Implementations land in
+ * apps/cli/src/commands/inbox/.
  */
 
 import { Command } from "commander";
-import { notYetImplemented } from "../lib/stub.js";
+import { runInboxList } from "./inbox/list.js";
+import { runInboxGet } from "./inbox/get.js";
+import { runInboxApprove } from "./inbox/approve.js";
+import { runInboxReject } from "./inbox/reject.js";
+import { runInboxRequestRevision } from "./inbox/request-revision.js";
+import { runInboxResubmit } from "./inbox/resubmit.js";
+import { runInboxCancel } from "./inbox/cancel.js";
+import { runInboxComment } from "./inbox/comment.js";
 
 export function registerInboxCommand(program: Command): void {
   const inbox = program
@@ -42,14 +49,14 @@ Examples:
   $ thinkwork inbox list --status APPROVED --json
 `,
     )
-    .action(() => notYetImplemented("inbox list", 1));
+    .action(runInboxList);
 
   inbox
     .command("get <id>")
     .description("Fetch one inbox item with its comments, links, and history.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("inbox get", 1));
+    .action(runInboxGet);
 
   inbox
     .command("approve <id>")
@@ -65,7 +72,7 @@ Examples:
   $ thinkwork inbox approve ibx-abc --notes "Budget confirmed."
 `,
     )
-    .action(() => notYetImplemented("inbox approve", 1));
+    .action(runInboxApprove);
 
   inbox
     .command("reject <id>")
@@ -73,30 +80,30 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--notes <text>", "Rejection reason")
-    .action(() => notYetImplemented("inbox reject", 1));
+    .action(runInboxReject);
 
   inbox
     .command("request-revision <id>")
     .description("Ask for changes — the agent gets the item back with your notes.")
-    .option("--notes <text>", "What needs to change")
+    .option("--notes <text>", "What needs to change (required; prompted in TTY)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("inbox request-revision", 1));
+    .action(runInboxRequestRevision);
 
   inbox
     .command("resubmit <id>")
     .description("Resubmit a revised inbox item for approval.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--notes <text>", "What changed")
-    .action(() => notYetImplemented("inbox resubmit", 1));
+    .option("--notes <text>", "What changed (sent as description on the resubmit input)")
+    .action(runInboxResubmit);
 
   inbox
     .command("cancel <id>")
     .description("Cancel a pending approval request (originator or admin).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("inbox cancel", 1));
+    .action(runInboxCancel);
 
   inbox
     .command("comment <id> [content]")
@@ -104,5 +111,5 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--file <path>", "Read comment body from a file")
-    .action(() => notYetImplemented("inbox comment", 1));
+    .action(runInboxComment);
 }
