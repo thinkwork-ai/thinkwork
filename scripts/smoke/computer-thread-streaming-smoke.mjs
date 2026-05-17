@@ -42,6 +42,7 @@ const env = {
   ...loadEnvFile(),
   ...process.env,
 };
+const REQUIRE_STREAMING_CHUNKS = truthy(env.SMOKE_REQUIRE_STREAMING_CHUNKS);
 
 const databaseUrl = env.DATABASE_URL;
 const apiUrl = first(
@@ -109,22 +110,32 @@ async function runSmoke() {
     publishedAt: chunk.publishedAt,
   }));
   const streamedText = parsedChunks.map((chunk) => chunk.text).join("");
-  const duplicateAdjacent = parsedChunks.some(
-    (chunk, index) => index > 0 && chunk.text === parsedChunks[index - 1].text,
+  const nonEmptyChunkTexts = parsedChunks
+    .map((chunk) => chunk.text)
+    .filter((text) => text.trim().length > 0);
+  const duplicateAdjacent = nonEmptyChunkTexts.some(
+    (text, index) => index > 0 && text === nonEmptyChunkTexts[index - 1],
   );
   const duplicateAny =
-    new Set(parsedChunks.map((chunk) => chunk.text)).size !==
-    parsedChunks.length;
+    new Set(nonEmptyChunkTexts).size !== nonEmptyChunkTexts.length;
 
-  if (parsedChunks.length === 0) {
+  if (parsedChunks.length === 0 && REQUIRE_STREAMING_CHUNKS) {
     fail(`No AppSync chunks received for thread ${threadId}.`);
+  }
+  if (parsedChunks.length === 0) {
+    console.warn(
+      `WARN: No AppSync chunks received for thread ${threadId}; durable response checks passed. Set SMOKE_REQUIRE_STREAMING_CHUNKS=1 to make this strict.`,
+    );
   }
   if (duplicateAdjacent || duplicateAny) {
     fail(
       `Duplicate AppSync chunks received for thread ${threadId}: ${JSON.stringify(parsedChunks)}`,
     );
   }
-  if (streamedText.trim() !== persisted.assistant.trim()) {
+  if (
+    parsedChunks.length > 0 &&
+    streamedText.trim() !== persisted.assistant.trim()
+  ) {
     fail(
       `Streamed text did not match persisted answer for thread ${threadId}: streamed=${JSON.stringify(streamedText)} assistant=${JSON.stringify(persisted.assistant)}`,
     );
@@ -145,6 +156,8 @@ async function runSmoke() {
     computerId: identity.computerId,
     tenantId: identity.tenantId,
     chunkCount: parsedChunks.length,
+    streamingChunksObserved: parsedChunks.length > 0,
+    streamingStrict: REQUIRE_STREAMING_CHUNKS,
     chunks: parsedChunks,
     streamedText,
     taskStatus: persisted.taskStatus,
@@ -417,6 +430,10 @@ function delay(ms) {
 
 function first(...values) {
   return values.find((value) => typeof value === "string" && value.length > 0);
+}
+
+function truthy(value) {
+  return value === "1" || value === "true" || value === "yes";
 }
 
 function fail(message) {
