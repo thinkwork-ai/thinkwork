@@ -164,6 +164,10 @@ export async function handler(event: EvalRunnerEvent): Promise<{
 				status: "running",
 				started_at: run.started_at ?? startedAt,
 				total_tests: cases.length,
+				passed: 0,
+				failed: 0,
+				pass_rate: null,
+				cost_usd: "0.000000",
 				error_message: null,
 			})
 			.where(eq(evalRuns.id, runId));

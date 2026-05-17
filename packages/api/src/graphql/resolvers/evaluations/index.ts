@@ -58,6 +58,58 @@ function runToGraphql(
   };
 }
 
+type EvalRunProgress = {
+  runId: string;
+  completed: number;
+  passed: number;
+  failed: number;
+};
+
+export function withLiveProgress(
+  row: Record<string, unknown>,
+  progress: EvalRunProgress | undefined,
+): Record<string, unknown> {
+  const status = String(row.status ?? "");
+  if (!["pending", "running"].includes(status) || !progress?.completed) {
+    return row;
+  }
+
+  return {
+    ...row,
+    passed: progress.passed,
+    failed: progress.failed,
+    pass_rate: (progress.passed / progress.completed).toFixed(4),
+  };
+}
+
+async function loadEvalRunProgress(
+  runIds: string[],
+): Promise<Map<string, EvalRunProgress>> {
+  if (runIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      runId: evalResults.run_id,
+      completed: sql<number>`COUNT(*)::int`,
+      passed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'pass')::int`,
+      failed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} <> 'pass')::int`,
+    })
+    .from(evalResults)
+    .where(inArray(evalResults.run_id, runIds))
+    .groupBy(evalResults.run_id);
+
+  return new Map(
+    rows.map((row) => [
+      row.runId,
+      {
+        runId: row.runId,
+        completed: Number(row.completed),
+        passed: Number(row.passed),
+        failed: Number(row.failed),
+      },
+    ]),
+  );
+}
+
 function resultToGraphql(
   row: Record<string, unknown>,
   testCase?: { name: string; category: string } | null,
@@ -256,10 +308,17 @@ const evalRunsQuery = async (
     .limit(limit)
     .offset(offset);
 
+  const progressByRunId = await loadEvalRunProgress(
+    rows.map((r) => r.run.id),
+  );
+
   return {
     items: rows.map((r) =>
       runToGraphql(
-        r.run as unknown as Record<string, unknown>,
+        withLiveProgress(
+          r.run as unknown as Record<string, unknown>,
+          progressByRunId.get(r.run.id),
+        ),
         r.agentName,
         r.agentTemplateName,
       ),
@@ -280,8 +339,12 @@ const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
     .leftJoin(agentTemplates, eq(evalRuns.agent_template_id, agentTemplates.id))
     .where(eq(evalRuns.id, args.id));
   if (!row) return null;
+  const progressByRunId = await loadEvalRunProgress([args.id]);
   return runToGraphql(
-    row.run as unknown as Record<string, unknown>,
+    withLiveProgress(
+      row.run as unknown as Record<string, unknown>,
+      progressByRunId.get(args.id),
+    ),
     row.agentName,
     row.agentTemplateName,
   );
