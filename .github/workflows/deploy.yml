@@ -60,6 +60,10 @@ jobs:
               # via scripts/build-lambdas.sh; a runbook YAML edit rebuilds
               # the zip but needs terraform-apply to actually ship it.
               - 'packages/runbooks/runbooks/**'
+              # The Lambda zips are produced by this script. Build-script
+              # changes can alter deployed Lambda contents even when no
+              # handler source file moved.
+              - 'scripts/build-lambdas.sh'
             container:
               - 'packages/agentcore-strands/**'
               - 'packages/agentcore-flue/**'
