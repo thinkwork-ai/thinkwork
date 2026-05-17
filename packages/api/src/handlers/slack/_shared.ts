@@ -11,6 +11,7 @@ import {
   getSlackAppCredentials,
   getSlackBotToken,
 } from "../../lib/slack/workspace-store.js";
+import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 
 const SLACK_SIGNATURE_VERSION = "v0";
 const REPLAY_WINDOW_SECONDS = 5 * 60;
@@ -75,6 +76,7 @@ export interface SlackHandlerDeps {
   ) => Promise<SlackWorkspaceContext | null>;
   loadBotToken?: (secretPath: string) => Promise<string>;
   loadSigningSecret?: () => Promise<string>;
+  metrics?: SlackMetrics;
   nowMs?: () => number;
 }
 
@@ -90,68 +92,76 @@ export function createSlackHandler(
   const loadSigningSecret =
     deps.loadSigningSecret ??
     (async () => (await getSlackAppCredentials()).signingSecret);
+  const metrics = deps.metrics ?? slackMetrics;
+  const nowMs = deps.nowMs ?? Date.now;
 
   return async function handleSlack(
     event: APIGatewayProxyEventV2,
   ): Promise<APIGatewayProxyStructuredResultV2> {
+    const startedMs = nowMs();
     const method = event.requestContext.http.method;
-    if (!allowedMethods.has(method)) {
-      return error("Method not allowed", 405);
+    try {
+      if (!allowedMethods.has(method)) {
+        return error("Method not allowed", 405);
+      }
+
+      const headers = normalizeHeaders(event.headers);
+      const rawBody = readRawBody(event);
+      const rawBodyText = rawBody.toString("utf8");
+      const signingSecret = await loadSigningSecret();
+      const signatureResult = verifySignature({
+        headers,
+        rawBody,
+        signingSecret,
+        nowMs,
+      });
+      if (!signatureResult.ok) {
+        return error(signatureResult.message, signatureResult.status);
+      }
+
+      if (headers["x-slack-retry-num"]) {
+        console.log(
+          `[slack:${config.name}] retry short-circuit retry=${headers["x-slack-retry-num"]} reason=${headers["x-slack-retry-reason"] ?? "unknown"}`,
+        );
+        return json({ ok: true, retried: true });
+      }
+
+      const earlyResponse = await config.preDispatch?.({
+        event,
+        headers,
+        rawBody,
+        rawBodyText,
+      });
+      if (earlyResponse) return earlyResponse;
+
+      const slackTeamId = config.extractTeamId({
+        event,
+        headers,
+        rawBody,
+        rawBodyText,
+      });
+      if (!slackTeamId) {
+        return error("Slack team_id is required", 400);
+      }
+
+      const workspace = await lookupWorkspace(slackTeamId);
+      if (!workspace) {
+        metrics.unknownTeam({ handler: config.name });
+        return error("Slack workspace is not installed", 404);
+      }
+
+      const botToken = await loadBotToken(workspace.botTokenSecretPath);
+      return config.dispatch({
+        event,
+        headers,
+        rawBody,
+        rawBodyText,
+        workspace,
+        botToken,
+      });
+    } finally {
+      metrics.ingestMs(nowMs() - startedMs, { handler: config.name });
     }
-
-    const headers = normalizeHeaders(event.headers);
-    const rawBody = readRawBody(event);
-    const rawBodyText = rawBody.toString("utf8");
-    const signingSecret = await loadSigningSecret();
-    const signatureResult = verifySignature({
-      headers,
-      rawBody,
-      signingSecret,
-      nowMs: deps.nowMs,
-    });
-    if (!signatureResult.ok) {
-      return error(signatureResult.message, signatureResult.status);
-    }
-
-    if (headers["x-slack-retry-num"]) {
-      console.log(
-        `[slack:${config.name}] retry short-circuit retry=${headers["x-slack-retry-num"]} reason=${headers["x-slack-retry-reason"] ?? "unknown"}`,
-      );
-      return json({ ok: true, retried: true });
-    }
-
-    const earlyResponse = await config.preDispatch?.({
-      event,
-      headers,
-      rawBody,
-      rawBodyText,
-    });
-    if (earlyResponse) return earlyResponse;
-
-    const slackTeamId = config.extractTeamId({
-      event,
-      headers,
-      rawBody,
-      rawBodyText,
-    });
-    if (!slackTeamId) {
-      return error("Slack team_id is required", 400);
-    }
-
-    const workspace = await lookupWorkspace(slackTeamId);
-    if (!workspace) {
-      return error("Slack workspace is not installed", 404);
-    }
-
-    const botToken = await loadBotToken(workspace.botTokenSecretPath);
-    return config.dispatch({
-      event,
-      headers,
-      rawBody,
-      rawBodyText,
-      workspace,
-      botToken,
-    });
   };
 }
 

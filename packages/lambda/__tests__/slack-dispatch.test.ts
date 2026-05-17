@@ -86,6 +86,14 @@ function makeSlackApi(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeMetrics() {
+  return {
+    dispatchSuccess: vi.fn(),
+    dispatchFailure: vi.fn(),
+    attributionDegraded: vi.fn(),
+  };
+}
+
 describe("slack dispatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +109,7 @@ describe("slack dispatch", () => {
       }),
     ]);
     const slackApi = makeSlackApi();
+    const metrics = makeMetrics();
 
     const result = await dispatchSlackCompletions(
       {},
@@ -108,6 +117,7 @@ describe("slack dispatch", () => {
         store,
         slackApi,
         getBotToken: async () => "xoxb-token",
+        metrics,
       },
     );
 
@@ -124,6 +134,7 @@ describe("slack dispatch", () => {
     expect(store.recordSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "chat_update", degraded: false }),
     );
+    expect(metrics.dispatchSuccess).toHaveBeenCalledWith("app_mention");
   });
 
   it("uses response_url for slash command completions and includes promote button", async () => {
@@ -190,6 +201,7 @@ describe("slack dispatch", () => {
 
   it("falls back to bot identity when customize scope is missing", async () => {
     const store = makeStore([pending()]);
+    const metrics = makeMetrics();
     const slackApi = makeSlackApi({
       postMessage: vi
         .fn()
@@ -199,7 +211,7 @@ describe("slack dispatch", () => {
 
     await dispatchSlackCompletions(
       {},
-      { store, slackApi, getBotToken: async () => "xoxb-token" },
+      { store, slackApi, getBotToken: async () => "xoxb-token", metrics },
     );
 
     expect(store.recordAttributionDegraded).toHaveBeenCalledWith(
@@ -215,15 +227,17 @@ describe("slack dispatch", () => {
     expect(store.recordSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ degraded: true }),
     );
+    expect(metrics.attributionDegraded).toHaveBeenCalledTimes(1);
   });
 
   it("records a terminal failure when the workspace bot token is gone", async () => {
     const store = makeStore([pending({ botTokenSecretPath: null })]);
     const slackApi = makeSlackApi();
+    const metrics = makeMetrics();
 
     const result = await dispatchSlackCompletions(
       {},
-      { store, slackApi, getBotToken: async () => "xoxb-token" },
+      { store, slackApi, getBotToken: async () => "xoxb-token", metrics },
     );
 
     expect(result).toEqual({ processed: 0, failed: 1 });
@@ -233,6 +247,7 @@ describe("slack dispatch", () => {
         error: "Slack bot token secret path is missing",
       }),
     );
+    expect(metrics.dispatchFailure).toHaveBeenCalledWith("bot_token");
   });
 
   it("includes the attribution footer on every outbound Slack message", async () => {

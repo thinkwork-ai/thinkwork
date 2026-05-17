@@ -13,6 +13,7 @@ import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
@@ -69,6 +70,7 @@ export interface SlackInteractivityDeps {
     actorId: string;
     envelope: ReturnType<typeof buildSlackMessageActionInput>;
   }) => Promise<SlackThreadMappingResult>;
+  metrics?: Pick<SlackMetrics, "dedupeHit">;
 }
 
 interface SlackMessageActionPayload {
@@ -106,6 +108,7 @@ export function createSlackInteractivityDispatcher(
   const slackApi = deps.slackApi ?? defaultSlackApi;
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
+  const metrics = deps.metrics ?? slackMetrics;
 
   return async function dispatchSlackInteractivity(
     args: SlackHandlerArgs,
@@ -121,6 +124,7 @@ export function createSlackInteractivityDispatcher(
             loadLinkedComputer,
             slackApi,
             resolveSlackThread,
+            metrics,
           },
         );
       case "block_actions":
@@ -174,6 +178,7 @@ async function handleMessageAction(
       actorId: string;
       envelope: ReturnType<typeof buildSlackMessageActionInput>;
     }) => Promise<SlackThreadMappingResult>;
+    metrics: Pick<SlackMetrics, "dedupeHit">;
   },
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const triggerId = requiredString(payload.trigger_id);
@@ -234,6 +239,9 @@ async function handleMessageAction(
     idempotencyKey: taskInput.eventId,
     createdByUserId: link.userId,
   });
+  if ((task as { wasCreated?: boolean }).wasCreated === false) {
+    deps.metrics.dedupeHit({ surface: "message_action" });
+  }
 
   return json({ ok: true, taskId: task.id });
 }

@@ -128,6 +128,13 @@ interface DispatchDeps {
   slackApi?: SlackDispatchApi;
   getBotToken?: (secretPath: string) => Promise<string>;
   logger?: Pick<typeof console, "log" | "warn" | "error">;
+  metrics?: SlackDispatchMetrics;
+}
+
+interface SlackDispatchMetrics {
+  dispatchSuccess(surface: string): void;
+  dispatchFailure(errorClass: string): void;
+  attributionDegraded(): void;
 }
 
 const db = getDb();
@@ -153,6 +160,7 @@ export async function dispatchSlackCompletions(
   const slackApi = deps.slackApi ?? defaultSlackApi;
   const getBotToken = deps.getBotToken ?? getSlackBotToken;
   const logger = deps.logger ?? console;
+  const metrics = deps.metrics ?? slackDispatchMetrics;
   const pending = await store.loadPending(normalizeLimit(options.limit));
   let processed = 0;
   let failed = 0;
@@ -167,6 +175,7 @@ export async function dispatchSlackCompletions(
       const posted = await deliverSlackResponse(item, token, attribution, {
         store,
         slackApi,
+        metrics,
       });
       await store.recordSuccess({
         tenantId: item.tenantId,
@@ -178,10 +187,12 @@ export async function dispatchSlackCompletions(
         mode: posted.mode,
         degraded: posted.degraded,
       });
+      metrics.dispatchSuccess(item.slack.triggerSurface || posted.mode);
       processed += 1;
     } catch (err) {
       failed += 1;
       const error = err instanceof Error ? err.message : String(err);
+      metrics.dispatchFailure(errorClass(error));
       logger.error("[slack-dispatch] dispatch failed", {
         taskId: item.taskId,
         eventId: item.eventId,
@@ -205,7 +216,11 @@ async function deliverSlackResponse(
   item: PendingSlackDispatch,
   token: string,
   attribution: SlackComputerAttribution,
-  deps: { store: SlackDispatchStore; slackApi: SlackDispatchApi },
+  deps: {
+    store: SlackDispatchStore;
+    slackApi: SlackDispatchApi;
+    metrics: SlackDispatchMetrics;
+  },
 ): Promise<{ mode: string; ts?: string | null; degraded: boolean }> {
   if (item.slack.modalViewId) {
     await deps.slackApi.updateView({
@@ -242,7 +257,11 @@ async function postSlackMessage(
   item: PendingSlackDispatch,
   token: string,
   attribution: SlackComputerAttribution,
-  deps: { store: SlackDispatchStore; slackApi: SlackDispatchApi },
+  deps: {
+    store: SlackDispatchStore;
+    slackApi: SlackDispatchApi;
+    metrics: SlackDispatchMetrics;
+  },
 ) {
   const response = await callWithAttributionFallback(
     item,
@@ -268,7 +287,11 @@ async function updateSlackMessage(
   item: PendingSlackDispatch,
   token: string,
   attribution: SlackComputerAttribution,
-  deps: { store: SlackDispatchStore; slackApi: SlackDispatchApi },
+  deps: {
+    store: SlackDispatchStore;
+    slackApi: SlackDispatchApi;
+    metrics: SlackDispatchMetrics;
+  },
 ) {
   const response = await callWithAttributionFallback(
     item,
@@ -294,7 +317,7 @@ async function updateSlackMessage(
 async function callWithAttributionFallback(
   item: PendingSlackDispatch,
   attribution: SlackComputerAttribution,
-  deps: { store: SlackDispatchStore },
+  deps: { store: SlackDispatchStore; metrics?: SlackDispatchMetrics },
   degraded: boolean,
   send: (degraded: boolean) => Promise<SlackApiResponse>,
 ): Promise<SlackApiResponse & { degraded: boolean }> {
@@ -308,6 +331,7 @@ async function callWithAttributionFallback(
       eventId: item.eventId,
       error: response.error ?? "missing_scope",
     });
+    (deps.metrics ?? slackDispatchMetrics).attributionDegraded();
     return callWithAttributionFallback(item, attribution, deps, true, send);
   }
   throw new Error(`Slack API failed: ${response.error ?? "unknown_error"}`);
@@ -735,4 +759,55 @@ function slackComputerEphemeralResponse(
 
 function normalizeSlackDisplayName(displayName: string): string {
   return displayName.trim() || "User";
+}
+
+const slackDispatchMetrics: SlackDispatchMetrics = {
+  dispatchSuccess(surface) {
+    emitSlackDispatchMetric("slack.dispatch.success", {
+      surface: surface || "unknown",
+    });
+  },
+  dispatchFailure(errorClassValue) {
+    emitSlackDispatchMetric("slack.dispatch.failure", {
+      error_class: errorClassValue || "unknown",
+    });
+  },
+  attributionDegraded() {
+    emitSlackDispatchMetric("slack.attribution.degraded");
+  },
+};
+
+function emitSlackDispatchMetric(
+  name:
+    | "slack.dispatch.success"
+    | "slack.dispatch.failure"
+    | "slack.attribution.degraded",
+  dimensions: Record<string, string> = {},
+): void {
+  const dimensionNames = Object.keys(dimensions).sort();
+  console.log(
+    JSON.stringify({
+      _aws: {
+        Timestamp: Date.now(),
+        CloudWatchMetrics: [
+          {
+            Namespace: "ThinkWork/Slack",
+            Dimensions: [dimensionNames],
+            Metrics: [{ Name: name, Unit: "Count" }],
+          },
+        ],
+      },
+      ...dimensions,
+      [name]: 1,
+    }),
+  );
+}
+
+function errorClass(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("bot token")) return "bot_token";
+  if (lower.includes("slack api failed")) return "slack_api";
+  if (lower.includes("response_url")) return "response_url";
+  if (lower.includes("required")) return "invalid_payload";
+  return "unknown";
 }
