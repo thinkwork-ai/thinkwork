@@ -15,7 +15,7 @@
 
 import { select } from "@inquirer/prompts";
 import { loadStageSession, saveStageSession } from "../cli-config.js";
-import { printError } from "../ui.js";
+import { printError, printMissingApiSessionError } from "../ui.js";
 import { requireTty } from "./interactive.js";
 
 export interface ResolveTenantOptions {
@@ -58,9 +58,7 @@ export async function resolveTenant(opts: ResolveTenantOptions): Promise<Resolve
 
   // 4. Picker (only works if the caller supplied `listTenants`).
   if (!opts.listTenants) {
-    printError(
-      `No tenant resolved for stage "${opts.stage}". Pass --tenant <slug>, set THINKWORK_TENANT, or re-run \`thinkwork login --stage ${opts.stage}\`.`,
-    );
+    printMissingApiSessionError(opts.stage, session !== null);
     process.exit(1);
   }
 

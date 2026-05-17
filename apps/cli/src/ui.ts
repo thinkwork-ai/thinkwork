@@ -61,6 +61,36 @@ export function printError(message: string): void {
 }
 
 /**
+ * Print the "no API session / no tenant cached" error with the actual fix on
+ * its own line, not buried in a comma list. `hasSession` distinguishes "you
+ * haven't done the API-side login yet" from "you logged in but have no tenant
+ * cached on the session."
+ */
+export function printMissingApiSessionError(stage: string, hasSession: boolean): void {
+  if (!hasSession) {
+    printError(`No API session for stage "${stage}".`);
+    console.log("");
+    console.log(`  ${chalk.bold("To fix:")}  thinkwork login --stage ${stage}`);
+    console.log(
+      chalk.dim(
+        `  (the deploy-side \`thinkwork login\` only configures an AWS profile —\n   it does NOT open an API session.)`,
+      ),
+    );
+    console.log("");
+  } else {
+    printError(`Session for stage "${stage}" has no tenant cached.`);
+    console.log("");
+    console.log(`  ${chalk.bold("To fix:")}  thinkwork login --stage ${stage}`);
+    console.log(
+      chalk.dim(
+        `  Or pass --tenant <slug>, or set THINKWORK_TENANT.`,
+      ),
+    );
+    console.log("");
+  }
+}
+
+/**
  * Print a warning message.
  */
 export function printWarning(message: string): void {
