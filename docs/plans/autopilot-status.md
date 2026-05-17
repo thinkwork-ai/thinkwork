@@ -16,18 +16,19 @@ Target branch: `main`
 
 ### Current Unit
 
-- Active unit: U1 Ontology schema, migrations, and seeds
-- Active branch: `codex/ontology-u1-schema`
-- Active worktree: `.Codex/worktrees/ontology-u1`
+- Active unit: U2 Ontology repository and GraphQL API
+- Active branch: `codex/ontology-u2-api`
+- Active worktree: `.Codex/worktrees/ontology-u2-api`
 - Started: 2026-05-17
-- PR: [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332)
-- CI: passed; ready to merge
+- PR: [#1340](https://github.com/thinkwork-ai/thinkwork/pull/1340)
+- CI: pending
 
 ### Progress Log
 
-| Date       | Unit | Branch                     | PR                                                           | Status    | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Notes                                                                                                                                           |
-| ---------- | ---- | -------------------------- | ------------------------------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-17 | U1   | `codex/ontology-u1-schema` | [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332) | CI passed | `pnpm schema:build`; `pnpm --filter @thinkwork/database-pg test -- schema-ontology.test.ts`; `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`; `git diff --check`; touched-file Prettier check; GitHub checks | Added the `ontology.*` schema foundation, idempotent tenant seed migration, canonical GraphQL ontology contract, and schema/migration coverage. |
+| Date       | Unit | Branch                     | PR                                                           | Status | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Notes                                                                                                                                                                                                                                                      |
+| ---------- | ---- | -------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-17 | U1   | `codex/ontology-u1-schema` | [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332) | Merged | `pnpm schema:build`; `pnpm --filter @thinkwork/database-pg test -- schema-ontology.test.ts`; `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`; `git diff --check`; touched-file Prettier check; GitHub checks; post-merge Deploy run | Added the `ontology.*` schema foundation, idempotent tenant seed migration, canonical GraphQL ontology contract, and schema/migration coverage. Squash merged as `7982cf5126d36f54bdcf1f2b6792d230dbee6750`; deleted the remote/local branch and worktree. |
+| 2026-05-17 | U2   | `codex/ontology-u2-api`    | [#1340](https://github.com/thinkwork-ai/thinkwork/pull/1340) | Active | `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/ontology/ontology.test.ts src/lib/ontology/repository.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `git diff --check`; touched-file Prettier check                                                                                                                                    | Added the tenant-admin ontology repository, change-set review GraphQL resolvers, suggestion scan/reprocess job API surface, enum coercion guards, active-definition mapping filtering, and focused resolver/repository coverage. CI pending.               |
 
 ### CI / Merge Log
 
@@ -38,6 +39,11 @@ Target branch: `main`
 - First CI run: `cla`, `lint`, `typecheck`, and `verify` passed; `Migration Drift Precheck (dev)` failed because `0098_business_ontology.sql` had not yet been applied to dev.
 - Applied `packages/database-pg/drizzle/0098_business_ontology.sql` to dev and verified the scoped drift reporter returned all markers present. Removed the unsupported schema-level `-- creates: ontology` marker so the reporter checks the table/index/constraint objects, matching prior schema extraction migrations.
 - Rerun GitHub checks passed for [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332); preparing to squash merge.
+- Squash merged [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332) as `7982cf5126d36f54bdcf1f2b6792d230dbee6750`; the merge command hit the known local `main` worktree bookkeeping error, but GitHub confirmed the PR was merged. Deleted the U1 remote/local branch and worktree.
+- Watched post-merge Deploy run `25994933925`, which passed.
+- Started U2 in `.Codex/worktrees/ontology-u2-api` on branch `codex/ontology-u2-api`.
+- Completed U2 local implementation and verification; preparing the branch for PR.
+- Opened [#1340](https://github.com/thinkwork-ai/thinkwork/pull/1340) for U2.
 
 ### Blockers
 
