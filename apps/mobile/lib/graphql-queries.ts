@@ -261,18 +261,6 @@ export const MessagesQuery = graphql(`
 // Computers
 // ---------------------------------------------------------------------------
 
-export const MyComputerQuery = graphql(`
-  query MyComputer {
-    myComputer {
-      id
-      name
-      slug
-      status
-      runtimeStatus
-    }
-  }
-`);
-
 export const AssignedComputersQuery = graphql(`
   query AssignedComputers {
     assignedComputers {
@@ -294,7 +282,6 @@ export const ComputersQuery = graphql(`
       slug
       status
       runtimeStatus
-      ownerUserId
     }
   }
 `);

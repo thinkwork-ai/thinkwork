@@ -1,19 +1,20 @@
 ---
 title: Computers
-description: ThinkWork Computers are durable per-user workspaces that stay warm, hold files and context, and delegate specialized work to managed Agents.
+description: ThinkWork Computers are tenant-managed shared work capabilities with durable workspaces, requester context overlays, and delegated managed Agents.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-A **ThinkWork Computer** is the user's durable AI work environment. It has an owner, a persistent EFS-backed workspace, runtime state, budget state, and an orchestration loop that can call tools directly or delegate focused work to managed Agents.
+A **ThinkWork Computer** is a tenant-managed shared AI work capability. It has a persistent EFS-backed workspace, runtime state, budget state, assignment policy, and an orchestration loop that can call tools directly or delegate focused work to managed Agents.
 
 This reframes the product model:
 
-- **Computer** — one per user, long-lived, stateful, workspace-owning, responsible for orchestration and continuity.
+- **Computer** — shared, long-lived, stateful, workspace-owning, responsible for orchestration and continuity.
+- **Requester context** — the invoking user's scoped memory, preferences, and personal connector credentials for a single request.
 - **Agent** — a reusable delegated worker with a defined capability set, runtime, model, tools, and guardrails.
 - **Template** — the reusable configuration base for either a Computer or an Agent.
 
-The Computer is what makes the product feel less like "another agent list" and more like an AWS-native cloud computer for AI work. It can keep a live filesystem, hold installed CLIs, maintain local caches, run a real browser later, and route expensive or specialized reasoning to AgentCore workers when that is the better substrate.
+The Computer is what makes the product feel less like "another agent list" and more like an AWS-native cloud computer for a role or function. A Finance Computer, Sales Computer, or Admin Computer can keep a live filesystem, hold installed CLIs, maintain local caches, run a real browser later, and route expensive or specialized reasoning to AgentCore workers when that is the better substrate. Users personalize each request through requester context; the Computer itself remains a governed shared capability.
 
 <Aside type="note">
   Phase 3 activates the runtime skeleton with image rollout tooling, CLI
@@ -28,14 +29,15 @@ The Computer is what makes the product feel less like "another agent list" and m
 
 Each Computer is backed by:
 
-| Layer                 | Purpose                                                                                |
-| --------------------- | -------------------------------------------------------------------------------------- |
-| `computers` row       | Owner, status, desired runtime state, budget fields, migration provenance              |
-| EFS access point      | Persistent workspace mounted at `/workspace` inside the runtime task                   |
-| ECS service           | Always-on-ish lightweight runtime task, usually one task per active Computer           |
-| Runtime callback API  | Service-auth endpoints for config, heartbeat, task claim, events, complete/fail        |
-| Computer tasks/events | Durable queue and audit stream for runtime work                                        |
-| Managed Agents        | Delegated AgentCore workers for focused jobs that should not live in the Computer loop |
+| Layer                 | Purpose                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| `computers` row       | Shared capability identity, status, desired runtime state, budget fields, migration provenance |
+| EFS access point      | Persistent workspace mounted at `/workspace` inside the runtime task                           |
+| ECS service           | Always-on-ish lightweight runtime task, usually one task per active Computer                   |
+| Runtime callback API  | Service-auth endpoints for config, heartbeat, task claim, events, complete/fail                |
+| Computer tasks/events | Durable queue and audit stream for runtime work                                                |
+| Assignments           | Direct user and Team access to the shared Computer                                             |
+| Managed Agents        | Delegated AgentCore workers for focused jobs that should not live in the Computer loop         |
 
 The default runtime image is intentionally small. It boots, verifies the workspace, heartbeats to the API, checks available CLIs, and polls for tasks. The platform can evolve the image with Google Workspace CLI tooling, browser-use tools, repo CLIs, and other local capabilities without changing the core product model.
 
@@ -51,18 +53,18 @@ Integration-origin work uses the same task/event surface. The shipped private ex
 
 ## Integration handoff
 
-Integrations route external work to Computers by default. That is the practical consequence of the Computer reframe: the Computer is the user's durable workplace, so it should own work that arrives from Linear, Slack, GitHub, or future external systems.
+Integrations route external work to assigned Computers by default. That is the practical consequence of the shared-Computer reframe: a governed work capability owns durable work, while the invoking user or connector owner supplies the requester context for that turn.
 
 For the private extension path:
 
 1. The scheduled integration poller finds a Linear issue with the `private-extension` label.
 2. The integration runtime records a integration execution for that external issue.
-3. The runtime creates a `integration_work` task and `integration_work_received` event for the configured Computer.
+3. The runtime creates a `integration_work` task and `integration_work_received` event for the configured shared Computer.
 4. A Computer-owned integration thread becomes the visible work artifact.
 5. The Computer delegates coding work to a managed Agent, which creates a branch, commit, and draft PR.
 6. Linear receives dispatch and PR comments, and the card moves to `In Review` after the draft PR exists.
 
-The Computer remains the owner throughout. The managed Agent is execution detail, visible in the lifecycle metadata, not the durable owner of the Linear issue.
+The Computer remains the durable work capability throughout. The managed Agent is execution detail, visible in the lifecycle metadata, not the durable owner of the Linear issue. Audit records keep the Computer and requester identities separate.
 
 ## Desired state
 
@@ -84,25 +86,25 @@ A scheduled reconciler watches active Computers and moves ECS services toward th
 
 AgentCore remains the right home for managed Agents: fast delegated work, Bedrock-native runtime integration, and low operational surface area.
 
-Computers add value where a long-lived environment matters:
+Computers add value where a long-lived shared environment matters:
 
 - persistent filesystem without S3 sync choreography
-- warm local state for CLIs, repos, credentials, browser profiles, caches, and scratch artifacts
+- warm local state for CLIs, repos, browser profiles, caches, and scratch artifacts
 - an orchestration process that can stream quickly and decide when to delegate
 - future browser/computer-use capability in a real Linux environment
-- clearer product language: the user owns a Computer; the Computer hires Agents
+- clearer product language: the tenant manages shared Computers; assigned users request work from them
 
 The cost target is deliberately modest: a tiny Fargate task plus shared EFS substrate is acceptable for the primary product surface, and heavier reasoning can still be outsourced to AgentCore.
 
 ## Migration model
 
-Phase 2 migrates user-paired Agents into Computers only when the source shape is unambiguous:
+Historical migrations converted user-paired Agents into Computers only when the source shape was unambiguous:
 
 - one active user-paired Agent for a human
 - source template is typed as a Computer Template
 - no conflicting existing Computer for that human
 
-Blocked cases remain Agents until an operator resolves them. The migration report classifies each owner group with severity, recommended action, and apply disposition so operators can dry-run before creating Computers.
+Existing personal Computer rows are preserved as historical state. New active work should route through shared Computers assigned directly to users or through Teams. Blocked migration cases remain Agents until an operator resolves them. The migration report classifies each historical owner group with severity, recommended action, and apply disposition so operators can dry-run before creating Computers.
 
 ## Related pages
 

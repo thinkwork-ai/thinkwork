@@ -51,7 +51,10 @@ type GraphClassification = {
   neighborIds: Set<string>;
 };
 
-function classifyNode(id: string, c: GraphClassification | null): NodeVisualState {
+function classifyNode(
+  id: string,
+  c: GraphClassification | null,
+): NodeVisualState {
   if (!c) return "matched";
   if (c.matchedIds.has(id)) return "matched";
   if (c.neighborIds.has(id)) return "neighbor";
@@ -94,6 +97,7 @@ interface WikiGraphProps {
   agentId?: string;
   /** @deprecated Use userIds. */
   agentIds?: string[];
+  useRequesterScope?: boolean;
   onNodeClick?: (
     node: WikiGraphNode,
     connectedEdges: {
@@ -120,6 +124,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       userIds,
       agentId,
       agentIds,
+      useRequesterScope = false,
       onNodeClick,
       onTypesLoaded,
       typeFilter,
@@ -140,15 +145,18 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
 
     const effectiveUserIds = userIds ?? agentIds;
     const effectiveUserId =
-      userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
+      userId ??
+      agentId ??
+      (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
     const isMultiAgent = !!effectiveUserIds && effectiveUserIds.length > 1;
     const client = useClient();
 
     // Single-agent path: urql subscription-style query.
     const [singleResult, singleReexecute] = useQuery({
       query: WikiGraphQuery,
-      variables: { tenantId, userId: effectiveUserId ?? "" },
-      pause: isMultiAgent || !effectiveUserId || !tenantId,
+      variables: { tenantId, userId: effectiveUserId ?? null },
+      pause:
+        isMultiAgent || (!effectiveUserId && !useRequesterScope) || !tenantId,
     });
 
     // Multi-agent: fan out per-agent, same shape as MemoryGraph does. One
@@ -168,9 +176,14 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         await Promise.all(
           effectiveUserIds.map(async (id) => {
             try {
-              const res = await client.query(WikiGraphQuery, { tenantId, userId: id }).toPromise();
+              const res = await client
+                .query(WikiGraphQuery, { tenantId, userId: id })
+                .toPromise();
               if (res.error) {
-                console.warn(`[WikiGraph] wikiGraph failed for user ${id}:`, res.error.message);
+                console.warn(
+                  `[WikiGraph] wikiGraph failed for user ${id}:`,
+                  res.error.message,
+                );
               }
               results[id] = res.data?.wikiGraph;
             } catch (err) {
@@ -189,7 +202,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (isMultiAgent) fetchAllAgents();
     }, [isMultiAgent, fetchAllAgents]);
 
-    const getNodeWithEdgesRef = useRef<WikiGraphHandle["getNodeWithEdges"]>(() => null);
+    const getNodeWithEdgesRef = useRef<WikiGraphHandle["getNodeWithEdges"]>(
+      () => null,
+    );
 
     useImperativeHandle(ref, () => ({
       refetch: () => {
@@ -232,12 +247,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         }
       } else {
         const graph = singleResult.data?.wikiGraph;
-        if (graph && effectiveUserId) {
+        if (graph) {
           for (const n of graph.nodes ?? []) {
             nodes.push({
               id: n.id,
               pageId: n.id,
-              agentId: effectiveUserId,
+              agentId: effectiveUserId ?? "",
               label: n.label ?? n.id,
               nodeType: "page",
               entityType: (n.entityType as WikiPageType) ?? "ENTITY",
@@ -279,7 +294,11 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       }
       if (searchQuery) {
         const normalize = (s: string) =>
-          s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+          s
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
         const q = normalize(searchQuery);
         filtered = filtered.filter((n) => normalize(n.label).includes(q));
       }
@@ -291,7 +310,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // prevents simulation + camera reset on every keystroke.
     const graphData = useMemo(() => {
       const nodeIds = new Set(allNodes.map((n) => n.id));
-      const links: { source: string; target: string; label: string; weight: number }[] = [];
+      const links: {
+        source: string;
+        target: string;
+        label: string;
+        weight: number;
+      }[] = [];
       if (isMultiAgent) {
         for (const [aid, graph] of Object.entries(multiResults)) {
           if (!graph) continue;
@@ -385,12 +409,14 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const state = classifyNode(node.id, classificationRef.current);
 
       const entityType = node.entityType as WikiPageType;
-      const color = PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
+      const color =
+        PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
       // Clip the label to keep the canvas readable without losing the full
       // title from the tooltip (nodeLabel callback below passes the raw
       // title to ForceGraph3D).
       const rawLabel = node.label ?? "";
-      const label = rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
+      const label =
+        rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
       // Size by degree. Pages with more links render bigger.
       const degree = node.edgeCount || 1;
       const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
@@ -502,7 +528,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // framed. No post-settle zoom — zoomToFit over-corrects and shoves
       // the whole layout into a tiny center blob.
       const nodeCount = graphData.nodes.length;
-      const initialZ = Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount)));
+      const initialZ = Math.max(
+        800,
+        Math.min(6000, 100 * Math.sqrt(nodeCount)),
+      );
       camera.position.set(0, 0, initialZ);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
@@ -543,8 +572,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         emptyFallback ?? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-sm text-muted-foreground max-w-sm">
-              No compiled memory pages yet — ask an agent a few questions and come back in a few
-              minutes.
+              No compiled memory pages yet — ask an agent a few questions and
+              come back in a few minutes.
             </p>
           </div>
         )
@@ -553,7 +582,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
 
     const typeCounts = PAGE_TYPES.map((t) => ({
       type: t,
-      count: graphData.nodes.filter((n: any) => (n.entityType as WikiPageType) === t).length,
+      count: graphData.nodes.filter(
+        (n: any) => (n.entityType as WikiPageType) === t,
+      ).length,
     }));
 
     return (
@@ -571,8 +602,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           linkColor={(link: any) => {
             const m = matchedIdsRef.current;
             if (!m) return "rgba(255,255,255,0.7)";
-            const sId = typeof link.source === "object" ? link.source.id : link.source;
-            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            const sId =
+              typeof link.source === "object" ? link.source.id : link.source;
+            const tId =
+              typeof link.target === "object" ? link.target.id : link.target;
             return m.has(sId) || m.has(tId)
               ? "rgba(255,255,255,0.7)"
               : "rgba(255,255,255,0.1)";
@@ -583,8 +616,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           linkDirectionalArrowColor={(link: any) => {
             const m = matchedIdsRef.current;
             if (!m) return "rgba(255,255,255,0.7)";
-            const sId = typeof link.source === "object" ? link.source.id : link.source;
-            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            const sId =
+              typeof link.source === "object" ? link.source.id : link.source;
+            const tId =
+              typeof link.target === "object" ? link.target.id : link.target;
             return m.has(sId) || m.has(tId)
               ? "rgba(255,255,255,0.7)"
               : "rgba(255,255,255,0.1)";
@@ -605,15 +640,21 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
             if (!onNodeClick) return;
             const edges = graphData.links
               .filter((l: any) => {
-                const sId = typeof l.source === "object" ? l.source.id : l.source;
-                const tId = typeof l.target === "object" ? l.target.id : l.target;
+                const sId =
+                  typeof l.source === "object" ? l.source.id : l.source;
+                const tId =
+                  typeof l.target === "object" ? l.target.id : l.target;
                 return sId === node.id || tId === node.id;
               })
               .map((l: any) => {
-                const sId = typeof l.source === "object" ? l.source.id : l.source;
-                const tId = typeof l.target === "object" ? l.target.id : l.target;
+                const sId =
+                  typeof l.source === "object" ? l.source.id : l.source;
+                const tId =
+                  typeof l.target === "object" ? l.target.id : l.target;
                 const otherId = sId === node.id ? tId : sId;
-                const otherNode = graphData.nodes.find((n: any) => n.id === otherId);
+                const otherNode = graphData.nodes.find(
+                  (n: any) => n.id === otherId,
+                );
                 return {
                   label: l.label || "references",
                   targetLabel: otherNode?.label ?? otherId,

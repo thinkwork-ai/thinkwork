@@ -3,7 +3,7 @@ title: Architecture
 description: How the ThinkWork Agent Harness fits together — the PPAF agent loop, the four operating guarantees, the components, and the AWS deployment topology.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 ThinkWork is **the open Agent Harness for Business**. The harness is the engineered structure around the model that turns raw, non-deterministic agent output into reliable, traceable, auditable work. This page is the architecture of that harness — first the mechanics that make it a harness, then the components, then the AWS deployment topology.
 
@@ -20,7 +20,13 @@ Every resource lives in your AWS account. There is no shared infrastructure, no 
 A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Company Brain, Agents, Integrations, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
 
 <Aside type="tip">
-  The "harness" framing comes from the [Definitive Guide to Harness Engineering](https://www.harnessengineering.com/) (Mitchell Hashimoto, 2026). The metaphor: a state-of-the-art model is a powerful but directionless wild horse; the harness is the reins, bit, and bridle that make its power useful. ThinkWork's job is the harness — the engineered structure between your inputs and the model's output that turns potential into reliable, governable work. The rest of this page assumes that frame.
+  The "harness" framing comes from the [Definitive Guide to Harness
+  Engineering](https://www.harnessengineering.com/) (Mitchell Hashimoto, 2026).
+  The metaphor: a state-of-the-art model is a powerful but directionless wild
+  horse; the harness is the reins, bit, and bridle that make its power useful.
+  ThinkWork's job is the harness — the engineered structure between your inputs
+  and the model's output that turns potential into reliable, governable work.
+  The rest of this page assumes that frame.
 </Aside>
 
 ### The PPAF agent loop
@@ -38,7 +44,7 @@ flowchart LR
 - **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, Company Brain context, the tool catalog, and current channel context. This is what Threads + Company Brain + Integrations produce together — a structured snapshot the model reasons over.
 - **Planning.** The model (via the selected AgentCore runtime on Bedrock) decides what to do next. ThinkWork doesn't replace the model's reasoning; it bounds the inputs and channels the outputs.
 - **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through integrations). Every action is captured as it happens.
-- **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the *next* turn perceives — and what an operator reads after the fact.
+- **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the _next_ turn perceives — and what an operator reads after the fact.
 
 The four phases are why the docs structure the components the way it does: Threads + Company Brain + Integrations are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
 
@@ -51,7 +57,7 @@ Beyond the loop, the harness has four operational properties it commits to deliv
 - **Security.** Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. Implemented in: Templates, AgentCore code sandbox, Bedrock Guardrails (`content_filters`), and runtime-level tool gating.
 - **Traceability.** End-to-end traces per turn, explainable decisions, auditable state. Implemented in: the turn record, the append-only audit log on S3, evaluator scores per turn.
 
-The five governance controls in [Control](/concepts/control/) map 1:N to these four operating guarantees — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The operating guarantees are the *language*; the controls are the *implementation*.
+The five governance controls in [Control](/concepts/control/) map 1:N to these four operating guarantees — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The operating guarantees are the _language_; the controls are the _implementation_.
 
 ### State separation: model as compute, harness as state
 
@@ -59,7 +65,7 @@ A single principle underlies everything below: **ThinkWork treats the model as s
 
 This is the cleanest way to explain why the product exists. A model returns a response and forgets. The harness remembers everything that surrounded the response: which thread it ran inside, what memory was assembled, which tools fired, what the guardrail decided, what the cost was, what the evaluator scored. None of that lives in the model. All of it lives in the harness.
 
-That separation is what makes turns reproducible (re-run a turn against a different model, the harness state is still intact), auditable (every turn has a durable record independent of what the model returned), and recoverable (a failed turn is a thread state, not a lost conversation). It also makes the model swappable — rotating from Sonnet to Opus is a template-id change because the harness owns everything *around* the model.
+That separation is what makes turns reproducible (re-run a turn against a different model, the harness state is still intact), auditable (every turn has a durable record independent of what the model returned), and recoverable (a failed turn is a thread state, not a lost conversation). It also makes the model swappable — rotating from Sonnet to Opus is a template-id change because the harness owns everything _around_ the model.
 
 ### The conceptual model maps onto the harness
 
@@ -106,7 +112,7 @@ See [Company Brain](/concepts/knowledge/).
 
 ### Computers
 
-Computers are durable per-user workspaces and orchestration runtimes. A Computer owns the user's live filesystem, runtime status, task queue, and local tool environment. It can answer directly, call local CLIs, or delegate focused work to managed Agents.
+Computers are tenant-managed shared workspaces and orchestration runtimes. A shared Computer owns the live filesystem, runtime status, task queue, and local tool environment for a governed work capability such as Sales, Finance, or Admin. User requests carry requester context so personal memory and credentials remain scoped to the person who asked.
 
 In infrastructure terms, Computers add a shared ECS Fargate cluster and encrypted EFS filesystem to the app tier. Each provisioned Computer gets an EFS access point and ECS service reconciled by the internal Computer manager endpoint.
 
@@ -152,48 +158,48 @@ See [Integrations](/concepts/integrations).
 
 The foundation tier provides identity, networking, and encryption. It changes rarely and is the most stable part of the deployment.
 
-| Resource | Purpose |
-|----------|---------|
-| VPC + subnets | Isolated network with public and private subnets across 2 AZs |
-| NAT Gateway | Outbound internet access for private subnet resources |
-| Cognito User Pool | User authentication and JWT issuance |
-| Cognito Identity Pool | Maps Cognito users to IAM roles for direct AWS resource access |
-| KMS keys | Encryption at rest for app data, audit logs, and credential vault |
-| Route53 records | DNS for admin app, API, and email |
-| ACM certificates | TLS for CloudFront and API Gateway custom domains |
-| SES domain identity | Verified sending domain for outbound email |
+| Resource              | Purpose                                                           |
+| --------------------- | ----------------------------------------------------------------- |
+| VPC + subnets         | Isolated network with public and private subnets across 2 AZs     |
+| NAT Gateway           | Outbound internet access for private subnet resources             |
+| Cognito User Pool     | User authentication and JWT issuance                              |
+| Cognito Identity Pool | Maps Cognito users to IAM roles for direct AWS resource access    |
+| KMS keys              | Encryption at rest for app data, audit logs, and credential vault |
+| Route53 records       | DNS for admin app, API, and email                                 |
+| ACM certificates      | TLS for CloudFront and API Gateway custom domains                 |
+| SES domain identity   | Verified sending domain for outbound email                        |
 
 ### Data tier
 
 The data tier holds all persistent state. It depends on the foundation tier for network access and KMS encryption.
 
-| Resource | Purpose |
-|----------|---------|
-| Aurora Postgres | Primary data store: agents, threads, messages, automations, integrations, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
-| S3 — skill catalog | `skills/catalog/*.md` — skill packs loaded at invoke time |
-| S3 — knowledge docs | Source documents for Bedrock Knowledge Bases |
-| S3 — audit logs | Append-only log of every agent invoke (NDJSON, partitioned by date) |
-| S3 — assets | Admin and end-user app static files |
-| Bedrock Knowledge Base | Vector-indexed document store for inline RAG, backed by Aurora `pgvector` |
-| Secrets Manager | DB credentials, OAuth client secrets |
+| Resource               | Purpose                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Aurora Postgres        | Primary data store: agents, threads, messages, automations, integrations, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
+| S3 — skill catalog     | `skills/catalog/*.md` — skill packs loaded at invoke time                                                                                                                |
+| S3 — knowledge docs    | Source documents for Bedrock Knowledge Bases                                                                                                                             |
+| S3 — audit logs        | Append-only log of every agent invoke (NDJSON, partitioned by date)                                                                                                      |
+| S3 — assets            | Admin and end-user app static files                                                                                                                                      |
+| Bedrock Knowledge Base | Vector-indexed document store for inline RAG, backed by Aurora `pgvector`                                                                                                |
+| Secrets Manager        | DB credentials, OAuth client secrets                                                                                                                                     |
 
 ### App tier
 
 The app tier is where computation happens. It depends on both lower tiers.
 
-| Resource | Purpose |
-|----------|---------|
-| AppSync GraphQL API | Real-time subscriptions (WebSocket), used for streaming responses |
-| API Gateway v2 | HTTP queries and mutations, integration webhook ingress |
-| AgentCore runtimes | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore |
-| ECS Fargate + EFS | ThinkWork Computer runtime substrate: lightweight per-user orchestration tasks with persistent workspaces |
-| Integration Lambdas | One per integration (Slack, GitHub, Google) — handles inbound events |
-| Step Functions | Automation runner, routine executor |
-| EventBridge | Triggers for scheduled automations |
+| Resource                 | Purpose                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| AppSync GraphQL API      | Real-time subscriptions (WebSocket), used for streaming responses                                          |
+| API Gateway v2           | HTTP queries and mutations, integration webhook ingress                                                    |
+| AgentCore runtimes       | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore             |
+| ECS Fargate + EFS        | ThinkWork Computer runtime substrate: lightweight per-user orchestration tasks with persistent workspaces  |
+| Integration Lambdas      | One per integration (Slack, GitHub, Google) — handles inbound events                                       |
+| Step Functions           | Automation runner, routine executor                                                                        |
+| EventBridge              | Triggers for scheduled automations                                                                         |
 | Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |
-| ECS Fargate (optional) | Hindsight memory add-on (if `enable_hindsight = true`) |
-| CloudFront | CDN for admin app, end-user app static files |
-| SES (sending) | Outbound email from agent responses |
+| ECS Fargate (optional)   | Hindsight memory add-on (if `enable_hindsight = true`)                                                     |
+| CloudFront               | CDN for admin app, end-user app static files                                                               |
+| SES (sending)            | Outbound email from agent responses                                                                        |
 
 ## Data flow: agent invoke
 
@@ -301,21 +307,26 @@ This split is useful to keep in mind:
 - **Agents** are mostly stateless between invocations aside from their configuration
 - **Integrations** store credentials and integration configuration, but the resulting work still lands in threads
 
-| What | Where | Backup |
-|------|-------|--------|
-| Agents, threads, messages | Aurora Postgres | Automated daily snapshots (7-day retention) |
-| User accounts | Cognito User Pool | Cognito-managed, multi-AZ |
-| Skill packs | S3 (skill catalog bucket) | S3 versioning enabled |
-| Knowledge documents | S3 (knowledge bucket) | S3 versioning enabled |
-| Audit logs | S3 (audit log bucket) | S3 versioning + lifecycle to Glacier after 90d |
-| Memories (managed) | Aurora Postgres | Same as above |
-| Memories (Hindsight) | Aurora Postgres + ECS in-flight processing | Same as above |
-| OAuth tokens / API keys | SSM Parameter Store (SecureString, KMS) | SSM-managed |
-| Terraform state | S3 (tfstate bucket) + DynamoDB (lock table) | S3 versioning enabled |
-| Vector index | Aurora Postgres (`pgvector`) | Same as Aurora above |
+| What                      | Where                                       | Backup                                         |
+| ------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| Agents, threads, messages | Aurora Postgres                             | Automated daily snapshots (7-day retention)    |
+| User accounts             | Cognito User Pool                           | Cognito-managed, multi-AZ                      |
+| Skill packs               | S3 (skill catalog bucket)                   | S3 versioning enabled                          |
+| Knowledge documents       | S3 (knowledge bucket)                       | S3 versioning enabled                          |
+| Audit logs                | S3 (audit log bucket)                       | S3 versioning + lifecycle to Glacier after 90d |
+| Memories (managed)        | Aurora Postgres                             | Same as above                                  |
+| Memories (Hindsight)      | Aurora Postgres + ECS in-flight processing  | Same as above                                  |
+| OAuth tokens / API keys   | SSM Parameter Store (SecureString, KMS)     | SSM-managed                                    |
+| Terraform state           | S3 (tfstate bucket) + DynamoDB (lock table) | S3 versioning enabled                          |
+| Vector index              | Aurora Postgres (`pgvector`)                | Same as Aurora above                           |
 
 <Aside type="note">
-Because the vector index lives in Aurora (`pgvector`), an Aurora snapshot restore brings back agents, threads, memories, **and** the KB vector index in one shot. The only state that is not in Aurora is binary assets (S3) and a small amount of managed identity or secret state in AWS services such as Cognito and Secrets Manager. You may still want to re-trigger a Knowledge Base sync if source S3 documents have changed since the snapshot.
+  Because the vector index lives in Aurora (`pgvector`), an Aurora snapshot
+  restore brings back agents, threads, memories, **and** the KB vector index in
+  one shot. The only state that is not in Aurora is binary assets (S3) and a
+  small amount of managed identity or secret state in AWS services such as
+  Cognito and Secrets Manager. You may still want to re-trigger a Knowledge Base
+  sync if source S3 documents have changed since the snapshot.
 </Aside>
 
 ## Multi-tenancy
@@ -332,16 +343,16 @@ CREATE POLICY tenant_isolation ON threads
 
 ## Security model
 
-| Boundary | Enforcement |
-|----------|-------------|
-| External → API | Cognito JWT (API Gateway authorizer) |
-| API → Aurora | IAM auth + VPC security groups |
-| AgentCore → Bedrock | IAM role (least privilege) |
-| AgentCore → S3 | IAM role (read skills, read KB docs, write audit logs) |
-| AgentCore → SSM | IAM role (read credentials for assigned integrations) |
-| Tenant isolation | Postgres RLS on all tables |
-| Secrets at rest | KMS encryption (dedicated key per secret category) |
-| Audit trail | Append-only S3 bucket (no delete permissions on Lambda role) |
+| Boundary            | Enforcement                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| External → API      | Cognito JWT (API Gateway authorizer)                         |
+| API → Aurora        | IAM auth + VPC security groups                               |
+| AgentCore → Bedrock | IAM role (least privilege)                                   |
+| AgentCore → S3      | IAM role (read skills, read KB docs, write audit logs)       |
+| AgentCore → SSM     | IAM role (read credentials for assigned integrations)        |
+| Tenant isolation    | Postgres RLS on all tables                                   |
+| Secrets at rest     | KMS encryption (dedicated key per secret category)           |
+| Audit trail         | Append-only S3 bucket (no delete permissions on Lambda role) |
 
 ## AgentCore runtime containers
 

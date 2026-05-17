@@ -1,11 +1,11 @@
 ---
 title: Admin — Computers
-description: The Computers surface for owner-scoped AI workspaces, runtime status, migration provenance, and ECS runtime intent.
+description: The Computers surface for tenant-managed shared AI workspaces, assignments, runtime status, migration provenance, and ECS runtime intent.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The Computers surface is where operators manage the durable per-user ThinkWork Computer. A Computer owns the user's live workspace and orchestration runtime; managed Agents remain available as delegated workers.
+The Computers surface is where operators manage durable shared ThinkWork Computers. A Computer owns a live workspace and orchestration runtime for a role or function; assigned users bring requester context when they ask it to work. Managed Agents remain available as delegated workers.
 
 ## Computer list
 
@@ -14,16 +14,16 @@ The Computers surface is where operators manage the durable per-user ThinkWork C
 
 The list is driven by `ComputersListQuery` and shows:
 
-| Column    | Notes                                             |
-| --------- | ------------------------------------------------- |
-| Computer  | Name, slug, and detail link                       |
-| Owner     | Human owner for the one-user Computer             |
-| Status    | Product lifecycle status                          |
-| Runtime   | Desired and observed runtime state                |
-| Template  | Linked Computer Template                          |
-| Budget    | Monthly cap and spend                             |
-| Heartbeat | Last runtime callback                             |
-| Migration | Source Agent provenance when created by migration |
+| Column    | Notes                                                        |
+| --------- | ------------------------------------------------------------ |
+| Computer  | Name, slug, scope, and detail link                           |
+| Access    | Direct user and Team assignment summary                      |
+| Status    | Product lifecycle status                                     |
+| Runtime   | Desired and observed runtime state                           |
+| Template  | Linked Computer Template                                     |
+| Budget    | Monthly cap and spend                                        |
+| Heartbeat | Last runtime callback                                        |
+| Migration | Historical source Agent provenance when created by migration |
 
 The primary sidebar includes **Computers** in the Work group with a live count badge.
 
@@ -32,11 +32,13 @@ The primary sidebar includes **Computers** in the Work group with a live count b
 **Route:** `/computers/:computerId`  
 **File:** `apps/admin/src/routes/_authed/_tenant/computers/$computerId.tsx`
 
-The detail page shows three operational panels:
+The detail page shows operational panels for shared capability management:
 
 - **Status** — desired runtime status, observed runtime status, lifecycle status, budget pause state, heartbeat, and last active time.
 - **Runtime** — ECS service name, EFS access point, live workspace root, and runtime config JSON.
-- **Migration** — source Agent, migration metadata, and creation provenance.
+- **Assignments** — direct user and Team assignment controls.
+- **Access users** — DataTable of users with effective access through direct or Team assignments.
+- **Migration** — historical source Agent, migration metadata, and creation provenance.
 
 The status panel can update `desired_runtime_status`. The scheduled Computer runtime reconciler treats that as intent and uses the service-auth manager path to reconcile ECS desired count and provisioning.
 

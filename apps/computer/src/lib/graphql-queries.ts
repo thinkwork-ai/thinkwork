@@ -7,21 +7,6 @@ import { gql } from "@urql/core";
  * in a future slice when query count grows.
  */
 
-export const MyComputerQuery = gql`
-  query MyComputer {
-    myComputer {
-      id
-      name
-      tenantId
-      ownerUserId
-      sourceAgent {
-        id
-        name
-      }
-    }
-  }
-`;
-
 export const AssignedComputersQuery = gql`
   query AssignedComputers {
     assignedComputers {
@@ -453,7 +438,7 @@ export const RejectComputerApprovalMutation = gql`
 export const ComputerMemoryRecordsQuery = gql`
   query ComputerMemoryRecords(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $namespace: String!
   ) {
     memoryRecords(tenantId: $tenantId, userId: $userId, namespace: $namespace) {
@@ -486,7 +471,7 @@ export const ComputerMemoryRecordsQuery = gql`
 export const DeleteComputerMemoryRecordMutation = gql`
   mutation DeleteComputerMemoryRecord(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $memoryRecordId: ID!
   ) {
     deleteMemoryRecord(
@@ -500,7 +485,7 @@ export const DeleteComputerMemoryRecordMutation = gql`
 export const ComputerMemorySearchQuery = gql`
   query ComputerMemorySearch(
     $tenantId: ID
-    $userId: ID!
+    $userId: ID
     $query: String!
     $strategy: MemoryStrategy
     $limit: Int
@@ -538,8 +523,8 @@ export const ComputerMemorySystemConfigQuery = gql`
 `;
 
 export const ComputerRecentWikiPagesQuery = gql`
-  query ComputerRecentWikiPages($userId: ID!, $limit: Int) {
-    recentWikiPages(userId: $userId, limit: $limit) {
+  query ComputerRecentWikiPages($tenantId: ID, $userId: ID, $limit: Int) {
+    recentWikiPages(tenantId: $tenantId, userId: $userId, limit: $limit) {
       id
       type
       slug
@@ -554,7 +539,7 @@ export const ComputerRecentWikiPagesQuery = gql`
 export const ComputerWikiSearchQuery = gql`
   query ComputerWikiSearch(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $query: String!
     $limit: Int
   ) {
@@ -582,7 +567,7 @@ export const ComputerWikiSearchQuery = gql`
 export const ComputerWikiPageQuery = gql`
   query ComputerWikiPage(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $type: WikiPageType!
     $slug: String!
   ) {

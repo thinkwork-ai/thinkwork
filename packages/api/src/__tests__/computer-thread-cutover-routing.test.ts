@@ -16,6 +16,8 @@ describe("Computer-owned thread turn routing", () => {
   it("routes new Computer-owned chat threads through computer_tasks without Agent wakeups", () => {
     expect(createThreadSource).toContain("resolveThreadComputer");
     expect(createThreadSource).toContain("computer_id: threadComputer?.id");
+    expect(createThreadSource).toContain("requesterUserId:");
+    expect(createThreadSource).toContain("requestedComputerId: i.computerId");
     expect(createThreadSource).toContain(
       "await routeRunbookForComputerMessage",
     );
@@ -38,10 +40,10 @@ describe("Computer-owned thread turn routing", () => {
 
     expect(threadCutoverSource).toContain("invokeChatAgent");
     expect(threadCutoverSource).toContain("ensureArtifactBuilderDefaults");
-		expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
-		expect(threadCutoverSource).toContain("computer?.primary_agent_id");
-		expect(threadCutoverSource).toContain("computer?.migrated_from_agent_id");
-		expect(threadCutoverSource).toContain('runtime: "strands"');
+    expect(threadCutoverSource).toContain("computerTaskId: input.taskId");
+    expect(threadCutoverSource).toContain("computer?.primary_agent_id");
+    expect(threadCutoverSource).toContain("computer?.migrated_from_agent_id");
+    expect(threadCutoverSource).toContain('runtime: "strands"');
     expect(threadCutoverSource).toContain("artifact_builder_defaults_seeded");
     expect(threadCutoverSource).toContain("thread_turn_dispatched");
     expect(chatInvokeSource).toMatch(
@@ -89,9 +91,7 @@ describe("Computer-owned thread turn routing", () => {
   it("prepares runbook step AgentCore invocations without dispatching chat-agent-invoke", () => {
     const runbookRuntimeSource = source("../lib/runbooks/runtime-api.ts");
 
-    expect(runbookRuntimeSource).toContain(
-      "prepareRunbookStepAgentInvocation",
-    );
+    expect(runbookRuntimeSource).toContain("prepareRunbookStepAgentInvocation");
     expect(runbookRuntimeSource).toContain(
       'provider: "bedrock-agentcore" as const',
     );
@@ -99,6 +99,6 @@ describe("Computer-owned thread turn routing", () => {
       'computer_response_mode: "runbook_step"',
     );
     expect(runbookRuntimeSource).not.toContain("getChatAgentInvokeFnArn");
-    expect(runbookRuntimeSource).not.toContain("InvocationType: \"Event\"");
+    expect(runbookRuntimeSource).not.toContain('InvocationType: "Event"');
   });
 });

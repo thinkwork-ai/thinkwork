@@ -183,7 +183,6 @@ describe("apps/computer Automations route", () => {
     useQueryMock.mockReturnValue([
       {
         data: {
-          myComputer: { ...SAMPLE_COMPUTER, sourceAgent: null },
           assignedComputers: [{ ...SAMPLE_COMPUTER, sourceAgent: null }],
         },
       },

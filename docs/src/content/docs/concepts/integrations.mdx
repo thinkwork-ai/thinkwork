@@ -23,18 +23,19 @@ It does not include a public integration catalog, integration execution table, p
 
 External-system access should be modeled at the right level:
 
-| Need | Preferred shape |
-| --- | --- |
-| A Computer needs tools during work | MCP server or built-in skill/tool |
-| A user needs provider OAuth | Mobile per-user connection flow |
-| A tenant needs an inbound endpoint | Explicit webhook/API route |
+| Need                                             | Preferred shape                                                  |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| A Computer needs tools during work               | MCP server or built-in skill/tool                                |
+| A user needs provider OAuth                      | Mobile per-user connection flow                                  |
+| A user-owned connector emits an event            | Connector trigger targeting an assigned shared Computer          |
+| A tenant needs an inbound endpoint               | Explicit webhook/API route                                       |
 | An enterprise customer needs a packaged workflow | Private extension with its own tables, runtime, and admin module |
 
 This keeps OSS ThinkWork focused on the harness and avoids shipping under-proven provider abstractions as if they were stable platform contracts.
 
 ## OAuth and credentials
 
-OAuth credentials and provider tokens remain part of the platform. They should be resolved only by the runtime surface that needs them, and future Slack, Google, or GitHub behavior should use Computer/user capability patterns rather than tenant-wide admin integration toggles.
+OAuth credentials and provider tokens remain part of the platform. They should be resolved only by the runtime surface that needs them. User-owned connectors such as Gmail and Calendar stay tied to the consenting user; event triggers route into assigned shared Computers with explicit requester and credential-subject attribution rather than creating personal Computer identities.
 
 <Aside type="note">
   Per-user provider setup belongs in the mobile connection flow when user

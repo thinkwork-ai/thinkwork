@@ -21,11 +21,11 @@ The mobile app owns the **user side** of integration and MCP configuration: self
 
 The Integrations screen is the user's home for connecting their personal accounts to ThinkWork. It lists every integration the tenant supports alongside the user's current status for each:
 
-| Integration             | What it unlocks                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| **Google Productivity** | Gmail read, Calendar read/write, Drive read for agents that have the Google built-in tool assigned |
-| **Microsoft 365**       | Outlook, Calendar, OneDrive for agents that have the Microsoft built-in tool assigned              |
-| **External Tasks**      | Webhook-driven task cards, save-edit round-trip, assigned-task push notifications                  |
+| Integration             | What it unlocks                                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Google Productivity** | Gmail read, Calendar read/write, Drive read for assigned Computers or delegated Agents that have the Google built-in tool assigned |
+| **Microsoft 365**       | Outlook, Calendar, OneDrive for assigned Computers or delegated Agents that have the Microsoft built-in tool assigned              |
+| **External Tasks**      | Webhook-driven task cards, save-edit round-trip, assigned-task push notifications                                                  |
 
 Each row shows a status badge:
 
@@ -37,7 +37,7 @@ Tapping **Connect** launches a WebBrowser session to the tenant's OAuth authoriz
 
 ### Per-provider target picker
 
-For integrations that route inbound work, the integration row can expose a **target picker**. The default target is a Computer, which gives the user a stable always-on orchestrator while still allowing the Computer to delegate to managed Agents or routines. The selection is stored per-user-per-provider when the provider supports user-level routing.
+For integrations that route inbound work, the integration row can expose a **target picker**. The target is an assigned shared Computer, such as Finance Computer or Sales Computer. The user's OAuth credential remains personal and consented by that user; routed work records both the selected shared Computer and the credential subject. The selection is stored per-user-per-provider when the provider supports user-level routing.
 
 ### Disconnecting
 
@@ -62,7 +62,7 @@ The list is fetched from `/api/skills/user-mcp-servers` — a tenant + principal
 
 Connecting is the same pattern as integrations: tap **Connect**, the app opens a WebBrowser to the MCP server's OAuth authorize URL, the user consents, the redirect lands back, and the per-user token is stored in Secrets Manager at the MCP-token path for this user and this server.
 
-Once connected, agents that have this MCP server assigned can call its tools on the user's behalf during invocations initiated by the user.
+Once connected, assigned Computers or delegated Agents that have this MCP server assigned can call its tools on the user's behalf during invocations initiated by the user.
 
 ### MCP server detail screen
 

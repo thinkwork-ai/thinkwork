@@ -6353,20 +6353,6 @@ export type MessagesQuery = {
   };
 };
 
-export type MyComputerQueryVariables = Exact<{ [key: string]: never }>;
-
-export type MyComputerQuery = {
-  __typename?: "Query";
-  myComputer?: {
-    __typename?: "Computer";
-    id: string;
-    name: string;
-    slug: string;
-    status: ComputerStatus;
-    runtimeStatus: ComputerRuntimeStatus;
-  } | null;
-};
-
 export type AssignedComputersQueryVariables = Exact<{ [key: string]: never }>;
 
 export type AssignedComputersQuery = {
@@ -6395,7 +6381,6 @@ export type ComputersQuery = {
     slug: string;
     status: ComputerStatus;
     runtimeStatus: ComputerRuntimeStatus;
-    ownerUserId?: string | null;
   }>;
 };
 
@@ -9209,38 +9194,6 @@ export const MessagesDocument = {
     },
   ],
 } as unknown as DocumentNode<MessagesQuery, MessagesQueryVariables>;
-export const MyComputerDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "MyComputer" },
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "myComputer" },
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "name" } },
-                { kind: "Field", name: { kind: "Name", value: "slug" } },
-                { kind: "Field", name: { kind: "Name", value: "status" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "runtimeStatus" },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<MyComputerQuery, MyComputerQueryVariables>;
 export const AssignedComputersDocument = {
   kind: "Document",
   definitions: [
@@ -9324,7 +9277,6 @@ export const ComputersDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "runtimeStatus" },
                 },
-                { kind: "Field", name: { kind: "Name", value: "ownerUserId" } },
               ],
             },
           },
