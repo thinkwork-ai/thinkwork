@@ -6,6 +6,8 @@ import { startOntologySuggestionScanMutation } from "./startOntologySuggestionSc
 import { updateOntologyChangeSetMutation } from "./updateOntologyChangeSet.mutation.js";
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
+import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
+import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
 
 export const ontologyQueries = {
   ontologyDefinitions,
@@ -19,4 +21,6 @@ export const ontologyMutations = {
   updateOntologyChangeSet: updateOntologyChangeSetMutation,
   approveOntologyChangeSet: approveOntologyChangeSetMutation,
   rejectOntologyChangeSet: rejectOntologyChangeSetMutation,
+  updateOntologyEntityType: updateOntologyEntityTypeMutation,
+  updateOntologyRelationshipType: updateOntologyRelationshipTypeMutation,
 };

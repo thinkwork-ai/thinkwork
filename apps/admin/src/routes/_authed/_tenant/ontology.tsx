@@ -27,6 +27,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -35,6 +43,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/PageHeader";
+import { PageLayout } from "@/components/PageLayout";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -46,6 +56,8 @@ import {
   RejectOntologyChangeSetMutation,
   StartOntologySuggestionScanMutation,
   UpdateOntologyChangeSetMutation,
+  UpdateOntologyEntityTypeMutation,
+  UpdateOntologyRelationshipTypeMutation,
 } from "@/lib/graphql-queries";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -230,6 +242,17 @@ function compactNames(values: string[], fallback = "none"): string {
   return `${values.slice(0, 3).join(", ")} +${values.length - 3}`;
 }
 
+function listInput(values: string[]): string {
+  return values.join(", ");
+}
+
+function parseListInput(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function jsonObject(value: JsonValue): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -342,19 +365,9 @@ const entityColumns: ColumnDef<EntityTypeRow>[] = [
     accessorKey: "name",
     header: "Entity",
     cell: ({ row }) => (
-      <span className="truncate font-medium">{row.original.name}</span>
+      <span className="block truncate font-medium">{row.original.name}</span>
     ),
-    size: 180,
-  },
-  {
-    accessorKey: "slug",
-    header: "Slug",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="font-mono text-[10px]">
-        {row.original.slug}
-      </Badge>
-    ),
-    size: 150,
+    size: 360,
   },
   {
     accessorKey: "lifecycleStatus",
@@ -366,53 +379,11 @@ const entityColumns: ColumnDef<EntityTypeRow>[] = [
     accessorKey: "broadType",
     header: "Broad Type",
     cell: ({ row }) => (
-      <Badge variant="secondary">{row.original.broadType}</Badge>
-    ),
-    size: 130,
-  },
-  {
-    accessorKey: "description",
-    header: "Description",
-    cell: ({ row }) => (
-      <span className="truncate text-sm text-muted-foreground">
-        {row.original.description ?? "No description yet."}
-      </span>
-    ),
-    size: 320,
-  },
-  {
-    accessorKey: "aliases",
-    header: "Aliases",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {compactNames(row.original.aliases)}
-      </span>
+      <Badge variant="secondary" className="max-w-full truncate">
+        {row.original.broadType}
+      </Badge>
     ),
     size: 220,
-  },
-  {
-    accessorKey: "facetTemplates",
-    header: "Facets",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {compactNames(
-          row.original.facetTemplates.map((facet) => facet.heading),
-        )}
-      </span>
-    ),
-    size: 220,
-  },
-  {
-    accessorKey: "externalMappings",
-    header: "Mappings",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.externalMappings.length === 0
-          ? "none"
-          : `${row.original.externalMappings.length} mapped`}
-      </span>
-    ),
-    size: 110,
   },
 ];
 
@@ -421,19 +392,9 @@ const relationshipColumns: ColumnDef<RelationshipTypeRow>[] = [
     accessorKey: "name",
     header: "Relationship",
     cell: ({ row }) => (
-      <span className="truncate font-medium">{row.original.name}</span>
+      <span className="block truncate font-medium">{row.original.name}</span>
     ),
-    size: 180,
-  },
-  {
-    accessorKey: "slug",
-    header: "Slug",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="font-mono text-[10px]">
-        {row.original.slug}
-      </Badge>
-    ),
-    size: 170,
+    size: 300,
   },
   {
     accessorKey: "lifecycleStatus",
@@ -445,60 +406,30 @@ const relationshipColumns: ColumnDef<RelationshipTypeRow>[] = [
     accessorKey: "sourceTypeSlugs",
     header: "From",
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
+      <span className="block truncate text-sm text-muted-foreground">
         {commaList(row.original.sourceTypeSlugs, "any")}
       </span>
     ),
-    size: 190,
+    size: 220,
   },
   {
     accessorKey: "targetTypeSlugs",
     header: "To",
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
+      <span className="block truncate text-sm text-muted-foreground">
         {commaList(row.original.targetTypeSlugs, "any")}
       </span>
     ),
-    size: 190,
-  },
-  {
-    accessorKey: "inverseName",
-    header: "Inverse",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.inverseName ?? "none"}
-      </span>
-    ),
-    size: 150,
-  },
-  {
-    accessorKey: "description",
-    header: "Description",
-    cell: ({ row }) => (
-      <span className="truncate text-sm text-muted-foreground">
-        {row.original.description ?? "No description yet."}
-      </span>
-    ),
-    size: 320,
-  },
-  {
-    accessorKey: "externalMappings",
-    header: "Mappings",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.externalMappings.length === 0
-          ? "none"
-          : `${row.original.externalMappings.length} mapped`}
-      </span>
-    ),
-    size: 110,
+    size: 220,
   },
 ];
 
 function EntitiesPanel({
   definitions,
+  onSelectEntity,
 }: {
   definitions: OntologyDefinitionsData | undefined;
+  onSelectEntity: (entity: EntityTypeRow) => void;
 }) {
   if (!definitions) {
     return (
@@ -520,8 +451,10 @@ function EntitiesPanel({
       <DataTable
         columns={entityColumns}
         data={definitions.entityTypes}
+        onRowClick={onSelectEntity}
         pageSize={0}
         tableClassName="table-fixed"
+        allowHorizontalScroll={false}
       />
     </div>
   );
@@ -529,8 +462,10 @@ function EntitiesPanel({
 
 function RelationshipsPanel({
   definitions,
+  onSelectRelationship,
 }: {
   definitions: OntologyDefinitionsData | undefined;
+  onSelectRelationship: (relationship: RelationshipTypeRow) => void;
 }) {
   if (!definitions) {
     return (
@@ -553,10 +488,444 @@ function RelationshipsPanel({
       <DataTable
         columns={relationshipColumns}
         data={definitions.relationshipTypes}
+        onRowClick={onSelectRelationship}
         pageSize={0}
         tableClassName="table-fixed"
+        allowHorizontalScroll={false}
       />
     </div>
+  );
+}
+
+type EntitySheetDraft = {
+  name: string;
+  description: string;
+  broadType: string;
+  aliases: string;
+  guidanceNotes: string;
+  lifecycleStatus: OntologyLifecycleStatus;
+};
+
+type RelationshipSheetDraft = {
+  name: string;
+  description: string;
+  inverseName: string;
+  sourceTypeSlugs: string;
+  targetTypeSlugs: string;
+  aliases: string;
+  guidanceNotes: string;
+  lifecycleStatus: OntologyLifecycleStatus;
+};
+
+const lifecycleOptions = [
+  OntologyLifecycleStatus.Approved,
+  OntologyLifecycleStatus.Proposed,
+  OntologyLifecycleStatus.Deprecated,
+  OntologyLifecycleStatus.Rejected,
+];
+
+function draftFromEntity(entity: EntityTypeRow | null): EntitySheetDraft {
+  return {
+    name: entity?.name ?? "",
+    description: entity?.description ?? "",
+    broadType: entity?.broadType ?? "",
+    aliases: listInput(entity?.aliases ?? []),
+    guidanceNotes: entity?.guidanceNotes ?? "",
+    lifecycleStatus:
+      entity?.lifecycleStatus ?? OntologyLifecycleStatus.Approved,
+  };
+}
+
+function draftFromRelationship(
+  relationship: RelationshipTypeRow | null,
+): RelationshipSheetDraft {
+  return {
+    name: relationship?.name ?? "",
+    description: relationship?.description ?? "",
+    inverseName: relationship?.inverseName ?? "",
+    sourceTypeSlugs: listInput(relationship?.sourceTypeSlugs ?? []),
+    targetTypeSlugs: listInput(relationship?.targetTypeSlugs ?? []),
+    aliases: listInput(relationship?.aliases ?? []),
+    guidanceNotes: relationship?.guidanceNotes ?? "",
+    lifecycleStatus:
+      relationship?.lifecycleStatus ?? OntologyLifecycleStatus.Approved,
+  };
+}
+
+function OntologyEntitySheet({
+  entity,
+  open,
+  canManage,
+  saving,
+  onOpenChange,
+  onSave,
+}: {
+  entity: EntityTypeRow | null;
+  open: boolean;
+  canManage: boolean;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (entity: EntityTypeRow, draft: EntitySheetDraft) => void;
+}) {
+  const [draft, setDraft] = useState(() => draftFromEntity(entity));
+
+  useEffect(() => {
+    setDraft(draftFromEntity(entity));
+  }, [entity]);
+
+  if (!entity) return null;
+
+  const disabled = !canManage || saving;
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (entity) onSave(entity, draft);
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-[min(34rem,calc(100vw-1rem))] gap-0 overflow-y-auto sm:max-w-none">
+        <SheetHeader>
+          <SheetTitle>{entity?.name ?? "Entity"}</SheetTitle>
+          <SheetDescription>
+            {entity ? `Business entity type ${entity.slug}` : ""}
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="space-y-4 px-4 pb-4">
+            {!canManage && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                Only tenant owners and admins can edit ontology definitions.
+              </div>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="entity-name">Name</Label>
+                <Input
+                  id="entity-name"
+                  value={draft.name}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="entity-broad-type">Broad Type</Label>
+                <Input
+                  id="entity-broad-type"
+                  value={draft.broadType}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      broadType: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Fact label="Slug" value={entity?.slug ?? "n/a"} mono />
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select
+                  value={draft.lifecycleStatus}
+                  disabled={disabled}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      lifecycleStatus: value as OntologyLifecycleStatus,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lifecycleOptions.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {compactLabel(status)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="entity-description">Description</Label>
+              <Textarea
+                id="entity-description"
+                value={draft.description}
+                disabled={disabled}
+                className="min-h-24"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="entity-aliases">Aliases</Label>
+              <Input
+                id="entity-aliases"
+                value={draft.aliases}
+                disabled={disabled}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    aliases: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="entity-guidance">Guidance Notes</Label>
+              <Textarea
+                id="entity-guidance"
+                value={draft.guidanceNotes}
+                disabled={disabled}
+                className="min-h-24"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    guidanceNotes: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Fact
+                label="Facets"
+                value={compactNames(
+                  entity?.facetTemplates.map((facet) => facet.heading) ?? [],
+                )}
+              />
+              <Fact
+                label="Mappings"
+                value={
+                  entity?.externalMappings.length
+                    ? `${entity.externalMappings.length} mapped`
+                    : "none"
+                }
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button type="submit" disabled={disabled || !entity}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
+              Save
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function OntologyRelationshipSheet({
+  relationship,
+  open,
+  canManage,
+  saving,
+  onOpenChange,
+  onSave,
+}: {
+  relationship: RelationshipTypeRow | null;
+  open: boolean;
+  canManage: boolean;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (
+    relationship: RelationshipTypeRow,
+    draft: RelationshipSheetDraft,
+  ) => void;
+}) {
+  const [draft, setDraft] = useState(() => draftFromRelationship(relationship));
+
+  useEffect(() => {
+    setDraft(draftFromRelationship(relationship));
+  }, [relationship]);
+
+  if (!relationship) return null;
+
+  const disabled = !canManage || saving;
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (relationship) onSave(relationship, draft);
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-[min(34rem,calc(100vw-1rem))] gap-0 overflow-y-auto sm:max-w-none">
+        <SheetHeader>
+          <SheetTitle>{relationship?.name ?? "Relationship"}</SheetTitle>
+          <SheetDescription>
+            {relationship ? `Relationship type ${relationship.slug}` : ""}
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="space-y-4 px-4 pb-4">
+            {!canManage && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                Only tenant owners and admins can edit ontology definitions.
+              </div>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="relationship-name">Name</Label>
+                <Input
+                  id="relationship-name"
+                  value={draft.name}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="relationship-inverse">Inverse Name</Label>
+                <Input
+                  id="relationship-inverse"
+                  value={draft.inverseName}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      inverseName: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Fact label="Slug" value={relationship?.slug ?? "n/a"} mono />
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select
+                  value={draft.lifecycleStatus}
+                  disabled={disabled}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      lifecycleStatus: value as OntologyLifecycleStatus,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lifecycleOptions.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {compactLabel(status)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="relationship-from">From Types</Label>
+                <Input
+                  id="relationship-from"
+                  value={draft.sourceTypeSlugs}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      sourceTypeSlugs: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="relationship-to">To Types</Label>
+                <Input
+                  id="relationship-to"
+                  value={draft.targetTypeSlugs}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      targetTypeSlugs: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="relationship-description">Description</Label>
+              <Textarea
+                id="relationship-description"
+                value={draft.description}
+                disabled={disabled}
+                className="min-h-24"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="relationship-aliases">Aliases</Label>
+              <Input
+                id="relationship-aliases"
+                value={draft.aliases}
+                disabled={disabled}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    aliases: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="relationship-guidance">Guidance Notes</Label>
+              <Textarea
+                id="relationship-guidance"
+                value={draft.guidanceNotes}
+                disabled={disabled}
+                className="min-h-24"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    guidanceNotes: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <Fact
+              label="Mappings"
+              value={
+                relationship?.externalMappings.length
+                  ? `${relationship.externalMappings.length} mapped`
+                  : "none"
+              }
+            />
+          </div>
+          <SheetFooter>
+            <Button type="submit" disabled={disabled || !relationship}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
+              Save
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1175,6 +1544,10 @@ export function OntologyStudioPage() {
   const [changeSetDrafts, setChangeSetDrafts] = useState<
     Record<string, ChangeSetDraft>
   >({});
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [selectedRelationshipId, setSelectedRelationshipId] = useState<
+    string | null
+  >(null);
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [roleRetryTick, setRoleRetryTick] = useState(0);
 
@@ -1216,6 +1589,11 @@ export function OntologyStudioPage() {
   const [{ fetching: rejectingChangeSet }, rejectChangeSet] = useMutation(
     RejectOntologyChangeSetMutation,
   );
+  const [{ fetching: savingEntityType }, updateEntityType] = useMutation(
+    UpdateOntologyEntityTypeMutation,
+  );
+  const [{ fetching: savingRelationshipType }, updateRelationshipType] =
+    useMutation(UpdateOntologyRelationshipTypeMutation);
 
   useEffect(() => {
     let cancelled = false;
@@ -1244,6 +1622,20 @@ export function OntologyStudioPage() {
     [changeSetsResult.data],
   );
   const definitions = definitionsResult.data?.ontologyDefinitions;
+  const selectedEntity = useMemo(
+    () =>
+      definitions?.entityTypes.find(
+        (entity) => entity.id === selectedEntityId,
+      ) ?? null,
+    [definitions?.entityTypes, selectedEntityId],
+  );
+  const selectedRelationship = useMemo(
+    () =>
+      definitions?.relationshipTypes.find(
+        (relationship) => relationship.id === selectedRelationshipId,
+      ) ?? null,
+    [definitions?.relationshipTypes, selectedRelationshipId],
+  );
   const selectedChangeSet = useMemo(
     () =>
       changeSets.find((changeSet) => changeSet.id === selectedChangeSetId) ??
@@ -1385,6 +1777,60 @@ export function OntologyStudioPage() {
     refetchChangeSets({ requestPolicy: "network-only" });
   }
 
+  async function saveEntityDefinition(
+    entity: EntityTypeRow,
+    draft: EntitySheetDraft,
+  ) {
+    if (!tenantId) return;
+    const result = await updateEntityType({
+      input: {
+        tenantId,
+        entityTypeId: entity.id,
+        name: draft.name.trim(),
+        description: draft.description.trim() || null,
+        broadType: draft.broadType.trim(),
+        aliases: parseListInput(draft.aliases),
+        guidanceNotes: draft.guidanceNotes.trim() || null,
+        lifecycleStatus: draft.lifecycleStatus,
+      },
+    });
+    if (result.error) {
+      toast.error(`Entity save failed: ${result.error.message}`);
+      return;
+    }
+    toast.success("Entity type saved");
+    refetchDefinitions({ requestPolicy: "network-only" });
+    setSelectedEntityId(null);
+  }
+
+  async function saveRelationshipDefinition(
+    relationship: RelationshipTypeRow,
+    draft: RelationshipSheetDraft,
+  ) {
+    if (!tenantId) return;
+    const result = await updateRelationshipType({
+      input: {
+        tenantId,
+        relationshipTypeId: relationship.id,
+        name: draft.name.trim(),
+        description: draft.description.trim() || null,
+        inverseName: draft.inverseName.trim() || null,
+        sourceTypeSlugs: parseListInput(draft.sourceTypeSlugs),
+        targetTypeSlugs: parseListInput(draft.targetTypeSlugs),
+        aliases: parseListInput(draft.aliases),
+        guidanceNotes: draft.guidanceNotes.trim() || null,
+        lifecycleStatus: draft.lifecycleStatus,
+      },
+    });
+    if (result.error) {
+      toast.error(`Relationship save failed: ${result.error.message}`);
+      return;
+    }
+    toast.success("Relationship type saved");
+    refetchDefinitions({ requestPolicy: "network-only" });
+    setSelectedRelationshipId(null);
+  }
+
   useEffect(() => {
     if (!scanJobId) return;
     const status = activeScanJob?.status;
@@ -1427,154 +1873,179 @@ export function OntologyStudioPage() {
   ]);
 
   return (
-    <div className="space-y-4 p-3">
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Ontology Studio
-            </h1>
-            {reviewableCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="bg-amber-500/15 text-amber-700"
-              >
-                {reviewableCount} need review
-              </Badge>
-            )}
+    <PageLayout
+      header={
+        <PageHeader
+          title="Ontology Studio"
+          actions={
+            <>
+              {reviewableCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-500/15 text-amber-700"
+                >
+                  {reviewableCount} need review
+                </Badge>
+              )}
+              {activeScanJob && (
+                <Badge
+                  variant="secondary"
+                  className={statusTone(activeScanJob.status)}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  Scan {compactLabel(activeScanJob.status)}
+                </Badge>
+              )}
+              <Button onClick={runScan} disabled={!tenantId || scanStarting}>
+                {scanStarting ? <Loader2 className="animate-spin" /> : <Play />}
+                Scan
+              </Button>
+            </>
+          }
+        />
+      }
+    >
+      <div className="space-y-4">
+        {changeSetsResult.error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {changeSetsResult.error.message}
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {activeScanJob && (
-              <Badge
-                variant="secondary"
-                className={statusTone(activeScanJob.status)}
-              >
-                <CheckCircle2 className="h-3 w-3" />
-                Scan {compactLabel(activeScanJob.status)}
-              </Badge>
-            )}
-            <Button onClick={runScan} disabled={!tenantId || scanStarting}>
-              {scanStarting ? <Loader2 className="animate-spin" /> : <Play />}
-              Scan
-            </Button>
+        )}
+        {activeScanJob?.error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {activeScanJob.error}
           </div>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Review suggested business types, relationships, facets, and vocabulary
-          mappings before they reshape the Company Brain.
-        </p>
-      </div>
+        )}
 
-      {changeSetsResult.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {changeSetsResult.error.message}
-        </div>
-      )}
-      {activeScanJob?.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {activeScanJob.error}
-        </div>
-      )}
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+          <TabsList className="flex-wrap gap-1">
+            <TabsTrigger value="change-sets">
+              <Pencil />
+              Change Sets
+            </TabsTrigger>
+            <TabsTrigger value="entities">
+              <Database />
+              Entities
+            </TabsTrigger>
+            <TabsTrigger value="relationships">
+              <GitBranch />
+              Relationships
+            </TabsTrigger>
+            <TabsTrigger value="mappings">
+              <Network />
+              Mappings
+            </TabsTrigger>
+            <TabsTrigger value="reprocess">
+              <RotateCw />
+              Reprocess Jobs
+            </TabsTrigger>
+          </TabsList>
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="change-sets">
-            <Pencil />
-            Change Sets
-          </TabsTrigger>
-          <TabsTrigger value="entities">
-            <Database />
-            Entities
-          </TabsTrigger>
-          <TabsTrigger value="relationships">
-            <GitBranch />
-            Relationships
-          </TabsTrigger>
-          <TabsTrigger value="mappings">
-            <Network />
-            Mappings
-          </TabsTrigger>
-          <TabsTrigger value="reprocess">
-            <RotateCw />
-            Reprocess Jobs
-          </TabsTrigger>
-        </TabsList>
+          <TabsContent value="change-sets" className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-[23rem_minmax(0,1fr)]">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Suggestions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {changeSetsResult.fetching && changeSets.length === 0 ? (
+                    <EmptyState
+                      icon={Loader2}
+                      title="Loading change sets"
+                      body="Fetching the latest ontology suggestions."
+                    />
+                  ) : (
+                    <ChangeSetList
+                      changeSets={changeSets}
+                      selectedId={selectedChangeSet?.id ?? null}
+                      onSelect={setSelectedChangeSetId}
+                    />
+                  )}
+                </CardContent>
+              </Card>
 
-        <TabsContent value="change-sets" className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-[23rem_minmax(0,1fr)]">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Suggestions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {changeSetsResult.fetching && changeSets.length === 0 ? (
-                  <EmptyState
-                    icon={Loader2}
-                    title="Loading change sets"
-                    body="Fetching the latest ontology suggestions."
-                  />
-                ) : (
-                  <ChangeSetList
-                    changeSets={changeSets}
-                    selectedId={selectedChangeSet?.id ?? null}
-                    onSelect={setSelectedChangeSetId}
-                  />
-                )}
-              </CardContent>
-            </Card>
+              <ChangeSetEditor
+                changeSet={selectedChangeSet}
+                draft={
+                  selectedChangeSet
+                    ? changeSetDrafts[selectedChangeSet.id]
+                    : undefined
+                }
+                itemDrafts={itemDrafts}
+                canManage={canManage}
+                saving={savingChangeSet}
+                approving={approvingChangeSet}
+                rejecting={rejectingChangeSet}
+                onDraftChange={(changeSetId, draft) =>
+                  setChangeSetDrafts((current) => ({
+                    ...current,
+                    [changeSetId]: draft,
+                  }))
+                }
+                onItemDraftChange={(itemId, draft) =>
+                  setItemDrafts((current) => ({ ...current, [itemId]: draft }))
+                }
+                onSave={saveChangeSet}
+                onApprove={approveSelected}
+                onReject={rejectSelected}
+              />
+            </div>
+          </TabsContent>
 
-            <ChangeSetEditor
-              changeSet={selectedChangeSet}
-              draft={
-                selectedChangeSet
-                  ? changeSetDrafts[selectedChangeSet.id]
-                  : undefined
-              }
-              itemDrafts={itemDrafts}
-              canManage={canManage}
-              saving={savingChangeSet}
-              approving={approvingChangeSet}
-              rejecting={rejectingChangeSet}
-              onDraftChange={(changeSetId, draft) =>
-                setChangeSetDrafts((current) => ({
-                  ...current,
-                  [changeSetId]: draft,
-                }))
-              }
-              onItemDraftChange={(itemId, draft) =>
-                setItemDrafts((current) => ({ ...current, [itemId]: draft }))
-              }
-              onSave={saveChangeSet}
-              onApprove={approveSelected}
-              onReject={rejectSelected}
+          <TabsContent value="entities">
+            <EntitiesPanel
+              definitions={definitions}
+              onSelectEntity={(entity) => setSelectedEntityId(entity.id)}
             />
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        <TabsContent value="entities">
-          <EntitiesPanel definitions={definitions} />
-        </TabsContent>
+          <TabsContent value="relationships">
+            <RelationshipsPanel
+              definitions={definitions}
+              onSelectRelationship={(relationship) =>
+                setSelectedRelationshipId(relationship.id)
+              }
+            />
+          </TabsContent>
 
-        <TabsContent value="relationships">
-          <RelationshipsPanel definitions={definitions} />
-        </TabsContent>
+          <TabsContent value="mappings">
+            <MappingsPanel definitions={definitions} />
+          </TabsContent>
 
-        <TabsContent value="mappings">
-          <MappingsPanel definitions={definitions} />
-        </TabsContent>
+          <TabsContent value="reprocess">
+            <ReprocessPanel
+              jobIdInput={reprocessJobIdInput}
+              setJobIdInput={setReprocessJobIdInput}
+              activeJobId={activeReprocessJobId}
+              setActiveJobId={setActiveReprocessJobId}
+              job={activeReprocessJob}
+              fetching={reprocessJobResult.fetching}
+              approvedChangeSets={approvedChangeSets}
+            />
+          </TabsContent>
+        </Tabs>
 
-        <TabsContent value="reprocess">
-          <ReprocessPanel
-            jobIdInput={reprocessJobIdInput}
-            setJobIdInput={setReprocessJobIdInput}
-            activeJobId={activeReprocessJobId}
-            setActiveJobId={setActiveReprocessJobId}
-            job={activeReprocessJob}
-            fetching={reprocessJobResult.fetching}
-            approvedChangeSets={approvedChangeSets}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
+        <OntologyEntitySheet
+          entity={selectedEntity}
+          open={Boolean(selectedEntityId)}
+          canManage={canManage}
+          saving={savingEntityType}
+          onOpenChange={(open) => {
+            if (!open) setSelectedEntityId(null);
+          }}
+          onSave={saveEntityDefinition}
+        />
+        <OntologyRelationshipSheet
+          relationship={selectedRelationship}
+          open={Boolean(selectedRelationshipId)}
+          canManage={canManage}
+          saving={savingRelationshipType}
+          onOpenChange={(open) => {
+            if (!open) setSelectedRelationshipId(null);
+          }}
+          onSave={saveRelationshipDefinition}
+        />
+      </div>
+    </PageLayout>
   );
 }
