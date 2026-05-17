@@ -25,6 +25,12 @@ const mocks = vi.hoisted(() => ({
   notifyThreadUpdate: vi.fn(),
   ensureMigratedComputerWorkspaceSeeded: vi.fn(),
   ensureDefaultComputerRunbookSkillsMaterialized: vi.fn(),
+  s3Send: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn(() => ({ send: mocks.s3Send })),
+  GetObjectCommand: vi.fn((input) => ({ input })),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -137,6 +143,11 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.ensureDefaultComputerRunbookSkillsMaterialized.mockResolvedValue({
       seeded: false,
     });
+    mocks.s3Send.mockReset();
+    mocks.s3Send.mockResolvedValue({
+      Body: Buffer.from("# Report\n\nRevenue grew 12%.\n", "utf8"),
+    });
+    process.env.WORKSPACE_BUCKET = "workspace-bucket";
   });
 
   it("reports no active Google Workspace connection for the requester", async () => {
@@ -471,7 +482,28 @@ describe("Computer runtime API thread turn execution", () => {
         },
       ],
       [{ id: "thread-1", title: "Hello", status: "in_progress" }],
-      [{ id: "message-1", role: "user", content: "hello computer" }],
+      [
+        {
+          id: "message-1",
+          role: "user",
+          content: "hello computer",
+          metadata: {
+            attachments: [
+              { attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+            ],
+          },
+        },
+      ],
+      [
+        {
+          id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          s3_key:
+            "tenants/tenant-1/attachments/thread-1/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/report.md",
+          name: "report.md",
+          mime_type: "text/markdown",
+          size_bytes: 28,
+        },
+      ],
       [
         { id: "message-1", role: "user", content: "hello computer" },
         { id: "message-0", role: "assistant", content: "previous reply" },
@@ -493,6 +525,14 @@ describe("Computer runtime API thread turn execution", () => {
       model: "model-1",
     });
     expect(result.messagesHistory).toHaveLength(2);
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name: "report.md",
+        readable: true,
+        contentText: "# Report\n\nRevenue grew 12%.",
+      }),
+    ]);
     expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 

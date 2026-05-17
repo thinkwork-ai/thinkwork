@@ -43,4 +43,29 @@ describe("Computer chat system prompt", () => {
     expect(prompt).toContain("# USER.md");
     expect(prompt).toContain("Name: Eric");
   });
+
+  it("adds current-turn attachment content to the system prompt", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        attachments: [
+          {
+            attachmentId: "attachment-1",
+            name: "agentic-etl-architecture-v5.md",
+            mimeType: "text/markdown",
+            sizeBytes: 42,
+            readable: true,
+            contentText: "# Hybrid Agentic ETL\n\nReady for implementation.",
+          },
+        ],
+      },
+      root,
+    );
+
+    expect(prompt).toContain("Files attached to the current user turn:");
+    expect(prompt).toContain("Do not say that no file is attached.");
+    expect(prompt).toContain("agentic-etl-architecture-v5.md");
+    expect(prompt).toContain("# Hybrid Agentic ETL");
+  });
 });
