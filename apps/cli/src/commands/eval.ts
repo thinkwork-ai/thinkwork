@@ -14,34 +14,32 @@ import { runEvalTestCaseUpdate } from "./eval/test-case/update.js";
 import { runEvalTestCaseDelete } from "./eval/test-case/delete.js";
 
 export function registerEvalCommand(program: Command): void {
+  addEvalRunOptions(
+    program
+      .command("evals")
+      .description(
+        "Start an evaluation run against a running Computer. Prompts for missing values in a TTY; fails fast in non-interactive sessions.",
+      ),
+  )
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork evals
+  $ thinkwork evals --computer comp-abc --category red-team-safety-scope
+`,
+    )
+    .action(runEvalRun);
+
   const evals = program
     .command("eval")
-    .alias("evals")
     .description(
       "Run evaluations against running Computers and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
     );
 
-  evals
-    .command("run")
+  addEvalRunOptions(evals.command("run"))
     .description(
       "Start an evaluation run. Prompts for missing values in a TTY; fails fast in non-interactive sessions.",
-    )
-    .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .option("-r, --region <region>", "AWS region", "us-east-1")
-    .option("--computer <id>", "Running Computer ID to evaluate")
-    .option("--model <id>", "Optional model override")
-    .option("--category <name...>", "Only run these categories (repeatable)")
-    .option(
-      "--test-case <id...>",
-      "Only run these specific test case IDs (repeatable)",
-    )
-    .option("--all", "Run all enabled test cases for the tenant")
-    .option("--watch", "Block and poll until the run reaches a terminal status")
-    .option(
-      "--timeout <seconds>",
-      "Max wait seconds for --watch (default 900)",
-      "900",
     )
     .addHelpText(
       "after",
@@ -208,4 +206,25 @@ Examples:
     .option("-r, --region <region>", "AWS region", "us-east-1")
     .option("-y, --yes", "Skip the confirmation prompt")
     .action(runEvalTestCaseDelete);
+}
+
+function addEvalRunOptions(command: Command): Command {
+  return command
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .option("-r, --region <region>", "AWS region", "us-east-1")
+    .option("--computer <id>", "Running Computer ID to evaluate")
+    .option("--model <id>", "Optional model override")
+    .option("--category <name...>", "Only run these categories (repeatable)")
+    .option(
+      "--test-case <id...>",
+      "Only run these specific test case IDs (repeatable)",
+    )
+    .option("--all", "Run all enabled test cases for the tenant")
+    .option("--watch", "Block and poll until the run reaches a terminal status")
+    .option(
+      "--timeout <seconds>",
+      "Max wait seconds for --watch (default 900)",
+      "900",
+    );
 }
