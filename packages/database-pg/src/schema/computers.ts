@@ -21,6 +21,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core.js";
 import { agents } from "./agents.js";
 import { agentTemplates } from "./agent-templates.js";
+import { teams } from "./teams.js";
 
 export const computers = pgTable(
   "computers",
@@ -31,14 +32,15 @@ export const computers = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    owner_user_id: uuid("owner_user_id")
-      .references(() => users.id, { onDelete: "cascade" })
-      .notNull(),
+    owner_user_id: uuid("owner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     template_id: uuid("template_id")
       .references(() => agentTemplates.id)
       .notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    scope: text("scope").notNull().default("shared"),
     status: text("status").notNull().default("active"),
     desired_runtime_status: text("desired_runtime_status")
       .notNull()
@@ -77,14 +79,20 @@ export const computers = pgTable(
   },
   (table) => [
     uniqueIndex("uq_computers_tenant_slug").on(table.tenant_id, table.slug),
-    uniqueIndex("uq_computers_active_owner")
-      .on(table.tenant_id, table.owner_user_id)
-      .where(sql`${table.status} <> 'archived'`),
     index("idx_computers_tenant_status").on(table.tenant_id, table.status),
+    index("idx_computers_tenant_scope_status").on(
+      table.tenant_id,
+      table.scope,
+      table.status,
+    ),
     index("idx_computers_owner").on(table.owner_user_id),
     index("idx_computers_template").on(table.template_id),
     index("idx_computers_migrated_agent").on(table.migrated_from_agent_id),
     index("idx_computers_primary_agent").on(table.primary_agent_id),
+    check(
+      "computers_scope_allowed",
+      sql`${table.scope} IN ('shared','historical_personal')`,
+    ),
     check(
       "computers_status_allowed",
       sql`${table.status} IN ('active','provisioning','failed','archived')`,
@@ -96,6 +104,70 @@ export const computers = pgTable(
     check(
       "computers_runtime_status_allowed",
       sql`${table.runtime_status} IN ('pending','starting','running','stopped','failed','unknown')`,
+    ),
+  ],
+);
+
+export const computerAssignments = pgTable(
+  "computer_assignments",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    computer_id: uuid("computer_id")
+      .references(() => computers.id, { onDelete: "cascade" })
+      .notNull(),
+    subject_type: text("subject_type").notNull(),
+    user_id: uuid("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    team_id: uuid("team_id").references(() => teams.id, {
+      onDelete: "cascade",
+    }),
+    role: text("role").notNull().default("member"),
+    assigned_by_user_id: uuid("assigned_by_user_id").references(
+      () => users.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_computer_assignments_user")
+      .on(table.tenant_id, table.computer_id, table.user_id)
+      .where(sql`${table.user_id} IS NOT NULL`),
+    uniqueIndex("uq_computer_assignments_team")
+      .on(table.tenant_id, table.computer_id, table.team_id)
+      .where(sql`${table.team_id} IS NOT NULL`),
+    index("idx_computer_assignments_computer").on(table.computer_id),
+    index("idx_computer_assignments_tenant_user").on(
+      table.tenant_id,
+      table.user_id,
+    ),
+    index("idx_computer_assignments_tenant_team").on(
+      table.tenant_id,
+      table.team_id,
+    ),
+    check(
+      "computer_assignments_subject_type_allowed",
+      sql`${table.subject_type} IN ('user','team')`,
+    ),
+    check(
+      "computer_assignments_subject_matches_target",
+      sql`(
+        (${table.subject_type} = 'user' AND ${table.user_id} IS NOT NULL AND ${table.team_id} IS NULL)
+        OR
+        (${table.subject_type} = 'team' AND ${table.team_id} IS NOT NULL AND ${table.user_id} IS NULL)
+      )`,
     ),
   ],
 );
@@ -232,7 +304,34 @@ export const computersRelations = relations(computers, ({ one, many }) => ({
     fields: [computers.migrated_from_agent_id],
     references: [agents.id],
   }),
+  assignments: many(computerAssignments),
   tasks: many(computerTasks),
   events: many(computerEvents),
   snapshots: many(computerSnapshots),
 }));
+
+export const computerAssignmentsRelations = relations(
+  computerAssignments,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [computerAssignments.tenant_id],
+      references: [tenants.id],
+    }),
+    computer: one(computers, {
+      fields: [computerAssignments.computer_id],
+      references: [computers.id],
+    }),
+    user: one(users, {
+      fields: [computerAssignments.user_id],
+      references: [users.id],
+    }),
+    team: one(teams, {
+      fields: [computerAssignments.team_id],
+      references: [teams.id],
+    }),
+    assignedBy: one(users, {
+      fields: [computerAssignments.assigned_by_user_id],
+      references: [users.id],
+    }),
+  }),
+);

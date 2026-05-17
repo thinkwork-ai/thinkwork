@@ -181,7 +181,7 @@ async function loadUserPairedAgents(tenantId: string) {
 }
 
 async function loadExistingComputers(tenantId: string) {
-  return db
+  const rows = await db
     .select({
       id: computers.id,
       tenant_id: computers.tenant_id,
@@ -190,5 +190,12 @@ async function loadExistingComputers(tenantId: string) {
       status: computers.status,
     })
     .from(computers)
-    .where(eq(computers.tenant_id, tenantId));
+    .where(
+      and(eq(computers.tenant_id, tenantId), isNotNull(computers.owner_user_id)),
+    );
+
+  return rows.map((row) => ({
+    ...row,
+    owner_user_id: row.owner_user_id!,
+  }));
 }

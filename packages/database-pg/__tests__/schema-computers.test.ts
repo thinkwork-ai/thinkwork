@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import {
+  computerAssignments,
   computerEvents,
   computerSnapshots,
   computerTasks,
@@ -14,12 +15,28 @@ describe("ThinkWork Computer schema", () => {
 
     expect(getTableName(computers)).toBe("computers");
     expect(columns.tenant_id.notNull).toBe(true);
-    expect(columns.owner_user_id.notNull).toBe(true);
+    expect(columns.owner_user_id.notNull).toBe(false);
     expect(columns.template_id.notNull).toBe(true);
+    expect(columns.scope.notNull).toBe(true);
+    expect(columns.scope.default).toBe("shared");
     expect(columns.status.notNull).toBe(true);
     expect(columns.desired_runtime_status.notNull).toBe(true);
     expect(columns.runtime_status.notNull).toBe(true);
     expect(columns.migrated_from_agent_id.notNull).toBe(false);
+  });
+
+  it("defines shared Computer assignment records", () => {
+    const columns = getTableColumns(computerAssignments);
+
+    expect(getTableName(computerAssignments)).toBe("computer_assignments");
+    expect(columns.tenant_id.notNull).toBe(true);
+    expect(columns.computer_id.notNull).toBe(true);
+    expect(columns.subject_type.notNull).toBe(true);
+    expect(columns.user_id.notNull).toBe(false);
+    expect(columns.team_id.notNull).toBe(false);
+    expect(columns.role.notNull).toBe(true);
+    expect(columns.role.default).toBe("member");
+    expect(columns.assigned_by_user_id.notNull).toBe(false);
   });
 
   it("defines Computer-owned work tables for later runtime phases", () => {

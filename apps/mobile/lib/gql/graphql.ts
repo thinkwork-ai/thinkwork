@@ -897,10 +897,11 @@ export type Computer = {
   migrationMetadata?: Maybe<Scalars['AWSJSON']['output']>;
   name: Scalars['String']['output'];
   owner?: Maybe<User>;
-  ownerUserId: Scalars['ID']['output'];
+  ownerUserId?: Maybe<Scalars['ID']['output']>;
   primaryAgentId?: Maybe<Scalars['ID']['output']>;
   runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
   runtimeStatus: ComputerRuntimeStatus;
+  scope: ComputerScope;
   slug: Scalars['String']['output'];
   sourceAgent?: Maybe<Agent>;
   spentMonthlyCents?: Maybe<Scalars['Int']['output']>;
@@ -910,6 +911,29 @@ export type Computer = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export type ComputerAssignment = {
+  __typename?: 'ComputerAssignment';
+  assignedBy?: Maybe<User>;
+  assignedByUserId?: Maybe<Scalars['ID']['output']>;
+  computer?: Maybe<Computer>;
+  computerId: Scalars['ID']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  role: Scalars['String']['output'];
+  subjectType: ComputerAssignmentSubjectType;
+  team?: Maybe<Team>;
+  teamId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  user?: Maybe<User>;
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum ComputerAssignmentSubjectType {
+  Team = 'TEAM',
+  User = 'USER'
+}
 
 export enum ComputerDesiredRuntimeStatus {
   Running = 'RUNNING',
@@ -942,6 +966,11 @@ export enum ComputerRuntimeStatus {
   Starting = 'STARTING',
   Stopped = 'STOPPED',
   Unknown = 'UNKNOWN'
+}
+
+export enum ComputerScope {
+  HistoricalPersonal = 'HISTORICAL_PERSONAL',
+  Shared = 'SHARED'
 }
 
 export enum ComputerStatus {
@@ -1159,8 +1188,9 @@ export type CreateComputerInput = {
   migratedFromAgentId?: InputMaybe<Scalars['ID']['input']>;
   migrationMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
-  ownerUserId: Scalars['ID']['input'];
+  ownerUserId?: InputMaybe<Scalars['ID']['input']>;
   runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  scope?: InputMaybe<ComputerScope>;
   slug?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
@@ -6022,7 +6052,7 @@ export type ComputersQueryVariables = Exact<{
 }>;
 
 
-export type ComputersQuery = { __typename?: 'Query', computers: Array<{ __typename?: 'Computer', id: string, name: string, slug: string, status: ComputerStatus, runtimeStatus: ComputerRuntimeStatus, ownerUserId: string }> };
+export type ComputersQuery = { __typename?: 'Query', computers: Array<{ __typename?: 'Computer', id: string, name: string, slug: string, status: ComputerStatus, runtimeStatus: ComputerRuntimeStatus, ownerUserId?: string | null }> };
 
 export type TeamsQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];

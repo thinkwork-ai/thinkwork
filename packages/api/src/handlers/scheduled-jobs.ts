@@ -688,7 +688,7 @@ async function fireScheduledJob(
     // working without re-creating the row.
     let computer: {
       id: string;
-      ownerUserId: string;
+      ownerUserId: string | null;
       migratedAgentId: string | null;
     } | null = null;
 

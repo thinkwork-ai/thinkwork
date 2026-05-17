@@ -64,6 +64,15 @@ export class ComputerTaskDelegationError extends Error {
   }
 }
 
+export class ComputerOwnerRequiredError extends Error {
+  constructor(readonly computerId: string) {
+    super(
+      `Computer ${computerId} has no owner_user_id; requester-scoped credential resolution is required for shared Computers.`,
+    );
+    this.name = "ComputerOwnerRequiredError";
+  }
+}
+
 export async function resolveComputerRuntimeConfig(input: {
   tenantId: string;
   computerId: string;
@@ -454,10 +463,11 @@ export async function checkGoogleWorkspaceConnection(input: {
   computerId: string;
 }) {
   const computer = await loadComputer(input.tenantId, input.computerId);
+  const ownerUserId = requireComputerOwnerUserId(computer);
   const checkedAt = new Date().toISOString();
   const connection = await resolveConnectionForUser(
     computer.tenant_id,
-    computer.owner_user_id,
+    ownerUserId,
     "google_productivity",
   );
 
@@ -497,10 +507,11 @@ export async function resolveGoogleWorkspaceCliToken(input: {
   computerId: string;
 }) {
   const computer = await loadComputer(input.tenantId, input.computerId);
+  const ownerUserId = requireComputerOwnerUserId(computer);
   const checkedAt = new Date().toISOString();
   const connection = await resolveConnectionForUser(
     computer.tenant_id,
-    computer.owner_user_id,
+    ownerUserId,
     "google_productivity",
   );
 
@@ -1149,6 +1160,15 @@ async function loadComputer(tenantId: string, computerId: string) {
     .limit(1);
   if (!computer) throw new ComputerNotFoundError(computerId);
   return computer;
+}
+
+function requireComputerOwnerUserId(
+  computer: Awaited<ReturnType<typeof loadComputer>>,
+) {
+  if (!computer.owner_user_id) {
+    throw new ComputerOwnerRequiredError(computer.id);
+  }
+  return computer.owner_user_id;
 }
 
 function missingGoogleCalendarScopes(grantedScopes: string[]) {
