@@ -3,7 +3,7 @@ title: Company Brain
 description: The harness-owned context substrate for ThinkWork agents — memory, compiled pages, knowledge bases, workspace files, and approved tools behind one inspectable layer.
 ---
 
-import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
 Company Brain is the context substrate agents use before they act. It is not a single database, vector index, or chat-history trick. It is the ThinkWork-owned layer that decides what an agent should know for the current turn, where each fact came from, how fresh it is, and whether it is durable enough to carry forward.
 
@@ -21,22 +21,34 @@ Company Brain is an umbrella over several source families. Operators see them to
 
 <CardGrid>
   <Card title="Memory" icon="seti:bookmark">
-    Durable facts, preferences, and observations retained from prior work. Hindsight and AgentCore Memory are adapter implementations below the ThinkWork memory contract.
+    Durable facts, preferences, and observations retained from prior work.
+    Hindsight and AgentCore Memory are adapter implementations below the
+    ThinkWork memory contract.
   </Card>
   <Card title="Pages" icon="graph">
-    Compiled Company Brain pages: entity, topic, and decision pages distilled from memory records and source citations.
+    Compiled Company Brain pages: entity, topic, and decision pages distilled
+    from memory records and source citations.
+  </Card>
+  <Card title="Business Ontology" icon="setting">
+    Tenant-governed business types, relationships, facet templates, and mappings
+    that shape shared Brain materialization.
   </Card>
   <Card title="Knowledge Bases" icon="open-book">
-    Operator-curated documents backed by Bedrock Knowledge Bases and Aurora pgvector. Best for policies, runbooks, product docs, and other authored source material.
+    Operator-curated documents backed by Bedrock Knowledge Bases and Aurora
+    pgvector. Best for policies, runbooks, product docs, and other authored
+    source material.
   </Card>
   <Card title="Workspace Files" icon="file">
-    Permissioned files from an agent workspace, template workspace, or tenant defaults.
+    Permissioned files from an agent workspace, template workspace, or tenant
+    defaults.
   </Card>
   <Card title="Approved MCP Tools" icon="setting">
-    Read-only, search-safe external tools that an admin has explicitly allowed to participate in context lookup.
+    Read-only, search-safe external tools that an admin has explicitly allowed
+    to participate in context lookup.
   </Card>
   <Card title="Source Routing" icon="search">
-    The internal `query_context` contract that fans out to eligible sources and returns normalized hits plus per-source status.
+    The internal `query_context` contract that fans out to eligible sources and
+    returns normalized hits plus per-source status.
   </Card>
 </CardGrid>
 
@@ -83,24 +95,30 @@ Company Brain treats source trust as a product concern, not a prompt afterthough
 
 - **Authored knowledge** comes from operator-managed documents and keeps file/chunk citations.
 - **Memory** comes from prior work and keeps adapter/source references.
+- **Ontology** defines approved business meaning before it changes durable Brain structure.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
 - **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
 
 <Aside type="note">
-The internal Context Engine service and `query_context` tool are still the developer contract behind Company Brain source routing. Product-facing docs use Company Brain; API reference docs still name the exact contract developers call.
+  The internal Context Engine service and `query_context` tool are still the
+  developer contract behind Company Brain source routing. Product-facing docs
+  use Company Brain; API reference docs still name the exact contract developers
+  call.
 </Aside>
 
 ## Admin Surface
 
 In Admin, Company Brain lives at `/knowledge` and has four tabs:
 
-| Tab | Purpose |
-|---|---|
-| Memory | Browse, search, edit, and visualize retained memory records |
-| Pages | Inspect compiled Company Brain pages and graph/search output |
-| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status |
-| Sources | Configure and verify the provider layer used by `query_context` |
+| Tab             | Purpose                                                         |
+| --------------- | --------------------------------------------------------------- |
+| Memory          | Browse, search, edit, and visualize retained memory records     |
+| Pages           | Inspect compiled Company Brain pages and graph/search output    |
+| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status           |
+| Sources         | Configure and verify the provider layer used by `query_context` |
+
+Ontology Studio lives under **Manage → Ontology** because it governs tenant-level business vocabulary rather than one source family. Operators use it to scan for suggestions, review change sets, approve definitions, and monitor reprocess jobs.
 
 The route path still says `/knowledge` for compatibility, but the visible module name is Company Brain.
 
@@ -109,6 +127,7 @@ The route path still says `/knowledge` for compatibility, but the visible module
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and Bedrock KBs
 - [Memory Facet](/concepts/knowledge/memory/) — retained facts and memory backends
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
+- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for Brain materialization
 - [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
 - [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how `query_context` assembles source hits

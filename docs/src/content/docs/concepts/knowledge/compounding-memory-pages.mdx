@@ -1,9 +1,9 @@
 ---
-title: 'Company Brain Page Model'
+title: "Company Brain Page Model"
 description: What a Company Brain page is made of — sections, aliases, links, unresolved mentions, sources — and how they all fit together.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 A page is the smallest unit of compiled Company Brain knowledge. When you ask your agent "what do you know about Austin?", it opens a page. When you tap a memory in the mobile app, you can see the pages that memory helps build. Pages are where traceability becomes concrete: every page links back to the source memories that wrote it, every section is dated, every mention is resolvable — there is no "where did the agent get this" mystery.
 
@@ -24,7 +24,9 @@ A page has:
 - A **last-compiled timestamp** — when the agent last touched this page.
 - A **status** — active or archived.
 
-Every page belongs to exactly one agent. Two agents in the same workspace can each have a page called "Austin, Texas" and those are two different pages, not the same one.
+Owner-scoped compiled wiki pages belong to exactly one agent. Two agents in the same workspace can each have a page called "Austin, Texas" and those are two different pages, not the same one.
+
+The business ontology introduces a tenant-shared Brain substrate alongside that owner-scoped wiki. Tenant entity pages are materialized from approved ontology definitions and cited source material so agents can retrieve shared business/domain context without collapsing every personal wiki page into a global namespace.
 
 ## Sections
 
@@ -40,9 +42,15 @@ The default sections depend on page type:
 
 The planner isn't locked into these defaults. If a batch of memories clearly justifies a section called `food_recommendations` on an entity page, the planner can propose it and the compiler will write it. The defaults just bias toward consistency.
 
+### Ontology-backed facets
+
+Approved [Business Ontology](/concepts/knowledge/business-ontology/) facet templates are the governed version of page sections for tenant-shared Brain pages. A `customer` entity type can define facets such as `overview`, `commitments`, `risks`, and `stakeholders`; an `opportunity` type can define a different set.
+
+Facet templates carry ordering, source-priority rules, prompts/guidance, and lifecycle state. During ontology reprocess, the materializer uses approved templates to write or preserve sections from cited source evidence. That means a template change can reshape both future Brain output and already-materialized business pages once its reprocess job succeeds.
+
 ### Rollup sections
 
-Some sections are *rollups* — their body is a list of links to other pages in the scope. When the aggregation pass emits `parentSectionUpdates` with `linked_page_slugs` populated, the compiler skips the section writer and renders the body deterministically:
+Some sections are _rollups_ — their body is a list of links to other pages in the scope. When the aggregation pass emits `parentSectionUpdates` with `linked_page_slugs` populated, the compiler skips the section writer and renders the body deterministically:
 
 ```markdown
 - [**Franklin Barbecue**](/wiki/entity/franklin-barbecue) — BBQ joint in Austin, TX.
@@ -56,6 +64,7 @@ Every bullet is a real markdown link pointing at `/wiki/<type>/<slug>` — the m
 When a rollup section gets dense, coherent, and durable enough — more than about 15 linked children, 20+ supporting records, 30+ days of evidence, and visible tag overlap — the aggregation pass promotes it into its own topic page.
 
 The promotion:
+
 1. Creates a new topic page with the promoted section's content.
 2. Sets `parent_page_id` on the new page, pointing back at the original.
 3. Writes `parent_of` / `child_of` link rows so graph traversal works both directions.
@@ -111,13 +120,14 @@ On top of planner-emitted references, two deterministic emitters write additiona
 
 The context tags exist so the deterministic rows can be dropped cleanly — a single `DELETE FROM wiki_page_links WHERE context LIKE 'deterministic:%' OR context LIKE 'co_mention:%'` scopes a rollback without touching planner-emitted references. See [the pipeline doc](/concepts/knowledge/compounding-memory-pipeline/#step-17b--deterministic-link-emission) for the rules, and `docs/metrics/wiki-link-density.md` in the repo for the rollback SQL.
 
-Links only exist between pages in the same scope. An agent can't link to another agent's page, even in the same workspace.
+Links only exist between pages in the same scope. An agent can't link to another agent's owner-scoped wiki page, even in the same workspace. Tenant-shared ontology Brain pages use the approved ontology vocabulary for business relationships and remain separate from another agent's private page namespace.
 
 ## Unresolved mentions
 
 When the planner sees a name it can't confidently place, it doesn't create a page. It holds the name as an **unresolved mention**.
 
 The row tracks:
+
 - The alias as it appeared ("Chef João").
 - A normalized version ("chef joao") for matching.
 - How many times it's been seen.
@@ -163,7 +173,9 @@ To actually purge a page — including its provenance rows — it has to be hard
 
 - [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the product-level overview
 - [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how pages get written
+- [Business Ontology](/concepts/knowledge/business-ontology/) — how approved business definitions shape tenant Brain pages
 - [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — hands-on recipes
+- [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess operations
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 
 ---
@@ -184,10 +196,10 @@ All defined in `packages/database-pg/src/schema/wiki.ts`:
       "linked_page_ids": ["<uuid>", "..."],
       "supporting_record_count": 12,
       "first_source_at": "2026-04-01T00:00:00Z",
-      "last_source_at":  "2026-04-19T00:00:00Z",
-      "observed_tags":   ["bbq", "food"],
+      "last_source_at": "2026-04-19T00:00:00Z",
+      "observed_tags": ["bbq", "food"],
       "promotion_status": "none|candidate|promoted|suppressed",
-      "promotion_score":  0.62,
+      "promotion_score": 0.62,
       "promoted_page_id": null
     }
     ```
@@ -199,13 +211,15 @@ All defined in `packages/database-pg/src/schema/wiki.ts`:
 - `wiki_compile_jobs` — the job ledger. Metrics JSON captures leaf stats, aggregation stats (`parent_sections_updated`, `sections_promoted`, `deterministic_parents_derived`, `aggregation_planner_calls`, `aggregation_input_tokens`, `aggregation_output_tokens`, `aggregation_error`), and densification + dedupe stats (`links_written_deterministic`, `links_written_co_mention`, `duplicate_candidates_count`, `alias_dedup_merged`, `fuzzy_dedupe_merges`, `deterministic_linking_flag_suppressed`).
 - `wiki_compile_cursors` — per-scope pagination state, composite primary key `(tenant_id, owner_id)`.
 
+Ontology-backed Brain materialization uses separate tables under the ontology schema: `ontology_entity_types`, `ontology_relationship_types`, `ontology_facet_templates`, `ontology_external_mappings`, `ontology_change_sets`, `ontology_suggestion_scan_jobs`, and `ontology_reprocess_jobs`. Keep that separation in mind when debugging: wiki compile jobs explain owner-scoped page output; ontology reprocess jobs explain tenant-shared business Brain output.
+
 ### Page template defaults
 
 ```ts
 // packages/api/src/lib/wiki/templates.ts (shape)
-entity:   ['overview', 'notes', 'visits', 'related']
-topic:    ['summary', 'highlights', 'related_entities', 'recent']
-decision: ['context', 'decision', 'rationale', 'consequences']
+entity: ["overview", "notes", "visits", "related"];
+topic: ["summary", "highlights", "related_entities", "recent"];
+decision: ["context", "decision", "rationale", "consequences"];
 ```
 
 ### Search query shape

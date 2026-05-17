@@ -3,9 +3,14 @@ title: Company Brain Graph Direction
 description: What graph-shaped Company Brain data ThinkWork already ships and where typed-relationship semantics are headed next.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork does not have that full typed layer yet. But Company Brain already has graph-shaped data: page links, aliases, co-mentions, parent/child page relationships, and memory graph views. That graph shape is how traceability scales beyond a single thread.
+When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — _Person_ `worksAt` _Company_, _Dish_ `servedAt` _Restaurant_. ThinkWork now approaches that through two layers:
+
+- the existing compiled-page graph: page links, aliases, co-mentions, parent/child page relationships, and memory graph views;
+- the governed [Business Ontology](/concepts/knowledge/business-ontology/): approved entity types, relationship types, facet templates, mappings, and reprocess jobs that shape tenant-shared Brain materialization.
+
+Those layers are related, but not identical. The page graph gives traceability and navigation. The ontology gives the tenant a reviewed business vocabulary before typed semantics affect page templates or agent retrieval.
 
 ## What ThinkWork already builds
 
@@ -20,30 +25,36 @@ Every edge is stored in `wiki_page_links` with a `context` tag recording what ca
 
 The page graph is queryable today — `wiki_page_links` indexes on both endpoints, and the admin app's wiki browser renders it as a graph visualization.
 
-## What's missing — typed semantics
+## Typed semantics now flow through ontology
 
-What the graph currently lacks is a **predicate** layer. An edge knows that page A references page B; it doesn't know *how*. "Taberna dos Mercadores → Lisbon" is a reference edge the same way "Chef João → Taberna dos Mercadores" is, even though the first means "located in" and the second means "works at." That's a real limitation: it makes query-time reasoning harder ("find me everyone who worked at restaurants in Lisbon") and it forces the agent to infer relationship semantics from page context every time.
+The legacy page-link graph still uses compact link kinds: `reference`, `parent_of`, and `child_of`. A `reference` edge knows that page A references page B; it does not necessarily know _how_. "Taberna dos Mercadores → Lisbon" and "Chef João → Taberna dos Mercadores" can both be references even though one reads like "located in" and the other like "works at."
 
-Typed relationships are the next layer of depth — not a rewrite of what exists today. The shape we're converging toward:
+Typed meaning now starts in the ontology rather than in ad hoc link rows. Approved relationship types define the tenant's business predicates, and approved facet templates tell materialization how to shape entity pages. Reprocess jobs then apply those definitions to the tenant-shared Brain, while the existing `wiki_page_links` table remains compatible with owner-scoped compiled pages and current graph navigation.
+
+The direction from here is additive:
 
 - **Edge type column.** `wiki_page_links.edge_type` becomes a richer enum with values like `located_in`, `works_at`, `owns`, `authored`, `member_of`, `mentions`, `derived_from`.
 - **Structured properties on edges.** `(A `located_in` B, since=2024-Q3, confidence=0.8)` — not every edge needs this, but for dated relationships and hedged claims it matters.
-- **Planner-written types.** The leaf planner will emit `edge_type` alongside the source memory citation. The section writer already cites memories per section; the planner will cite memories per edge type as well.
-- **Retrieval surfaces that use types.** The memory-retrieval tool grows `recall_by_edge_type` (or similar) so agents can ask graph-shaped questions directly.
+- **Planner-written types.** Future planners can emit ontology-backed relationship slugs alongside source memory citations instead of inventing predicates freely.
+- **Retrieval surfaces that use types.** The Brain Context provider and split `query_brain_context` tool already give agents an ontology-shaped business retrieval surface. Future graph-specific retrieval can build on approved relationship definitions.
 
-None of this rewrites what's already shipped. The current `reference` edges stay; typed edges layer on top.
+None of this rewrites what's already shipped. Current `reference` edges stay; governed typed semantics layer on top.
 
 ## Why this order
 
-Shipping the graph before the types isn't accidental. Typed edges in an agent system are hard to get right in isolation — the model invents predicates that look useful on paper but don't hold up in recall, or it commits to an ontology that doesn't match the data's real shape. Shipping untyped edges first gives us the corpus to measure against before committing to a type vocabulary. The deterministic emitters, in particular, were built so we could measure link density and recall quality *before* asking the planner to commit to semantics.
+Shipping the graph before the ontology wasn't accidental. Typed edges in an agent system are hard to get right in isolation — the model invents predicates that look useful on paper but don't hold up in recall, or it commits to an ontology that doesn't match the data's real shape. Shipping untyped edges first gave us the corpus to measure against before committing to a type vocabulary. The deterministic emitters, in particular, were built so we could measure link density and recall quality _before_ asking the planner to commit to semantics.
 
 <Aside type="note">
-  If you're designing an agent today that relies on typed-relationship retrieval, don't wait for this layer — build it in your own skill pack or downstream service. The wiki API exposes pages, links, and sources; your skill pack can layer its own ontology over them. That's the right pattern until typed edges land natively.
+  If you're designing a tenant business vocabulary, use Ontology Studio and the
+  change-set loop. If you're designing agent-work events or vertical-pack
+  semantics, reuse that pattern downstream rather than forcing those concepts
+  into the core business ontology.
 </Aside>
 
 ## Related pages
 
 - [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the overview of the page graph that's shipped today
+- [Business Ontology](/concepts/knowledge/business-ontology/) — the governed vocabulary for typed business semantics
 - [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — where `reference` and `parent_of` edges are written
 - [Company Brain Page Model](/concepts/knowledge/compounding-memory-pages/) — the `wiki_page_links` data model
 - [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — how to monitor link density + quality
@@ -55,5 +66,6 @@ Today's graph, concretely:
 - **Edge storage.** `wiki_page_links(from_page_id, to_page_id, kind, context, created_at)` with a unique index on `(from_page_id, to_page_id, kind)` — replays are idempotent.
 - **Edge kinds shipped.** `reference`, `parent_of`, `child_of`.
 - **Edge `context` tags.** `deterministic:city:<slug>`, `deterministic:journal:<slug>`, `co_mention:<memory_unit_id>`, plus planner-emitted free-text rationale.
+- **Ontology storage.** `ontology_entity_types`, `ontology_relationship_types`, `ontology_facet_templates`, `ontology_external_mappings`, `ontology_change_sets`, and `ontology_reprocess_jobs` carry the governed typed vocabulary and application ledger.
 - **Density metrics.** `links_written_deterministic`, `links_written_co_mention`, and `duplicate_candidates_count` on every compile job — see `docs/metrics/wiki-link-density.md` for the baseline snapshots.
 - **Rollback path.** Single `DELETE ... WHERE context LIKE 'deterministic:%'` drops every deterministic edge without touching planner-written references. Same pattern for co-mention edges via their `co_mention:` prefix.
