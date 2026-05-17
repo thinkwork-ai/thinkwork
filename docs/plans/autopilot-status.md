@@ -400,6 +400,43 @@ None.
 
 ## CI / PR
 
+- Opened [#1323](https://github.com/thinkwork-ai/thinkwork/pull/1323).
+- GitHub PR checks on [#1323](https://github.com/thinkwork-ai/thinkwork/pull/1323) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Squash merged [#1323](https://github.com/thinkwork-ai/thinkwork/pull/1323) as `a66362458775395dea07e1ea7479e94a7f30a99e`; Deploy run `25992538831` passed.
+- Live smoke confirmed `threadContext` now includes earlier Slack messages and file refs, and the Slack file is materialized as a ThinkWork `thread_attachments` row linked to the current user message. The response still said no file was available because Marco's Computer runs on the `flue` runtime, while attachment staging only existed in the Strands runtime.
+
+# Flue Slack Attachment Runtime Hotfix - 2026-05-17
+
+## Status
+
+- Branch: `codex/slack-attachment-runtime`
+- Started: `2026-05-17T14:10:00Z`
+- Root cause:
+  - Slack files are now correctly mapped into ThinkWork message attachments, but Marco's Computer resolves to agent runtime `flue`.
+  - `chat-agent-invoke` forwards `message_attachments` to both runtimes, but only the Strands Python runtime staged those S3 attachments into per-turn local files and exposed a `file_read` affordance.
+  - Flue therefore answered from Slack thread text/history alone and could still claim the file was unavailable.
+- Implemented:
+  - Added Flue per-turn message attachment staging from the existing `message_attachments` payload, with tenant/thread S3-key prefix validation and per-turn `/tmp` cleanup.
+  - Added a restricted Flue `file_read` tool that only reads the staged attachment paths for the current turn.
+  - Added an attachment prompt block that explicitly lists attached files, includes text previews for text-like files, and tells the model not to claim no file is attached.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/agentcore-flue test -- agent-container/tests/message-attachments.test.ts agent-container/tests/server.test.ts` - passed.
+- `pnpm --filter @thinkwork/agentcore-flue typecheck` - passed.
+- `pnpm --filter @thinkwork/api test -- src/handlers/slack/events.test.ts src/lib/slack/envelope.test.ts test/integration/slack-acceptance.test.ts` - passed.
+- `pnpm --filter @thinkwork/agentcore-flue test` - passed.
+- `pnpm --filter @thinkwork/agentcore-flue build` - passed.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check ...` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+
+## CI / PR
+
 - Pending: commit, PR, CI, squash merge, deploy, and live Slack smoke.
 
 ## Blockers

@@ -118,6 +118,59 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  it("stages message attachments, exposes them in the prompt, and adds file_read", async () => {
+    let seenSystemPrompt = "";
+    let seenTools: AgentTool<any>[] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "Summarize the file attached in Slack.",
+        message_attachments: [
+          {
+            attachment_id: "att-1",
+            s3_key: "tenants/tenant-1/attachments/thread-1/att-1/brief.md",
+            name: "brief.md",
+            mime_type: "text/markdown",
+            size_bytes: 128,
+          },
+        ],
+      }),
+      deps: makeDeps({
+        stageMessageAttachmentsImpl: async () => ({
+          turnDir: "/tmp/flue-turn-test/attachments",
+          staged: [
+            {
+              attachmentId: "att-1",
+              localPath: "/tmp/flue-turn-test/attachments/brief.md",
+              name: "brief.md",
+              mimeType: "text/markdown",
+              sizeBytes: 128,
+              textPreview: "# Brief\n\nRevenue grew 12%.",
+            },
+          ],
+        }),
+        runAgentLoop: async ({ systemPrompt, tools }) => {
+          seenSystemPrompt = systemPrompt;
+          seenTools = tools;
+          return {
+            content: "stub response",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: tools.map((t) => t.name),
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(seenSystemPrompt).toContain("Files attached to this turn:");
+    expect(seenSystemPrompt).toContain("Do not say that no file is attached");
+    expect(seenSystemPrompt).toContain(
+      "/tmp/flue-turn-test/attachments/brief.md",
+    );
+    expect(seenSystemPrompt).toContain("Revenue grew 12%.");
+    expect(seenTools.some((tool) => tool.name === "file_read")).toBe(true);
+  });
+
   it("skill_run invocation fires the completion callback exactly once with the camelCase shape + HMAC header", async () => {
     const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
     const fetchImpl: typeof fetch = (async (
@@ -683,6 +736,9 @@ interface MakeDepsOptions {
   connectMcpServerFactory?: ConnectMcpServerFn;
   runAgentLoop?: typeof import("../src/server.js").runAgentLoop;
   fetchImpl?: typeof fetch;
+  stageMessageAttachmentsImpl?: typeof import(
+    "../src/runtime/message-attachments.js"
+  ).stageMessageAttachments;
   /** Hook fired after the agent loop finally block (before returning). */
   onHandlerComplete?: (
     bundle: import("../src/server.js").AssembledToolBundle,
@@ -715,6 +771,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     fetchImpl: opts.fetchImpl,
     runAgentLoop: opts.runAgentLoop ?? stubAgentLoop,
     bootstrapWorkspaceImpl: (async () => {}) as never,
+    stageMessageAttachmentsImpl: opts.stageMessageAttachmentsImpl,
     discoverWorkspaceSkillsImpl: (async () => []) as never,
     onHandlerComplete: opts.onHandlerComplete,
   };
