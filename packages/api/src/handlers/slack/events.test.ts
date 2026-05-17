@@ -46,7 +46,6 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     wasCreated: true,
   }));
   const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
-  const updateTaskInput = vi.fn(async () => {});
   const resolveSlackThread = vi.fn(async () => ({
     threadId: "thread-1",
     messageId: "message-1",
@@ -66,7 +65,6 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   return {
     enqueueTask,
     loadLinkedComputer,
-    updateTaskInput,
     resolveSlackThread,
     slackApi,
     metrics,
@@ -112,7 +110,7 @@ describe("Slack events handler", () => {
     expect(res?.body).toBe("challenge-1");
   });
 
-  it("enqueues linked app mentions with Slack envelope, context, files, and placeholder metadata", async () => {
+  it("enqueues linked app mentions with Slack envelope, context, and files without posting a placeholder", async () => {
     const deps = makeDeps();
     const dispatch = createSlackEventsDispatcher(deps);
 
@@ -166,20 +164,7 @@ describe("Slack events handler", () => {
         }),
       }),
     );
-    expect(deps.slackApi.postMessage).toHaveBeenCalledWith({
-      token: "xoxb-token",
-      channel: "C123",
-      threadTs: "1710000001.000000",
-      text: "Eric's Computer is thinking...",
-    });
-    expect(deps.updateTaskInput).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: "task-1",
-        taskInput: expect.objectContaining({
-          placeholderTs: "1710000002.000000",
-        }),
-      }),
-    );
+    expect(deps.slackApi.postMessage).not.toHaveBeenCalled();
   });
 
   it("accepts direct messages as Slack thread turns", async () => {
@@ -234,7 +219,6 @@ describe("Slack events handler", () => {
       surface: "app_mention",
     });
     expect(deps.slackApi.postMessage).not.toHaveBeenCalled();
-    expect(deps.updateTaskInput).not.toHaveBeenCalled();
   });
 
   it("prompts unlinked Slack users instead of enqueuing Computer work", async () => {
@@ -259,11 +243,11 @@ describe("Slack events handler", () => {
     expect(deps.enqueueTask).not.toHaveBeenCalled();
   });
 
-  it("does not fail enqueue when placeholder posting fails", async () => {
+  it("does not post a placeholder for linked app mentions", async () => {
     const deps = makeDeps({
       slackApi: {
         fetchThreadMessages: vi.fn(async () => []),
-        postMessage: vi.fn(async () => ({ ok: false, error: "channel_error" })),
+        postMessage: vi.fn(async () => ({ ok: true, ts: "1710000002.000000" })),
         sendLinkPrompt: vi.fn(async () => {}),
       },
     });
@@ -273,6 +257,6 @@ describe("Slack events handler", () => {
 
     expect(res.statusCode).toBe(200);
     expect(deps.enqueueTask).toHaveBeenCalledTimes(1);
-    expect(deps.updateTaskInput).not.toHaveBeenCalled();
+    expect(deps.slackApi.postMessage).not.toHaveBeenCalled();
   });
 });
