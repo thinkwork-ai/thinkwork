@@ -22,11 +22,24 @@ Every response includes normalized hits plus provider statuses. Provider failure
 ## Provider Families
 
 - `memory`: user-scoped Hindsight/managed memory recall.
+- `brain`: tenant-shared ontology-shaped Company Brain pages and facets.
 - `wiki`: compiled Company Brain pages.
 - `workspace`: permissioned workspace files for the active target.
 - `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
 - `sub-agent`: read-only sub-agent providers, when enabled by the Company Brain v0 work.
+
+## Brain Provider
+
+The `brain` family is the business/domain Company Brain provider. It searches tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
+
+Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, and the ontology version or reprocess context that shaped the materialized output.
+
+Brain is intentionally separate from:
+
+- `memory`, which reads raw retained observations through Hindsight or the configured memory backend;
+- `wiki`, which reads owner-scoped compiled pages;
+- authored `knowledge-base` sources, which read operator-uploaded documents.
 
 ## Hindsight Strategy
 
@@ -49,7 +62,9 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 
 Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
-When Company Brain is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context` and `query_wiki_context`. These are still Context Engine tools at the API layer: Hindsight and compiled pages remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+When Company Brain is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context`, `query_wiki_context`, and `query_brain_context`. These are still Context Engine tools at the API layer: Hindsight memory, compiled pages, and ontology-shaped Brain remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+
+`query_brain_context` should be the model's first choice for governed business/domain context. Raw ontology admin APIs are not runtime tools.
 
 ## Admin Verification
 
@@ -61,6 +76,6 @@ Admin operators verify source routing from **Company Brain → Sources**. The te
 - run a query against the same backend Context Engine path used by runtimes;
 - inspect provider statuses, latency, partial failures, top hits, and the full structured response.
 
-Provider failures are expected to be partial. A Hindsight timeout, skipped Bedrock KB, or unavailable MCP adapter should appear as provider-local status while successful providers still return hits.
+Provider failures are expected to be partial. A Hindsight timeout, skipped Bedrock KB, unavailable MCP adapter, or empty Brain result should appear as provider-local status while successful providers still return hits.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.

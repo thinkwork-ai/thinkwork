@@ -1,9 +1,9 @@
 ---
-title: 'Company Brain Compile Pipeline'
+title: "Company Brain Compile Pipeline"
 description: How raw memories become durable Company Brain pages — step by step, in plain language, then in technical detail.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 This doc is a walking tour of how raw memories become Company Brain pages — the distillation layer that turns scattered observations into structured, queryable pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong. The pipeline is the load-bearing implementation of the page promise: reproducible outputs from the same input set and a complete provenance trail from every page back to the source memories that wrote it.
 
@@ -13,14 +13,27 @@ The first half is plain-language narrative. The second half (["Under the hood"](
 
 There are two compile passes that run in the same job:
 
-1. **Leaf pass.** Reads new memories, decides which concrete *entity* pages should be created or updated. Produces pages like `Momofuku Daishō`, `Franklin Barbecue`, `Biscuit (dog)`. This is where most wiki content originates.
-2. **Aggregation pass.** Runs *after* the leaf pass completes. Looks across the agent's recently-changed pages and decides which *hub* topics deserve rollup sections (e.g. `Toronto` with a `Restaurants` section) and which sections have become dense enough to promote into their own page (e.g. a `Restaurants` section on `Austin` promotes into a standalone `Austin Restaurants` topic page).
+1. **Leaf pass.** Reads new memories, decides which concrete _entity_ pages should be created or updated. Produces pages like `Momofuku Daishō`, `Franklin Barbecue`, `Biscuit (dog)`. This is where most wiki content originates.
+2. **Aggregation pass.** Runs _after_ the leaf pass completes. Looks across the agent's recently-changed pages and decides which _hub_ topics deserve rollup sections (e.g. `Toronto` with a `Restaurants` section) and which sections have become dense enough to promote into their own page (e.g. a `Restaurants` section on `Austin` promotes into a standalone `Austin Restaurants` topic page).
 
 Both passes are driven by one compile job. The job is always scoped to one `(tenant, owner)` pair. If anything fails, the cursor stays where it was and the next job safely replays.
 
 <Aside type="tip">
-  If you only remember one thing: **leaf creates entities, aggregation makes them cohere**. The leaf planner is conservative; the aggregation planner is what makes the wiki feel compounded instead of just piled up.
+  If you only remember one thing: **leaf creates entities, aggregation makes
+  them cohere**. The leaf planner is conservative; the aggregation planner is
+  what makes the wiki feel compounded instead of just piled up.
 </Aside>
+
+## Where ontology fits
+
+The compile pipeline still starts from Hindsight memory and writes compiled pages. The [Business Ontology](/concepts/knowledge/business-ontology/) adds a governed meaning layer beside it:
+
+- suggestion scans observe memory, current Brain pages, and external references to propose new entity types, relationship types, facet templates, and mappings;
+- admins approve those proposals as ontology change sets in Ontology Studio;
+- approval queues an ontology reprocess job that applies the approved definitions and materializes tenant-shared Brain pages/facets;
+- future compiles and Brain retrieval use approved templates instead of relying only on generic page defaults.
+
+This means "compile to wiki" is no longer the whole story. Hindsight remains the source memory substrate, owner-scoped compiled wiki pages remain stable, and the ontology-driven Brain becomes the shared business view that can be rebuilt when the tenant vocabulary changes.
 
 ## Pass 1: Leaf compile
 
@@ -71,7 +84,7 @@ The planner never writes to the database. It produces a plan; the compiler appli
 
 ### Step 1.5 — The section writer patches one section at a time
 
-For every section the plan wants to update, the compiler calls a second Bedrock model — the **section writer**. It's narrow: take the existing section markdown, the planner's proposed body, and the specific memories cited — produce final markdown for *this one section only*.
+For every section the plan wants to update, the compiler calls a second Bedrock model — the **section writer**. It's narrow: take the existing section markdown, the planner's proposed body, and the specific memories cited — produce final markdown for _this one section only_.
 
 Before calling, the compiler checks `isMeaningfulChange` — a cheap edit-distance filter that skips sections when the proposal is effectively identical to the stored body. No point burning tokens polishing prose that already says the same thing.
 
@@ -84,7 +97,7 @@ Before the model output is trusted:
 - **`linkifyKnownEntities()`** rewrites `**Entity Name**` bolded mentions into real `[**Entity Name**](/wiki/<type>/<slug>)` markdown links when the name matches a page in scope. Longest-title-first match prevents shadowing.
 - **Invalid `pageLinks`** (bad page types, blank slugs) are dropped with a CloudWatch warning rather than failing the whole plan.
 
-All five filters exist because *some* model has produced the exact failure mode we're guarding against. Prompts are the first line of defense; these repo-level guards are the second.
+All five filters exist because _some_ model has produced the exact failure mode we're guarding against. Prompts are the first line of defense; these repo-level guards are the second.
 
 ### Step 1.7 — Provenance gets written with deliberate care
 
@@ -99,7 +112,7 @@ The fix: zero cited memories means zero source rows. **Blank provenance is alway
 Before creating any page the leaf planner proposed in `newPages[]`, the compiler tries to merge the proposal into an existing page. The match runs in two passes:
 
 1. **Exact alias match.** The proposed title + aliases are normalized and looked up against `wiki_page_aliases` in the same scope. A hit turns the proposal into a `pageUpdate` against the existing page and bumps `alias_dedup_merged`.
-2. **Trigram fuzzy fallback.** If no exact alias matches, the compiler queries `wiki_page_aliases.alias` and `wiki_pages.title` with Postgres `pg_trgm` similarity. Matches at `similarity() >= 0.85` are accepted only when the matched page has the *same* `type` as the proposal — entity into entity, topic into topic. Cross-type fuzzy matches are always rejected. Successful fuzzy merges bump `fuzzy_dedupe_merges`, tracked separately from exact because fuzzy is the over-collapse risk.
+2. **Trigram fuzzy fallback.** If no exact alias matches, the compiler queries `wiki_page_aliases.alias` and `wiki_pages.title` with Postgres `pg_trgm` similarity. Matches at `similarity() >= 0.85` are accepted only when the matched page has the _same_ `type` as the proposal — entity into entity, topic into topic. Cross-type fuzzy matches are always rejected. Successful fuzzy merges bump `fuzzy_dedupe_merges`, tracked separately from exact because fuzzy is the over-collapse risk.
 
 The repo helper is `findAliasMatchesFuzzy` in `packages/api/src/lib/wiki/repository.ts`; it sits on the `pg_trgm` GIN indexes added by migration `0015_pg_trgm_alias_title_indexes.sql`. The helper's internal try/catch makes a missing `pg_trgm` extension a graceful no-match rather than a job failure.
 
@@ -133,17 +146,20 @@ Large backfills naturally spread across multiple jobs — cursor-preserving mean
 ## Pass 2: Aggregation
 
 <Aside type="note">
-  Aggregation is gated behind `WIKI_AGGREGATION_PASS_ENABLED`. When the flag is off (default), the pipeline stops at the leaf pass. Everything below runs only when the flag is on — currently per-agent allowlist until thresholds stabilize.
+  Aggregation is gated behind `WIKI_AGGREGATION_PASS_ENABLED`. When the flag is
+  off (default), the pipeline stops at the leaf pass. Everything below runs only
+  when the flag is on — currently per-agent allowlist until thresholds
+  stabilize.
 </Aside>
 
-The leaf pass ends with fresh entity pages in the scope, but they're not yet *organized*. Marco now has 90 restaurants, events, and places — but there's no "Austin" topic page tying his Austin ones together, no "Restaurants" hub, no rollups you can scroll through. That's what the aggregation pass builds.
+The leaf pass ends with fresh entity pages in the scope, but they're not yet _organized_. Marco now has 90 restaurants, events, and places — but there's no "Austin" topic page tying his Austin ones together, no "Restaurants" hub, no rollups you can scroll through. That's what the aggregation pass builds.
 
 ### Step 2.1 — Derive parent candidates
 
-Two deterministic expanders scan the current job's records + the scope's recently-changed pages to suggest hubs that *obviously* need to exist:
+Two deterministic expanders scan the current job's records + the scope's recently-changed pages to suggest hubs that _obviously_ need to exist:
 
 - **`deriveParentCandidates(records)`** — pulls city, journal, and tag clusters out of raw record metadata. Records with `place.city = "Austin"` group into an Austin candidate. Shared `journal_id`s group into a trip topic. Repeated tags group into a tag-collection hub.
-- **`deriveParentCandidatesFromPageSummaries(pages)`** — scans each scope page's *summary* text for city names. Catches "Korean restaurant in Toronto." style summaries where raw metadata isn't in the current batch. Walks comma-separated postal addresses from the end to pull `Toronto` out of `", Toronto, ON M6J 1G1, Canada."`.
+- **`deriveParentCandidatesFromPageSummaries(pages)`** — scans each scope page's _summary_ text for city names. Catches "Korean restaurant in Toronto." style summaries where raw metadata isn't in the current batch. Walks comma-separated postal addresses from the end to pull `Toronto` out of `", Toronto, ON M6J 1G1, Canada."`.
 
 Both expanders are cheap — no LLM, no extra DB hits beyond the already-hydrated pages. They exist so the LLM gets grounded seed hubs instead of inventing them.
 
@@ -174,7 +190,7 @@ The markdown URL `/wiki/<type>/<slug>` matches the mobile router path. Mobile's 
 
 ### Step 2.4 — Dedupe across sections on the same parent
 
-A single parent page like `Austin Activities` previously listed `Lady Bird Lake Hike & Bike Trail` under *both* `Overview` AND `Outdoor & Family Attractions`. The aggregation planner was emitting the same child under multiple sections.
+A single parent page like `Austin Activities` previously listed `Lady Bird Lake Hike & Bike Trail` under _both_ `Overview` AND `Outdoor & Family Attractions`. The aggregation planner was emitting the same child under multiple sections.
 
 The compiler now tracks `claimedChildrenByParent` per job — first section to claim a child wins; later sections on the same parent drop the duplicate before rendering. The aggregation prompt was also updated to forbid emitting the same child twice.
 
@@ -223,7 +239,7 @@ The score is coarse and monotonic — it's used for ordering, not as a precise r
 
 **Hallucinated IDs.** Covered in [Step 1.6](#step-16--hallucinated-ids-and-stray-wikilinks-get-filtered) — caught at repo boundary, not the prompt.
 
-**Over-grouping in aggregation.** The `Austin Restaurants = Toronto restaurants` bug. Fixed by adding evidence requirements to the prompt *and* showing the planner per-page summaries (previously only titles were visible to the LLM).
+**Over-grouping in aggregation.** The `Austin Restaurants = Toronto restaurants` bug. Fixed by adding evidence requirements to the prompt _and_ showing the planner per-page summaries (previously only titles were visible to the LLM).
 
 **Env vars reset on deploy.** Terraform apply on an unrelated merge re-applies Lambda env config, wiping `WIKI_AGGREGATION_PASS_ENABLED`. Known paper cut; pin in terraform is the fix.
 
@@ -244,11 +260,15 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 - `fuzzy_dedupe_merges` — same, via `pg_trgm` similarity ≥ 0.85 (same-type gate).
 - `deterministic_linking_flag_suppressed` — `true` when `WIKI_DETERMINISTIC_LINKING_ENABLED=false` skipped both emitters.
 
+Ontology reprocess jobs have their own metrics on `ontology_reprocess_jobs.metrics`. Those metrics track applied definitions, mappings, facets, materialized pages, preserved higher-trust sections, and errors from the ontology materializer. Use them when an approved change set did not appear in Brain output.
+
 ## Related pages
 
 - [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the overview
 - [Company Brain Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
+- [Business Ontology](/concepts/knowledge/business-ontology/) — the governed business vocabulary that shapes tenant Brain materialization
 - [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — hands-on recipes
+- [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess recovery workflow
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 
 ---
@@ -262,6 +282,13 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 - **Admin mutation** — `compileWikiNow(tenantId, ownerId, modelId?)` resolver.
 - **Nightly lint** — `packages/api/src/handlers/wiki-lint.ts`.
 - **CLI** — `thinkwork wiki compile --tenant … --owner …`.
+
+Ontology uses a separate trigger path:
+
+- **Suggestion scan** — `startOntologySuggestionScan` inserts an `ontology_suggestion_scan_jobs` row and invokes `ontology-scan`.
+- **Approval reprocess** — `approveOntologyChangeSet` applies an approved ontology version, queues an `ontology_reprocess_jobs` row, and invokes `ontology-reprocess`.
+
+Those jobs can change tenant-shared Brain materialization without advancing an owner-scoped `wiki_compile_cursors` row.
 
 ### Caps (leaf pass)
 
@@ -277,7 +304,7 @@ const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
 ### Caps (aggregation pass)
 
 ```ts
-const MAX_AGGREGATION_PAGES = 60;  // top-N recently-changed pages fed to the aggregation planner
+const MAX_AGGREGATION_PAGES = 60; // top-N recently-changed pages fed to the aggregation planner
 ```
 
 ### Cursor SQL
@@ -299,23 +326,66 @@ WHERE bank_id = ${bankId}
 ```jsonc
 {
   "pageUpdates": [
-    { "pageId": "<uuid>", "sections": [{ "slug": "overview", "proposed_body_md": "...", "source_refs": ["<memory_unit_id>"] }], "aliases": ["..."] }
+    {
+      "pageId": "<uuid>",
+      "sections": [
+        {
+          "slug": "overview",
+          "proposed_body_md": "...",
+          "source_refs": ["<memory_unit_id>"],
+        },
+      ],
+      "aliases": ["..."],
+    },
   ],
   "newPages": [
-    { "type": "entity|topic|decision", "slug": "...", "title": "...", "summary": "...", "aliases": ["..."], "source_refs": ["<memory_unit_id>"],
-      "sections": [{ "slug": "overview", "heading": "Overview", "body_md": "...", "source_refs": ["<memory_unit_id>"] }] }
+    {
+      "type": "entity|topic|decision",
+      "slug": "...",
+      "title": "...",
+      "summary": "...",
+      "aliases": ["..."],
+      "source_refs": ["<memory_unit_id>"],
+      "sections": [
+        {
+          "slug": "overview",
+          "heading": "Overview",
+          "body_md": "...",
+          "source_refs": ["<memory_unit_id>"],
+        },
+      ],
+    },
   ],
   "unresolvedMentions": [
-    { "alias": "Chef João", "suggestedType": "entity", "context": "mentioned when describing…", "source_ref": "<memory_unit_id>" }
+    {
+      "alias": "Chef João",
+      "suggestedType": "entity",
+      "context": "mentioned when describing…",
+      "source_ref": "<memory_unit_id>",
+    },
   ],
   "promotions": [
-    { "mentionId": "<uuid>", "type": "entity", "title": "...", "slug": "...", "sections": [/* same shape */] }
+    {
+      "mentionId": "<uuid>",
+      "type": "entity",
+      "title": "...",
+      "slug": "...",
+      "sections": [
+        /* same shape */
+      ],
+    },
   ],
   "pageLinks": [
-    { "fromType": "entity", "fromSlug": "...", "toType": "topic", "toSlug": "...", "context": "why this link exists" }
+    {
+      "fromType": "entity",
+      "fromSlug": "...",
+      "toType": "topic",
+      "toSlug": "...",
+      "context": "why this link exists",
+    },
   ],
-  "parentSectionUpdates": [],  // reserved for leaf planner, rarely populated
-  "sectionPromotions": []       // same
+  "parentSectionUpdates": [], // reserved for leaf planner, rarely populated
+  "sectionPromotions": [], // same
 }
 ```
 
@@ -328,12 +398,12 @@ WHERE bank_id = ${bankId}
       "pageId": "<parent hub page id>",
       "sectionSlug": "restaurants",
       "heading": "Restaurants",
-      "proposed_body_md": "...",                // ignored when linked_page_slugs is populated
+      "proposed_body_md": "...", // ignored when linked_page_slugs is populated
       "linked_page_slugs": [{ "type": "entity", "slug": "franklin-barbecue" }],
       "source_refs": ["<memory_unit_id>"],
       "observed_tags": ["bbq", "food"],
-      "rationale": "…"
-    }
+      "rationale": "…",
+    },
   ],
   "sectionPromotions": [
     {
@@ -342,11 +412,13 @@ WHERE bank_id = ${bankId}
       "reason": "Section has 20+ linked entities and 30+ days of provenance.",
       "parentSummary": "Short paragraph to leave on the parent section.",
       "topHighlights": ["- Franklin Barbecue", "- Uchi", "- Suerte"],
-      "newPage": { /* same shape as leaf newPages[] */ }
-    }
+      "newPage": {
+        /* same shape as leaf newPages[] */
+      },
+    },
   ],
-  "newPages": [],      // hub topic pages only — banned from creating leaf entities
-  "pageLinks": []
+  "newPages": [], // hub topic pages only — banned from creating leaf entities
+  "pageLinks": [],
   // all other fields forced to [] — aggregation planner is prevented from re-entering the leaf planner's job
 }
 ```
@@ -365,17 +437,33 @@ export function linkifyKnownEntities(body, refs): string { … }
 
 ```ts
 // packages/api/src/lib/wiki/promotion-scorer.ts
-export const DEFAULT_PROMOTION_THRESHOLDS = { candidate: 0.4, promoteReady: 0.55 };
-const WEIGHTS = { linked: 0.25, supporting: 0.25, temporal: 0.2, coherence: 0.15, readability: 0.15 };
-const SATURATION = { linkedPageCount: 20, supportingRecordCount: 30, temporalSpreadDays: 30, bodyLength: 1800 };
+export const DEFAULT_PROMOTION_THRESHOLDS = {
+  candidate: 0.4,
+  promoteReady: 0.55,
+};
+const WEIGHTS = {
+  linked: 0.25,
+  supporting: 0.25,
+  temporal: 0.2,
+  coherence: 0.15,
+  readability: 0.15,
+};
+const SATURATION = {
+  linkedPageCount: 20,
+  supportingRecordCount: 30,
+  temporalSpreadDays: 30,
+  bodyLength: 1800,
+};
 ```
 
 ### Parent expanders
 
 ```ts
 // packages/api/src/lib/wiki/parent-expander.ts
-export function deriveParentCandidates(records): DerivedParentCandidate[];        // record metadata
-export function deriveParentCandidatesFromPageSummaries(pages): DerivedParentCandidate[]; // page summaries
+export function deriveParentCandidates(records): DerivedParentCandidate[]; // record metadata
+export function deriveParentCandidatesFromPageSummaries(
+  pages,
+): DerivedParentCandidate[]; // page summaries
 export function mergeParentCandidates(...lists): DerivedParentCandidate[];
 ```
 
@@ -384,7 +472,7 @@ export function mergeParentCandidates(...lists): DerivedParentCandidate[];
 ```ts
 // packages/api/src/lib/wiki/deterministic-linker.ts
 export async function emitDeterministicParentLinks(args): Promise<number>; // city/journal → parent topic
-export async function emitCoMentionLinks(args): Promise<number>;           // entity ↔ entity via shared memory_unit
+export async function emitCoMentionLinks(args): Promise<number>; // entity ↔ entity via shared memory_unit
 ```
 
 Gated on `WIKI_DETERMINISTIC_LINKING_ENABLED` (default `true`). Context tags `deterministic:city:<slug>`, `deterministic:journal:<slug>`, `co_mention:<memory_unit_id>` make the rows droppable via a single `DELETE ... WHERE context LIKE 'deterministic:%' OR ...` query — see `docs/metrics/wiki-link-density.md` for the rollback SQL.
@@ -393,8 +481,8 @@ Gated on `WIKI_DETERMINISTIC_LINKING_ENABLED` (default `true`). Context tags `de
 
 ```ts
 // packages/api/src/lib/wiki/repository.ts
-export async function findAliasMatches(args): Promise<AliasMatch[]>;       // exact match (existing)
-export async function findAliasMatchesFuzzy(args): Promise<AliasMatch[]>;  // pg_trgm similarity ≥ 0.85
+export async function findAliasMatches(args): Promise<AliasMatch[]>; // exact match (existing)
+export async function findAliasMatchesFuzzy(args): Promise<AliasMatch[]>; // pg_trgm similarity ≥ 0.85
 ```
 
 Backed by migration `packages/database-pg/drizzle/0015_pg_trgm_alias_title_indexes.sql` (`CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN trigram indexes on `wiki_page_aliases.alias` and `wiki_pages.title`). The compiler's `maybeMergeIntoExistingPage` tries exact first, falls through to fuzzy with a strict same-type gate, and returns `"exact" | "fuzzy" | null` so the caller bumps the right metric.

@@ -1,0 +1,109 @@
+---
+title: Business Ontology
+description: How ThinkWork turns retained memory into governed business types, relationships, facets, and tenant-shared Brain pages.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Business ontology is the governed vocabulary that sits between raw memory and the shared Company Brain. It answers a different question from Hindsight and compiled pages:
+
+- **Hindsight is memory.** It keeps retained observations, preferences, events, and source facts.
+- **Ontology is meaning.** It defines the tenant's business types, relationship language, facet templates, and optional standards mappings.
+- **Brain pages are the materialized view.** They are rebuilt from memory using the approved ontology, with provenance back to the facts that supported each section.
+
+The ontology layer exists because "compile memory into a wiki" is too loose by itself. Without a governed vocabulary, the same corpus can produce pages called `Account`, `Customer`, `Client`, `Prospect`, and `Company` with overlapping sections and unclear relationships. Ontology Studio gives operators a review loop before those concepts become durable structure.
+
+## What the ontology owns
+
+The first version is intentionally a business/domain ontology, not an agent-work ontology. Agent workflows, task events, and Symphony ETL can reuse the same change-set pattern later, but this layer is scoped to customer, opportunity, commitment, risk, product, person, and similar business concepts in the Company Brain.
+
+It owns four definition families:
+
+| Family             | Purpose                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Entity types       | Canonical business objects such as `customer`, `opportunity`, `person`, or `product`.                                 |
+| Relationship types | Named links between entity types such as `owns`, `champions`, `blocks`, or `committed_to`.                            |
+| Facet templates    | Section templates that tell Brain materialization what an entity page should contain and which sources have priority. |
+| External mappings  | Optional mappings from ThinkWork-native concepts to outside vocabularies.                                             |
+
+Entity and relationship definitions have lifecycle state: `PROPOSED`, `APPROVED`, `DEPRECATED`, or `REJECTED`. Only approved definitions drive Brain materialization and Context Engine retrieval.
+
+## Suggestion loop
+
+Ontology suggestions are evidence-backed change sets. A scan looks across existing Brain signals and available source references, groups recurring patterns, and proposes one or more change sets.
+
+Each change set records:
+
+- a title, summary, confidence, observed frequency, and expected impact;
+- line items for entity types, relationship types, facet templates, and mappings;
+- evidence examples with source labels, quotes, metadata, and observation timestamps;
+- item-level status so weak items can be removed or held while stronger items move forward.
+
+Operators review the proposal in Admin under **Manage → Ontology**. They can edit names, guidance, JSON payloads, mappings, and templates before approval. Approval is the governance point: it creates or updates the approved ontology definitions and queues one asynchronous reprocess job.
+
+<Aside type="note">
+  Suggestions are advisory. A scan may find no strong recurring patterns, may
+  degrade if a source adapter is unavailable, or may produce a draft that should
+  be rejected. No suggestion affects the Brain until an admin approves it.
+</Aside>
+
+## Change-set lifecycle
+
+Change sets move through a small state machine:
+
+| Status           | Meaning                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| `DRAFT`          | The suggestion engine or an operator created the proposal, but it is not ready for review. |
+| `PENDING_REVIEW` | The proposal is ready for an admin decision.                                               |
+| `APPROVED`       | An admin approved the proposal and an ontology version/reprocess job has been queued.      |
+| `APPLIED`        | Reprocessing applied the approved definitions to the tenant Brain.                         |
+| `REJECTED`       | An admin rejected the proposal; it no longer participates in materialization.              |
+
+Approval and application are separate on purpose. The ontology version can be approved while the reprocess job is still pending, running, or failed. That separation makes partial rollout visible instead of hiding it behind a single "save" action.
+
+## Reprocess behavior
+
+When a change set is approved, ThinkWork queues an ontology reprocess job. The job:
+
+1. applies the approved definition changes into the tenant ontology tables;
+2. resolves approved facet templates for each affected entity type;
+3. materializes tenant-shared Brain pages and sections from cited source material;
+4. preserves higher-trust existing sections when source evidence is not strong enough to replace them;
+5. records impact, metrics, errors, and final status on the job row.
+
+This is how approved ontology changes affect both future and past Brain materialization. Future compiles use the approved templates. Reprocess also revisits existing materialized business pages so operators do not have to wait for new memory to drift the corpus into the new shape.
+
+The current owner-scoped compiled wiki remains compatible with existing page/link behavior. The business ontology adds a tenant-shared Brain substrate on top of those memories; it does not turn every wiki link into an RDF triple or force every agent page to share a global slug.
+
+## Standards mapping stance
+
+ThinkWork stores standards mappings as metadata, not as the canonical product model.
+
+Good mappings help interoperability:
+
+- `customer` can have a broad mapping to Schema.org `Organization`;
+- a relationship can carry an external URI without renaming the ThinkWork predicate;
+- mapping kinds use SKOS-style semantics: `EXACT`, `CLOSE`, `BROAD`, `NARROW`, and `RELATED`;
+- provenance metadata follows the spirit of PROV-O: source kind, source reference, source label, observed time, and evidence quote;
+- definition metadata can carry Dublin Core-style labels, descriptions, and lifecycle timestamps.
+
+The product rule is: **conform where it helps, never contort the tenant vocabulary to satisfy a generic ontology.** Operators should see ThinkWork-native business language first, with standards mappings available for integration and export.
+
+## Where agents consume it
+
+Agents do not call ontology admin APIs directly. They consume the approved ontology through Company Brain:
+
+- the Brain Context provider returns tenant-shared, ontology-shaped entity pages and facets;
+- the split `query_brain_context` tool searches business/domain context such as customers, commitments, risks, relationships, and cited provenance;
+- normal memory lookup still goes through Hindsight-backed memory tools or the `memory` Context Engine provider;
+- compiled wiki pages remain available as the `wiki` provider for owner-scoped page lookup.
+
+This keeps ontology governance in Admin while letting agents benefit from the approved vocabulary at retrieval time.
+
+## Related pages
+
+- [Company Brain](/concepts/knowledge/) — the product boundary around memory, pages, knowledge bases, workspace files, and source routing
+- [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how retained memories become compiled pages
+- [Company Brain Graph Direction](/concepts/knowledge/knowledge-graph/) — how typed relationship semantics fit with existing page links
+- [Company Brain Context API](/api/context-engine/) — the provider contract used by agents and MCP clients
+- [Operating Business Ontology](/guides/business-ontology-operations/) — operator workflow and recovery steps

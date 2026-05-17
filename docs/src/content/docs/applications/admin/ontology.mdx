@@ -1,0 +1,36 @@
+---
+title: Admin — Ontology
+description: "The Manage-section studio for reviewing business ontology suggestions, approving change sets, and monitoring Brain reprocess jobs."
+---
+
+Ontology Studio is the operator surface for governed business/domain vocabulary. It lives under **Manage → Ontology**.
+
+**Route:** `/ontology`  
+**Surfaces:** Change Sets, Definitions, Mappings, Reprocess Jobs
+
+## Why It Exists
+
+Company Brain should not compile raw memory into durable business structure without a review point. Ontology Studio lets admins inspect evidence-backed suggestions, edit weak proposals, approve durable definitions, and watch the async reprocess job that updates tenant-shared Brain pages/facets.
+
+## Surfaces
+
+| Surface        | Purpose                                                                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Change Sets    | Start scans, review suggested entity types, relationships, facet templates, mappings, evidence, confidence, frequency, and impact |
+| Definitions    | Inspect approved entity types, relationship types, and facet templates                                                            |
+| Mappings       | Inspect optional external mappings such as Schema.org or internal vocabularies                                                    |
+| Reprocess Jobs | Check whether approved changes have been applied to Brain materialization                                                         |
+
+## Operational Guidance
+
+- Start with a scan only when you expect recurring business patterns in the corpus.
+- Do not approve a line item without cited evidence.
+- Edit tenant-facing names and guidance before approval; external mappings are metadata, not canonical names.
+- After approval, verify the reprocess job before assuming the Brain has been updated.
+- Use the operations guide when a reprocess job fails or appears to apply fewer pages than expected.
+
+## Related Pages
+
+- [Business Ontology](/concepts/knowledge/business-ontology/) — product model and boundary
+- [Operating Business Ontology](/guides/business-ontology-operations/) — scan, review, approval, and recovery workflow
+- [Company Brain](/applications/admin/knowledge/) — source inspection and Context Engine verification

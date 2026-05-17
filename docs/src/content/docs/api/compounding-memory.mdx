@@ -3,7 +3,7 @@ title: Compiled Pages (API)
 description: Programmatic access to compiled Company Brain pages — reading pages, searching, compiling on demand, and bulk-importing.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Everything you can do with compiled Company Brain pages — reading pages, searching, compiling, importing — is exposed through the GraphQL API. This page tells you what queries exist, who can call them, and what they return.
 
@@ -14,6 +14,7 @@ Start here if you're building a client (the mobile app, an SDK, another service)
 **Read a page** when you know its slug. Returns the full page including every section and alias.
 
 **Search an agent's wiki** with a free-text query. Two flavors:
+
 - Lexical search — looks for your query in titles, summaries, and body text.
 - Ranked wiki search for mobile — uses the same compiled-page FTS path, with prefix matching for partial mobile input.
 
@@ -27,6 +28,8 @@ Start here if you're building a client (the mobile app, an SDK, another service)
 
 **Reset an agent's wiki** (admin only). Clear the cursor, optionally archive pages.
 
+**Govern business ontology** (admin only). Start suggestion scans, review change sets, approve/reject ontology updates, inspect active definitions, and monitor reprocess jobs that materialize tenant-shared Brain pages.
+
 ## Who can call what
 
 All wiki reads are **agent-scoped**. Every query requires `ownerId` (the agent id), and the system checks that you're either that agent yourself or an admin of the tenant.
@@ -35,10 +38,17 @@ There is no tenant-wide read path. If you want to know what's in another agent's
 
 Mutations (`compileWikiNow`, `bootstrapJournalImport`, `resetWikiCursor`) are admin-only across the board.
 
+Ontology queries and mutations are tenant-admin only. They operate on tenant-shared business Brain definitions, not a single agent's owner-scoped wiki.
+
 ## Reading one page
 
 ```graphql
-query GetPage($tenantId: ID!, $ownerId: ID!, $type: WikiPageType!, $slug: String!) {
+query GetPage(
+  $tenantId: ID!
+  $ownerId: ID!
+  $type: WikiPageType!
+  $slug: String!
+) {
   wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
     id
     title
@@ -67,8 +77,19 @@ Two options depending on what you're building.
 
 ```graphql
 query Search($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int = 20) {
-  wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
-    page { id type slug title summary }
+  wikiSearch(
+    tenantId: $tenantId
+    ownerId: $ownerId
+    query: $query
+    limit: $limit
+  ) {
+    page {
+      id
+      type
+      slug
+      title
+      summary
+    }
     score
     matchedAlias
   }
@@ -103,7 +124,9 @@ Mobile search runs through the shared compiled-page FTS helper. It matches activ
 `matchingMemoryIds` is preserved for mobile wire compatibility and is currently always `[]` on this FTS path.
 
 <Aside type="tip">
-If you're building a user-facing wiki browser, use `mobileWikiSearch`. It keeps the mobile response shape while sharing the same compiled-page search behavior as `wikiSearch`.
+  If you're building a user-facing wiki browser, use `mobileWikiSearch`. It
+  keeps the mobile response shape while sharing the same compiled-page search
+  behavior as `wikiSearch`.
 </Aside>
 
 ## Jumping from a memory to its pages
@@ -115,7 +138,9 @@ query MemoriesWithPages($assistantId: ID!, $query: String!) {
   memorySearch(assistantId: $assistantId, query: $query) {
     records {
       memoryRecordId
-      content { text }
+      content {
+        text
+      }
       wikiPages {
         id
         type
@@ -173,7 +198,12 @@ Returns the job row — either a fresh insert, or (if a compile is already runni
 Admin only. Fire-and-forget — the mutation acknowledges immediately, the actual work happens on a dedicated worker Lambda.
 
 ```graphql
-mutation BulkImport($accountId: ID!, $tenantId: ID!, $agentId: ID!, $limit: Int) {
+mutation BulkImport(
+  $accountId: ID!
+  $tenantId: ID!
+  $agentId: ID!
+  $limit: Int
+) {
   bootstrapJournalImport(
     accountId: $accountId
     tenantId: $tenantId
@@ -207,10 +237,130 @@ mutation Reset($tenantId: ID!, $ownerId: ID!, $force: Boolean) {
 
 For a truly clean rebuild (including deleting provenance rows), see [the operations guide](/guides/compounding-memory-operations/#rebuilding-an-agents-wiki-from-scratch).
 
+## Governing business ontology
+
+The business ontology API sits beside compiled-page APIs. It is the admin contract behind **Manage → Ontology**.
+
+```graphql
+query OntologyDefinitions($tenantId: ID!) {
+  ontologyDefinitions(tenantId: $tenantId) {
+    activeVersion {
+      id
+      versionNumber
+      activatedAt
+    }
+    entityTypes {
+      id
+      slug
+      name
+      lifecycleStatus
+    }
+    relationshipTypes {
+      id
+      slug
+      name
+      lifecycleStatus
+    }
+    facetTemplates {
+      id
+      slug
+      heading
+      entityTypeId
+      lifecycleStatus
+    }
+    externalMappings {
+      id
+      subjectKind
+      mappingKind
+      vocabulary
+      externalUri
+    }
+  }
+}
+```
+
+Suggestion scans create evidence-backed change sets:
+
+```graphql
+mutation StartOntologyScan($tenantId: ID!) {
+  startOntologySuggestionScan(
+    input: { tenantId: $tenantId, trigger: "manual" }
+  ) {
+    id
+    status
+    result
+    metrics
+  }
+}
+```
+
+Operators review and edit change sets before approval:
+
+```graphql
+query OntologyChangeSets($tenantId: ID!) {
+  ontologyChangeSets(tenantId: $tenantId, status: PENDING_REVIEW) {
+    id
+    title
+    confidence
+    observedFrequency
+    expectedImpact
+    evidenceExamples {
+      sourceKind
+      sourceLabel
+      quote
+      observedAt
+    }
+    items {
+      id
+      itemType
+      action
+      status
+      title
+      proposedValue
+      editedValue
+    }
+  }
+}
+```
+
+Approval queues asynchronous reprocessing. Track application through the job ledger:
+
+```graphql
+mutation ApproveOntologyChangeSet($tenantId: ID!, $changeSetId: ID!) {
+  approveOntologyChangeSet(
+    input: { tenantId: $tenantId, changeSetId: $changeSetId }
+  ) {
+    id
+    status
+    appliedVersionId
+    approvedAt
+  }
+}
+```
+
+```graphql
+query OntologyReprocessJob($tenantId: ID!, $jobId: ID!) {
+  ontologyReprocessJob(tenantId: $tenantId, jobId: $jobId) {
+    id
+    status
+    attempt
+    input
+    impact
+    metrics
+    error
+    startedAt
+    finishedAt
+  }
+}
+```
+
+See [Operating Business Ontology](/guides/business-ontology-operations/) for review, retry, and failure recovery guidance.
+
 ## Errors
 
 - **Auth or scope failures** surface as `Agent not found or access denied` (mobile paths) or `Forbidden` (admin paths). Scope mismatch is treated as unauthorized, not "not found."
 - **Compile job failures** show up in the job row's `error` field — common ones are `Too many requests` (Bedrock throttling) and adapter-not-implemented errors.
+- **Ontology scan/reprocess failures** show up on `ontologySuggestionScanJob.error` or `ontologyReprocessJob.error`. Approval and application are separate states, so always inspect the reprocess job before assuming approved definitions reached Brain output.
 - **Read paths don't call LLMs,** so they don't see Bedrock errors.
 
 ## Related pages
@@ -218,7 +368,9 @@ For a truly clean rebuild (including deleting provenance rows), see [the operati
 - [Compiled Company Brain Pages](/concepts/knowledge/compounding-memory/) — the overview
 - [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — what compiles do
 - [Company Brain Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
+- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business definitions and materialization
 - [Operating Compiled Company Brain Pages](/guides/compounding-memory-operations/) — hands-on recipes
+- [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess runbook
 - [GraphQL Schema](/api/graphql/) — the full ThinkWork GraphQL API
 
 ---
@@ -229,6 +381,7 @@ For a truly clean rebuild (including deleting provenance rows), see [the operati
 
 - `packages/database-pg/graphql/types/wiki.graphql` — wiki types, queries, mutations
 - `packages/database-pg/graphql/types/memory.graphql` — `MemoryRecord.wikiPages` + `mobileWikiSearch`
+- `packages/database-pg/graphql/types/ontology.graphql` — ontology definitions, change sets, suggestion scan jobs, and reprocess jobs
 
 ### `mobileWikiSearch` scoring (implementation)
 

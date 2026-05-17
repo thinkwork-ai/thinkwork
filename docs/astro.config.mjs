@@ -139,6 +139,10 @@ export default defineConfig({
                   slug: "concepts/knowledge/compounding-memory",
                 },
                 {
+                  label: "Business Ontology",
+                  slug: "concepts/knowledge/business-ontology",
+                },
+                {
                   label: "Compile Pipeline",
                   slug: "concepts/knowledge/compounding-memory-pipeline",
                 },
@@ -244,6 +248,10 @@ export default defineConfig({
                 {
                   label: "Operating Compiled Pages",
                   slug: "guides/compounding-memory-operations",
+                },
+                {
+                  label: "Operating Business Ontology",
+                  slug: "guides/business-ontology-operations",
                 },
               ],
             },
@@ -376,6 +384,10 @@ export default defineConfig({
                         {
                           label: "Company Brain",
                           slug: "applications/admin/knowledge",
+                        },
+                        {
+                          label: "Ontology",
+                          slug: "applications/admin/ontology",
                         },
                         {
                           label: "Memory Facet",

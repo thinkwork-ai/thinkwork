@@ -1,0 +1,128 @@
+---
+title: Operating Business Ontology
+description: Run suggestion scans, review change sets, approve ontology updates, and recover failed Brain reprocess jobs.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+This guide is for admins operating the business ontology loop in a live ThinkWork tenant. It assumes you understand the boundary from the [Business Ontology concept page](/concepts/knowledge/business-ontology/): Hindsight stores memory, ontology defines meaning, and the Company Brain materializes approved meaning into pages and facets.
+
+Ontology work happens in Admin under **Manage → Ontology**. The studio has four practical surfaces:
+
+- **Change Sets** — review suggestions, evidence, confidence, frequency, and line items.
+- **Definitions** — inspect the active entity types, relationship types, and facet templates.
+- **Mappings** — inspect optional standards mappings such as Schema.org or internal vocabularies.
+- **Reprocess Jobs** — monitor the async application job after approval.
+
+## Run a suggestion scan
+
+Start from **Change Sets** and use the scan action. The API creates an `ontology_suggestion_scan_jobs` row and invokes the scan Lambda asynchronously. The job can be inspected through the Admin scan status panel or the GraphQL API:
+
+```graphql
+mutation StartScan($tenantId: ID!) {
+  startOntologySuggestionScan(
+    input: { tenantId: $tenantId, trigger: "manual" }
+  ) {
+    id
+    status
+    trigger
+    createdAt
+  }
+}
+```
+
+Expected outcomes:
+
+- `SUCCEEDED` with one or more draft or pending-review change sets;
+- `SUCCEEDED` with no suggestions when the scan found no strong recurring pattern;
+- `FAILED` with an error message when the scan could not read enough source context.
+
+<Aside type="note">
+  The scan is intentionally conservative. A no-suggestion result is healthy when
+  the corpus is sparse or the recurring pattern is already covered by approved
+  definitions.
+</Aside>
+
+## Review a change set
+
+For each candidate, check four things before approval:
+
+| Check      | What good looks like                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| Evidence   | Every meaningful item has concrete examples with source labels and quotes.               |
+| Frequency  | The pattern appears often enough to justify durable structure.                           |
+| Impact     | Expected impact names affected entity types, page sections, or materialization behavior. |
+| Vocabulary | Canonical names are tenant-native, with external mappings only as metadata.              |
+
+Use item-level edits to remove weak relationships, correct names, tighten guidance, or hold items in `PENDING_REVIEW`. A change set does not need to be approved exactly as suggested.
+
+## Approve and watch reprocess
+
+Approval creates or updates the approved ontology definitions and queues one async reprocess job. Admin switches to the Reprocess Jobs surface after approval. When you have the job id from Admin, the activity log, or operator diagnostics, use it to inspect:
+
+- status: `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELED`;
+- attempt count and timestamps;
+- input summary and expected impact;
+- metrics such as applied entity types, relationships, mappings, facets, and materialized pages;
+- error text if the job failed.
+
+The job status matters more than the change-set status. A change set can be approved while the materialized Brain is not fully updated yet.
+
+## Verify materialization
+
+After a successful job:
+
+1. Open **Definitions** and confirm the approved entity, relationship, facet, or mapping appears with the expected lifecycle status.
+2. Search Company Brain for an affected business object through the Brain provider or `query_brain_context`.
+3. Inspect the page/facet output and confirm sections match the approved facet templates.
+4. Check provenance: new or rewritten sections should cite source records, not just inferred text.
+5. Compare expected impact to job metrics. A zero-page reprocess can be valid, but it should be explainable from sparse source data or template-only changes.
+
+## Recover a failed reprocess job
+
+Start with the job row. The GraphQL API can read a specific job by id:
+
+```graphql
+query ReprocessJob($tenantId: ID!, $jobId: ID!) {
+  ontologyReprocessJob(tenantId: $tenantId, jobId: $jobId) {
+    id
+    status
+    attempt
+    input
+    impact
+    metrics
+    error
+    createdAt
+    startedAt
+    finishedAt
+  }
+}
+```
+
+Use this recovery flow:
+
+1. **Classify the failure.** Auth/scope failures usually indicate a bad request path; Bedrock or Lambda timeouts are retriable; validation errors usually mean the edited JSON payload needs correction.
+2. **Check whether definitions applied.** The job may have failed after creating ontology definitions but before materializing every page. Use Definitions and Mappings to inspect the approved state.
+3. **Check materialized impact.** Search affected Brain pages and compare against `impact` and `metrics`.
+4. **Create a safe retry path.** If the payload is wrong, edit or reject the change set and create a corrected one. If the job failed transiently, queue a new reprocess through the supported backend path for that environment. The current Admin retry button is disabled until a dedicated retry mutation exists.
+5. **Record the incident.** Include change-set id, reprocess job id, error, partial impact, and the corrective action in the rollout notes.
+
+Do not mutate production rows by hand unless a separate incident response explicitly authorizes it. The normal path is to create a corrected change set or requeue through the API/Lambda path that records a durable job.
+
+## Rollout guardrails
+
+Keep these rules while expanding the ontology:
+
+- Keep the first ontology business/domain-only. Do not mix agent-task events or Symphony ETL concepts into this layer.
+- Prefer product-native names. Store Schema.org, SKOS-style mapping kinds, PROV-O-inspired provenance, and Dublin Core-style metadata as interoperability hints.
+- Require evidence before approval. No source citations means no durable materialization.
+- Treat approval and application separately. Operators should see approved definitions and failed jobs as different states.
+- Add facet templates gradually. A small number of reliable facets beats a broad template set that rewrites pages with weak evidence.
+- Keep owner-scoped compiled wiki behavior stable. Tenant-shared ontology Brain pages should not break existing agent wiki routes, mobile pages, or page-link graphs.
+
+## Related pages
+
+- [Business Ontology](/concepts/knowledge/business-ontology/)
+- [Company Brain Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
+- [Company Brain Context API](/api/context-engine/)
+- [Compiled Pages API](/api/compounding-memory/)
