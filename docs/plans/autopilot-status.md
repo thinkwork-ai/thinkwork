@@ -524,6 +524,28 @@ None.
 - `pnpm --filter @thinkwork/computer-runtime build` - passed.
 - `pnpm --filter @thinkwork/api build` - passed.
 - `git diff --check` - passed.
+- `pnpm exec prettier --check ...` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+
+## CI / PR
+
+- Opened [#1330](https://github.com/thinkwork-ai/thinkwork/pull/1330).
+- Rebased [#1330](https://github.com/thinkwork-ai/thinkwork/pull/1330) after `main` advanced; reran touched unit slices after rebase:
+  - `pnpm --filter @thinkwork/api test -- src/lib/computers/runtime-api.test.ts` - passed.
+  - `pnpm --filter @thinkwork/computer-runtime test -- src/computer-chat.test.ts` - passed.
+- GitHub PR checks on [#1330](https://github.com/thinkwork-ai/thinkwork/pull/1330) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Squash merged [#1330](https://github.com/thinkwork-ai/thinkwork/pull/1330) as `e0a2c80e68d4cdeddf00793f94135e433a347d1d`.
+- Deploy run `25994235900` initially failed in `Build & Deploy Computer` during `terraform init` because the Terraform registry/GitHub returned a transient `502 Bad Gateway` while fetching the Cloudflare provider signature. No code change was made; rerunning failed jobs passed.
+- Deploy run `25994235900` passed on rerun, including `Build Computer Runtime` and `Build & Deploy Computer`.
+- Live Slack smoke after deploy:
+  - Signed Slack event `EvCodexComputerFile1779031002` enqueued task `71a58579-b480-4d45-a83b-637e736f6992`.
+  - Task completed in `computer_native` mode with response message `23759467-505c-4fb1-ad5d-ab4278b4efc0`.
+  - The user message metadata linked attachment `a229a33d-6722-47f0-be7a-7dd726055400`.
+  - The assistant response summarized `agentic-etl-architecture-v5.md` content instead of claiming no file was available.
 
 ## Blockers
 
