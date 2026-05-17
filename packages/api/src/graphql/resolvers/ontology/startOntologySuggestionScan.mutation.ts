@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { requireTenantAdmin } from "../core/authz.js";
-import { startOntologySuggestionScan } from "../../../lib/ontology/repository.js";
+import { startOntologySuggestionScanJob } from "../../../lib/ontology/suggestions.js";
 
 export const startOntologySuggestionScanMutation = async (
   _parent: unknown,
@@ -14,7 +14,7 @@ export const startOntologySuggestionScanMutation = async (
   ctx: GraphQLContext,
 ) => {
   await requireTenantAdmin(ctx, args.input.tenantId);
-  return startOntologySuggestionScan({
+  return startOntologySuggestionScanJob({
     tenantId: args.input.tenantId,
     trigger: args.input.trigger,
     dedupeKey: args.input.dedupeKey,
