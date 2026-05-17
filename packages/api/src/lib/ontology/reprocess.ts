@@ -17,6 +17,7 @@ import {
   type OntologyImpactItem,
   type OntologyReprocessImpact,
 } from "./impact.js";
+import { materializeOntologyTemplatesForImpact } from "./materializer.js";
 
 type DbLike = typeof defaultDb;
 
@@ -273,13 +274,11 @@ async function processClaimedOntologyReprocessJob(args: {
     db: args.db,
     pageCap: args.pageCap,
   });
-  const metrics = {
-    approvedItems: applicableItems.length,
-    affectedPages: impact.affectedPageCount,
-    affectedExternalRefs: impact.affectedExternalRefCount,
-    capHit: impact.capHit,
-    materialization: "definition_apply_only",
-  };
+  let persistedImpact: OntologyReprocessImpact & { materialization?: unknown } =
+    {
+      ...impact,
+    };
+  let metrics: Record<string, unknown> = {};
 
   await args.db.transaction(async (tx) => {
     const txDb = tx as unknown as DbLike;
@@ -289,6 +288,26 @@ async function processClaimedOntologyReprocessJob(args: {
       items: applicableItems,
       db: txDb,
     });
+    const materialization = await materializeOntologyTemplatesForImpact({
+      tenantId: args.job.tenant_id,
+      pageIds: impact.affectedPageIds,
+      db: txDb,
+    });
+    metrics = {
+      approvedItems: applicableItems.length,
+      affectedPages: impact.affectedPageCount,
+      affectedExternalRefs: impact.affectedExternalRefCount,
+      capHit: impact.capHit,
+      materialization: "brain_template_materialization",
+      pagesChanged: materialization.pagesChanged,
+      facetsAdded: materialization.facetsAdded,
+      facetsUpdated: materialization.facetsUpdated,
+      sourcesRetained: materialization.sourcesRetained,
+      skippedPages: materialization.skippedPages,
+      skippedSections: materialization.skippedSections,
+      materializationErrors: materialization.errors,
+    };
+    persistedImpact = { ...impact, materialization };
     const applicableItemIds = applicableItems
       .map((item) => item.id)
       .filter((id): id is string => typeof id === "string");
@@ -312,7 +331,7 @@ async function processClaimedOntologyReprocessJob(args: {
       .set({
         status: "succeeded",
         finished_at: new Date(),
-        impact,
+        impact: persistedImpact,
         metrics,
         error: null,
         updated_at: new Date(),
@@ -320,7 +339,10 @@ async function processClaimedOntologyReprocessJob(args: {
       .where(eq(ontologyReprocessJobs.id, args.job.id));
   });
 
-  return { impact, metrics };
+  return {
+    impact: persistedImpact,
+    metrics,
+  };
 }
 
 export async function applyOntologyChangeSetItems(args: {

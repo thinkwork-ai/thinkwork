@@ -21,7 +21,10 @@
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { invokeClaudeJson } from "./bedrock.js";
-import { describeAllPageTypes } from "./templates.js";
+import {
+  describeAllPageTypes,
+  describeOntologyAwareWikiGuardrails,
+} from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
 // ---------------------------------------------------------------------------
@@ -29,90 +32,90 @@ import type { WikiPageType } from "./repository.js";
 // ---------------------------------------------------------------------------
 
 export interface PlannerCandidatePage {
-	id: string;
-	type: WikiPageType;
-	slug: string;
-	title: string;
-	summary: string | null;
-	aliases: string[];
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  summary: string | null;
+  aliases: string[];
 }
 
 export interface PlannerOpenMention {
-	id: string;
-	alias: string;
-	aliasNormalized: string;
-	mentionCount: number;
-	suggestedType: WikiPageType | null;
+  id: string;
+  alias: string;
+  aliasNormalized: string;
+  mentionCount: number;
+  suggestedType: WikiPageType | null;
 }
 
 export interface PlannerBatch {
-	tenantId: string;
-	ownerId: string;
-	records: ThinkWorkMemoryRecord[];
-	candidatePages: PlannerCandidatePage[];
-	openMentions: PlannerOpenMention[];
+  tenantId: string;
+  ownerId: string;
+  records: ThinkWorkMemoryRecord[];
+  candidatePages: PlannerCandidatePage[];
+  openMentions: PlannerOpenMention[];
 }
 
 export interface PlannedSectionUpdate {
-	slug: string;
-	rationale: string;
-	proposed_body_md: string;
-	/**
-	 * Which memory-record IDs actually inform THIS section's update. REQUIRED
-	 * and narrowly scoped — per-section, not per-page — so the reverse lookup
-	 * from a memory back to its citing pages stays truthful. The compiler
-	 * writes one `wiki_section_sources` row per listed ref; omitting refs
-	 * produces zero provenance rows for this section (preferred over wrongly
-	 * citing every record in the batch, which produced a lot of noise
-	 * pre-fix).
-	 */
-	source_refs: string[];
+  slug: string;
+  rationale: string;
+  proposed_body_md: string;
+  /**
+   * Which memory-record IDs actually inform THIS section's update. REQUIRED
+   * and narrowly scoped — per-section, not per-page — so the reverse lookup
+   * from a memory back to its citing pages stays truthful. The compiler
+   * writes one `wiki_section_sources` row per listed ref; omitting refs
+   * produces zero provenance rows for this section (preferred over wrongly
+   * citing every record in the batch, which produced a lot of noise
+   * pre-fix).
+   */
+  source_refs: string[];
 }
 
 export interface PlannedPageUpdate {
-	pageId: string;
-	sections: PlannedSectionUpdate[];
-	/** New aliases to register on the existing page. */
-	aliases?: string[];
+  pageId: string;
+  sections: PlannedSectionUpdate[];
+  /** New aliases to register on the existing page. */
+  aliases?: string[];
 }
 
 export interface PlannedNewPageSection {
-	slug: string;
-	heading: string;
-	body_md: string;
-	/** Per-section provenance — see PlannedSectionUpdate.source_refs. */
-	source_refs: string[];
+  slug: string;
+  heading: string;
+  body_md: string;
+  /** Per-section provenance — see PlannedSectionUpdate.source_refs. */
+  source_refs: string[];
 }
 
 export interface PlannedNewPage {
-	type: WikiPageType;
-	slug: string;
-	title: string;
-	aliases?: string[];
-	summary?: string | null;
-	sections: PlannedNewPageSection[];
-	/**
-	 * Fallback provenance for sections that don't carry their own source_refs.
-	 * Prefer per-section refs — this is only used as a secondary source when
-	 * a section's `source_refs` is empty.
-	 */
-	source_refs: string[];
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  aliases?: string[];
+  summary?: string | null;
+  sections: PlannedNewPageSection[];
+  /**
+   * Fallback provenance for sections that don't carry their own source_refs.
+   * Prefer per-section refs — this is only used as a secondary source when
+   * a section's `source_refs` is empty.
+   */
+  source_refs: string[];
 }
 
 export interface PlannedUnresolvedMention {
-	alias: string;
-	suggestedType: WikiPageType | null;
-	context: string;
-	source_ref: string;
+  alias: string;
+  suggestedType: WikiPageType | null;
+  context: string;
+  source_ref: string;
 }
 
 export interface PlannedPromotion {
-	mentionId: string;
-	reason: string;
-	type: WikiPageType;
-	title: string;
-	slug: string;
-	sections: PlannedNewPageSection[];
+  mentionId: string;
+  reason: string;
+  type: WikiPageType;
+  title: string;
+  slug: string;
+  sections: PlannedNewPageSection[];
 }
 
 /**
@@ -123,12 +126,12 @@ export interface PlannedPromotion {
  * page in the same plan.
  */
 export interface PlannedPageLink {
-	fromType: WikiPageType;
-	fromSlug: string;
-	toType: WikiPageType;
-	toSlug: string;
-	/** One-line description of why the link exists (for backlink context). */
-	context?: string;
+  fromType: WikiPageType;
+  fromSlug: string;
+  toType: WikiPageType;
+  toSlug: string;
+  /** One-line description of why the link exists (for backlink context). */
+  context?: string;
 }
 
 /**
@@ -139,14 +142,14 @@ export interface PlannedPageLink {
  * compiler can update `wiki_page_sections.aggregation` metadata in one go.
  */
 export interface PlannedParentSectionUpdate {
-	pageId: string; // existing parent/hub page id (must be in candidatePages)
-	sectionSlug: string;
-	heading: string;
-	proposed_body_md: string;
-	rationale: string;
-	linked_page_slugs: Array<{ type: WikiPageType; slug: string }>;
-	source_refs: string[];
-	observed_tags?: string[];
+  pageId: string; // existing parent/hub page id (must be in candidatePages)
+  sectionSlug: string;
+  heading: string;
+  proposed_body_md: string;
+  rationale: string;
+  linked_page_slugs: Array<{ type: WikiPageType; slug: string }>;
+  source_refs: string[];
+  observed_tags?: string[];
 }
 
 /**
@@ -157,40 +160,40 @@ export interface PlannedParentSectionUpdate {
  * already-promoted section.
  */
 export interface PlannedSectionPromotion {
-	pageId: string;
-	sectionSlug: string;
-	reason: string;
-	newPage: PlannedNewPage;
-	parentSummary: string;
-	topHighlights: string[];
+  pageId: string;
+  sectionSlug: string;
+  reason: string;
+  newPage: PlannedNewPage;
+  parentSummary: string;
+  topHighlights: string[];
 }
 
 export interface PlannerResult {
-	pageUpdates: PlannedPageUpdate[];
-	newPages: PlannedNewPage[];
-	unresolvedMentions: PlannedUnresolvedMention[];
-	promotions: PlannedPromotion[];
-	pageLinks: PlannedPageLink[];
-	/**
-	 * Hub/rollup section updates on existing parent pages. Emitted primarily
-	 * by the aggregation pass; the leaf planner may also set them but should
-	 * stay conservative — mis-rollups are expensive to unwind.
-	 */
-	parentSectionUpdates: PlannedParentSectionUpdate[];
-	/**
-	 * Sections that have earned promotion into their own topic pages. Applied
-	 * after parentSectionUpdates so the planner sees fresh aggregation metadata
-	 * before deciding which sections to promote.
-	 */
-	sectionPromotions: PlannedSectionPromotion[];
-	usage: {
-		inputTokens: number;
-		outputTokens: number;
-		/** Retry attempts inside `invokeClaudeJson` before the call succeeded.
-		 * Optional so older tests that stub `runPlanner` directly stay green —
-		 * production code always populates this. */
-		bedrockRetries?: number;
-	};
+  pageUpdates: PlannedPageUpdate[];
+  newPages: PlannedNewPage[];
+  unresolvedMentions: PlannedUnresolvedMention[];
+  promotions: PlannedPromotion[];
+  pageLinks: PlannedPageLink[];
+  /**
+   * Hub/rollup section updates on existing parent pages. Emitted primarily
+   * by the aggregation pass; the leaf planner may also set them but should
+   * stay conservative — mis-rollups are expensive to unwind.
+   */
+  parentSectionUpdates: PlannedParentSectionUpdate[];
+  /**
+   * Sections that have earned promotion into their own topic pages. Applied
+   * after parentSectionUpdates so the planner sees fresh aggregation metadata
+   * before deciding which sections to promote.
+   */
+  sectionPromotions: PlannedSectionPromotion[];
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    /** Retry attempts inside `invokeClaudeJson` before the call succeeded.
+     * Optional so older tests that stub `runPlanner` directly stay green —
+     * production code always populates this. */
+    bedrockRetries?: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +207,10 @@ You always belong to exactly **one (tenant, agent) scope**. All pages you refere
 ## Page types
 
 ${describeAllPageTypes()}
+
+## Business ontology guardrails
+
+${describeOntologyAwareWikiGuardrails()}
 
 Type describes page *shape*, not sharing. All pages are owner-scoped.
 
@@ -304,53 +311,57 @@ const PLANNER_OUTPUT_SCHEMA = `{
 // ---------------------------------------------------------------------------
 
 export function buildPlannerUserPrompt(batch: PlannerBatch): string {
-	const lines: string[] = [];
-	lines.push("## Memory records in this batch\n");
-	for (const r of batch.records) {
-		const meta =
-			r.metadata && Object.keys(r.metadata).length > 0
-				? ` metadata=${JSON.stringify(compactMetadata(r.metadata))}`
-				: "";
-		const when = r.updatedAt || r.createdAt;
-		lines.push(
-			`- id=${r.id} kind=${r.kind} when=${when}${meta}\n  text: ${truncate(r.content.text, 800)}`,
-		);
-	}
+  const lines: string[] = [];
+  lines.push("## Memory records in this batch\n");
+  for (const r of batch.records) {
+    const meta =
+      r.metadata && Object.keys(r.metadata).length > 0
+        ? ` metadata=${JSON.stringify(compactMetadata(r.metadata))}`
+        : "";
+    const when = r.updatedAt || r.createdAt;
+    lines.push(
+      `- id=${r.id} kind=${r.kind} when=${when}${meta}\n  text: ${truncate(r.content.text, 800)}`,
+    );
+  }
 
-	lines.push("\n## Candidate pages already in this scope\n");
-	if (batch.candidatePages.length === 0) {
-		lines.push("(none)");
-	} else {
-		for (const p of batch.candidatePages) {
-			lines.push(
-				`- id=${p.id} type=${p.type} slug=${p.slug} title=${JSON.stringify(p.title)}` +
-					(p.summary ? ` summary=${JSON.stringify(truncate(p.summary, 200))}` : "") +
-					(p.aliases.length > 0 ? ` aliases=${JSON.stringify(p.aliases.slice(0, 8))}` : ""),
-			);
-		}
-	}
+  lines.push("\n## Candidate pages already in this scope\n");
+  if (batch.candidatePages.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const p of batch.candidatePages) {
+      lines.push(
+        `- id=${p.id} type=${p.type} slug=${p.slug} title=${JSON.stringify(p.title)}` +
+          (p.summary
+            ? ` summary=${JSON.stringify(truncate(p.summary, 200))}`
+            : "") +
+          (p.aliases.length > 0
+            ? ` aliases=${JSON.stringify(p.aliases.slice(0, 8))}`
+            : ""),
+      );
+    }
+  }
 
-	lines.push("\n## Open unresolved mentions in this scope\n");
-	if (batch.openMentions.length === 0) {
-		lines.push("(none)");
-	} else {
-		for (const m of batch.openMentions) {
-			lines.push(
-				`- id=${m.id} alias=${JSON.stringify(m.alias)} count=${m.mentionCount}` +
-					(m.suggestedType ? ` suggestedType=${m.suggestedType}` : ""),
-			);
-		}
-	}
+  lines.push("\n## Open unresolved mentions in this scope\n");
+  if (batch.openMentions.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const m of batch.openMentions) {
+      lines.push(
+        `- id=${m.id} alias=${JSON.stringify(m.alias)} count=${m.mentionCount}` +
+          (m.suggestedType ? ` suggestedType=${m.suggestedType}` : ""),
+      );
+    }
+  }
 
-	lines.push("\n## Required output JSON shape\n");
-	lines.push("```");
-	lines.push(PLANNER_OUTPUT_SCHEMA);
-	lines.push("```");
-	lines.push(
-		"\nReturn ONLY the JSON object. No prose, no fences. Include empty arrays for categories that don't apply.",
-	);
+  lines.push("\n## Required output JSON shape\n");
+  lines.push("```");
+  lines.push(PLANNER_OUTPUT_SCHEMA);
+  lines.push("```");
+  lines.push(
+    "\nReturn ONLY the JSON object. No prose, no fences. Include empty arrays for categories that don't apply.",
+  );
 
-	return lines.join("\n");
+  return lines.join("\n");
 }
 
 /**
@@ -359,199 +370,201 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
  * job failed without advancing the cursor, so we re-try cleanly.
  */
 export async function runPlanner(
-	batch: PlannerBatch,
-	opts: { signal?: AbortSignal; modelId?: string } = {},
+  batch: PlannerBatch,
+  opts: { signal?: AbortSignal; modelId?: string } = {},
 ): Promise<PlannerResult> {
-	const user = buildPlannerUserPrompt(batch);
-	const resp = await invokeClaudeJson<PlannerResult>({
-		system: PLANNER_SYSTEM,
-		user,
-		// Planner output grows with batch complexity + link proposals + per-
-		// section source_refs. 8k was tight enough to truncate on 50-record
-		// batches with 20+ new pages; 24k gives comfortable headroom without
-		// changing models. Haiku 4.5 supports up to 32k output tokens.
-		maxTokens: 24000,
-		temperature: 0,
-		modelId: opts.modelId,
-		signal: opts.signal,
-	});
+  const user = buildPlannerUserPrompt(batch);
+  const resp = await invokeClaudeJson<PlannerResult>({
+    system: PLANNER_SYSTEM,
+    user,
+    // Planner output grows with batch complexity + link proposals + per-
+    // section source_refs. 8k was tight enough to truncate on 50-record
+    // batches with 20+ new pages; 24k gives comfortable headroom without
+    // changing models. Haiku 4.5 supports up to 32k output tokens.
+    maxTokens: 24000,
+    temperature: 0,
+    modelId: opts.modelId,
+    signal: opts.signal,
+  });
 
-	const parsed = resp.parsed;
-	validatePlannerResult(parsed);
-	return {
-		...parsed,
-		usage: {
-			inputTokens: resp.inputTokens,
-			outputTokens: resp.outputTokens,
-			bedrockRetries: resp.retries,
-		},
-	};
+  const parsed = resp.parsed;
+  validatePlannerResult(parsed);
+  return {
+    ...parsed,
+    usage: {
+      inputTokens: resp.inputTokens,
+      outputTokens: resp.outputTokens,
+      bedrockRetries: resp.retries,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Validation — refuse malformed plans so the compiler never writes garbage
 // ---------------------------------------------------------------------------
 
-export function validatePlannerResult(value: unknown): asserts value is PlannerResult {
-	if (!value || typeof value !== "object") {
-		throw new Error("planner response is not an object");
-	}
-	const v = value as Record<string, unknown>;
-	requireArray(v, "pageUpdates");
-	requireArray(v, "newPages");
-	requireArray(v, "unresolvedMentions");
-	requireArray(v, "promotions");
-	// pageLinks is newer than the other fields — accept plans that omit it.
-	if (v.pageLinks === undefined) {
-		v.pageLinks = [];
-	} else if (!Array.isArray(v.pageLinks)) {
-		throw new Error("planner response pageLinks must be an array");
-	}
+export function validatePlannerResult(
+  value: unknown,
+): asserts value is PlannerResult {
+  if (!value || typeof value !== "object") {
+    throw new Error("planner response is not an object");
+  }
+  const v = value as Record<string, unknown>;
+  requireArray(v, "pageUpdates");
+  requireArray(v, "newPages");
+  requireArray(v, "unresolvedMentions");
+  requireArray(v, "promotions");
+  // pageLinks is newer than the other fields — accept plans that omit it.
+  if (v.pageLinks === undefined) {
+    v.pageLinks = [];
+  } else if (!Array.isArray(v.pageLinks)) {
+    throw new Error("planner response pageLinks must be an array");
+  }
 
-	// parentSectionUpdates / sectionPromotions are PR-B additions. The leaf
-	// planner prompt does not ask for them, so default to [] when absent.
-	if (v.parentSectionUpdates === undefined) {
-		v.parentSectionUpdates = [];
-	} else if (!Array.isArray(v.parentSectionUpdates)) {
-		throw new Error("planner response parentSectionUpdates must be an array");
-	}
-	if (v.sectionPromotions === undefined) {
-		v.sectionPromotions = [];
-	} else if (!Array.isArray(v.sectionPromotions)) {
-		throw new Error("planner response sectionPromotions must be an array");
-	}
+  // parentSectionUpdates / sectionPromotions are PR-B additions. The leaf
+  // planner prompt does not ask for them, so default to [] when absent.
+  if (v.parentSectionUpdates === undefined) {
+    v.parentSectionUpdates = [];
+  } else if (!Array.isArray(v.parentSectionUpdates)) {
+    throw new Error("planner response parentSectionUpdates must be an array");
+  }
+  if (v.sectionPromotions === undefined) {
+    v.sectionPromotions = [];
+  } else if (!Array.isArray(v.sectionPromotions)) {
+    throw new Error("planner response sectionPromotions must be an array");
+  }
 
-	for (const p of v.parentSectionUpdates as unknown[]) {
-		if (!p || typeof p !== "object") {
-			throw new Error("parentSectionUpdates entry not object");
-		}
-		const psu = p as Record<string, unknown>;
-		if (typeof psu.pageId !== "string" || psu.pageId.length === 0) {
-			throw new Error("parentSectionUpdates.pageId missing");
-		}
-		if (
-			typeof psu.sectionSlug !== "string" ||
-			psu.sectionSlug.length === 0
-		) {
-			throw new Error("parentSectionUpdates.sectionSlug missing");
-		}
-		if (!Array.isArray(psu.linked_page_slugs)) {
-			psu.linked_page_slugs = [];
-		}
-		if (!Array.isArray(psu.source_refs)) {
-			psu.source_refs = [];
-		}
-	}
+  for (const p of v.parentSectionUpdates as unknown[]) {
+    if (!p || typeof p !== "object") {
+      throw new Error("parentSectionUpdates entry not object");
+    }
+    const psu = p as Record<string, unknown>;
+    if (typeof psu.pageId !== "string" || psu.pageId.length === 0) {
+      throw new Error("parentSectionUpdates.pageId missing");
+    }
+    if (typeof psu.sectionSlug !== "string" || psu.sectionSlug.length === 0) {
+      throw new Error("parentSectionUpdates.sectionSlug missing");
+    }
+    if (!Array.isArray(psu.linked_page_slugs)) {
+      psu.linked_page_slugs = [];
+    }
+    if (!Array.isArray(psu.source_refs)) {
+      psu.source_refs = [];
+    }
+  }
 
-	for (const p of v.sectionPromotions as unknown[]) {
-		if (!p || typeof p !== "object") {
-			throw new Error("sectionPromotions entry not object");
-		}
-		const sp = p as Record<string, unknown>;
-		if (typeof sp.pageId !== "string" || sp.pageId.length === 0) {
-			throw new Error("sectionPromotions.pageId missing");
-		}
-		if (typeof sp.sectionSlug !== "string" || sp.sectionSlug.length === 0) {
-			throw new Error("sectionPromotions.sectionSlug missing");
-		}
-		if (!sp.newPage || typeof sp.newPage !== "object") {
-			throw new Error("sectionPromotions.newPage missing");
-		}
-		const np = sp.newPage as Record<string, unknown>;
-		if (!isPageType(np.type)) {
-			throw new Error(
-				`sectionPromotions.newPage.type invalid: ${np.type}`,
-			);
-		}
-		if (typeof np.title !== "string" || np.title.length === 0) {
-			throw new Error("sectionPromotions.newPage.title missing");
-		}
-		if (typeof np.slug !== "string" || np.slug.length === 0) {
-			throw new Error("sectionPromotions.newPage.slug missing");
-		}
-		if (!Array.isArray(np.sections)) {
-			throw new Error("sectionPromotions.newPage.sections missing");
-		}
-		if (!Array.isArray(sp.topHighlights)) {
-			sp.topHighlights = [];
-		}
-	}
+  for (const p of v.sectionPromotions as unknown[]) {
+    if (!p || typeof p !== "object") {
+      throw new Error("sectionPromotions entry not object");
+    }
+    const sp = p as Record<string, unknown>;
+    if (typeof sp.pageId !== "string" || sp.pageId.length === 0) {
+      throw new Error("sectionPromotions.pageId missing");
+    }
+    if (typeof sp.sectionSlug !== "string" || sp.sectionSlug.length === 0) {
+      throw new Error("sectionPromotions.sectionSlug missing");
+    }
+    if (!sp.newPage || typeof sp.newPage !== "object") {
+      throw new Error("sectionPromotions.newPage missing");
+    }
+    const np = sp.newPage as Record<string, unknown>;
+    if (!isPageType(np.type)) {
+      throw new Error(`sectionPromotions.newPage.type invalid: ${np.type}`);
+    }
+    if (typeof np.title !== "string" || np.title.length === 0) {
+      throw new Error("sectionPromotions.newPage.title missing");
+    }
+    if (typeof np.slug !== "string" || np.slug.length === 0) {
+      throw new Error("sectionPromotions.newPage.slug missing");
+    }
+    if (!Array.isArray(np.sections)) {
+      throw new Error("sectionPromotions.newPage.sections missing");
+    }
+    if (!Array.isArray(sp.topHighlights)) {
+      sp.topHighlights = [];
+    }
+  }
 
-	// Filter bad pageLinks silently instead of failing the whole plan. Some
-	// models (smaller Nova / OSS variants) occasionally invent a page type
-	// like `vehicle` or a blank slug; better to drop that one link than lose
-	// every update in the batch. The compiler already tolerates missing
-	// link targets via findPageBySlug returning null.
-	v.pageLinks = (v.pageLinks as unknown[]).filter((l) => {
-		if (!l || typeof l !== "object") return false;
-		const link = l as Record<string, unknown>;
-		if (!isPageType(link.fromType) || !isPageType(link.toType)) {
-			console.warn(
-				`[planner] dropping pageLink with invalid type fromType=${link.fromType} toType=${link.toType}`,
-			);
-			return false;
-		}
-		if (typeof link.fromSlug !== "string" || link.fromSlug.length === 0) {
-			console.warn(`[planner] dropping pageLink with missing fromSlug`);
-			return false;
-		}
-		if (typeof link.toSlug !== "string" || link.toSlug.length === 0) {
-			console.warn(`[planner] dropping pageLink with missing toSlug`);
-			return false;
-		}
-		return true;
-	});
+  // Filter bad pageLinks silently instead of failing the whole plan. Some
+  // models (smaller Nova / OSS variants) occasionally invent a page type
+  // like `vehicle` or a blank slug; better to drop that one link than lose
+  // every update in the batch. The compiler already tolerates missing
+  // link targets via findPageBySlug returning null.
+  v.pageLinks = (v.pageLinks as unknown[]).filter((l) => {
+    if (!l || typeof l !== "object") return false;
+    const link = l as Record<string, unknown>;
+    if (!isPageType(link.fromType) || !isPageType(link.toType)) {
+      console.warn(
+        `[planner] dropping pageLink with invalid type fromType=${link.fromType} toType=${link.toType}`,
+      );
+      return false;
+    }
+    if (typeof link.fromSlug !== "string" || link.fromSlug.length === 0) {
+      console.warn(`[planner] dropping pageLink with missing fromSlug`);
+      return false;
+    }
+    if (typeof link.toSlug !== "string" || link.toSlug.length === 0) {
+      console.warn(`[planner] dropping pageLink with missing toSlug`);
+      return false;
+    }
+    return true;
+  });
 
-	for (const u of v.pageUpdates as unknown[]) {
-		if (!u || typeof u !== "object") throw new Error("pageUpdates entry not object");
-		const up = u as Record<string, unknown>;
-		if (typeof up.pageId !== "string" || up.pageId.length === 0) {
-			throw new Error("pageUpdates.pageId missing");
-		}
-		requireArray(up, "sections");
-	}
+  for (const u of v.pageUpdates as unknown[]) {
+    if (!u || typeof u !== "object")
+      throw new Error("pageUpdates entry not object");
+    const up = u as Record<string, unknown>;
+    if (typeof up.pageId !== "string" || up.pageId.length === 0) {
+      throw new Error("pageUpdates.pageId missing");
+    }
+    requireArray(up, "sections");
+  }
 
-	for (const p of v.newPages as unknown[]) {
-		if (!p || typeof p !== "object") throw new Error("newPages entry not object");
-		const np = p as Record<string, unknown>;
-		if (!isPageType(np.type)) throw new Error(`newPages.type invalid: ${np.type}`);
-		if (typeof np.title !== "string" || np.title.length === 0) {
-			throw new Error("newPages.title missing");
-		}
-		if (typeof np.slug !== "string" || np.slug.length === 0) {
-			throw new Error("newPages.slug missing");
-		}
-		requireArray(np, "sections");
-	}
+  for (const p of v.newPages as unknown[]) {
+    if (!p || typeof p !== "object")
+      throw new Error("newPages entry not object");
+    const np = p as Record<string, unknown>;
+    if (!isPageType(np.type))
+      throw new Error(`newPages.type invalid: ${np.type}`);
+    if (typeof np.title !== "string" || np.title.length === 0) {
+      throw new Error("newPages.title missing");
+    }
+    if (typeof np.slug !== "string" || np.slug.length === 0) {
+      throw new Error("newPages.slug missing");
+    }
+    requireArray(np, "sections");
+  }
 
-	for (const m of v.unresolvedMentions as unknown[]) {
-		if (!m || typeof m !== "object") {
-			throw new Error("unresolvedMentions entry not object");
-		}
-		const um = m as Record<string, unknown>;
-		if (typeof um.alias !== "string" || um.alias.length === 0) {
-			throw new Error("unresolvedMentions.alias missing");
-		}
-	}
+  for (const m of v.unresolvedMentions as unknown[]) {
+    if (!m || typeof m !== "object") {
+      throw new Error("unresolvedMentions entry not object");
+    }
+    const um = m as Record<string, unknown>;
+    if (typeof um.alias !== "string" || um.alias.length === 0) {
+      throw new Error("unresolvedMentions.alias missing");
+    }
+  }
 
-	for (const pr of v.promotions as unknown[]) {
-		if (!pr || typeof pr !== "object") throw new Error("promotions entry not object");
-		const p = pr as Record<string, unknown>;
-		if (typeof p.mentionId !== "string" || p.mentionId.length === 0) {
-			throw new Error("promotions.mentionId missing");
-		}
-		if (!isPageType(p.type)) throw new Error(`promotions.type invalid: ${p.type}`);
-	}
+  for (const pr of v.promotions as unknown[]) {
+    if (!pr || typeof pr !== "object")
+      throw new Error("promotions entry not object");
+    const p = pr as Record<string, unknown>;
+    if (typeof p.mentionId !== "string" || p.mentionId.length === 0) {
+      throw new Error("promotions.mentionId missing");
+    }
+    if (!isPageType(p.type))
+      throw new Error(`promotions.type invalid: ${p.type}`);
+  }
 }
 
 function requireArray(obj: Record<string, unknown>, key: string): void {
-	if (!Array.isArray(obj[key])) {
-		throw new Error(`planner response missing array field: ${key}`);
-	}
+  if (!Array.isArray(obj[key])) {
+    throw new Error(`planner response missing array field: ${key}`);
+  }
 }
 
 function isPageType(v: unknown): v is WikiPageType {
-	return v === "entity" || v === "topic" || v === "decision";
+  return v === "entity" || v === "topic" || v === "decision";
 }
 
 // ---------------------------------------------------------------------------
@@ -559,32 +572,34 @@ function isPageType(v: unknown): v is WikiPageType {
 // ---------------------------------------------------------------------------
 
 function truncate(s: string, n: number): string {
-	return s.length <= n ? s : `${s.slice(0, n)}…`;
+  return s.length <= n ? s : `${s.slice(0, n)}…`;
 }
 
 /**
  * Strip bulky metadata fields (like Google Places photo arrays) so the planner
  * prompt stays focused on what's useful. Keeps names, tags, geo, dates.
  */
-function compactMetadata(meta: Record<string, unknown>): Record<string, unknown> {
-	const out: Record<string, unknown> = {};
-	for (const [k, v] of Object.entries(meta)) {
-		if (k === "photos" || k === "raw") continue;
-		if (v == null) continue;
-		if (typeof v === "object" && !Array.isArray(v)) {
-			const sub: Record<string, unknown> = {};
-			for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) {
-				if (sk === "photos" || sk === "raw") continue;
-				if (typeof sv === "string" && sv.length > 400) continue;
-				sub[sk] = sv;
-			}
-			out[k] = sub;
-			continue;
-		}
-		if (typeof v === "string" && v.length > 400) continue;
-		out[k] = v;
-	}
-	return out;
+function compactMetadata(
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (k === "photos" || k === "raw") continue;
+    if (v == null) continue;
+    if (typeof v === "object" && !Array.isArray(v)) {
+      const sub: Record<string, unknown> = {};
+      for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) {
+        if (sk === "photos" || sk === "raw") continue;
+        if (typeof sv === "string" && sv.length > 400) continue;
+        sub[sk] = sv;
+      }
+      out[k] = sub;
+      continue;
+    }
+    if (typeof v === "string" && v.length > 400) continue;
+    out[k] = v;
+  }
+  return out;
 }
 
 // Test-only exports — not part of the public surface.
