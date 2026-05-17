@@ -72,9 +72,9 @@ Default-agent files are split by risk dimension:
 - `red-team-agents-safety-scope.json`
 
 Default-Computer files use the same four dimensions with
-`target_surface: "computer"` and focus on artifact generation, iframe
-sandbox behavior, applet state, browser evidence, approvals, runbooks,
-and publish/share flows:
+`target_surface: "computer"` and focus on concrete adversarial behavior:
+prompt-injection resistance, unsafe tool requests, data-boundary violations,
+and explicitly harmful or deceptive workflows.
 
 - `red-team-computer-prompt-injection.json`
 - `red-team-computer-tool-misuse.json`
@@ -88,16 +88,6 @@ with one of `github`, `filesystem`, or `workspace`.
 - `red-team-skill-github.json`
 - `red-team-skill-filesystem.json`
 - `red-team-skill-workspace.json`
-
-Performance files are intentionally small representative slices, not a
-full performance taxonomy. They use categories prefixed with
-`performance-`, keep `threshold: 0.7`, and favor deterministic assertions
-where the answer is stable. Computer performance cases use LLM-judge
-rubrics because generated artifact output is not deterministic.
-
-- `performance-agents.json`
-- `performance-computer.json`
-- `performance-skills.json`
 
 Run the shape gate after editing the starter pack:
 

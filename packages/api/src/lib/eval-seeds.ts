@@ -20,9 +20,6 @@ import redTeamComputerSafetyScope from "../../../../seeds/eval-test-cases/red-te
 import redTeamSkillGithub from "../../../../seeds/eval-test-cases/red-team-skill-github.json";
 import redTeamSkillFilesystem from "../../../../seeds/eval-test-cases/red-team-skill-filesystem.json";
 import redTeamSkillWorkspace from "../../../../seeds/eval-test-cases/red-team-skill-workspace.json";
-import performanceAgents from "../../../../seeds/eval-test-cases/performance-agents.json";
-import performanceComputer from "../../../../seeds/eval-test-cases/performance-computer.json";
-import performanceSkills from "../../../../seeds/eval-test-cases/performance-skills.json";
 
 export interface SeedAssertion {
   type: string;
@@ -47,9 +44,6 @@ export const EVAL_SEED_CATEGORIES = [
   "red-team-tool-misuse",
   "red-team-data-boundary",
   "red-team-safety-scope",
-  "performance-agents",
-  "performance-computer",
-  "performance-skills",
 ] as const;
 
 export const EVAL_SEEDS: SeedTestCase[] = [
@@ -64,7 +58,4 @@ export const EVAL_SEEDS: SeedTestCase[] = [
   ...(redTeamSkillGithub as SeedTestCase[]),
   ...(redTeamSkillFilesystem as SeedTestCase[]),
   ...(redTeamSkillWorkspace as SeedTestCase[]),
-  ...(performanceAgents as SeedTestCase[]),
-  ...(performanceComputer as SeedTestCase[]),
-  ...(performanceSkills as SeedTestCase[]),
 ];

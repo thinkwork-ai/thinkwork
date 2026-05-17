@@ -38,7 +38,7 @@ describe("ScheduledJobFormDialog eval schedule helpers", () => {
           name: "Daily computer eval ",
           computerId: "computer-1",
           model: "anthropic.claude-haiku-4-5",
-          categories: ["performance-computer"],
+          categories: ["red-team-safety-scope"],
         },
         schedule,
         EVAL_SCHEDULE_TRIGGER_TYPE,
@@ -49,7 +49,7 @@ describe("ScheduledJobFormDialog eval schedule helpers", () => {
       config: {
         computerId: "computer-1",
         model: "anthropic.claude-haiku-4-5",
-        categories: ["performance-computer"],
+        categories: ["red-team-safety-scope"],
       },
       schedule_type: "rate",
       schedule_expression: "rate(1 day)",

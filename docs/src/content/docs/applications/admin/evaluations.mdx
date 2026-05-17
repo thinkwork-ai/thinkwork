@@ -62,14 +62,14 @@ Columns: Name (clickable → [Test Case detail](#test-case-detail)), Category, E
 
 Actions:
 
-- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the 210-test ThinkWork red-team and performance pack across 7 categories. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
+- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the 189-test ThinkWork RedTeam pack across 4 categories. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
 - **New test case** → `/evaluations/studio/new` — the form described below.
 - **Search by name** — free-text filter over `evalTestCases(tenantId, search)`.
 - **Trash icon** per row — `deleteEvalTestCase` mutation, confirms first.
 
 ### First-visit auto-seed
 
-The Studio auto-seeds the 210-case starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent so re-visits don't duplicate.
+The Studio auto-seeds the 189-case starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent so re-visits don't duplicate.
 
 ## Test Case detail
 

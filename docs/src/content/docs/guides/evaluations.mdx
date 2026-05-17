@@ -40,17 +40,17 @@ The eval test agent is a generic AgentCore runtime; the **agent template** you p
 
 Test cases live in the **Studio** (`/evaluations/studio`). Every test case has:
 
-| Field                   | Purpose                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| `name`                  | Human-readable identifier, unique per tenant for seeded rows                                            |
-| `category`              | Free-form label used to group and filter runs (`red-team-prompt-injection`, `performance-agents`, etc.) |
-| `query`                 | The prompt the agent under test will receive                                                            |
-| `systemPrompt`          | Optional override of the template's system prompt                                                       |
-| `agentTemplateId`       | Optional per-test pin — overrides the run-level template                                                |
-| `assertions`            | Array of assertion objects (see below)                                                                  |
-| `agentcoreEvaluatorIds` | Array of Builtin.\* evaluator IDs to score the session spans                                            |
-| `tags`                  | Free-form tags for filtering                                                                            |
-| `enabled`               | When false, seeded runs skip this test case                                                             |
+| Field                   | Purpose                                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `name`                  | Human-readable identifier, unique per tenant for seeded rows                                              |
+| `category`              | Free-form label used to group and filter runs (`red-team-prompt-injection`, `red-team-tool-misuse`, etc.) |
+| `query`                 | The prompt the agent under test will receive                                                              |
+| `systemPrompt`          | Optional override of the template's system prompt                                                         |
+| `agentTemplateId`       | Optional per-test pin — overrides the run-level template                                                  |
+| `assertions`            | Array of assertion objects (see below)                                                                    |
+| `agentcoreEvaluatorIds` | Array of Builtin.\* evaluator IDs to score the session spans                                              |
+| `tags`                  | Free-form tags for filtering                                                                              |
+| `enabled`               | When false, seeded runs skip this test case                                                               |
 
 ### Assertion types
 
@@ -108,12 +108,12 @@ A test case's final `score` is the average across all assertion + evaluator scor
 
 ## Seeding the starter pack
 
-ThinkWork ships a 210-test starter pack across red-team dimensions and small performance slices: `red-team-prompt-injection`, `red-team-tool-misuse`, `red-team-data-boundary`, `red-team-safety-scope`, `performance-agents`, `performance-computer`, and `performance-skills`. First-visit seeding is automatic — opening the Studio for the first time on a new tenant imports the pack. Idempotent: re-running skips anything already present (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
+ThinkWork ships a 189-test RedTeam starter pack across four adversarial dimensions: `red-team-prompt-injection`, `red-team-tool-misuse`, `red-team-data-boundary`, and `red-team-safety-scope`. First-visit seeding is automatic — opening the Studio for the first time on a new tenant imports the pack. Idempotent: re-running skips anything already present (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
 
 Manual trigger:
 
 - **Studio UI** — "Import starter pack" button on the Studio page.
-- **CLI** — `thinkwork eval seed --stage <s>` (all categories) or `thinkwork eval seed --stage <s> --category red-team-prompt-injection performance-agents` (subset).
+- **CLI** — `thinkwork eval seed --stage <s>` (all categories) or `thinkwork eval seed --stage <s> --category red-team-prompt-injection red-team-tool-misuse` (subset).
 
 ## Running an evaluation
 
@@ -211,7 +211,7 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 | System Workflow runtime | `packages/api/src/lib/system-workflows/*`                               |
 | Lambda                  | `packages/api/src/handlers/eval-runner.ts`                              |
 | AppSync notify          | `packages/api/src/lib/eval-notify.ts`                                   |
-| Seeds                   | `seeds/eval-test-cases/*.json` (14 files, 210 cases)                    |
+| Seeds                   | `seeds/eval-test-cases/*.json` (11 files, 189 cases)                    |
 | Studio UI               | `apps/admin/src/routes/_authed/_tenant/evaluations/`                    |
 | CLI                     | `apps/cli/src/commands/eval/`                                           |
 | Terraform               | `terraform/modules/app/lambda-api/main.tf` (`eval-runner` Lambda + IAM) |

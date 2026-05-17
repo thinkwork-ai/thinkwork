@@ -1,11 +1,11 @@
 ---
 title: Evaluation Seed Cleanup
-description: Remove maniflow-era evaluation starter rows after pulling the ThinkWork red-team and performance seed pack.
+description: Remove maniflow-era evaluation starter rows after pulling the ThinkWork RedTeam seed pack.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The ThinkWork red-team and performance starter pack replaces the older
+The ThinkWork RedTeam starter pack replaces the older
 maniflow evaluation seeds. Fresh tenants receive the new pack automatically.
 Existing deployments should run the cleanup SQL once so old seeded rows no
 longer appear in the Studio category list or future evaluation runs.
@@ -32,6 +32,15 @@ Then open Evaluations Studio or run the seed command to import the new pack:
 
 ```bash
 thinkwork eval seed --stage <stage>
+```
+
+If the deployment previously imported now-retired non-RedTeam slices or
+ambiguous Computer safety-scope cases, run the RedTeam-only cleanup as well:
+
+```bash
+psql "$DATABASE_URL" \
+  -v ON_ERROR_STOP=1 \
+  -f packages/database-pg/drizzle/0096_true_redteam_eval_seed_cleanup.sql
 ```
 
 ## Verify
@@ -61,7 +70,7 @@ GROUP BY category;
 ```
 
 The query should return zero rows. New seeded categories should be limited to
-red-team dimensions and performance slices:
+red-team dimensions:
 
 ```sql
 SELECT DISTINCT category

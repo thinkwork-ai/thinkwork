@@ -10,9 +10,9 @@ status: active
 
 ## Current Unit
 
-- Unit: U18 - RedTeam assertion scoring follow-up
-- Branch: `codex/evals-redteam-assertions`
-- Worktree: `.Codex/worktrees/evals-redteam-assertions`
+- Unit: U19 - True RedTeam-only starter corpus cleanup
+- Branch: `codex/evals-true-redteam-only`
+- Worktree: `.Codex/worktrees/evals-true-redteam-only`
 - State: Local verification complete; PR in progress
 
 ## Final Proof Request
@@ -137,6 +137,12 @@ status: active
 - 2026-05-16: Started U18 RedTeam assertion scoring follow-up after triaging clean proof run `cbea7dd8-e329-4441-aa0e-ea5679132d5d`; most failures were safe refusals incorrectly failed by deterministic `not-contains` checks when the Computer quoted a phrase from the unsafe user request and the semantic rubric passed.
 - 2026-05-16: Implemented U18 scoring fix: `eval-worker` now softens failed `not-contains` / `not-icontains` assertions only when the forbidden phrase appears in the original user query and a semantic `llm-rubric` assertion passed, preserving deterministic failures for actual unsafe compliance.
 - 2026-05-16: Local U18 verification passed: focused eval-worker tests, API typecheck, API build, eval-worker Lambda bundle, touched-file Prettier check, and `git diff --check`.
+- 2026-05-16: PR #1288 required checks passed, was squash-merged to `main`, the U18 branch/worktree was cleaned up, and post-merge Deploy passed.
+- 2026-05-16: Admin UI proof against the Marco running Computer used `red-team-safety-scope` as run `0d262839-5a15-40da-98cc-f99f4e108edb`; the detail page showed all 47 selected rows while running, then finalized as `completed` with 40 pass, 4 fail, 3 error, 85.1% pass rate, and `$0.000000` recorded cost.
+- 2026-05-16: Operator follow-up: remove every eval not specifically identified as a true RedTeam eval. Started U19 in a clean worktree to remove performance seed packs, prune ambiguous Computer safety-scope cases, update product/docs copy, and add a deployed DB cleanup migration for old seed rows.
+- 2026-05-16: Implemented U19 cleanup: removed the three performance seed packs, pruned six ambiguous Computer safety-scope cases, tightened seed shape tests so only `red-team-*` files/categories ship, and added `0096_true_redteam_eval_seed_cleanup.sql` plus a deploy hook to delete old seed rows while detaching historical `eval_results`.
+- 2026-05-16: Applied U19 cleanup SQL to dev; it selected/deleted 21 retired seed cases, detached 28 historical result references, and live dev now reports 189 `yaml-seed` cases across the four RedTeam categories only.
+- 2026-05-16: Local U19 verification passed: focused API/Admin/Lambda tests, API typecheck/build, Admin build, CLI typecheck/build, docs build, seed count/category probe, dev cleanup SQL apply, marker view check, touched-file Prettier check, and `git diff --check`.
 
 ## Pull Requests
 
@@ -160,7 +166,8 @@ status: active
 | U15    | `codex/evals-computer-task-execution`          | [#1278](https://github.com/thinkwork-ai/thinkwork/pull/1278) | passed  | merged  | Follow-up: execute eval cases through the selected running Computer's thread/task path; dev migration applied and verified; post-merge Deploy passed       |
 | U16    | `codex/evals-worker-timeout`                   | [#1281](https://github.com/thinkwork-ai/thinkwork/pull/1281) | passed  | merged  | Follow-up: keep Computer-task wait timeout below Lambda timeout so slow cases record eval errors instead of stranding runs; post-merge Deploy passed       |
 | U17    | `codex/evals-reconcile-stale-runs`             | [#1286](https://github.com/thinkwork-ai/thinkwork/pull/1286) | passed  | merged  | Follow-up: reconcile stale running eval runs that are missing result rows; post-merge Deploy passed and completed the stale Marco proof run                |
-| U18    | `codex/evals-redteam-assertions`               | TBD                                                          | pending | pending | Follow-up: avoid false RedTeam failures when safe refusals quote unsafe request phrases and the semantic rubric passed                                     |
+| U18    | `codex/evals-redteam-assertions`               | [#1288](https://github.com/thinkwork-ai/thinkwork/pull/1288) | passed  | merged  | Follow-up: avoid false RedTeam failures when safe refusals quote unsafe request phrases and the semantic rubric passed; post-merge Deploy passed           |
+| U19    | `codex/evals-true-redteam-only`                | [#1291](https://github.com/thinkwork-ai/thinkwork/pull/1291) | pending | pending | Follow-up: remove performance/ambiguous starter rows so the seed library is explicitly RedTeam-only                                                        |
 
 ## CI Failures
 
