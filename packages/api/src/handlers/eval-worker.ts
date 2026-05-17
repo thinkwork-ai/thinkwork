@@ -106,7 +106,13 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
 
 export function summarizeEvalResults(
   rows: Array<{ status: string; evaluator_results: unknown }>,
-): { passed: number; failed: number; passRate: number; totalCostUsd: number } {
+): {
+  completed: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  totalCostUsd: number;
+} {
   const passed = rows.filter((row) => row.status === "pass").length;
   const failed = rows.length - passed;
   const totalCostUsd = rows.reduce(
@@ -114,6 +120,7 @@ export function summarizeEvalResults(
     0,
   );
   return {
+    completed: rows.length,
     passed,
     failed,
     passRate: rows.length > 0 ? passed / rows.length : 0,
@@ -642,12 +649,6 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
   const [run] = await db.select().from(evalRuns).where(eq(evalRuns.id, runId));
   if (!run || run.status !== "running" || run.total_tests <= 0) return;
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(evalResults)
-    .where(eq(evalResults.run_id, runId));
-  if (count < run.total_tests) return;
-
   const rows = await db
     .select({
       status: evalResults.status,
@@ -656,13 +657,14 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
   const summary = summarizeEvalResults(rows);
+  const isComplete = summary.completed >= run.total_tests;
   const completedAt = new Date();
 
   const updated = await db
     .update(evalRuns)
     .set({
-      status: "completed",
-      completed_at: completedAt,
+      status: isComplete ? "completed" : "running",
+      completed_at: isComplete ? completedAt : null,
       passed: summary.passed,
       failed: summary.failed,
       pass_rate: summary.passRate.toFixed(4),
@@ -672,7 +674,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     .returning({ id: evalRuns.id });
   if (updated.length === 0) return;
 
-  if (summary.totalCostUsd > 0 && run.agent_id) {
+  if (isComplete && summary.totalCostUsd > 0 && run.agent_id) {
     await db
       .insert(costEvents)
       .values({
@@ -694,14 +696,14 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     runId,
     tenantId: run.tenant_id,
     agentId: run.agent_id,
-    status: "completed",
+    status: isComplete ? "completed" : "running",
     totalTests: run.total_tests,
     passed: summary.passed,
     failed: summary.failed,
     passRate: summary.passRate,
   });
   console.log(
-    `[eval-worker] finalized runId=${runId}: ${summary.passed}/${run.total_tests} passed`,
+    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed of ${run.total_tests}`,
   );
 }
 

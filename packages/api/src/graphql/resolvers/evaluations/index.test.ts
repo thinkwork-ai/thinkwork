@@ -29,7 +29,11 @@ vi.mock("../../../lib/agentcore-spans.js", () => ({
   fetchSpansForSession: mockFetchSpansForSession,
 }));
 
-import { evalResultSpans, placeholderStatusForEvalRun } from "./index.js";
+import {
+  evalResultSpans,
+  placeholderStatusForEvalRun,
+  withLiveProgress,
+} from "./index.js";
 
 describe("placeholderStatusForEvalRun", () => {
   it("keeps planned eval rows visible with the parent run state", () => {
@@ -38,6 +42,46 @@ describe("placeholderStatusForEvalRun", () => {
     expect(placeholderStatusForEvalRun("cancelled")).toBe("cancelled");
     expect(placeholderStatusForEvalRun("failed")).toBe("failed");
     expect(placeholderStatusForEvalRun("completed")).toBe("waiting");
+  });
+});
+
+describe("withLiveProgress", () => {
+  it("overlays running eval run counters from completed result rows", () => {
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "running",
+          passed: 0,
+          failed: 0,
+          pass_rate: null,
+        },
+        { runId: "run-1", completed: 40, passed: 39, failed: 1 },
+      ),
+    ).toMatchObject({
+      passed: 39,
+      failed: 1,
+      pass_rate: "0.9750",
+    });
+  });
+
+  it("leaves completed eval run counters untouched", () => {
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "completed",
+          passed: 40,
+          failed: 1,
+          pass_rate: "0.9756",
+        },
+        { runId: "run-1", completed: 40, passed: 39, failed: 1 },
+      ),
+    ).toMatchObject({
+      passed: 40,
+      failed: 1,
+      pass_rate: "0.9756",
+    });
   });
 });
 

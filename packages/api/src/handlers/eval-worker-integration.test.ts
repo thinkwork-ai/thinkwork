@@ -33,6 +33,7 @@ describe("eval fan-out integration shape", () => {
 				evaluator_results: [],
 			})),
 		);
+		expect(summary.completed).toBe(120);
 		expect(summary.passed).toBe(80);
 		expect(summary.failed).toBe(40);
 		expect(summary.passRate).toBe(80 / 120);
