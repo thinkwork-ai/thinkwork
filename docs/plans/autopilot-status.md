@@ -162,6 +162,18 @@ Target branch: `main`
   - `thinkwork-dev-api-slack-dispatch`: `2026-05-17T10:25:11Z`
 - Ran a signed Slack Events API DM smoke after deploy. The deployed route returned task `2805de2c-eb9b-4705-8f1a-5136f9dbab1c`; the Computer completed it and `slack-dispatch` posted `slack final response ok` to Slack at `1779013812.283429`.
 - Verified the previously stuck task `4bb289b6-acfb-422c-ab49-178081308ecd` also now has `slack.dispatch_completed` with Slack timestamp `1779012410.992669`.
+- Started follow-up UX hotfix branch `codex/slack-branding-placeholders` in `.Codex/worktrees/slack-branding-placeholders` after live feedback that Slack needs a pending response and should consistently display as `ThinkWork` with the brain logo rather than `Eric Odom's Computer`.
+- Implemented branded pending placeholders for Slack Events API DM/app-mention tasks. New Slack tasks post `Marco is thinking...` as `ThinkWork`, persist the placeholder timestamp, and replace that same message with the final response.
+- Standardized outbound Slack dispatcher messages to use `ThinkWork` plus `https://admin.thinkwork.ai/logo.png` for `chat.postMessage`/`chat.update`, while preserving the per-Computer routing attribution in the message footer.
+- Local verification for the branding/placeholder hotfix passed:
+  - `pnpm install --frozen-lockfile`
+  - `pnpm --filter @thinkwork/api test -- src/handlers/slack/events.test.ts test/integration/slack-acceptance.test.ts`
+  - `pnpm --filter @thinkwork/lambda test -- slack-dispatch.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/lambda typecheck`
+  - `bash scripts/build-lambdas.sh slack-events`
+  - `bash scripts/build-lambdas.sh slack-dispatch`
+  - `git diff --check`
 
 ### Blockers
 

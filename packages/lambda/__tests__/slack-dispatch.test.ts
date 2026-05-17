@@ -130,8 +130,8 @@ describe("slack dispatch", () => {
       expect.objectContaining({
         channel: "C123",
         ts: "1710000002.000000",
-        username: "Eric's Computer",
-        iconUrl: "https://example.com/avatar.png",
+        username: "ThinkWork",
+        iconUrl: "https://admin.thinkwork.ai/logo.png",
       }),
     );
     expect(slackApi.postMessage).not.toHaveBeenCalled();
@@ -262,7 +262,7 @@ describe("slack dispatch", () => {
       expect.objectContaining({
         username: undefined,
         iconUrl: null,
-        text: expect.stringContaining("*Eric's Computer:*"),
+        text: "Quarterly revenue was $42M.",
       }),
     );
     expect(store.recordSuccess).toHaveBeenCalledWith(
@@ -312,6 +312,23 @@ describe("slack dispatch", () => {
             ]),
           }),
         ]),
+      }),
+    );
+  });
+
+  it("posts new responses under the ThinkWork brand", async () => {
+    const store = makeStore([pending()]);
+    const slackApi = makeSlackApi();
+
+    await dispatchSlackCompletions(
+      {},
+      { store, slackApi, getBotToken: async () => "xoxb-token" },
+    );
+
+    expect(slackApi.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: "ThinkWork",
+        iconUrl: "https://admin.thinkwork.ai/logo.png",
       }),
     );
   });
