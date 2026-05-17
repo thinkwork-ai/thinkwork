@@ -44,6 +44,11 @@ type Documents = {
     "\n  mutation CliLabelDelete($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": typeof types.CliLabelDeleteDocument,
     "\n  query CliLabelTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliLabelTenantBySlugDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": typeof types.CliMeDocument,
+    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n": typeof types.CliTenantMembersDocument,
+    "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n": typeof types.CliInviteMemberDocument,
+    "\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n": typeof types.CliUpdateTenantMemberDocument,
+    "\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": typeof types.CliRemoveTenantMemberDocument,
+    "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliMemberTenantBySlugDocument,
     "\n  mutation CliMsgSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": typeof types.CliMsgSendMessageDocument,
     "\n  query CliMsgMessages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        cursor\n        node {\n          id\n          role\n          senderType\n          senderId\n          content\n          tokenCount\n          createdAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": typeof types.CliMsgMessagesDocument,
     "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": typeof types.CliThreadsDocument,
@@ -98,6 +103,11 @@ const documents: Documents = {
     "\n  mutation CliLabelDelete($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": types.CliLabelDeleteDocument,
     "\n  query CliLabelTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliLabelTenantBySlugDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": types.CliMeDocument,
+    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n": types.CliTenantMembersDocument,
+    "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n": types.CliInviteMemberDocument,
+    "\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n": types.CliUpdateTenantMemberDocument,
+    "\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": types.CliRemoveTenantMemberDocument,
+    "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliMemberTenantBySlugDocument,
     "\n  mutation CliMsgSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": types.CliMsgSendMessageDocument,
     "\n  query CliMsgMessages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        cursor\n        node {\n          id\n          role\n          senderType\n          senderId\n          content\n          tokenCount\n          createdAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": types.CliMsgMessagesDocument,
     "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": types.CliThreadsDocument,
@@ -256,6 +266,26 @@ export function graphql(source: "\n  query CliLabelTenantBySlug($slug: String!) 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n"): (typeof documents)["\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"): (typeof documents)["\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
