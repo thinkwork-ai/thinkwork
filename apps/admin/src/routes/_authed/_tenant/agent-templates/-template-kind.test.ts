@@ -13,6 +13,7 @@ describe("typed template admin surface", () => {
 
   it("labels the route as Templates and exposes kind filters", () => {
     expect(sidebarSource).toContain('label: "Templates"');
+    expect(sidebarSource).toContain('label: "Ontology"');
     expect(listSource).toContain("TemplateKind.Computer");
     expect(listSource).toContain("TemplateKind.Agent");
   });

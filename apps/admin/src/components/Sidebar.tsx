@@ -12,6 +12,7 @@ import {
   CreditCard,
   Puzzle,
   Brain,
+  Network,
   Webhook,
   Slack,
   CalendarClock,
@@ -263,6 +264,7 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
+    { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/people", icon: Users, label: "People" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]

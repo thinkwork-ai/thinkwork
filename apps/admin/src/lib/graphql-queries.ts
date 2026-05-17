@@ -2310,6 +2310,263 @@ export const MemorySystemConfigQuery = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
+// Business Ontology
+// ---------------------------------------------------------------------------
+
+export const OntologyDefinitionsQuery = graphql(`
+  query OntologyDefinitions($tenantId: ID!) {
+    ontologyDefinitions(tenantId: $tenantId) {
+      tenantId
+      activeVersion {
+        id
+        versionNumber
+        status
+        sourceChangeSetId
+        activatedAt
+        createdAt
+      }
+      entityTypes {
+        id
+        slug
+        name
+        description
+        broadType
+        aliases
+        propertiesSchema
+        guidanceNotes
+        lifecycleStatus
+        approvedAt
+        updatedAt
+        facetTemplates {
+          id
+          slug
+          heading
+          facetType
+          position
+          sourcePriority
+          prompt
+          guidanceNotes
+          lifecycleStatus
+        }
+        externalMappings {
+          id
+          subjectKind
+          subjectId
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+          notes
+        }
+      }
+      relationshipTypes {
+        id
+        slug
+        name
+        description
+        inverseName
+        sourceTypeSlugs
+        targetTypeSlugs
+        aliases
+        guidanceNotes
+        lifecycleStatus
+        approvedAt
+        updatedAt
+        externalMappings {
+          id
+          subjectKind
+          subjectId
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+          notes
+        }
+      }
+      facetTemplates {
+        id
+        entityTypeId
+        slug
+        heading
+        facetType
+        position
+        sourcePriority
+        prompt
+        guidanceNotes
+        lifecycleStatus
+      }
+      externalMappings {
+        id
+        subjectKind
+        subjectId
+        mappingKind
+        vocabulary
+        externalUri
+        externalLabel
+        notes
+      }
+    }
+  }
+`);
+
+export const OntologyChangeSetsQuery = graphql(`
+  query OntologyChangeSets($tenantId: ID!, $status: OntologyChangeSetStatus) {
+    ontologyChangeSets(tenantId: $tenantId, status: $status) {
+      id
+      tenantId
+      title
+      summary
+      status
+      confidence
+      observedFrequency
+      expectedImpact
+      proposedBy
+      approvedByUserId
+      approvedAt
+      rejectedByUserId
+      rejectedAt
+      appliedVersionId
+      createdAt
+      updatedAt
+      items {
+        id
+        itemType
+        action
+        status
+        targetKind
+        targetSlug
+        title
+        description
+        proposedValue
+        editedValue
+        confidence
+        position
+        evidenceExamples {
+          id
+          sourceKind
+          sourceRef
+          sourceLabel
+          quote
+          metadata
+          observedAt
+        }
+      }
+      evidenceExamples {
+        id
+        sourceKind
+        sourceRef
+        sourceLabel
+        quote
+        metadata
+        observedAt
+      }
+    }
+  }
+`);
+
+export const OntologySuggestionScanJobQuery = graphql(`
+  query OntologySuggestionScanJob($tenantId: ID!, $jobId: ID!) {
+    ontologySuggestionScanJob(tenantId: $tenantId, jobId: $jobId) {
+      id
+      status
+      trigger
+      dedupeKey
+      startedAt
+      finishedAt
+      error
+      result
+      metrics
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const OntologyReprocessJobQuery = graphql(`
+  query OntologyReprocessJob($tenantId: ID!, $jobId: ID!) {
+    ontologyReprocessJob(tenantId: $tenantId, jobId: $jobId) {
+      id
+      changeSetId
+      ontologyVersionId
+      dedupeKey
+      status
+      attempt
+      claimedAt
+      startedAt
+      finishedAt
+      input
+      impact
+      metrics
+      error
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const StartOntologySuggestionScanMutation = graphql(`
+  mutation StartOntologySuggestionScan(
+    $input: StartOntologySuggestionScanInput!
+  ) {
+    startOntologySuggestionScan(input: $input) {
+      id
+      status
+      trigger
+      dedupeKey
+      result
+      metrics
+      error
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateOntologyChangeSetMutation = graphql(`
+  mutation UpdateOntologyChangeSet($input: UpdateOntologyChangeSetInput!) {
+    updateOntologyChangeSet(input: $input) {
+      id
+      title
+      summary
+      status
+      confidence
+      observedFrequency
+      expectedImpact
+      updatedAt
+      items {
+        id
+        status
+        editedValue
+        updatedAt
+      }
+    }
+  }
+`);
+
+export const ApproveOntologyChangeSetMutation = graphql(`
+  mutation ApproveOntologyChangeSet($input: ApproveOntologyChangeSetInput!) {
+    approveOntologyChangeSet(input: $input) {
+      id
+      status
+      approvedAt
+      appliedVersionId
+      updatedAt
+    }
+  }
+`);
+
+export const RejectOntologyChangeSetMutation = graphql(`
+  mutation RejectOntologyChangeSet($input: RejectOntologyChangeSetInput!) {
+    rejectOntologyChangeSet(input: $input) {
+      id
+      status
+      rejectedAt
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
 // Agent Templates
 // ---------------------------------------------------------------------------
 
