@@ -108,4 +108,65 @@ describe("ContextEngineService", () => {
     expect(listed.map((p) => p.id)).toEqual(["memory"]);
     expect(seenTenants).toEqual(["tenant-dynamic", "tenant-dynamic"]);
   });
+
+  it("can route ontology Brain independently from page/wiki providers", async () => {
+    const service = createContextEngineService({
+      providers: [
+        provider,
+        {
+          id: "brain",
+          family: "brain",
+          sourceFamily: "brain",
+          displayName: "Ontology Brain",
+          defaultEnabled: true,
+          query: async (request) => ({
+            hits: [
+              {
+                id: "brain:acme:facet:risks",
+                providerId: "brain",
+                family: "brain",
+                sourceFamily: "brain",
+                title: "Acme - Risks & Landmines",
+                snippet: `Ontology facet about ${request.query}`,
+                score: 0.8,
+                scope: request.scope,
+                provenance: {
+                  sourceId: "section-risks",
+                  metadata: {
+                    entityType: "customer",
+                    facetSlug: "risks_and_landmines",
+                    facetType: "compiled",
+                  },
+                },
+              },
+            ],
+          }),
+        },
+      ],
+      validateCaller: async () => true,
+    });
+
+    const result = await service.query({
+      query: "Acme meeting prep",
+      providers: { families: ["brain"] },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(result.providers).toEqual([
+      expect.objectContaining({
+        providerId: "brain",
+        family: "brain",
+        sourceFamily: "brain",
+      }),
+    ]);
+    expect(result.hits[0]).toMatchObject({
+      providerId: "brain",
+      sourceFamily: "brain",
+      provenance: {
+        metadata: {
+          facetSlug: "risks_and_landmines",
+        },
+      },
+    });
+  });
 });

@@ -25,6 +25,9 @@ describe("Context Engine source families", () => {
       sourceFamilyForProvider(provider({ id: "memory", family: "memory" })),
     ).toBe("brain");
     expect(
+      sourceFamilyForProvider(provider({ id: "brain", family: "brain" })),
+    ).toBe("brain");
+    expect(
       sourceFamilyForProvider(provider({ id: "wiki", family: "wiki" })),
     ).toBe("pages");
     expect(

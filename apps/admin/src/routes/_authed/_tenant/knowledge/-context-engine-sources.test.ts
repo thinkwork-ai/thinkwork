@@ -27,6 +27,13 @@ describe("context engine source helpers", () => {
     const sources = [
       provider({ id: "memory", displayName: "Memory", defaultEnabled: true }),
       provider({
+        id: "brain",
+        family: "brain",
+        sourceFamily: "brain",
+        displayName: "Ontology Brain",
+        defaultEnabled: true,
+      }),
+      provider({
         id: "wiki",
         family: "wiki",
         displayName: "Pages",
@@ -51,7 +58,7 @@ describe("context engine source helpers", () => {
     ];
 
     expect(visibleContextProviders(sources).map((source) => source.id)).toEqual(
-      ["memory", "wiki", "workspace", "kb", "builtin:web"],
+      ["memory", "brain", "wiki", "workspace", "kb", "builtin:web"],
     );
   });
 

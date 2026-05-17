@@ -14,6 +14,7 @@ export function sourceFamilyForProvider(
 ): ContextSourceFamily {
   if (provider.sourceFamily) return provider.sourceFamily;
   if (provider.family === "memory") return "brain";
+  if (provider.family === "brain") return "brain";
   if (provider.family === "wiki") return "pages";
   if (provider.family === "workspace") return "workspace";
   if (provider.family === "knowledge-base") return "knowledge-base";
@@ -30,7 +31,8 @@ export function sourceFamilyForHit(
   return sourceFamilyForProvider({
     id: hit.providerId,
     family: hit.family,
-    displayName: hit.provenance.label ?? provider?.displayName ?? hit.providerId,
+    displayName:
+      hit.provenance.label ?? provider?.displayName ?? hit.providerId,
     config: hit.metadata,
     sourceFamily: provider?.sourceFamily,
     subAgent: provider?.subAgent,
@@ -57,7 +59,9 @@ function flattenUnknown(value: unknown): string[] {
   if (typeof value === "number" || typeof value === "boolean") {
     return [String(value)];
   }
-  if (Array.isArray(value)) return value.flatMap((entry) => flattenUnknown(entry));
-  if (typeof value === "object") return Object.values(value).flatMap(flattenUnknown);
+  if (Array.isArray(value))
+    return value.flatMap((entry) => flattenUnknown(entry));
+  if (typeof value === "object")
+    return Object.values(value).flatMap(flattenUnknown);
   return [];
 }

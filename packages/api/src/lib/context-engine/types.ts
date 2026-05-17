@@ -3,6 +3,7 @@ export type ContextEngineScope = "personal" | "team" | "auto";
 export type ContextEngineDepth = "quick" | "deep";
 export type ContextProviderFamily =
   | "memory"
+  | "brain"
   | "wiki"
   | "workspace"
   | "knowledge-base"
@@ -66,8 +67,10 @@ export interface ContextEngineRequest {
   caller: ContextEngineCaller;
 }
 
-export interface ContextEngineProviderRequest
-  extends Omit<ContextEngineRequest, "providers"> {
+export interface ContextEngineProviderRequest extends Omit<
+  ContextEngineRequest,
+  "providers"
+> {
   limit: number;
   mode: ContextEngineMode;
   scope: ContextEngineScope;

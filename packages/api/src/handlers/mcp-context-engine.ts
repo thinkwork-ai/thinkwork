@@ -24,7 +24,7 @@ const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: wiki, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for Hindsight Memory synthesis.",
+      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for Hindsight Memory synthesis.",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,6 +48,7 @@ const TOOLS = [
                 type: "string",
                 enum: [
                   "memory",
+                  "brain",
                   "wiki",
                   "workspace",
                   "knowledge-base",
@@ -163,9 +164,26 @@ const TOOLS = [
     },
   },
   {
+    name: "query_brain_context",
+    description:
+      "Search only tenant-shared ontology-shaped Company Brain pages and facets. Use this for business/domain context such as customers, opportunities, commitments, risks, relationships, and cited provenance.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        mode: { type: "string", enum: ["results", "answer"] },
+        scope: { type: "string", enum: ["team", "auto"] },
+        depth: { type: "string", enum: ["quick", "deep"] },
+        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "query_wiki_context",
     description:
-      "Search only compiled Company Brain pages. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory.",
+      "Search only owner-scoped compiled wiki pages. Use this for fast personal page/entity/topic lookup without waiting on Hindsight Memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -365,6 +383,11 @@ async function handleToolCall(
         },
         providerOptionsArg(args.providerOptions),
       );
+    }
+    case "query_brain_context": {
+      return await queryContextTool(request.id, args, callerWithTarget, {
+        families: ["brain"],
+      });
     }
     case "query_wiki_context": {
       return await queryContextTool(request.id, args, callerWithTarget, {
@@ -697,9 +720,8 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -905,9 +927,8 @@ async function canManageProviderSettings(
   const principalId = stringClaim(claims.sub);
   if (!principalId) return false;
   try {
-    const { requireTenantAdmin } = await import(
-      "../graphql/resolvers/core/authz.js"
-    );
+    const { requireTenantAdmin } =
+      await import("../graphql/resolvers/core/authz.js");
     await requireTenantAdmin(
       {
         auth: {

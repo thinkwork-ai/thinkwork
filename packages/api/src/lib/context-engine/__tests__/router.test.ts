@@ -60,6 +60,7 @@ describe("Context Engine router", () => {
     const router = createContextEngineRouter({
       providers: [
         provider({ id: "memory", family: "memory" }),
+        provider({ id: "brain", family: "brain" }),
         provider({ id: "wiki", family: "wiki" }),
       ],
     });
@@ -74,6 +75,17 @@ describe("Context Engine router", () => {
       "wiki",
     ]);
     expect(result.hits[0]?.providerId).toBe("wiki");
+
+    const brainResult = await router.query({
+      query: "Acme commitments",
+      providers: { families: ["brain"] },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(brainResult.providers.map((status) => status.providerId)).toEqual([
+      "brain",
+    ]);
+    expect(brainResult.hits[0]?.providerId).toBe("brain");
   });
 
   it("skips default-disabled providers unless explicitly selected", async () => {

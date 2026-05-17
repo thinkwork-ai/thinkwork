@@ -307,6 +307,68 @@ describe("memory context provider", () => {
     ]);
   });
 
+  it("marks bridged tenant entity pages as Brain source-family hits", async () => {
+    recallMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "mem-acme",
+          tenantId: "tenant-1",
+          ownerType: "user",
+          ownerId: "user-1",
+          kind: "semantic",
+          sourceType: "conversation",
+          status: "active",
+          content: {
+            summary: "Acme commitment",
+            text: "Acme needs the renewal pricing before Tuesday.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          createdAt: "2026-05-17T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 0.8,
+        backend: "hindsight",
+      },
+    ]);
+    findPageSourcesAcrossSurfacesMock.mockResolvedValueOnce([
+      {
+        pageTable: "tenant_entity_pages",
+        pageId: "page-acme",
+        sectionId: "section-commitments",
+        sourceKind: "memory_unit",
+        sourceRef: "mem-acme",
+        title: "Acme",
+        slug: "acme",
+        entitySubtype: "customer",
+      },
+    ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "Acme renewal pricing",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+
+    expect(result.hits[1]).toMatchObject({
+      id: "wiki:tenant_entity_pages:page-acme:via-memory:mem-acme",
+      family: "wiki",
+      sourceFamily: "brain",
+      provenance: {
+        uri: "thinkwork://brain/customer/acme",
+        metadata: expect.objectContaining({
+          pageTable: "tenant_entity_pages",
+          entitySubtype: "customer",
+        }),
+      },
+    });
+  });
+
   it("keeps memory hits when the wiki citation bridge is unavailable", async () => {
     recallMock.mockResolvedValueOnce([
       {

@@ -35,6 +35,7 @@ export type UpsertTenantContextProviderSettingInput = {
 
 const BUILT_IN_PROVIDER_FAMILIES: Record<string, ContextProviderFamily> = {
   memory: "memory",
+  brain: "brain",
   wiki: "wiki",
   "workspace-files": "workspace",
   "bedrock-knowledge-base": "knowledge-base",
