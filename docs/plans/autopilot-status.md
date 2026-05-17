@@ -292,7 +292,14 @@ None.
 
 ## CI / PR
 
-- Pending: commit, PR, CI, merge, and deployed Slack smoke verification.
+- Opened [#1320](https://github.com/thinkwork-ai/thinkwork/pull/1320).
+- GitHub PR checks on [#1320](https://github.com/thinkwork-ai/thinkwork/pull/1320) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Pending: squash merge, branch cleanup, and deployed Slack smoke verification.
 
 ## Blockers
 
