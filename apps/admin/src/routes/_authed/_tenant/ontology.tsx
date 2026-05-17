@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { type ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -22,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,6 +51,7 @@ import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import { cn, formatDateTime } from "@/lib/utils";
 import {
   OntologyChangeSetStatus,
+  type OntologyDefinitionsQuery as OntologyDefinitionsQueryData,
   OntologyJobStatus,
   OntologyLifecycleStatus,
 } from "@/gql/graphql";
@@ -112,6 +115,11 @@ type ChangeSetDraft = {
   title: string;
   summary: string;
 };
+
+type OntologyDefinitionsData =
+  OntologyDefinitionsQueryData["ontologyDefinitions"];
+type EntityTypeRow = OntologyDefinitionsData["entityTypes"][number];
+type RelationshipTypeRow = OntologyDefinitionsData["relationshipTypes"][number];
 
 type ParseResult =
   | { ok: true; value: JsonValue }
@@ -210,6 +218,16 @@ function compactLabel(value: string): string {
 function formatPercent(value?: number | null): string {
   if (value == null) return "n/a";
   return `${Math.round(value * 100)}%`;
+}
+
+function commaList(values: string[], fallback = "none"): string {
+  return values.length > 0 ? values.join(", ") : fallback;
+}
+
+function compactNames(values: string[], fallback = "none"): string {
+  if (values.length === 0) return fallback;
+  if (values.length <= 3) return values.join(", ");
+  return `${values.slice(0, 3).join(", ")} +${values.length - 3}`;
 }
 
 function jsonObject(value: JsonValue): Record<string, unknown> {
@@ -319,200 +337,225 @@ function EmptyState({
   );
 }
 
-function DefinitionList({
+const entityColumns: ColumnDef<EntityTypeRow>[] = [
+  {
+    accessorKey: "name",
+    header: "Entity",
+    cell: ({ row }) => (
+      <span className="truncate font-medium">{row.original.name}</span>
+    ),
+    size: 180,
+  },
+  {
+    accessorKey: "slug",
+    header: "Slug",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="font-mono text-[10px]">
+        {row.original.slug}
+      </Badge>
+    ),
+    size: 150,
+  },
+  {
+    accessorKey: "lifecycleStatus",
+    header: "Status",
+    cell: ({ row }) => <StatusBadge status={row.original.lifecycleStatus} />,
+    size: 120,
+  },
+  {
+    accessorKey: "broadType",
+    header: "Broad Type",
+    cell: ({ row }) => (
+      <Badge variant="secondary">{row.original.broadType}</Badge>
+    ),
+    size: 130,
+  },
+  {
+    accessorKey: "description",
+    header: "Description",
+    cell: ({ row }) => (
+      <span className="truncate text-sm text-muted-foreground">
+        {row.original.description ?? "No description yet."}
+      </span>
+    ),
+    size: 320,
+  },
+  {
+    accessorKey: "aliases",
+    header: "Aliases",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {compactNames(row.original.aliases)}
+      </span>
+    ),
+    size: 220,
+  },
+  {
+    accessorKey: "facetTemplates",
+    header: "Facets",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {compactNames(
+          row.original.facetTemplates.map((facet) => facet.heading),
+        )}
+      </span>
+    ),
+    size: 220,
+  },
+  {
+    accessorKey: "externalMappings",
+    header: "Mappings",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {row.original.externalMappings.length === 0
+          ? "none"
+          : `${row.original.externalMappings.length} mapped`}
+      </span>
+    ),
+    size: 110,
+  },
+];
+
+const relationshipColumns: ColumnDef<RelationshipTypeRow>[] = [
+  {
+    accessorKey: "name",
+    header: "Relationship",
+    cell: ({ row }) => (
+      <span className="truncate font-medium">{row.original.name}</span>
+    ),
+    size: 180,
+  },
+  {
+    accessorKey: "slug",
+    header: "Slug",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="font-mono text-[10px]">
+        {row.original.slug}
+      </Badge>
+    ),
+    size: 170,
+  },
+  {
+    accessorKey: "lifecycleStatus",
+    header: "Status",
+    cell: ({ row }) => <StatusBadge status={row.original.lifecycleStatus} />,
+    size: 120,
+  },
+  {
+    accessorKey: "sourceTypeSlugs",
+    header: "From",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {commaList(row.original.sourceTypeSlugs, "any")}
+      </span>
+    ),
+    size: 190,
+  },
+  {
+    accessorKey: "targetTypeSlugs",
+    header: "To",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {commaList(row.original.targetTypeSlugs, "any")}
+      </span>
+    ),
+    size: 190,
+  },
+  {
+    accessorKey: "inverseName",
+    header: "Inverse",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {row.original.inverseName ?? "none"}
+      </span>
+    ),
+    size: 150,
+  },
+  {
+    accessorKey: "description",
+    header: "Description",
+    cell: ({ row }) => (
+      <span className="truncate text-sm text-muted-foreground">
+        {row.original.description ?? "No description yet."}
+      </span>
+    ),
+    size: 320,
+  },
+  {
+    accessorKey: "externalMappings",
+    header: "Mappings",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {row.original.externalMappings.length === 0
+          ? "none"
+          : `${row.original.externalMappings.length} mapped`}
+      </span>
+    ),
+    size: 110,
+  },
+];
+
+function EntitiesPanel({
   definitions,
 }: {
-  definitions:
-    | {
-        activeVersion?: {
-          versionNumber: number;
-          activatedAt?: string | null;
-        } | null;
-        entityTypes: Array<{
-          id: string;
-          slug: string;
-          name: string;
-          description?: string | null;
-          broadType: string;
-          aliases: string[];
-          lifecycleStatus: OntologyLifecycleStatus;
-          guidanceNotes?: string | null;
-          facetTemplates: Array<{
-            id: string;
-            slug: string;
-            heading: string;
-            facetType: string;
-            lifecycleStatus: OntologyLifecycleStatus;
-          }>;
-          externalMappings: Array<{
-            id: string;
-            mappingKind: string;
-            vocabulary: string;
-            externalUri: string;
-            externalLabel?: string | null;
-          }>;
-        }>;
-        relationshipTypes: Array<{
-          id: string;
-          slug: string;
-          name: string;
-          description?: string | null;
-          inverseName?: string | null;
-          sourceTypeSlugs: string[];
-          targetTypeSlugs: string[];
-          lifecycleStatus: OntologyLifecycleStatus;
-          externalMappings: Array<{
-            id: string;
-            mappingKind: string;
-            vocabulary: string;
-            externalUri: string;
-            externalLabel?: string | null;
-          }>;
-        }>;
-      }
-    | undefined;
+  definitions: OntologyDefinitionsData | undefined;
 }) {
   if (!definitions) {
     return (
       <EmptyState
         icon={Database}
-        title="Loading definitions"
+        title="Loading entities"
         body="Fetching the active business ontology."
       />
     );
   }
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <Fact
-          label="Active version"
-          value={
-            definitions.activeVersion
-              ? `v${definitions.activeVersion.versionNumber}`
-              : "No active version"
-          }
-        />
-        <Fact
-          label="Entity types"
-          value={String(definitions.entityTypes.length)}
-        />
-        <Fact
-          label="Relationships"
-          value={String(definitions.relationshipTypes.length)}
-        />
-        <Fact
-          label="Last activated"
-          value={
-            definitions.activeVersion?.activatedAt
-              ? formatDateTime(definitions.activeVersion.activatedAt)
-              : "n/a"
-          }
-        />
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Entities</h2>
+        <p className="text-sm text-muted-foreground">
+          Business object types that shape compiled Company Brain pages.
+        </p>
       </div>
+      <DataTable
+        columns={entityColumns}
+        data={definitions.entityTypes}
+        pageSize={0}
+        tableClassName="table-fixed"
+      />
+    </div>
+  );
+}
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Entity Types</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {definitions.entityTypes.length === 0 ? (
-              <EmptyState
-                icon={Database}
-                title="No entity types"
-                body="Approved entity definitions will appear here."
-              />
-            ) : (
-              definitions.entityTypes.map((entity) => (
-                <div key={entity.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <p className="font-medium">{entity.name}</p>
-                        <Badge
-                          variant="outline"
-                          className="font-mono text-[10px]"
-                        >
-                          {entity.slug}
-                        </Badge>
-                        <StatusBadge status={entity.lifecycleStatus} />
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {entity.description ?? "No description yet."}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{entity.broadType}</Badge>
-                  </div>
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                    <Fact
-                      label="Aliases"
-                      value={entity.aliases.join(", ") || "none"}
-                    />
-                    <Fact
-                      label="Facet templates"
-                      value={
-                        entity.facetTemplates
-                          .map((facet) => facet.heading)
-                          .join(", ") || "none"
-                      }
-                    />
-                  </div>
-                  {entity.guidanceNotes && (
-                    <p className="mt-3 rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-                      {entity.guidanceNotes}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Relationship Types</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {definitions.relationshipTypes.length === 0 ? (
-              <EmptyState
-                icon={GitBranch}
-                title="No relationship types"
-                body="Approved relationship definitions will appear here."
-              />
-            ) : (
-              definitions.relationshipTypes.map((relationship) => (
-                <div key={relationship.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="font-medium">{relationship.name}</p>
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {relationship.slug}
-                    </Badge>
-                    <StatusBadge status={relationship.lifecycleStatus} />
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {relationship.description ?? "No description yet."}
-                  </p>
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                    <Fact
-                      label="From"
-                      value={relationship.sourceTypeSlugs.join(", ") || "any"}
-                    />
-                    <Fact
-                      label="To"
-                      value={relationship.targetTypeSlugs.join(", ") || "any"}
-                    />
-                  </div>
-                  {relationship.inverseName && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Inverse: {relationship.inverseName}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+function RelationshipsPanel({
+  definitions,
+}: {
+  definitions: OntologyDefinitionsData | undefined;
+}) {
+  if (!definitions) {
+    return (
+      <EmptyState
+        icon={GitBranch}
+        title="Loading relationships"
+        body="Fetching the active business ontology."
+      />
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Relationships</h2>
+        <p className="text-sm text-muted-foreground">
+          Directed links that tell the wiki compiler how business objects
+          relate.
+        </p>
       </div>
+      <DataTable
+        columns={relationshipColumns}
+        data={definitions.relationshipTypes}
+        pageSize={0}
+        tableClassName="table-fixed"
+      />
     </div>
   );
 }
@@ -520,20 +563,7 @@ function DefinitionList({
 function MappingsPanel({
   definitions,
 }: {
-  definitions:
-    | {
-        externalMappings: Array<{
-          id: string;
-          subjectKind: string;
-          subjectId: string;
-          mappingKind: string;
-          vocabulary: string;
-          externalUri: string;
-          externalLabel?: string | null;
-          notes?: string | null;
-        }>;
-      }
-    | undefined;
+  definitions: OntologyDefinitionsData | undefined;
 }) {
   const mappings = definitions?.externalMappings ?? [];
   if (mappings.length === 0) {
@@ -1397,10 +1427,10 @@ export function OntologyStudioPage() {
   ]);
 
   return (
-    <div className="space-y-5 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-4 p-3">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
               Ontology Studio
             </h1>
@@ -1413,26 +1443,26 @@ export function OntologyStudioPage() {
               </Badge>
             )}
           </div>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Review suggested business types, relationships, facets, and
-            vocabulary mappings before they reshape the Company Brain.
-          </p>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {activeScanJob && (
+              <Badge
+                variant="secondary"
+                className={statusTone(activeScanJob.status)}
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Scan {compactLabel(activeScanJob.status)}
+              </Badge>
+            )}
+            <Button onClick={runScan} disabled={!tenantId || scanStarting}>
+              {scanStarting ? <Loader2 className="animate-spin" /> : <Play />}
+              Scan
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {activeScanJob && (
-            <Badge
-              variant="secondary"
-              className={statusTone(activeScanJob.status)}
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              Scan {compactLabel(activeScanJob.status)}
-            </Badge>
-          )}
-          <Button onClick={runScan} disabled={!tenantId || scanStarting}>
-            {scanStarting ? <Loader2 className="animate-spin" /> : <Play />}
-            Scan
-          </Button>
-        </div>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Review suggested business types, relationships, facets, and vocabulary
+          mappings before they reshape the Company Brain.
+        </p>
       </div>
 
       {changeSetsResult.error && (
@@ -1446,31 +1476,19 @@ export function OntologyStudioPage() {
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Fact
-          label="Definitions"
-          value={`${definitions?.entityTypes.length ?? 0} entities`}
-        />
-        <Fact
-          label="Relationships"
-          value={String(definitions?.relationshipTypes.length ?? 0)}
-        />
-        <Fact label="Change sets" value={String(changeSets.length)} />
-        <Fact
-          label="Scan status"
-          value={activeScanJob ? compactLabel(activeScanJob.status) : "idle"}
-        />
-      </div>
-
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="change-sets">
             <Pencil />
             Change Sets
           </TabsTrigger>
-          <TabsTrigger value="definitions">
+          <TabsTrigger value="entities">
             <Database />
-            Definitions
+            Entities
+          </TabsTrigger>
+          <TabsTrigger value="relationships">
+            <GitBranch />
+            Relationships
           </TabsTrigger>
           <TabsTrigger value="mappings">
             <Network />
@@ -1533,8 +1551,12 @@ export function OntologyStudioPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="definitions">
-          <DefinitionList definitions={definitions} />
+        <TabsContent value="entities">
+          <EntitiesPanel definitions={definitions} />
+        </TabsContent>
+
+        <TabsContent value="relationships">
+          <RelationshipsPanel definitions={definitions} />
         </TabsContent>
 
         <TabsContent value="mappings">
