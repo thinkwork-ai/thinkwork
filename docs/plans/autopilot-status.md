@@ -444,7 +444,41 @@ None.
 
 ## CI / PR
 
-- Pending: commit, PR, CI, squash merge, deploy, and live Slack smoke.
+- Opened [#1328](https://github.com/thinkwork-ai/thinkwork/pull/1328).
+- GitHub PR checks on [#1328](https://github.com/thinkwork-ai/thinkwork/pull/1328) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Squash merged [#1328](https://github.com/thinkwork-ai/thinkwork/pull/1328) as `c933f433280f012d6788ef5c30717d64c472fe52`; Deploy run `25993640509` passed.
+- Live smoke still returned a "no file" response. DB task output showed `mode: computer_native` and no `thread_turn_dispatched` event, proving Slack turns are executing through the Computer-native runtime rather than the Flue AgentCore invoke path.
+
+# Computer-Native Slack Attachment Context Hotfix - 2026-05-17
+
+## Status
+
+- Branch: `codex/computer-runtime-attachment-context`
+- Started: `2026-05-17T14:45:00Z`
+- Root cause:
+  - Slack ingestion now links the file to the ThinkWork user message, but Computer-native `loadThreadTurnContext` only returned message text/history/system prompt.
+  - `@thinkwork/computer-runtime` therefore called Bedrock without any attachment metadata or file content and could truthfully answer that no file was visible in its prompt context.
+- Implemented:
+  - The Computer runtime context API now resolves `messages.metadata.attachments` into tenant-pinned thread attachment records.
+  - Text-like attachments are read from S3 through the API and returned inline in the current turn context with size/truncation metadata.
+  - The Computer runtime system prompt now includes a current-turn file block and tells the model not to claim no file is attached.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api test -- src/lib/computers/runtime-api.test.ts` - passed.
+- `pnpm --filter @thinkwork/computer-runtime test -- src/computer-chat.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/computer-runtime typecheck` - passed.
+- `pnpm --filter @thinkwork/api test -- src/lib/computers/runtime-api.test.ts src/handlers/slack/events.test.ts src/lib/slack/file-attachments.test.ts test/integration/slack-acceptance.test.ts` - passed.
+- `pnpm --filter @thinkwork/computer-runtime test` - passed.
+- `pnpm --filter @thinkwork/computer-runtime build` - passed.
+- `pnpm --filter @thinkwork/api build` - passed.
+- `git diff --check` - passed.
 
 ## Blockers
 

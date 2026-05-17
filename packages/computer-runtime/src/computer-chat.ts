@@ -75,8 +75,11 @@ export async function buildSystemPrompt(
 ): Promise<string> {
   const basePrompt =
     context.systemPrompt || buildDefaultSystemPrompt(context, workspaceRoot);
+  const attachmentPrompt = buildAttachmentPrompt(context.attachments ?? []);
   const workspacePrompt = await readWorkspaceSystemPrompt(workspaceRoot);
-  return [basePrompt, workspacePrompt].filter(Boolean).join("\n\n---\n\n");
+  return [basePrompt, attachmentPrompt, workspacePrompt]
+    .filter(Boolean)
+    .join("\n\n---\n\n");
 }
 
 function buildBedrockMessages(
@@ -109,6 +112,38 @@ function buildDefaultSystemPrompt(
     "Answer the user's thread message directly and keep the response useful, concise, and grounded in the conversation.",
     `Workspace root: ${context.computer.workspaceRoot || workspaceRoot}.`,
   ].join("\n");
+}
+
+function buildAttachmentPrompt(
+  attachments: NonNullable<ThreadTurnContext["attachments"]>,
+) {
+  if (attachments.length === 0) return "";
+
+  const lines = [
+    "Files attached to the current user turn:",
+    "These files are already attached to this request. Do not say that no file is attached.",
+  ];
+  for (const attachment of attachments) {
+    const sizeKb = Math.max(1, Math.ceil((attachment.sizeBytes || 0) / 1024));
+    lines.push(
+      `- ${attachment.name} (${attachment.mimeType || "application/octet-stream"}, ~${sizeKb} KB)`,
+    );
+    if (attachment.readable && attachment.contentText) {
+      const truncated = attachment.truncated
+        ? "\n\n[attachment text truncated]"
+        : "";
+      lines.push(`  Content:\n${fenced(`${attachment.contentText}${truncated}`)}`);
+    } else {
+      lines.push(
+        `  Content is not available inline (${attachment.reason || "unreadable"}).`,
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+function fenced(text: string) {
+  return ["```", text, "```"].join("\n");
 }
 
 function extractText(content: unknown): string {

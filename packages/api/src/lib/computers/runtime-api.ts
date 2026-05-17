@@ -1,3 +1,4 @@
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -24,16 +25,19 @@ import {
   completeRunbookRunFromThreadTurn,
   failRunbookRunFromThreadTurn,
 } from "../runbooks/runs.js";
+import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
 export {
   buildDraftAppletSourceDigest,
   verifyDraftAppletPromotionProof,
 } from "../applets/draft-promotion.js";
 
 const db = getDb();
+const s3 = new S3Client({});
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 const ARTIFACT_SAVE_MISSING_MESSAGE =
   "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.";
 const RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES = 5;
+const COMPUTER_ATTACHMENT_TEXT_BYTES = 128 * 1024;
 
 const BUILD_INTENT_ACTION_RE =
   /\b(build|create|generate|make|produce|assemble|compose)\b/i;
@@ -605,6 +609,11 @@ export async function loadThreadTurnContext(input: {
     threadId: payload.threadId,
     messageId: payload.messageId,
   });
+  const attachments = await loadComputerThreadTurnAttachments({
+    tenantId: input.tenantId,
+    threadId: payload.threadId,
+    metadata: message.metadata,
+  });
 
   const history = await db
     .select({
@@ -646,6 +655,7 @@ export async function loadThreadTurnContext(input: {
       id: message.id,
       content: message.content ?? "",
     },
+    attachments,
     messagesHistory: history
       .filter((row) => row.role === "user" || row.role === "assistant")
       .map((row) => ({
@@ -1263,6 +1273,7 @@ async function loadComputerThreadTurn(input: {
       id: messages.id,
       content: messages.content,
       role: messages.role,
+      metadata: messages.metadata,
     })
     .from(messages)
     .where(
@@ -1287,6 +1298,107 @@ async function loadComputerThreadTurn(input: {
   }
 
   return { thread, message };
+}
+
+async function loadComputerThreadTurnAttachments(input: {
+  tenantId: string;
+  threadId: string;
+  metadata: unknown;
+}) {
+  const attachments = await resolveMessageAttachmentsForDispatch({
+    tenantId: input.tenantId,
+    metadata: input.metadata,
+  });
+  if (attachments.length === 0) return [];
+
+  const expectedPrefix = `tenants/${input.tenantId}/attachments/${input.threadId}/`;
+  const bucket = process.env.WORKSPACE_BUCKET || process.env.BUCKET_NAME || "";
+
+  return Promise.all(
+    attachments.map(async (attachment) => {
+      const base = {
+        attachmentId: attachment.attachmentId,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.sizeBytes,
+        readable: false,
+        truncated: false,
+      };
+      if (!attachment.s3Key.startsWith(expectedPrefix)) {
+        return { ...base, reason: "prefix_mismatch" };
+      }
+      if (!isProbablyTextAttachment(attachment)) {
+        return { ...base, reason: "unsupported_mime_type" };
+      }
+      if (!bucket) {
+        return { ...base, reason: "workspace_bucket_unconfigured" };
+      }
+
+      try {
+        const object = await s3.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: attachment.s3Key,
+            Range: `bytes=0-${COMPUTER_ATTACHMENT_TEXT_BYTES - 1}`,
+          }),
+        );
+        const body = await s3BodyToBuffer(object.Body);
+        const contentText = body.toString("utf-8").trim();
+        return {
+          ...base,
+          readable: Boolean(contentText),
+          truncated: attachment.sizeBytes > COMPUTER_ATTACHMENT_TEXT_BYTES,
+          contentText,
+        };
+      } catch (err) {
+        console.error("[computer-runtime] failed to load message attachment", {
+          tenantId: input.tenantId,
+          threadId: input.threadId,
+          attachmentId: attachment.attachmentId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return { ...base, reason: "download_failed" };
+      }
+    }),
+  );
+}
+
+async function s3BodyToBuffer(body: unknown): Promise<Buffer> {
+  if (!body) return Buffer.alloc(0);
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  if (
+    typeof (body as { transformToByteArray?: unknown }).transformToByteArray ===
+    "function"
+  ) {
+    const bytes = await (
+      body as { transformToByteArray: () => Promise<Uint8Array> }
+    ).transformToByteArray();
+    return Buffer.from(bytes);
+  }
+  throw new Error("Unsupported S3 body type");
+}
+
+function isProbablyTextAttachment(entry: {
+  mimeType: string;
+  name: string;
+}): boolean {
+  const mime = entry.mimeType.toLowerCase();
+  const name = entry.name.toLowerCase();
+  return (
+    mime.startsWith("text/") ||
+    mime.includes("json") ||
+    mime.includes("xml") ||
+    name.endsWith(".csv") ||
+    name.endsWith(".json") ||
+    name.endsWith(".md") ||
+    name.endsWith(".markdown") ||
+    name.endsWith(".tsv") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".xml") ||
+    name.endsWith(".yaml") ||
+    name.endsWith(".yml")
+  );
 }
 
 function resolveComputerChatModel(runtimeConfig: unknown) {

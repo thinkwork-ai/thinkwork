@@ -43,6 +43,16 @@ export type ThreadTurnContext = {
     id: string;
     content: string;
   };
+  attachments?: Array<{
+    attachmentId: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    readable: boolean;
+    truncated?: boolean;
+    contentText?: string;
+    reason?: string;
+  }>;
   messagesHistory: Array<{
     id: string;
     role: "user" | "assistant" | string;
