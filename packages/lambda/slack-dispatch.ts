@@ -406,16 +406,23 @@ function createDrizzleSlackDispatchStore(
     async loadPending(limit) {
       const rows = await dbClient
         .select({
-          eventId: computerEvents.id,
-          tenantId: computerEvents.tenant_id,
-          computerId: computerEvents.computer_id,
+          eventId: sql<string>`COALESCE((
+            SELECT ${computerEvents.id}::text
+            FROM ${computerEvents}
+            WHERE ${computerEvents.task_id} = ${computerTasks.id}
+              AND ${computerEvents.event_type} = 'task_completed'
+            ORDER BY ${computerEvents.created_at} ASC
+            LIMIT 1
+          ), ${computerTasks.id}::text)`,
+          tenantId: computerTasks.tenant_id,
+          computerId: computerTasks.computer_id,
           taskId: computerTasks.id,
           input: computerTasks.input,
           output: computerTasks.output,
           responseMessageContent: sql<string | null>`(
             SELECT ${messages.content}
             FROM ${messages}
-            WHERE ${messages.tenant_id} = ${computerEvents.tenant_id}
+            WHERE ${messages.tenant_id} = ${computerTasks.tenant_id}
               AND ${messages.id} = CASE
                 WHEN ${computerTasks.output}->>'responseMessageId'
                   ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -429,13 +436,12 @@ function createDrizzleSlackDispatchStore(
           actorAvatarUrl: users.image,
           botTokenSecretPath: slackWorkspaces.bot_token_secret_path,
         })
-        .from(computerEvents)
-        .innerJoin(computerTasks, eq(computerEvents.task_id, computerTasks.id))
+        .from(computerTasks)
         .leftJoin(users, eq(computerTasks.created_by_user_id, users.id))
         .leftJoin(
           slackWorkspaces,
           and(
-            eq(slackWorkspaces.tenant_id, computerEvents.tenant_id),
+            eq(slackWorkspaces.tenant_id, computerTasks.tenant_id),
             eq(
               slackWorkspaces.slack_team_id,
               sql<string>`${computerTasks.input}->'slack'->>'slackTeamId'`,
@@ -444,17 +450,17 @@ function createDrizzleSlackDispatchStore(
         )
         .where(
           and(
-            eq(computerEvents.event_type, "task_completed"),
+            eq(computerTasks.status, "completed"),
             sql`${computerTasks.input}->>'source' = 'slack'`,
             sql`NOT EXISTS (
               SELECT 1
               FROM computer_events dispatch_events
-              WHERE dispatch_events.task_id = ${computerEvents.task_id}
+              WHERE dispatch_events.task_id = ${computerTasks.id}
                 AND dispatch_events.event_type IN ('slack.dispatch_completed','slack.dispatch_failed')
             )`,
           ),
         )
-        .orderBy(asc(computerEvents.created_at))
+        .orderBy(asc(computerTasks.created_at))
         .limit(limit);
 
       return rows.map((row: any) => {

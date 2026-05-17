@@ -141,6 +141,21 @@ Target branch: `main`
   - `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts src/__tests__/thread-resolver.test.ts`
   - `pnpm --filter @thinkwork/lambda typecheck`
   - `pnpm --filter @thinkwork/api typecheck`
+- Opened and merged [#1312](https://github.com/thinkwork-ai/thinkwork/pull/1312) (`fix(slack): surface thread channels and response text`). Required checks passed and Deploy run `25987731904` passed.
+- Verified deployed `threadsPaged` now returns Slack threads with `channel: SLACK`; Admin and Computer Threads pages can load Slack-created threads again.
+- Ran a signed Slack Events API DM smoke. The task completed with assistant message `Got it. Marco here and operational.`, but the scheduled Slack dispatch Lambda continued timing out before marking `slack.dispatch_completed`.
+- Started follow-up hotfix branch `codex/fix-slack-dispatch-drain` in `.Codex/worktrees/debug-slack-threads`.
+- Confirmed Slack dispatch timeout root cause: `loadPending` scanned from `computer_events` task-completion rows, then filtered for Slack tasks and dispatch markers. In dev this exceeded the 30s Lambda timeout before the pending Slack completion could be posted.
+- Implemented follow-up hotfix to load pending Slack completions from completed `computer_tasks` first, resolve the source completion event with a per-task subquery, and keep assistant-message lookup tenant-scoped.
+- Incorporated live UX feedback: Slack event ingestion no longer posts a visible `Marco is thinking...` placeholder for app mentions/DMs. Final answers post as the only bot reply when dispatch completes; existing legacy placeholders can still be updated if already present on older tasks.
+- Local verification for the follow-up hotfix passed:
+  - `pnpm --filter @thinkwork/api test -- src/handlers/slack/events.test.ts test/integration/slack-acceptance.test.ts`
+  - `pnpm --filter @thinkwork/lambda test -- slack-dispatch.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/lambda typecheck`
+  - `bash scripts/build-lambdas.sh slack-events`
+  - `bash scripts/build-lambdas.sh slack-dispatch`
+  - `git diff --check`
 
 ### Blockers
 

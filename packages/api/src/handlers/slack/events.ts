@@ -1,6 +1,4 @@
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { and, eq } from "drizzle-orm";
-import { computerTasks } from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { enqueueComputerTask } from "../../lib/computers/tasks.js";
 import { json } from "../../lib/response.js";
@@ -78,12 +76,6 @@ export interface SlackEventsDeps {
     slackTeamId: string;
     slackUserId: string;
   }) => Promise<SlackLinkedComputer | null>;
-  updateTaskInput?: (input: {
-    tenantId: string;
-    computerId: string;
-    taskId: string;
-    taskInput: Record<string, unknown>;
-  }) => Promise<void>;
   resolveSlackThread?: (input: {
     tenantId: string;
     computerId: string;
@@ -113,9 +105,6 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   const loadLinkedComputer =
     deps.loadLinkedComputer ??
     ((input) => loadLinkedSlackComputer(input, dbClient));
-  const updateTaskInput =
-    deps.updateTaskInput ??
-    ((input) => defaultUpdateTaskInput(input, dbClient));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
   const metrics = deps.metrics ?? slackMetrics;
@@ -198,31 +187,6 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       return json({ ok: true, duplicate: true, taskId: task.id });
     }
 
-    const placeholder = await safePostPlaceholder(slackApi, {
-      token: args.botToken,
-      channel: channelId,
-      threadTs,
-      text: `${link.computerName || "Your Computer"} is thinking...`,
-    });
-    if (placeholder?.ts) {
-      try {
-        await updateTaskInput({
-          tenantId: args.workspace.tenantId,
-          computerId: link.computerId,
-          taskId: task.id,
-          taskInput: {
-            ...mappedTaskInput,
-            placeholderTs: placeholder.ts,
-            slack: { ...mappedTaskInput.slack, placeholderTs: placeholder.ts },
-          },
-        });
-      } catch (err) {
-        console.warn("[slack:events] placeholder metadata update failed", {
-          err: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
     return json({ ok: true, taskId: task.id });
   };
 }
@@ -245,27 +209,6 @@ function classifySlackEvent(
   return null;
 }
 
-async function defaultUpdateTaskInput(
-  input: {
-    tenantId: string;
-    computerId: string;
-    taskId: string;
-    taskInput: Record<string, unknown>;
-  },
-  dbClient: DbClient,
-): Promise<void> {
-  await dbClient
-    .update(computerTasks)
-    .set({ input: input.taskInput, updated_at: new Date() })
-    .where(
-      and(
-        eq(computerTasks.tenant_id, input.tenantId),
-        eq(computerTasks.computer_id, input.computerId),
-        eq(computerTasks.id, input.taskId),
-      ),
-    );
-}
-
 async function safeFetchThreadContext(
   slackApi: SlackApi,
   input: { token: string; channel: string; threadTs: string },
@@ -279,32 +222,6 @@ async function safeFetchThreadContext(
       err: err instanceof Error ? err.message : String(err),
     });
     return [];
-  }
-}
-
-async function safePostPlaceholder(
-  slackApi: SlackApi,
-  input: {
-    token: string;
-    channel: string;
-    threadTs: string;
-    text: string;
-  },
-): Promise<{ ok: boolean; ts?: string; error?: string } | null> {
-  try {
-    const res = await slackApi.postMessage(input);
-    if (!res.ok) {
-      console.warn("[slack:events] placeholder post failed", {
-        error: res.error ?? "unknown",
-      });
-      return null;
-    }
-    return res;
-  } catch (err) {
-    console.warn("[slack:events] placeholder post failed", {
-      err: err instanceof Error ? err.message : String(err),
-    });
-    return null;
   }
 }
 
