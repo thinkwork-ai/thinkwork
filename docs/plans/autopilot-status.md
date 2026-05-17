@@ -100,6 +100,33 @@ Target branch: `main`
 - Watched post-merge Deploy run `25977319292`, which passed; deleted U12 remote/local branch and worktree.
 - All implementation units from `docs/plans/2026-05-16-004-feat-thinkwork-computer-slack-workspace-app-plan.md` are complete and merged.
 
+### Live Slack Setup / E2E Verification
+
+- Created the dev Slack app `ThinkWork Dev` in the Homecare Intelligence Slack workspace.
+- Populated the `thinkwork/dev/slack/app` Secrets Manager secret with Slack app credentials and verified the secret shape without exposing the secret values.
+- Verified signed Slack Events URL challenge smoke against the deployed `/slack/events` route returned `200` and echoed the challenge.
+- Verified unsigned Slack Events API requests are rejected with `401`.
+- Confirmed deployed docs/admin routes are live:
+  - `https://docs.thinkwork.ai/integrations/slack/`
+  - `https://docs.thinkwork.ai/operations/slack-dispatch-runbook/`
+  - `https://admin.thinkwork.ai/slack`
+- Found live admin install failure after U12: `startSlackWorkspaceInstall` returned a GraphQL error because `graphql-http` lacked access to Slack app credentials.
+- Opened and merged [#1298](https://github.com/thinkwork-ai/thinkwork/pull/1298) (`fix(slack): wire app credentials into GraphQL`), but its post-merge deploy failed during Terraform apply because the added Lambda environment variable pushed `graphql-http` past AWS's 4KB environment limit.
+- Opened and merged [#1300](https://github.com/thinkwork-ai/thinkwork/pull/1300) (`fix(slack): load app credentials without GraphQL env`) to use the stage-scoped secret fallback from `graphql-http` instead of wiring another environment variable. Required checks passed and Deploy run `25979254054` passed.
+- Verified deployed `thinkwork-dev-api-graphql-http` was updated at `2026-05-17T02:37:31Z`, is on `STAGE=dev`, and does not include `SLACK_APP_CREDENTIALS_SECRET_ARN`.
+- Started Slack workspace install through the deployed `startSlackWorkspaceInstall` GraphQL mutation using the live admin owner session, completed Slack OAuth approval in Brave, and verified the redirect returned `slackInstall=success`.
+- Verified `slack_workspaces` contains one active Homecare Intelligence workspace row:
+  - `slack_team_id`: `T1U9X1BEH`
+  - `app_id`: `A0B443U357D`
+  - `bot_user_id`: `U0B54RVL9NU`
+  - `status`: `active`
+- Ran the deployed per-user Slack OAuth linking flow through `/api/oauth/authorize?provider=slack`, approved Sign in with Slack, and verified the redirect returned `status=connected&provider=slack`.
+- Verified `slack_user_links` contains one active link for the ThinkWork user `4dee701a-c17b-46fe-9f38-a333d4c3fad0` and Slack user `U1UA2R8V7`.
+- Verified Slack Web API `auth.test` succeeds for the installed bot in Homecare Intelligence.
+- Ran a signed Slack Events API DM smoke for the linked user. The deployed `/slack/events` route returned `200` with task `759fd77c-ac07-450f-a4c9-dbad85c52306`; the task completed, created Slack thread mapping `695b782a-7712-4959-8a4c-79768cbabbce`, and wrote a user/assistant exchange to ThinkWork thread `3711ff02-a2a5-482d-9005-9a44f6af5d54`.
+- Verified the bot DM channel received a Slack bot message after the event smoke.
+- Ran a signed `/thinkwork` slash-command ingress smoke for the linked user. The deployed `/slack/slash-command` route returned `200` and queued task `b976be63-6d84-4381-924a-0217bf36bb39`; the Computer completed the ThinkWork response, but final Slack delivery failed because the smoke used an intentionally fake `response_url`.
+
 ### Blockers
 
 - None.
