@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-17
-status: active
+status: completed
 ---
 
 # Autopilot Status Ledger
@@ -16,12 +16,12 @@ Target branch: `main`
 
 ### Current Unit
 
-- Active unit: U8 Docs, operations, and rollout guardrails
-- Active branch: `codex/ontology-u8-docs-ops`
-- Active worktree: `.Codex/worktrees/ontology-u8-docs-ops`
+- Active unit: none - business ontology change sets completed
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-17
 - PR: [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357)
-- CI: pending; local verification passed
+- CI: passed
 
 ### Progress Log
 
@@ -34,7 +34,7 @@ Target branch: `main`
 | 2026-05-17 | U5   | `codex/ontology-u5-brain-templates` | [#1351](https://github.com/thinkwork-ai/thinkwork/pull/1351) | Merged | `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/api test -- src/lib/ontology/templates.test.ts src/lib/ontology/materializer.test.ts src/lib/ontology/reprocess.test.ts src/__tests__/wiki-compiler.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `bash scripts/build-lambdas.sh ontology-reprocess`; `git diff --check`; touched-file Prettier check; GitHub checks; post-merge Deploy run                                                                                                                                                | Added ontology template resolution, Brain materializer draft logic, source-less write rejection, higher-trust section preservation, reprocess materialization integration, and wiki planner/writer ontology guardrails. Squash merged as `c0ecf7ce31a3fb69638702b2546eb5e6dd33780a`; deleted the remote/local branch and worktree.                                   |
 | 2026-05-17 | U6   | `codex/ontology-u6-context-engine`  | [#1353](https://github.com/thinkwork-ai/thinkwork/pull/1353) | Merged | `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/api test -- src/lib/context-engine src/handlers/mcp-context-engine.requester-context.test.ts`; `pnpm --filter @thinkwork/admin test -- src/routes/_authed/_tenant/knowledge/-context-engine-sources.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/react-native-sdk typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `bash scripts/build-lambdas.sh mcp-context-engine`; `pnpm --filter @thinkwork/admin build`; `git diff --check`; touched-file Prettier check; GitHub checks; post-merge Deploy run | Added ontology-aware tenant Brain context retrieval, structured facet/provenance metadata, direct `query_brain_context` agent tool routing, Brain source-family propagation for memory bridge hits, and Context Engine provider selection coverage. Squash merged as `466143e9d30eac61aceaa4fe36a3ce922d3b0117`; deleted the remote/local branch and worktree.       |
 | 2026-05-17 | U7   | `codex/ontology-u7-admin-studio`    | [#1355](https://github.com/thinkwork-ai/thinkwork/pull/1355) | Merged | `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/admin codegen`; `pnpm --filter @thinkwork/admin test -- src/routes/_authed/_tenant/-ontology-route.test.tsx src/routes/_authed/_tenant/-ontology-change-set.test.tsx src/routes/_authed/_tenant/agent-templates/-template-kind.test.ts`; `pnpm --filter @thinkwork/admin test`; `pnpm --filter @thinkwork/admin build`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`; `git diff --check`; touched-file Prettier check; Vite `/ontology` HTTP smoke; GitHub checks; post-merge Deploy run                                                               | Added the Manage-section Ontology Studio UI for scanning, reviewing, editing, approving/rejecting change sets, mappings, and reprocess job monitoring. Squash merged as `b119687f6c018cc69ec82fcffe940ca9a69ba5d5`; deleted the remote/local branch and worktree.                                                                                                    |
-| 2026-05-17 | U8   | `codex/ontology-u8-docs-ops`        | [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357) | Active | `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/docs build`; touched-file Prettier check; `git diff --check`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`                                                                                                                                                                                                                                                                                                                                                                                                                                             | Documenting the ontology model, operator workflow, reprocess behavior, Context Engine/GraphQL surface, rollout guardrails, and reusable change-set-loop best practice.                                                                                                                                                                                               |
+| 2026-05-17 | U8   | `codex/ontology-u8-docs-ops`        | [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357) | Merged | `pnpm install --frozen-lockfile`; `pnpm --filter @thinkwork/docs build`; touched-file Prettier check; `git diff --check`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`; GitHub checks; post-merge Deploy run                                                                                                                                                                                                                                                                                                                                                                                                       | Documented the ontology model, operator workflow, reprocess behavior, Context Engine/GraphQL surface, rollout guardrails, and reusable change-set-loop best practice. Squash merged as `054deb20b0af37396b846381506c4d58976bd032`; deleted the remote/local branch and worktree.                                                                                     |
 
 ### CI / Merge Log
 
@@ -89,6 +89,12 @@ Target branch: `main`
 - Updated the U8 docs set for the business ontology concept, operator runbook, Admin Ontology page, Context Engine/API docs, knowledge graph direction, page/pipeline docs, and reusable best-practice solution note.
 - Completed U8 local verification: docs build, touched-file Prettier check, diff whitespace check, repo typecheck, repo lint, and repo test all passed. Preparing PR.
 - Opened [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357) for U8.
+- Required checks passed for [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357); the branch was behind `main`, so it was rebased, docs build/format/diff checks passed again, and required checks passed after the force-push.
+- A second status-ledger conflict appeared after the shared-computers closeout landed on `main`; rebased again, resolved the ledger conflict by keeping U7/U8 ontology status plus the completed shared-computers section, and docs build/format/diff checks passed again before force-push.
+- Required checks passed again for [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357).
+- Squash merged [#1357](https://github.com/thinkwork-ai/thinkwork/pull/1357) as `054deb20b0af37396b846381506c4d58976bd032`; the merge command hit the known local `main` worktree bookkeeping error, but GitHub confirmed the PR was merged. Deleted the U8 remote/local branch and worktree.
+- Watched post-merge Deploy run `26000927848`, which passed.
+- Completed all business ontology change-set implementation units from U1 through U8.
 
 ### Blockers
 
