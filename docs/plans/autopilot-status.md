@@ -35,6 +35,8 @@ Target branch: `main`
 - Copied the business ontology plan and brainstorm requirements into the branch because they were not yet present on `origin/main`.
 - Completed U1 local implementation and verification; preparing the branch for PR.
 - Opened [#1332](https://github.com/thinkwork-ai/thinkwork/pull/1332) for U1.
+- First CI run: `cla`, `lint`, `typecheck`, and `verify` passed; `Migration Drift Precheck (dev)` failed because `0098_business_ontology.sql` had not yet been applied to dev.
+- Applied `packages/database-pg/drizzle/0098_business_ontology.sql` to dev and verified the scoped drift reporter returned all markers present. Removed the unsupported schema-level `-- creates: ontology` marker so the reporter checks the table/index/constraint objects, matching prior schema extraction migrations.
 
 ### Blockers
 

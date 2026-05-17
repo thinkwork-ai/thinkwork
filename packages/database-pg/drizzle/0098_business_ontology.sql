@@ -1,7 +1,6 @@
 -- Purpose: add tenant-scoped business ontology definitions, suggestion change sets, and reprocess job state.
 -- Plan: docs/plans/2026-05-17-002-feat-business-ontology-change-sets-plan.md (U1)
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0098_business_ontology.sql
--- creates: ontology
 -- creates: ontology.versions
 -- creates: ontology.entity_types
 -- creates: ontology.relationship_types
