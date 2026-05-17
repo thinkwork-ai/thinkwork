@@ -18,38 +18,38 @@ import { getTemplate } from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
 export interface SectionWriteArgs {
-	pageType: WikiPageType;
-	pageTitle: string;
-	sectionSlug: string;
-	sectionHeading: string;
-	existingBodyMd: string | null;
-	proposedBodyMd: string;
-	/**
-	 * Records the planner said informed this update. The writer uses them to
-	 * ground the final body — not to invent new claims, just to prefer concrete
-	 * quotes over rewrites that drift. Source record ids are intentionally NOT
-	 * shown to the writer; it tends to splice them into prose.
-	 */
-	sourceRecords: ThinkWorkMemoryRecord[];
-	/**
-	 * Titles of other pages in the same (tenant, owner) scope. The writer is
-	 * instructed to wrap matching names in `[[Title]]` so the rendered wiki
-	 * can hyperlink. Pass at most ~50; the prompt truncates anyway.
-	 */
-	knownPageTitles?: string[];
-	modelId?: string;
-	signal?: AbortSignal;
+  pageType: WikiPageType;
+  pageTitle: string;
+  sectionSlug: string;
+  sectionHeading: string;
+  existingBodyMd: string | null;
+  proposedBodyMd: string;
+  /**
+   * Records the planner said informed this update. The writer uses them to
+   * ground the final body — not to invent new claims, just to prefer concrete
+   * quotes over rewrites that drift. Source record ids are intentionally NOT
+   * shown to the writer; it tends to splice them into prose.
+   */
+  sourceRecords: ThinkWorkMemoryRecord[];
+  /**
+   * Titles of other pages in the same (tenant, owner) scope. The writer is
+   * instructed to wrap matching names in `[[Title]]` so the rendered wiki
+   * can hyperlink. Pass at most ~50; the prompt truncates anyway.
+   */
+  knownPageTitles?: string[];
+  modelId?: string;
+  signal?: AbortSignal;
 }
 
 export interface SectionWriteResult {
-	body_md: string;
-	inputTokens: number;
-	outputTokens: number;
-	modelId: string;
-	/** Retry attempts before the underlying Bedrock call succeeded. Optional so
-	 * older tests that stub `writeSection` directly stay green — production
-	 * code always populates this. */
-	bedrockRetries?: number;
+  body_md: string;
+  inputTokens: number;
+  outputTokens: number;
+  modelId: string;
+  /** Retry attempts before the underlying Bedrock call succeeded. Optional so
+   * older tests that stub `writeSection` directly stay green — production
+   * code always populates this. */
+  bedrockRetries?: number;
 }
 
 const SECTION_WRITER_SYSTEM = `You are rewriting a single section of a compounding-memory wiki page.
@@ -63,6 +63,7 @@ Your only output is the final markdown body for the named section. Do not return
 - Prefer short prose over bullet spam. Use bullets when the content is genuinely list-like.
 - If the existing body is meaningfully correct and the new evidence only reinforces it, return the existing body (possibly with small factual updates).
 - Never speculate, moralize, or summarize the user's emotions beyond what the records show.
+- When business ontology labels, relationship names, or facet names are present in context, use them as the schema contract. Do not invent new business/domain schema in the body.
 
 ## Formatting rules (strict)
 
@@ -78,67 +79,67 @@ Your only output is the final markdown body for the named section. Do not return
  * whitespace collapsing — a cheap way to short-circuit a few thousand cases.
  */
 export function isMeaningfulChange(
-	existing: string | null,
-	proposed: string,
+  existing: string | null,
+  proposed: string,
 ): boolean {
-	const a = normalizeForCompare(existing ?? "");
-	const b = normalizeForCompare(proposed);
-	if (a === b) return false;
-	if (a.length === 0 && b.length > 0) return true;
-	if (b.length === 0) return false;
-	// If they differ by < 5% of chars, treat as noise. Use a rough ratio.
-	const delta = editDistanceLB(a, b);
-	const scale = Math.max(a.length, b.length);
-	return delta / scale > 0.05;
+  const a = normalizeForCompare(existing ?? "");
+  const b = normalizeForCompare(proposed);
+  if (a === b) return false;
+  if (a.length === 0 && b.length > 0) return true;
+  if (b.length === 0) return false;
+  // If they differ by < 5% of chars, treat as noise. Use a rough ratio.
+  const delta = editDistanceLB(a, b);
+  const scale = Math.max(a.length, b.length);
+  return delta / scale > 0.05;
 }
 
 export async function writeSection(
-	args: SectionWriteArgs,
+  args: SectionWriteArgs,
 ): Promise<SectionWriteResult> {
-	const template = getTemplate(args.pageType);
-	const sectionTemplate = template.sections.find(
-		(s) => s.slug === args.sectionSlug,
-	);
-	const sectionPrompt =
-		sectionTemplate?.prompt ??
-		"A named section on the page; respect its existing role.";
+  const template = getTemplate(args.pageType);
+  const sectionTemplate = template.sections.find(
+    (s) => s.slug === args.sectionSlug,
+  );
+  const sectionPrompt =
+    sectionTemplate?.prompt ??
+    "A named section on the page; respect its existing role.";
 
-	const user = [
-		`Page: ${args.pageTitle}  (type: ${args.pageType})`,
-		`Section: ${args.sectionHeading}  (slug: ${args.sectionSlug})`,
-		`Section purpose: ${sectionPrompt}`,
-		"",
-		"## Existing body",
-		args.existingBodyMd?.trim() || "_(empty — this is a new section)_",
-		"",
-		"## Planner's proposed body",
-		args.proposedBodyMd.trim(),
-		"",
-		"## Source records (grounding only — do NOT cite ids in the body)",
-		args.sourceRecords.length === 0
-			? "(none explicitly cited — stay close to the planner's draft)"
-			: args.sourceRecords
-					.map((r) => `- ${truncate(r.content.text, 400)}`)
-					.join("\n"),
-		"",
-		"Return only the final markdown body for this one section. Do not include the heading line. Use plain prose — no [[wikilink]] brackets.",
-	].join("\n");
+  const user = [
+    `Page: ${args.pageTitle}  (type: ${args.pageType})`,
+    `Section: ${args.sectionHeading}  (slug: ${args.sectionSlug})`,
+    `Section purpose: ${sectionPrompt}`,
+    "",
+    "## Existing body",
+    args.existingBodyMd?.trim() || "_(empty — this is a new section)_",
+    "",
+    "## Planner's proposed body",
+    args.proposedBodyMd.trim(),
+    "",
+    "## Source records (grounding only — do NOT cite ids in the body)",
+    args.sourceRecords.length === 0
+      ? "(none explicitly cited — stay close to the planner's draft)"
+      : args.sourceRecords
+          .map((r) => `- ${truncate(r.content.text, 400)}`)
+          .join("\n"),
+    "",
+    "Return only the final markdown body for this one section. Do not include the heading line. Use plain prose — no [[wikilink]] brackets.",
+  ].join("\n");
 
-	const resp = await invokeClaudeWithRetry({
-		system: SECTION_WRITER_SYSTEM,
-		user,
-		maxTokens: 2048,
-		temperature: 0,
-		modelId: args.modelId,
-		signal: args.signal,
-	});
-	return {
-		body_md: resp.text.trim(),
-		inputTokens: resp.inputTokens,
-		outputTokens: resp.outputTokens,
-		modelId: resp.modelId,
-		bedrockRetries: resp.retries,
-	};
+  const resp = await invokeClaudeWithRetry({
+    system: SECTION_WRITER_SYSTEM,
+    user,
+    maxTokens: 2048,
+    temperature: 0,
+    modelId: args.modelId,
+    signal: args.signal,
+  });
+  return {
+    body_md: resp.text.trim(),
+    inputTokens: resp.inputTokens,
+    outputTokens: resp.outputTokens,
+    modelId: resp.modelId,
+    bedrockRetries: resp.retries,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +147,7 @@ export async function writeSection(
 // ---------------------------------------------------------------------------
 
 function normalizeForCompare(s: string): string {
-	return s.trim().replace(/\s+/g, " ");
+  return s.trim().replace(/\s+/g, " ");
 }
 
 /**
@@ -155,27 +156,27 @@ function normalizeForCompare(s: string): string {
  * a full Levenshtein implementation just to decide whether to skip a call.
  */
 function editDistanceLB(a: string, b: string): number {
-	const lenDiff = Math.abs(a.length - b.length);
-	if (a === b) return 0;
+  const lenDiff = Math.abs(a.length - b.length);
+  if (a === b) return 0;
 
-	let commonPrefix = 0;
-	const minLen = Math.min(a.length, b.length);
-	while (commonPrefix < minLen && a[commonPrefix] === b[commonPrefix]) {
-		commonPrefix++;
-	}
-	let commonSuffix = 0;
-	while (
-		commonSuffix < minLen - commonPrefix &&
-		a[a.length - 1 - commonSuffix] === b[b.length - 1 - commonSuffix]
-	) {
-		commonSuffix++;
-	}
+  let commonPrefix = 0;
+  const minLen = Math.min(a.length, b.length);
+  while (commonPrefix < minLen && a[commonPrefix] === b[commonPrefix]) {
+    commonPrefix++;
+  }
+  let commonSuffix = 0;
+  while (
+    commonSuffix < minLen - commonPrefix &&
+    a[a.length - 1 - commonSuffix] === b[b.length - 1 - commonSuffix]
+  ) {
+    commonSuffix++;
+  }
 
-	const aCore = a.length - commonPrefix - commonSuffix;
-	const bCore = b.length - commonPrefix - commonSuffix;
-	return Math.max(aCore, bCore, lenDiff);
+  const aCore = a.length - commonPrefix - commonSuffix;
+  const bCore = b.length - commonPrefix - commonSuffix;
+  return Math.max(aCore, bCore, lenDiff);
 }
 
 function truncate(s: string, n: number): string {
-	return s.length <= n ? s : `${s.slice(0, n)}…`;
+  return s.length <= n ? s : `${s.slice(0, n)}…`;
 }
