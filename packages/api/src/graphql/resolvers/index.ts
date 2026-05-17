@@ -54,6 +54,7 @@ import { runbookQueries, runbookMutations } from "./runbooks/index.js";
 import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
+import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -87,6 +88,7 @@ export const queryResolvers: Record<string, any> = {
   ...customizeQueries,
   ...complianceQueries,
   ...slackQueries,
+  ...ontologyQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -120,6 +122,7 @@ export const mutationResolvers: Record<string, any> = {
   ...customizeMutations,
   ...complianceMutations,
   ...slackMutations,
+  ...ontologyMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
