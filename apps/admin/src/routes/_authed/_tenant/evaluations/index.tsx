@@ -39,13 +39,6 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -57,8 +50,6 @@ import {
 import { cn, relativeTime } from "@/lib/utils";
 import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
-  ComputersListQuery,
-  ModelCatalogQuery,
   EvalSummaryQuery,
   EvalRunsQuery,
   EvalTimeSeriesQuery,
@@ -471,6 +462,8 @@ function EvaluationsPage() {
 // Run Evaluation dialog (inline — keeps the route self-contained for v1)
 // ---------------------------------------------------------------------------
 
+const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
+
 function RunEvaluationButton({
   tenantId,
   onStarted,
@@ -479,29 +472,9 @@ function RunEvaluationButton({
   onStarted: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [computerId, setComputerId] = useState<string>("");
-  const [model, setModel] = useState<string>("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
-
-  const [computersRes] = useQuery({
-    query: ComputersListQuery,
-    variables: { tenantId },
-    pause: !tenantId || !open,
-  });
-  const [modelsRes] = useQuery({ query: ModelCatalogQuery, pause: !open });
-  const runningComputers = (computersRes.data?.computers ?? []).filter(
-    (computer) => computer.runtimeStatus === "RUNNING",
-  ) as Array<{
-    id: string;
-    name: string;
-    runtimeStatus: string;
-  }>;
-  const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as Array<{
-    modelId: string;
-    displayName: string;
-  }>;
 
   function toggleCat(id: string) {
     setSelectedCats((cur) =>
@@ -510,14 +483,12 @@ function RunEvaluationButton({
   }
 
   async function handleStart() {
-    if (!computerId) return;
     setSubmitting(true);
     try {
       const res = await startEvalRun({
         tenantId,
         input: {
-          computerId,
-          model: model || null,
+          model: DEFAULT_EVAL_MODEL_ID,
           // Empty selection = "All Categories" (run everything).
           categories: selectedCats.length > 0 ? selectedCats : null,
         },
@@ -544,46 +515,15 @@ function RunEvaluationButton({
         <DialogHeader>
           <DialogTitle>Run Evaluation</DialogTitle>
           <DialogDescription>
-            Run selected tests against a Computer.
+            Run selected tests directly against the default Agent template.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="re-computer">Target Computer</Label>
-            <Select value={computerId} onValueChange={setComputerId}>
-              <SelectTrigger id="re-computer">
-                <SelectValue placeholder="Pick a running Computer" />
-              </SelectTrigger>
-              <SelectContent>
-                {runningComputers.length === 0 ? (
-                  <SelectItem value="__none" disabled>
-                    No running Computers
-                  </SelectItem>
-                ) : (
-                  runningComputers.map((computer) => (
-                    <SelectItem key={computer.id} value={computer.id}>
-                      {computer.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="re-model">Model</Label>
-            <Select value={model} onValueChange={setModel}>
-              <SelectTrigger id="re-model">
-                <SelectValue placeholder="Use template default" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelCatalog.map((m) => (
-                  <SelectItem key={m.modelId} value={m.modelId}>
-                    {m.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Model</Label>
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              Kimi K2.5
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -615,7 +555,7 @@ function RunEvaluationButton({
           >
             Cancel
           </Button>
-          <Button onClick={handleStart} disabled={submitting || !computerId}>
+          <Button onClick={handleStart} disabled={submitting}>
             {submitting ? "Starting…" : "Start Evaluation"}
           </Button>
         </DialogFooter>

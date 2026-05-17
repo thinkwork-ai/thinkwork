@@ -21,6 +21,11 @@ import {
   fetchSpansForSession,
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
+import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
+import {
+  ensureEvalAgentForTemplate,
+  resolveEvalTemplateId,
+} from "../../../lib/evals/eval-agent-provisioning.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -308,9 +313,7 @@ const evalRunsQuery = async (
     .limit(limit)
     .offset(offset);
 
-  const progressByRunId = await loadEvalRunProgress(
-    rows.map((r) => r.run.id),
-  );
+  const progressByRunId = await loadEvalRunProgress(rows.map((r) => r.run.id));
 
   return {
     items: rows.map((r) =>
@@ -619,49 +622,35 @@ async function resolveRunTarget(args: {
   tenantId: string;
   input: StartEvalRunInput;
 }): Promise<{
-  computerId: string;
-  agentId: string | null;
-  agentTemplateId: string | null;
+  agentId: string;
+  agentTemplateId: string;
 }> {
-  if (!args.input.computerId) {
-    throw new Error("Eval runs must target a running Computer");
+  if (args.input.agentId) {
+    const [agent] = await db
+      .select({
+        id: agents.id,
+        templateId: agents.template_id,
+      })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.id, args.input.agentId),
+          eq(agents.tenant_id, args.tenantId),
+        ),
+      );
+    if (!agent) throw new Error("Agent not found for eval run");
+    return { agentId: agent.id, agentTemplateId: agent.templateId };
   }
 
-  const [computer] = await db
-    .select({
-      id: computers.id,
-      tenantId: computers.tenant_id,
-      templateId: computers.template_id,
-      runtimeStatus: computers.runtime_status,
-      primaryAgentId: computers.primary_agent_id,
-      migratedFromAgentId: computers.migrated_from_agent_id,
-    })
-    .from(computers)
-    .where(
-      and(
-        eq(computers.id, args.input.computerId),
-        eq(computers.tenant_id, args.tenantId),
-      ),
-    );
-
-  if (!computer) {
-    throw new Error("Computer not found for eval run");
-  }
-  if (computer.runtimeStatus !== "running") {
-    throw new Error("Eval runs must target a running Computer");
-  }
-
-  const agentId =
-    computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
-  if (!agentId) {
-    throw new Error("Running Computer has no primary agent to evaluate");
-  }
-
-  return {
-    computerId: computer.id,
-    agentId,
-    agentTemplateId: computer.templateId,
-  };
+  const templateId = await resolveEvalTemplateId(
+    args.tenantId,
+    args.input.agentTemplateId,
+  );
+  const target = await ensureEvalAgentForTemplate({
+    tenantId: args.tenantId,
+    templateId,
+  });
+  return { agentId: target.agentId, agentTemplateId: target.templateId };
 }
 
 const startEvalRun = async (
@@ -669,6 +658,17 @@ const startEvalRun = async (
   args: { tenantId: string; input: StartEvalRunInput },
   _ctx: GraphQLContext,
 ) => {
+  if (args.input.computerId) {
+    throw new Error(
+      "Computer eval targets are no longer supported. Evals run directly against AgentCore Agent templates.",
+    );
+  }
+  if (args.input.model && args.input.model !== DEFAULT_EVAL_MODEL_ID) {
+    throw new Error(
+      `Eval model overrides are no longer supported. Evals use ${DEFAULT_EVAL_MODEL_ID}.`,
+    );
+  }
+
   const target = await resolveRunTarget(args);
 
   const [run] = await db
@@ -676,10 +676,10 @@ const startEvalRun = async (
     .values({
       tenant_id: args.tenantId,
       agent_id: target.agentId,
-      computer_id: target.computerId,
+      computer_id: null,
       agent_template_id: target.agentTemplateId,
       status: "pending",
-      model: args.input.model ?? null,
+      model: DEFAULT_EVAL_MODEL_ID,
       categories: args.input.categories ?? [],
     })
     .returning();

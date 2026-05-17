@@ -1,11 +1,7 @@
-import { select, checkbox, confirm, input } from "@inquirer/prompts";
+import { select, checkbox, confirm } from "@inquirer/prompts";
 import ora from "ora";
 import { gqlQuery, gqlMutate } from "../../lib/gql-client.js";
-import {
-  isInteractive,
-  requireTty,
-  promptOrExit,
-} from "../../lib/interactive.js";
+import { isInteractive, promptOrExit } from "../../lib/interactive.js";
 import {
   isJsonMode,
   printJson,
@@ -13,12 +9,7 @@ import {
   logStderr,
 } from "../../lib/output.js";
 import { printError, printSuccess } from "../../ui.js";
-import {
-  ComputersForEvalDoc,
-  EvalTestCasesDoc,
-  EvalRunDoc,
-  StartEvalRunDoc,
-} from "./gql.js";
+import { EvalTestCasesDoc, EvalRunDoc, StartEvalRunDoc } from "./gql.js";
 import {
   resolveEvalContext,
   fmtPercent,
@@ -36,23 +27,37 @@ interface RunOptions extends EvalCliOptions {
   timeout?: string;
 }
 
+const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
+
 export async function runEvalRun(opts: RunOptions): Promise<void> {
   const ctx = await resolveEvalContext(opts);
   const interactive = isInteractive();
 
-  let computerId = opts.computer ?? null;
+  const deprecatedComputerId = opts.computer ?? null;
   let categories = opts.category ?? null;
   let testCaseIds = opts.testCase ?? null;
+
+  if (deprecatedComputerId) {
+    printError(
+      "--computer is no longer supported for eval runs. Evals run directly against the default Agent template.",
+    );
+    process.exit(1);
+  }
+  if (opts.model && opts.model !== DEFAULT_EVAL_MODEL_ID) {
+    printError(
+      `--model is no longer configurable for eval runs. Evals use ${DEFAULT_EVAL_MODEL_ID}.`,
+    );
+    process.exit(1);
+  }
 
   const scopeSatisfied =
     (testCaseIds && testCaseIds.length > 0) ||
     (categories && categories.length > 0) ||
     opts.all === true;
 
-  if (!computerId || !scopeSatisfied) {
+  if (!scopeSatisfied) {
     if (!interactive) {
       const missing: string[] = [];
-      if (!computerId) missing.push("--computer");
       if (!scopeSatisfied)
         missing.push("one of --all | --category | --test-case");
       printError(
@@ -60,32 +65,6 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
       );
       process.exit(1);
     }
-  }
-
-  if (!computerId) {
-    const data = await gqlQuery(ctx.client, ComputersForEvalDoc, {
-      tenantId: ctx.tenantId,
-    });
-    const computers = (data.computers ?? []).filter(
-      (computer) => computer.runtimeStatus === "RUNNING",
-    );
-    if (computers.length === 0) {
-      printError(
-        "No running Computers found for this tenant. Start a Computer first.",
-      );
-      process.exit(1);
-    }
-    requireTty("Computer");
-    computerId = await promptOrExit(() =>
-      select({
-        message: "Computer to run against?",
-        choices: computers.map((computer) => ({
-          name: `${computer.name}  (${computer.slug})`,
-          value: computer.id,
-        })),
-        loop: false,
-      }),
-    );
   }
 
   if (!scopeSatisfied) {
@@ -151,22 +130,17 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
     }
   }
 
-  if (!opts.model && interactive) {
-    const entered = await promptOrExit(() =>
-      input({
-        message: "Model override? (blank for Computer default)",
-        default: "",
-      }),
-    );
-    if (entered.trim()) opts.model = entered.trim();
-  }
+  const requestedModel = opts.model ?? null;
+  opts.model = DEFAULT_EVAL_MODEL_ID;
 
   if (interactive && !isJsonMode()) {
     const summaryLines: Array<[string, string]> = [
       ["Stage", ctx.stage],
       ["Tenant", ctx.tenantSlug],
-      ["Computer", computerId],
+      ["Target", "Default Agent template"],
     ];
+    if (requestedModel && requestedModel !== DEFAULT_EVAL_MODEL_ID)
+      summaryLines.push(["Ignored Model", requestedModel]);
     if (opts.model) summaryLines.push(["Model", opts.model]);
     if (categories && categories.length)
       summaryLines.push(["Categories", categories.join(", ")]);
@@ -188,7 +162,6 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   const mutRes = await gqlMutate(ctx.client, StartEvalRunDoc, {
     tenantId: ctx.tenantId,
     input: {
-      computerId,
       model: opts.model ?? null,
       categories: categories ?? null,
       testCaseIds: testCaseIds ?? null,

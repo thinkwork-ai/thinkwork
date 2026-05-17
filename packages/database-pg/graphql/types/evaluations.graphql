@@ -46,14 +46,16 @@ type EvalRun {
   agentId: ID
   agentName: String
   computerId: ID
-  # Template the eval test agent loaded for this run. The user picks
-  # this in the Run Evaluation dialog. Per-test-case
+  # Template the eval test agent loaded for this run. Manual runs default to
+  # the tenant's default Agent template. Per-test-case
   # eval_test_cases.agent_template_id overrides this for individual
   # tests that need a different tool surface.
   agentTemplateId: ID
   agentTemplateName: String
   scheduledJobId: ID
   status: String!
+  # Deprecated for manual/scheduled eval runs; direct-AgentCore evals always
+  # use Kimi K2.5.
   model: String
   categories: [String!]!
   totalTests: Int!
@@ -160,15 +162,15 @@ input UpdateEvalTestCaseInput {
 }
 
 input StartEvalRunInput {
-  # Preferred target: a concrete running Computer. The worker uses the
-  # Computer's primary agent/runtime identity so Computer evals exercise the
-  # same substrate users operate, and agent work happens through Computer
-  # delegation instead of a separate generic-agent eval target.
+  # Deprecated for this direct-AgentCore eval path. Supplying computerId is
+  # rejected; Computer evals are intentionally out of this slice.
   computerId: ID
-  # Legacy input fields retained for old generated clients. New eval runs must
-  # pass computerId; the resolver rejects template-only or agent-only targets.
+  # Optional explicit AgentCore target. Omit both fields to use the tenant's
+  # default Agent template and the platform-managed system eval agent.
   agentId: ID
   agentTemplateId: ID
+  # Deprecated; direct-AgentCore evals always use Kimi K2.5 and reject
+  # non-Kimi overrides.
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.
   categories: [String!]

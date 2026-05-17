@@ -17,6 +17,7 @@ import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
 import {
   agents,
   agentSkills,
+  agentTemplates,
   computers,
   computerEvents,
   computerTasks,
@@ -32,6 +33,8 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+
+const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 
 // Module-scope SFN client so warm Lambda invocations reuse the TCP pool.
 const _SFN_CLIENT = new SFNClient({
@@ -56,6 +59,61 @@ type ScheduledComputerTarget = {
   ownerUserId: string;
   migratedAgentId: string | null;
 };
+
+async function resolveDefaultEvalTemplateId(
+  tenantId: string,
+  requestedTemplateId?: string | null,
+): Promise<string> {
+  if (requestedTemplateId) {
+    const [template] = await getDb()
+      .select({
+        id: agentTemplates.id,
+        templateKind: agentTemplates.template_kind,
+      })
+      .from(agentTemplates)
+      .where(
+        and(
+          eq(agentTemplates.id, requestedTemplateId),
+          eq(agentTemplates.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
+    if (!template) throw new Error("Scheduled eval Agent template not found");
+    if (template.templateKind !== "agent") {
+      throw new Error(
+        "Scheduled evals currently require an Agent template target",
+      );
+    }
+    return template.id;
+  }
+
+  const [defaultTemplate] = await getDb()
+    .select({ id: agentTemplates.id })
+    .from(agentTemplates)
+    .where(
+      and(
+        eq(agentTemplates.tenant_id, tenantId),
+        eq(agentTemplates.slug, "default"),
+        eq(agentTemplates.template_kind, "agent"),
+      ),
+    )
+    .limit(1);
+  if (defaultTemplate) return defaultTemplate.id;
+
+  const [firstTemplate] = await getDb()
+    .select({ id: agentTemplates.id })
+    .from(agentTemplates)
+    .where(
+      and(
+        eq(agentTemplates.tenant_id, tenantId),
+        eq(agentTemplates.template_kind, "agent"),
+      ),
+    )
+    .limit(1);
+  if (!firstTemplate)
+    throw new Error("No Agent template found for scheduled eval");
+  return firstTemplate.id;
+}
 
 // ---------------------------------------------------------------------------
 // skill_run branch helpers (Unit 6)
@@ -434,8 +492,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       }
     } else if (triggerType === "eval_scheduled") {
       // Eval-scheduled jobs: insert a pending eval_runs row + fire the
-      // eval-runner Lambda async. Config carries the selected target
-      // template (agent or Computer), categories, and model selection.
+      // eval-runner Lambda async. Evals now run directly against a
+      // platform-managed AgentCore agent for the selected/default Agent
+      // template; Computer evals are intentionally out of this slice.
       const cfg = (job?.config ?? {}) as {
         agentId?: string;
         agentTemplateId?: string;
@@ -443,57 +502,43 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         model?: string;
         categories?: string[];
       };
-      let targetComputerId: string | null = null;
       let targetAgentId: string | null = null;
-      let targetTemplateId: string | null = null;
-
-      if (cfg.computerId) {
-        const [computer] = await db
-          .select({
-            id: computers.id,
-            tenantId: computers.tenant_id,
-            templateId: computers.template_id,
-            runtimeStatus: computers.runtime_status,
-            primaryAgentId: computers.primary_agent_id,
-            migratedFromAgentId: computers.migrated_from_agent_id,
-          })
-          .from(computers)
-          .where(
-            and(
-              eq(computers.id, cfg.computerId),
-              eq(computers.tenant_id, tenantId),
-            ),
+      let targetTemplateId: string;
+      try {
+        if (cfg.computerId) {
+          throw new Error(
+            "Scheduled eval Computer targets are no longer supported",
           );
-        if (!computer || computer.runtimeStatus !== "running") {
-          const message = !computer
-            ? "Scheduled eval Computer not found"
-            : "Scheduled eval Computer is not running";
-          await db.insert(evalRuns).values({
-            tenant_id: tenantId,
-            scheduled_job_id: triggerId,
-            status: "failed",
-            model: cfg.model ?? null,
-            categories: cfg.categories ?? [],
-            completed_at: new Date(),
-            error_message: message,
-          });
-          console.warn(`[job-trigger] ${message} for trigger ${triggerId}`);
-          return;
         }
-        targetComputerId = computer.id;
-        targetAgentId =
-          computer.primaryAgentId ?? computer.migratedFromAgentId ?? null;
-        targetTemplateId = computer.templateId;
-      }
-
-      if (!targetAgentId) {
-        const message =
-          "Scheduled evals must target a running Computer with a primary agent";
+        if (cfg.model && cfg.model !== DEFAULT_EVAL_MODEL_ID) {
+          throw new Error(
+            `Scheduled eval model overrides are no longer supported; use ${DEFAULT_EVAL_MODEL_ID}`,
+          );
+        }
+        if (cfg.agentId) {
+          const [agent] = await db
+            .select({ id: agents.id, templateId: agents.template_id })
+            .from(agents)
+            .where(
+              and(eq(agents.id, cfg.agentId), eq(agents.tenant_id, tenantId)),
+            )
+            .limit(1);
+          if (!agent) throw new Error("Scheduled eval Agent not found");
+          targetAgentId = agent.id;
+          targetTemplateId = agent.templateId;
+        } else {
+          targetTemplateId = await resolveDefaultEvalTemplateId(
+            tenantId,
+            cfg.agentTemplateId,
+          );
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         await db.insert(evalRuns).values({
           tenant_id: tenantId,
           scheduled_job_id: triggerId,
           status: "failed",
-          model: cfg.model ?? null,
+          model: DEFAULT_EVAL_MODEL_ID,
           categories: cfg.categories ?? [],
           completed_at: new Date(),
           error_message: message,
@@ -507,11 +552,11 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .values({
           tenant_id: tenantId,
           agent_id: targetAgentId,
-          computer_id: targetComputerId,
+          computer_id: null,
           agent_template_id: targetTemplateId,
           scheduled_job_id: triggerId,
           status: "pending",
-          model: cfg.model ?? null,
+          model: DEFAULT_EVAL_MODEL_ID,
           categories: cfg.categories ?? [],
         })
         .returning();
@@ -538,6 +583,16 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         );
         console.log(`[job-trigger] Fired eval-runner for run ${run.id}`);
       } catch (invokeErr) {
+        const message =
+          invokeErr instanceof Error ? invokeErr.message : String(invokeErr);
+        await db
+          .update(evalRuns)
+          .set({
+            status: "failed",
+            completed_at: new Date(),
+            error_message: `Failed to invoke eval-runner: ${message}`,
+          })
+          .where(eq(evalRuns.id, run.id));
         console.error(
           `[job-trigger] Failed to invoke eval-runner for run ${run.id}:`,
           invokeErr,
