@@ -56,6 +56,11 @@ describe("verifyMagicBytes", () => {
 		);
 	});
 
+	it("accepts a real PDF prefix", () => {
+		const result = verifyMagicBytes(Buffer.from("%PDF-1.4\n"), ".pdf");
+		expect(result.ok).toBe(true);
+	});
+
 	it("rejects Markdown with a binary prefix", () => {
 		const result = verifyMagicBytes(Buffer.from([0xff, 0xfe, 0x00]), ".md");
 		expect(result.ok).toBe(false);
@@ -63,7 +68,7 @@ describe("verifyMagicBytes", () => {
 	});
 
 	it("rejects unsupported extension", () => {
-		const result = verifyMagicBytes(Buffer.from([0x00]), ".pdf");
+		const result = verifyMagicBytes(Buffer.from([0x00]), ".zip");
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("unsupported_extension");
 	});

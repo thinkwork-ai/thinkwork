@@ -89,6 +89,7 @@ export type ThreadTurnContext = {
     truncated?: boolean;
     contentText?: string;
     reason?: string;
+    extractionKind?: "text" | "xlsx" | "pdf";
   }>;
   messagesHistory: Array<{
     id: string;

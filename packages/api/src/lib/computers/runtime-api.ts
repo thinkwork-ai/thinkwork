@@ -28,6 +28,11 @@ import {
 } from "../runbooks/runs.js";
 import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
 import { assembleRequesterContext } from "./requester-context.js";
+import {
+  attachmentDownloadByteLimit,
+  detectAttachmentKind,
+  extractAttachmentText,
+} from "./attachment-extraction.js";
 export {
   buildDraftAppletSourceDigest,
   verifyDraftAppletPromotionProof,
@@ -39,7 +44,6 @@ const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 const ARTIFACT_SAVE_MISSING_MESSAGE =
   "I generated a dashboard draft but could not save it as an Artifact. Please retry; no applet was created.";
 const RUNBOOK_HEARTBEAT_STALL_THRESHOLD_MINUTES = 5;
-const COMPUTER_ATTACHMENT_TEXT_BYTES = 128 * 1024;
 
 const BUILD_INTENT_ACTION_RE =
   /\b(build|create|generate|make|produce|assemble|compose)\b/i;
@@ -1344,8 +1348,13 @@ async function loadComputerThreadTurnAttachments(input: {
       if (!attachment.s3Key.startsWith(expectedPrefix)) {
         return { ...base, reason: "prefix_mismatch" };
       }
-      if (!isProbablyTextAttachment(attachment)) {
+      const extractionKind = detectAttachmentKind(attachment);
+      if (!extractionKind) {
         return { ...base, reason: "unsupported_mime_type" };
+      }
+      const byteLimit = attachmentDownloadByteLimit(attachment);
+      if (extractionKind !== "text" && attachment.sizeBytes > byteLimit) {
+        return { ...base, reason: "attachment_too_large", extractionKind };
       }
       if (!bucket) {
         return { ...base, reason: "workspace_bucket_unconfigured" };
@@ -1356,17 +1365,17 @@ async function loadComputerThreadTurnAttachments(input: {
           new GetObjectCommand({
             Bucket: bucket,
             Key: attachment.s3Key,
-            Range: `bytes=0-${COMPUTER_ATTACHMENT_TEXT_BYTES - 1}`,
+            Range: `bytes=0-${byteLimit - 1}`,
           }),
         );
         const body = await s3BodyToBuffer(object.Body);
-        const contentText = body.toString("utf-8").trim();
-        return {
-          ...base,
-          readable: Boolean(contentText),
-          truncated: attachment.sizeBytes > COMPUTER_ATTACHMENT_TEXT_BYTES,
-          contentText,
-        };
+        const extracted = await extractAttachmentText({
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          body,
+        });
+        return { ...base, ...extracted };
       } catch (err) {
         console.error("[computer-runtime] failed to load message attachment", {
           tenantId: input.tenantId,
@@ -1394,28 +1403,6 @@ async function s3BodyToBuffer(body: unknown): Promise<Buffer> {
     return Buffer.from(bytes);
   }
   throw new Error("Unsupported S3 body type");
-}
-
-function isProbablyTextAttachment(entry: {
-  mimeType: string;
-  name: string;
-}): boolean {
-  const mime = entry.mimeType.toLowerCase();
-  const name = entry.name.toLowerCase();
-  return (
-    mime.startsWith("text/") ||
-    mime.includes("json") ||
-    mime.includes("xml") ||
-    name.endsWith(".csv") ||
-    name.endsWith(".json") ||
-    name.endsWith(".md") ||
-    name.endsWith(".markdown") ||
-    name.endsWith(".tsv") ||
-    name.endsWith(".txt") ||
-    name.endsWith(".xml") ||
-    name.endsWith(".yaml") ||
-    name.endsWith(".yml")
-  );
 }
 
 function resolveComputerChatModel(runtimeConfig: unknown) {

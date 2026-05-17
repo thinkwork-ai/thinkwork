@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import JSZip from "jszip";
 
 const mocks = vi.hoisted(() => ({
   computerRows: [
@@ -487,58 +488,11 @@ describe("Computer runtime API thread turn execution", () => {
   });
 
   it("loads Computer-owned Thread turn context for the native runtime", async () => {
-    mocks.selectQueue = [
-      [
-        {
-          id: "task-1",
-          task_type: "thread_turn",
-          input: {
-            threadId: "thread-1",
-            messageId: "message-1",
-            source: "chat_message",
-          },
-        },
-      ],
-      [
-        {
-          id: "computer-1",
-          tenant_id: "tenant-1",
-          owner_user_id: "user-1",
-          name: "Marco",
-          slug: "marco",
-          live_workspace_root: "/workspace",
-          runtime_config: { chatModel: "model-1" },
-          migrated_from_agent_id: "agent-1",
-        },
-      ],
-      [{ id: "thread-1", title: "Hello", status: "in_progress" }],
-      [
-        {
-          id: "message-1",
-          role: "user",
-          content: "hello computer",
-          metadata: {
-            attachments: [
-              { attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
-            ],
-          },
-        },
-      ],
-      [
-        {
-          id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-          s3_key:
-            "tenants/tenant-1/attachments/thread-1/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/report.md",
-          name: "report.md",
-          mime_type: "text/markdown",
-          size_bytes: 28,
-        },
-      ],
-      [
-        { id: "message-1", role: "user", content: "hello computer" },
-        { id: "message-0", role: "assistant", content: "previous reply" },
-      ],
-    ];
+    queueThreadTurnContext({
+      name: "report.md",
+      mime_type: "text/markdown",
+      size_bytes: 28,
+    });
 
     const result = await loadThreadTurnContext({
       tenantId: "tenant-1",
@@ -578,6 +532,71 @@ describe("Computer runtime API thread turn execution", () => {
       }),
     ]);
     expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
+  });
+
+  it("extracts xlsx attachment content for native thread turns", async () => {
+    const body = await buildXlsxBuffer({
+      rows: [
+        ["Metric", "Value"],
+        ["Revenue", "12345"],
+      ],
+    });
+    mocks.s3Send.mockResolvedValue({ Body: body });
+    queueThreadTurnContext({
+      name: "financials.xlsx",
+      mime_type:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      size_bytes: body.length,
+    });
+
+    const result = await loadThreadTurnContext({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+    });
+
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name: "financials.xlsx",
+        readable: true,
+        extractionKind: "xlsx",
+        contentText: expect.stringContaining("B2=12345"),
+      }),
+    ]);
+    expect(mocks.s3Send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Range: "bytes=0-15728639",
+        }),
+      }),
+    );
+  });
+
+  it("extracts pdf attachment content for native thread turns", async () => {
+    const body = Buffer.from(minimalPdf("Board revenue was 12345"), "utf8");
+    mocks.s3Send.mockResolvedValue({ Body: body });
+    queueThreadTurnContext({
+      name: "board-statement.pdf",
+      mime_type: "application/pdf",
+      size_bytes: body.length,
+    });
+
+    const result = await loadThreadTurnContext({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+      taskId: "task-1",
+    });
+
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name: "board-statement.pdf",
+        readable: true,
+        extractionKind: "pdf",
+        contentText: expect.stringContaining("Board revenue was 12345"),
+      }),
+    ]);
   });
 
   it("records native Computer responses as assistant messages and events", async () => {
@@ -1191,6 +1210,161 @@ describe("Computer runtime API thread turn execution", () => {
     expect(mocks.invokeChatAgent).not.toHaveBeenCalled();
   });
 });
+
+function queueThreadTurnContext(attachment: {
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+}) {
+  mocks.selectQueue = [
+    [
+      {
+        id: "task-1",
+        task_type: "thread_turn",
+        input: {
+          threadId: "thread-1",
+          messageId: "message-1",
+          source: "chat_message",
+        },
+      },
+    ],
+    [
+      {
+        id: "computer-1",
+        tenant_id: "tenant-1",
+        owner_user_id: "user-1",
+        name: "Marco",
+        slug: "marco",
+        live_workspace_root: "/workspace",
+        runtime_config: { chatModel: "model-1" },
+        migrated_from_agent_id: "agent-1",
+      },
+    ],
+    [{ id: "thread-1", title: "Hello", status: "in_progress" }],
+    [
+      {
+        id: "message-1",
+        role: "user",
+        content: "hello computer",
+        metadata: {
+          attachments: [
+            { attachmentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+          ],
+        },
+      },
+    ],
+    [
+      {
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        s3_key: `tenants/tenant-1/attachments/thread-1/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/${attachment.name}`,
+        ...attachment,
+      },
+    ],
+    [
+      { id: "message-1", role: "user", content: "hello computer" },
+      { id: "message-0", role: "assistant", content: "previous reply" },
+    ],
+  ];
+}
+
+async function buildXlsxBuffer(input: { rows: string[][] }): Promise<Buffer> {
+  const zip = new JSZip();
+  const sharedStrings = Array.from(new Set(input.rows.flat()));
+  const sharedStringIndex = new Map(
+    sharedStrings.map((value, index) => [value, index]),
+  );
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>`,
+  );
+  zip.file(
+    "xl/workbook.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Statement" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`,
+  );
+  zip.file(
+    "xl/_rels/workbook.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`,
+  );
+  zip.file(
+    "xl/sharedStrings.xml",
+    `<sst>${sharedStrings.map((value) => `<si><t>${value}</t></si>`).join("")}</sst>`,
+  );
+  zip.file(
+    "xl/worksheets/sheet1.xml",
+    `<worksheet><sheetData>${input.rows
+      .map(
+        (row, rowIndex) =>
+          `<row r="${rowIndex + 1}">${row
+            .map(
+              (value, columnIndex) =>
+                `<c r="${columnName(columnIndex)}${rowIndex + 1}" t="s"><v>${sharedStringIndex.get(value)}</v></c>`,
+            )
+            .join("")}</row>`,
+      )
+      .join("")}</sheetData></worksheet>`,
+  );
+  return Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+}
+
+function minimalPdf(text: string): string {
+  const stream = `BT /F1 24 Tf 72 720 Td (${text}) Tj ET`;
+  return `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length ${stream.length} >>
+stream
+${stream}
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000241 00000 n
+0000000311 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+${360 + stream.length}
+%%EOF`;
+}
+
+function columnName(index: number): string {
+  let n = index + 1;
+  let name = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    name = String.fromCharCode(65 + rem) + name;
+    n = Math.floor((n - 1) / 26);
+  }
+  return name;
+}
 
 function queueThreadTurnRecord(prompt: string) {
   mocks.selectQueue = [

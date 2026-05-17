@@ -48,6 +48,7 @@ const MAGIC_BYTES: Record<string, ReadonlyArray<readonly number[]>> = {
 	".txt": [
 		[0xef, 0xbb, 0xbf], // UTF-8 BOM
 	],
+	".pdf": [[0x25, 0x50, 0x44, 0x46]], // %PDF
 };
 
 export interface MagicByteFailure {
