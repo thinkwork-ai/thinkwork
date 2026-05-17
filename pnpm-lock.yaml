@@ -264,9 +264,6 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.4.1
         version: 8.4.1(@types/node@25.6.0)
-      '@thinkwork/admin-ops':
-        specifier: workspace:*
-        version: link:../../packages/admin-ops
       '@urql/core':
         specifier: ^6.0.0
         version: 6.0.1(graphql@16.13.2)
@@ -292,6 +289,9 @@ importers:
       '@graphql-codegen/client-preset':
         specifier: ^4.8.2
         version: 4.8.3(graphql@16.13.2)
+      '@thinkwork/admin-ops':
+        specifier: workspace:*
+        version: link:../../packages/admin-ops
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
