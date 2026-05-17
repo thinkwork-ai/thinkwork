@@ -14,11 +14,9 @@ import {
   Brain,
   Webhook,
   Slack,
-  Shield,
   CalendarClock,
   LayoutTemplate,
   ShieldCheck,
-  ScrollText,
   AppWindow,
 } from "lucide-react";
 import { useQuery } from "urql";
@@ -265,9 +263,7 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
-    { to: "/compliance", icon: ScrollText, label: "Compliance" },
     { to: "/people", icon: Users, label: "People" },
-    { to: "/security", icon: Shield, label: "Security Center" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),
