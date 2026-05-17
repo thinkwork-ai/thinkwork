@@ -21,11 +21,13 @@ import {
   ensureMigratedComputerWorkspaceSeeded,
 } from "./workspace-seed.js";
 import { toGraphqlComputerTask } from "./tasks.js";
+import type { MemoryRequestContext } from "../memory/index.js";
 import {
   completeRunbookRunFromThreadTurn,
   failRunbookRunFromThreadTurn,
 } from "../runbooks/runs.js";
 import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
+import { assembleRequesterContext } from "./requester-context.js";
 export {
   buildDraftAppletSourceDigest,
   verifyDraftAppletPromotionProof,
@@ -630,17 +632,32 @@ export async function loadThreadTurnContext(input: {
     )
     .orderBy(asc(messages.created_at));
 
+  const requesterUserId =
+    payload.requesterUserId ?? task.created_by_user_id ?? null;
+  const contextClass =
+    payload.contextClass ?? (requesterUserId ? "user" : "system");
+  const requesterContext = await assembleRequesterContext({
+    tenantId: input.tenantId,
+    computerId: input.computerId,
+    requesterUserId,
+    prompt: message.content ?? "",
+    sourceSurface: payload.source,
+    contextClass,
+    credentialSubject: payload.credentialSubject,
+    event: payload.event,
+  });
+
   return {
     taskId: input.taskId,
     source: payload.source,
     requester: {
-      userId: payload.requesterUserId ?? task.created_by_user_id ?? null,
+      userId: requesterUserId,
       actorType: payload.actorType,
       actorId: payload.actorId,
-      contextClass:
-        payload.requesterUserId || task.created_by_user_id ? "user" : "system",
+      contextClass,
     },
     surfaceContext: payload.surfaceContext,
+    requesterContext,
     computer: {
       id: computer.id,
       name: computer.name,
@@ -667,8 +684,8 @@ export async function loadThreadTurnContext(input: {
     systemPrompt: buildComputerThreadSystemPrompt({
       computer,
       threadTitle: thread.title,
-      requesterUserId:
-        payload.requesterUserId ?? task.created_by_user_id ?? null,
+      requesterUserId,
+      requesterContext,
     }),
   };
 }
@@ -1417,6 +1434,7 @@ function buildComputerThreadSystemPrompt(input: {
   computer: Awaited<ReturnType<typeof loadComputer>>;
   threadTitle: string;
   requesterUserId: string | null;
+  requesterContext?: Awaited<ReturnType<typeof assembleRequesterContext>>;
 }) {
   return [
     `You are ${input.computer.name}, a shared ThinkWork Computer.`,
@@ -1453,6 +1471,12 @@ function threadTurnPayload(input: unknown) {
       payload.requesterUserId.trim()
         ? payload.requesterUserId.trim()
         : null,
+    contextClass:
+      typeof payload.contextClass === "string" && payload.contextClass.trim()
+        ? payload.contextClass.trim()
+        : null,
+    credentialSubject: credentialSubjectPayload(payload.credentialSubject),
+    event: eventPayload(payload.event),
     surfaceContext: isRecord(payload.surfaceContext)
       ? payload.surfaceContext
       : {
@@ -1475,4 +1499,40 @@ function requiredPayloadString(value: unknown, name: string) {
     );
   }
   return value.trim();
+}
+
+function credentialSubjectPayload(
+  value: unknown,
+): MemoryRequestContext["credentialSubject"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const type =
+    value.type === "service"
+      ? "service"
+      : value.type === "user"
+        ? "user"
+        : null;
+  if (!type) return undefined;
+  return {
+    type,
+    userId: optionalPayloadString(value.userId),
+    connectionId: optionalPayloadString(value.connectionId),
+    provider: optionalPayloadString(value.provider),
+  };
+}
+
+function eventPayload(
+  value: unknown,
+): MemoryRequestContext["event"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  return {
+    provider: optionalPayloadString(value.provider),
+    eventType: optionalPayloadString(value.eventType),
+    eventId: optionalPayloadString(value.eventId),
+    metadata,
+  };
+}
+
+function optionalPayloadString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

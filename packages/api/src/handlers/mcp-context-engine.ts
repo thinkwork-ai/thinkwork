@@ -7,6 +7,7 @@ import { getContextEngineService } from "../lib/context-engine/service.js";
 import type {
   ContextEngineDepth,
   ContextEngineMode,
+  ContextEngineCaller,
   ContextProviderOptions,
   ContextEngineScope,
   ContextProviderFamily,
@@ -72,6 +73,30 @@ const TOOLS = [
           },
           additionalProperties: false,
         },
+        contextClass: { type: "string" },
+        computerId: { type: "string" },
+        sourceSurface: { type: "string" },
+        credentialSubject: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["user", "service"] },
+            userId: { type: "string" },
+            connectionId: { type: "string" },
+            provider: { type: "string" },
+          },
+          required: ["type"],
+          additionalProperties: false,
+        },
+        event: {
+          type: "object",
+          properties: {
+            provider: { type: "string" },
+            eventType: { type: "string" },
+            eventId: { type: "string" },
+            metadata: { type: "object" },
+          },
+          additionalProperties: false,
+        },
       },
       required: ["query"],
       additionalProperties: false,
@@ -105,6 +130,30 @@ const TOOLS = [
               },
               additionalProperties: false,
             },
+          },
+          additionalProperties: false,
+        },
+        contextClass: { type: "string" },
+        computerId: { type: "string" },
+        sourceSurface: { type: "string" },
+        credentialSubject: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["user", "service"] },
+            userId: { type: "string" },
+            connectionId: { type: "string" },
+            provider: { type: "string" },
+          },
+          required: ["type"],
+          additionalProperties: false,
+        },
+        event: {
+          type: "object",
+          properties: {
+            provider: { type: "string" },
+            eventType: { type: "string" },
+            eventId: { type: "string" },
+            metadata: { type: "object" },
           },
           additionalProperties: false,
         },
@@ -286,7 +335,16 @@ async function handleToolCall(
   }
 
   const service = getContextEngineService();
-  const callerWithTarget = callerWithTargetArgs(caller, args);
+  const requesterContext = requesterContextArg(caller, args);
+  if (requesterContext.error) {
+    return jsonRpcError(request.id, -32602, requesterContext.error);
+  }
+  const callerWithTarget = {
+    ...callerWithTargetArgs(caller, args),
+    ...(requesterContext.value
+      ? { requesterContext: requesterContext.value }
+      : {}),
+  };
   switch (toolName) {
     case "query_context": {
       return await queryContextTool(
@@ -496,6 +554,102 @@ function callerWithTargetArgs<T extends { agentId?: string | null }>(
 ): T {
   const agentId = stringArg(args.agentId);
   return agentId ? { ...caller, agentId } : caller;
+}
+
+function requesterContextArg(
+  caller: { userId?: string | null },
+  args: Record<string, unknown>,
+):
+  | {
+      value?: NonNullable<ContextEngineCaller["requesterContext"]>;
+      error?: undefined;
+    }
+  | { value?: undefined; error: string } {
+  const contextClass = stringArg(args.contextClass);
+  const computerId = stringArg(args.computerId);
+  const sourceSurface = stringArg(args.sourceSurface);
+  const credentialSubject = credentialSubjectArg(args.credentialSubject);
+  const event = eventArg(args.event);
+  if (credentialSubject.error) return { error: credentialSubject.error };
+  if (event.error) return { error: event.error };
+  if (
+    credentialSubject.value?.type === "user" &&
+    credentialSubject.value.userId &&
+    caller.userId &&
+    credentialSubject.value.userId !== caller.userId
+  ) {
+    return {
+      error: "credentialSubject.userId must match the authenticated requester",
+    };
+  }
+  if (
+    !contextClass &&
+    !computerId &&
+    !sourceSurface &&
+    !credentialSubject.value &&
+    !event.value
+  ) {
+    return {};
+  }
+  return {
+    value: {
+      contextClass: contextClass ?? undefined,
+      computerId: computerId ?? null,
+      requesterUserId: caller.userId ?? null,
+      sourceSurface: sourceSurface ?? null,
+      credentialSubject: credentialSubject.value ?? null,
+      event: event.value ?? null,
+    },
+  };
+}
+
+function credentialSubjectArg(value: unknown):
+  | {
+      value?: {
+        type: "user" | "service";
+        userId?: string | null;
+        connectionId?: string | null;
+        provider?: string | null;
+      };
+      error?: undefined;
+    }
+  | { value?: undefined; error: string } {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return { error: "credentialSubject must be an object" };
+  const type =
+    value.type === "user" || value.type === "service" ? value.type : null;
+  if (!type) return { error: "credentialSubject.type is required" };
+  return {
+    value: {
+      type,
+      userId: stringArg(value.userId),
+      connectionId: stringArg(value.connectionId),
+      provider: stringArg(value.provider),
+    },
+  };
+}
+
+function eventArg(value: unknown):
+  | {
+      value?: {
+        provider?: string | null;
+        eventType?: string | null;
+        eventId?: string | null;
+        metadata?: Record<string, unknown> | null;
+      };
+      error?: undefined;
+    }
+  | { value?: undefined; error: string } {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return { error: "event must be an object" };
+  return {
+    value: {
+      provider: stringArg(value.provider),
+      eventType: stringArg(value.eventType),
+      eventId: stringArg(value.eventId),
+      metadata: isRecord(value.metadata) ? value.metadata : null,
+    },
+  };
 }
 
 async function queryContextTool(

@@ -75,9 +75,10 @@ export async function buildSystemPrompt(
 ): Promise<string> {
   const basePrompt =
     context.systemPrompt || buildDefaultSystemPrompt(context, workspaceRoot);
+  const requesterPrompt = buildRequesterContextPrompt(context.requesterContext);
   const attachmentPrompt = buildAttachmentPrompt(context.attachments ?? []);
   const workspacePrompt = await readWorkspaceSystemPrompt(workspaceRoot);
-  return [basePrompt, attachmentPrompt, workspacePrompt]
+  return [basePrompt, requesterPrompt, attachmentPrompt, workspacePrompt]
     .filter(Boolean)
     .join("\n\n---\n\n");
 }
@@ -132,11 +133,52 @@ function buildAttachmentPrompt(
       const truncated = attachment.truncated
         ? "\n\n[attachment text truncated]"
         : "";
-      lines.push(`  Content:\n${fenced(`${attachment.contentText}${truncated}`)}`);
+      lines.push(
+        `  Content:\n${fenced(`${attachment.contentText}${truncated}`)}`,
+      );
     } else {
       lines.push(
         `  Content is not available inline (${attachment.reason || "unreadable"}).`,
       );
+    }
+  }
+  return lines.join("\n");
+}
+
+function buildRequesterContextPrompt(
+  requesterContext: ThreadTurnContext["requesterContext"],
+) {
+  if (!requesterContext) return "";
+  const lines = [
+    "Requester context overlay:",
+    `Context class: ${requesterContext.contextClass}`,
+    `Requester user id: ${requesterContext.requester.userId ?? "unavailable"}`,
+    `Memory provider: ${requesterContext.personalMemory.status.state}${
+      requesterContext.personalMemory.status.reason
+        ? ` (${requesterContext.personalMemory.status.reason})`
+        : ""
+    }`,
+  ];
+  if (requesterContext.credentialSubject) {
+    lines.push(
+      `Credential subject: ${requesterContext.credentialSubject.type}${
+        requesterContext.credentialSubject.userId
+          ? `:${requesterContext.credentialSubject.userId}`
+          : ""
+      }`,
+    );
+  }
+  if (requesterContext.event) {
+    lines.push(
+      `Connector event: ${requesterContext.event.provider ?? "unknown"}:${
+        requesterContext.event.eventType ?? "unknown"
+      }`,
+    );
+  }
+  if (requesterContext.personalMemory.hits.length > 0) {
+    lines.push("Personal memory hits:");
+    for (const hit of requesterContext.personalMemory.hits.slice(0, 5)) {
+      lines.push(`- ${hit.title}: ${hit.text}`);
     }
   }
   return lines.join("\n");

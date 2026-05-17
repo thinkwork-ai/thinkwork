@@ -56,6 +56,25 @@ export type HindsightRecallOptions = {
   trace?: boolean;
 };
 
+export type MemoryRequestContext = {
+  contextClass?: string;
+  computerId?: string;
+  requesterUserId?: string;
+  sourceSurface?: string;
+  credentialSubject?: {
+    type: "user" | "service";
+    userId?: string | null;
+    connectionId?: string | null;
+    provider?: string | null;
+  };
+  event?: {
+    provider?: string | null;
+    eventType?: string | null;
+    eventId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  };
+};
+
 export type ThinkWorkMemoryRecord = {
   id: string;
   tenantId: string;
@@ -88,6 +107,7 @@ export type RecallRequest = MemoryOwnerRef & {
   strategies?: MemoryStrategy[];
   depth?: RecallDepth;
   hindsight?: HindsightRecallOptions;
+  requestContext?: MemoryRequestContext;
 };
 
 export type RecallResult = {

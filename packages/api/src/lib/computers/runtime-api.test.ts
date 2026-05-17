@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   notifyThreadUpdate: vi.fn(),
   ensureMigratedComputerWorkspaceSeeded: vi.fn(),
   ensureDefaultComputerRunbookSkillsMaterialized: vi.fn(),
+  assembleRequesterContext: vi.fn(),
   s3Send: vi.fn(),
 }));
 
@@ -104,6 +105,13 @@ vi.mock("./workspace-seed.js", () => ({
     mocks.ensureDefaultComputerRunbookSkillsMaterialized,
 }));
 
+vi.mock("./requester-context.js", () => ({
+  assembleRequesterContext: mocks.assembleRequesterContext,
+  formatRequesterContextForPrompt: vi.fn((context) =>
+    context ? "Requester context overlay" : "",
+  ),
+}));
+
 import {
   checkGoogleWorkspaceConnection,
   executeThreadTurnTask,
@@ -143,6 +151,28 @@ describe("Computer runtime API Google Workspace status", () => {
     mocks.ensureDefaultComputerRunbookSkillsMaterialized.mockResolvedValue({
       seeded: false,
     });
+    mocks.assembleRequesterContext.mockImplementation(async (input: any) => ({
+      contextClass: input.contextClass ?? "user",
+      computerId: input.computerId,
+      requester: { userId: input.requesterUserId ?? null },
+      sourceSurface: input.sourceSurface ?? "chat_message",
+      personalMemory: {
+        hits: [],
+        status: {
+          providerId: "memory",
+          displayName: "Hindsight Memory",
+          state: "skipped",
+          hitCount: 0,
+          reason: "no personal memory matched the request",
+          metadata: {
+            contextClass: input.contextClass ?? "user",
+            requesterUserId: input.requesterUserId ?? null,
+            computerId: input.computerId,
+            sourceSurface: input.sourceSurface ?? "chat_message",
+          },
+        },
+      },
+    }));
     mocks.s3Send.mockReset();
     mocks.s3Send.mockResolvedValue({
       Body: Buffer.from("# Report\n\nRevenue grew 12%.\n", "utf8"),
@@ -519,11 +549,25 @@ describe("Computer runtime API thread turn execution", () => {
     expect(result).toMatchObject({
       taskId: "task-1",
       source: "chat_message",
+      requesterContext: {
+        contextClass: "system",
+        requester: { userId: null },
+      },
       computer: { id: "computer-1", name: "Marco", slug: "marco" },
       thread: { id: "thread-1", title: "Hello" },
       message: { id: "message-1", content: "hello computer" },
       model: "model-1",
     });
+    expect(mocks.assembleRequesterContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        computerId: "computer-1",
+        requesterUserId: null,
+        prompt: "hello computer",
+        sourceSurface: "chat_message",
+        contextClass: "system",
+      }),
+    );
     expect(result.messagesHistory).toHaveLength(2);
     expect(result.attachments).toEqual([
       expect.objectContaining({

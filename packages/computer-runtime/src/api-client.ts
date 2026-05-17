@@ -29,6 +29,43 @@ export type ThreadTurnContext = {
     contextClass?: string | null;
   };
   surfaceContext?: Record<string, unknown> | null;
+  requesterContext?: {
+    contextClass: string;
+    computerId: string;
+    requester: {
+      userId: string | null;
+    };
+    sourceSurface: string;
+    credentialSubject?: {
+      type: "user" | "service";
+      userId?: string | null;
+      connectionId?: string | null;
+      provider?: string | null;
+    };
+    event?: {
+      provider?: string | null;
+      eventType?: string | null;
+      eventId?: string | null;
+      metadata?: Record<string, unknown> | null;
+    };
+    personalMemory: {
+      hits: Array<{
+        id: string;
+        title: string;
+        text: string;
+        score: number;
+        provenance?: Record<string, unknown>;
+      }>;
+      status: {
+        providerId: string;
+        displayName: string;
+        state: string;
+        hitCount: number;
+        reason?: string;
+        metadata?: Record<string, unknown>;
+      };
+    };
+  } | null;
   computer: {
     id: string;
     name: string;

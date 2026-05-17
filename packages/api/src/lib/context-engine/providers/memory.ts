@@ -53,6 +53,7 @@ export function createMemoryContextProvider(
           status: {
             state: "skipped",
             reason: "user scope is required for memory recall",
+            metadata: memoryStatusMetadata(request.caller),
           },
         };
       }
@@ -65,6 +66,16 @@ export function createMemoryContextProvider(
         query: request.query,
         limit: Math.min(request.limit, MEMORY_LIMIT),
         depth: request.depth,
+        requestContext: {
+          contextClass: request.caller.requesterContext?.contextClass,
+          computerId: request.caller.requesterContext?.computerId ?? undefined,
+          requesterUserId: request.caller.userId,
+          sourceSurface:
+            request.caller.requesterContext?.sourceSurface ?? undefined,
+          credentialSubject:
+            request.caller.requesterContext?.credentialSubject ?? undefined,
+          event: request.caller.requesterContext?.event ?? undefined,
+        },
         hindsight: {
           budget: request.depth === "deep" ? "mid" : "low",
           maxTokens: request.depth === "deep" ? 2_000 : 500,
@@ -128,10 +139,35 @@ export function createMemoryContextProvider(
           ? {
               state: "stale",
               reason: `wiki citation bridge failed: ${bridge.error}`,
+              metadata: memoryStatusMetadata(request.caller),
             }
-          : undefined,
+          : {
+              metadata: memoryStatusMetadata(request.caller),
+            },
       };
     },
+  };
+}
+
+function memoryStatusMetadata(caller: {
+  userId?: string | null;
+  requesterContext?: {
+    contextClass?: string;
+    computerId?: string | null;
+    sourceSurface?: string | null;
+    credentialSubject?: unknown;
+    event?: unknown;
+  };
+}) {
+  return {
+    requesterUserId: caller.userId ?? null,
+    contextClass:
+      caller.requesterContext?.contextClass ??
+      (caller.userId ? "user" : "system"),
+    computerId: caller.requesterContext?.computerId ?? null,
+    sourceSurface: caller.requesterContext?.sourceSurface ?? null,
+    credentialSubject: caller.requesterContext?.credentialSubject ?? null,
+    event: caller.requesterContext?.event ?? null,
   };
 }
 
@@ -214,7 +250,10 @@ async function loadWikiBridgeHits(args: {
       }),
     };
   } catch (err) {
-    return { hits: [], error: err instanceof Error ? err.message : String(err) };
+    return {
+      hits: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
