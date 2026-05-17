@@ -631,25 +631,66 @@ thinkwork message list <threadId> [--limit <n>] [--cursor <c>]
 
 ---
 
+## label
+
+Manage tenant-wide thread labels (Gmail-style tags applied to threads).
+
+```bash
+thinkwork label <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `labels`.
+
+To attach or detach a label on a specific thread, use `thinkwork thread label assign|remove`. The `label` command only manages label CRUD; assignments live on threads.
+
+### label list
+
+```bash
+thinkwork label list
+```
+
+Prints id / name / color / description for every label in the tenant.
+
+### label create
+
+```bash
+thinkwork label create [name] [--color <hex>] [--description <text>]
+```
+
+- In a TTY with no name, prompts for name and color.
+- `--color` validates against `^#[0-9a-fA-F]{6}$`; invalid formats error before the API call.
+
+### label update
+
+```bash
+thinkwork label update <id> [--name <n>] [--color <hex>] [--description <text>]
+```
+
+Only flags you pass are sent in `UpdateThreadLabelInput`. Requires at least one of `--name`, `--color`, `--description`.
+
+### label delete
+
+```bash
+thinkwork label delete <id> [--yes]
+```
+
+Deletes the label. Any existing thread-label assignments are removed automatically. Prompts for confirmation in a TTY; refuses in a non-interactive session without `--yes`.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
 
 | Phase | Commands |
 |-------|----------|
-| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message) shipped · [`label`](#label), [`inbox`](#inbox) next |
+| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label) shipped · [`inbox`](#inbox) next |
 | 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
-
-### label
-
-```bash
-thinkwork label list | create [name] [--color] [--description] | update <id> | delete <id>
-```
 
 ### inbox
 
