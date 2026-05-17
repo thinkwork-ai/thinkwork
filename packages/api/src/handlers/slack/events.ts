@@ -1,4 +1,6 @@
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { and, eq } from "drizzle-orm";
+import { computerTasks } from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { enqueueComputerTask } from "../../lib/computers/tasks.js";
 import { json } from "../../lib/response.js";
@@ -52,7 +54,10 @@ interface SlackApi {
     token: string;
     channel: string;
     text: string;
+    blocks?: Array<Record<string, unknown>>;
     threadTs?: string | null;
+    username?: string;
+    iconUrl?: string | null;
   }): Promise<{ ok: boolean; ts?: string; error?: string }>;
   fetchThreadMessages(input: {
     token: string;
@@ -76,6 +81,12 @@ export interface SlackEventsDeps {
     slackTeamId: string;
     slackUserId: string;
   }) => Promise<SlackLinkedComputer | null>;
+  updateTaskInput?: (input: {
+    tenantId: string;
+    computerId: string;
+    taskId: string;
+    taskInput: Record<string, unknown>;
+  }) => Promise<void>;
   resolveSlackThread?: (input: {
     tenantId: string;
     computerId: string;
@@ -105,6 +116,9 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   const loadLinkedComputer =
     deps.loadLinkedComputer ??
     ((input) => loadLinkedSlackComputer(input, dbClient));
+  const updateTaskInput =
+    deps.updateTaskInput ??
+    ((input) => defaultUpdateTaskInput(input, dbClient));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
   const metrics = deps.metrics ?? slackMetrics;
@@ -187,6 +201,30 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       return json({ ok: true, duplicate: true, taskId: task.id });
     }
 
+    const placeholder = await safePostPlaceholder(slackApi, {
+      token: args.botToken,
+      channel: channelId,
+      threadTs,
+    });
+    if (placeholder?.ts) {
+      try {
+        await updateTaskInput({
+          tenantId: args.workspace.tenantId,
+          computerId: link.computerId,
+          taskId: task.id,
+          taskInput: {
+            ...mappedTaskInput,
+            placeholderTs: placeholder.ts,
+            slack: { ...mappedTaskInput.slack, placeholderTs: placeholder.ts },
+          },
+        });
+      } catch (err) {
+        console.warn("[slack:events] placeholder metadata update failed", {
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return json({ ok: true, taskId: task.id });
   };
 }
@@ -209,6 +247,27 @@ function classifySlackEvent(
   return null;
 }
 
+async function defaultUpdateTaskInput(
+  input: {
+    tenantId: string;
+    computerId: string;
+    taskId: string;
+    taskInput: Record<string, unknown>;
+  },
+  dbClient: DbClient,
+): Promise<void> {
+  await dbClient
+    .update(computerTasks)
+    .set({ input: input.taskInput, updated_at: new Date() })
+    .where(
+      and(
+        eq(computerTasks.tenant_id, input.tenantId),
+        eq(computerTasks.computer_id, input.computerId),
+        eq(computerTasks.id, input.taskId),
+      ),
+    );
+}
+
 async function safeFetchThreadContext(
   slackApi: SlackApi,
   input: { token: string; channel: string; threadTs: string },
@@ -225,12 +284,46 @@ async function safeFetchThreadContext(
   }
 }
 
+async function safePostPlaceholder(
+  slackApi: SlackApi,
+  input: {
+    token: string;
+    channel: string;
+    threadTs: string;
+  },
+): Promise<{ ok: boolean; ts?: string; error?: string } | null> {
+  const text = "Marco is thinking...";
+  try {
+    const res = await slackApi.postMessage({
+      ...input,
+      text,
+      blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
+      ...thinkworkSlackBrand(),
+    });
+    if (!res.ok) {
+      console.warn("[slack:events] placeholder post failed", {
+        error: res.error ?? "unknown",
+      });
+      return null;
+    }
+    return res;
+  } catch (err) {
+    console.warn("[slack:events] placeholder post failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 const defaultSlackApi: SlackApi = {
   async postMessage(input) {
     return slackApiCall(input.token, "chat.postMessage", {
       channel: input.channel,
       text: input.text,
+      blocks: input.blocks,
       thread_ts: input.threadTs || undefined,
+      username: input.username || undefined,
+      icon_url: input.iconUrl || undefined,
     });
   },
   async fetchThreadMessages(input) {
@@ -335,6 +428,15 @@ function requiredString(value: unknown): string {
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function thinkworkSlackBrand(): { username: string; iconUrl: string } {
+  return {
+    username: process.env.THINKWORK_SLACK_USERNAME?.trim() || "ThinkWork",
+    iconUrl:
+      process.env.THINKWORK_SLACK_ICON_URL?.trim() ||
+      "https://admin.thinkwork.ai/logo.png",
+  };
 }
 
 export const handler = createSlackHandler({

@@ -141,6 +141,7 @@ interface SlackDispatchMetrics {
 const db = getDb();
 const secretCache = new Map<string, string>();
 let smClient: SecretsManagerClient | null = null;
+const DEFAULT_THINKWORK_SLACK_ICON_URL = "https://admin.thinkwork.ai/logo.png";
 
 export async function handler(event: SlackDispatchEvent = {}): Promise<{
   ok: boolean;
@@ -368,13 +369,12 @@ function attributedMessage(
   attribution: SlackComputerAttribution,
   degraded: boolean,
 ) {
+  const brand = thinkworkSlackBrand();
   return {
     text: slackComputerResponseText(text, attribution, { degraded }),
     blocks: slackComputerResponseBlocks(text, attribution, { degraded }),
-    username: degraded
-      ? undefined
-      : slackComputerUsername(attribution.displayName),
-    iconUrl: degraded ? null : attribution.avatarUrl,
+    username: degraded ? undefined : brand.username,
+    iconUrl: degraded ? null : brand.iconUrl,
   };
 }
 
@@ -604,6 +604,7 @@ async function postLegacyPlaceholder(
     text: event.text,
     blocks: [{ type: "section", text: { type: "mrkdwn", text: event.text } }],
     threadTs: event.threadTs || undefined,
+    ...thinkworkSlackBrand(),
   });
   if (!response.ok) {
     throw new Error(
@@ -675,6 +676,15 @@ function slackMessageBody(input: SlackMessageInput): Record<string, unknown> {
   };
 }
 
+function thinkworkSlackBrand(): { username: string; iconUrl: string } {
+  return {
+    username: process.env.THINKWORK_SLACK_USERNAME?.trim() || "ThinkWork",
+    iconUrl:
+      process.env.THINKWORK_SLACK_ICON_URL?.trim() ||
+      DEFAULT_THINKWORK_SLACK_ICON_URL,
+  };
+}
+
 async function slackApiRequest<T extends SlackApiResponse>(
   method: string,
   input: { token: string; body: Record<string, unknown> },
@@ -741,9 +751,9 @@ function slackComputerResponseText(
   attribution: SlackComputerAttribution,
   options: { degraded?: boolean } = {},
 ): string {
-  const body = text.trim() || "ThinkWork response";
-  if (!options.degraded) return body;
-  return `*${slackComputerUsername(attribution.displayName)}:*\n${body}`;
+  void attribution;
+  void options;
+  return text.trim() || "ThinkWork response";
 }
 
 function slackComputerResponseBlocks(

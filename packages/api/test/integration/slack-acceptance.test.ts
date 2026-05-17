@@ -125,6 +125,10 @@ function makeHarness() {
   const loadLinkedComputer = vi.fn(async (input: any) => {
     return links.get(`${input.slackTeamId}:${input.slackUserId}`) ?? null;
   });
+  const updateTaskInput = vi.fn(async (input: any) => {
+    const task = tasks.find((item) => item.id === input.taskId);
+    if (task) task.taskInput = input.taskInput;
+  });
   const resolveSlackThread = vi.fn(async (input: any) => ({
     threadId: `thread:${input.envelope.slackTeamId}:${input.envelope.channelId}`,
     messageId: `message:${input.envelope.eventId}`,
@@ -182,6 +186,7 @@ function makeHarness() {
     threadMessages,
     enqueueTask,
     loadLinkedComputer,
+    updateTaskInput,
     resolveSlackThread,
     slackEventsApi,
     slackDispatchApi,
@@ -280,8 +285,8 @@ async function replayCompletedTask(
         ],
       },
     ],
-    username: "Alice's Computer",
-    iconUrl: "https://example.com/avatar.png",
+    username: "ThinkWork",
+    iconUrl: "https://admin.thinkwork.ai/logo.png",
   };
   if (slack.modalViewId) {
     await harness.slackDispatchApi.updateView({
@@ -326,6 +331,7 @@ describe("Slack origin acceptance examples", () => {
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
       loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
@@ -347,10 +353,16 @@ describe("Slack origin acceptance examples", () => {
         }),
       }),
     );
-    expect(harness.visible.placeholders).toHaveLength(0);
-    expect(harness.visible.postedMessages[0]).toMatchObject({
+    expect(harness.visible.placeholders[0]).toMatchObject({
       channel: "C-finance",
-      username: "Alice's Computer",
+      username: "ThinkWork",
+      iconUrl: "https://admin.thinkwork.ai/logo.png",
+      text: "Marco is thinking...",
+    });
+    expect(harness.visible.updatedMessages[0]).toMatchObject({
+      channel: "C-finance",
+      username: "ThinkWork",
+      iconUrl: "https://admin.thinkwork.ai/logo.png",
     });
     expect(harness.metrics.dispatchSuccess).toHaveBeenCalledWith("app_mention");
   });
@@ -361,6 +373,7 @@ describe("Slack origin acceptance examples", () => {
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
       loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
@@ -453,6 +466,7 @@ describe("Slack origin acceptance examples", () => {
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
       loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
@@ -492,6 +506,7 @@ describe("Slack origin acceptance examples", () => {
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
       loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
@@ -523,6 +538,7 @@ describe("Slack origin acceptance examples", () => {
     const events = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
       loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
@@ -574,11 +590,11 @@ describe("Slack origin acceptance examples", () => {
       modalAck.statusCode,
     ]).toEqual([200, 200, 200]);
     expect(ackMs).toBeLessThan(3000);
-    expect(harness.visible.placeholders).toHaveLength(0);
-    expect(harness.visible.updatedMessages).toHaveLength(0);
+    expect(harness.visible.placeholders).toHaveLength(1);
+    expect(harness.visible.updatedMessages).toHaveLength(1);
     expect(harness.visible.responseUrlPosts).toHaveLength(1);
     expect(harness.visible.modalUpdates).toHaveLength(1);
-    expect(harness.visible.postedMessages).toHaveLength(2);
+    expect(harness.visible.postedMessages).toHaveLength(1);
     expect(harness.metrics.dispatchSuccess).toHaveBeenCalledWith("app_mention");
     expect(harness.metrics.dispatchSuccess).toHaveBeenCalledWith(
       "slash_command",
