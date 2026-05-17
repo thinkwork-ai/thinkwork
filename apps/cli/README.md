@@ -147,7 +147,7 @@ message and exits with code 2.
 | Phase | Domain | Commands |
 |-------|--------|----------|
 | **0 (now)** | Foundation | `login` (Cognito + AWS), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
-| 1 | Work & approvals | ✅ `thread` shipped · `message`, `label`, `inbox` next |
+| 1 | Work & approvals | ✅ `thread`, `message` shipped · `label`, `inbox` next |
 | 2 | Agents & workspace | `agent`, `template`, `tenant`, `member`, `team`, `kb` |
 | 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill` |
 | 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
