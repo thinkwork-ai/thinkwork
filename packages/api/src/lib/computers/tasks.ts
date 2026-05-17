@@ -264,8 +264,12 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
     actorType,
     actorId,
     requesterUserId,
-    contextClass: requesterUserId ? "user" : "system",
+    contextClass:
+      optionalString(payload.contextClass) ??
+      (requesterUserId ? "user" : "system"),
     runbookRunId: optionalString(payload.runbookRunId),
+    credentialSubject: normalizeCredentialSubject(payload, requesterUserId),
+    event: normalizeEvent(payload.event),
     surfaceContext: normalizeSurfaceContext(payload, source),
   };
 }
@@ -385,12 +389,57 @@ function normalizeSurfaceContext(
   payload: Record<string, unknown>,
   source: string,
 ) {
+  const explicit =
+    payload.surfaceContext &&
+    typeof payload.surfaceContext === "object" &&
+    !Array.isArray(payload.surfaceContext)
+      ? (payload.surfaceContext as Record<string, unknown>)
+      : {};
   return {
     source,
     triggerId: optionalString(payload.triggerId),
     triggerType: optionalString(payload.triggerType),
     scheduleName: optionalString(payload.scheduleName),
+    ...explicit,
   };
+}
+
+function normalizeCredentialSubject(
+  payload: Record<string, unknown>,
+  requesterUserId: string | null,
+) {
+  const raw =
+    payload.credentialSubject &&
+    typeof payload.credentialSubject === "object" &&
+    !Array.isArray(payload.credentialSubject)
+      ? (payload.credentialSubject as Record<string, unknown>)
+      : null;
+  if (!raw) return null;
+
+  const type = optionalString(raw.type);
+  const userId = optionalString(raw.userId);
+  if (type !== "user" || !userId) {
+    throw new ComputerTaskInputError(
+      "credentialSubject must identify a user subject",
+    );
+  }
+  if (requesterUserId && userId !== requesterUserId) {
+    throw new ComputerTaskInputError(
+      "credentialSubject.userId must match requesterUserId",
+    );
+  }
+
+  return {
+    type,
+    userId,
+    connectionId: optionalString(raw.connectionId),
+    provider: optionalString(raw.provider),
+  };
+}
+
+function normalizeEvent(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
 function normalizeRunbookExecuteInput(input: unknown): Record<string, unknown> {

@@ -44,7 +44,16 @@ input CreateScheduledJobInput {
 }
 
 extend type Query {
-  scheduledJobs(tenantId: ID!, agentId: ID, computerId: ID, routineId: ID, triggerType: String, enabled: Boolean, limit: Int): [ScheduledJob!]!
+  scheduledJobs(
+    tenantId: ID!
+    agentId: ID
+    computerId: ID
+    routineId: ID
+    triggerType: String
+    connectionId: ID
+    enabled: Boolean
+    limit: Int
+  ): [ScheduledJob!]!
   scheduledJob(id: ID!): ScheduledJob
 }
 

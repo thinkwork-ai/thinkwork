@@ -26,6 +26,7 @@ import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = resolve(__dirname, "..");
 const auditScript = join(catalogRoot, "scripts", "u8-status.ts");
+const AUDIT_TIMEOUT_MS = 15_000;
 
 function runAudit(): string {
   return execSync(`pnpm exec tsx ${auditScript}`, {
@@ -54,41 +55,57 @@ function readYaml(slug: string): Record<string, unknown> {
 }
 
 describe("u8-status audit script", () => {
-  it("runs + emits the expected markdown skeleton", () => {
-    const out = runAudit();
-    expect(out).toContain("# U8 — Skill catalog migration status");
-    expect(out).toContain("## Summary");
-    expect(out).toContain("## Per-slug detail");
-    expect(out).toContain("## Migration guidance");
-  });
+  it(
+    "runs + emits the expected markdown skeleton",
+    () => {
+      const out = runAudit();
+      expect(out).toContain("# U8 — Skill catalog migration status");
+      expect(out).toContain("## Summary");
+      expect(out).toContain("## Per-slug detail");
+      expect(out).toContain("## Migration guidance");
+    },
+    AUDIT_TIMEOUT_MS,
+  );
 
-  it("reports the deliverable set + connectors as `done`", () => {
-    const out = runAudit();
-    const donePattern = /\| done \| (\d+) \|/;
-    const match = out.match(donePattern);
-    expect(match).not.toBeNull();
-    // Post pure-skill-spec cleanup the 4 composition primitives (frame,
-    // synthesize, gather, compound) are gone. Remaining deliverables +
-    // connectors + built-ins still clear 15 after retiring the external
-    // task-intake skill pack.
-    expect(Number(match![1])).toBeGreaterThanOrEqual(15);
-  });
+  it(
+    "reports the deliverable set + connectors as `done`",
+    () => {
+      const out = runAudit();
+      const donePattern = /\| done \| (\d+) \|/;
+      const match = out.match(donePattern);
+      expect(match).not.toBeNull();
+      // Post pure-skill-spec cleanup the 4 composition primitives (frame,
+      // synthesize, gather, compound) are gone. Remaining deliverables +
+      // connectors + built-ins still clear 15 after retiring the external
+      // task-intake skill pack.
+      expect(Number(match![1])).toBeGreaterThanOrEqual(15);
+    },
+    AUDIT_TIMEOUT_MS,
+  );
 
-  it("has no regressed slugs (composition / declarative / unsupported)", () => {
-    const out = runAudit();
-    const regressedPattern = /\| regressed \| (\d+) \|/;
-    const match = out.match(regressedPattern);
-    expect(match).not.toBeNull();
-    expect(Number(match![1])).toBe(0);
-  });
+  it(
+    "has no regressed slugs (composition / declarative / unsupported)",
+    () => {
+      const out = runAudit();
+      const regressedPattern = /\| regressed \| (\d+) \|/;
+      const match = out.match(regressedPattern);
+      expect(match).not.toBeNull();
+      expect(Number(match![1])).toBe(0);
+    },
+    AUDIT_TIMEOUT_MS,
+  );
 
-  it("has no unknown slugs — every SKILL.md parses + declares execution", () => {
-    const out = runAudit();
-    const unknownPattern = /\| unknown \| (\d+) \|/;
-    const match = out.match(unknownPattern);
-    expect(match).not.toBeNull();
-    expect(Number(match![1])).toBe(0);
-  });
+  it(
+    "has no unknown slugs — every SKILL.md parses + declares execution",
+    () => {
+      const out = runAudit();
+      const unknownPattern = /\| unknown \| (\d+) \|/;
+      const match = out.match(unknownPattern);
+      expect(match).not.toBeNull();
+      expect(Number(match![1])).toBe(0);
+    },
+    AUDIT_TIMEOUT_MS,
+  );
 });
 
 describe("sales-prep (U8 first migration exemplar)", () => {
