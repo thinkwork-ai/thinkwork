@@ -22,6 +22,23 @@ export const MyComputerQuery = gql`
   }
 `;
 
+export const AssignedComputersQuery = gql`
+  query AssignedComputers {
+    assignedComputers {
+      id
+      name
+      tenantId
+      slug
+      status
+      runtimeStatus
+      sourceAgent {
+        id
+        name
+      }
+    }
+  }
+`;
+
 export const ComputerThreadsQuery = gql`
   query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
     threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {

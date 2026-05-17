@@ -41,7 +41,7 @@ const toastMessage = vi.mocked(toast.message);
 function setComputerId(id: string | null): void {
   useQueryMock.mockReturnValue([
     {
-      data: id ? { myComputer: { id } } : null,
+      data: id ? { assignedComputers: [{ id }] } : { assignedComputers: [] },
       fetching: false,
       stale: false,
       hasNext: false,
@@ -61,8 +61,7 @@ beforeEach(() => {
   // mutation. The shared helper instantiates them in that order.
   useMutationMock.mockImplementation(((doc: unknown) => {
     const isEnable =
-      doc === EnableSkillMutation ||
-      doc === EnableWorkflowMutation;
+      doc === EnableSkillMutation || doc === EnableWorkflowMutation;
     return [
       { fetching: false, stale: false, hasNext: false },
       isEnable ? enableExec : disableExec,
@@ -96,10 +95,7 @@ describe("useToggleMutation core", () => {
     expect(enableExec).toHaveBeenCalledWith(
       { input: { computerId: "computer-1", skillId: "sales-prep" } },
       {
-        additionalTypenames: [
-          "AgentSkill",
-          "CustomizeBindings",
-        ],
+        additionalTypenames: ["AgentSkill", "CustomizeBindings"],
       },
     );
     expect(disableExec).not.toHaveBeenCalled();
@@ -158,9 +154,7 @@ describe("useToggleMutation core", () => {
     enableExec.mockResolvedValue({
       error: {
         message: "Custom failure",
-        graphQLErrors: [
-          { extensions: { code: "SOMETHING_ELSE" } },
-        ],
+        graphQLErrors: [{ extensions: { code: "SOMETHING_ELSE" } }],
       },
     });
     const { result } = renderHook(() => useToggleMutation(opts));
@@ -178,7 +172,7 @@ describe("useToggleMutation core", () => {
       await result.current.toggle("sales-prep", true);
     });
     expect(toastError).toHaveBeenCalledWith(
-      expect.stringMatching(/Couldn't resolve your Computer/),
+      expect.stringMatching(/Select an assigned Computer/),
     );
     expect(enableExec).not.toHaveBeenCalled();
     expect(disableExec).not.toHaveBeenCalled();

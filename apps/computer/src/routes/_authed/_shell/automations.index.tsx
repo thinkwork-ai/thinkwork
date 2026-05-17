@@ -1,8 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Play, Pause, Monitor, Clock, Plus, Loader2 } from "lucide-react";
+import {
+  Search,
+  Play,
+  Pause,
+  Monitor,
+  Clock,
+  Plus,
+  Loader2,
+} from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useSubscription, useQuery } from "urql";
+import { useSubscription } from "urql";
 import {
   Badge,
   Button,
@@ -13,12 +21,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@thinkwork/ui";
-import {
-  MyComputerQuery,
-  ThreadTurnUpdatedSubscription,
-} from "@/lib/graphql-queries";
+import { ThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
+import type { AssignedComputer } from "@/lib/use-assigned-computer-selection";
+import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import {
@@ -36,18 +43,6 @@ import {
 export const Route = createFileRoute("/_authed/_shell/automations/")({
   component: AutomationsPage,
 });
-
-interface MyComputer {
-  id: string;
-  name: string;
-  tenantId: string;
-  ownerUserId: string;
-  sourceAgent: { id: string; name: string } | null;
-}
-
-interface MyComputerResult {
-  myComputer: MyComputer | null;
-}
 
 async function apiFetch<T>(
   path: string,
@@ -177,7 +172,13 @@ function jobColumns(
       header: "Next Run",
       cell: ({ row }) => {
         if (!row.original.enabled) {
-          return <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>—</span>;
+          return (
+            <span
+              className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+            >
+              —
+            </span>
+          );
         }
         const nextDb = row.original.next_run_at;
         const estimated = estimateNextRun(
@@ -186,10 +187,18 @@ function jobColumns(
         );
         const nextDate = nextDb ? new Date(nextDb) : estimated;
         if (!nextDate) {
-          return <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>—</span>;
+          return (
+            <span
+              className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+            >
+              —
+            </span>
+          );
         }
         return (
-          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+          >
             {relativeTime(nextDate.toISOString())}
           </span>
         );
@@ -205,7 +214,7 @@ function AddJobButton({
   onCreated,
 }: {
   tenantId: string;
-  computer: MyComputer;
+  computer: AssignedComputer;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -217,13 +226,19 @@ function AddJobButton({
         <Tooltip>
           <TooltipTrigger asChild>
             <span tabIndex={0}>
-              <Button variant="ghost" size="sm" disabled className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled
+                className="text-muted-foreground"
+              >
                 <Plus className="h-4 w-4 mr-1" /> Add Job
               </Button>
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            This Computer has no source agent yet — use admin to create the schedule.
+            This Computer has no source agent yet — use admin to create the
+            schedule.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -269,10 +284,11 @@ function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const computer = computerData?.myComputer ?? null;
+  const {
+    fetching: computerFetching,
+    noAssignedComputers,
+    selectedComputer: computer,
+  } = useAssignedComputerSelection();
   const computerId = computer?.id ?? null;
 
   const [subResult] = useSubscription({
@@ -333,13 +349,26 @@ function AutomationsPage() {
     );
   }, [jobs, search]);
 
-  const tally = !computer || loading
-    ? "Loading..."
-    : `${enabledJobs.length} active, ${disabledJobs.length} disabled`;
+  const tally =
+    !computer || loading
+      ? "Loading..."
+      : `${enabledJobs.length} active, ${disabledJobs.length} disabled`;
 
   usePageHeaderActions({ title: "Automations", subtitle: tally });
 
-  if (!tenantId || !computer || loading) {
+  if (noAssignedComputers) {
+    return (
+      <main className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
+        <p className="text-base font-medium">No shared Computer assigned</p>
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">
+          Ask your tenant operator to assign a shared Computer before managing
+          automations.
+        </p>
+      </main>
+    );
+  }
+
+  if (!tenantId || !computer || loading || computerFetching) {
     return <PageSkeleton />;
   }
 
@@ -398,7 +427,7 @@ function AutomationsPage() {
         {error && <p className="shrink-0 text-sm text-destructive">{error}</p>}
 
         <DataTable
-          columns={jobColumns(runningJobIds, computer.name)}
+          columns={jobColumns(runningJobIds, computer.name || "Computer")}
           data={filteredJobs}
           filterValue={search}
           filterColumn="name"

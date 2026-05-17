@@ -16,7 +16,13 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
-  useQuery: () => [{ data: { myComputer: { id: "computer-1" } } }],
+  useQuery: () => [
+    {
+      data: {
+        assignedComputers: [{ id: "computer-1", name: "Sales Computer" }],
+      },
+    },
+  ],
   useMutation: () => [{ fetching: false }, createThreadMock],
 }));
 
