@@ -3,6 +3,7 @@ import {
   buildEvalWorkerMessages,
   chunkEvalWorkerMessages,
   evalWorkerMessageGroupIdForMessage,
+  excludesComputerSurfaceByDefault,
   selectedTestCaseIdsFromEvent,
 } from "./eval-runner.js";
 
@@ -51,6 +52,18 @@ describe("selectedTestCaseIdsFromEvent", () => {
         20,
       ),
     ).toBe("eval-agentcore:agent-1:1");
+  });
+
+  it("excludes Computer-surface cases from direct AgentCore category runs by default", () => {
+    expect(excludesComputerSurfaceByDefault({ computer_id: null }, [])).toBe(
+      true,
+    );
+    expect(
+      excludesComputerSurfaceByDefault({ computer_id: "computer-1" }, []),
+    ).toBe(false);
+    expect(
+      excludesComputerSurfaceByDefault({ computer_id: null }, ["tc-1"]),
+    ).toBe(false);
   });
 });
 

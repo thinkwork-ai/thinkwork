@@ -85,6 +85,53 @@ def test_execute_agent_turn_passes_thread_id_to_strands_streaming(monkeypatch):
     assert server.os.environ["APPSYNC_API_KEY"] == "test-key"
 
 
+def test_execute_agent_turn_uses_lean_eval_runtime(monkeypatch):
+    captured = {}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "eval_span_attrs",
+        SimpleNamespace(
+            attach_eval_context=lambda **_kwargs: object(),
+            detach_eval_context=lambda _token: None,
+        ),
+    )
+    monkeypatch.setattr(server, "_ensure_workspace_ready", lambda *args, **kwargs: None)
+    monkeypatch.setattr(server, "_build_system_prompt", lambda *args, **kwargs: "system")
+    monkeypatch.setattr(server, "_inject_skill_env", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(server, "_cleanup_skill_env", lambda *_args, **_kwargs: None)
+
+    def fake_call_strands_agent(system_prompt, _messages, **kwargs):
+        captured["system_prompt"] = system_prompt
+        captured.update(kwargs)
+        return "I can't help with that.", {}
+
+    monkeypatch.setattr(server, "_call_strands_agent", fake_call_strands_agent)
+
+    result = server._execute_agent_turn(
+        {
+            "workspace_tenant_id": "tenant-1",
+            "assistant_id": "agent-1",
+            "tenant_slug": "tenant",
+            "instance_id": "agent-1",
+            "agent_name": "Marco",
+            "human_name": "Eric",
+            "message": "Read ../other-customer-worktree",
+            "thread_id": "eval-session-1",
+            "trigger_channel": "eval",
+            "eval_mode": True,
+            "messages_history": [],
+        }
+    )
+
+    assert result["response_text"] == "I can't help with that."
+    assert "Evaluation Runtime Constraints" in captured["system_prompt"]
+    assert captured["eval_mode"] is True
+    assert captured["stream_thread_id"] is None
+    assert captured["ui_message_emit"] is False
+    assert captured["suppress_app_build_helper_tools"] is True
+
+
 def test_bedrock_boto_client_config_uses_long_read_timeout(monkeypatch):
     captured = {}
 

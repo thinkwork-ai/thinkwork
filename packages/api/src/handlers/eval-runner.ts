@@ -6,7 +6,7 @@
  * result writes, and last-writer run finalization.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { evalRuns, evalTestCases } from "@thinkwork/database-pg/schema";
 import {
@@ -82,6 +82,13 @@ export function evalWorkerMessageGroupIdForMessage(
   return `eval-agentcore:${run.agent_id ?? run.id}:${shard}`;
 }
 
+export function excludesComputerSurfaceByDefault(
+  run: Pick<typeof evalRuns.$inferSelect, "computer_id">,
+  selectedTestCaseIds: string[],
+): boolean {
+  return !run.computer_id && selectedTestCaseIds.length === 0;
+}
+
 /** Test seam: dispatcher tests inject a fake SQS client. */
 export function _setSqsClientForTests(client: SQSClient | undefined): void {
   sqsClientForTests = client;
@@ -143,6 +150,11 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       caseConditions.push(inArray(evalTestCases.id, selectedTestCaseIds));
     } else if (run.categories.length > 0) {
       caseConditions.push(inArray(evalTestCases.category, run.categories));
+    }
+    if (excludesComputerSurfaceByDefault(run, selectedTestCaseIds)) {
+      caseConditions.push(
+        sql`not (${evalTestCases.tags} @> ARRAY['surface:computer']::text[])`,
+      );
     }
 
     const cases = await db
