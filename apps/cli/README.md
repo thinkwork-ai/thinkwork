@@ -148,7 +148,7 @@ message and exits with code 2.
 |-------|--------|----------|
 | **0 (now)** | Foundation | `login` (Cognito + AWS), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
 | 1 | Work & approvals | ✅ `thread`, `message`, `label`, `inbox` — **Phase 1 complete** |
-| 2 | Agents & workspace | ✅ `member` shipped · `agent`, `template`, `tenant`, `team`, `kb` next |
+| 2 | Agents & workspace | ✅ `member`, `team` shipped · `agent`, `template`, `tenant`, `kb` next |
 | 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill` |
 | 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
 | 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |

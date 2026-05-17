@@ -796,6 +796,57 @@ Removes the membership. The underlying Cognito user is **not** deleted. Prompts 
 
 ---
 
+## team
+
+Teams are workspace subdivisions inside a tenant. Each has a name, optional sub-budget, and roster of agent + user members. Use teams to scope budgets and route work to a subset of agents.
+
+```bash
+thinkwork team <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `teams`.
+
+### team list / get
+
+```bash
+thinkwork team list
+thinkwork team get <id>
+```
+
+`list` is a tenant-wide table (id / name / type / status / budget). `get` shows team metadata plus the agent + user rosters.
+
+### team create / update / delete
+
+```bash
+thinkwork team create [name] [--description <t>] [--budget-usd <n>]
+thinkwork team update <id> [--name <n>] [--description <t>] [--status active|archived] [--budget-usd <n>]
+thinkwork team delete <id> [--yes]
+```
+
+- `create` prompts for `name` in a TTY when omitted; `--budget-usd` is optional (stored as `budgetMonthlyCents` after × 100).
+- `update` accepts partial input; requires at least one of the four flags.
+- `delete` honors `-y/--yes` (archives the team rather than hard-deleting).
+
+### team add-agent / remove-agent
+
+```bash
+thinkwork team add-agent    <teamId> <agentId>
+thinkwork team remove-agent <teamId> <agentId>
+```
+
+Manage the team's agent roster. Both verbs are idempotent at the API level (re-adding or re-removing returns the current state, doesn't error).
+
+### team add-user / remove-user
+
+```bash
+thinkwork team add-user    <teamId> <userId>
+thinkwork team remove-user <teamId> <userId>
+```
+
+Manage the team's user roster. Same idempotency semantics as the agent verbs.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -803,7 +854,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`team`](#team), [`kb`](#kb) next |
+| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`kb`](#kb) next |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
@@ -847,15 +898,6 @@ Tenant (workspace) CRUD + settings.
 thinkwork tenant list | get <idOrSlug> | create [name] [--slug] [--plan] [--issue-prefix]
 thinkwork tenant update <id> [--name] [--plan] [--issue-prefix]
 thinkwork tenant settings get|set [--default-model] [--monthly-budget-usd] [--max-agents] [--auto-close-after-days] [--feature key=value]
-```
-
-### team
-
-```bash
-thinkwork team list | get <id> | create [name] [--description] [--budget-usd]
-thinkwork team update <id> | delete <id>
-thinkwork team add-agent|remove-agent <teamId> <agentId>
-thinkwork team add-user|remove-user <teamId> <userId>
 ```
 
 ### kb
