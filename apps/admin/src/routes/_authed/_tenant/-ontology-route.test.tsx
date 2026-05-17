@@ -18,11 +18,18 @@ describe("ontology studio route", () => {
     );
   });
 
-  it("exposes the four practical studio surfaces", () => {
+  it("exposes the practical studio surfaces", () => {
     expect(routeSource).toContain("Change Sets");
-    expect(routeSource).toContain("Definitions");
+    expect(routeSource).toContain("Entities");
+    expect(routeSource).toContain("Relationships");
     expect(routeSource).toContain("Mappings");
     expect(routeSource).toContain("Reprocess Jobs");
+  });
+
+  it("uses tables for approved entity and relationship definitions", () => {
+    expect(routeSource).toContain("const entityColumns");
+    expect(routeSource).toContain("const relationshipColumns");
+    expect(routeSource).toContain("<DataTable");
   });
 
   it("wires the ontology GraphQL operations used by the page", () => {
