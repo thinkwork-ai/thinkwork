@@ -3,11 +3,11 @@ title: Admin — Agents
 description: The delegated-agent roster plus runtime, template, Company Brain, and automation configuration. Computers own user workspaces; Agents provide reusable managed-worker capabilities.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-The Agents surface is where operators and authors build, configure, and iterate on delegated workers in a ThinkWork tenant. Computers are the primary per-user workspace/orchestrator surface; Agents are reusable managed workers that Computers, threads, automations, or operators can invoke for focused work.
+The Agents surface is where operators and authors build, configure, and iterate on delegated workers in a ThinkWork tenant. Computers are the primary shared workspace/orchestrator surface; Agents are reusable managed workers that Computers, threads, automations, or operators can invoke for focused work.
 
-For user-owned runtime state, persistent workspace files, and migration from old user-paired Agents, use [Admin — Computers](/applications/admin/computers/).
+For shared runtime state, persistent workspace files, assignments, and migration from old user-paired Agents, use [Admin — Computers](/applications/admin/computers/).
 
 ## The agent list
 
@@ -18,14 +18,14 @@ The list is a `DataTable` with search, sort, and a pair of top-right buttons: **
 
 Each row carries:
 
-| Column | Notes |
-|---|---|
-| Name | Cloud vs BYOB icon next to the name — BYOB agents use runtimes other than the two ThinkWork-managed ones (`sdk`, `strands`) |
-| Status | `IDLE`, `BUSY`, `PAUSED`, or `STOPPED` as a `StatusBadge` |
-| Template | The linked agent template name, if any |
-| Human pair | The user this agent is paired with (for single-user agents) |
-| Budget | Monthly cap from the template's budget policy |
-| Heartbeat | Relative time since the agent last reported in |
+| Column     | Notes                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Name       | Cloud vs BYOB icon next to the name — BYOB agents use runtimes other than the two ThinkWork-managed ones (`sdk`, `strands`) |
+| Status     | `IDLE`, `BUSY`, `PAUSED`, or `STOPPED` as a `StatusBadge`                                                                   |
+| Template   | The linked agent template name, if any                                                                                      |
+| Human pair | The user this agent is paired with (for single-user agents)                                                                 |
+| Budget     | Monthly cap from the template's budget policy                                                                               |
+| Heartbeat  | Relative time since the agent last reported in                                                                              |
 
 The list is driven by `AgentsListQuery`. An `OnAgentStatusChangedSubscription` re-executes the query whenever any agent transitions states — creates, deletes, pauses, resumes — so the roster stays live.
 
@@ -116,6 +116,7 @@ The "Create Sub-agent" dialog captures a name, slug, role, and model selection. 
 The Workspace tab is an agent's composed file view — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, `memory/*.md`, and any agent-scoped customizations. The file list is the **composed view** from the [workspace overlay](/concepts/agents/workspace-overlay/): every file the agent would read at invocation time, drawn from the agent layer, the template layer, or tenant defaults.
 
 **Layout:**
+
 - **Left sidebar** — collapsible folder/file tree. Files that inherit cleanly from the template or tenant defaults show no icon — that's the common case. Non-default state gets a right-justified indicator:
   - Filled purple dot — agent-scoped override
   - Amber alert — pinned guardrail file has a template update available
@@ -153,12 +154,12 @@ This is distinct from the tenant-wide [Automations](/applications/admin/automati
 
 Agent status is a small enum backed by the `OnAgentStatusChangedSubscription`:
 
-| Status | Meaning |
-|---|---|
-| `IDLE` | Running, waiting for work |
-| `BUSY` | Currently executing a turn |
-| `PAUSED` | Admin-paused, will not accept new turns but can be resumed |
-| `STOPPED` | Terminated |
+| Status    | Meaning                                                    |
+| --------- | ---------------------------------------------------------- |
+| `IDLE`    | Running, waiting for work                                  |
+| `BUSY`    | Currently executing a turn                                 |
+| `PAUSED`  | Admin-paused, will not accept new turns but can be resumed |
+| `STOPPED` | Terminated                                                 |
 
 Pausing and resuming are manual operator actions. Stopping is typically followed by deletion.
 
@@ -200,7 +201,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ## Related pages
 
 - [Agent Templates](/applications/admin/agent-templates/) — reusable bundles + explicit sync flow
-- [Computers](/applications/admin/computers/) — durable per-user workspace and runtime surface
+- [Computers](/applications/admin/computers/) — durable shared workspace and runtime surface
 - [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi managed-runtime routing
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from

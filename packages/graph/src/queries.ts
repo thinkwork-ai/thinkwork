@@ -9,7 +9,7 @@ import { gql } from "@urql/core";
  */
 
 export const MemoryGraphQuery = gql`
-  query MemoryGraph($userId: ID!) {
+  query MemoryGraph($userId: ID) {
     memoryGraph(userId: $userId) {
       nodes {
         id
@@ -32,7 +32,7 @@ export const MemoryGraphQuery = gql`
 `;
 
 export const WikiGraphQuery = gql`
-  query WikiGraph($tenantId: ID!, $userId: ID!) {
+  query WikiGraph($tenantId: ID!, $userId: ID) {
     wikiGraph(tenantId: $tenantId, userId: $userId) {
       nodes {
         id

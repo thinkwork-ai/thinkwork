@@ -323,22 +323,6 @@ export const ComputerDetailQuery = graphql(`
   }
 `);
 
-export const MyComputerQuery = graphql(`
-  query MyComputer {
-    myComputer {
-      id
-      name
-      slug
-      status
-      desiredRuntimeStatus
-      runtimeStatus
-      liveWorkspaceRoot
-      lastHeartbeatAt
-      lastActiveAt
-    }
-  }
-`);
-
 export const CreateComputerMutation = graphql(`
   mutation CreateComputer($input: CreateComputerInput!) {
     createComputer(input: $input) {

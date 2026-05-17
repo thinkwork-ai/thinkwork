@@ -106,6 +106,7 @@ describe("Computers admin routes", () => {
     expect(queriesSource).toContain("mutation SetComputerAssignments");
     expect(queriesSource).toContain("mutation SetUserComputerAssignments");
     expect(queriesSource).toContain("mutation UpdateComputer");
+    expect(queriesSource).not.toContain("export const MyComputerQuery");
     // ComputerTasksQuery / ComputerThreadsQuery / ComputerEventsQuery were
     // the panels' only consumers and are retired alongside them.
     expect(queriesSource).not.toContain("export const ComputerTasksQuery");

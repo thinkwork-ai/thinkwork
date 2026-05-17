@@ -13,7 +13,7 @@ Every inbound integration event answers the same three routing questions before 
 
 1. **Does a thread already exist for this external conversation?** A Slack threaded reply should land in the same ThinkWork thread as the original message, not a new one.
 2. **If yes, is that thread still open?** A reply to a `DONE` thread should reopen it, not silently drop.
-3. **If no thread exists, which Computer should own the new one?** The inbound event may name a target, or the tenant may have a default routing rule.
+3. **If no thread exists, which shared Computer should receive the new one?** The inbound event may name a target, or the tenant may have a default routing rule.
 
 Each integration runtime runs through those questions before creating or updating a thread. The answers live in channel-specific metadata.
 
@@ -90,7 +90,7 @@ Routing is configured per integration in the relevant admin surface, such as [pr
 
 ### What's tenant-scoped (admin web)
 
-- **Target Computer per integration.** Every integration that creates work needs a target Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
+- **Target Computer per integration.** Every integration that creates work needs a target shared Computer. When inbound routing finds no more-specific match, the new thread and task route there. The Computer can handle the work directly or delegate to a managed Agent or routine.
 - **Routing rules per integration.** A list of predicate-to-target rules evaluated in order. Predicates can be: `@-mention`, `channel = #engineering`, `from-domain = customer.com`, `label = bug`, or provider-specific fields. Define rules in the provider's admin surface. The first matching rule wins; if none match, the integration's target Computer runs.
 - **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the integration's reopen mode to `disabled`.
 - **Signing secret rotation.** Each integration's webhook signing secret lives in the tenant credential vault. Rotate it from the provider's admin surface; active integration runtimes pick up the new value from deployed configuration. See [Integrations → credential vault](/concepts/integrations#credential-vault).
@@ -108,12 +108,12 @@ Here's the full path of an inbound Slack message becoming a thread turn.
 2. **Webhook signature verified.** The Slack integration runtime validates the `X-Slack-Signature` header against the tenant credential vault.
 3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the integration-agnostic shape the thread path consumes.
 4. **Routing check.** The integration queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
-5. **Target resolution.** For a new thread, the Lambda picks a Computer target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the assigned Computer already owns it.
+5. **Target resolution.** For a new thread, the Lambda picks an assigned shared Computer target: the target of an @-mention, a channel binding, or the integration default. For an existing thread, the selected Computer already owns the work.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
 7. **Computer invoked.** The Computer runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
 8. **Reply or delegation.** The Computer handles the work or delegates to a managed Agent. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
 
-Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the Computer task/delegation shows tool calls and memory reads, and the outbound Slack response is logged with its Slack message id.
+Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the Computer task/delegation shows tool calls and memory reads, requester identity is preserved, and the outbound Slack response is logged with its Slack message id.
 
 ## Why Computers and managed Agents see metadata
 

@@ -51,7 +51,7 @@ export function MemoryPanel({
           <p className="text-sm text-muted-foreground">Loading memory...</p>
         ) : records.length === 0 ? (
           <div className="rounded-lg border border-border/70 bg-card px-5 py-6 text-sm text-muted-foreground">
-            Your Computer has not remembered anything yet.
+            No requester memories have been captured yet.
           </div>
         ) : (
           <div className="grid gap-6">

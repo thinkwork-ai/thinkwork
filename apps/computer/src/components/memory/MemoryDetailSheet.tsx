@@ -52,7 +52,11 @@ interface MemoryDetailSheetProps {
 function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
   const colors = STRATEGY_COLORS[strategy] || "bg-muted text-muted-foreground";
-  return <Badge className={`${colors} font-normal text-xs`}>{strategyLabel(strategy)}</Badge>;
+  return (
+    <Badge className={`${colors} font-normal text-xs`}>
+      {strategyLabel(strategy)}
+    </Badge>
+  );
 }
 
 function MemoryContent({ text }: { text: string }) {
@@ -66,7 +70,9 @@ function MemoryContent({ text }: { text: string }) {
               {s.topic}
             </p>
           )}
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{s.content}</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {s.content}
+          </p>
         </div>
       ))}
     </div>
@@ -79,20 +85,27 @@ function MemoryContent({ text }: { text: string }) {
  * only write action is Forget (delete). See plan
  * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md U5.
  */
-export function MemoryDetailSheet({ record, deleting, onForget }: MemoryDetailSheetProps) {
+export function MemoryDetailSheet({
+  record,
+  deleting,
+  onForget,
+}: MemoryDetailSheetProps) {
   return (
     <SheetContent className="sm:max-w-lg flex flex-col">
       <SheetHeader className="p-6 pb-0">
         <SheetTitle>Memory Detail</SheetTitle>
         <SheetDescription>
           {record.createdAt
-            ? `Created ${new Date(record.createdAt).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })}`
+            ? `Created ${new Date(record.createdAt).toLocaleDateString(
+                "en-US",
+                {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                },
+              )}`
             : "Memory record"}
         </SheetDescription>
       </SheetHeader>
@@ -125,7 +138,9 @@ export function MemoryDetailSheet({ record, deleting, onForget }: MemoryDetailSh
                   <p className="text-muted-foreground uppercase tracking-wider font-medium">
                     Confidence
                   </p>
-                  <p className="mt-0.5">{(record.confidence * 100).toFixed(0)}%</p>
+                  <p className="mt-0.5">
+                    {(record.confidence * 100).toFixed(0)}%
+                  </p>
                 </div>
               )}
               {record.accessCount > 0 && (
@@ -176,7 +191,11 @@ export function MemoryDetailSheet({ record, deleting, onForget }: MemoryDetailSh
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {record.tags.map((t) => (
-                    <Badge key={t} variant="outline" className="font-normal text-xs">
+                    <Badge
+                      key={t}
+                      variant="outline"
+                      className="font-normal text-xs"
+                    >
                       {t}
                     </Badge>
                   ))}
@@ -201,13 +220,15 @@ export function MemoryDetailSheet({ record, deleting, onForget }: MemoryDetailSh
                 <AlertDialogHeader>
                   <AlertDialogTitle>Forget this memory?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Your Computer will no longer recall this in future threads. This cannot be
-                    undone.
+                    This requester memory will no longer be recalled in future
+                    threads. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onForget}>Forget</AlertDialogAction>
+                  <AlertDialogAction onClick={onForget}>
+                    Forget
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -221,7 +242,9 @@ export function MemoryDetailSheet({ record, deleting, onForget }: MemoryDetailSh
 function DateField({ label, iso }: { label: string; iso: string }) {
   return (
     <div>
-      <p className="text-muted-foreground uppercase tracking-wider font-medium">{label}</p>
+      <p className="text-muted-foreground uppercase tracking-wider font-medium">
+        {label}
+      </p>
       <p className="mt-0.5">
         {new Date(iso).toLocaleDateString("en-US", {
           month: "short",

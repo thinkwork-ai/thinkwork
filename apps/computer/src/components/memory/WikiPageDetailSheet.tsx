@@ -23,7 +23,7 @@ export interface WikiPageSheetEdge {
 
 interface WikiPageDetailSheetProps {
   tenantId: string;
-  userId: string;
+  userId?: string | null;
   type: WikiPageType;
   slug: string;
   /** Title shown until the full page query resolves. */
@@ -54,7 +54,7 @@ export function WikiPageDetailSheet({
   const [pageResult] = useQuery({
     query: ComputerWikiPageQuery,
     variables: { tenantId, userId, type, slug },
-    pause: !tenantId || !userId || !slug,
+    pause: !tenantId || !slug,
   });
 
   const page: any = pageResult.data?.wikiPage;
@@ -88,10 +88,13 @@ export function WikiPageDetailSheet({
             ? ` — ${connectedEdges.length} link${connectedEdges.length !== 1 ? "s" : ""}`
             : ""}
           {page?.lastCompiledAt
-            ? ` · compiled ${new Date(page.lastCompiledAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}`
+            ? ` · compiled ${new Date(page.lastCompiledAt).toLocaleDateString(
+                "en-US",
+                {
+                  month: "short",
+                  day: "numeric",
+                },
+              )}`
             : ""}
         </SheetDescription>
       </SheetHeader>
@@ -103,12 +106,15 @@ export function WikiPageDetailSheet({
           </div>
         ) : !page ? (
           <p className="text-sm text-muted-foreground">
-            This page couldn't be loaded. It may have been archived since it was last indexed.
+            This page couldn't be loaded. It may have been archived since it was
+            last indexed.
           </p>
         ) : (
           <>
             {page.summary && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{page.summary}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                {page.summary}
+              </p>
             )}
 
             {page.aliases && page.aliases.length > 0 && (
@@ -118,7 +124,11 @@ export function WikiPageDetailSheet({
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {page.aliases.map((a: string) => (
-                    <Badge key={a} variant="outline" className="font-normal text-xs">
+                    <Badge
+                      key={a}
+                      variant="outline"
+                      className="font-normal text-xs"
+                    >
                       {a}
                     </Badge>
                   ))}
@@ -132,7 +142,9 @@ export function WikiPageDetailSheet({
                   .sort((a: any, b: any) => a.position - b.position)
                   .map((s: any) => (
                     <div key={s.id}>
-                      <h4 className="text-sm font-semibold text-foreground mb-1">{s.heading}</h4>
+                      <h4 className="text-sm font-semibold text-foreground mb-1">
+                        {s.heading}
+                      </h4>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
                         {s.bodyMd}
                       </p>
@@ -166,9 +178,13 @@ export function WikiPageDetailSheet({
                     Page
                   </Badge>
                   <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">{edge.targetLabel}</p>
+                    <p className="font-medium text-foreground truncate">
+                      {edge.targetLabel}
+                    </p>
                     {edge.label && edge.label !== "references" && (
-                      <p className="text-xs text-muted-foreground">{edge.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {edge.label}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -178,7 +194,9 @@ export function WikiPageDetailSheet({
         )}
 
         {!loadingPage && page && connectedEdges.length === 0 && (
-          <p className="text-sm text-muted-foreground">No links to or from this page yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No links to or from this page yet.
+          </p>
         )}
       </div>
     </>

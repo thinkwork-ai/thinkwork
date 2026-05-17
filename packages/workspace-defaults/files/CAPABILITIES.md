@@ -31,7 +31,7 @@ the app source with `@thinkwork/computer-stdlib` primitives, call `save_app`
 with one or more TSX files and metadata, use `load_app` before regenerating an
 existing app, and use `list_apps` when you need to reference prior apps. App
 refreshes must be deterministic `refresh()` exports; do not use refresh to ask the
-user's Computer to reinterpret the original request.
+Computer to reinterpret the original request.
 
 Computer hosts generated Apps inside host-provided Artifact chrome and a
 sandboxed iframe runtime. App TSX should render only body/canvas content and

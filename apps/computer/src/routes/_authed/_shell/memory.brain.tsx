@@ -25,7 +25,6 @@ import {
   ComputerMemoryRecordsQuery,
   ComputerMemorySearchQuery,
   DeleteComputerMemoryRecordMutation,
-  MyComputerQuery,
 } from "@/lib/graphql-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
@@ -59,14 +58,6 @@ export const Route = createFileRoute("/_authed/_shell/memory/brain")({
   }),
 });
 
-interface MyComputerResult {
-  myComputer?: {
-    id: string;
-    tenantId: string;
-    ownerUserId: string;
-  } | null;
-}
-
 interface MemoryRecordsResult {
   memoryRecords?: any[] | null;
 }
@@ -78,7 +69,11 @@ interface MemorySearchResult {
 function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
   const colors = STRATEGY_COLORS[strategy] || "bg-muted text-muted-foreground";
-  return <Badge className={`${colors} font-normal text-xs`}>{strategyLabel(strategy)}</Badge>;
+  return (
+    <Badge className={`${colors} font-normal text-xs`}>
+      {strategyLabel(strategy)}
+    </Badge>
+  );
 }
 
 function BrainPage() {
@@ -89,11 +84,15 @@ function BrainPage() {
   const activeTab =
     [...MEMORY_TABS]
       .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "";
   const view: BrainView = viewParam ?? "table";
   const setView = useCallback(
     (next: BrainView) => {
-      navigate({ search: next === "table" ? {} : { view: next }, replace: true });
+      navigate({
+        search: next === "table" ? {} : { view: next },
+        replace: true,
+      });
     },
     [navigate],
   );
@@ -102,24 +101,34 @@ function BrainPage() {
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<MemoryGraphHandle>(null);
 
-  const [{ data: computerData }] = useQuery<MyComputerResult>({ query: MyComputerQuery });
-  const userId = computerData?.myComputer?.ownerUserId ?? null;
-  const effectiveTenantId = tenantId ?? computerData?.myComputer?.tenantId ?? null;
-  const namespace = userId ? `user_${userId}` : "";
+  const effectiveTenantId = tenantId ?? null;
+  const requesterUserId = null;
+  const namespace = "requester";
 
   const [recordsResult, refetchRecords] = useQuery<MemoryRecordsResult>({
     query: ComputerMemoryRecordsQuery,
-    variables: { tenantId: effectiveTenantId, userId, namespace },
-    pause: !!activeSearch || !effectiveTenantId || !userId,
+    variables: {
+      tenantId: effectiveTenantId,
+      userId: requesterUserId,
+      namespace,
+    },
+    pause: !!activeSearch || !effectiveTenantId,
   });
 
   const [searchResult] = useQuery<MemorySearchResult>({
     query: ComputerMemorySearchQuery,
-    variables: { tenantId: effectiveTenantId, userId, query: activeSearch, limit: 50 },
-    pause: !activeSearch || !userId,
+    variables: {
+      tenantId: effectiveTenantId,
+      userId: requesterUserId,
+      query: activeSearch,
+      limit: 50,
+    },
+    pause: !activeSearch || !effectiveTenantId,
   });
 
-  const [, deleteMemoryRecord] = useMutation(DeleteComputerMemoryRecordMutation);
+  const [, deleteMemoryRecord] = useMutation(
+    DeleteComputerMemoryRecordMutation,
+  );
 
   const [selectedRecord, setSelectedRecord] = useState<MemoryRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -140,7 +149,8 @@ function BrainPage() {
       createdAt: r.createdAt ?? null,
       updatedAt: r.updatedAt ?? null,
       namespace: r.namespace ?? null,
-      strategy: r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
+      strategy:
+        r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
       factType: r.factType ?? null,
       confidence: r.confidence ?? null,
       eventDate: r.eventDate ?? null,
@@ -176,7 +186,9 @@ function BrainPage() {
         header: "Date",
         size: 140,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+          >
             {row.original.createdAt
               ? new Date(row.original.createdAt).toLocaleDateString("en-US", {
                   month: "short",
@@ -203,7 +215,9 @@ function BrainPage() {
         header: "Memory",
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
-            <span className="truncate">{stripTopicTags(row.original.text)}</span>
+            <span className="truncate">
+              {stripTopicTags(row.original.text)}
+            </span>
           </span>
         ),
       },
@@ -221,12 +235,12 @@ function BrainPage() {
   };
 
   const handleForget = useCallback(async () => {
-    if (!selectedRecord || !effectiveTenantId || !userId) return;
+    if (!selectedRecord || !effectiveTenantId) return;
     setDeleting(true);
     try {
       const result = await deleteMemoryRecord({
         tenantId: effectiveTenantId,
-        userId,
+        userId: requesterUserId,
         memoryRecordId: selectedRecord.memoryRecordId,
       });
       if (result.error) throw result.error;
@@ -236,7 +250,7 @@ function BrainPage() {
     } finally {
       setDeleting(false);
     }
-  }, [selectedRecord, effectiveTenantId, userId, deleteMemoryRecord, refetchRecords]);
+  }, [selectedRecord, effectiveTenantId, deleteMemoryRecord, refetchRecords]);
 
   const isLoading = activeSearch
     ? searchResult.fetching && !searchResult.data
@@ -304,10 +318,10 @@ function BrainPage() {
       <div className="min-h-0 flex-1 px-4">
         {view === "graph" ? (
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
-            {userId ? (
+            {effectiveTenantId ? (
               <MemoryGraph
                 ref={graphRef}
-                userId={userId}
+                useRequesterScope
                 searchQuery={searchQuery || undefined}
                 onNodeClick={(node, edges) => {
                   setGraphNode(node);
@@ -332,7 +346,7 @@ function BrainPage() {
             <p className="text-sm text-muted-foreground">
               {activeSearch
                 ? "No memories match your search."
-                : "Your Computer hasn't remembered anything yet."}
+                : "No requester memories have been captured yet."}
             </p>
           </div>
         ) : (

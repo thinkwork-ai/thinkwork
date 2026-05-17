@@ -8,10 +8,9 @@ const pageHeaderActionsMock = vi.fn();
 const useRouterStateMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -46,6 +45,19 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-A" }),
 }));
 
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({
+    user: { sub: "cognito-sub-1", email: "eric@example.com", groups: [] },
+    isLoading: false,
+    isAuthenticated: true,
+    signIn: vi.fn(),
+    signUp: vi.fn(),
+    confirmSignUp: vi.fn(),
+    signOut: vi.fn(),
+    getToken: vi.fn(),
+  }),
+}));
+
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: (actions: unknown) => pageHeaderActionsMock(actions),
 }));
@@ -66,10 +78,7 @@ beforeEach(() => {
   pageHeaderActionsMock.mockReset();
   useRouterStateMock.mockReset();
 
-  useQueryMock.mockReturnValue([
-    { data: undefined, fetching: false },
-    vi.fn(),
-  ]);
+  useQueryMock.mockReturnValue([{ data: undefined, fetching: false }, vi.fn()]);
   useRouterStateMock.mockReturnValue("/memory/brain");
 });
 
@@ -113,23 +122,12 @@ describe("apps/computer Memory in-page tab strip", () => {
       .mockReturnValueOnce([
         {
           data: {
-            myComputer: {
-              id: "computer-1",
-              tenantId: "tenant-A",
-              ownerUserId: "user-1",
-            },
-          },
-        },
-      ])
-      .mockReturnValueOnce([
-        {
-          data: {
             memoryRecords: [
               {
                 memoryRecordId: "memory-1",
                 content: { text: "A compact table fact." },
                 createdAt: "2026-05-11T12:00:00.000Z",
-                namespace: "user_user-1",
+                namespace: "user_requester-1",
                 strategy: "semantic",
               },
             ],

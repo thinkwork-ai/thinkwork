@@ -27,7 +27,6 @@ import {
 import {
   ComputerRecentWikiPagesQuery,
   ComputerWikiSearchQuery,
-  MyComputerQuery,
 } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -50,16 +49,14 @@ export const Route = createFileRoute("/_authed/_shell/memory/pages")({
   }),
 });
 
-interface MyComputerResult {
-  myComputer?: { id: string; tenantId: string; ownerUserId: string } | null;
-}
-
 interface RecentWikiPagesResult {
   recentWikiPages?: any[] | null;
 }
 
 interface WikiSearchResult {
-  wikiSearch?: { score: number; matchedAlias: string | null; page: any }[] | null;
+  wikiSearch?:
+    | { score: number; matchedAlias: string | null; page: any }[]
+    | null;
 }
 
 type WikiRow = {
@@ -92,11 +89,15 @@ function PagesPage() {
   const activeTab =
     [...MEMORY_TABS]
       .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ?? "";
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "";
   const view: PagesView = viewParam ?? "table";
   const setView = useCallback(
     (next: PagesView) => {
-      navigate({ search: next === "table" ? {} : { view: next }, replace: true });
+      navigate({
+        search: next === "table" ? {} : { view: next },
+        replace: true,
+      });
     },
     [navigate],
   );
@@ -105,20 +106,24 @@ function PagesPage() {
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<WikiGraphHandle>(null);
 
-  const [{ data: computerData }] = useQuery<MyComputerResult>({ query: MyComputerQuery });
-  const userId = computerData?.myComputer?.ownerUserId ?? null;
-  const effectiveTenantId = tenantId ?? computerData?.myComputer?.tenantId ?? null;
+  const requesterUserId = null;
+  const effectiveTenantId = tenantId ?? null;
 
   const [listResult] = useQuery<RecentWikiPagesResult>({
     query: ComputerRecentWikiPagesQuery,
-    variables: { userId },
-    pause: !!activeSearch || !userId,
+    variables: { tenantId: effectiveTenantId, userId: requesterUserId },
+    pause: !!activeSearch || !effectiveTenantId,
   });
 
   const [searchResult] = useQuery<WikiSearchResult>({
     query: ComputerWikiSearchQuery,
-    variables: { tenantId: effectiveTenantId, userId, query: activeSearch, limit: 50 },
-    pause: !activeSearch || !effectiveTenantId || !userId,
+    variables: {
+      tenantId: effectiveTenantId,
+      userId: requesterUserId,
+      query: activeSearch,
+      limit: 50,
+    },
+    pause: !activeSearch || !effectiveTenantId,
   });
 
   // List-row detail sheet
@@ -164,7 +169,9 @@ function PagesPage() {
         cell: ({ row }) => {
           const d = row.original.lastCompiledAt ?? row.original.updatedAt;
           return (
-            <span className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}>
+            <span
+              className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+            >
               {d
                 ? new Date(d).toLocaleDateString("en-US", {
                     month: "short",
@@ -275,11 +282,11 @@ function PagesPage() {
       <div className="min-h-0 flex-1 px-4">
         {view === "graph" ? (
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
-            {effectiveTenantId && userId ? (
+            {effectiveTenantId ? (
               <WikiGraph
                 ref={graphRef}
                 tenantId={effectiveTenantId}
-                userId={userId}
+                useRequesterScope
                 searchQuery={searchQuery || undefined}
                 onNodeClick={(node, edges) => {
                   setGraphNode(node);
@@ -304,7 +311,7 @@ function PagesPage() {
             <p className="text-sm text-muted-foreground max-w-sm">
               {activeSearch
                 ? "No pages match your search."
-                : "No compiled pages yet — ask your Computer a few questions and come back in a few minutes."}
+                : "No compiled pages yet. They appear after requester memory is summarized."}
             </p>
           </div>
         ) : (
@@ -322,10 +329,10 @@ function PagesPage() {
       {/* List-row detail sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="sm:max-w-lg flex flex-col">
-          {selectedRow && effectiveTenantId && userId && (
+          {selectedRow && effectiveTenantId && (
             <WikiPageDetailSheet
               tenantId={effectiveTenantId}
-              userId={userId}
+              userId={requesterUserId}
               type={selectedRow.type}
               slug={selectedRow.slug}
               title={selectedRow.title}
@@ -340,7 +347,7 @@ function PagesPage() {
           {graphNode && effectiveTenantId && (
             <WikiPageDetailSheet
               tenantId={effectiveTenantId}
-              userId={graphNode.agentId}
+              userId={graphNode.agentId || requesterUserId}
               type={graphNode.entityType}
               slug={graphNode.slug}
               title={graphNode.label}
@@ -354,7 +361,9 @@ function PagesPage() {
                 setGraphNodeEdges(prev.edges);
               }}
               onEdgeClick={(edge) => {
-                const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                const result = graphRef.current?.getNodeWithEdges(
+                  edge.targetId,
+                );
                 if (result && graphNode) {
                   setGraphNodeHistory((h) => [
                     ...h,
