@@ -369,7 +369,32 @@ None.
   - `test`
   - `typecheck`
   - `verify`
-- Pending: squash merge, deploy, and live Slack smoke.
+- Squash merged [#1321](https://github.com/thinkwork-ai/thinkwork/pull/1321) as `323c94776a18a66e05e8f47778cd3f8186476c68`; Deploy run `25991999562` passed.
+- Live smoke still returned `threadContext: []`; CloudWatch showed Slack `conversations.replies` returned `invalid_arguments`.
+
+# Slack Thread Context Fetch Hotfix - 2026-05-17
+
+## Status
+
+- Branch: `codex/slack-replies-form-fetch`
+- Started: `2026-05-17T13:30:00Z`
+- Root cause:
+  - Slack `chat.postMessage` accepts JSON, but `conversations.replies` rejected the JSON request body with `invalid_arguments` and reported missing `channel`/`ts`.
+  - The same `conversations.replies` call succeeds when sent as `application/x-www-form-urlencoded`, so the deployed Slack Events Lambda was discarding thread context before the #1321 merge logic could see prior file uploads.
+- Implemented:
+  - Use a form-encoded Slack Web API helper for `conversations.replies`.
+  - Added a regression test that asserts `conversations.replies` is called with form encoding and that earlier thread files are materialized.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/api exec vitest run src/handlers/slack/events.test.ts src/lib/slack/envelope.test.ts test/integration/slack-acceptance.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `bash scripts/build-lambdas.sh slack-events` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Pending: commit, PR, CI, squash merge, deploy, and live Slack smoke.
 
 ## Blockers
 
