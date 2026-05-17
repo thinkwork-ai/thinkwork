@@ -22,7 +22,10 @@ const LINKED_COMPUTER = {
   userId: "user-1",
   slackUserName: "Eric",
   computerId: "computer-1",
-  computerName: "Eric's Computer",
+  computerName: "Finance Computer",
+  computerSlug: "finance-computer",
+  prompt: "summarize Q3 revenue",
+  targetToken: "finance",
 };
 
 function makeRawForm(overrides: Record<string, string> = {}) {
@@ -30,7 +33,7 @@ function makeRawForm(overrides: Record<string, string> = {}) {
     team_id: "T123",
     user_id: "U123",
     channel_id: "C123",
-    text: "summarize Q3 revenue",
+    text: "finance summarize Q3 revenue",
     response_url: "https://hooks.slack.com/commands/response",
     trigger_id: "trigger-1",
     ...overrides,
@@ -55,13 +58,16 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     input: input.taskInput,
     wasCreated: true,
   }));
-  const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
+  const resolveTarget = vi.fn(async () => ({
+    status: "resolved" as const,
+    target: LINKED_COMPUTER,
+  }));
   const resolveSlackThread = vi.fn(async () => ({
     threadId: "thread-1",
     messageId: "message-1",
     wasCreated: true,
   }));
-  return { enqueueTask, loadLinkedComputer, resolveSlackThread, ...overrides };
+  return { enqueueTask, resolveTarget, resolveSlackThread, ...overrides };
 }
 
 describe("Slack slash command handler", () => {
@@ -87,10 +93,11 @@ describe("Slack slash command handler", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe("");
-    expect(deps.loadLinkedComputer).toHaveBeenCalledWith({
+    expect(deps.resolveTarget).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       slackTeamId: "T123",
       slackUserId: "U123",
+      text: "finance summarize Q3 revenue",
     });
     expect(deps.enqueueTask).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -115,7 +122,9 @@ describe("Slack slash command handler", () => {
   });
 
   it("returns an ephemeral link prompt for unlinked slash command users", async () => {
-    const deps = makeDeps({ loadLinkedComputer: vi.fn(async () => null) });
+    const deps = makeDeps({
+      resolveTarget: vi.fn(async () => ({ status: "unlinked" as const })),
+    });
     const dispatch = createSlackSlashCommandDispatcher(deps);
 
     const res = await dispatch(makeArgs());
@@ -137,9 +146,28 @@ describe("Slack slash command handler", () => {
 
     expect(body).toMatchObject({
       response_type: "ephemeral",
-      text: "Usage: /thinkwork <prompt>",
+      text: "Usage: /thinkwork <computer> <prompt>",
     });
-    expect(deps.loadLinkedComputer).not.toHaveBeenCalled();
+    expect(deps.resolveTarget).not.toHaveBeenCalled();
+    expect(deps.enqueueTask).not.toHaveBeenCalled();
+  });
+
+  it("returns assignment guidance without enqueueing when no shared Computer is assigned", async () => {
+    const deps = makeDeps({
+      resolveTarget: vi.fn(async () => ({
+        status: "no_assignments" as const,
+        requester: { userId: "user-1", slackUserName: "Eric" },
+      })),
+    });
+    const dispatch = createSlackSlashCommandDispatcher(deps);
+
+    const res = await dispatch(makeArgs());
+    const body = JSON.parse(res.body || "{}");
+
+    expect(body).toMatchObject({
+      response_type: "ephemeral",
+      text: expect.stringContaining("do not have access"),
+    });
     expect(deps.enqueueTask).not.toHaveBeenCalled();
   });
 });

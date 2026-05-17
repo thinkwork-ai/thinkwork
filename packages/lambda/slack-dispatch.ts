@@ -6,6 +6,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   computerEvents,
+  computers,
   computerTasks,
   messages,
   slackWorkspaces,
@@ -41,6 +42,7 @@ interface PendingSlackDispatch {
   eventId: string;
   tenantId: string;
   computerId: string;
+  computerName: string;
   taskId: string;
   response: string;
   slack: SlackTaskEnvelope;
@@ -347,7 +349,13 @@ async function resolveAttribution(
 ): Promise<SlackComputerAttribution> {
   const dbName = item.actor.displayName?.trim();
   const dbAvatar = item.actor.avatarUrl?.trim();
-  if (dbName && dbAvatar) return { displayName: dbName, avatarUrl: dbAvatar };
+  if (dbName && dbAvatar) {
+    return {
+      computerName: item.computerName,
+      displayName: dbName,
+      avatarUrl: dbAvatar,
+    };
+  }
 
   const info = await slackApi.usersInfo({
     token,
@@ -355,6 +363,7 @@ async function resolveAttribution(
   });
   const profile = info.user?.profile;
   return {
+    computerName: item.computerName,
     displayName:
       dbName ||
       info.user?.real_name?.trim() ||
@@ -417,6 +426,7 @@ function createDrizzleSlackDispatchStore(
           ), ${computerTasks.id}::text)`,
           tenantId: computerTasks.tenant_id,
           computerId: computerTasks.computer_id,
+          computerName: computers.name,
           taskId: computerTasks.id,
           input: computerTasks.input,
           output: computerTasks.output,
@@ -438,6 +448,7 @@ function createDrizzleSlackDispatchStore(
           botTokenSecretPath: slackWorkspaces.bot_token_secret_path,
         })
         .from(computerTasks)
+        .innerJoin(computers, eq(computers.id, computerTasks.computer_id))
         .leftJoin(users, eq(computerTasks.created_by_user_id, users.id))
         .leftJoin(
           slackWorkspaces,
@@ -471,6 +482,7 @@ function createDrizzleSlackDispatchStore(
           eventId: row.eventId,
           tenantId: row.tenantId,
           computerId: row.computerId,
+          computerName: row.computerName,
           taskId: row.taskId,
           response: slackDispatchResponseText(
             output,
@@ -735,16 +747,17 @@ function parseBotTokenSecret(secretString: string): string {
 }
 
 interface SlackComputerAttribution {
+  computerName: string;
   displayName: string;
   avatarUrl: string | null;
 }
 
-function slackComputerUsername(displayName: string): string {
-  return `${normalizeSlackDisplayName(displayName)}'s Computer`;
+function slackComputerUsername(computerName: string): string {
+  return normalizeSlackDisplayName(computerName) || "ThinkWork Computer";
 }
 
-function slackComputerFooter(displayName: string): string {
-  return `Routed via @ThinkWork · ${slackComputerUsername(displayName)}`;
+function slackComputerFooter(attribution: SlackComputerAttribution): string {
+  return `Routed via @ThinkWork · ${slackComputerUsername(attribution.computerName)} · requested by ${normalizeSlackDisplayName(attribution.displayName)}`;
 }
 
 function slackComputerResponseText(
@@ -752,9 +765,9 @@ function slackComputerResponseText(
   attribution: SlackComputerAttribution,
   options: { degraded?: boolean } = {},
 ): string {
-  void attribution;
-  void options;
-  return text.trim() || "ThinkWork response";
+  const body = text.trim() || "ThinkWork response";
+  if (!options.degraded) return body;
+  return `*${slackComputerUsername(attribution.computerName)}:*\n${body}`;
 }
 
 function slackComputerResponseBlocks(
@@ -772,9 +785,7 @@ function slackComputerResponseBlocks(
     },
     {
       type: "context",
-      elements: [
-        { type: "mrkdwn", text: slackComputerFooter(attribution.displayName) },
-      ],
+      elements: [{ type: "mrkdwn", text: slackComputerFooter(attribution) }],
     },
   ];
 }

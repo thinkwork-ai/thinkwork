@@ -10,6 +10,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   computerEvents: {},
+  computers: {},
   computerTasks: {},
   messages: {},
   slackWorkspaces: {},
@@ -38,6 +39,7 @@ function pending(overrides: Record<string, unknown> = {}) {
     eventId: "event-1",
     tenantId: "tenant-1",
     computerId: "computer-1",
+    computerName: "Finance Computer",
     taskId: "task-1",
     response: "Quarterly revenue was $42M.",
     botTokenSecretPath: "secret/slack-bot",
@@ -262,7 +264,7 @@ describe("slack dispatch", () => {
       expect.objectContaining({
         username: undefined,
         iconUrl: null,
-        text: "Quarterly revenue was $42M.",
+        text: "*Finance Computer:*\nQuarterly revenue was $42M.",
       }),
     );
     expect(store.recordSuccess).toHaveBeenCalledWith(
@@ -307,7 +309,7 @@ describe("slack dispatch", () => {
             type: "context",
             elements: expect.arrayContaining([
               expect.objectContaining({
-                text: "Routed via @ThinkWork · Eric's Computer",
+                text: "Routed via @ThinkWork · Finance Computer · requested by Eric",
               }),
             ]),
           }),

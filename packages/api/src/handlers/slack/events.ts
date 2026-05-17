@@ -6,6 +6,7 @@ import { enqueueComputerTask } from "../../lib/computers/tasks.js";
 import { json } from "../../lib/response.js";
 import {
   buildSlackThreadTurnInput,
+  slackEventText,
   slackFileRefs,
   slackThreadTs,
   summarizeSlackThreadContext,
@@ -85,6 +86,8 @@ export interface SlackEventsDeps {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
+    text?: string;
+    botUserId?: string | null;
   }) => Promise<SlackLinkedComputer | null>;
   updateTaskInput?: (input: {
     tenantId: string;
@@ -166,6 +169,8 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       tenantId: args.workspace.tenantId,
       slackTeamId,
       slackUserId,
+      text: slackEventText(event),
+      botUserId: args.workspace.botUserId,
     });
     if (!link) {
       await slackApi.sendLinkPrompt({
@@ -183,6 +188,10 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       channel: channelId,
       threadTs,
     });
+    const eventForTask = {
+      ...event,
+      text: link.prompt || slackEventText(event),
+    };
     const taskInput = buildSlackThreadTurnInput({
       channelType,
       slackTeamId,
@@ -190,7 +199,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       slackWorkspaceRowId: args.workspace.id,
       channelId,
       eventId,
-      event,
+      event: eventForTask,
       threadContext,
       actorId: link.userId,
     });
@@ -282,9 +291,7 @@ function classifySlackEvent(
 
 async function safeMaterializeSlackFiles(
   materializeSlackFiles: NonNullable<SlackEventsDeps["materializeSlackFiles"]>,
-  input: Parameters<
-    NonNullable<SlackEventsDeps["materializeSlackFiles"]>
-  >[0],
+  input: Parameters<NonNullable<SlackEventsDeps["materializeSlackFiles"]>>[0],
 ): Promise<void> {
   if (input.fileRefs.length === 0) return;
   try {
@@ -399,7 +406,7 @@ const defaultSlackApi: SlackApi = {
     const url = buildSlackLinkUrl(input.workspaceTeamId);
     await slackApiCall(input.token, "chat.postMessage", {
       channel: input.channelId,
-      text: `Connect your Slack identity to ThinkWork before using your Computer from Slack: ${url}`,
+      text: `Connect your Slack identity to ThinkWork before using shared Computers from Slack: ${url}`,
     });
     await slackApiCall(input.token, "views.publish", {
       user_id: input.slackUserId,
@@ -410,7 +417,7 @@ const defaultSlackApi: SlackApi = {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Connect your ThinkWork account to use your Computer from Slack.",
+              text: "Connect your ThinkWork account to use shared Computers from Slack.",
             },
           },
           {

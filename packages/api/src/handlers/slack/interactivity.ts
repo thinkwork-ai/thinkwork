@@ -62,6 +62,7 @@ export interface SlackInteractivityDeps {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
+    text?: string;
   }) => Promise<SlackLinkedComputer | null>;
   slackApi?: SlackInteractivityApi;
   resolveSlackThread?: (input: {
@@ -170,6 +171,7 @@ async function handleMessageAction(
       tenantId: string;
       slackTeamId: string;
       slackUserId: string;
+      text?: string;
     }) => Promise<SlackLinkedComputer | null>;
     slackApi: SlackInteractivityApi;
     resolveSlackThread: (input: {
@@ -206,6 +208,7 @@ async function handleMessageAction(
     tenantId: args.workspace.tenantId,
     slackTeamId,
     slackUserId,
+    text: messageText(message),
   });
   if (!link) {
     return json({
@@ -306,7 +309,7 @@ function buildWorkingModalView(): Record<string, unknown> {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "Working on this with your Computer...",
+          text: "Working on this with the selected Computer...",
         },
       },
     ],
@@ -390,6 +393,11 @@ function coerceObject(value: unknown): Record<string, unknown> {
   const object = coerceObjectOrNull(value);
   if (!object) throw new Error("Slack interactivity payload is malformed");
   return object;
+}
+
+function messageText(message: Record<string, unknown>): string {
+  const text = message.text;
+  return typeof text === "string" ? text : "";
 }
 
 function coerceObjectOrNull(value: unknown): Record<string, unknown> | null {

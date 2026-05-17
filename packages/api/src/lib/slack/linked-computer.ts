@@ -1,48 +1,44 @@
-import { and, eq, ne } from "drizzle-orm";
-import { computers, slackUserLinks } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
+import {
+  loadSlackTargetingContext,
+  resolveSlackSharedComputerTarget,
+  type SlackResolvedComputerTarget,
+} from "./shared-computer-targeting.js";
 
 export type SlackLinkedComputerDbClient = typeof db;
 
-export interface SlackLinkedComputer {
-  userId: string;
-  slackUserName: string | null;
-  computerId: string;
-  computerName: string;
-}
+export type SlackLinkedComputer = Omit<
+  SlackResolvedComputerTarget,
+  "prompt" | "targetToken"
+> & {
+  prompt?: string;
+  targetToken?: string | null;
+};
 
 export async function loadLinkedSlackComputer(
   input: {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
+    text?: string;
+    botUserId?: string | null;
   },
   dbClient: SlackLinkedComputerDbClient = db,
 ): Promise<SlackLinkedComputer | null> {
-  const [row] = await dbClient
-    .select({
-      userId: slackUserLinks.user_id,
-      slackUserName: slackUserLinks.slack_user_name,
-      computerId: computers.id,
-      computerName: computers.name,
-    })
-    .from(slackUserLinks)
-    .innerJoin(
-      computers,
-      and(
-        eq(computers.tenant_id, slackUserLinks.tenant_id),
-        eq(computers.owner_user_id, slackUserLinks.user_id),
-        ne(computers.status, "archived"),
-      ),
-    )
-    .where(
-      and(
-        eq(slackUserLinks.tenant_id, input.tenantId),
-        eq(slackUserLinks.slack_team_id, input.slackTeamId),
-        eq(slackUserLinks.slack_user_id, input.slackUserId),
-        eq(slackUserLinks.status, "active"),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
+  const result = await resolveSlackSharedComputerTarget(
+    {
+      tenantId: input.tenantId,
+      slackTeamId: input.slackTeamId,
+      slackUserId: input.slackUserId,
+      text: input.text ?? "",
+      botUserId: input.botUserId,
+      allowSingleAssignedFallback: true,
+    },
+    {
+      loadContext: (contextInput) =>
+        loadSlackTargetingContext(contextInput, dbClient),
+    },
+  );
+  if (result.status !== "resolved") return null;
+  return result.target;
 }

@@ -25,7 +25,8 @@ For an invoked turn, ThinkWork builds a Slack task envelope containing:
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Slack team id and workspace row id      | Resolve the installed tenant workspace and bot token.                                                    |
 | Slack channel id and thread timestamp   | Preserve where the response should return.                                                               |
-| Invoking Slack user id                  | Resolve the linked ThinkWork user and Computer.                                                          |
+| Invoking Slack user id                  | Resolve the linked ThinkWork requester.                                                                  |
+| Selected shared Computer id             | Route work to an assigned shared Computer without a personal Computer fallback.                          |
 | Source message text and timestamp       | Give the Computer the user's actual request.                                                             |
 | Summarized source-thread messages       | Provide relevant local context for the request.                                                          |
 | File references from the source message | Let the Computer reason about attachments the user explicitly included.                                  |
@@ -48,7 +49,7 @@ Slack bot tokens are not committed to the repo or stored in Terraform variables.
 
 ## Model and runtime use
 
-Slack content enters the same tenant-scoped Computer runtime as ordinary ThinkWork thread turns. The runtime can use the user's assigned Computer memory, Company Brain context, and approved tools under the same tenant and user boundaries that apply outside Slack.
+Slack content enters the same tenant-scoped Computer runtime as ordinary ThinkWork thread turns. The runtime can use the selected shared Computer's memory, Company Brain context, approved tools, and the requester's scoped personal context under the same tenant and user boundaries that apply outside Slack.
 
 Slack content is not used to train foundation models. Provider-specific retention and no-training controls follow the deployed Bedrock/AgentCore configuration for the customer's AWS account.
 
@@ -62,6 +63,7 @@ Slack itself may process and store Slack workspace data under the customer's Sla
 
 - Workspace installation is tenant-admin controlled.
 - User linking is per-user; an admin workspace install does not automatically let every Slack user invoke a Computer.
+- Computer access is assignment-based through direct user and Team assignments.
 - Runtime task creation uses the linked ThinkWork user id, not the Slack display name alone.
 - The Slack dispatcher reads the bot token only from the tenant-scoped Secrets Manager path associated with the installed workspace.
 

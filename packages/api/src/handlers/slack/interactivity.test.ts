@@ -22,7 +22,8 @@ const LINKED_COMPUTER = {
   userId: "user-1",
   slackUserName: "Eric",
   computerId: "computer-1",
-  computerName: "Eric's Computer",
+  computerName: "Finance Computer",
+  computerSlug: "finance-computer",
 };
 
 function makeRawPayload(payload: Record<string, unknown>) {
@@ -150,11 +151,14 @@ describe("Slack interactivity handler", () => {
         triggerId: "trigger-1",
       }),
     );
-    expect(deps.loadLinkedComputer).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      slackTeamId: "T123",
-      slackUserId: "U123",
-    });
+    expect(deps.loadLinkedComputer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        text: "Review this file",
+      }),
+    );
     expect(deps.enqueueTask).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",
