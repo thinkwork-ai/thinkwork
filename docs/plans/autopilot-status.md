@@ -174,6 +174,12 @@ Target branch: `main`
   - `bash scripts/build-lambdas.sh slack-events`
   - `bash scripts/build-lambdas.sh slack-dispatch`
   - `git diff --check`
+- Opened and merged [#1316](https://github.com/thinkwork-ai/thinkwork/pull/1316) (`fix(slack): brand responses and update placeholders`). Required checks passed, then the branch was rebased because it was behind `main`; checks passed again after the rebase and Deploy run `25989295990` passed.
+- Verified deployed Lambda timestamps after the deploy:
+  - `thinkwork-dev-api-slack-events`: `2026-05-17T11:18:27Z`
+  - `thinkwork-dev-api-slack-dispatch`: `2026-05-17T11:18:21Z`
+- Ran a signed Slack Events API DM smoke after deploy. The deployed route returned task `8eaa1373-8764-4159-9fd7-cde9c48df0ad`; the task completed with placeholder timestamp `1779017099.807819`, stored the same timestamp in `input.slack.placeholderTs`, and `slack-dispatch` completed with `mode: chat_update`.
+- Verified Slack API history for the smoke message shows the final visible message at timestamp `1779017099.807819` with `username: ThinkWork`, text `branded placeholder ok`, and a Slack-cached bot icon derived from the configured ThinkWork logo.
 
 ### Blockers
 
