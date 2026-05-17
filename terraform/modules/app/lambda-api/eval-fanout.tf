@@ -8,29 +8,32 @@
 
 resource "aws_sqs_queue" "eval_fanout_dlq" {
   count                     = local.use_local_zips ? 1 : 0
-  name                      = "thinkwork-${var.stage}-eval-fanout-dlq"
+  name                      = "thinkwork-${var.stage}-eval-fanout-dlq.fifo"
+  fifo_queue                = true
   message_retention_seconds = 1209600 # 14 days
   sqs_managed_sse_enabled   = true
 
   tags = {
-    Name = "thinkwork-${var.stage}-eval-fanout-dlq"
+    Name = "thinkwork-${var.stage}-eval-fanout-dlq.fifo"
   }
 }
 
 resource "aws_sqs_queue" "eval_fanout" {
-  count                      = local.use_local_zips ? 1 : 0
-  name                       = "thinkwork-${var.stage}-eval-fanout"
-  visibility_timeout_seconds = 300
-  message_retention_seconds  = 86400 # 1 day; DLQ holds longer-stuck messages
-  sqs_managed_sse_enabled    = true
+  count                       = local.use_local_zips ? 1 : 0
+  name                        = "thinkwork-${var.stage}-eval-fanout.fifo"
+  fifo_queue                  = true
+  content_based_deduplication = true
+  visibility_timeout_seconds  = 300
+  message_retention_seconds   = 86400 # 1 day; DLQ holds longer-stuck messages
+  sqs_managed_sse_enabled     = true
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.eval_fanout_dlq[0].arn
-    maxReceiveCount     = 3
+    maxReceiveCount     = 5
   })
 
   tags = {
-    Name = "thinkwork-${var.stage}-eval-fanout"
+    Name = "thinkwork-${var.stage}-eval-fanout.fifo"
   }
 }
 

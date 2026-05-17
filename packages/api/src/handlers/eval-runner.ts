@@ -64,6 +64,12 @@ export function chunkEvalWorkerMessages(
 	return batches;
 }
 
+export function evalWorkerMessageGroupIdForRun(
+	run: Pick<typeof evalRuns.$inferSelect, "computer_id" | "agent_id" | "id">,
+): string {
+	return `eval-computer:${run.computer_id ?? run.agent_id ?? run.id}`;
+}
+
 /** Test seam: dispatcher tests inject a fake SQS client. */
 export function _setSqsClientForTests(client: SQSClient | undefined): void {
 	sqsClientForTests = client;
@@ -73,6 +79,7 @@ async function sendFanoutBatch(
 	queueUrl: string,
 	batch: EvalWorkerMessage[],
 	client: SQSClient,
+	messageGroupId: string,
 ): Promise<void> {
 	const resp = await client.send(
 		new SendMessageBatchCommand({
@@ -80,6 +87,7 @@ async function sendFanoutBatch(
 			Entries: batch.map((message) => ({
 				Id: String(message.index),
 				MessageBody: JSON.stringify(message),
+				MessageGroupId: messageGroupId,
 			})),
 		}),
 	);
@@ -181,8 +189,9 @@ export async function handler(event: EvalRunnerEvent): Promise<{
 
 		const messages = buildEvalWorkerMessages(runId, cases);
 		const client = sqsClientForTests ?? sqs;
+		const messageGroupId = evalWorkerMessageGroupIdForRun(run);
 		for (const batch of chunkEvalWorkerMessages(messages)) {
-			await sendFanoutBatch(queueUrl, batch, client);
+			await sendFanoutBatch(queueUrl, batch, client, messageGroupId);
 		}
 
 		console.log(

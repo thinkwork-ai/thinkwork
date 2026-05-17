@@ -155,6 +155,13 @@ export function agentCoreEvaluatorsEnabled(
   );
 }
 
+export function isRetryableEvalInfrastructureError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ThrottlingException|TooManyRequests|Too many requests|Rate exceeded|Timed out waiting for Computer eval task/i.test(
+    message,
+  );
+}
+
 function evaluatorCostUsd(evaluatorResults: unknown): number {
   if (!Array.isArray(evaluatorResults)) return 0;
   return evaluatorResults.reduce((total, result) => {
@@ -603,6 +610,9 @@ async function executeCase(
       );
     }
   } catch (err) {
+    if (isRetryableEvalInfrastructureError(err)) {
+      throw err;
+    }
     errorMessage = err instanceof Error ? err.message : String(err);
     console.error(`[eval-worker] test '${tc.name}' failed:`, errorMessage);
   }
