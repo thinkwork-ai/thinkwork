@@ -6,6 +6,7 @@ import { enqueueComputerTask } from "../../lib/computers/tasks.js";
 import { json } from "../../lib/response.js";
 import {
   buildSlackThreadTurnInput,
+  slackFileRefs,
   slackThreadTs,
   summarizeSlackThreadContext,
   type SlackThreadContextMessage,
@@ -391,6 +392,7 @@ const defaultSlackApi: SlackApi = {
       botId: optionalString(message.bot_id),
       ts: requiredString(message.ts),
       text: optionalString(message.text) ?? "",
+      files: slackFileRefs(message.files),
     }));
   },
   async sendLinkPrompt(input) {

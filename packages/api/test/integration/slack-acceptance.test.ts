@@ -230,6 +230,24 @@ function appMentionPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function dmPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "event_callback",
+    team_id: "T-W1",
+    event_id: "Ev-DM",
+    event: {
+      type: "message",
+      channel_type: "im",
+      team: "T-W1",
+      user: "U-A",
+      channel: "D-finance",
+      text: "Can you review this file?",
+      ts: "1710000001.000000",
+      ...overrides,
+    },
+  };
+}
+
 function slashArgs(workspace: SlackWorkspaceContext, overrides = {}) {
   const rawBodyText = new URLSearchParams({
     team_id: workspace.slackTeamId,
@@ -509,6 +527,75 @@ describe("Slack origin acceptance examples", () => {
     expect(input.fileRefs).toEqual([
       expect.objectContaining({ id: "F-pdf", mimetype: "application/pdf" }),
     ]);
+  });
+
+  it("covers AE4b: replies inherit files uploaded earlier in the Slack thread", async () => {
+    const harness = makeHarness();
+    harness.threadMessages.set("D-finance:1710000000.000000", [
+      {
+        user: "U-A",
+        ts: "1710000000.000000",
+        text: "summarize this file",
+        files: [
+          {
+            id: "F-md",
+            name: "agentic-etl-architecture-v5.md",
+            mimetype: "text/plain",
+            urlPrivate: "https://files.slack.com/agentic-etl-architecture-v5.md",
+            urlPrivateDownload:
+              "https://files.slack.com/download/agentic-etl-architecture-v5.md",
+            permalink: "https://example.slack.com/files/F-md",
+            sizeBytes: 28622,
+          },
+        ],
+      },
+      {
+        user: "U-A",
+        ts: "1710000001.000000",
+        text: "Can you review this file?",
+      },
+    ]);
+    const dispatch = createSlackEventsDispatcher({
+      enqueueTask: harness.enqueueTask,
+      loadLinkedComputer: harness.loadLinkedComputer,
+      updateTaskInput: harness.updateTaskInput,
+      resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
+      slackApi: harness.slackEventsApi,
+      metrics: harness.metrics,
+    });
+
+    await dispatch(
+      eventArgs(
+        WORKSPACE_W1,
+        dmPayload({
+          event_id: "Ev-AE4b",
+          channel: "D-finance",
+          text: "Can you review this file?",
+          thread_ts: "1710000000.000000",
+          ts: "1710000001.000000",
+        }),
+      ),
+    );
+
+    const input = harness.tasks[0].taskInput;
+    expect(input.sourceMessage.files).toEqual([]);
+    expect(input.fileRefs).toEqual([
+      expect.objectContaining({
+        id: "F-md",
+        name: "agentic-etl-architecture-v5.md",
+      }),
+    ]);
+    expect(harness.materializeSlackFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileRefs: [
+          expect.objectContaining({
+            id: "F-md",
+            name: "agentic-etl-architecture-v5.md",
+          }),
+        ],
+      }),
+    );
   });
 
   it("covers AE5: one tenant can bind multiple Slack workspaces for the same user", async () => {

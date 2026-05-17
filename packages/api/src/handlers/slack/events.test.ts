@@ -325,6 +325,94 @@ describe("Slack events handler", () => {
     );
   });
 
+  it("materializes files from earlier Slack thread messages when a reply has no files", async () => {
+    const deps = makeDeps({
+      slackApi: {
+        fetchThreadMessages: vi.fn(async () => [
+          {
+            user: "U123",
+            botId: null,
+            ts: "1710000000.000000",
+            text: "summarize this file",
+            files: [
+              {
+                id: "FTHREAD",
+                name: "agentic-etl-architecture-v5.md",
+                mimetype: "text/plain",
+                urlPrivate: "https://files.slack.com/files-pri/FTHREAD",
+                urlPrivateDownload:
+                  "https://files.slack.com/files-pri/FTHREAD/download",
+                permalink:
+                  "https://example.slack.com/files/U123/FTHREAD/agentic-etl-architecture-v5.md",
+                sizeBytes: 28622,
+              },
+            ],
+          },
+          {
+            user: "U123",
+            botId: null,
+            ts: "1710000001.000000",
+            text: "Can you review this file?",
+          },
+        ]),
+        postMessage: vi.fn(async () => ({
+          ok: true,
+          ts: "1710000002.000000",
+        })),
+        sendLinkPrompt: vi.fn(async () => {}),
+      },
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    await dispatch(
+      makeArgs({
+        type: "event_callback",
+        team_id: "T123",
+        event_id: "EvThreadFile",
+        event: {
+          type: "message",
+          channel_type: "im",
+          team: "T123",
+          user: "U123",
+          channel: "D123",
+          text: "Can you review this file?",
+          ts: "1710000001.000000",
+          thread_ts: "1710000000.000000",
+        },
+      }),
+    );
+
+    const inheritedFile = {
+      id: "FTHREAD",
+      name: "agentic-etl-architecture-v5.md",
+      mimetype: "text/plain",
+      urlPrivate: "https://files.slack.com/files-pri/FTHREAD",
+      urlPrivateDownload: "https://files.slack.com/files-pri/FTHREAD/download",
+      permalink:
+        "https://example.slack.com/files/U123/FTHREAD/agentic-etl-architecture-v5.md",
+      sizeBytes: 28622,
+    };
+    expect(deps.enqueueTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskInput: expect.objectContaining({
+          sourceMessage: expect.objectContaining({
+            text: "Can you review this file?",
+            files: [],
+          }),
+          fileRefs: [inheritedFile],
+          slack: expect.objectContaining({
+            fileRefs: [inheritedFile],
+          }),
+        }),
+      }),
+    );
+    expect(deps.materializeSlackFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileRefs: [inheritedFile],
+      }),
+    );
+  });
+
   it("does not enqueue duplicate Slack event ids", async () => {
     const deps = makeDeps({
       enqueueTask: vi.fn(async (input: any) => ({
