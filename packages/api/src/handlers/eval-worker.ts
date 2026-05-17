@@ -159,7 +159,7 @@ export function agentCoreEvaluatorsEnabled(
 
 export function isRetryableEvalInfrastructureError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /ThrottlingException|TooManyRequests|Too many requests|Rate exceeded|Timed out waiting for Computer eval task|AgentCore eval invocation timed out/i.test(
+  return /Timed out waiting for Computer eval task|Lambda\.TooManyRequestsException|Lambda throttled/i.test(
     message,
   );
 }
@@ -186,6 +186,12 @@ function uniqueSessionId(
 const JUDGE_MODEL_ID =
   process.env.EVAL_JUDGE_MODEL_ID ??
   "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+export function llmJudgeEnabled(value = process.env.EVAL_LLM_JUDGE): boolean {
+  return ["1", "true", "enabled", "always", "llm"].includes(
+    (value ?? "heuristic").toLowerCase(),
+  );
+}
 
 async function llmJudge(
   query: string,
@@ -342,6 +348,9 @@ async function evaluateAssertion(
       }
 
     case "llm-rubric":
+      if (!llmJudgeEnabled()) {
+        return llmRubricHeuristic(output, value);
+      }
       return llmJudge(query, output, value);
 
     default:

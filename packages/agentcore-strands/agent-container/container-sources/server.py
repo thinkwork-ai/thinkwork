@@ -941,6 +941,7 @@ def _call_strands_agent(
     system_prompt: str,
     messages: list,
     model: str = "",
+    max_tokens: int | None = None,
     skills_config: list | None = None,
     guardrail_config: dict | None = None,
     mcp_configs: list | None = None,
@@ -993,6 +994,8 @@ def _call_strands_agent(
     boto_client_config = _bedrock_boto_client_config()
     if boto_client_config is not None:
         bedrock_kwargs["boto_client_config"] = boto_client_config
+    if max_tokens and max_tokens > 0:
+        bedrock_kwargs["max_tokens"] = max_tokens
 
     bedrock_model = BedrockModel(
         model_id=effective_model,
@@ -2574,6 +2577,14 @@ def _cleanup_skill_env(keys: list):
         os.environ.pop(k, None)
 
 
+def _coerce_positive_int(value) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _execute_agent_turn(payload: dict) -> dict:
     """Run one Strands agent turn for a chat-invoke-shaped payload.
 
@@ -2627,6 +2638,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     trigger_channel = payload.get("trigger_channel") or ""
     context_profile_name = payload.get("context_profile") or ""
     request_model = payload.get("model", "")
+    max_tokens = _coerce_positive_int(payload.get("max_tokens"))
     skills_config = payload.get("skills")
     knowledge_bases_config = payload.get("knowledge_bases")
     guardrail_config = payload.get("guardrail_config")
@@ -2812,6 +2824,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             system_prompt,
             messages,
             model=request_model,
+            max_tokens=max_tokens,
             skills_config=skills_config,
             guardrail_config=guardrail_config,
             mcp_configs=mcp_configs if mcp_configs else None,

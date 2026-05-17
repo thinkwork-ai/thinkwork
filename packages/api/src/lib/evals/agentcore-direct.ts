@@ -7,6 +7,7 @@ import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js"
 
 export const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 210_000;
+export const DEFAULT_EVAL_MAX_TOKENS = 2_048;
 
 const lambdaClient = new LambdaClient({});
 
@@ -30,6 +31,14 @@ export function evalAgentCoreInvokeTimeoutMs(
     return DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS;
   }
   return parsed;
+}
+
+export function evalMaxTokens(value = process.env.EVAL_MAX_TOKENS): number {
+  const parsed = Number(value ?? DEFAULT_EVAL_MAX_TOKENS);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_EVAL_MAX_TOKENS;
+  }
+  return Math.floor(parsed);
 }
 
 export function extractAgentCoreResponseText(data: unknown): string {
@@ -89,6 +98,7 @@ export function buildEvalAgentCorePayload(input: {
     context_engine_config: runtimeConfig.contextEngineConfig,
     runtime_type: runtimeConfig.runtimeType,
     model: evalModelId(input.model),
+    max_tokens: evalMaxTokens(),
     skills:
       runtimeConfig.skillsConfig.length > 0
         ? runtimeConfig.skillsConfig
