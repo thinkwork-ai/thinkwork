@@ -19,7 +19,38 @@ export function registerEvalCommand(program: Command): void {
     .alias("evals")
     .description(
       "Run evaluations against the default AgentCore agent template and manage eval test cases. Integrates with the Evaluations Studio in the admin UI.",
-    );
+    )
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .option("-r, --region <region>", "AWS region", "us-east-1")
+    .option(
+      "--computer <id>",
+      "Deprecated; evals now run directly against AgentCore",
+    )
+    .option("--model <id>", "Deprecated; evals always use Kimi K2.5")
+    .option("--category <name...>", "Only run these categories (repeatable)")
+    .option(
+      "--test-case <id...>",
+      "Only run these specific test case IDs (repeatable)",
+    )
+    .option("--all", "Run all enabled test cases for the tenant")
+    .option("--watch", "Block and poll until the run reaches a terminal status")
+    .option(
+      "--timeout <seconds>",
+      "Max wait seconds for --watch (default 900)",
+      "900",
+    )
+    .addHelpText(
+      "after",
+      `
+Default action:
+  $ thinkwork evals
+
+Equivalent explicit action:
+  $ thinkwork eval run
+`,
+    )
+    .action(runEvalRun);
 
   evals
     .command("run")
@@ -53,7 +84,7 @@ Examples:
   # Fire and return — prints the runId; view results in the admin UI
   $ thinkwork eval run --category red-team-safety-scope
 
-  # Pick categories + test cases interactively
+  # Pick categories interactively
   $ thinkwork eval run
 
   # Block until done

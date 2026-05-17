@@ -1,4 +1,4 @@
-import { select, checkbox, confirm } from "@inquirer/prompts";
+import { checkbox, confirm } from "@inquirer/prompts";
 import ora from "ora";
 import { gqlQuery, gqlMutate } from "../../lib/gql-client.js";
 import { isInteractive, promptOrExit } from "../../lib/interactive.js";
@@ -68,66 +68,31 @@ export async function runEvalRun(opts: RunOptions): Promise<void> {
   }
 
   if (!scopeSatisfied) {
-    const scope = await promptOrExit(() =>
-      select({
-        message: "How should we pick test cases?",
-        choices: [
-          { name: "All enabled test cases", value: "all" as const },
-          { name: "Filter by category", value: "category" as const },
-          { name: "Pick specific test cases", value: "specific" as const },
-        ],
+    const tcData = await gqlQuery(ctx.client, EvalTestCasesDoc, {
+      tenantId: ctx.tenantId,
+    });
+    const distinctCategories = Array.from(
+      new Set(
+        (tcData.evalTestCases ?? [])
+          .filter((tc) => tc.enabled)
+          .map((tc) => tc.category),
+      ),
+    ).sort();
+    if (distinctCategories.length === 0) {
+      printError(
+        "No enabled test cases exist for this tenant yet. Run `thinkwork eval seed` to load the starter pack.",
+      );
+      process.exit(1);
+    }
+    const picked = await promptOrExit(() =>
+      checkbox({
+        message: "Which categories? (space to toggle, enter to confirm)",
+        choices: distinctCategories.map((c) => ({ name: c, value: c })),
+        required: true,
         loop: false,
       }),
     );
-
-    if (scope === "all") {
-      categories = null;
-      testCaseIds = null;
-      opts.all = true;
-    } else if (scope === "category") {
-      const tcData = await gqlQuery(ctx.client, EvalTestCasesDoc, {
-        tenantId: ctx.tenantId,
-      });
-      const distinctCategories = Array.from(
-        new Set((tcData.evalTestCases ?? []).map((tc) => tc.category)),
-      ).sort();
-      if (distinctCategories.length === 0) {
-        printError(
-          "No test cases exist for this tenant yet. Run `thinkwork eval seed` to load the starter pack.",
-        );
-        process.exit(1);
-      }
-      const picked = await promptOrExit(() =>
-        checkbox({
-          message: "Which categories? (space to toggle, enter to confirm)",
-          choices: distinctCategories.map((c) => ({ name: c, value: c })),
-          required: true,
-          loop: false,
-        }),
-      );
-      categories = picked;
-    } else {
-      const tcData = await gqlQuery(ctx.client, EvalTestCasesDoc, {
-        tenantId: ctx.tenantId,
-      });
-      const options = (tcData.evalTestCases ?? []).filter((tc) => tc.enabled);
-      if (options.length === 0) {
-        printError("No enabled test cases to pick from.");
-        process.exit(1);
-      }
-      const picked = await promptOrExit(() =>
-        checkbox({
-          message: "Which test cases?",
-          choices: options.map((tc) => ({
-            name: `${tc.name}  (${tc.category})`,
-            value: tc.id,
-          })),
-          required: true,
-          loop: false,
-        }),
-      );
-      testCaseIds = picked;
-    }
+    categories = picked;
   }
 
   const requestedModel = opts.model ?? null;
