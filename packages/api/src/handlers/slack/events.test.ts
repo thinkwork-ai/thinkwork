@@ -60,12 +60,16 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     postMessage: vi.fn(async () => ({ ok: true, ts: "1710000002.000000" })),
     sendLinkPrompt: vi.fn(async () => {}),
   };
+  const metrics = {
+    dedupeHit: vi.fn(),
+  };
   return {
     enqueueTask,
     loadLinkedComputer,
     updateTaskInput,
     resolveSlackThread,
     slackApi,
+    metrics,
     ...overrides,
   };
 }
@@ -225,6 +229,9 @@ describe("Slack events handler", () => {
       ok: true,
       duplicate: true,
       taskId: "task-1",
+    });
+    expect(deps.metrics.dedupeHit).toHaveBeenCalledWith({
+      surface: "app_mention",
     });
     expect(deps.slackApi.postMessage).not.toHaveBeenCalled();
     expect(deps.updateTaskInput).not.toHaveBeenCalled();

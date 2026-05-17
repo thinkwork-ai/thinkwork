@@ -15,6 +15,7 @@ import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
@@ -89,6 +90,7 @@ export interface SlackEventsDeps {
     actorId: string;
     envelope: ReturnType<typeof buildSlackThreadTurnInput>;
   }) => Promise<SlackThreadMappingResult>;
+  metrics?: Pick<SlackMetrics, "dedupeHit">;
 }
 
 export async function handleUrlVerification(args: {
@@ -116,6 +118,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     ((input) => defaultUpdateTaskInput(input, dbClient));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
+  const metrics = deps.metrics ?? slackMetrics;
 
   return async function dispatchSlackEvent(
     args: SlackHandlerArgs,
@@ -191,6 +194,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     });
 
     if ((task as { wasCreated?: boolean }).wasCreated === false) {
+      metrics.dedupeHit({ surface: channelType });
       return json({ ok: true, duplicate: true, taskId: task.id });
     }
 

@@ -9,6 +9,7 @@ import {
   loadLinkedSlackComputer,
   type SlackLinkedComputer,
 } from "../../lib/slack/linked-computer.js";
+import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
@@ -44,6 +45,7 @@ export interface SlashCommandDeps {
     actorId: string;
     envelope: ReturnType<typeof buildSlackSlashCommandInput>;
   }) => Promise<SlackThreadMappingResult>;
+  metrics?: Pick<SlackMetrics, "dedupeHit">;
 }
 
 export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
@@ -52,6 +54,7 @@ export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
     deps.loadLinkedComputer ?? ((input) => loadLinkedSlackComputer(input));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
+  const metrics = deps.metrics ?? slackMetrics;
 
   return async function dispatchSlashCommand(
     args: SlackHandlerArgs,
@@ -86,7 +89,7 @@ export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
       actorId: link.userId,
       envelope: taskInput,
     });
-    await enqueueTask({
+    const task = await enqueueTask({
       tenantId: args.workspace.tenantId,
       computerId: link.computerId,
       taskType: "thread_turn",
@@ -94,6 +97,9 @@ export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
       idempotencyKey: taskInput.eventId,
       createdByUserId: link.userId,
     });
+    if ((task as { wasCreated?: boolean }).wasCreated === false) {
+      metrics.dedupeHit({ surface: "slash_command" });
+    }
 
     return { statusCode: 200, body: "" };
   };

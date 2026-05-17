@@ -90,6 +90,18 @@ function makeHandler(
   return { handler, dispatch, lookupWorkspace, loadBotToken };
 }
 
+function makeMetrics() {
+  return {
+    emit: vi.fn(),
+    ingestMs: vi.fn(),
+    dedupeHit: vi.fn(),
+    unknownTeam: vi.fn(),
+    dispatchSuccess: vi.fn(),
+    dispatchFailure: vi.fn(),
+    attributionDegraded: vi.fn(),
+  };
+}
+
 describe("verifySlackSignature", () => {
   it("accepts a valid v0 signature with a fresh timestamp", () => {
     const rawBody = Buffer.from(JSON.stringify({ team_id: "T123" }));
@@ -158,7 +170,15 @@ describe("verifySlackSignature", () => {
 
 describe("createSlackHandler", () => {
   it("runs dispatch after valid signature, workspace lookup, and bot-token load", async () => {
-    const { handler, dispatch, lookupWorkspace, loadBotToken } = makeHandler();
+    const metrics = makeMetrics();
+    const { handler, dispatch, lookupWorkspace, loadBotToken } = makeHandler({
+      metrics,
+      nowMs: vi
+        .fn()
+        .mockReturnValueOnce(NOW_MS)
+        .mockReturnValueOnce(NOW_MS)
+        .mockReturnValueOnce(NOW_MS + 42),
+    });
     const rawBody = JSON.stringify({ team_id: "T123", event_id: "Ev1" });
 
     const res = await handler(makeEvent(rawBody));
@@ -174,6 +194,7 @@ describe("createSlackHandler", () => {
         botToken: "xoxb-token",
       }),
     );
+    expect(metrics.ingestMs).toHaveBeenCalledWith(42, { handler: "events" });
   });
 
   it("rejects invalid signatures before downstream lookup or dispatch", async () => {
@@ -292,8 +313,10 @@ describe("createSlackHandler", () => {
   });
 
   it("returns 404 for a signed request from an unknown Slack workspace", async () => {
+    const metrics = makeMetrics();
     const { handler, dispatch } = makeHandler({
       lookupWorkspace: async () => null,
+      metrics,
     });
 
     const res = await handler(makeEvent(JSON.stringify({ team_id: "T404" })));
@@ -302,6 +325,7 @@ describe("createSlackHandler", () => {
     expect(JSON.parse(res.body || "{}")).toEqual({
       error: "Slack workspace is not installed",
     });
+    expect(metrics.unknownTeam).toHaveBeenCalledWith({ handler: "events" });
     expect(dispatch).not.toHaveBeenCalled();
   });
 });
