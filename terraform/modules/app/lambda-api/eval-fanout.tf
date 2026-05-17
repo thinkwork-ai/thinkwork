@@ -93,6 +93,10 @@ resource "aws_lambda_event_source_mapping" "eval_fanout" {
   batch_size              = 1
   enabled                 = true
   function_response_types = ["ReportBatchItemFailures"]
+
+  scaling_config {
+    maximum_concurrency = 20
+  }
 }
 
 resource "aws_lambda_function_event_invoke_config" "eval_worker" {

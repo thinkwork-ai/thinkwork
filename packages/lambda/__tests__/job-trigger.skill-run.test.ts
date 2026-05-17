@@ -85,6 +85,14 @@ vi.mock("@thinkwork/database-pg", () => ({
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agentWakeupRequests: { id: "agent_wakeup_requests.id" },
   agents: { id: "agents.id" },
+  agentTemplates: {
+    id: "agent_templates.id",
+    name: "agent_templates.name",
+    runtime: "agent_templates.runtime",
+    slug: "agent_templates.slug",
+    tenant_id: "agent_templates.tenant_id",
+    template_kind: "agent_templates.template_kind",
+  },
   agentSkills: {
     id: "agent_skills.id",
     agent_id: "agent_skills.agent_id",
@@ -514,25 +522,19 @@ describe("job-trigger skill_run misconfiguration", () => {
 });
 
 describe("job-trigger eval_scheduled", () => {
-  it("creates an eval run for a selected running Computer", async () => {
+  it("creates an eval run for the default AgentCore eval agent", async () => {
     mockSelect.mockReturnValueOnce([
       {
         enabled: true,
         name: "Daily eval",
         config: {
-          computerId: "computer-1",
-          model: "anthropic.claude-haiku-4-5",
           categories: ["red-team-safety-scope"],
         },
       },
     ]);
     mockSelect.mockReturnValueOnce([
       {
-        id: "computer-1",
-        templateId: "computer-template-1",
-        runtimeStatus: "running",
-        primaryAgentId: "computer-agent-1",
-        migratedFromAgentId: null,
+        id: "default-template-1",
       },
     ]);
     mockInsert.mockReturnValueOnce([{ id: "eval-run-1" }]);
@@ -546,12 +548,12 @@ describe("job-trigger eval_scheduled", () => {
     expect(mockInsertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: "T1",
-        agent_id: "computer-agent-1",
-        computer_id: "computer-1",
-        agent_template_id: "computer-template-1",
+        agent_id: null,
+        computer_id: null,
+        agent_template_id: "default-template-1",
         scheduled_job_id: "job-eval-1",
         status: "pending",
-        model: "anthropic.claude-haiku-4-5",
+        model: "moonshotai.kimi-k2.5",
         categories: ["red-team-safety-scope"],
       }),
     );

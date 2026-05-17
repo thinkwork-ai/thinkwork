@@ -19,36 +19,32 @@ describe("ScheduledJobFormDialog eval schedule helpers", () => {
     ).toBe(EVAL_SCHEDULE_TRIGGER_TYPE);
   });
 
-  it("validates that scheduled evals have a running Computer and category", () => {
+  it("validates that scheduled evals have a category", () => {
     expect(
       validateScheduledJobForm(
         { name: "Daily eval", categories: [] },
         EVAL_SCHEDULE_TRIGGER_TYPE,
       ),
     ).toEqual([
-      { field: "computerId", message: "Select a running Computer" },
       { field: "categories", message: "Select at least one category" },
     ]);
   });
 
-  it("builds scheduled eval payloads for running Computer ids", () => {
+  it("builds scheduled eval payloads for the direct AgentCore default model", () => {
     expect(
       buildScheduledJobPayload(
         {
-          name: "Daily computer eval ",
-          computerId: "computer-1",
-          model: "anthropic.claude-haiku-4-5",
+          name: "Daily red team eval ",
           categories: ["red-team-safety-scope"],
         },
         schedule,
         EVAL_SCHEDULE_TRIGGER_TYPE,
       ),
     ).toEqual({
-      name: "Daily computer eval",
+      name: "Daily red team eval",
       trigger_type: "eval_scheduled",
       config: {
-        computerId: "computer-1",
-        model: "anthropic.claude-haiku-4-5",
+        model: "moonshotai.kimi-k2.5",
         categories: ["red-team-safety-scope"],
       },
       schedule_type: "rate",

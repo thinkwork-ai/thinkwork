@@ -34,13 +34,11 @@ import {
   type SchedulePickerValue,
 } from "@/components/schedule-picker/SchedulePicker";
 import { apiFetch } from "@/lib/api-fetch";
-import { ComputersListQuery, ModelCatalogQuery } from "@/lib/graphql-queries";
 import { allEvalCategoryIds, EVAL_CATEGORIES } from "@/lib/evaluation-options";
 import { cn } from "@/lib/utils";
 
 type AgentOption = { id: string; name: string };
-type ComputerOption = { id: string; name: string; runtimeStatus: string };
-type ModelOption = { modelId: string; displayName: string };
+const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 
 export const EVAL_SCHEDULE_TRIGGER_TYPE = "eval_scheduled";
 
@@ -114,12 +112,6 @@ export function validateScheduledJobForm(
   if (isEvalScheduledTrigger(triggerType)) {
     const errors: Array<{ field: keyof TriggerFormValues; message: string }> =
       [];
-    if (!values.computerId) {
-      errors.push({
-        field: "computerId",
-        message: "Select a running Computer",
-      });
-    }
     if ((values.categories ?? []).length === 0) {
       errors.push({
         field: "categories",
@@ -142,10 +134,9 @@ export function buildScheduledJobPayload(
 ): ScheduledJobFormData {
   if (isEvalScheduledTrigger(triggerType)) {
     const config: EvalScheduleConfig = {
-      computerId: values.computerId,
+      model: values.model || DEFAULT_EVAL_MODEL_ID,
       categories: values.categories ?? [],
     };
-    if (values.model) config.model = values.model;
 
     return {
       name: values.name.trim(),
@@ -206,7 +197,7 @@ export function ScheduledJobFormDialog({
       agentId: initial?.agent_id || "",
       agentTemplateId: evalConfig.agentTemplateId || "",
       computerId: evalConfig.computerId || "",
-      model: evalConfig.model || "",
+      model: evalConfig.model || DEFAULT_EVAL_MODEL_ID,
       categories: evalConfig.categories?.length
         ? evalConfig.categories
         : isEvalSchedule
@@ -216,20 +207,6 @@ export function ScheduledJobFormDialog({
     },
   });
 
-  const [computersRes] = useQuery({
-    query: ComputersListQuery,
-    variables: { tenantId },
-    pause: !open || !isEvalSchedule,
-  });
-  const [modelsRes] = useQuery({
-    query: ModelCatalogQuery,
-    pause: !open || !isEvalSchedule,
-  });
-
-  const runningComputers = (computersRes.data?.computers ?? []).filter(
-    (computer) => computer.runtimeStatus === "RUNNING",
-  ) as ComputerOption[];
-  const modelCatalog = (modelsRes.data?.modelCatalog ?? []) as ModelOption[];
   const selectedCategories = form.watch("categories") ?? [];
 
   // Reset form when dialog opens
@@ -246,7 +223,7 @@ export function ScheduledJobFormDialog({
       agentId: initial?.agent_id || "",
       agentTemplateId: nextEvalConfig.agentTemplateId || "",
       computerId: nextEvalConfig.computerId || "",
-      model: nextEvalConfig.model || "",
+      model: nextEvalConfig.model || DEFAULT_EVAL_MODEL_ID,
       categories: nextEvalConfig.categories?.length
         ? nextEvalConfig.categories
         : nextIsEvalSchedule
@@ -346,44 +323,9 @@ export function ScheduledJobFormDialog({
                 />
 
                 {isEvalSchedule ? (
-                  <FormField
-                    control={form.control}
-                    name="computerId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-semibold">
-                          Target Computer
-                        </FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-[220px]">
-                              <SelectValue placeholder="Select Computer..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {runningComputers.length === 0 ? (
-                              <SelectItem value="__none" disabled>
-                                No running Computers
-                              </SelectItem>
-                            ) : (
-                              runningComputers.map((computer) => (
-                                <SelectItem
-                                  key={computer.id}
-                                  value={computer.id}
-                                >
-                                  {computer.name}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="w-[220px] rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    Default Agent template
+                  </div>
                 ) : (
                   <FormField
                     control={form.control}
@@ -423,38 +365,14 @@ export function ScheduledJobFormDialog({
                     <Beaker className="h-4 w-4" />
                     Evaluation Run
                   </div>
-                  <FormField
-                    control={form.control}
-                    name="model"
-                    render={({ field }) => (
-                      <FormItem className="mb-4">
-                        <FormLabel className="text-sm font-semibold">
-                          Model
-                        </FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Use template default" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {modelCatalog.map((model) => (
-                              <SelectItem
-                                key={model.modelId}
-                                value={model.modelId}
-                              >
-                                {model.displayName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="mb-4">
+                    <FormLabel className="text-sm font-semibold">
+                      Model
+                    </FormLabel>
+                    <div className="mt-2 rounded-md border bg-background px-3 py-2 text-sm">
+                      Kimi K2.5
+                    </div>
+                  </div>
                   <FormField
                     control={form.control}
                     name="categories"

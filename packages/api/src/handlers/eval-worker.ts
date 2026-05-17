@@ -22,6 +22,8 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { createHash } from "crypto";
 import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
+import { invokeAgentCoreForEval } from "../lib/evals/agentcore-direct.js";
+import { ensureEvalAgentForTemplate } from "../lib/evals/eval-agent-provisioning.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -157,7 +159,7 @@ export function agentCoreEvaluatorsEnabled(
 
 export function isRetryableEvalInfrastructureError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /ThrottlingException|TooManyRequests|Too many requests|Rate exceeded|Timed out waiting for Computer eval task/i.test(
+  return /ThrottlingException|TooManyRequests|Too many requests|Rate exceeded|Timed out waiting for Computer eval task|AgentCore eval invocation timed out/i.test(
     message,
   );
 }
@@ -575,7 +577,35 @@ async function executeCase(
   let costUsd = 0;
 
   try {
-    const inv = await invokeComputer(run, tc, sessionId);
+    const caseTemplateId = tc.agent_template_id ?? run.agent_template_id;
+    let targetAgentId = run.agent_id;
+    if (caseTemplateId && caseTemplateId !== run.agent_template_id) {
+      targetAgentId = (
+        await ensureEvalAgentForTemplate({
+          tenantId: run.tenant_id,
+          templateId: caseTemplateId,
+        })
+      ).agentId;
+    } else if (!targetAgentId && caseTemplateId) {
+      targetAgentId = (
+        await ensureEvalAgentForTemplate({
+          tenantId: run.tenant_id,
+          templateId: caseTemplateId,
+        })
+      ).agentId;
+    }
+    if (!targetAgentId) {
+      throw new Error("Eval run has no AgentCore agent target");
+    }
+
+    const inv = await invokeAgentCoreForEval({
+      tenantId: run.tenant_id,
+      agentId: targetAgentId,
+      sessionId,
+      message: tc.query,
+      model: run.model,
+      systemPrompt: tc.system_prompt,
+    });
     actualOutput = inv.output;
     durationMs = inv.durationMs;
 

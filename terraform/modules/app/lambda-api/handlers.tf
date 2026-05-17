@@ -237,7 +237,8 @@ locals {
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
     "eval-runner" = {
-      EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
+      EVAL_FANOUT_QUEUE_URL                = local.eval_fanout_queue_url
+      EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "20"
     }
     "eval-worker" = {
       EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url
@@ -503,7 +504,7 @@ resource "aws_lambda_function" "handler" {
   # concurrent drainers would race the chain head SELECT and produce
   # orphan prev_hash links). All other handlers run with the default
   # account-level concurrency pool.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 5 : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 20 : -1
 
   environment {
     variables = merge(
