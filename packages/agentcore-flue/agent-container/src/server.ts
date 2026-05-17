@@ -85,6 +85,12 @@ import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import { composeSystemPrompt } from "./runtime/system-prompt.js";
 import {
+  buildFileReadTool,
+  cleanupMessageAttachments,
+  formatMessageAttachmentsPreamble,
+  stageMessageAttachments,
+} from "./runtime/message-attachments.js";
+import {
   retainConversation,
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
@@ -319,6 +325,8 @@ export interface HandlerDependencies {
   runAgentLoop?: typeof runAgentLoop;
   /** Optional override for the workspace S3 sync (test-only). */
   bootstrapWorkspaceImpl?: typeof bootstrapWorkspace;
+  /** Optional override for per-turn attachment staging (test-only). */
+  stageMessageAttachmentsImpl?: typeof stageMessageAttachments;
   /**
    * Optional override for workspace-skills discovery (test-only). The default
    * walks the local workspace tree.
@@ -946,11 +954,6 @@ export async function handleInvocation(
   }
 
   const workspaceSkills = await discoverSkills(env.workspaceDir);
-  const systemPrompt = await composeSystemPrompt({
-    payload: args.payload,
-    workspaceDir: env.workspaceDir,
-    workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
-  });
 
   const agentCoreClient = deps.agentCoreClientFactory();
 
@@ -1095,6 +1098,38 @@ export async function handleInvocation(
   // even if the LLM throws or a tool raises.
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
+  const stageAttachments =
+    deps.stageMessageAttachmentsImpl ?? stageMessageAttachments;
+  const stagedAttachments = await stageAttachments({
+    attachments: args.payload.message_attachments,
+    workspaceBucket: env.workspaceBucket,
+    expectedTenantId: identity.tenantId,
+    expectedThreadId: identity.threadId,
+    s3Client: deps.s3ClientFactory(env.awsRegion),
+    logger: (event, details) =>
+      logStructured({
+        level: "warn",
+        event,
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        ...details,
+      }),
+  });
+  const attachmentPreamble = formatMessageAttachmentsPreamble(
+    stagedAttachments.staged,
+  );
+  const systemPromptBase = await composeSystemPrompt({
+    payload: args.payload,
+    workspaceDir: env.workspaceDir,
+    workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
+  });
+  const systemPrompt = attachmentPreamble
+    ? `${systemPromptBase}\n\n---\n\n${attachmentPreamble}`
+    : systemPromptBase;
+  const fileReadTool = buildFileReadTool(stagedAttachments.staged);
+  if (fileReadTool) {
+    bundle.tools.push(fileReadTool);
+  }
   try {
     // The current invocation's model id is what pi-ai's Agent will use
     // to serialize history → Bedrock for THIS turn. We use the same id on
@@ -1130,6 +1165,17 @@ export async function handleInvocation(
           error: err instanceof Error ? err.message : String(err),
         });
       }
+    }
+    try {
+      await cleanupMessageAttachments(stagedAttachments.turnDir);
+    } catch (err) {
+      logStructured({
+        level: "warn",
+        event: "message_attachment_cleanup_failed",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
     deps.onHandlerComplete?.(bundle);
   }
