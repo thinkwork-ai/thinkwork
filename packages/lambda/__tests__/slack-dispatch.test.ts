@@ -131,7 +131,7 @@ describe("slack dispatch", () => {
         channel: "C123",
         ts: "1710000002.000000",
         username: "ThinkWork",
-        iconUrl: "https://admin.thinkwork.ai/logo.png",
+        iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
       }),
     );
     expect(slackApi.postMessage).not.toHaveBeenCalled();
@@ -328,7 +328,7 @@ describe("slack dispatch", () => {
     expect(slackApi.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         username: "ThinkWork",
-        iconUrl: "https://admin.thinkwork.ai/logo.png",
+        iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
       }),
     );
   });

@@ -286,7 +286,7 @@ async function replayCompletedTask(
       },
     ],
     username: "ThinkWork",
-    iconUrl: "https://admin.thinkwork.ai/logo.png",
+    iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
   };
   if (slack.modalViewId) {
     await harness.slackDispatchApi.updateView({
@@ -356,13 +356,13 @@ describe("Slack origin acceptance examples", () => {
     expect(harness.visible.placeholders[0]).toMatchObject({
       channel: "C-finance",
       username: "ThinkWork",
-      iconUrl: "https://admin.thinkwork.ai/logo.png",
+      iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
       text: "Marco is thinking...",
     });
     expect(harness.visible.updatedMessages[0]).toMatchObject({
       channel: "C-finance",
       username: "ThinkWork",
-      iconUrl: "https://admin.thinkwork.ai/logo.png",
+      iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
     });
     expect(harness.metrics.dispatchSuccess).toHaveBeenCalledWith("app_mention");
   });

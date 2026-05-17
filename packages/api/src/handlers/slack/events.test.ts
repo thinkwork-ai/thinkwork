@@ -178,7 +178,7 @@ describe("Slack events handler", () => {
         },
       ],
       username: "ThinkWork",
-      iconUrl: "https://admin.thinkwork.ai/logo.png",
+      iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
     });
     expect(deps.updateTaskInput).toHaveBeenCalledWith(
       expect.objectContaining({
