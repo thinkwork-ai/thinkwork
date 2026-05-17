@@ -413,6 +413,86 @@ describe("Slack events handler", () => {
     );
   });
 
+  it("fetches Slack thread replies with form encoding for Web API compatibility", async () => {
+    const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+      if (url.endsWith("/conversations.replies")) {
+        expect(init.headers).toMatchObject({
+          Authorization: "Bearer xoxb-token",
+          "Content-Type": "application/x-www-form-urlencoded",
+        });
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        const form = init.body as URLSearchParams;
+        expect(form.get("channel")).toBe("D123");
+        expect(form.get("ts")).toBe("1710000000.000000");
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            messages: [
+              {
+                user: "U123",
+                ts: "1710000000.000000",
+                text: "summarize this file",
+                files: [
+                  {
+                    id: "FTHREAD",
+                    name: "financials.xlsx",
+                    url_private: "https://files.slack.com/FTHREAD",
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith("/chat.postMessage")) {
+        return new Response(
+          JSON.stringify({ ok: true, ts: "1710000002.000000" }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected Slack API URL ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const deps = makeDeps({
+        slackApi: undefined,
+      });
+      const dispatch = createSlackEventsDispatcher(deps);
+
+      await dispatch(
+        makeArgs({
+          type: "event_callback",
+          team_id: "T123",
+          event_id: "EvFormFetch",
+          event: {
+            type: "message",
+            channel_type: "im",
+            team: "T123",
+            user: "U123",
+            channel: "D123",
+            text: "Can you review this file?",
+            ts: "1710000001.000000",
+            thread_ts: "1710000000.000000",
+          },
+        }),
+      );
+
+      expect(deps.materializeSlackFiles).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileRefs: [
+            expect.objectContaining({
+              id: "FTHREAD",
+              name: "financials.xlsx",
+            }),
+          ],
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not enqueue duplicate Slack event ids", async () => {
     const deps = makeDeps({
       enqueueTask: vi.fn(async (input: any) => ({

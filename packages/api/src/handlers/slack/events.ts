@@ -377,7 +377,7 @@ const defaultSlackApi: SlackApi = {
     });
   },
   async fetchThreadMessages(input) {
-    const res = await slackApiCall<{
+    const res = await slackApiFormCall<{
       ok: boolean;
       messages?: Array<Record<string, unknown>>;
       error?: string;
@@ -441,6 +441,29 @@ async function slackApiCall<T = { ok: boolean; ts?: string; error?: string }>(
       "Content-Type": "application/json; charset=utf-8",
     },
     body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Slack Web API ${method} failed with ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+async function slackApiFormCall<T = { ok: boolean; error?: string }>(
+  token: string,
+  method: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined && value !== null) form.set(key, String(value));
+  }
+  const response = await fetch(`https://slack.com/api/${method}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form,
   });
   if (!response.ok) {
     throw new Error(`Slack Web API ${method} failed with ${response.status}`);
