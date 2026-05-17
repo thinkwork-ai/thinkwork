@@ -12,6 +12,7 @@ import {
 } from "../admin-config.js";
 import type { ContextProviderDescriptor } from "../types.js";
 import { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
+import { createBrainContextProvider } from "./brain.js";
 import { createCatalogContextProvider } from "./catalog.js";
 import { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
 import { createErpCustomerContextProvider } from "./erp-customer.js";
@@ -29,6 +30,7 @@ export function createCoreContextProviders(
   const memoryConfig = memoryProviderConfig(settings);
   const providers = [
     createMemoryContextProvider(memoryConfig),
+    createBrainContextProvider(),
     createWikiContextProvider(),
     createWikiSourceAgentContextProvider(),
     createWorkspaceFilesContextProvider(),
@@ -183,6 +185,7 @@ async function callTenantMcpTool(args: {
 }
 
 export { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
+export { createBrainContextProvider } from "./brain.js";
 export { createCatalogContextProvider } from "./catalog.js";
 export { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
 export { createErpCustomerContextProvider } from "./erp-customer.js";

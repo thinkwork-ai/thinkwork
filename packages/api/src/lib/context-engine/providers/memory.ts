@@ -221,6 +221,8 @@ async function loadWikiBridgeHits(args: {
           id: `wiki:${row.pageTable}:${row.pageId}:via-memory:${row.sourceRef}`,
           providerId: "memory",
           family: "wiki",
+          sourceFamily:
+            row.pageTable === "tenant_entity_pages" ? "brain" : "pages",
           title: row.title,
           snippet: "Compiled Company Brain page citing recalled memory.",
           score: memoryScore + 0.15,

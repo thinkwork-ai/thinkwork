@@ -5,6 +5,7 @@ export type ContextEngineScope = "personal" | "team" | "auto";
 export type ContextEngineDepth = "quick" | "deep";
 export type ContextProviderFamily =
   | "memory"
+  | "brain"
   | "wiki"
   | "workspace"
   | "knowledge-base"
@@ -88,36 +89,43 @@ export interface QueryContextArgs {
   };
 }
 
-export async function queryContext(args: QueryContextArgs): Promise<ContextEngineResponse> {
+export async function queryContext(
+  args: QueryContextArgs,
+): Promise<ContextEngineResponse> {
   const token = getAuthToken();
   if (!token) throw new Error("Not authenticated");
-  const response = await fetch(`${args.apiBaseUrl.replace(/\/$/, "")}/mcp/context-engine`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "mobile-query-context",
-      method: "tools/call",
-      params: {
-        name: "query_context",
-        arguments: {
-          query: args.query,
-          mode: args.mode ?? "results",
-          scope: args.scope ?? "auto",
-          depth: args.depth ?? "quick",
-          limit: args.limit,
-          providers: args.providers,
-          providerOptions: args.providerOptions,
-        },
+  const response = await fetch(
+    `${args.apiBaseUrl.replace(/\/$/, "")}/mcp/context-engine`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
       },
-    }),
-  });
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "mobile-query-context",
+        method: "tools/call",
+        params: {
+          name: "query_context",
+          arguments: {
+            query: args.query,
+            mode: args.mode ?? "results",
+            scope: args.scope ?? "auto",
+            depth: args.depth ?? "quick",
+            limit: args.limit,
+            providers: args.providers,
+            providerOptions: args.providerOptions,
+          },
+        },
+      }),
+    },
+  );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
-    throw new Error(payload.error?.message || `Context Engine HTTP ${response.status}`);
+    throw new Error(
+      payload.error?.message || `Context Engine HTTP ${response.status}`,
+    );
   }
   return payload.result?.structuredContent as ContextEngineResponse;
 }

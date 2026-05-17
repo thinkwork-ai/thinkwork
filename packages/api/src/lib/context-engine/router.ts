@@ -26,6 +26,7 @@ const DEFAULT_DEEP_TIMEOUT_MS = 8_000;
 
 const FAMILY_ORDER: ContextProviderFamily[] = [
   "memory",
+  "brain",
   "wiki",
   "workspace",
   "knowledge-base",
@@ -60,7 +61,9 @@ export function createContextEngineRouter(args: {
       const hits = rankAndDedupe(
         results.flatMap((result) => result.hits),
       ).slice(0, normalized.limit);
-      const kbHits = hits.filter((hit) => hit.providerId === "bedrock-knowledge-base");
+      const kbHits = hits.filter(
+        (hit) => hit.providerId === "bedrock-knowledge-base",
+      );
       if (kbHits.length > 0) {
         void invokeKbPromotionWorker({
           tenantId: normalized.caller.tenantId,

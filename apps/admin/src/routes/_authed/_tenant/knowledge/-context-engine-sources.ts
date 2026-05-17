@@ -31,6 +31,7 @@ export type ContextSourceRow = {
 
 export const FAMILY_LABELS: Record<string, string> = {
   memory: "Memory",
+  brain: "Brain",
   wiki: "Pages",
   "knowledge-base": "Knowledge Base",
   workspace: "Workspace",
@@ -120,6 +121,9 @@ export function providerDescription(provider: ContextProviderSummary) {
   if (provider.family === "memory") {
     const config = memoryConfig(provider);
     return `Hindsight ${config.queryMode}, ${config.timeoutMs.toLocaleString()} ms`;
+  }
+  if (provider.family === "brain") {
+    return "Tenant-shared ontology-shaped Brain pages, facets, relationships, and citations.";
   }
   if (provider.family === "workspace") {
     return "Requires an agent, template, or defaults workspace target.";
