@@ -64,15 +64,6 @@ export class ComputerTaskDelegationError extends Error {
   }
 }
 
-export class ComputerOwnerRequiredError extends Error {
-  constructor(readonly computerId: string) {
-    super(
-      `Computer ${computerId} has no owner_user_id; requester-scoped credential resolution is required for shared Computers.`,
-    );
-    this.name = "ComputerOwnerRequiredError";
-  }
-}
-
 export async function resolveComputerRuntimeConfig(input: {
   tenantId: string;
   computerId: string;
@@ -81,7 +72,6 @@ export async function resolveComputerRuntimeConfig(input: {
   return {
     tenantId: computer.tenant_id,
     computerId: computer.id,
-    ownerUserId: computer.owner_user_id,
     desiredRuntimeStatus: computer.desired_runtime_status,
     runtimeStatus: computer.runtime_status,
     runtimeConfig: computer.runtime_config,
@@ -372,6 +362,7 @@ export async function claimNextComputerTask(input: {
       task_type: computerTasks.task_type,
       input: computerTasks.input,
       idempotency_key: computerTasks.idempotency_key,
+      created_by_user_id: computerTasks.created_by_user_id,
       created_at: computerTasks.created_at,
     })
     .from(computerTasks)
@@ -406,6 +397,7 @@ export async function claimNextComputerTask(input: {
       task_type: computerTasks.task_type,
       input: computerTasks.input,
       idempotency_key: computerTasks.idempotency_key,
+      created_by_user_id: computerTasks.created_by_user_id,
       claimed_at: computerTasks.claimed_at,
       created_at: computerTasks.created_at,
     });
@@ -417,6 +409,7 @@ export async function claimNextComputerTask(input: {
     taskType: claimed.task_type,
     input: claimed.input,
     idempotencyKey: claimed.idempotency_key,
+    createdByUserId: claimed.created_by_user_id,
     claimedAt: claimed.claimed_at,
     createdAt: claimed.created_at,
   };
@@ -461,13 +454,23 @@ export async function appendComputerTaskEvent(input: {
 export async function checkGoogleWorkspaceConnection(input: {
   tenantId: string;
   computerId: string;
+  requesterUserId?: string | null;
 }) {
   const computer = await loadComputer(input.tenantId, input.computerId);
-  const ownerUserId = requireComputerOwnerUserId(computer);
+  const requesterUserId = credentialRequesterUserId(input.requesterUserId);
   const checkedAt = new Date().toISOString();
+  if (!requesterUserId) {
+    return {
+      providerName: "google_productivity",
+      connected: false,
+      tokenResolved: false,
+      reason: "requester_user_required",
+      checkedAt,
+    };
+  }
   const connection = await resolveConnectionForUser(
     computer.tenant_id,
-    ownerUserId,
+    requesterUserId,
     "google_productivity",
   );
 
@@ -505,20 +508,28 @@ export async function checkGoogleWorkspaceConnection(input: {
 export async function resolveGoogleWorkspaceCliToken(input: {
   tenantId: string;
   computerId: string;
+  requesterUserId?: string | null;
 }) {
   const computer = await loadComputer(input.tenantId, input.computerId);
-  const ownerUserId = requireComputerOwnerUserId(computer);
+  const requesterUserId = credentialRequesterUserId(input.requesterUserId);
   const checkedAt = new Date().toISOString();
-  const connection = await resolveConnectionForUser(
-    computer.tenant_id,
-    ownerUserId,
-    "google_productivity",
-  );
-
   const base = {
     providerName: "google_productivity",
     checkedAt,
   };
+  if (!requesterUserId) {
+    return {
+      ...base,
+      connected: false,
+      tokenResolved: false,
+      reason: "requester_user_required",
+    };
+  }
+  const connection = await resolveConnectionForUser(
+    computer.tenant_id,
+    requesterUserId,
+    "google_productivity",
+  );
 
   if (!connection) {
     return {
@@ -613,6 +624,14 @@ export async function loadThreadTurnContext(input: {
   return {
     taskId: input.taskId,
     source: payload.source,
+    requester: {
+      userId: payload.requesterUserId ?? task.created_by_user_id ?? null,
+      actorType: payload.actorType,
+      actorId: payload.actorId,
+      contextClass:
+        payload.requesterUserId || task.created_by_user_id ? "user" : "system",
+    },
+    surfaceContext: payload.surfaceContext,
     computer: {
       id: computer.id,
       name: computer.name,
@@ -635,7 +654,12 @@ export async function loadThreadTurnContext(input: {
         content: row.content ?? "",
       })),
     model: resolveComputerChatModel(computer.runtime_config),
-    systemPrompt: buildComputerThreadSystemPrompt(computer, thread.title),
+    systemPrompt: buildComputerThreadSystemPrompt({
+      computer,
+      threadTitle: thread.title,
+      requesterUserId:
+        payload.requesterUserId ?? task.created_by_user_id ?? null,
+    }),
   };
 }
 
@@ -683,6 +707,10 @@ export async function recordThreadTurnResponse(input: {
     taskId: input.taskId,
     sourceMessageId: message.id,
     source: payload.source,
+    requesterUserId: payload.requesterUserId ?? task.created_by_user_id ?? null,
+    contextClass:
+      payload.requesterUserId || task.created_by_user_id ? "user" : "system",
+    surfaceContext: payload.surfaceContext,
     model: input.model ?? null,
     usage: input.usage ?? null,
     draftPreviewCount: draftPreviewParts.length,
@@ -790,6 +818,11 @@ export async function recordThreadTurnResponse(input: {
       sourceMessageId: message.id,
       responseMessageId: assistantMessage.id,
       source: payload.source,
+      requesterUserId:
+        payload.requesterUserId ?? task.created_by_user_id ?? null,
+      contextClass:
+        payload.requesterUserId || task.created_by_user_id ? "user" : "system",
+      surfaceContext: payload.surfaceContext,
       model: input.model ?? null,
       linkedArtifactIds,
       linkedArtifactCount: linkedArtifactIds.length,
@@ -866,6 +899,8 @@ export async function recordThreadTurnResponse(input: {
       responseMessageId: assistantMessage.id,
       threadId: thread.id,
       source: payload.source,
+      requesterUserId:
+        payload.requesterUserId ?? task.created_by_user_id ?? null,
     },
   });
 
@@ -1162,13 +1197,8 @@ async function loadComputer(tenantId: string, computerId: string) {
   return computer;
 }
 
-function requireComputerOwnerUserId(
-  computer: Awaited<ReturnType<typeof loadComputer>>,
-) {
-  if (!computer.owner_user_id) {
-    throw new ComputerOwnerRequiredError(computer.id);
-  }
-  return computer.owner_user_id;
+function credentialRequesterUserId(value: string | null | undefined) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function missingGoogleCalendarScopes(grantedScopes: string[]) {
@@ -1183,6 +1213,7 @@ async function loadTask(tenantId: string, computerId: string, taskId: string) {
       id: computerTasks.id,
       task_type: computerTasks.task_type,
       input: computerTasks.input,
+      created_by_user_id: computerTasks.created_by_user_id,
       claimed_at: computerTasks.claimed_at,
       created_at: computerTasks.created_at,
     })
@@ -1270,16 +1301,18 @@ function resolveComputerChatModel(runtimeConfig: unknown) {
   );
 }
 
-function buildComputerThreadSystemPrompt(
-  computer: Awaited<ReturnType<typeof loadComputer>>,
-  threadTitle: string,
-) {
+function buildComputerThreadSystemPrompt(input: {
+  computer: Awaited<ReturnType<typeof loadComputer>>;
+  threadTitle: string;
+  requesterUserId: string | null;
+}) {
   return [
-    `You are ${computer.name}, a ThinkWork Computer.`,
-    "You are the always-on workspace for this user, not a delegated worker.",
+    `You are ${input.computer.name}, a shared ThinkWork Computer.`,
+    "Answer for the requester of this turn, using only requester-scoped context and credentials when they are explicitly provided.",
     "Answer the user's Thread message directly. Be useful, concise, and grounded in the visible conversation.",
-    `Thread: ${threadTitle}.`,
-    `Workspace root: ${computer.live_workspace_root ?? "/workspace"}.`,
+    `Requester user id: ${input.requesterUserId ?? "unavailable"}.`,
+    `Thread: ${input.threadTitle}.`,
+    `Workspace root: ${input.computer.live_workspace_root ?? "/workspace"}.`,
   ].join("\n");
 }
 
@@ -1295,6 +1328,27 @@ function threadTurnPayload(input: unknown) {
       typeof payload.source === "string" && payload.source.trim()
         ? payload.source.trim()
         : "chat_message",
+    actorType:
+      typeof payload.actorType === "string" && payload.actorType.trim()
+        ? payload.actorType.trim()
+        : null,
+    actorId:
+      typeof payload.actorId === "string" && payload.actorId.trim()
+        ? payload.actorId.trim()
+        : null,
+    requesterUserId:
+      typeof payload.requesterUserId === "string" &&
+      payload.requesterUserId.trim()
+        ? payload.requesterUserId.trim()
+        : null,
+    surfaceContext: isRecord(payload.surfaceContext)
+      ? payload.surfaceContext
+      : {
+          source:
+            typeof payload.source === "string"
+              ? payload.source
+              : "chat_message",
+        },
     runbookRunId:
       typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
         ? payload.runbookRunId.trim()

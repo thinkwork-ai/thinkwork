@@ -42,6 +42,7 @@ def test_append_computer_task_event_posts_runtime_event(monkeypatch):
         event_type="browser_automation_started",
         level="info",
         payload={"url": "https://example.test"},
+        requester_user_id="user-1",
         api_url="https://api.example.test/",
         api_secret="service-secret",
         timeout=3,
@@ -54,4 +55,5 @@ def test_append_computer_task_event_posts_runtime_event(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer service-secret"
     assert '"eventType": "browser_automation_started"' in captured["body"]
     assert '"url": "https://example.test"' in captured["body"]
+    assert '"requesterUserId": "user-1"' in captured["body"]
     assert captured["timeout"] == 3

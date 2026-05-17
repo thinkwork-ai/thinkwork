@@ -4,6 +4,7 @@ import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   enqueueComputerThreadTurn,
+  resolveThreadComputer,
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
 
@@ -29,6 +30,15 @@ export const sendMessage = async (
     .where(eq(threads.id, i.threadId));
   if (!thread) throw new Error("Thread not found");
 
+  const isUserMessage = i.role.toLowerCase() === "user";
+  if (isUserMessage && thread.computer_id && senderType === "user") {
+    await resolveThreadComputer({
+      tenantId: thread.tenant_id,
+      requesterUserId: senderId,
+      requestedComputerId: thread.computer_id,
+    });
+  }
+
   // metadata.attachments is the message ↔ thread_attachments link for the
   // finance pilot (U3 of 2026-05-14-002). The presign/finalize handlers
   // already inserted the thread_attachments rows; sendMessage only
@@ -52,8 +62,6 @@ export const sendMessage = async (
       metadata: parsedMetadata,
     })
     .returning();
-
-  const isUserMessage = i.role.toLowerCase() === "user";
 
   // Auto-generate thread title from first user message (no updated_at bump)
   if (isUserMessage && i.content && thread.title === "Untitled conversation") {

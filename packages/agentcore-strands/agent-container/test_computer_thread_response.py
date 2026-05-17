@@ -51,6 +51,7 @@ def test_record_thread_turn_response_posts_to_runtime_endpoint():
             content="Final answer",
             model="model-1",
             usage={"input_tokens": 3},
+            requester_user_id="user-1",
             api_url="https://api.example.test/",
             api_secret="service-secret",
         )
@@ -66,6 +67,7 @@ def test_record_thread_turn_response_posts_to_runtime_endpoint():
         "content": "Final answer",
         "model": "model-1",
         "usage": {"input_tokens": 3},
+        "requesterUserId": "user-1",
     }
 
 

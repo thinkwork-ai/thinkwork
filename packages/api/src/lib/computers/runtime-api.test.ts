@@ -139,17 +139,18 @@ describe("Computer runtime API Google Workspace status", () => {
     });
   });
 
-  it("reports no active Google Workspace connection for the Computer owner", async () => {
+  it("reports no active Google Workspace connection for the requester", async () => {
     mocks.resolveConnectionForUser.mockResolvedValue(null);
 
     const result = await checkGoogleWorkspaceConnection({
       tenantId: "tenant-1",
       computerId: "computer-1",
+      requesterUserId: "requester-1",
     });
 
     expect(mocks.resolveConnectionForUser).toHaveBeenCalledWith(
       "tenant-1",
-      "user-1",
+      "requester-1",
       "google_productivity",
     );
     expect(result).toMatchObject({
@@ -173,6 +174,7 @@ describe("Computer runtime API Google Workspace status", () => {
     const result = await checkGoogleWorkspaceConnection({
       tenantId: "tenant-1",
       computerId: "computer-1",
+      requesterUserId: "requester-1",
     });
 
     expect(mocks.resolveOAuthTokenDetails).toHaveBeenCalledWith(
@@ -205,6 +207,7 @@ describe("Computer runtime API Google Workspace status", () => {
     const result = await checkGoogleWorkspaceConnection({
       tenantId: "tenant-1",
       computerId: "computer-1",
+      requesterUserId: "requester-1",
     });
 
     expect(result).toMatchObject({
@@ -216,7 +219,7 @@ describe("Computer runtime API Google Workspace status", () => {
     expect(JSON.stringify(result)).not.toContain("ya29");
   });
 
-  it("resolves a Google Workspace CLI token for service-auth runtime use", async () => {
+  it("resolves a Google Workspace CLI token for requester-auth runtime use", async () => {
     mocks.resolveConnectionForUser.mockResolvedValue({
       connectionId: "connection-1",
       providerId: "provider-1",
@@ -229,6 +232,7 @@ describe("Computer runtime API Google Workspace status", () => {
     const result = await resolveGoogleWorkspaceCliToken({
       tenantId: "tenant-1",
       computerId: "computer-1",
+      requesterUserId: "requester-1",
     });
 
     expect(result).toMatchObject({
@@ -247,6 +251,7 @@ describe("Computer runtime API Google Workspace status", () => {
       resolveGoogleWorkspaceCliToken({
         tenantId: "tenant-1",
         computerId: "computer-1",
+        requesterUserId: "requester-1",
       }),
     ).resolves.toMatchObject({
       connected: false,
@@ -263,6 +268,7 @@ describe("Computer runtime API Google Workspace status", () => {
     const result = await resolveGoogleWorkspaceCliToken({
       tenantId: "tenant-1",
       computerId: "computer-1",
+      requesterUserId: "requester-1",
     });
 
     expect(result).toMatchObject({
@@ -271,6 +277,20 @@ describe("Computer runtime API Google Workspace status", () => {
       reason: "token_unavailable_or_expired",
     });
     expect(JSON.stringify(result)).not.toContain("accessToken");
+  });
+
+  it("fails Google Workspace credential resolution closed without requester identity", async () => {
+    const result = await resolveGoogleWorkspaceCliToken({
+      tenantId: "tenant-1",
+      computerId: "computer-1",
+    });
+
+    expect(mocks.resolveConnectionForUser).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      connected: false,
+      tokenResolved: false,
+      reason: "requester_user_required",
+    });
   });
 });
 

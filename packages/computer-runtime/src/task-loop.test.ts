@@ -47,6 +47,7 @@ describe("Computer task loop", () => {
           threadId: "thread-1",
           messageId: "message-1",
           source: "chat_message",
+          requesterUserId: "user-1",
         },
       },
       "/workspace",
@@ -62,6 +63,8 @@ describe("Computer task loop", () => {
         threadId: "thread-1",
         messageId: "message-1",
         source: "chat_message",
+        requesterUserId: "user-1",
+        contextClass: "user",
       },
     });
     expect(api.loadThreadTurnContext).toHaveBeenCalledWith("task-thread");
@@ -106,12 +109,15 @@ describe("Computer task loop", () => {
       {
         id: "task-1",
         taskType: "google_workspace_auth_check",
+        createdByUserId: "user-1",
       },
       "/workspace",
       api,
     );
 
-    expect(api.checkGoogleWorkspaceConnection).toHaveBeenCalledOnce();
+    expect(api.checkGoogleWorkspaceConnection).toHaveBeenCalledWith({
+      requesterUserId: "user-1",
+    });
     expect(api.appendTaskEvent).toHaveBeenCalledWith("task-1", {
       eventType: "google_workspace_auth_checked",
       level: "info",
@@ -120,6 +126,7 @@ describe("Computer task loop", () => {
         connected: true,
         tokenResolved: true,
         connectionId: "connection-1",
+        requesterUserId: "user-1",
         missingScopes: [],
         reason: null,
       },
@@ -288,6 +295,7 @@ describe("Computer task loop", () => {
       {
         id: "task-2",
         taskType: "google_calendar_upcoming",
+        createdByUserId: "user-1",
         input: {
           timeMin: "2026-05-07T10:00:00.000Z",
           timeMax: "2026-05-08T10:00:00.000Z",
@@ -299,7 +307,9 @@ describe("Computer task loop", () => {
       gws,
     );
 
-    expect(api.resolveGoogleWorkspaceCliToken).toHaveBeenCalledOnce();
+    expect(api.resolveGoogleWorkspaceCliToken).toHaveBeenCalledWith({
+      requesterUserId: "user-1",
+    });
     expect(gws).toHaveBeenCalledWith(
       {
         timeMin: "2026-05-07T10:00:00.000Z",
@@ -317,6 +327,7 @@ describe("Computer task loop", () => {
         tokenResolved: true,
         calendarAvailable: true,
         eventCount: 2,
+        requesterUserId: "user-1",
         reason: null,
         missingScopes: [],
       },
@@ -352,6 +363,7 @@ describe("Computer task loop", () => {
       {
         id: "task-3",
         taskType: "google_calendar_upcoming",
+        createdByUserId: "user-1",
         input: {
           timeMin: "2026-05-07T10:00:00.000Z",
           timeMax: "2026-05-08T10:00:00.000Z",
@@ -373,6 +385,7 @@ describe("Computer task loop", () => {
         tokenResolved: true,
         calendarAvailable: false,
         eventCount: 0,
+        requesterUserId: "user-1",
         reason: "missing_google_calendar_scope",
         missingScopes: ["https://www.googleapis.com/auth/calendar"],
       },

@@ -20,6 +20,8 @@ describe("thread cutover runbook helpers", () => {
       messageId: "message-1",
       actorType: "user",
       actorId: "user-1",
+      requesterUserId: "user-1",
+      contextClass: "user",
     });
   });
 

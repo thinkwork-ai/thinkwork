@@ -78,7 +78,15 @@ describe("Computer task helpers", () => {
       source: "chat_message",
       actorType: "user",
       actorId: "user-1",
+      requesterUserId: "user-1",
+      contextClass: "user",
       runbookRunId: null,
+      surfaceContext: {
+        source: "chat_message",
+        triggerId: null,
+        triggerType: null,
+        scheduleName: null,
+      },
     });
     expect(
       normalizeTaskInput("thread_turn", {
@@ -93,8 +101,26 @@ describe("Computer task helpers", () => {
       source: "runbook",
       actorType: null,
       actorId: null,
+      requesterUserId: null,
+      contextClass: "system",
       runbookRunId: "run-1",
+      surfaceContext: {
+        source: "runbook",
+        triggerId: null,
+        triggerType: null,
+        scheduleName: null,
+      },
     });
+  });
+
+  it("rejects user-originated thread turns without requester identity", () => {
+    expect(() =>
+      normalizeTaskInput("thread_turn", {
+        threadId: "thread-1",
+        messageId: "message-1",
+        actorType: "user",
+      }),
+    ).toThrow("requesterUserId is required");
   });
 
   it("normalizes Slack-originated thread turn input with the canonical envelope", () => {
@@ -139,6 +165,8 @@ describe("Computer task helpers", () => {
         modalViewId: null,
         actorType: "user",
         actorId: "user-1",
+        requesterUserId: "user-1",
+        contextClass: "user",
         slack: expect.objectContaining({
           slackTeamId: "T123",
           triggerSurface: "app_mention",
@@ -182,6 +210,7 @@ describe("Computer task helpers", () => {
         responseUrl: "https://hooks.slack.com/commands/response",
         actorType: "user",
         actorId: "user-1",
+        requesterUserId: "user-1",
       }),
     );
   });
@@ -222,6 +251,7 @@ describe("Computer task helpers", () => {
         modalViewId: "V123",
         actorType: "user",
         actorId: "user-1",
+        requesterUserId: "user-1",
       }),
     );
   });
@@ -260,6 +290,8 @@ describe("Computer task helpers", () => {
       messageId: "message-1",
       actorType: "user",
       actorId: "user-1",
+      requesterUserId: "user-1",
+      contextClass: "user",
     });
   });
 

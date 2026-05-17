@@ -124,6 +124,7 @@ async function route(
       taskType: validTaskType(body.taskType),
       taskInput: body.input,
       idempotencyKey: optionalString(body.idempotencyKey),
+      createdByUserId: optionalUuid(body.createdByUserId, "createdByUserId"),
     });
     return json({ task }, 201);
   }
@@ -134,7 +135,13 @@ async function route(
   ) {
     const tenantId = validUuid(body.tenantId, "tenantId");
     const computerId = validUuid(body.computerId, "computerId");
-    return json(await checkGoogleWorkspaceConnection({ tenantId, computerId }));
+    return json(
+      await checkGoogleWorkspaceConnection({
+        tenantId,
+        computerId,
+        requesterUserId: optionalUuid(body.requesterUserId, "requesterUserId"),
+      }),
+    );
   }
 
   if (
@@ -147,6 +154,7 @@ async function route(
       await resolveGoogleWorkspaceCliToken({
         tenantId,
         computerId,
+        requesterUserId: optionalUuid(body.requesterUserId, "requesterUserId"),
       }),
     );
   }
@@ -400,6 +408,11 @@ function validUuid(value: unknown, name: string): string {
     throw new BadRequestError(`${name}: valid UUID required`);
   }
   return value;
+}
+
+function optionalUuid(value: unknown, name: string): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  return validUuid(value, name);
 }
 
 function requiredString(value: unknown, name: string): string {

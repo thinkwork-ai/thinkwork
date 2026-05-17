@@ -621,6 +621,7 @@ describe("job-trigger Computer scheduled thread turns", () => {
           threadId: "thread-1",
           messageId: "message-1",
           source: "schedule",
+          requesterUserId: "U1",
           triggerId: "job-agent-1",
         }),
       }),
@@ -632,6 +633,51 @@ describe("job-trigger Computer scheduled thread turns", () => {
       }),
     ).toBe(false);
     expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("skips scheduled shared-Computer work instead of falling back to historical owner credentials when no requester exists", async () => {
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          name: "System schedule",
+          config: {},
+          created_by_type: "system",
+          created_by_id: null,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "computer-1",
+          ownerUserId: "legacy-owner",
+          migratedAgentId: "A1",
+        },
+      ]);
+    mockInsert.mockReturnValueOnce([{ id: "event-1" }]);
+
+    await handler({
+      triggerId: "job-agent-system",
+      triggerType: "agent_scheduled",
+      tenantId: "T1",
+      agentId: "A1",
+      prompt: "Check the calendar",
+    });
+
+    expect(mockEnsureThreadForWork).not.toHaveBeenCalled();
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "scheduled_thread_turn_skipped",
+        payload: expect.objectContaining({
+          reason: "requester_user_required",
+        }),
+      }),
+    );
+    expect(
+      mockInsertValues.mock.calls.some((call) => {
+        const value = call[0] as Record<string, unknown>;
+        return value.task_type === "thread_turn";
+      }),
+    ).toBe(false);
   });
 
   it("does not create legacy Agent wakeups when a scheduled agent has no Computer", async () => {

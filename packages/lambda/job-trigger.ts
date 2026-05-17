@@ -228,8 +228,9 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -335,6 +336,10 @@ async function enqueueScheduledComputerThreadTurn(input: {
     source: "schedule",
     actorType: input.actorType,
     actorId: input.actorId ?? null,
+    requesterUserId:
+      input.actorType === "user" ? (input.actorId ?? null) : null,
+    contextClass:
+      input.actorType === "user" && input.actorId ? "user" : "system",
     triggerId: input.triggerId,
     triggerType: input.triggerType,
     scheduleName: input.scheduleName ?? null,
@@ -374,6 +379,8 @@ async function enqueueScheduledComputerThreadTurn(input: {
         triggerId: input.triggerId,
         triggerType: input.triggerType,
         scheduleName: input.scheduleName ?? null,
+        requesterUserId:
+          input.actorType === "user" ? (input.actorId ?? null) : null,
       },
     });
   }
@@ -435,17 +442,30 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       });
 
       if (computer) {
-        if (!computer.ownerUserId) {
+        const requesterUserId = isUserScheduled ? job!.created_by_id : null;
+        if (!requesterUserId) {
           console.warn(
-            `[job-trigger] Computer ${computer.id} has no owner_user_id; skipping legacy owner-scoped scheduled job ${triggerId}`,
+            `[job-trigger] Computer ${computer.id} scheduled job ${triggerId} has no requester user; skipping requester-scoped scheduled turn`,
           );
+          await db.insert(computerEvents).values({
+            tenant_id: tenantId,
+            computer_id: computer.id,
+            event_type: "scheduled_thread_turn_skipped",
+            level: "warn",
+            payload: {
+              triggerId,
+              triggerType,
+              scheduleName: scheduleName ?? null,
+              reason: "requester_user_required",
+            },
+          });
           return;
         }
 
         const result = await ensureThreadForWork({
           tenantId,
           computerId: computer.id,
-          userId: computer.ownerUserId,
+          userId: requesterUserId,
           title: jobTitle,
           channel: "schedule",
         });
@@ -460,13 +480,14 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             tenant_id: tenantId,
             role: "user",
             content: messageContent,
-            sender_type: isUserScheduled ? "user" : "system",
-            sender_id: isUserScheduled ? job!.created_by_id : null,
+            sender_type: "user",
+            sender_id: requesterUserId,
             metadata: {
               source: "scheduled_job",
               triggerId,
               triggerType,
               scheduleName: scheduleName ?? null,
+              requesterUserId,
             },
           })
           .returning({ id: messages.id });
@@ -478,8 +499,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           triggerId,
           triggerType,
           scheduleName,
-          actorType: isUserScheduled ? "user" : "system",
-          actorId: isUserScheduled ? job!.created_by_id : null,
+          actorType: "user",
+          actorId: requesterUserId,
         });
 
         // Keep the migrated Agent heartbeat fresh because it remains the
@@ -572,8 +593,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } =
-          await import("@aws-sdk/client-lambda");
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -914,8 +936,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } =
-          await import("@aws-sdk/client-scheduler");
+        const { SchedulerClient, DeleteScheduleCommand } = await import(
+          "@aws-sdk/client-scheduler"
+        );
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

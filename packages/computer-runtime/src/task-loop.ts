@@ -128,6 +128,8 @@ export async function handleTask(
   if (task.taskType === "thread_turn") {
     if (!api) throw new Error("Computer runtime API is required");
     const threadTurn = parseThreadTurnInput(task.input);
+    const requesterUserId =
+      threadTurn.requesterUserId ?? taskRequesterUserId(task);
     await api.appendTaskEvent(task.id, {
       eventType: "thread_turn_claimed",
       level: "info",
@@ -135,6 +137,8 @@ export async function handleTask(
         threadId: threadTurn.threadId,
         messageId: threadTurn.messageId,
         source: threadTurn.source,
+        requesterUserId,
+        contextClass: requesterUserId ? "user" : "system",
       },
     });
     const context = await api.loadThreadTurnContext(task.id);
@@ -153,7 +157,10 @@ export async function handleTask(
   }
   if (task.taskType === "google_workspace_auth_check") {
     if (!api) throw new Error("Computer runtime API is required");
-    const googleWorkspace = await api.checkGoogleWorkspaceConnection();
+    const requesterUserId = taskRequesterUserId(task);
+    const googleWorkspace = await api.checkGoogleWorkspaceConnection({
+      requesterUserId,
+    });
     await api.appendTaskEvent(task.id, {
       eventType: "google_workspace_auth_checked",
       level:
@@ -165,6 +172,7 @@ export async function handleTask(
         connected: googleWorkspace.connected,
         tokenResolved: googleWorkspace.tokenResolved,
         connectionId: googleWorkspace.connectionId ?? null,
+        requesterUserId,
         missingScopes: googleWorkspace.missingScopes ?? [],
         reason: googleWorkspace.reason ?? null,
       },
@@ -178,7 +186,10 @@ export async function handleTask(
   if (task.taskType === "google_calendar_upcoming") {
     if (!api) throw new Error("Computer runtime API is required");
     const taskInput = parseCalendarUpcomingInput(task.input);
-    const cliToken = await api.resolveGoogleWorkspaceCliToken();
+    const requesterUserId = taskRequesterUserId(task);
+    const cliToken = await api.resolveGoogleWorkspaceCliToken({
+      requesterUserId,
+    });
     let googleCalendar;
     if (
       cliToken.connected &&
@@ -239,6 +250,7 @@ export async function handleTask(
         tokenResolved: googleCalendar.tokenResolved,
         calendarAvailable: googleCalendar.calendarAvailable,
         eventCount: googleCalendar.eventCount,
+        requesterUserId,
         reason: googleCalendar.reason ?? null,
         missingScopes: googleCalendar.missingScopes ?? [],
       },
@@ -271,6 +283,20 @@ function parseCalendarUpcomingInput(input: unknown) {
   return { timeMin, timeMax, maxResults };
 }
 
+function taskRequesterUserId(task: RuntimeTask): string | null {
+  if (typeof task.createdByUserId === "string" && task.createdByUserId.trim()) {
+    return task.createdByUserId.trim();
+  }
+  const payload =
+    task.input && typeof task.input === "object" && !Array.isArray(task.input)
+      ? (task.input as Record<string, unknown>)
+      : {};
+  return typeof payload.requesterUserId === "string" &&
+    payload.requesterUserId.trim()
+    ? payload.requesterUserId.trim()
+    : null;
+}
+
 function parseThreadTurnInput(input: unknown) {
   const payload =
     input && typeof input === "object" && !Array.isArray(input)
@@ -283,6 +309,11 @@ function parseThreadTurnInput(input: unknown) {
       typeof payload.source === "string" && payload.source.trim()
         ? payload.source.trim()
         : "chat_message",
+    requesterUserId:
+      typeof payload.requesterUserId === "string" &&
+      payload.requesterUserId.trim()
+        ? payload.requesterUserId.trim()
+        : null,
   };
 }
 

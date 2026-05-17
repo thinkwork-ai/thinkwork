@@ -43,6 +43,7 @@ export const createThread = async (
   const threadComputer = await resolveThreadComputer({
     tenantId: i.tenantId,
     ownerUserId: createdByType === "user" ? createdById : null,
+    requesterUserId: createdByType === "user" ? createdById : null,
     requestedComputerId: i.computerId ?? null,
   });
 
@@ -102,7 +103,10 @@ export const createThread = async (
         tenant_id: i.tenantId,
         agent_id: threadComputer ? null : i.agentId,
         computer_id: threadComputer?.id,
-        user_id: threadComputer?.owner_user_id,
+        user_id:
+          createdByType === "user"
+            ? createdById
+            : threadComputer?.owner_user_id,
         number: nextNumber,
         identifier,
         title: effectiveTitle,
