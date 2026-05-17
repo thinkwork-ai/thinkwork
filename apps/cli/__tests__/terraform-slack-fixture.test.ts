@@ -15,13 +15,13 @@ function read(path: string): string {
 }
 
 describe("Slack Terraform handler environment", () => {
-  it("passes Slack app credentials to GraphQL and Slack OAuth handlers", () => {
+  it("passes Slack app credentials to Slack OAuth handlers without bloating GraphQL env", () => {
     const source = read(HANDLERS_TF);
 
     expect(source).toContain("SLACK_APP_CREDENTIALS_SECRET_ARN");
     expect(source).toMatch(/"oauth-authorize"\s+= local\.slack_handler_env/);
     expect(source).toMatch(/"oauth-callback"\s+= local\.slack_handler_env/);
-    expect(source).toMatch(
+    expect(source).not.toMatch(
       /"graphql-http"\s+= merge\(local\.slack_handler_env,/,
     );
   });

@@ -36,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   __resetSlackWorkspaceStoreCacheForTest();
   process.env.SLACK_APP_CREDENTIALS_SECRET_ARN = "slack-app-secret-arn";
+  process.env.STAGE = "dev";
 });
 
 describe("slackBotTokenSecretPath", () => {
@@ -67,6 +68,28 @@ describe("getSlackAppCredentials", () => {
       clientSecret: "csecret",
     });
     expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the stage-scoped Slack app secret name when no ARN is wired", async () => {
+    delete process.env.SLACK_APP_CREDENTIALS_SECRET_ARN;
+    process.env.STAGE = "prod";
+    sendMock.mockResolvedValueOnce({
+      SecretString: JSON.stringify({
+        signing_secret: "sign",
+        client_id: "cid",
+        client_secret: "csecret",
+      }),
+    });
+
+    await expect(getSlackAppCredentials()).resolves.toEqual({
+      signingSecret: "sign",
+      clientId: "cid",
+      clientSecret: "csecret",
+    });
+
+    expect(sendMock).toHaveBeenCalledWith({
+      SecretId: "thinkwork/prod/slack/app",
+    });
   });
 
   it("rejects incomplete app credentials", async () => {

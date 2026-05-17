@@ -35,12 +35,7 @@ export function slackBotTokenSecretPath(
 export async function getSlackAppCredentials(): Promise<SlackAppCredentials> {
   if (appCredentialsCache) return appCredentialsCache;
 
-  const secretArn = process.env.SLACK_APP_CREDENTIALS_SECRET_ARN || "";
-  if (!secretArn) {
-    throw new Error(
-      "SLACK_APP_CREDENTIALS_SECRET_ARN not set - the Lambda environment is missing the Slack app credentials secret ARN.",
-    );
-  }
+  const secretArn = slackAppCredentialsSecretId();
 
   const res = await getClient().send(
     new GetSecretValueCommand({ SecretId: secretArn }),
@@ -78,6 +73,14 @@ export async function getSlackAppCredentials(): Promise<SlackAppCredentials> {
     `[slack-workspace-store] Loaded Slack app credentials from ${secretArn}`,
   );
   return appCredentialsCache;
+}
+
+function slackAppCredentialsSecretId(): string {
+  const envArn = process.env.SLACK_APP_CREDENTIALS_SECRET_ARN?.trim();
+  if (envArn) return envArn;
+
+  const stage = process.env.STAGE?.trim() || "dev";
+  return `thinkwork/${stage}/slack/app`;
 }
 
 export async function getSlackBotToken(secretPath: string): Promise<string> {
