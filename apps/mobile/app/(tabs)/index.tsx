@@ -38,8 +38,7 @@ import { useQuery } from "urql";
 // `dueAt`, etc.) than the chat-oriented SDK surface exposes on `Thread`.
 import {
   ThreadsQuery,
-  MyComputerQuery,
-  ComputersQuery,
+  AssignedComputersQuery,
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
 } from "@/lib/graphql-queries";
@@ -67,9 +66,7 @@ import {
   CreditCard,
   DatabaseZap,
 } from "lucide-react-native";
-import {
-  IconLetterCase,
-} from "@tabler/icons-react-native";
+import { IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
@@ -130,7 +127,6 @@ type HomeComputer = {
   id: string;
   name?: string | null;
   slug?: string | null;
-  ownerUserId?: string | null;
   status?: string | null;
   runtimeStatus?: string | null;
 };
@@ -183,46 +179,60 @@ export default function ThreadsScreen() {
 
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
-  const [{ data: myComputerData, fetching: myComputerFetching }] = useQuery({
-    query: MyComputerQuery,
-    pause: !tenantId,
-  });
-  const myComputer = myComputerData?.myComputer;
   const [{ data: computersData, fetching: computersFetching }] = useQuery({
-    query: ComputersQuery,
-    variables: { tenantId: tenantId! },
+    query: AssignedComputersQuery,
     pause: !tenantId,
   });
   const computers = useMemo<HomeComputer[]>(() => {
-    const rows = ((computersData?.computers ?? []) as HomeComputer[]).filter((computer) => {
-      if (computer.status === "archived") return false;
-      if (!currentUser?.id) return false;
-      return computer.ownerUserId === currentUser.id;
-    });
-    if (rows.length > 0) return rows;
-    return myComputer ? [myComputer as HomeComputer] : [];
-  }, [computersData?.computers, currentUser?.id, myComputer]);
+    return ((computersData?.assignedComputers ?? []) as HomeComputer[]).filter(
+      (computer) => computer.status !== "archived",
+    );
+  }, [computersData?.assignedComputers]);
+  const selectedComputerStorageKey = tenantId
+    ? `thinkwork:selected-computer:${tenantId}`
+    : null;
   const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
     null,
   );
 
   useEffect(() => {
-    if (selectedComputerId && computers.some((c) => c.id === selectedComputerId)) {
+    if (!selectedComputerStorageKey) {
+      setSelectedComputerId(null);
       return;
     }
-    const ownedComputer =
-      computers.find((computer) => computer.id === myComputer?.id) ??
-      computers[0] ??
-      null;
-    setSelectedComputerId(ownedComputer?.id ?? null);
-  }, [computers, myComputer?.id, selectedComputerId]);
+    let cancelled = false;
+    AsyncStorage.getItem(selectedComputerStorageKey)
+      .then((stored) => {
+        if (!cancelled && stored) setSelectedComputerId(stored);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedComputerStorageKey]);
+
+  useEffect(() => {
+    if (!selectedComputerStorageKey || !selectedComputerId) return;
+    void AsyncStorage.setItem(
+      selectedComputerStorageKey,
+      selectedComputerId,
+    ).catch(() => {});
+  }, [selectedComputerId, selectedComputerStorageKey]);
+
+  useEffect(() => {
+    if (
+      selectedComputerId &&
+      computers.some((computer) => computer.id === selectedComputerId)
+    ) {
+      return;
+    }
+    setSelectedComputerId(computers[0]?.id ?? null);
+  }, [computers, selectedComputerId]);
 
   const selectedComputer = useMemo(
     () =>
-      computers.find((computer) => computer.id === selectedComputerId) ??
-      myComputer ??
-      null,
-    [computers, myComputer, selectedComputerId],
+      computers.find((computer) => computer.id === selectedComputerId) ?? null,
+    [computers, selectedComputerId],
   );
 
   // Server already scopes agents to the authed user. Just drop local scratch agents.
@@ -280,11 +290,7 @@ export default function ThreadsScreen() {
   const [{ data: threadsData }, reexecute] = useQuery({
     query: ThreadsQuery,
     variables: queryVars,
-    pause:
-      !tenantId ||
-      myComputerFetching ||
-      computersFetching ||
-      !selectedComputer?.id,
+    pause: !tenantId || computersFetching || !selectedComputer?.id,
   });
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
@@ -666,12 +672,11 @@ export default function ThreadsScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   const computerDisplayName =
-    selectedComputer?.name ||
-    myComputer?.name ||
-    (computersFetching || myComputerFetching ? "" : "Computer");
+    selectedComputer?.name || (computersFetching ? "" : "Computer");
   const brainProviderErrors = brainProviders.filter((provider) =>
     ["error", "timeout"].includes(provider.state),
   ).length;
+  const noAssignedComputer = !computersFetching && computers.length === 0;
 
   return (
     <KeyboardAvoidingView
@@ -845,6 +850,46 @@ export default function ThreadsScreen() {
         </View>
       )}
 
+      {computers.length > 1 ? (
+        <View className="bg-white dark:bg-neutral-950 px-4 pb-2">
+          <FlatList
+            horizontal
+            data={computers}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const selected = item.id === selectedComputerId;
+              return (
+                <Pressable
+                  onPress={() => setSelectedComputerId(item.id)}
+                  className="mr-2 rounded-full border px-3 py-1.5"
+                  style={{
+                    borderColor: selected ? colors.primary : colors.border,
+                    backgroundColor: selected
+                      ? isDark
+                        ? "#1e3a5f"
+                        : "#e0f2fe"
+                      : "transparent",
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <Text
+                    className="text-sm font-medium"
+                    style={{
+                      color: selected ? colors.primary : colors.foreground,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.name || item.slug || "Computer"}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+      ) : null}
+
       {/* Threads / Brain segmented control */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
@@ -992,7 +1037,11 @@ export default function ThreadsScreen() {
               ListEmptyComponent={
                 <View className="items-center gap-2">
                   <ListTodo size={32} color={colors.mutedForeground} />
-                  <Muted>No threads found</Muted>
+                  <Muted>
+                    {noAssignedComputer
+                      ? "Ask an operator to assign a Computer"
+                      : "No threads found"}
+                  </Muted>
                 </View>
               }
               contentContainerStyle={
@@ -1026,7 +1075,12 @@ export default function ThreadsScreen() {
             value={newThreadText}
             onChangeText={setNewThreadText}
             onSubmit={() => handleCreateThread()}
-            placeholder="Start a new thread..."
+            placeholder={
+              noAssignedComputer
+                ? "Ask an operator to assign a Computer"
+                : "Start a new thread..."
+            }
+            disabled={noAssignedComputer}
             colors={colors}
             isDark={isDark}
             onQuickActions={() => {

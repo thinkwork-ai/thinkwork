@@ -28,8 +28,8 @@ interface TenantContextValue {
   error: string | null;
   /**
    * True when the signed-in user has no `custom:tenant_id` claim AND the
-   * tenant-discovery fallback (myComputer GraphQL query) found no membership
-   * either. apps/computer (the end-user surface) deliberately does NOT call
+   * tenant-discovery fallback (assignedComputers GraphQL query) found no
+   * membership either. apps/computer (the end-user surface) deliberately does NOT call
    * admin's `bootstrapUser` mutation here — auto-provisioning a tenant for
    * an end user would silently promote them to operator of a fresh empty
    * tenant. Instead, the shell renders a "contact your operator" surface
@@ -62,12 +62,12 @@ const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";
  * trigger lands; admin papers over this with `bootstrapUser` (which would
  * auto-promote the user to operator of a new tenant). apps/computer
  * suppresses that path, so existing-tenant Google users would otherwise be
- * locked out. Solution: query `myComputer` — its server resolver does an
- * email-fallback DB lookup on the caller's identity and returns the
- * Computer (which carries tenantId) when one exists. No tenant
+ * locked out. Solution: query `assignedComputers` — its server resolver does
+ * an email-fallback DB lookup on the caller's identity and returns shared
+ * Computers (which carry tenantId) when assignments exist. No tenant
  * provisioning happens in this path; we only read.
  */
-async function discoverTenantViaMyComputer(
+async function discoverTenantViaAssignedComputers(
   token: string,
 ): Promise<string | null> {
   if (!GRAPHQL_HTTP_URL) return null;
@@ -81,14 +81,14 @@ async function discoverTenantViaMyComputer(
       method: "POST",
       headers,
       body: JSON.stringify({
-        query: `query { myComputer { id tenantId } }`,
+        query: `query { assignedComputers { id tenantId } }`,
       }),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as {
-      data?: { myComputer?: { id?: string; tenantId?: string } | null };
+      data?: { assignedComputers?: { id?: string; tenantId?: string }[] };
     };
-    return body.data?.myComputer?.tenantId ?? null;
+    return body.data?.assignedComputers?.[0]?.tenantId ?? null;
   } catch {
     return null;
   }
@@ -167,14 +167,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
       return;
     }
-    const found = await discoverTenantViaMyComputer(token);
+    const found = await discoverTenantViaAssignedComputers(token);
     if (found) {
       setDiscoveredTenantId(found);
       setNoTenantAssigned(false);
       await fetchTenant(found);
     } else {
-      // The user is signed in but has no Computer (and therefore no tenant
-      // membership we can discover from this surface). Render the
+      // The user is signed in but has no assigned Computer (and therefore no
+      // tenant membership we can discover from this surface). Render the
       // NoTenantAssigned page rather than auto-bootstrapping a new tenant.
       setTenant(null);
       setNoTenantAssigned(true);
@@ -187,7 +187,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       fetchTenant(jwtTenantId);
     } else if (isAuthenticated && !jwtTenantId) {
       // No tenant claim on the JWT (Google-federated user, pre-token trigger
-      // hasn't landed). Try tenant-discovery via myComputer before falling
+      // hasn't landed). Try tenant-discovery via assignedComputers before falling
       // back to NoTenantAssigned.
       discoverTenantThenFetch();
     } else {
@@ -226,7 +226,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
 export function useTenant() {
   const ctx = useContext(TenantContext);
-  if (!ctx)
-    throw new Error("useTenant must be used within a TenantProvider");
+  if (!ctx) throw new Error("useTenant must be used within a TenantProvider");
   return ctx;
 }

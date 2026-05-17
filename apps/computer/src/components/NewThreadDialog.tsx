@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "urql";
+import { useMutation } from "urql";
 import {
   Button,
   Dialog,
@@ -11,20 +11,19 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import {
-  CreateThreadMutation,
-  MyComputerQuery,
-} from "@/lib/graphql-queries";
+import { CreateThreadMutation } from "@/lib/graphql-queries";
+import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 
 interface NewThreadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-interface MyComputerResult {
-  myComputer: { id: string; name?: string | null } | null;
 }
 
 interface CreateThreadResult {
@@ -45,21 +44,19 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
   const { tenantId } = useTenant();
   const [title, setTitle] = useState("New thread");
   const [error, setError] = useState<string | null>(null);
-  const [{ data: myComputerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-    pause: !open,
-  });
-  const [{ fetching }, createThread] = useMutation<CreateThreadResult, CreateThreadVars>(
-    CreateThreadMutation,
-  );
+  const {
+    computers,
+    noAssignedComputers,
+    selectedComputer,
+    selectedComputerId,
+    setSelectedComputerId,
+  } = useAssignedComputerSelection({ pause: !open });
+  const [{ fetching }, createThread] = useMutation<
+    CreateThreadResult,
+    CreateThreadVars
+  >(CreateThreadMutation);
 
-  const computerId = myComputerData?.myComputer?.id ?? null;
-  // myComputerData with a present `myComputer: null` field means the query
-  // resolved but the caller has no Computer assigned. Distinguish that from
-  // "still loading" so we can show an actionable message instead of leaving
-  // the Create button permanently disabled with no feedback.
-  const myComputerLoaded = myComputerData !== undefined;
-  const noComputerAssigned = myComputerLoaded && computerId === null;
+  const computerId = selectedComputer?.id ?? null;
   const canSubmit = !!tenantId && !!computerId && !fetching;
 
   async function handleSubmit(event: React.FormEvent) {
@@ -103,13 +100,33 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-4">
-            {noComputerAssigned ? (
+            {noAssignedComputers ? (
               <p className="text-sm text-muted-foreground">
-                You don't have a Computer assigned yet. Ask your tenant operator
-                to provision one before creating threads.
+                You don't have access to a shared Computer yet. Ask your tenant
+                operator to assign one before creating threads.
               </p>
             ) : (
               <>
+                {computers.length > 1 ? (
+                  <>
+                    <Label htmlFor="new-thread-computer">Computer</Label>
+                    <Select
+                      value={selectedComputerId ?? undefined}
+                      onValueChange={setSelectedComputerId}
+                    >
+                      <SelectTrigger id="new-thread-computer">
+                        <SelectValue placeholder="Select a Computer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {computers.map((computer) => (
+                          <SelectItem key={computer.id} value={computer.id}>
+                            {computer.name || computer.slug || "Computer"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                ) : null}
                 <Label htmlFor="new-thread-title">Title</Label>
                 <Input
                   id="new-thread-title"
@@ -120,9 +137,7 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
                 />
               </>
             )}
-            {error ? (
-              <p className="text-sm text-destructive">{error}</p>
-            ) : null}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
           <DialogFooter>
             <Button
@@ -131,9 +146,9 @@ export function NewThreadDialog({ open, onOpenChange }: NewThreadDialogProps) {
               onClick={() => onOpenChange(false)}
               disabled={fetching}
             >
-              {noComputerAssigned ? "Close" : "Cancel"}
+              {noAssignedComputers ? "Close" : "Cancel"}
             </Button>
-            {!noComputerAssigned && (
+            {!noAssignedComputers && (
               <Button type="submit" disabled={!canSubmit}>
                 {fetching ? "Creating…" : "Create"}
               </Button>

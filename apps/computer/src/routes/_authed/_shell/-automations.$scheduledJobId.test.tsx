@@ -15,10 +15,9 @@ const useSubscriptionMock = vi.fn();
 const pageHeaderActionsMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -76,13 +75,14 @@ beforeEach(() => {
   useQueryMock.mockReturnValue([
     {
       data: {
-        myComputer: {
-          id: "computer-marco",
-          name: "Marco",
-          tenantId: "tenant-A",
-          ownerUserId: "user-1",
-          sourceAgent: { id: "agent-marco", name: "Marco" },
-        },
+        assignedComputers: [
+          {
+            id: "computer-marco",
+            name: "Marco",
+            tenantId: "tenant-A",
+            sourceAgent: { id: "agent-marco", name: "Marco" },
+          },
+        ],
       },
     },
   ]);
@@ -151,14 +151,19 @@ describe("apps/computer scheduled-job detail route", () => {
   });
 
   it("PUTs enabled toggle + refetches the job", async () => {
-    apiFetchMock.mockImplementation(async (path: string, opts: { method?: string } = {}) => {
-      if (path.startsWith("/api/scheduled-jobs/job-1") && opts.method === "PUT") {
-        return SAMPLE_JOB;
-      }
-      if (path.startsWith("/api/scheduled-jobs/job-1")) return SAMPLE_JOB;
-      if (path.startsWith("/api/thread-turns")) return [];
-      return [];
-    });
+    apiFetchMock.mockImplementation(
+      async (path: string, opts: { method?: string } = {}) => {
+        if (
+          path.startsWith("/api/scheduled-jobs/job-1") &&
+          opts.method === "PUT"
+        ) {
+          return SAMPLE_JOB;
+        }
+        if (path.startsWith("/api/scheduled-jobs/job-1")) return SAMPLE_JOB;
+        if (path.startsWith("/api/thread-turns")) return [];
+        return [];
+      },
+    );
 
     render(<ScheduledJobDetailPage />);
     await waitFor(() =>
@@ -184,14 +189,19 @@ describe("apps/computer scheduled-job detail route", () => {
   });
 
   it("Trigger Now POSTs to /:id/fire and does not collapse the page on success", async () => {
-    apiFetchMock.mockImplementation(async (path: string, opts: { method?: string } = {}) => {
-      if (path.startsWith("/api/scheduled-jobs/job-1/fire") && opts.method === "POST") {
-        return { ok: true };
-      }
-      if (path.startsWith("/api/scheduled-jobs/job-1")) return SAMPLE_JOB;
-      if (path.startsWith("/api/thread-turns")) return [];
-      return [];
-    });
+    apiFetchMock.mockImplementation(
+      async (path: string, opts: { method?: string } = {}) => {
+        if (
+          path.startsWith("/api/scheduled-jobs/job-1/fire") &&
+          opts.method === "POST"
+        ) {
+          return { ok: true };
+        }
+        if (path.startsWith("/api/scheduled-jobs/job-1")) return SAMPLE_JOB;
+        if (path.startsWith("/api/thread-turns")) return [];
+        return [];
+      },
+    );
 
     render(<ScheduledJobDetailPage />);
     await waitFor(() =>
@@ -225,16 +235,16 @@ describe("apps/computer scheduled-job detail route", () => {
     await waitFor(() =>
       expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
-    const initialRunsCalls = apiFetchMock.mock.calls.filter((c) =>
-      typeof c[0] === "string" && c[0].startsWith("/api/thread-turns"),
+    const initialRunsCalls = apiFetchMock.mock.calls.filter(
+      (c) => typeof c[0] === "string" && c[0].startsWith("/api/thread-turns"),
     ).length;
 
     subData = { onThreadTurnUpdated: { threadId: "t1" } };
     rerender(<ScheduledJobDetailPage />);
 
     await waitFor(() => {
-      const runsCalls = apiFetchMock.mock.calls.filter((c) =>
-        typeof c[0] === "string" && c[0].startsWith("/api/thread-turns"),
+      const runsCalls = apiFetchMock.mock.calls.filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("/api/thread-turns"),
       ).length;
       expect(runsCalls).toBeGreaterThan(initialRunsCalls);
     });

@@ -1,5 +1,16 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { View, ScrollView, Pressable, RefreshControl, Modal, TextInput, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import {
+  View,
+  ScrollView,
+  Pressable,
+  RefreshControl,
+  Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
@@ -16,7 +27,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { useQuery } from "urql";
 // TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier`.
 //            Keep local ThreadsQuery until SDK widens.
-import { MyComputerQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
 
 interface Thread {
   id: string;
@@ -59,7 +70,10 @@ function formatRelativeTime(timestamp: number | null | undefined): string {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // Mobile row component
@@ -68,7 +82,7 @@ function ThreadRowItem({
   agents,
   computerName,
   onPress,
-  isLast
+  isLast,
 }: {
   thread: Thread;
   agents: { id: string; name: string; status?: string }[] | undefined;
@@ -84,7 +98,7 @@ function ThreadRowItem({
   };
 
   const assignee = thread.computerId
-    ? (computerName || "Computer")
+    ? computerName || "Computer"
     : getAgentName(thread.agentId) || "Agent";
 
   return (
@@ -93,16 +107,24 @@ function ThreadRowItem({
       isLast={isLast}
       line1Left={
         <View className="flex-row items-center gap-1.5 flex-shrink">
-          <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100 flex-shrink leading-none" numberOfLines={1}>
-            {thread.number ? `#${thread.number} ` : ""}{thread.title}
+          <Text
+            className="text-base font-medium text-neutral-900 dark:text-neutral-100 flex-shrink leading-none"
+            numberOfLines={1}
+          >
+            {thread.number ? `#${thread.number} ` : ""}
+            {thread.title}
           </Text>
         </View>
       }
       line2Left={
         <>
-          <Muted className="text-sm" numberOfLines={1}>{assignee}</Muted>
+          <Muted className="text-sm" numberOfLines={1}>
+            {assignee}
+          </Muted>
           <Muted className="text-sm">{"\u00B7"}</Muted>
-          <Muted className="text-sm">{formatRelativeTime(new Date(thread.updatedAt).getTime())}</Muted>
+          <Muted className="text-sm">
+            {formatRelativeTime(new Date(thread.updatedAt).getTime())}
+          </Muted>
         </>
       }
       line2Right={
@@ -119,10 +141,16 @@ function CreateThreadModal({
   visible,
   onClose,
   computer,
+  computers,
+  selectedComputerId,
+  onComputerChange,
 }: {
   visible: boolean;
   onClose: () => void;
   computer?: { id: string; name?: string | null } | null;
+  computers: { id: string; name?: string | null; slug?: string | null }[];
+  selectedComputerId: string | null;
+  onComputerChange: (id: string) => void;
 }) {
   const { user } = useAuth();
   const tenantId = user?.tenantId;
@@ -183,7 +211,11 @@ function CreateThreadModal({
           </Pressable>
         </View>
 
-        <ScrollView className="flex-1" contentContainerClassName="px-4 py-4" keyboardShouldPersistTaps="handled">
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-4 py-4"
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Title */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
@@ -204,17 +236,44 @@ function CreateThreadModal({
             <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
               Computer
             </Text>
-            <View className="h-12 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 bg-white dark:bg-neutral-900 flex-row items-center">
-              <Text className="text-neutral-900 dark:text-neutral-100">
-                {computer?.name || "No Computer available"}
-              </Text>
-            </View>
+            {computers.length > 1 ? (
+              <View className="gap-2">
+                {computers.map((item) => {
+                  const selected = item.id === selectedComputerId;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => onComputerChange(item.id)}
+                      className="h-12 rounded-lg border px-3 flex-row items-center"
+                      style={{
+                        borderColor: selected ? "#0284c7" : "#d4d4d8",
+                        backgroundColor: selected ? "#e0f2fe" : "transparent",
+                      }}
+                    >
+                      <Text className="text-neutral-900 dark:text-neutral-100">
+                        {item.name || item.slug || "Computer"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View className="h-12 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 bg-white dark:bg-neutral-900 flex-row items-center">
+                <Text className="text-neutral-900 dark:text-neutral-100">
+                  {computer?.name || "No Computer available"}
+                </Text>
+              </View>
+            )}
           </View>
         </ScrollView>
 
         {/* Footer */}
         <View className="px-4 py-4 border-t border-neutral-200 dark:border-neutral-800">
-          <Button onPress={handleCreate} loading={creating} disabled={!title.trim() || !computer?.id}>
+          <Button
+            onPress={handleCreate}
+            loading={creating}
+            disabled={!title.trim() || !computer?.id}
+          >
             Create Thread
           </Button>
         </View>
@@ -235,18 +294,45 @@ export default function ThreadsScreen() {
   // Defer agents query to avoid synchronous cache update triggering a setState
   // in HomeScreen (which shares the same useAgents query) during our render.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const [{ data: myComputerData, fetching: computerFetching }] = useQuery({
-    query: MyComputerQuery,
+  const [{ data: computerData, fetching: computerFetching }] = useQuery({
+    query: AssignedComputersQuery,
     pause: !tenantId,
   });
-  const myComputer = myComputerData?.myComputer;
+  const assignedComputers = useMemo(
+    () =>
+      ((computerData?.assignedComputers ?? []) as any[]).filter(
+        (computer) => computer.status !== "archived",
+      ),
+    [computerData?.assignedComputers],
+  );
+  const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (
+      selectedComputerId &&
+      assignedComputers.some((computer) => computer.id === selectedComputerId)
+    ) {
+      return;
+    }
+    setSelectedComputerId(assignedComputers[0]?.id ?? null);
+  }, [assignedComputers, selectedComputerId]);
+  const selectedComputer = useMemo(
+    () =>
+      assignedComputers.find(
+        (computer) => computer.id === selectedComputerId,
+      ) ?? null,
+    [assignedComputers, selectedComputerId],
+  );
 
   const [{ data: threadsData, fetching: threadsFetching }] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId!, computerId: myComputer?.id },
-    pause: !tenantId || computerFetching || !myComputer?.id,
+    variables: { tenantId: tenantId!, computerId: selectedComputer?.id },
+    pause: !tenantId || computerFetching || !selectedComputer?.id,
   });
   const { agents: sdkAgents, loading: agentsFetching } = useAgents({
     tenantId: mounted ? tenantId : undefined,
@@ -273,80 +359,100 @@ export default function ThreadsScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleRowPress = useCallback((thread: Thread) => {
-    router.push(`/threads/${thread.id}`);
-  }, [router]);
+  const handleRowPress = useCallback(
+    (thread: Thread) => {
+      router.push(`/threads/${thread.id}`);
+    },
+    [router],
+  );
 
-  const getAssigneeName = useCallback((thread: Thread) => {
-    if (thread.computerId) return myComputer?.name || "Computer";
-    const agentId = thread.agentId;
-    if (!agentId) return "\u2014";
-    const a = agents?.find((a: any) => a.id === agentId);
-    if (!a) return "Unknown";
-    return a.status === "revoked" ? `${a.name} (removed)` : a.name;
-  }, [agents, myComputer?.name]);
+  const getAssigneeName = useCallback(
+    (thread: Thread) => {
+      if (thread.computerId) return selectedComputer?.name || "Computer";
+      const agentId = thread.agentId;
+      if (!agentId) return "\u2014";
+      const a = agents?.find((a: any) => a.id === agentId);
+      if (!a) return "Unknown";
+      return a.status === "revoked" ? `${a.name} (removed)` : a.name;
+    },
+    [agents, selectedComputer?.name],
+  );
 
   // Table columns for wide screens
-  const columns: Column<Thread>[] = useMemo(() => [
-    {
-      key: "title",
-      header: "Thread",
-      flex: 3,
-      minWidth: 250,
-      render: (item) => (
-        <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100" numberOfLines={1}>
-          {item.number ? `#${item.number} ` : ""}{item.title}
-        </Text>
-      ),
-    },
-    {
-      key: "assignee",
-      header: "Assignee",
-      flex: 1.5,
-      minWidth: 120,
-      render: (item) => (
-        <Muted className="text-sm">
-          {getAssigneeName(item)}
-        </Muted>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      flex: 1,
-      minWidth: 80,
-      render: (item) => (
-        <Muted className="text-sm">
-          {lifecycleLabel((item as any).lifecycleStatus)}
-        </Muted>
-      ),
-    },
-    {
-      key: "lastActivity",
-      header: "Activity",
-      flex: 1,
-      minWidth: 80,
-      align: "right",
-      render: (item) => (
-        <Muted className="text-sm">{formatRelativeTime(new Date(item.updatedAt).getTime())}</Muted>
-      ),
-    },
-  ], [getAssigneeName]);
+  const columns: Column<Thread>[] = useMemo(
+    () => [
+      {
+        key: "title",
+        header: "Thread",
+        flex: 3,
+        minWidth: 250,
+        render: (item) => (
+          <Text
+            className="text-sm font-medium text-neutral-900 dark:text-neutral-100"
+            numberOfLines={1}
+          >
+            {item.number ? `#${item.number} ` : ""}
+            {item.title}
+          </Text>
+        ),
+      },
+      {
+        key: "assignee",
+        header: "Assignee",
+        flex: 1.5,
+        minWidth: 120,
+        render: (item) => (
+          <Muted className="text-sm">{getAssigneeName(item)}</Muted>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        flex: 1,
+        minWidth: 80,
+        render: (item) => (
+          <Muted className="text-sm">
+            {lifecycleLabel((item as any).lifecycleStatus)}
+          </Muted>
+        ),
+      },
+      {
+        key: "lastActivity",
+        header: "Activity",
+        flex: 1,
+        minWidth: 80,
+        align: "right",
+        render: (item) => (
+          <Muted className="text-sm">
+            {formatRelativeTime(new Date(item.updatedAt).getTime())}
+          </Muted>
+        ),
+      },
+    ],
+    [getAssigneeName],
+  );
 
   // Sort logic (newest first)
   const filteredThreads = useMemo(() => {
     return [...threads].sort(
-      (a: Thread, b: Thread) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a: Thread, b: Thread) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [threads]);
 
   const isLoading = threadsFetching || agentsFetching || computerFetching;
 
-  const renderMobileItem = ({ item, index }: { item: Thread; index: number }) => (
+  const renderMobileItem = ({
+    item,
+    index,
+  }: {
+    item: Thread;
+    index: number;
+  }) => (
     <ThreadRowItem
       thread={item}
       agents={agents}
-      computerName={myComputer?.name}
+      computerName={selectedComputer?.name}
       onPress={() => handleRowPress(item)}
       isLast={index === filteredThreads.length - 1}
     />
@@ -364,8 +470,14 @@ export default function ThreadsScreen() {
           {isLargeScreen ? (
             <ScrollView
               className="flex-1"
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 }}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingTop: 12,
+                paddingBottom: 16,
+              }}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
             >
               <DataTable
                 data={filteredThreads}
@@ -386,7 +498,12 @@ export default function ThreadsScreen() {
                   data={filteredThreads}
                   renderItem={renderMobileItem}
                   keyExtractor={(item) => item.id}
-                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefresh}
+                    />
+                  }
                 />
               )}
             </View>
@@ -396,7 +513,10 @@ export default function ThreadsScreen() {
           <CreateThreadModal
             visible={showCreateModal}
             onClose={() => setShowCreateModal(false)}
-            computer={myComputer}
+            computer={selectedComputer}
+            computers={assignedComputers}
+            selectedComputerId={selectedComputerId}
+            onComputerChange={setSelectedComputerId}
           />
         </>
       )}

@@ -6367,6 +6367,21 @@ export type MyComputerQuery = {
   } | null;
 };
 
+export type AssignedComputersQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AssignedComputersQuery = {
+  __typename?: "Query";
+  assignedComputers: Array<{
+    __typename?: "Computer";
+    id: string;
+    name: string;
+    slug: string;
+    status: ComputerStatus;
+    runtimeStatus: ComputerRuntimeStatus;
+    tenantId: string;
+  }>;
+};
+
 export type ComputersQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
@@ -9226,6 +9241,42 @@ export const MyComputerDocument = {
     },
   ],
 } as unknown as DocumentNode<MyComputerQuery, MyComputerQueryVariables>;
+export const AssignedComputersDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "AssignedComputers" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "assignedComputers" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "runtimeStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AssignedComputersQuery,
+  AssignedComputersQueryVariables
+>;
 export const ComputersDocument = {
   kind: "Document",
   definitions: [

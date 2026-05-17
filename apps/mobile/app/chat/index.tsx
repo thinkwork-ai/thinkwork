@@ -18,7 +18,7 @@ import { useQuery } from "urql";
 // ThreadsQuery stays local — the chat dashboard accesses richer Thread
 // fields (`description`, labels, metadata, assignee detail) than the
 // chat-oriented SDK Thread type exposes.
-import { MyComputerQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
 
 // ThreadLifecycleStatus → operator-facing label. Mirrors admin's
 // ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
@@ -32,14 +32,22 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   AWAITING_USER: "Awaiting user",
 };
 
-function lifecycleColor(status: string | null | undefined, isDark: boolean): string {
+function lifecycleColor(
+  status: string | null | undefined,
+  isDark: boolean,
+): string {
   if (!status) return isDark ? "#a3a3a3" : "#737373";
   switch (status) {
-    case "RUNNING": return isDark ? "#60a5fa" : "#2563eb"; // blue
-    case "COMPLETED": return isDark ? "#4ade80" : "#16a34a"; // green
-    case "CANCELLED": return isDark ? "#facc15" : "#ca8a04"; // yellow
-    case "FAILED": return isDark ? "#f87171" : "#dc2626"; // red
-    default: return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER
+    case "RUNNING":
+      return isDark ? "#60a5fa" : "#2563eb"; // blue
+    case "COMPLETED":
+      return isDark ? "#4ade80" : "#16a34a"; // green
+    case "CANCELLED":
+      return isDark ? "#facc15" : "#ca8a04"; // yellow
+    case "FAILED":
+      return isDark ? "#f87171" : "#dc2626"; // red
+    default:
+      return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER
   }
 }
 
@@ -61,11 +69,18 @@ export default function ChatRoute() {
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
 
-  const [{ data: myComputerData, fetching: myComputerFetching }] = useQuery({
-    query: MyComputerQuery,
+  const [{ data: computerData, fetching: computersFetching }] = useQuery({
+    query: AssignedComputersQuery,
     pause: !tenantId,
   });
-  const myComputer = myComputerData?.myComputer;
+  const assignedComputers = useMemo(
+    () =>
+      ((computerData?.assignedComputers ?? []) as any[]).filter(
+        (computer) => computer.status !== "archived",
+      ),
+    [computerData?.assignedComputers],
+  );
+  const selectedComputer = assignedComputers[0] ?? null;
 
   const caller = useMemo(() => {
     if (!currentUser) return undefined;
@@ -80,8 +95,8 @@ export default function ChatRoute() {
   // Thread tracking
   const [{ data: threadsData }, reexecuteThreads] = useQuery({
     query: ThreadsQuery,
-    variables: { tenantId: tenantId!, computerId: myComputer?.id },
-    pause: !tenantId || myComputerFetching || !myComputer?.id,
+    variables: { tenantId: tenantId!, computerId: selectedComputer?.id },
+    pause: !tenantId || computersFetching || !selectedComputer?.id,
   });
   const chatThreads = threadsData?.threads ?? [];
 
@@ -94,7 +109,10 @@ export default function ChatRoute() {
       // Mark read while user is actively viewing this thread
       if (paramThreadId) markRead(paramThreadId);
     }
-  }, [threadEvent?.onThreadUpdated?.threadId, threadEvent?.onThreadUpdated?.updatedAt]);
+  }, [
+    threadEvent?.onThreadUpdated?.threadId,
+    threadEvent?.onThreadUpdated?.updatedAt,
+  ]);
 
   // Mark read on mount
   useEffect(() => {
@@ -106,41 +124,53 @@ export default function ChatRoute() {
 
   const activeThread = useMemo(() => {
     if (paramThreadId) {
-      const found = (chatThreads as any[]).find((t: any) => t.id === paramThreadId);
+      const found = (chatThreads as any[]).find(
+        (t: any) => t.id === paramThreadId,
+      );
       if (found) return found;
       // Thread not in query yet — use param directly
       return { id: paramThreadId, identifier: paramIdentifier };
     }
-    if (!(chatThreads as any[]).length || !myComputer?.id) return null;
+    if (!(chatThreads as any[]).length || !selectedComputer?.id) return null;
     const active = (chatThreads as any[])
-      .filter((t: any) =>
-        t.computerId === myComputer.id
-        && t.channel === "CHAT"
-        && !t.archivedAt
-        && t.lifecycleStatus !== "COMPLETED"
-        && t.lifecycleStatus !== "CANCELLED",
+      .filter(
+        (t: any) =>
+          t.computerId === selectedComputer.id &&
+          t.channel === "CHAT" &&
+          !t.archivedAt &&
+          t.lifecycleStatus !== "COMPLETED" &&
+          t.lifecycleStatus !== "CANCELLED",
       )
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
     return active[0] ?? null;
-  }, [chatThreads, myComputer?.id, paramThreadId, paramIdentifier]);
+  }, [chatThreads, selectedComputer?.id, paramThreadId, paramIdentifier]);
 
-  const threadIdentifier = activeThread?.identifier || paramIdentifier || "New Thread";
+  const threadIdentifier =
+    activeThread?.identifier || paramIdentifier || "New Thread";
   const lifecycleStatus = activeThread?.lifecycleStatus;
-  const lifecycleLabel = lifecycleStatus ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle") : null;
+  const lifecycleLabel = lifecycleStatus
+    ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle")
+    : null;
   const lifecycleDotColor = lifecycleColor(lifecycleStatus, isDark);
 
   const handleNewChat = useCallback(() => {
-    if (!myComputer?.id) return;
+    if (!selectedComputer?.id) return;
     if (activeThread?.id) {
       // Archive instead of the retired status=DONE transition (U9): lifecycle
       // is derived server-side; "done" as a user action maps to archiving.
-      updateThread(activeThread.id, { archivedAt: new Date().toISOString() })
-        .catch((e: any) => console.error("[Chat] Failed to archive thread:", e));
+      updateThread(activeThread.id, {
+        archivedAt: new Date().toISOString(),
+      }).catch((e: any) =>
+        console.error("[Chat] Failed to archive thread:", e),
+      );
     }
     setChatKey((k) => k + 1);
-  }, [myComputer?.id, activeThread?.id, updateThread]);
+  }, [selectedComputer?.id, activeThread?.id, updateThread]);
 
-  if (!myComputer) {
+  if (!selectedComputer) {
     return <View className="flex-1 bg-white dark:bg-neutral-950" />;
   }
 
@@ -151,11 +181,20 @@ export default function ChatRoute() {
         style={{ paddingTop: insets.top }}
         className="bg-white dark:bg-neutral-950 border-b border-neutral-200 dark:border-neutral-800"
       >
-        <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 44 }}>
+        <View
+          className="flex-row items-center justify-between pl-2 pr-4"
+          style={{ height: 44 }}
+        >
           {/* Left: back + title */}
-          <Pressable onPress={() => router.back()} className="flex-row items-center gap-0.5 active:opacity-70 flex-shrink" style={{ maxWidth: "60%" }}>
+          <Pressable
+            onPress={() => router.back()}
+            className="flex-row items-center gap-0.5 active:opacity-70 flex-shrink"
+            style={{ maxWidth: "60%" }}
+          >
             <ChevronLeft size={22} color={colors.foreground} />
-            <Text className="text-base" numberOfLines={1}>{(activeThread as any)?.title || threadIdentifier}</Text>
+            <Text className="text-base" numberOfLines={1}>
+              {(activeThread as any)?.title || threadIdentifier}
+            </Text>
           </Pressable>
 
           {/* Right: read-only lifecycle badge (U9 — status picker retired) */}
@@ -169,7 +208,10 @@ export default function ChatRoute() {
                 borderColor: lifecycleDotColor,
               }}
             >
-              <Text className="text-xs font-medium" style={{ color: lifecycleDotColor }}>
+              <Text
+                className="text-xs font-medium"
+                style={{ color: lifecycleDotColor }}
+              >
                 {lifecycleLabel}
               </Text>
             </View>
@@ -181,11 +223,11 @@ export default function ChatRoute() {
 
       {/* Chat */}
       <ChatScreen
-        key={`chat-${chatKey}-${myComputer.id}`}
+        key={`chat-${chatKey}-${selectedComputer.id}`}
         baseUrl=""
         token="graphql"
         agentType="computer"
-        agentName={myComputer.name || "Computer"}
+        agentName={selectedComputer.name || "Computer"}
         agents={[]}
         selectedAgentId=""
         threadId={activeThread?.id}
@@ -195,7 +237,6 @@ export default function ChatRoute() {
         mentionCandidates={[]}
         hideHeader
       />
-
     </View>
   );
 }

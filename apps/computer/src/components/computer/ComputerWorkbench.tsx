@@ -1,20 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "urql";
+import { useMutation } from "urql";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@thinkwork/ui";
 import { ComputerComposer } from "@/components/computer/ComputerComposer";
 import { StarterCardGrid } from "@/components/computer/StarterCardGrid";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
-  MyComputerQuery,
   SendMessageMutation,
 } from "@/lib/graphql-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
-
-interface MyComputerResult {
-  myComputer: { id: string; name?: string | null } | null;
-}
+import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 
 interface CreateThreadResult {
   createThread: { id: string };
@@ -49,9 +52,14 @@ export function ComputerWorkbench() {
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
+  const {
+    computers,
+    fetching: computersFetching,
+    noAssignedComputers,
+    selectedComputer,
+    selectedComputerId,
+    setSelectedComputerId,
+  } = useAssignedComputerSelection();
   const [{ fetching }, createThread] = useMutation<
     CreateThreadResult,
     CreateThreadVars
@@ -60,13 +68,17 @@ export function ComputerWorkbench() {
     SendMessageMutation,
   );
 
-  const computerId = computerData?.myComputer?.id ?? null;
+  const computerId = selectedComputer?.id ?? null;
 
   async function handleSubmit(files: File[]) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
     if (!tenantId || !computerId) {
-      setError("Your Computer is not ready yet. Try again in a moment.");
+      setError(
+        noAssignedComputers
+          ? "You need access to a shared Computer before starting work."
+          : "Your selected Computer is not ready yet. Try again in a moment.",
+      );
       return;
     }
 
@@ -181,15 +193,40 @@ export function ComputerWorkbench() {
       <div className="mx-auto flex w-full max-w-[750px] flex-1 flex-col justify-center gap-5 px-4 py-8 sm:px-6">
         <header className="text-center">
           <h1 className="text-balance text-3xl font-normal leading-tight tracking-normal sm:text-4xl">
-            ThinkWork Computer
+            {selectedComputer?.name || "ThinkWork Computer"}
           </h1>
         </header>
+
+        {computers.length > 1 ? (
+          <div className="mx-auto w-full max-w-xs">
+            <Select
+              value={selectedComputerId ?? undefined}
+              onValueChange={setSelectedComputerId}
+            >
+              <SelectTrigger aria-label="Select Computer">
+                <SelectValue placeholder="Select a Computer" />
+              </SelectTrigger>
+              <SelectContent>
+                {computers.map((computer) => (
+                  <SelectItem key={computer.id} value={computer.id}>
+                    {computer.name || computer.slug || "Computer"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : noAssignedComputers && !computersFetching ? (
+          <p className="mx-auto max-w-md text-center text-sm text-muted-foreground">
+            You do not have access to a shared Computer yet. Ask your tenant
+            operator to assign one before starting work.
+          </p>
+        ) : null}
 
         <ComputerComposer
           value={prompt}
           onChange={setPrompt}
           onSubmit={handleSubmit}
-          isSubmitting={fetching || busy}
+          isSubmitting={fetching || busy || computersFetching}
           error={error}
         />
 
@@ -206,10 +243,7 @@ function titleFromPrompt(prompt: string): string {
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }
 
-function titleFromPromptWithAttachments(
-  prompt: string,
-  files: File[],
-): string {
+function titleFromPromptWithAttachments(prompt: string, files: File[]): string {
   if (prompt.trim()) return titleFromPrompt(prompt);
   // File-only turn — title after the first attached file so the
   // sidebar entry reads sensibly without an explicit prompt.

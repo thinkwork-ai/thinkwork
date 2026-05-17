@@ -15,10 +15,9 @@ const useSubscriptionMock = vi.fn();
 const pageHeaderActionsMock = vi.fn();
 
 vi.mock("@tanstack/react-router", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-router")>(
-      "@tanstack/react-router",
-    );
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -49,7 +48,6 @@ const SAMPLE_COMPUTER = {
   id: "computer-marco",
   name: "Marco",
   tenantId: "tenant-A",
-  ownerUserId: "user-1",
   sourceAgent: { id: "agent-marco", name: "Marco" },
 };
 
@@ -97,7 +95,9 @@ beforeEach(() => {
   useSubscriptionMock.mockReset();
   pageHeaderActionsMock.mockReset();
 
-  useQueryMock.mockReturnValue([{ data: { myComputer: SAMPLE_COMPUTER } }]);
+  useQueryMock.mockReturnValue([
+    { data: { assignedComputers: [SAMPLE_COMPUTER] } },
+  ]);
   useSubscriptionMock.mockReturnValue([{ data: undefined }]);
   apiFetchMock.mockImplementation(async (path: string) => {
     if (path.startsWith("/api/scheduled-jobs")) return SAMPLE_JOBS;
@@ -108,8 +108,9 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const AutomationsPage = (Route as unknown as { component: () => React.ReactElement })
-  .component;
+const AutomationsPage = (
+  Route as unknown as { component: () => React.ReactElement }
+).component;
 
 describe("apps/computer Automations route", () => {
   it("renders the user's two backfilled jobs in a paged table", async () => {
@@ -166,7 +167,9 @@ describe("apps/computer Automations route", () => {
   });
 
   it("renders the empty state when the API returns zero jobs", async () => {
-    apiFetchMock.mockImplementationOnce(async () => []).mockImplementationOnce(async () => []);
+    apiFetchMock
+      .mockImplementationOnce(async () => [])
+      .mockImplementationOnce(async () => []);
     render(<AutomationsPage />);
     await waitFor(() =>
       expect(screen.getByText("No automations yet")).toBeTruthy(),
@@ -181,6 +184,7 @@ describe("apps/computer Automations route", () => {
       {
         data: {
           myComputer: { ...SAMPLE_COMPUTER, sourceAgent: null },
+          assignedComputers: [{ ...SAMPLE_COMPUTER, sourceAgent: null }],
         },
       },
     ]);
@@ -199,9 +203,7 @@ describe("apps/computer Automations route", () => {
     apiFetchMock.mockRejectedValueOnce(new Error("kaboom"));
     apiFetchMock.mockResolvedValueOnce([]);
     render(<AutomationsPage />);
-    await waitFor(() =>
-      expect(screen.getByText("kaboom")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText("kaboom")).toBeTruthy());
   });
 
   it("refetches when the ThreadTurnUpdated subscription delivers", async () => {

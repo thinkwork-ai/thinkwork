@@ -18,8 +18,17 @@ import {
   Button,
   Input,
   Textarea,
-  Form, FormField, FormItem, FormLabel, FormControl, FormMessage,
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@thinkwork/ui";
 import {
   SchedulePicker,
@@ -45,7 +54,7 @@ interface ScheduledJobFormDialogProps {
   computerId: string;
   /**
    * The agent that fires the job. Resolved upstream from
-   * `myComputer.sourceAgent.id`. The list/detail routes disable the
+   * the selected assigned Computer's source agent. The list/detail routes disable the
    * "Add Job" / "Edit" affordance when this is null, so the dialog itself
    * can rely on a non-null value.
    */
@@ -62,7 +71,13 @@ const triggerFormSchema = z.object({
 type TriggerFormValues = z.infer<typeof triggerFormSchema>;
 
 export function ScheduledJobFormDialog({
-  open, onOpenChange, mode, computerId, agentId, initial, onSubmit,
+  open,
+  onOpenChange,
+  mode,
+  computerId,
+  agentId,
+  initial,
+  onSubmit,
 }: ScheduledJobFormDialogProps) {
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
@@ -74,7 +89,9 @@ export function ScheduledJobFormDialog({
   });
 
   const form = useForm<TriggerFormValues>({
-    resolver: zodResolver(triggerFormSchema as never) as Resolver<TriggerFormValues>,
+    resolver: zodResolver(
+      triggerFormSchema as never,
+    ) as Resolver<TriggerFormValues>,
     defaultValues: {
       name: initial?.name || "",
       prompt: initial?.prompt || "",
@@ -100,7 +117,9 @@ export function ScheduledJobFormDialog({
     setDialogError(null);
 
     const triggerType =
-      scheduleValue.scheduleType === "at" ? "agent_reminder" : "agent_scheduled";
+      scheduleValue.scheduleType === "at"
+        ? "agent_reminder"
+        : "agent_scheduled";
 
     try {
       await onSubmit({
@@ -141,9 +160,14 @@ export function ScheduledJobFormDialog({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-semibold">Job Name</FormLabel>
+                    <FormLabel className="text-sm font-semibold">
+                      Job Name
+                    </FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Check Austin headlines" />
+                      <Input
+                        {...field}
+                        placeholder="e.g. Check Austin headlines"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -155,7 +179,9 @@ export function ScheduledJobFormDialog({
                 name="prompt"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-semibold">Prompt</FormLabel>
+                    <FormLabel className="text-sm font-semibold">
+                      Prompt
+                    </FormLabel>
                     <FormControl>
                       <Textarea
                         {...field}
@@ -168,13 +194,22 @@ export function ScheduledJobFormDialog({
                 )}
               />
 
-              <SchedulePicker value={scheduleValue} onChange={setScheduleValue} />
+              <SchedulePicker
+                value={scheduleValue}
+                onChange={setScheduleValue}
+              />
 
-              {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
+              {dialogError && (
+                <p className="text-sm text-destructive">{dialogError}</p>
+              )}
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>

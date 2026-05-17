@@ -1,14 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  Pause,
-  Pencil,
-  Play,
-  Trash2,
-  Zap,
-  Loader2,
-} from "lucide-react";
+import { Pause, Pencil, Play, Trash2, Zap, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useSubscription, useQuery } from "urql";
+import { useSubscription } from "urql";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,10 +25,8 @@ import {
 } from "@thinkwork/ui";
 import { Response } from "@/components/ai-elements/response";
 import { useTenant } from "@/context/TenantContext";
-import {
-  MyComputerQuery,
-  ThreadTurnUpdatedSubscription,
-} from "@/lib/graphql-queries";
+import { ThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -51,19 +42,11 @@ import {
   type ThreadTurnRow,
 } from "./-automations.utils";
 
-export const Route = createFileRoute("/_authed/_shell/automations/$scheduledJobId")({
+export const Route = createFileRoute(
+  "/_authed/_shell/automations/$scheduledJobId",
+)({
   component: ScheduledJobDetailPage,
 });
-
-interface MyComputerResult {
-  myComputer: {
-    id: string;
-    name: string;
-    tenantId: string;
-    ownerUserId: string;
-    sourceAgent: { id: string; name: string } | null;
-  } | null;
-}
 
 async function apiFetch<T>(
   path: string,
@@ -80,16 +63,12 @@ async function apiFetch<T>(
   });
 }
 
-
 function ScheduledJobDetailPage() {
   const { scheduledJobId } = Route.useParams();
   const { tenantId } = useTenant();
   const navigate = useNavigate();
 
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const computer = computerData?.myComputer ?? null;
+  const { computers, selectedComputer } = useAssignedComputerSelection();
 
   const [job, setJob] = useState<ScheduledJobRow | null>(null);
   const [jobLoading, setJobLoading] = useState(true);
@@ -104,7 +83,9 @@ function ScheduledJobDetailPage() {
     "toggle" | "fire" | "delete" | null
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<ScheduledJobRunRow | null>(null);
+  const [selectedRun, setSelectedRun] = useState<ScheduledJobRunRow | null>(
+    null,
+  );
   const [runSheetOpen, setRunSheetOpen] = useState(false);
 
   const [subResult] = useSubscription({
@@ -244,6 +225,10 @@ function ScheduledJobDetailPage() {
     );
   }
 
+  const computer =
+    computers.find(
+      (assignedComputer) => assignedComputer.id === job.computer_id,
+    ) ?? selectedComputer;
   const sourceAgent = computer?.sourceAgent ?? null;
 
   return (

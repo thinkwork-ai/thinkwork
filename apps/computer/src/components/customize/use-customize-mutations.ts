@@ -1,17 +1,13 @@
 import { useCallback, useState } from "react";
-import { useMutation, useQuery, type AnyVariables, type TypedDocumentNode } from "urql";
+import { useMutation, type AnyVariables, type TypedDocumentNode } from "urql";
 import { toast } from "sonner";
 import {
   DisableSkillMutation,
   DisableWorkflowMutation,
   EnableSkillMutation,
   EnableWorkflowMutation,
-  MyComputerQuery,
 } from "@/lib/graphql-queries";
-
-interface MyComputerResult {
-  myComputer?: { id: string } | null;
-}
+import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 
 export interface UseToggleMutationResult {
   toggle: (key: string, nextConnected: boolean) => Promise<void>;
@@ -34,10 +30,7 @@ interface ToggleMutationOptions {
   enableMutation: TypedDocumentNode<unknown, AnyVariables>;
   disableMutation: TypedDocumentNode<unknown, AnyVariables>;
   typenames: readonly string[];
-  buildVariables: (
-    computerId: string,
-    key: string,
-  ) => AnyVariables;
+  buildVariables: (computerId: string, key: string) => AnyVariables;
   /** Map a server `extensions.code` to a sonner `toast.message` hint. */
   errorCodeHints?: Readonly<Record<string, string>>;
 }
@@ -67,7 +60,7 @@ const WORKFLOW_OPTS: ToggleMutationOptions = {
 
 /**
  * Shared core for the Customize tab Connect / Disable buttons. Resolves
- * the caller's Computer id once via MyComputerQuery, owns the
+ * the caller's selected assigned Computer id once, owns the
  * pending-key Set so overlapping toggles don't clobber, and routes
  * server `extensions.code` errors to per-mutation hint messages when
  * present (otherwise falls back to `toast.error(message)`).
@@ -78,10 +71,8 @@ const WORKFLOW_OPTS: ToggleMutationOptions = {
 export function useToggleMutation(
   opts: ToggleMutationOptions,
 ): UseToggleMutationResult {
-  const [{ data: computerData }] = useQuery<MyComputerResult>({
-    query: MyComputerQuery,
-  });
-  const computerId = computerData?.myComputer?.id ?? null;
+  const { selectedComputer } = useAssignedComputerSelection();
+  const computerId = selectedComputer?.id ?? null;
 
   const [, enable] = useMutation(opts.enableMutation);
   const [, disable] = useMutation(opts.disableMutation);
@@ -93,7 +84,7 @@ export function useToggleMutation(
   const toggle = useCallback(
     async (key: string, nextConnected: boolean) => {
       if (!computerId) {
-        toast.error("Couldn't resolve your Computer — please reload.");
+        toast.error("Select an assigned Computer before changing Customize.");
         return;
       }
       setPendingSlugs((prev) => {
@@ -108,10 +99,8 @@ export function useToggleMutation(
           ? await enable(variables, { additionalTypenames })
           : await disable(variables, { additionalTypenames });
         if (result.error) {
-          const codeRaw =
-            result.error.graphQLErrors[0]?.extensions?.code;
-          const code =
-            typeof codeRaw === "string" ? codeRaw : undefined;
+          const codeRaw = result.error.graphQLErrors[0]?.extensions?.code;
+          const code = typeof codeRaw === "string" ? codeRaw : undefined;
           const hint = code ? opts.errorCodeHints?.[code] : undefined;
           if (hint) {
             toast.message(hint);

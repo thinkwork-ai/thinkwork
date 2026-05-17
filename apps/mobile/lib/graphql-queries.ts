@@ -273,6 +273,19 @@ export const MyComputerQuery = graphql(`
   }
 `);
 
+export const AssignedComputersQuery = graphql(`
+  query AssignedComputers {
+    assignedComputers {
+      id
+      name
+      slug
+      status
+      runtimeStatus
+      tenantId
+    }
+  }
+`);
+
 export const ComputersQuery = graphql(`
   query Computers($tenantId: ID!) {
     computers(tenantId: $tenantId) {

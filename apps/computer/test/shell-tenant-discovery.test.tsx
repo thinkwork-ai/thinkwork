@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NoTenantAssigned } from "../src/components/NoTenantAssigned";
 
@@ -33,8 +33,9 @@ vi.mock("../src/lib/graphql-client", () => ({
 }));
 
 async function renderTenantProbe() {
-  const { TenantProvider, useTenant } =
-    await import("../src/context/TenantContext");
+  const { TenantProvider, useTenant } = await import(
+    "../src/context/TenantContext"
+  );
 
   function Probe() {
     const tenant = useTenant();
@@ -72,19 +73,17 @@ describe("apps/computer tenant discovery", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
-  it("discovers an invited Google-federated user's tenant through myComputer", async () => {
+  it("discovers an invited Google-federated user's tenant through assignedComputers", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
-          myComputer: {
-            id: "computer-1",
-            tenantId: "tenant-A",
-          },
+          assignedComputers: [{ id: "computer-1", tenantId: "tenant-A" }],
         },
       }),
     } as Response);
@@ -106,7 +105,7 @@ describe("apps/computer tenant discovery", () => {
           Authorization: "jwt-token",
           "x-api-key": "test-key",
         }),
-        body: expect.stringContaining("myComputer"),
+        body: expect.stringContaining("assignedComputers"),
       }),
     );
     expect(apiFetchMock).toHaveBeenCalledWith("/api/tenants/tenant-A", {
@@ -122,7 +121,7 @@ describe("apps/computer tenant discovery", () => {
       ok: true,
       json: async () => ({
         data: {
-          myComputer: null,
+          assignedComputers: [],
         },
       }),
     } as Response);
