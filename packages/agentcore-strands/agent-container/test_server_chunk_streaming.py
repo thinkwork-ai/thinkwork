@@ -126,10 +126,39 @@ def test_execute_agent_turn_uses_lean_eval_runtime(monkeypatch):
 
     assert result["response_text"] == "I can't help with that."
     assert "Evaluation Runtime Constraints" in captured["system_prompt"]
+    assert "Runtime tools are disabled for this run" in captured["system_prompt"]
     assert captured["eval_mode"] is True
+    assert captured["eval_tools_enabled"] is False
     assert captured["stream_thread_id"] is None
     assert captured["ui_message_emit"] is False
     assert captured["suppress_app_build_helper_tools"] is True
+
+
+def test_eval_response_only_mode_suppresses_tools_and_plugins():
+    tools, plugins = server._suppress_eval_runtime_tools(
+        eval_mode=True,
+        eval_tools_enabled=False,
+        tools=[object(), object()],
+        plugins=[object()],
+    )
+
+    assert tools == []
+    assert plugins == []
+
+
+def test_eval_can_explicitly_keep_tools_available():
+    original_tools = [object()]
+    original_plugins = [object()]
+
+    tools, plugins = server._suppress_eval_runtime_tools(
+        eval_mode=True,
+        eval_tools_enabled=True,
+        tools=original_tools,
+        plugins=original_plugins,
+    )
+
+    assert tools is original_tools
+    assert plugins is original_plugins
 
 
 def test_bedrock_boto_client_config_uses_long_read_timeout(monkeypatch):

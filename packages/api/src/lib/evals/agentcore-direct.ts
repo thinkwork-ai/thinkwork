@@ -80,6 +80,7 @@ export function buildEvalAgentCorePayload(input: {
     message: input.message,
     messages_history: [],
     eval_mode: true,
+    eval_tools_enabled: false,
     use_memory: false,
     tenant_slug: runtimeConfig.tenantSlug || undefined,
     instance_id: runtimeConfig.agentSlug || undefined,
