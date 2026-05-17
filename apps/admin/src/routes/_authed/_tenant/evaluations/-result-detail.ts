@@ -64,6 +64,21 @@ export function sortEvalSpans(spans: EvalSpanRow[]): EvalSpanRow[] {
   });
 }
 
+export function canEditEvalResult(
+  testCaseId: string | null | undefined,
+): testCaseId is string {
+  return typeof testCaseId === "string" && testCaseId.length > 0;
+}
+
+export function openEvalResultEditor(
+  testCaseId: string | null | undefined,
+  onEditTestCase: (testCaseId: string) => void,
+) {
+  if (!canEditEvalResult(testCaseId)) return false;
+  onEditTestCase(testCaseId);
+  return true;
+}
+
 export function expectedSummary(assertions: AssertionResult[]): string {
   return assertions
     .map((assertion) => {

@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  canEditEvalResult,
   deriveEvalFailureMode,
   expectedSummary,
+  openEvalResultEditor,
   parseEvaluatorResults,
   sortEvalSpans,
 } from "./-result-detail";
@@ -67,6 +69,24 @@ describe("evaluation result detail helpers", () => {
     ).toEqual(["a", "b"]);
   });
 
+  it("only offers result-to-edit navigation for persisted test cases", () => {
+    expect(canEditEvalResult("test-case-1")).toBe(true);
+    expect(canEditEvalResult("")).toBe(false);
+    expect(canEditEvalResult(null)).toBe(false);
+    expect(canEditEvalResult(undefined)).toBe(false);
+  });
+
+  it("opens the result editor only when a result has a test case id", () => {
+    const onEdit = vi.fn();
+
+    expect(openEvalResultEditor("test-case-1", onEdit)).toBe(true);
+    expect(onEdit).toHaveBeenCalledWith("test-case-1");
+
+    expect(openEvalResultEditor(null, onEdit)).toBe(false);
+    expect(openEvalResultEditor("", onEdit)).toBe(false);
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps trace loading lazy in the run-detail sheet", () => {
     const routeSource = readFileSync(
       new URL("./$runId.tsx", import.meta.url),
@@ -76,10 +96,21 @@ describe("evaluation result detail helpers", () => {
       new URL("../../../../lib/graphql-queries.ts", import.meta.url),
       "utf8",
     );
+    const formSource = readFileSync(
+      new URL(
+        "../../../../components/evaluations/EvalTestCaseForm.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
 
     expect(routeSource).toContain("EvalResultSpansQuery");
     expect(routeSource).toContain("setShowTrace((value) => !value)");
     expect(routeSource).toContain("pause: !traceEnabled");
+    expect(routeSource).toContain("EditEvalTestCaseSheet");
+    expect(routeSource).toContain("Edit Eval");
+    expect(formSource).toContain("onSaved?: () => void");
+    expect(formSource).toContain("onCancel?: () => void");
     expect(querySource).toContain("query EvalResultSpans");
   });
 

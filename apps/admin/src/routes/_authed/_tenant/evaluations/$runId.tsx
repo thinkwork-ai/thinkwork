@@ -1,14 +1,28 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  type ReactNode,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Activity, ChevronDown, Loader2, Trash2, Square } from "lucide-react";
+import {
+  Activity,
+  ChevronDown,
+  Loader2,
+  Pencil,
+  Trash2,
+  Square,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { EvalTestCaseForm } from "@/components/evaluations/EvalTestCaseForm";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,21 +40,25 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { relativeTime } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
 import {
   EvalRunQuery,
   EvalRunResultsQuery,
   EvalResultSpansQuery,
+  EvalTestCaseQuery,
   DeleteEvalRunMutation,
   CancelEvalRunMutation,
   OnEvalRunUpdatedSubscription,
 } from "@/lib/graphql-queries";
 import {
+  canEditEvalResult,
   deriveEvalFailureMode,
   expectedSummary,
+  openEvalResultEditor,
   parseAssertions,
   parseEvaluatorResults,
   parseSpanAttributes,
@@ -51,6 +69,13 @@ import {
 export const Route = createFileRoute("/_authed/_tenant/evaluations/$runId")({
   component: EvalRunDetailPage,
 });
+
+const EVAL_RESULT_SHEET_WIDTH_CLASS =
+  "data-[side=right]:max-w-none";
+const EVAL_RESULT_SHEET_STYLE = {
+  width: "min(750px, calc(100vw - 2rem))",
+  maxWidth: "none",
+};
 
 interface EvalResultRow {
   id: string;
@@ -166,6 +191,9 @@ function EvalRunDetailPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
+  const [editingTestCaseId, setEditingTestCaseId] = useState<string | null>(
+    null,
+  );
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const [, deleteRun] = useMutation(DeleteEvalRunMutation);
@@ -419,8 +447,20 @@ function EvalRunDetailPage() {
         runId={runId}
         result={runResults.find((r) => r.id === selectedResultId)}
         open={!!selectedResultId}
+        onEditTestCase={setEditingTestCaseId}
         onOpenChange={(open) => {
           if (!open) setSelectedResultId(null);
+        }}
+      />
+      <EditEvalTestCaseSheet
+        testCaseId={editingTestCaseId}
+        open={!!editingTestCaseId}
+        onOpenChange={(open) => {
+          if (!open) setEditingTestCaseId(null);
+        }}
+        onSaved={() => {
+          setEditingTestCaseId(null);
+          silentRefetch();
         }}
       />
     </div>
@@ -431,11 +471,13 @@ function ResultDetailSheet({
   runId,
   result,
   open,
+  onEditTestCase,
   onOpenChange,
 }: {
   runId: string;
   result: EvalResultRow | undefined;
   open: boolean;
+  onEditTestCase: (testCaseId: string) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const [showTrace, setShowTrace] = useState(false);
@@ -457,6 +499,7 @@ function ResultDetailSheet({
   const evaluatorResults = parseEvaluatorResults(result.evaluatorResults);
   const failureMode = deriveEvalFailureMode(result);
   const expected = expectedSummary(assertions);
+  const canEdit = canEditEvalResult(result.testCaseId);
   const spans = sortEvalSpans(
     ((traceResult.data?.evalResultSpans ?? []) as EvalSpanRow[]).map(
       (span) => ({
@@ -468,11 +511,30 @@ function ResultDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-2xl overflow-y-auto">
-        <SheetHeader className="px-6 pt-6">
-          <SheetTitle className="text-base leading-snug">
-            {result.testCaseName ?? "(unnamed)"}
-          </SheetTitle>
+      <SheetContent
+        className={`${EVAL_RESULT_SHEET_WIDTH_CLASS} overflow-y-auto`}
+        style={EVAL_RESULT_SHEET_STYLE}
+      >
+        <SheetHeader className="px-6 pt-6 pr-14">
+          <div className="flex items-start justify-between gap-3">
+            <SheetTitle className="text-base leading-snug">
+              {result.testCaseName ?? "(unnamed)"}
+            </SheetTitle>
+            {canEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-2"
+                onClick={() =>
+                  openEvalResultEditor(result.testCaseId, onEditTestCase)
+                }
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Eval
+              </Button>
+            )}
+          </div>
         </SheetHeader>
         <div className="space-y-4 px-6 pb-6">
           <div className="flex items-center gap-2">
@@ -656,6 +718,72 @@ function ResultDetailSheet({
             <div className="rounded border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
               {result.errorMessage}
             </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function EditEvalTestCaseSheet({
+  testCaseId,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  testCaseId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [actions, setActions] = useState<ReactNode>(null);
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const [tc] = useQuery({
+    query: EvalTestCaseQuery,
+    variables: { id: testCaseId ?? "" },
+    pause: !open || !testCaseId,
+    requestPolicy: "network-only",
+  });
+
+  const initial = tc.data?.evalTestCase;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        className={cn(EVAL_RESULT_SHEET_WIDTH_CLASS, "overflow-y-auto")}
+        style={EVAL_RESULT_SHEET_STYLE}
+      >
+        <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
+          <div className="flex items-start justify-between gap-3">
+            <SheetTitle className="text-base leading-snug">
+              {initial?.name ? `Edit: ${initial.name}` : "Edit Eval"}
+            </SheetTitle>
+            {actions && (
+              <div className="flex shrink-0 items-center gap-2">{actions}</div>
+            )}
+          </div>
+          <SheetDescription className="sr-only">
+            Edit the evaluation test case associated with the selected run
+            result.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="px-6 pb-6">
+          {tc.fetching && !initial ? (
+            <PageSkeleton />
+          ) : !initial ? (
+            <div className="py-8 text-sm text-muted-foreground">
+              Test case not found.
+            </div>
+          ) : (
+            <EvalTestCaseForm
+              initial={initial}
+              isEdit
+              onActions={setActions}
+              onCancel={handleCancel}
+              onSaved={onSaved}
+            />
           )}
         </div>
       </SheetContent>

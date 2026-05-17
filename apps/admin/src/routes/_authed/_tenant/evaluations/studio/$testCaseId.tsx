@@ -43,6 +43,13 @@ export const Route = createFileRoute(
   component: EvalTestCaseDetailPage,
 });
 
+const EVAL_RESULT_SHEET_WIDTH_CLASS =
+  "data-[side=right]:max-w-none";
+const EVAL_RESULT_SHEET_STYLE = {
+  width: "min(750px, calc(100vw - 2rem))",
+  maxWidth: "none",
+};
+
 interface HistoryRow {
   id: string;
   runId: string;
@@ -298,7 +305,10 @@ function EvalTestCaseDetailPage() {
       </div>
 
       <Sheet open={!!selectedResult} onOpenChange={() => setSelectedResult(null)}>
-        <SheetContent className="sm:max-w-2xl overflow-y-auto">
+        <SheetContent
+          className={`${EVAL_RESULT_SHEET_WIDTH_CLASS} overflow-y-auto`}
+          style={EVAL_RESULT_SHEET_STYLE}
+        >
           <SheetHeader className="px-6 pt-6">
             <SheetTitle className="text-base leading-snug">
               {selectedResult?.testCaseName ?? tc.name}

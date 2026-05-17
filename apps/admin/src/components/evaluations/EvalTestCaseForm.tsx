@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "urql";
 import { Plus, Save, Trash2 } from "lucide-react";
 
@@ -95,6 +95,10 @@ interface Props {
   initial?: EvalTestCaseFormInitial;
   /** When true, render Save (vs Create) and call the update mutation. */
   isEdit?: boolean;
+  /** Override the default post-save navigation when embedded in a sheet. */
+  onSaved?: () => void;
+  /** Override the default cancel navigation when embedded in a sheet. */
+  onCancel?: () => void;
   /**
    * Hoist the Cancel/Save action buttons to the parent so they can render
    * inside PageHeader.actions (right of the title) instead of above the
@@ -103,7 +107,24 @@ interface Props {
   onActions?: (node: ReactNode) => void;
 }
 
-export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
+export function completeEvalTestCaseFormSubmit({
+  onSaved,
+  navigateToStudio,
+}: {
+  onSaved?: () => void;
+  navigateToStudio: () => void;
+}) {
+  if (onSaved) onSaved();
+  else navigateToStudio();
+}
+
+export function EvalTestCaseForm({
+  initial,
+  isEdit,
+  onSaved,
+  onCancel,
+  onActions,
+}: Props) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
 
@@ -192,7 +213,7 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
     );
   }
 
-  async function handleSubmit() {
+  const handleSubmit = useCallback(async () => {
     if (!name || !query || submitting) return;
     setSubmitting(true);
     try {
@@ -214,11 +235,31 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
       } else {
         await createCase({ tenantId, input });
       }
-      navigate({ to: "/evaluations/studio" });
+      completeEvalTestCaseFormSubmit({
+        onSaved,
+        navigateToStudio: () => navigate({ to: "/evaluations/studio" }),
+      });
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [
+    agentTemplateId,
+    assertions,
+    category,
+    createCase,
+    enabled,
+    evaluatorIds,
+    initial?.id,
+    isEdit,
+    name,
+    navigate,
+    onSaved,
+    query,
+    submitting,
+    systemPrompt,
+    tenantId,
+    updateCase,
+  ]);
 
   const templateOptions = (templates.data?.agentTemplates ?? []) as Array<{
     id: string;
@@ -233,7 +274,9 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate({ to: "/evaluations/studio" })}
+          onClick={() =>
+            onCancel ? onCancel() : navigate({ to: "/evaluations/studio" })
+          }
           disabled={submitting}
         >
           Cancel
@@ -250,7 +293,16 @@ export function EvalTestCaseForm({ initial, isEdit, onActions }: Props) {
     );
     return () => onActions(null);
     // submitting + form validity drive button enablement; rebuild on every change.
-  }, [onActions, name, query, submitting, isEdit]);
+  }, [
+    handleSubmit,
+    isEdit,
+    name,
+    navigate,
+    onActions,
+    onCancel,
+    query,
+    submitting,
+  ]);
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
