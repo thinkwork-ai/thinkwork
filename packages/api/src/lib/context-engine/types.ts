@@ -23,6 +23,24 @@ export interface ContextEngineCaller {
   agentId?: string | null;
   templateId?: string | null;
   traceId?: string | null;
+  requesterContext?: {
+    contextClass?: string;
+    computerId?: string | null;
+    requesterUserId?: string | null;
+    sourceSurface?: string | null;
+    credentialSubject?: {
+      type: "user" | "service";
+      userId?: string | null;
+      connectionId?: string | null;
+      provider?: string | null;
+    } | null;
+    event?: {
+      provider?: string | null;
+      eventType?: string | null;
+      eventId?: string | null;
+      metadata?: Record<string, unknown> | null;
+    } | null;
+  };
 }
 
 export interface ContextProviderSelection {
@@ -141,7 +159,10 @@ export interface ContextProviderDescriptor {
     }>;
     toolAllowlist: string[];
     depthCap: number;
-    processModel: "deterministic-retrieval" | "lambda-bedrock-converse" | "agentcore";
+    processModel:
+      | "deterministic-retrieval"
+      | "lambda-bedrock-converse"
+      | "agentcore";
     seamState?: "inert" | "live";
   };
   supportedScopes?: ContextEngineScope[];

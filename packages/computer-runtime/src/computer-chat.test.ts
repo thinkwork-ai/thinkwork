@@ -68,4 +68,55 @@ describe("Computer chat system prompt", () => {
     expect(prompt).toContain("agentic-etl-architecture-v5.md");
     expect(prompt).toContain("# Hybrid Agentic ETL");
   });
+
+  it("adds requester memory overlay to the system prompt", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        requesterContext: {
+          contextClass: "personal_connector_event",
+          computerId: "computer-1",
+          requester: { userId: "user-eric" },
+          sourceSurface: "gmail",
+          credentialSubject: {
+            type: "user",
+            userId: "user-eric",
+            connectionId: "connection-1",
+            provider: "google_workspace",
+          },
+          event: {
+            provider: "gmail",
+            eventType: "message.created",
+            eventId: "event-1",
+          },
+          personalMemory: {
+            status: {
+              providerId: "memory",
+              displayName: "Hindsight Memory",
+              state: "ok",
+              hitCount: 1,
+            },
+            hits: [
+              {
+                id: "memory-1",
+                title: "Launch brief preference",
+                text: "Eric prefers concise launch briefs.",
+                score: 0.9,
+              },
+            ],
+          },
+        },
+      },
+      root,
+    );
+
+    expect(prompt).toContain("Requester context overlay:");
+    expect(prompt).toContain("Context class: personal_connector_event");
+    expect(prompt).toContain("Credential subject: user:user-eric");
+    expect(prompt).toContain("Connector event: gmail:message.created");
+    expect(prompt).toContain(
+      "Launch brief preference: Eric prefers concise launch briefs.",
+    );
+  });
 });

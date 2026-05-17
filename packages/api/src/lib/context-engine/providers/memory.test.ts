@@ -170,6 +170,66 @@ describe("memory context provider", () => {
     });
   });
 
+  it("passes requester context to recall and exposes provider status metadata", async () => {
+    recallMock.mockResolvedValueOnce([]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "new email from Acme",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: {
+        tenantId: "tenant-1",
+        userId: "user-eric",
+        requesterContext: {
+          contextClass: "personal_connector_event",
+          computerId: "computer-sales",
+          requesterUserId: "user-eric",
+          sourceSurface: "gmail",
+          credentialSubject: {
+            type: "user",
+            userId: "user-eric",
+            connectionId: "connection-1",
+            provider: "google_workspace",
+          },
+          event: {
+            provider: "gmail",
+            eventType: "message.created",
+            eventId: "gmail-event-1",
+            metadata: { from: "buyer@example.com" },
+          },
+        },
+      },
+    });
+
+    expect(recallMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerType: "user",
+        ownerId: "user-eric",
+        requestContext: expect.objectContaining({
+          contextClass: "personal_connector_event",
+          computerId: "computer-sales",
+          requesterUserId: "user-eric",
+          sourceSurface: "gmail",
+          event: expect.objectContaining({
+            provider: "gmail",
+            eventType: "message.created",
+          }),
+        }),
+      }),
+    );
+    expect(result.status?.metadata).toMatchObject({
+      contextClass: "personal_connector_event",
+      requesterUserId: "user-eric",
+      computerId: "computer-sales",
+      sourceSurface: "gmail",
+    });
+  });
+
   it("returns compiled wiki pages that cite recalled Hindsight memory units", async () => {
     recallMock.mockResolvedValueOnce([
       {
