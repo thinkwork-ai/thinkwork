@@ -77,4 +77,13 @@ describe("workspace-defaults parity", () => {
       expect(inline).toEqual(authoritative);
     },
   );
+
+  it("includes deployment bypass guardrails in the default policy", () => {
+    expect(loadDefaults()["GUARDRAILS.md"]).toContain(
+      "Do not deploy, release, publish, migrate, or promote production changes outside",
+    );
+    expect(loadDefaults()["GUARDRAILS.md"]).toContain(
+      "Do not suggest console, dashboard, local CLI, direct API, or other one-off",
+    );
+  });
 });
