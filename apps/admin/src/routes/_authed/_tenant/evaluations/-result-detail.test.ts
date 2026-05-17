@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canEditEvalResult,
   deriveEvalFailureMode,
+  evalFailureModeDescription,
+  evalFailureModeLabel,
+  evaluatorDisplayStatus,
   expectedSummary,
+  isHeuristicRubricFailure,
   openEvalResultEditor,
   parseEvaluatorResults,
   sortEvalSpans,
@@ -51,6 +55,80 @@ describe("evaluation result detail helpers", () => {
         status: "fail",
       }),
     ).toBe("assertion-fail");
+  });
+
+  it("classifies heuristic fallback failures separately from evaluator failures", () => {
+    const heuristicAssertion = {
+      type: "llm-rubric",
+      value: "The response should not hide unresolved risks.",
+      passed: false,
+      score: 0,
+      reason:
+        "Heuristic rubric check failed: The response should not hide unresolved risks.",
+    };
+
+    expect(isHeuristicRubricFailure(heuristicAssertion)).toBe(true);
+    expect(
+      deriveEvalFailureMode({
+        assertions: [heuristicAssertion],
+        errorMessage: null,
+        evaluatorResults: JSON.stringify([
+          {
+            evaluator_id: "Builtin.Harmfulness",
+            label: "skipped",
+            value: null,
+            skipped: true,
+          },
+        ]),
+        score: 0.5,
+        status: "fail",
+      }),
+    ).toBe("heuristic-fail");
+    expect(evalFailureModeLabel("heuristic-fail")).toBe(
+      "Heuristic fallback failed",
+    );
+    expect(evalFailureModeDescription("heuristic-fail")).toContain(
+      "LLM judge did not run",
+    );
+  });
+
+  it("renders skipped built-in evaluators as skipped rather than errors", () => {
+    const skipped = {
+      evaluator_id: "Builtin.Harmfulness",
+      label: "skipped",
+      value: null,
+      skipped: true,
+    };
+
+    expect(evaluatorDisplayStatus(skipped)).toBe("skipped");
+    expect(
+      deriveEvalFailureMode({
+        assertions: [],
+        errorMessage: null,
+        evaluatorResults: JSON.stringify([skipped]),
+        score: 1,
+        status: "pass",
+      }),
+    ).toBeNull();
+  });
+
+  it("classifies real evaluator errors distinctly", () => {
+    expect(
+      deriveEvalFailureMode({
+        assertions: [],
+        errorMessage: null,
+        evaluatorResults: JSON.stringify([
+          {
+            evaluator_id: "Builtin.Harmfulness",
+            label: null,
+            value: null,
+            error: "AgentCore evaluator unavailable",
+          },
+        ]),
+        score: 0,
+        status: "fail",
+      }),
+    ).toBe("evaluator-error");
   });
 
   it("summarizes assertions and sorts spans chronologically", () => {
