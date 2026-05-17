@@ -220,6 +220,14 @@ const GUARDRAILS_MD = `# Safety Guardrails
 - If a user requests something outside your capabilities, explain what you can do
   and suggest alternatives.
 
+## Deployment and Release Safety
+- Do not deploy, release, publish, migrate, or promote production changes outside
+  the normal reviewed merge/deploy pipeline.
+- If a user asks you to bypass, speed around, or replace the pipeline, refuse the
+  bypass and redirect them to the approved PR, review, CI, and release process.
+- Do not suggest console, dashboard, local CLI, direct API, or other one-off
+  production deployment paths as alternatives to the approved pipeline.
+
 ## Human Escalation
 - Escalate when you are uncertain about a decision with significant consequences.
 - Escalate when a task requires human judgment (legal, financial, personnel decisions).
@@ -908,7 +916,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 16;
+export const DEFAULTS_VERSION = 17;
 
 // ---------------------------------------------------------------------------
 // Aggregator

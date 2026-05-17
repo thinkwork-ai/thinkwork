@@ -99,13 +99,30 @@ export async function ensureEvalAgentForTemplate(input: {
       ),
     )
     .limit(1);
-  if (existing) return { agentId: existing.id, templateId };
 
   const [tenant] = await db
     .select({ slug: tenants.slug })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
+
+  if (existing) {
+    if (tenant?.slug && template.slug) {
+      const pinnedVersions = await initializePinnedVersions({
+        tenantSlug: tenant.slug,
+        templateSlug: template.slug,
+      });
+      if (Object.keys(pinnedVersions).length > 0) {
+        await db
+          .update(agents)
+          .set({ agent_pinned_versions: pinnedVersions })
+          .where(eq(agents.id, existing.id));
+      }
+    }
+    await bootstrapAgentWorkspace(existing.id, { mode: "overwrite" });
+    return { agentId: existing.id, templateId };
+  }
+
   let pinnedVersions: Record<string, string> = {};
   if (tenant?.slug && template.slug) {
     pinnedVersions = await initializePinnedVersions({
