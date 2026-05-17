@@ -511,36 +511,108 @@ thinkwork wiki status [-t <tenant>] [--agent <id>] [-n <limit>] [--watch] [--tim
 
 ---
 
+## thread
+
+Threads are tenant-scoped work items (tasks, conversations, bug reports, questions). The `thread` command lets you list, create, update, comment on, and route threads from the terminal — the same operations the admin UI exposes.
+
+```bash
+thinkwork thread <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`.
+
+### thread list
+
+```bash
+thinkwork thread list [--assignee <id|me>] [--agent <id>] [--search <q>] [--limit <n>] [--archived]
+```
+
+- `--assignee me` resolves to the caller's Cognito principal. Requires a Cognito session.
+- Archived threads are filtered out by default — pass `--archived` to include them.
+- `--limit` defaults to 50.
+
+### thread get
+
+```bash
+thinkwork thread get <idOrNumber>
+```
+
+Accepts either a thread ID (e.g. `thr-abc123` or a UUID) or a tenant-scoped issue number (e.g. `42`). Numeric input dispatches `threadByNumber`; anything else dispatches `thread(id:)`.
+
+### thread create
+
+```bash
+thinkwork thread create [title] [--assignee <id>] [--due <iso>] [--label <name>...]
+```
+
+In a TTY with no arguments, prompts for title and assignee. `--label` accepts a repeatable list of label *names* (not IDs); names are resolved against `threadLabels(tenantId:)` before the create and attached via `assignThreadLabel` after.
+
+### thread update
+
+```bash
+thinkwork thread update <id> [--title <t>] [--assignee <id>] [--due <iso>]
+```
+
+Only flags you pass are sent in `UpdateThreadInput`. Requires at least one of `--title`, `--assignee`, `--due`.
+
+### thread checkout / release
+
+```bash
+thinkwork thread checkout <id>
+thinkwork thread release <id> --run-id <id>
+```
+
+`checkout` generates a fresh `cli-<uuid>` runId, locks the thread under it, and prints the runId. Pair it with `release --run-id <id>` to release the lock. The `--agent` flag on `checkout` is informational only — checkout is tracked by the runId, not by an agent identity.
+
+### thread comment
+
+```bash
+thinkwork thread comment <id> [content] [--file <path>]
+```
+
+Posts a `USER` message to the thread. The schema has no separate operator-comment surface; comments and conversational messages share the same `Message` list and are distinguished by `senderType`.
+
+### thread label
+
+```bash
+thinkwork thread label assign <threadId> <labelId>
+thinkwork thread label remove <threadId> <labelId>
+```
+
+Attach or detach an existing label on a thread. Manage label CRUD (create / update / delete labels themselves) with `thinkwork label`.
+
+### thread escalate / delegate
+
+```bash
+thinkwork thread escalate <id> --to-agent <id> --reason <text>
+thinkwork thread delegate <id> --to-agent <id> [--reason <text>]
+```
+
+`escalate` requires a `--reason` (it lands in the activity log). `delegate` requires a Cognito session so the API can record who delegated.
+
+### thread delete
+
+```bash
+thinkwork thread delete <id> [--yes]
+```
+
+Hard-deletes the thread (not just closes it). Prompts for confirmation in a TTY; refuses in a non-interactive session without `--yes`.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
 
 | Phase | Commands |
 |-------|----------|
-| 1 — Work & approvals | [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) |
+| 1 — Work & approvals | ✅ [`thread`](#thread) shipped · [`message`](#message), [`label`](#label), [`inbox`](#inbox) next |
 | 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
-
-### thread
-
-Create, list, update, close, comment, checkout/release, escalate, delegate, and delete threads (tasks, chats, bugs, questions).
-
-```bash
-thinkwork thread list [--status] [--priority] [--assignee] [--search] [--agent]
-thinkwork thread get <idOrNumber>
-thinkwork thread create [title] [--type] [--priority] [--assignee] [--body] [--due] [--label ...]
-thinkwork thread update <id> [--title] [--status] [--priority] [--assignee] [--due] [--body]
-thinkwork thread close|reopen <id>
-thinkwork thread checkout|release <id> [--agent]
-thinkwork thread comment <id> [content] [--file]
-thinkwork thread label assign|remove <threadId> <labelId>
-thinkwork thread escalate|delegate <id> --to-agent <id>
-thinkwork thread delete <id> [--yes]
-```
 
 ### message
 

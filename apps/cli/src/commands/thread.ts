@@ -1,12 +1,21 @@
 /**
  * `thinkwork thread ...` — work items in a tenant.
  *
- * Maps 1:1 to the admin "Threads" UI. Scaffolded in Phase 0; action bodies
- * land in Phase 1 — see apps/cli/README.md#roadmap.
+ * Maps 1:1 to the admin "Threads" UI. Implementations land in apps/cli/src/commands/thread/.
  */
 
 import { Command } from "commander";
-import { notYetImplemented } from "../lib/stub.js";
+import { runThreadList } from "./thread/list.js";
+import { runThreadGet } from "./thread/get.js";
+import { runThreadCreate } from "./thread/create.js";
+import { runThreadUpdate } from "./thread/update.js";
+import { runThreadCheckout } from "./thread/checkout.js";
+import { runThreadRelease } from "./thread/release.js";
+import { runThreadComment } from "./thread/comment.js";
+import { runThreadLabel } from "./thread/label.js";
+import { runThreadEscalate } from "./thread/escalate.js";
+import { runThreadDelegate } from "./thread/delegate.js";
+import { runThreadDelete } from "./thread/delete.js";
 
 export function registerThreadCommand(program: Command): void {
   const thread = program
@@ -41,7 +50,7 @@ Examples:
   $ thinkwork thread list --archived
 `,
     )
-    .action(() => notYetImplemented("thread list", 1));
+    .action(runThreadList);
 
   thread
     .command("get <idOrNumber>")
@@ -57,7 +66,7 @@ Examples:
   $ thinkwork thread get 42 --json | jq .assignee
 `,
     )
-    .action(() => notYetImplemented("thread get", 1));
+    .action(runThreadGet);
 
   thread
     .command("create [title]")
@@ -82,7 +91,7 @@ Examples:
   $ thinkwork thread create "Investigate latency spike"
 `,
     )
-    .action(() => notYetImplemented("thread create", 1));
+    .action(runThreadCreate);
 
   thread
     .command("update <id>")
@@ -100,29 +109,38 @@ Examples:
   $ thinkwork thread update thr-abc --assignee agt-ops
 `,
     )
-    .action(() => notYetImplemented("thread update", 1));
+    .action(runThreadUpdate);
 
   thread
     .command("checkout <id>")
-    .description("Claim a thread so an agent can work it (locks other agents out).")
+    .description("Claim a thread for a CLI-issued run-id (lock until release).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--agent <id>", "Agent to check it out to (defaults to the caller)")
+    .option("--agent <id>", "Informational — checkout is tracked by the generated runId")
     .addHelpText(
       "after",
       `
 Examples:
-  $ thinkwork thread checkout thr-abc --agent agt-fixer
+  $ thinkwork thread checkout thr-abc
+  # Run ID is printed — pair with \`thread release\` to release the lock.
 `,
     )
-    .action(() => notYetImplemented("thread checkout", 1));
+    .action(runThreadCheckout);
 
   thread
     .command("release <id>")
-    .description("Release a checked-out thread (unlocks it so another agent can claim it).")
+    .description("Release a checked-out thread (pass the run-id from checkout).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("thread release", 1));
+    .option("--run-id <id>", "The runId returned by `thinkwork thread checkout`")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork thread release thr-abc --run-id cli-1234abcd-…
+`,
+    )
+    .action(runThreadRelease);
 
   thread
     .command("comment <id> [content]")
@@ -137,9 +155,11 @@ Examples:
   $ thinkwork thread comment thr-abc "Looks good, shipping"
   $ thinkwork thread comment thr-abc --file /tmp/review.md
   $ thinkwork thread comment thr-abc            # prompts interactively
+
+Note: comments are sent as USER messages (no separate comment surface in the schema).
 `,
     )
-    .action(() => notYetImplemented("thread comment", 1));
+    .action(runThreadComment);
 
   thread
     .command("label <assign|remove> <threadId> <labelId>")
@@ -154,7 +174,7 @@ Examples:
   $ thinkwork thread label remove thr-abc lbl-ops
 `,
     )
-    .action(() => notYetImplemented("thread label", 1));
+    .action(runThreadLabel);
 
   thread
     .command("escalate <id>")
@@ -163,7 +183,7 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--reason <text>", "Reason note (appears in activity log)")
-    .action(() => notYetImplemented("thread escalate", 1));
+    .action(runThreadEscalate);
 
   thread
     .command("delegate <id>")
@@ -171,7 +191,8 @@ Examples:
     .option("--to-agent <id>", "Agent to delegate to")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("thread delegate", 1));
+    .option("--reason <text>", "Optional reason note")
+    .action(runThreadDelegate);
 
   thread
     .command("delete <id>")
@@ -190,5 +211,5 @@ Examples:
   $ thinkwork thread delete thr-abc --yes
 `,
     )
-    .action(() => notYetImplemented("thread delete", 1));
+    .action(runThreadDelete);
 }

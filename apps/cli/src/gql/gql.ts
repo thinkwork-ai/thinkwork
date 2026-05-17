@@ -30,6 +30,21 @@ type Documents = {
     "\n  mutation CliDeleteEvalTestCase($id: ID!) {\n    deleteEvalTestCase(id: $id)\n  }\n": typeof types.CliDeleteEvalTestCaseDocument,
     "\n  mutation CliSeedEvalTestCases($tenantId: ID!, $categories: [String!]) {\n    seedEvalTestCases(tenantId: $tenantId, categories: $categories)\n  }\n": typeof types.CliSeedEvalTestCasesDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": typeof types.CliMeDocument,
+    "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": typeof types.CliThreadsDocument,
+    "\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliThreadByIdDocument,
+    "\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliThreadByNumberDocument,
+    "\n  query CliThreadLabelsForResolve($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.CliThreadLabelsForResolveDocument,
+    "\n  mutation CliCreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n    }\n  }\n": typeof types.CliCreateThreadDocument,
+    "\n  mutation CliUpdateThread($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      number\n      title\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      archivedAt\n    }\n  }\n": typeof types.CliUpdateThreadDocument,
+    "\n  mutation CliDeleteThread($id: ID!) {\n    deleteThread(id: $id)\n  }\n": typeof types.CliDeleteThreadDocument,
+    "\n  mutation CliCheckoutThread($id: ID!, $input: CheckoutThreadInput!) {\n    checkoutThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n      checkoutVersion\n    }\n  }\n": typeof types.CliCheckoutThreadDocument,
+    "\n  mutation CliReleaseThread($id: ID!, $input: ReleaseThreadInput!) {\n    releaseThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n    }\n  }\n": typeof types.CliReleaseThreadDocument,
+    "\n  mutation CliAssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      threadId\n      labelId\n      createdAt\n    }\n  }\n": typeof types.CliAssignThreadLabelDocument,
+    "\n  mutation CliRemoveThreadLabel($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n": typeof types.CliRemoveThreadLabelDocument,
+    "\n  mutation CliEscalateThread($input: EscalateThreadInput!) {\n    escalateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": typeof types.CliEscalateThreadDocument,
+    "\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": typeof types.CliDelegateThreadDocument,
+    "\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": typeof types.CliSendMessageDocument,
+    "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliThreadTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": typeof types.CliAllTenantAgentsForWikiDocument,
     "\n  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String) {\n    compileWikiNow(tenantId: $tenantId, ownerId: $ownerId, modelId: $modelId) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n": typeof types.CliCompileWikiNowDocument,
@@ -53,6 +68,21 @@ const documents: Documents = {
     "\n  mutation CliDeleteEvalTestCase($id: ID!) {\n    deleteEvalTestCase(id: $id)\n  }\n": types.CliDeleteEvalTestCaseDocument,
     "\n  mutation CliSeedEvalTestCases($tenantId: ID!, $categories: [String!]) {\n    seedEvalTestCases(tenantId: $tenantId, categories: $categories)\n  }\n": types.CliSeedEvalTestCasesDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": types.CliMeDocument,
+    "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": types.CliThreadsDocument,
+    "\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliThreadByIdDocument,
+    "\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliThreadByNumberDocument,
+    "\n  query CliThreadLabelsForResolve($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": types.CliThreadLabelsForResolveDocument,
+    "\n  mutation CliCreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n    }\n  }\n": types.CliCreateThreadDocument,
+    "\n  mutation CliUpdateThread($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      number\n      title\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      archivedAt\n    }\n  }\n": types.CliUpdateThreadDocument,
+    "\n  mutation CliDeleteThread($id: ID!) {\n    deleteThread(id: $id)\n  }\n": types.CliDeleteThreadDocument,
+    "\n  mutation CliCheckoutThread($id: ID!, $input: CheckoutThreadInput!) {\n    checkoutThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n      checkoutVersion\n    }\n  }\n": types.CliCheckoutThreadDocument,
+    "\n  mutation CliReleaseThread($id: ID!, $input: ReleaseThreadInput!) {\n    releaseThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n    }\n  }\n": types.CliReleaseThreadDocument,
+    "\n  mutation CliAssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      threadId\n      labelId\n      createdAt\n    }\n  }\n": types.CliAssignThreadLabelDocument,
+    "\n  mutation CliRemoveThreadLabel($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n": types.CliRemoveThreadLabelDocument,
+    "\n  mutation CliEscalateThread($input: EscalateThreadInput!) {\n    escalateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": types.CliEscalateThreadDocument,
+    "\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": types.CliDelegateThreadDocument,
+    "\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": types.CliSendMessageDocument,
+    "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliThreadTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": types.CliAllTenantAgentsForWikiDocument,
     "\n  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String) {\n    compileWikiNow(tenantId: $tenantId, ownerId: $ownerId, modelId: $modelId) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n": types.CliCompileWikiNowDocument,
@@ -138,6 +168,66 @@ export function graphql(source: "\n  mutation CliSeedEvalTestCases($tenantId: ID
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n"): (typeof documents)["\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadLabelsForResolve($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n"): (typeof documents)["\n  query CliThreadLabelsForResolve($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateThread($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      number\n      title\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      archivedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateThread($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      number\n      title\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteThread($id: ID!) {\n    deleteThread(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteThread($id: ID!) {\n    deleteThread(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCheckoutThread($id: ID!, $input: CheckoutThreadInput!) {\n    checkoutThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n      checkoutVersion\n    }\n  }\n"): (typeof documents)["\n  mutation CliCheckoutThread($id: ID!, $input: CheckoutThreadInput!) {\n    checkoutThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n      checkoutVersion\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliReleaseThread($id: ID!, $input: ReleaseThreadInput!) {\n    releaseThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n    }\n  }\n"): (typeof documents)["\n  mutation CliReleaseThread($id: ID!, $input: ReleaseThreadInput!) {\n    releaseThread(id: $id, input: $input) {\n      id\n      status\n      checkoutRunId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliAssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      threadId\n      labelId\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliAssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      threadId\n      labelId\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliRemoveThreadLabel($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n"): (typeof documents)["\n  mutation CliRemoveThreadLabel($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliEscalateThread($input: EscalateThreadInput!) {\n    escalateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n"): (typeof documents)["\n  mutation CliEscalateThread($input: EscalateThreadInput!) {\n    escalateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n"): (typeof documents)["\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"): (typeof documents)["\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
