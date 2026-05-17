@@ -156,6 +156,12 @@ Target branch: `main`
   - `bash scripts/build-lambdas.sh slack-events`
   - `bash scripts/build-lambdas.sh slack-dispatch`
   - `git diff --check`
+- Opened and merged [#1313](https://github.com/thinkwork-ai/thinkwork/pull/1313) (`fix(slack): drain completed tasks and remove placeholders`). Required checks passed and Deploy run `25988195062` passed.
+- Verified deployed Lambda timestamps after the deploy:
+  - `thinkwork-dev-api-slack-events`: `2026-05-17T10:25:18Z`
+  - `thinkwork-dev-api-slack-dispatch`: `2026-05-17T10:25:11Z`
+- Ran a signed Slack Events API DM smoke after deploy. The deployed route returned task `2805de2c-eb9b-4705-8f1a-5136f9dbab1c`; the Computer completed it and `slack-dispatch` posted `slack final response ok` to Slack at `1779013812.283429`.
+- Verified the previously stuck task `4bb289b6-acfb-422c-ab49-178081308ecd` also now has `slack.dispatch_completed` with Slack timestamp `1779012410.992669`.
 
 ### Blockers
 
