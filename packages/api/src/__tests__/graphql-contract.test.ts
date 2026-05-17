@@ -191,8 +191,11 @@ describe("GraphQL Schema Contract", () => {
 		it("ThreadChannel includes connector-created work", () => {
 			const enumType = schema.getType("ThreadChannel");
 			expect(enumType).toBeDefined();
-			const values = (enumType as any).getValues().map((value: { name: string }) => value.name);
+			const values = (enumType as any)
+				.getValues()
+				.map((value: { name: string }) => value.name);
 			expect(values).toContain("CONNECTOR");
+			expect(values).toContain("SLACK");
 		});
 
 		it("CreateThreadInput accepts firstMessage for atomic create-and-send", () => {

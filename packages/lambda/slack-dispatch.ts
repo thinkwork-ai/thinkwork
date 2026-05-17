@@ -7,6 +7,7 @@ import { getDb } from "@thinkwork/database-pg";
 import {
   computerEvents,
   computerTasks,
+  messages,
   slackWorkspaces,
   users,
 } from "@thinkwork/database-pg/schema";
@@ -411,6 +412,18 @@ function createDrizzleSlackDispatchStore(
           taskId: computerTasks.id,
           input: computerTasks.input,
           output: computerTasks.output,
+          responseMessageContent: sql<string | null>`(
+            SELECT ${messages.content}
+            FROM ${messages}
+            WHERE ${messages.tenant_id} = ${computerEvents.tenant_id}
+              AND ${messages.id} = CASE
+                WHEN ${computerTasks.output}->>'responseMessageId'
+                  ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                  THEN (${computerTasks.output}->>'responseMessageId')::uuid
+                ELSE NULL
+              END
+            LIMIT 1
+          )`,
           actorUserId: computerTasks.created_by_user_id,
           actorName: users.name,
           actorAvatarUrl: users.image,
@@ -452,7 +465,10 @@ function createDrizzleSlackDispatchStore(
           tenantId: row.tenantId,
           computerId: row.computerId,
           taskId: row.taskId,
-          response: String(output.response ?? ""),
+          response: slackDispatchResponseText(
+            output,
+            row.responseMessageContent,
+          ),
           slack: normalizeSlackEnvelope(input.slack),
           actor: {
             userId: row.actorUserId ?? null,
@@ -522,6 +538,18 @@ function objectPayload(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+export function slackDispatchResponseText(
+  output: Record<string, unknown>,
+  responseMessageContent: unknown,
+): string {
+  const inlineResponse =
+    typeof output.response === "string" ? output.response.trim() : "";
+  if (inlineResponse) return inlineResponse;
+  return typeof responseMessageContent === "string"
+    ? responseMessageContent.trim()
+    : "";
 }
 
 function normalizeSlackEnvelope(value: unknown): SlackTaskEnvelope {

@@ -5195,6 +5195,7 @@ export enum ThreadChannel {
   Email = 'EMAIL',
   Manual = 'MANUAL',
   Schedule = 'SCHEDULE',
+  Slack = 'SLACK',
   Task = 'TASK',
   Webhook = 'WEBHOOK'
 }

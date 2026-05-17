@@ -127,6 +127,21 @@ Target branch: `main`
 - Verified the bot DM channel received a Slack bot message after the event smoke.
 - Ran a signed `/thinkwork` slash-command ingress smoke for the linked user. The deployed `/slack/slash-command` route returned `200` and queued task `b976be63-6d84-4381-924a-0217bf36bb39`; the Computer completed the ThinkWork response, but final Slack delivery failed because the smoke used an intentionally fake `response_url`.
 
+### Post-Implementation Live Debug
+
+- Started hotfix branch `codex/debug-slack-threads` in `.Codex/worktrees/debug-slack-threads` after live reports that Slack placeholders were not becoming useful answers and both Admin/Computer Threads pages showed `[GraphQL] Unexpected error`.
+- Confirmed GraphQL root cause in CloudWatch: Slack-created threads persisted `channel = 'slack'`, `threadToCamel` returned `SLACK`, but `ThreadChannel` did not include `SLACK`, causing `Enum "ThreadChannel" cannot represent value: "SLACK"` for `threadsPaged.items[0].channel`.
+- Confirmed Slack dispatch root cause from dev DB rows: completed Slack tasks stored `output.responseMessageId` with a valid assistant message, but `output.response` was empty, so `slack-dispatch` sent the fallback `"ThinkWork response"` instead of the message content.
+- Implemented hotfix to add `SLACK` to the GraphQL enum, regenerate generated GraphQL clients, and have `slack-dispatch` resolve assistant message content from `responseMessageId` when inline output text is absent.
+- Local verification passed:
+  - `pnpm install --frozen-lockfile`
+  - `pnpm schema:build`
+  - GraphQL codegen for `apps/admin`, `apps/mobile`, and `apps/cli`
+  - `pnpm --filter @thinkwork/lambda test -- slack-dispatch.test.ts`
+  - `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts src/__tests__/thread-resolver.test.ts`
+  - `pnpm --filter @thinkwork/lambda typecheck`
+  - `pnpm --filter @thinkwork/api typecheck`
+
 ### Blockers
 
 - None.
