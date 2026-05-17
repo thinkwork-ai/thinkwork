@@ -476,13 +476,18 @@ describe("computer-runtime handler", () => {
   it("checks Google Workspace connection status without exposing tokens", async () => {
     const response = await handler(
       event("POST", "/api/computers/runtime/google-workspace/check", {
-        body: { tenantId: TENANT_ID, computerId: COMPUTER_ID },
+        body: {
+          tenantId: TENANT_ID,
+          computerId: COMPUTER_ID,
+          requesterUserId: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+        },
       }),
     );
     expect(response.statusCode).toBe(200);
     expect(mocks.checkGoogleWorkspaceConnection).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       computerId: COMPUTER_ID,
+      requesterUserId: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
     });
     expect(JSON.parse(response.body ?? "{}")).toMatchObject({
       providerName: "google_productivity",
@@ -498,6 +503,7 @@ describe("computer-runtime handler", () => {
         body: {
           tenantId: TENANT_ID,
           computerId: COMPUTER_ID,
+          requesterUserId: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
         },
       }),
     );
@@ -505,6 +511,7 @@ describe("computer-runtime handler", () => {
     expect(mocks.resolveGoogleWorkspaceCliToken).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       computerId: COMPUTER_ID,
+      requesterUserId: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
     });
     expect(JSON.parse(response.body ?? "{}")).toMatchObject({
       connected: true,

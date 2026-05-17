@@ -34,6 +34,7 @@ def record_thread_turn_response(
     model: str | None = None,
     usage: dict[str, Any] | None = None,
     source: str | None = None,
+    requester_user_id: str | None = None,
     api_url: str | None = None,
     api_secret: str | None = None,
     timeout_seconds: float = 10.0,
@@ -71,6 +72,8 @@ def record_thread_turn_response(
         body["usage"] = usage
     if source:
         body["source"] = source
+    if requester_user_id:
+        body["requesterUserId"] = requester_user_id
 
     payload = json.dumps(body).encode("utf-8")
     last_error: Exception | None = None

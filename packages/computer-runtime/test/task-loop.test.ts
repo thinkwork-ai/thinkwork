@@ -223,6 +223,7 @@ describe("Computer runtime task loop", () => {
           threadId: "thread-1",
           messageId: "message-1",
           source: "chat_message",
+          requesterUserId: "user-1",
         },
       }),
       completeTask: vi.fn(),
@@ -275,6 +276,8 @@ describe("Computer runtime task loop", () => {
         threadId: "thread-1",
         messageId: "message-1",
         source: "chat_message",
+        requesterUserId: "user-1",
+        contextClass: "user",
       },
     });
     expect(api.loadThreadTurnContext).toHaveBeenCalledWith("task-10");

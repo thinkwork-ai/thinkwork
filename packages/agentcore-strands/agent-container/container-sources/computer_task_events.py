@@ -16,6 +16,7 @@ def append_computer_task_event(
     event_type: str,
     level: str = "info",
     payload: dict[str, Any] | None = None,
+    requester_user_id: str | None = None,
     api_url: str,
     api_secret: str,
     timeout: float = 10.0,
@@ -30,13 +31,16 @@ def append_computer_task_event(
         raise ValueError("api_url and api_secret are required")
 
     url = f"{api_url.rstrip('/')}/api/computers/runtime/tasks/{task_id}/events"
+    event_payload = payload or {}
+    if requester_user_id and "requesterUserId" not in event_payload:
+        event_payload = {**event_payload, "requesterUserId": requester_user_id}
     body = json.dumps(
         {
             "tenantId": tenant_id,
             "computerId": computer_id,
             "eventType": event_type,
             "level": level,
-            "payload": payload or {},
+            "payload": event_payload,
         }
     ).encode("utf-8")
     request = urllib.request.Request(

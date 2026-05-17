@@ -3,6 +3,7 @@ export type RuntimeTask = {
   taskType: string;
   input?: unknown;
   idempotencyKey?: string | null;
+  createdByUserId?: string | null;
 };
 
 export type RuntimeApiConfig = {
@@ -21,6 +22,13 @@ export type GoogleCalendarUpcomingInput = {
 export type ThreadTurnContext = {
   taskId: string;
   source: string;
+  requester?: {
+    userId?: string | null;
+    actorType?: string | null;
+    actorId?: string | null;
+    contextClass?: string | null;
+  };
+  surfaceContext?: Record<string, unknown> | null;
   computer: {
     id: string;
     name: string;
@@ -161,7 +169,9 @@ export class ComputerRuntimeApi {
     });
   }
 
-  async checkGoogleWorkspaceConnection(): Promise<{
+  async checkGoogleWorkspaceConnection(input?: {
+    requesterUserId?: string | null;
+  }): Promise<{
     providerName: string;
     connected: boolean;
     tokenResolved: boolean;
@@ -177,11 +187,14 @@ export class ComputerRuntimeApi {
       body: JSON.stringify({
         tenantId: this.config.tenantId,
         computerId: this.config.computerId,
+        requesterUserId: input?.requesterUserId ?? null,
       }),
     });
   }
 
-  async resolveGoogleWorkspaceCliToken(): Promise<{
+  async resolveGoogleWorkspaceCliToken(input?: {
+    requesterUserId?: string | null;
+  }): Promise<{
     providerName: string;
     connected: boolean;
     tokenResolved: boolean;
@@ -197,6 +210,7 @@ export class ComputerRuntimeApi {
       body: JSON.stringify({
         tenantId: this.config.tenantId,
         computerId: this.config.computerId,
+        requesterUserId: input?.requesterUserId ?? null,
       }),
     });
   }

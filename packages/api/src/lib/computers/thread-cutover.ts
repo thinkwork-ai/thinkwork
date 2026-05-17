@@ -2,9 +2,11 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   computers,
+  computerAssignments,
   computerEvents,
   computerTasks,
   messages,
+  teamUsers,
   threadAttachments,
   threads,
 } from "@thinkwork/database-pg/schema";
@@ -41,8 +43,10 @@ const db = getDb();
 export async function resolveThreadComputer(input: {
   tenantId: string;
   ownerUserId?: string | null;
+  requesterUserId?: string | null;
   requestedComputerId?: string | null;
 }) {
+  const requesterUserId = input.requesterUserId ?? input.ownerUserId ?? null;
   if (input.requestedComputerId) {
     const [computer] = await db
       .select({
@@ -59,13 +63,21 @@ export async function resolveThreadComputer(input: {
       )
       .limit(1);
     if (!computer) throw new Error("Computer not found");
-    if (input.ownerUserId && computer.owner_user_id !== input.ownerUserId) {
-      throw new Error("Computer does not belong to thread owner");
+    if (
+      requesterUserId &&
+      computer.owner_user_id !== requesterUserId &&
+      !(await hasComputerRequesterAccess({
+        tenantId: input.tenantId,
+        computerId: computer.id,
+        requesterUserId,
+      }))
+    ) {
+      throw new Error("Computer is not assigned to requester");
     }
     return computer;
   }
 
-  if (!input.ownerUserId) return null;
+  if (!requesterUserId) return null;
   const [computer] = await db
     .select({
       id: computers.id,
@@ -75,12 +87,48 @@ export async function resolveThreadComputer(input: {
     .where(
       and(
         eq(computers.tenant_id, input.tenantId),
-        eq(computers.owner_user_id, input.ownerUserId),
+        eq(computers.owner_user_id, requesterUserId),
         ne(computers.status, "archived"),
       ),
     )
     .limit(1);
   return computer ?? null;
+}
+
+export async function hasComputerRequesterAccess(input: {
+  tenantId: string;
+  computerId: string;
+  requesterUserId: string;
+}) {
+  const [direct] = await db
+    .select({ id: computerAssignments.id })
+    .from(computerAssignments)
+    .where(
+      and(
+        eq(computerAssignments.tenant_id, input.tenantId),
+        eq(computerAssignments.computer_id, input.computerId),
+        eq(computerAssignments.subject_type, "user"),
+        eq(computerAssignments.user_id, input.requesterUserId),
+      ),
+    )
+    .limit(1);
+  if (direct) return true;
+
+  const [team] = await db
+    .select({ id: computerAssignments.id })
+    .from(computerAssignments)
+    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
+    .where(
+      and(
+        eq(computerAssignments.tenant_id, input.tenantId),
+        eq(computerAssignments.computer_id, input.computerId),
+        eq(computerAssignments.subject_type, "team"),
+        eq(teamUsers.tenant_id, input.tenantId),
+        eq(teamUsers.user_id, input.requesterUserId),
+      ),
+    )
+    .limit(1);
+  return Boolean(team);
 }
 
 export async function enqueueComputerThreadTurn(input: {
@@ -101,6 +149,7 @@ export async function enqueueComputerThreadTurn(input: {
     actorId: input.actorId ?? null,
     runbookRunId: input.runbookRunId ?? null,
   });
+  const requesterUserId = taskRequesterUserId(taskInput);
   const idempotencyKey = input.runbookRunId
     ? `runbook-thread-turn:${input.runbookRunId}`
     : `thread-turn:${input.threadId}:${input.messageId}`;
@@ -133,7 +182,7 @@ export async function enqueueComputerThreadTurn(input: {
       task_type: "thread_turn",
       input: taskInput,
       idempotency_key: idempotencyKey,
-      created_by_user_id: input.actorType === "user" ? input.actorId : null,
+      created_by_user_id: requesterUserId,
     })
     .returning({ id: computerTasks.id });
 
@@ -147,6 +196,9 @@ export async function enqueueComputerThreadTurn(input: {
       threadId: input.threadId,
       messageId: input.messageId,
       source: input.source ?? "chat_message",
+      requesterUserId,
+      contextClass: requesterUserId ? "user" : "system",
+      surfaceContext: recordValue(taskInput?.surfaceContext),
     },
   });
 
@@ -525,7 +577,7 @@ async function enqueueRunbookExecuteTask(input: {
       task_type: "runbook_execute",
       input: taskInput,
       idempotency_key: idempotencyKey,
-      created_by_user_id: input.actorType === "user" ? input.actorId : null,
+      created_by_user_id: taskRequesterUserId(taskInput),
     })
     .returning({ id: computerTasks.id, status: computerTasks.status });
 
@@ -539,6 +591,7 @@ async function enqueueRunbookExecuteTask(input: {
       runbookRunId: input.runbookRunId,
       threadId: input.threadId,
       messageId: input.sourceMessageId,
+      requesterUserId: taskRequesterUserId(taskInput),
     },
   });
 
@@ -655,6 +708,11 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function taskRequesterUserId(input: Record<string, unknown> | null) {
+  const value = input?.requesterUserId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function runbookDecisionSummary(input: {
   parts: unknown;
   runbookRunId: string;
@@ -700,12 +758,12 @@ async function dispatchComputerThreadTurn(input: {
   taskId: string;
   runbookRunId?: string | null;
 }) {
-	const [computer] = await db
-		.select({
-			id: computers.id,
-			primary_agent_id: computers.primary_agent_id,
-			migrated_from_agent_id: computers.migrated_from_agent_id,
-		})
+  const [computer] = await db
+    .select({
+      id: computers.id,
+      primary_agent_id: computers.primary_agent_id,
+      migrated_from_agent_id: computers.migrated_from_agent_id,
+    })
     .from(computers)
     .where(
       and(
@@ -715,12 +773,12 @@ async function dispatchComputerThreadTurn(input: {
     )
     .limit(1);
 
-	const backingAgentId =
-		computer?.primary_agent_id ?? computer?.migrated_from_agent_id ?? null;
-	if (!backingAgentId) {
-		await markDispatchFailed(input, {
-			message: "Computer has no Strands backing agent configured",
-			code: "missing_backing_agent",
+  const backingAgentId =
+    computer?.primary_agent_id ?? computer?.migrated_from_agent_id ?? null;
+  if (!backingAgentId) {
+    await markDispatchFailed(input, {
+      message: "Computer has no Strands backing agent configured",
+      code: "missing_backing_agent",
     });
     return false;
   }
@@ -776,10 +834,10 @@ async function dispatchComputerThreadTurn(input: {
       recipeDefaults.written.length > 0 ||
       recipeDefaults.updated.length > 0
     ) {
-	await db.insert(computerEvents).values({
-		tenant_id: input.tenantId,
-		computer_id: input.computerId,
-		task_id: input.taskId,
+      await db.insert(computerEvents).values({
+        tenant_id: input.tenantId,
+        computer_id: input.computerId,
+        task_id: input.taskId,
         event_type: "artifact_builder_defaults_seeded",
         level: "info",
         payload: {
@@ -821,13 +879,13 @@ async function dispatchComputerThreadTurn(input: {
     task_id: input.taskId,
     event_type: "thread_turn_dispatched",
     level: "info",
-		payload: {
-			threadId: input.threadId,
-			messageId: input.messageId,
-			agentId: backingAgentId,
-			runtime: "strands",
-		},
-	});
+    payload: {
+      threadId: input.threadId,
+      messageId: input.messageId,
+      agentId: backingAgentId,
+      runtime: "strands",
+    },
+  });
 
   let runbookContext: unknown;
   if (input.runbookRunId) {
@@ -838,12 +896,12 @@ async function dispatchComputerThreadTurn(input: {
     runbookContext = runningRun ? buildAgentRunbookContext(runningRun) : null;
   }
 
-	const invoked = await invokeChatAgent({
-		tenantId: input.tenantId,
-		threadId: input.threadId,
-		agentId: backingAgentId,
-		userMessage: message.content ?? "",
-		messageId: input.messageId,
+  const invoked = await invokeChatAgent({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    agentId: backingAgentId,
+    userMessage: message.content ?? "",
+    messageId: input.messageId,
     computerId: input.computerId,
     computerTaskId: input.taskId,
     runbookContext,

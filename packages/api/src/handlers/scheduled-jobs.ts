@@ -65,8 +65,9 @@ async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -94,8 +95,9 @@ async function invokeJobScheduleManager(
       console.error("[scheduled-jobs]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -252,7 +254,7 @@ export async function handler(
       const check = await checkMembership(event, method);
       if (!check.ok) return check.response;
       if (method === "GET") return listScheduledJobs(event, check.tenantId);
-      return createScheduledJob(event, check.tenantId);
+      return createScheduledJob(event, check.tenantId, check.userId);
     }
 
     // --- Trigger Runs ---
@@ -357,6 +359,7 @@ async function getScheduledJob(
 async function createScheduledJob(
   event: APIGatewayProxyEventV2,
   tenantId: string,
+  creatorUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let body: Record<string, unknown> = {};
   try {
@@ -389,6 +392,14 @@ async function createScheduledJob(
     }
   }
 
+  const createdByType = (
+    (body.created_by_type as string) || "user"
+  ).toLowerCase();
+  const createdById =
+    createdByType === "user"
+      ? creatorUserId
+      : (body.created_by_id as string) || null;
+
   const [row] = await db
     .insert(scheduledJobs)
     .values({
@@ -406,8 +417,8 @@ async function createScheduledJob(
       schedule_expression: (body.schedule_expression as string) || null,
       timezone: (body.timezone as string) || "UTC",
       enabled: true,
-      created_by_type: (body.created_by_type as string) || "user",
-      created_by_id: (body.created_by_id as string) || null,
+      created_by_type: createdByType,
+      created_by_id: createdById,
     })
     .returning();
 
@@ -425,7 +436,7 @@ async function createScheduledJob(
       timezone: row.timezone,
       prompt: row.prompt || undefined,
       config: row.config || undefined,
-      createdByType: "user",
+      createdByType,
     });
     if (!result.ok) {
       // Keep the DB row so the user's input isn't lost; surface a clear error
@@ -637,8 +648,9 @@ async function fireScheduledJob(
       .returning();
 
     try {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
+      const { LambdaClient, InvokeCommand } = await import(
+        "@aws-sdk/client-lambda"
+      );
       const lambda = new LambdaClient({});
       const stage = process.env.STAGE || "dev";
       const fnName =
@@ -796,8 +808,16 @@ async function fireScheduledJob(
           source: "schedule",
           actorType: "user",
           actorId: firingUserId,
+          requesterUserId: firingUserId,
+          contextClass: "user",
           triggerId,
           triggerType: trig.trigger_type,
+          surfaceContext: {
+            source: "schedule",
+            triggerId,
+            triggerType: trig.trigger_type,
+            scheduleName: trig.name,
+          },
         },
         idempotency_key: idempotencyKey,
         created_by_user_id: firingUserId,
@@ -824,6 +844,7 @@ async function fireScheduledJob(
           messageId: message.id,
           triggerId,
           triggerType: trig.trigger_type,
+          requesterUserId: firingUserId,
         },
       });
     }

@@ -180,10 +180,13 @@ export function normalizeTaskInput(
   if (
     taskType === "health_check" ||
     taskType === "workspace_file_list" ||
-    taskType === "google_cli_smoke" ||
-    taskType === "google_workspace_auth_check"
+    taskType === "google_cli_smoke"
   ) {
     return null;
+  }
+
+  if (taskType === "google_workspace_auth_check") {
+    return normalizeRequesterEnvelopeInput(input);
   }
 
   if (taskType === "google_calendar_upcoming") {
@@ -245,23 +248,25 @@ function normalizeThreadTurnInput(input: unknown): Record<string, unknown> {
       ? payload.source.trim()
       : "chat_message";
   if (source === "slack") return normalizeSlackThreadTurnInput(payload);
+  const actorType = optionalString(payload.actorType);
+  const actorId = optionalString(payload.actorId);
+  const requesterUserId = normalizeRequesterUserId({
+    requesterUserId: payload.requesterUserId,
+    actorType,
+    actorId,
+    taskName: "thread_turn",
+  });
 
   return {
     threadId: requiredString(payload.threadId, "threadId"),
     messageId: requiredString(payload.messageId, "messageId"),
     source,
-    actorType:
-      typeof payload.actorType === "string" && payload.actorType.trim()
-        ? payload.actorType.trim()
-        : null,
-    actorId:
-      typeof payload.actorId === "string" && payload.actorId.trim()
-        ? payload.actorId.trim()
-        : null,
-    runbookRunId:
-      typeof payload.runbookRunId === "string" && payload.runbookRunId.trim()
-        ? payload.runbookRunId.trim()
-        : null,
+    actorType,
+    actorId,
+    requesterUserId,
+    contextClass: requesterUserId ? "user" : "system",
+    runbookRunId: optionalString(payload.runbookRunId),
+    surfaceContext: normalizeSurfaceContext(payload, source),
   };
 }
 
@@ -293,6 +298,14 @@ function normalizeSlackThreadTurnInput(
     placeholderTs: optionalString(slackPayload.placeholderTs),
     modalViewId: optionalString(slackPayload.modalViewId),
   };
+  const actorType = optionalString(payload.actorType) ?? "user";
+  const actorId = requiredString(payload.actorId, "actorId");
+  const requesterUserId = normalizeRequesterUserId({
+    requesterUserId: payload.requesterUserId,
+    actorType,
+    actorId,
+    taskName: "thread_turn",
+  });
   return {
     source: "slack",
     threadId: requiredString(payload.threadId, "threadId"),
@@ -314,11 +327,20 @@ function normalizeSlackThreadTurnInput(
     responseUrl: slack.responseUrl,
     placeholderTs: slack.placeholderTs,
     modalViewId: slack.modalViewId,
-    actorType:
-      typeof payload.actorType === "string" && payload.actorType.trim()
-        ? payload.actorType.trim()
-        : "user",
-    actorId: requiredString(payload.actorId, "actorId"),
+    actorType,
+    actorId,
+    requesterUserId,
+    contextClass: "user",
+    surfaceContext: {
+      source: "slack",
+      channelType: slack.channelType,
+      triggerSurface: slack.triggerSurface,
+      slackTeamId: slack.slackTeamId,
+      slackUserId: slack.slackUserId,
+      slackWorkspaceRowId: slack.slackWorkspaceRowId,
+      channelId: slack.channelId,
+      rootThreadTs: slack.rootThreadTs,
+    },
   };
 }
 
@@ -326,20 +348,69 @@ function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function normalizeRequesterUserId(input: {
+  requesterUserId: unknown;
+  actorType: string | null;
+  actorId: string | null;
+  taskName: string;
+}): string | null {
+  const explicit = optionalString(input.requesterUserId);
+  const requesterUserId =
+    explicit ?? (input.actorType === "user" ? input.actorId : null);
+  if (input.actorType === "user" && !requesterUserId) {
+    throw new ComputerTaskInputError(
+      `requesterUserId is required for user-originated ${input.taskName} tasks`,
+    );
+  }
+  return requesterUserId;
+}
+
+function requesterEnvelopeFields(payload: Record<string, unknown>) {
+  const actorType = optionalString(payload.actorType);
+  const actorId = optionalString(payload.actorId);
+  const requesterUserId = normalizeRequesterUserId({
+    requesterUserId: payload.requesterUserId,
+    actorType,
+    actorId,
+    taskName: "Google Workspace",
+  });
+  return {
+    ...(actorType ? { actorType } : {}),
+    ...(actorId ? { actorId } : {}),
+    ...(requesterUserId ? { requesterUserId, contextClass: "user" } : {}),
+  };
+}
+
+function normalizeSurfaceContext(
+  payload: Record<string, unknown>,
+  source: string,
+) {
+  return {
+    source,
+    triggerId: optionalString(payload.triggerId),
+    triggerType: optionalString(payload.triggerType),
+    scheduleName: optionalString(payload.scheduleName),
+  };
+}
+
 function normalizeRunbookExecuteInput(input: unknown): Record<string, unknown> {
   const payload = coerceObject(input);
+  const actorType = optionalString(payload.actorType);
+  const actorId = optionalString(payload.actorId);
+  const requesterUserId = normalizeRequesterUserId({
+    requesterUserId: payload.requesterUserId,
+    actorType,
+    actorId,
+    taskName: "runbook_execute",
+  });
   return {
     runbookRunId: requiredString(payload.runbookRunId, "runbookRunId"),
     threadId: requiredString(payload.threadId, "threadId"),
     messageId: requiredString(payload.messageId, "messageId"),
-    actorType:
-      typeof payload.actorType === "string" && payload.actorType.trim()
-        ? payload.actorType.trim()
-        : null,
-    actorId:
-      typeof payload.actorId === "string" && payload.actorId.trim()
-        ? payload.actorId.trim()
-        : null,
+    actorType,
+    actorId,
+    requesterUserId,
+    contextClass: requesterUserId ? "user" : "system",
   };
 }
 
@@ -373,7 +444,17 @@ function normalizeGoogleCalendarUpcomingInput(
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
     maxResults,
+    ...requesterEnvelopeFields(payload),
   };
+}
+
+function normalizeRequesterEnvelopeInput(
+  input: unknown,
+): Record<string, unknown> | null {
+  if (input === undefined || input === null) return null;
+  const payload = coerceObject(input);
+  const envelope = requesterEnvelopeFields(payload);
+  return Object.keys(envelope).length > 0 ? envelope : null;
 }
 
 export function toGraphqlComputerTask(row: Record<string, any>) {
