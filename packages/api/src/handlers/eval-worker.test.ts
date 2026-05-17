@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentCoreBudgetExceededAssertion,
   agentCoreEvaluatorsEnabled,
   estimateAgentCoreEvaluatorCostUsd,
   extractComputerTaskResponse,
@@ -99,12 +100,22 @@ describe("eval-worker infrastructure retry classification", () => {
     ).toBe(false);
     expect(
       isRetryableEvalInfrastructureError(
-        new Error("AgentCore eval invocation timed out after 210000ms"),
+        new Error("AgentCore eval invocation exceeded 45000ms response budget"),
       ),
     ).toBe(false);
     expect(
       isRetryableEvalInfrastructureError(new Error("policy violation")),
     ).toBe(false);
+  });
+
+  it("represents stalled AgentCore responses as failed eval assertions", () => {
+    expect(agentCoreBudgetExceededAssertion(45_000)).toEqual({
+      type: "agentcore-response-budget",
+      passed: false,
+      score: 0,
+      reason:
+        "AgentCore did not return a response within the 45000ms eval response budget.",
+    });
   });
 });
 

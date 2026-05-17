@@ -6,7 +6,7 @@ import {
 import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
 
 export const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
-export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 210_000;
+export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 45_000;
 export const DEFAULT_EVAL_MAX_TOKENS = 2_048;
 
 const lambdaClient = new LambdaClient({});
@@ -39,6 +39,13 @@ export function evalMaxTokens(value = process.env.EVAL_MAX_TOKENS): number {
     return DEFAULT_EVAL_MAX_TOKENS;
   }
   return Math.floor(parsed);
+}
+
+export class AgentCoreEvalInvocationTimeoutError extends Error {
+  constructor(public readonly timeoutMs: number) {
+    super(`AgentCore eval invocation exceeded ${timeoutMs}ms response budget`);
+    this.name = "AgentCoreEvalInvocationTimeoutError";
+  }
 }
 
 export function extractAgentCoreResponseText(data: unknown): string {
@@ -165,9 +172,7 @@ export async function invokeAgentCoreForEval(input: {
     );
   } catch (err) {
     if (controller.signal.aborted) {
-      throw new Error(
-        `AgentCore eval invocation timed out after ${timeoutMs}ms`,
-      );
+      throw new AgentCoreEvalInvocationTimeoutError(timeoutMs);
     }
     throw err;
   } finally {

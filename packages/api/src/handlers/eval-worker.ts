@@ -22,7 +22,10 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { createHash } from "crypto";
 import { enqueueComputerThreadTurn } from "../lib/computers/thread-cutover.js";
-import { invokeAgentCoreForEval } from "../lib/evals/agentcore-direct.js";
+import {
+  AgentCoreEvalInvocationTimeoutError,
+  invokeAgentCoreForEval,
+} from "../lib/evals/agentcore-direct.js";
 import { ensureEvalAgentForTemplate } from "../lib/evals/eval-agent-provisioning.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
@@ -162,6 +165,17 @@ export function isRetryableEvalInfrastructureError(error: unknown): boolean {
   return /Timed out waiting for Computer eval task|Lambda\.TooManyRequestsException|Lambda throttled/i.test(
     message,
   );
+}
+
+export function agentCoreBudgetExceededAssertion(
+  timeoutMs: number,
+): AssertionResult {
+  return {
+    type: "agentcore-response-budget",
+    passed: false,
+    score: 0,
+    reason: `AgentCore did not return a response within the ${timeoutMs}ms eval response budget.`,
+  };
 }
 
 function evaluatorCostUsd(evaluatorResults: unknown): number {
@@ -703,8 +717,13 @@ async function executeCase(
     if (isRetryableEvalInfrastructureError(err)) {
       throw err;
     }
-    errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[eval-worker] test '${tc.name}' failed:`, errorMessage);
+    if (err instanceof AgentCoreEvalInvocationTimeoutError) {
+      durationMs = err.timeoutMs;
+      assertionResults.push(agentCoreBudgetExceededAssertion(err.timeoutMs));
+    } else {
+      errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(`[eval-worker] test '${tc.name}' failed:`, errorMessage);
+    }
   }
 
   const assertionsPassed = assertionResults.every((a) => a.passed);
