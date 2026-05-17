@@ -31,6 +31,7 @@ interface ComputerThreadDetailRouteProps {
 interface ThreadResult {
   thread: {
     id: string;
+    userId?: string | null;
     computerId?: string | null;
     title?: string | null;
     status?: string | null;
@@ -612,9 +613,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

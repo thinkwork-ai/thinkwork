@@ -25,6 +25,7 @@ interface ThreadsPagedResult {
     totalCount: number;
     items: Array<{
       id: string;
+      userId?: string | null;
       number: number;
       identifier?: string | null;
       title?: string | null;
@@ -69,20 +70,21 @@ function ThreadsPage() {
     return () => window.clearTimeout(timeout);
   }, [search]);
 
-  const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadsPagedResult>({
-    query: ThreadsPagedQuery,
-    variables: {
-      tenantId: tenantId ?? "",
-      search: debouncedSearch.trim() || undefined,
-      showArchived: false,
-      sortField: "updated",
-      sortDir: "desc",
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-    },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
+  const [{ data, fetching, error }, reexecuteQuery] =
+    useQuery<ThreadsPagedResult>({
+      query: ThreadsPagedQuery,
+      variables: {
+        tenantId: tenantId ?? "",
+        search: debouncedSearch.trim() || undefined,
+        showArchived: false,
+        sortField: "updated",
+        sortDir: "desc",
+        limit: pageSize,
+        offset: pageIndex * pageSize,
+      },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
 
   const [{ data: threadUpdate }] = useSubscription<{
     onThreadUpdated?: { tenantId?: string | null } | null;
