@@ -2,8 +2,7 @@
  * Thinkwork database schema definitions.
  *
  * v0.1 — only tables needed for the Thinkwork launch.
- * Cut tables (autoresearch, eval, ontology, places,
- * workflow-configs, usage-records) are out of scope.
+ * Cut tables (autoresearch, places, usage-records) are out of scope.
  */
 
 export * from "./core";
@@ -48,6 +47,7 @@ export * from "./builtin-tools";
 export * from "./evaluations";
 export * from "./wiki";
 export * from "./brain";
+export * from "./ontology";
 export * from "./context-engine";
 export * from "./skill-runs";
 export * from "./mutation-idempotency";

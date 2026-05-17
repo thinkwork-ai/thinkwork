@@ -6,6 +6,41 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Business Ontology Change Sets
+
+Plan: `docs/plans/2026-05-17-002-feat-business-ontology-change-sets-plan.md`
+
+Requirements: `docs/brainstorms/2026-05-17-business-ontology-change-sets-requirements.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 Ontology schema, migrations, and seeds
+- Active branch: `codex/ontology-u1-schema`
+- Active worktree: `.Codex/worktrees/ontology-u1`
+- Started: 2026-05-17
+- PR: not opened
+- CI: not started; local verification passed
+
+### Progress Log
+
+| Date       | Unit | Branch                     | PR         | Status           | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Notes                                                                                                                                           |
+| ---------- | ---- | -------------------------- | ---------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-17 | U1   | `codex/ontology-u1-schema` | Not opened | Locally verified | `pnpm schema:build`; `pnpm --filter @thinkwork/database-pg test -- schema-ontology.test.ts`; `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm -r --if-present test`; `git diff --check`; touched-file Prettier check | Added the `ontology.*` schema foundation, idempotent tenant seed migration, canonical GraphQL ontology contract, and schema/migration coverage. |
+
+### CI / Merge Log
+
+- Started U1 in `.Codex/worktrees/ontology-u1` on branch `codex/ontology-u1-schema`.
+- Copied the business ontology plan and brainstorm requirements into the branch because they were not yet present on `origin/main`.
+- Completed U1 local implementation and verification; preparing the branch for PR.
+
+### Blockers
+
+- None.
+
+---
+
 ## Current Run: Shared Computers Product Reframe
 
 Plan: `docs/plans/2026-05-17-001-feat-shared-computers-reframe-plan.md`
