@@ -153,6 +153,9 @@ locals {
       # Lambda logs and degrades gracefully if decryption returns empty.
       GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
     }
+    "ontology-scan" = {
+      BEDROCK_MODEL_ID = var.wiki_compile_model_id
+    }
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
     }
@@ -329,6 +332,7 @@ resource "aws_lambda_function" "handler" {
     "memory",
     "memory-retain",
     "wiki-compile",
+    "ontology-scan",
     "wiki-lint",
     "wiki-export",
     "wiki-bootstrap-import",
@@ -493,8 +497,8 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "ontology-scan" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -570,6 +574,47 @@ resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
   destination_config {
     on_failure {
       destination = aws_sqs_queue.wiki_compile_dlq[0].arn
+    }
+  }
+}
+
+# Ontology suggestion scans are durable-job driven. Disable AWS async
+# retries so duplicate scan invocations do not create duplicate review
+# proposals; the scan job row is the retry/observability surface.
+resource "aws_sqs_queue" "ontology_scan_dlq" {
+  count                     = local.use_local_zips ? 1 : 0
+  name                      = "thinkwork-${var.stage}-ontology-scan-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-ontology-scan-dlq"
+  }
+}
+
+resource "aws_iam_role_policy" "ontology_scan_dlq_send" {
+  count = local.use_local_zips ? 1 : 0
+  name  = "thinkwork-${var.stage}-ontology-scan-dlq-send"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
+  count                        = local.use_local_zips ? 1 : 0
+  function_name                = aws_lambda_function.handler["ontology-scan"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.ontology_scan_dlq[0].arn
     }
   }
 }

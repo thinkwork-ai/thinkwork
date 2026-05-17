@@ -38,10 +38,13 @@ vi.mock("../../../lib/ontology/repository.js", () => ({
   listOntologyChangeSets: mockListOntologyChangeSets,
   loadOntologySuggestionScanJob: mockLoadOntologySuggestionScanJob,
   loadOntologyReprocessJob: mockLoadOntologyReprocessJob,
-  startOntologySuggestionScan: mockStartOntologySuggestionScan,
   updateOntologyChangeSet: mockUpdateOntologyChangeSet,
   approveOntologyChangeSet: mockApproveOntologyChangeSet,
   rejectOntologyChangeSet: mockRejectOntologyChangeSet,
+}));
+
+vi.mock("../../../lib/ontology/suggestions.js", () => ({
+  startOntologySuggestionScanJob: mockStartOntologySuggestionScan,
 }));
 
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";

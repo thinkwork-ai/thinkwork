@@ -524,6 +524,9 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # wiki-bootstrap-import: bootstrapJournalImport admin mutation
         # Event-invokes this for the long-running ingest path.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",
+        # ontology-scan: startOntologySuggestionScan Event-invokes this
+        # after inserting a durable scan job row.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-scan",
         # routine-resume: routine-approval-bridge (Phase B U8) invokes
         # this with RequestResponse after a HITL decideInboxItem
         # decision. Calls SendTaskSuccess/SendTaskFailure on the SFN
