@@ -28,6 +28,11 @@ import { useQuery } from "urql";
 // TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier`.
 //            Keep local ThreadsQuery until SDK widens.
 import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import { useMe } from "@/lib/hooks/use-users";
+import {
+  activeAssignedComputers,
+  resolveMobileTenantId,
+} from "@/lib/mobile-tenant";
 
 interface Thread {
   id: string;
@@ -288,8 +293,8 @@ export default function ThreadsScreen() {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
-  const { user } = useAuth();
-  const tenantId = user?.tenantId;
+  const { user, isAuthenticated } = useAuth();
+  const authTenantId = user?.tenantId ?? null;
 
   // Defer agents query to avoid synchronous cache update triggering a setState
   // in HomeScreen (which shares the same useAgents query) during our render.
@@ -300,14 +305,18 @@ export default function ThreadsScreen() {
 
   const [{ data: computerData, fetching: computerFetching }] = useQuery({
     query: AssignedComputersQuery,
-    pause: !tenantId,
+    pause: !isAuthenticated,
   });
   const assignedComputers = useMemo(
     () =>
-      ((computerData?.assignedComputers ?? []) as any[]).filter(
-        (computer) => computer.status !== "archived",
-      ),
+      activeAssignedComputers((computerData?.assignedComputers ?? []) as any[]),
     [computerData?.assignedComputers],
+  );
+  const [{ data: meData }] = useMe();
+  const tenantId = resolveMobileTenantId(
+    authTenantId,
+    meData?.me?.tenantId,
+    assignedComputers,
   );
   const [selectedComputerId, setSelectedComputerId] = useState<string | null>(
     null,

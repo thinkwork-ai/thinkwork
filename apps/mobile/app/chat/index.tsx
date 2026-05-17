@@ -19,6 +19,10 @@ import { useQuery } from "urql";
 // fields (`description`, labels, metadata, assignee detail) than the
 // chat-oriented SDK Thread type exposes.
 import { AssignedComputersQuery, ThreadsQuery } from "@/lib/graphql-queries";
+import {
+  activeAssignedComputers,
+  resolveMobileTenantId,
+} from "@/lib/mobile-tenant";
 
 // ThreadLifecycleStatus → operator-facing label. Mirrors admin's
 // ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
@@ -59,8 +63,8 @@ export default function ChatRoute() {
       identifier?: string;
     }>();
   const router = useRouter();
-  const { user } = useAuth();
-  const tenantId = user?.tenantId;
+  const { user, isAuthenticated } = useAuth();
+  const authTenantId = user?.tenantId ?? null;
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -71,16 +75,19 @@ export default function ChatRoute() {
 
   const [{ data: computerData, fetching: computersFetching }] = useQuery({
     query: AssignedComputersQuery,
-    pause: !tenantId,
+    pause: !isAuthenticated,
   });
   const assignedComputers = useMemo(
     () =>
-      ((computerData?.assignedComputers ?? []) as any[]).filter(
-        (computer) => computer.status !== "archived",
-      ),
+      activeAssignedComputers((computerData?.assignedComputers ?? []) as any[]),
     [computerData?.assignedComputers],
   );
   const selectedComputer = assignedComputers[0] ?? null;
+  const tenantId = resolveMobileTenantId(
+    authTenantId,
+    currentUser?.tenantId,
+    assignedComputers,
+  );
 
   const caller = useMemo(() => {
     if (!currentUser) return undefined;
@@ -231,7 +238,7 @@ export default function ChatRoute() {
         agents={[]}
         selectedAgentId=""
         threadId={activeThread?.id}
-        tenantId={tenantId}
+        tenantId={tenantId ?? undefined}
         caller={caller}
         onNewChat={handleNewChat}
         mentionCandidates={[]}

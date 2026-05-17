@@ -42,6 +42,10 @@ import {
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
 } from "@/lib/graphql-queries";
+import {
+  activeAssignedComputers,
+  resolveMobileTenantId,
+} from "@/lib/mobile-tenant";
 import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";
 import {
@@ -129,12 +133,14 @@ type HomeComputer = {
   slug?: string | null;
   status?: string | null;
   runtimeStatus?: string | null;
+  tenantId?: string | null;
 };
 
 export default function ThreadsScreen() {
   const router = useRouter();
-  const { user, refreshCounter, signOut, getToken } = useAuth();
-  const tenantId = user?.tenantId;
+  const { user, refreshCounter, signOut, getToken, isAuthenticated } =
+    useAuth();
+  const authTenantId = user?.tenantId ?? null;
 
   // Role gate for owner-only menu items (Billing). One-shot fetch on mount —
   // role doesn't change while a session is alive.
@@ -166,28 +172,32 @@ export default function ThreadsScreen() {
   const insets = useSafeAreaInsets();
   const { isWide } = useMediaQuery();
   const { markRead, isUnread } = useThreadReadState();
+  const [{ data: meData }] = useMe();
+  const currentUser = meData?.me;
+  const [{ data: computersData, fetching: computersFetching }] = useQuery({
+    query: AssignedComputersQuery,
+    pause: !isAuthenticated,
+  });
+  const computers = useMemo<HomeComputer[]>(() => {
+    return activeAssignedComputers(
+      (computersData?.assignedComputers ?? []) as HomeComputer[],
+    );
+  }, [computersData?.assignedComputers]);
+  const tenantId = resolveMobileTenantId(
+    authTenantId,
+    currentUser?.tenantId,
+    computers,
+  );
   const {
     hasNewCompletion,
     isThreadActive,
     markThreadActive,
     clearThreadActive,
     activeTriggers,
-  } = useTurnCompletion(tenantId);
+  } = useTurnCompletion(tenantId ?? undefined);
 
   // ── Agents + Me ──────────────────────────────────────────────────────────
   const { agents, loading: agentsFetching } = useAgents({ tenantId });
-
-  const [{ data: meData }] = useMe();
-  const currentUser = meData?.me;
-  const [{ data: computersData, fetching: computersFetching }] = useQuery({
-    query: AssignedComputersQuery,
-    pause: !tenantId,
-  });
-  const computers = useMemo<HomeComputer[]>(() => {
-    return ((computersData?.assignedComputers ?? []) as HomeComputer[]).filter(
-      (computer) => computer.status !== "archived",
-    );
-  }, [computersData?.assignedComputers]);
   const selectedComputerStorageKey = tenantId
     ? `thinkwork:selected-computer:${tenantId}`
     : null;
@@ -526,7 +536,7 @@ export default function ThreadsScreen() {
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(
-    tenantId,
+    tenantId ?? undefined,
     "thread",
   );
   const threadQuickActions: QuickAction[] = (qaThreadData?.userQuickActions ??
