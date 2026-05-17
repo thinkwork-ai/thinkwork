@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	buildEvalWorkerMessages,
 	chunkEvalWorkerMessages,
+	evalWorkerMessageGroupIdForRun,
 	selectedTestCaseIdsFromEvent,
 } from "./eval-runner.js";
 
@@ -23,6 +24,23 @@ describe("selectedTestCaseIdsFromEvent", () => {
 				input: { testCaseIds: "tc-1" },
 			}),
 		).toEqual([]);
+	});
+
+	it("groups FIFO messages by selected Computer so one Computer is evaluated serially", () => {
+		expect(
+			evalWorkerMessageGroupIdForRun({
+				id: "run-1",
+				computer_id: "computer-1",
+				agent_id: "agent-1",
+			}),
+		).toBe("eval-computer:computer-1");
+		expect(
+			evalWorkerMessageGroupIdForRun({
+				id: "run-1",
+				computer_id: null,
+				agent_id: "agent-1",
+			}),
+		).toBe("eval-computer:agent-1");
 	});
 });
 

@@ -3,6 +3,7 @@ import {
   agentCoreEvaluatorsEnabled,
   estimateAgentCoreEvaluatorCostUsd,
   extractComputerTaskResponse,
+  isRetryableEvalInfrastructureError,
   parseEvalWorkerMessage,
   softenEchoedForbiddenPhraseAssertions,
   summarizeEvalResults,
@@ -71,6 +72,24 @@ describe("eval-worker evaluator cost controls", () => {
     expect(agentCoreEvaluatorsEnabled("disabled")).toBe(false);
     expect(agentCoreEvaluatorsEnabled("enabled")).toBe(true);
     expect(agentCoreEvaluatorsEnabled("FULL")).toBe(true);
+  });
+});
+
+describe("eval-worker infrastructure retry classification", () => {
+  it("retries transient substrate errors instead of scoring them as eval failures", () => {
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("Timed out waiting for Computer eval task after 210000ms"),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("ThrottlingException: Too many requests"),
+      ),
+    ).toBe(true);
+    expect(isRetryableEvalInfrastructureError(new Error("policy violation"))).toBe(
+      false,
+    );
   });
 });
 
