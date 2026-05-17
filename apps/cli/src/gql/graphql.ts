@@ -565,6 +565,11 @@ export type ApproveInboxItemInput = {
   reviewNotes?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ApproveOntologyChangeSetInput = {
+  changeSetId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
 export type Artifact = {
   __typename?: 'Artifact';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1967,6 +1972,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   approveInboxItem: InboxItem;
+  approveOntologyChangeSet: OntologyChangeSet;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -2084,6 +2090,7 @@ export type Mutation = {
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
   rejectInboxItem: InboxItem;
+  rejectOntologyChangeSet: OntologyChangeSet;
   rejectRunbookRun: RunbookRun;
   rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
@@ -2123,6 +2130,7 @@ export type Mutation = {
   setRoutineTrigger: RoutineTrigger;
   setUserComputerAssignments: Array<ComputerAssignment>;
   startEvalRun: EvalRun;
+  startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   submitRunFeedback: SkillRun;
@@ -2147,6 +2155,7 @@ export type Mutation = {
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
+  updateOntologyChangeSet: OntologyChangeSet;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
@@ -2233,6 +2242,11 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationApproveInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ApproveInboxItemInput>;
+};
+
+
+export type MutationApproveOntologyChangeSetArgs = {
+  input: ApproveOntologyChangeSetInput;
 };
 
 
@@ -2738,6 +2752,11 @@ export type MutationRejectInboxItemArgs = {
 };
 
 
+export type MutationRejectOntologyChangeSetArgs = {
+  input: RejectOntologyChangeSetInput;
+};
+
+
 export type MutationRejectRunbookRunArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2916,6 +2935,11 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartOntologySuggestionScanArgs = {
+  input: StartOntologySuggestionScanInput;
+};
+
+
 export type MutationStartSkillRunArgs = {
   input: StartSkillRunInput;
 };
@@ -3044,6 +3068,11 @@ export type MutationUpdateMemoryRecordArgs = {
 };
 
 
+export type MutationUpdateOntologyChangeSetArgs = {
+  input: UpdateOntologyChangeSetInput;
+};
+
+
 export type MutationUpdateQuickActionArgs = {
   id: Scalars['ID']['input'];
   input: UpdateQuickActionInput;
@@ -3148,6 +3177,245 @@ export type NewMessageEvent = {
   senderType?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
+};
+
+export enum OntologyChangeAction {
+  Create = 'CREATE',
+  Deprecate = 'DEPRECATE',
+  Reject = 'REJECT',
+  Update = 'UPDATE'
+}
+
+export enum OntologyChangeItemType {
+  EntityType = 'ENTITY_TYPE',
+  ExternalMapping = 'EXTERNAL_MAPPING',
+  FacetTemplate = 'FACET_TEMPLATE',
+  RelationshipType = 'RELATIONSHIP_TYPE'
+}
+
+export type OntologyChangeSet = {
+  __typename?: 'OntologyChangeSet';
+  appliedVersionId?: Maybe<Scalars['ID']['output']>;
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  approvedByUserId?: Maybe<Scalars['ID']['output']>;
+  confidence?: Maybe<Scalars['Float']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  evidenceExamples: Array<OntologyEvidenceExample>;
+  expectedImpact: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  items: Array<OntologyChangeSetItem>;
+  observedFrequency: Scalars['Int']['output'];
+  proposedBy: Scalars['String']['output'];
+  proposedByUserId?: Maybe<Scalars['ID']['output']>;
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  rejectedByUserId?: Maybe<Scalars['ID']['output']>;
+  status: OntologyChangeSetStatus;
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type OntologyChangeSetItem = {
+  __typename?: 'OntologyChangeSetItem';
+  action: OntologyChangeAction;
+  changeSetId: Scalars['ID']['output'];
+  confidence?: Maybe<Scalars['Float']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  editedValue?: Maybe<Scalars['AWSJSON']['output']>;
+  evidenceExamples: Array<OntologyEvidenceExample>;
+  id: Scalars['ID']['output'];
+  itemType: OntologyChangeItemType;
+  position: Scalars['Int']['output'];
+  proposedValue: Scalars['AWSJSON']['output'];
+  status: OntologyChangeSetStatus;
+  targetKind?: Maybe<Scalars['String']['output']>;
+  targetSlug?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum OntologyChangeSetStatus {
+  Applied = 'APPLIED',
+  Approved = 'APPROVED',
+  Draft = 'DRAFT',
+  PendingReview = 'PENDING_REVIEW',
+  Rejected = 'REJECTED'
+}
+
+export type OntologyDefinitions = {
+  __typename?: 'OntologyDefinitions';
+  activeVersion?: Maybe<OntologyVersion>;
+  entityTypes: Array<OntologyEntityType>;
+  externalMappings: Array<OntologyExternalMapping>;
+  facetTemplates: Array<OntologyFacetTemplate>;
+  relationshipTypes: Array<OntologyRelationshipType>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export type OntologyEntityType = {
+  __typename?: 'OntologyEntityType';
+  aliases: Array<Scalars['String']['output']>;
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  broadType: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  externalMappings: Array<OntologyExternalMapping>;
+  facetTemplates: Array<OntologyFacetTemplate>;
+  guidanceNotes?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  lifecycleStatus: OntologyLifecycleStatus;
+  name: Scalars['String']['output'];
+  propertiesSchema: Scalars['AWSJSON']['output'];
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  slug: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  versionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type OntologyEvidenceExample = {
+  __typename?: 'OntologyEvidenceExample';
+  changeSetId: Scalars['ID']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  itemId?: Maybe<Scalars['ID']['output']>;
+  metadata: Scalars['AWSJSON']['output'];
+  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  quote: Scalars['String']['output'];
+  sourceKind: Scalars['String']['output'];
+  sourceLabel?: Maybe<Scalars['String']['output']>;
+  sourceRef?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export type OntologyExternalMapping = {
+  __typename?: 'OntologyExternalMapping';
+  createdAt: Scalars['AWSDateTime']['output'];
+  externalLabel?: Maybe<Scalars['String']['output']>;
+  externalUri: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  mappingKind: OntologyMappingKind;
+  notes?: Maybe<Scalars['String']['output']>;
+  subjectId: Scalars['ID']['output'];
+  subjectKind: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  vocabulary: Scalars['String']['output'];
+};
+
+export type OntologyFacetTemplate = {
+  __typename?: 'OntologyFacetTemplate';
+  createdAt: Scalars['AWSDateTime']['output'];
+  entityTypeId: Scalars['ID']['output'];
+  facetType: Scalars['String']['output'];
+  guidanceNotes?: Maybe<Scalars['String']['output']>;
+  heading: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  lifecycleStatus: OntologyLifecycleStatus;
+  position: Scalars['Int']['output'];
+  prompt?: Maybe<Scalars['String']['output']>;
+  slug: Scalars['String']['output'];
+  sourcePriority: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum OntologyJobStatus {
+  Canceled = 'CANCELED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Running = 'RUNNING',
+  Succeeded = 'SUCCEEDED'
+}
+
+export enum OntologyLifecycleStatus {
+  Approved = 'APPROVED',
+  Deprecated = 'DEPRECATED',
+  Proposed = 'PROPOSED',
+  Rejected = 'REJECTED'
+}
+
+export enum OntologyMappingKind {
+  Broad = 'BROAD',
+  Close = 'CLOSE',
+  Exact = 'EXACT',
+  Narrow = 'NARROW',
+  Related = 'RELATED'
+}
+
+export type OntologyRelationshipType = {
+  __typename?: 'OntologyRelationshipType';
+  aliases: Array<Scalars['String']['output']>;
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  externalMappings: Array<OntologyExternalMapping>;
+  guidanceNotes?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  inverseName?: Maybe<Scalars['String']['output']>;
+  lifecycleStatus: OntologyLifecycleStatus;
+  name: Scalars['String']['output'];
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  slug: Scalars['String']['output'];
+  sourceEntityTypeId?: Maybe<Scalars['ID']['output']>;
+  sourceTypeSlugs: Array<Scalars['String']['output']>;
+  targetEntityTypeId?: Maybe<Scalars['ID']['output']>;
+  targetTypeSlugs: Array<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  versionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type OntologyReprocessJob = {
+  __typename?: 'OntologyReprocessJob';
+  attempt: Scalars['Int']['output'];
+  changeSetId?: Maybe<Scalars['ID']['output']>;
+  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  dedupeKey?: Maybe<Scalars['String']['output']>;
+  error?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  impact: Scalars['AWSJSON']['output'];
+  input: Scalars['AWSJSON']['output'];
+  metrics: Scalars['AWSJSON']['output'];
+  ontologyVersionId?: Maybe<Scalars['ID']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: OntologyJobStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type OntologySuggestionScanJob = {
+  __typename?: 'OntologySuggestionScanJob';
+  createdAt: Scalars['AWSDateTime']['output'];
+  dedupeKey?: Maybe<Scalars['String']['output']>;
+  error?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  metrics: Scalars['AWSJSON']['output'];
+  result: Scalars['AWSJSON']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: OntologyJobStatus;
+  tenantId: Scalars['ID']['output'];
+  trigger: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type OntologyVersion = {
+  __typename?: 'OntologyVersion';
+  activatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  sourceChangeSetId?: Maybe<Scalars['ID']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  versionNumber: Scalars['Int']['output'];
 };
 
 export type OrgUpdateEvent = {
@@ -3369,6 +3637,10 @@ export type Query = {
   modelCatalog: Array<ModelCatalogEntry>;
   myComputer?: Maybe<Computer>;
   mySlackLinks: Array<SlackUserLink>;
+  ontologyChangeSets: Array<OntologyChangeSet>;
+  ontologyDefinitions: OntologyDefinitions;
+  ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
+  ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
@@ -3888,6 +4160,29 @@ export type QueryMySlackLinksArgs = {
 };
 
 
+export type QueryOntologyChangeSetsArgs = {
+  status?: InputMaybe<OntologyChangeSetStatus>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryOntologyDefinitionsArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryOntologyReprocessJobArgs = {
+  jobId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryOntologySuggestionScanJobArgs = {
+  jobId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryPendingSystemReviewsCountArgs = {
   tenantId: Scalars['ID']['input'];
 };
@@ -4287,6 +4582,12 @@ export type RegisterPushTokenInput = {
 
 export type RejectInboxItemInput = {
   reviewNotes?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RejectOntologyChangeSetInput = {
+  changeSetId: Scalars['ID']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type ReleaseThreadInput = {
@@ -4864,6 +5165,12 @@ export type StartEvalRunInput = {
   computerId?: InputMaybe<Scalars['ID']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+};
+
+export type StartOntologySuggestionScanInput = {
+  dedupeKey?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  trigger?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type StartSkillRunInput = {
@@ -5536,6 +5843,21 @@ export type UpdateKnowledgeBaseInput = {
   name?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UpdateOntologyChangeSetInput = {
+  changeSetId: Scalars['ID']['input'];
+  items?: InputMaybe<Array<UpdateOntologyChangeSetItemInput>>;
+  status?: InputMaybe<OntologyChangeSetStatus>;
+  summary?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  title?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateOntologyChangeSetItemInput = {
+  editedValue?: InputMaybe<Scalars['AWSJSON']['input']>;
+  id: Scalars['ID']['input'];
+  status?: InputMaybe<OntologyChangeSetStatus>;
+};
+
 export type UpdateQuickActionInput = {
   prompt?: InputMaybe<Scalars['String']['input']>;
   scope?: InputMaybe<QuickActionScope>;
@@ -6117,6 +6439,42 @@ export type CliSeedEvalTestCasesMutationVariables = Exact<{
 
 export type CliSeedEvalTestCasesMutation = { __typename?: 'Mutation', seedEvalTestCases: number };
 
+export type CliLabelListQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type CliLabelListQuery = { __typename?: 'Query', threadLabels: Array<{ __typename?: 'ThreadLabel', id: string, name: string, color?: string | null, description?: string | null, createdAt: any }> };
+
+export type CliLabelCreateMutationVariables = Exact<{
+  input: CreateThreadLabelInput;
+}>;
+
+
+export type CliLabelCreateMutation = { __typename?: 'Mutation', createThreadLabel: { __typename?: 'ThreadLabel', id: string, name: string, color?: string | null, description?: string | null } };
+
+export type CliLabelUpdateMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateThreadLabelInput;
+}>;
+
+
+export type CliLabelUpdateMutation = { __typename?: 'Mutation', updateThreadLabel: { __typename?: 'ThreadLabel', id: string, name: string, color?: string | null, description?: string | null } };
+
+export type CliLabelDeleteMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type CliLabelDeleteMutation = { __typename?: 'Mutation', deleteThreadLabel: boolean };
+
+export type CliLabelTenantBySlugQueryVariables = Exact<{
+  slug: Scalars['String']['input'];
+}>;
+
+
+export type CliLabelTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
+
 export type CliMeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -6312,6 +6670,11 @@ export const CliCreateEvalTestCaseDocument = {"kind":"Document","definitions":[{
 export const CliUpdateEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateEvalTestCaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<CliUpdateEvalTestCaseMutation, CliUpdateEvalTestCaseMutationVariables>;
 export const CliDeleteEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteEvalTestCaseMutation, CliDeleteEvalTestCaseMutationVariables>;
 export const CliSeedEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSeedEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"categories"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"seedEvalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"categories"},"value":{"kind":"Variable","name":{"kind":"Name","value":"categories"}}}]}]}}]} as unknown as DocumentNode<CliSeedEvalTestCasesMutation, CliSeedEvalTestCasesMutationVariables>;
+export const CliLabelListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliLabelList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"threadLabels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliLabelListQuery, CliLabelListQueryVariables>;
+export const CliLabelCreateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliLabelCreate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateThreadLabelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliLabelCreateMutation, CliLabelCreateMutationVariables>;
+export const CliLabelUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliLabelUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateThreadLabelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliLabelUpdateMutation, CliLabelUpdateMutationVariables>;
+export const CliLabelDeleteDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliLabelDelete"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliLabelDeleteMutation, CliLabelDeleteMutationVariables>;
+export const CliLabelTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliLabelTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliLabelTenantBySlugQuery, CliLabelTenantBySlugQueryVariables>;
 export const CliMeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMe"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}}]}}]}}]} as unknown as DocumentNode<CliMeQuery, CliMeQueryVariables>;
 export const CliMsgSendMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliMsgSendMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SendMessageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliMsgSendMessageMutation, CliMsgSendMessageMutationVariables>;
 export const CliMsgMessagesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMsgMessages"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"messages"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cursor"}},{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"senderType"}},{"kind":"Field","name":{"kind":"Name","value":"senderId"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]} as unknown as DocumentNode<CliMsgMessagesQuery, CliMsgMessagesQueryVariables>;
