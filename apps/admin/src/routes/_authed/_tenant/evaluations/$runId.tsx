@@ -57,6 +57,9 @@ import {
 import {
   canEditEvalResult,
   deriveEvalFailureMode,
+  evalFailureModeDescription,
+  evalFailureModeLabel,
+  evaluatorDisplayStatus,
   expectedSummary,
   openEvalResultEditor,
   parseAssertions,
@@ -498,6 +501,8 @@ function ResultDetailSheet({
   const assertions = parseAssertions(result.assertions);
   const evaluatorResults = parseEvaluatorResults(result.evaluatorResults);
   const failureMode = deriveEvalFailureMode(result);
+  const failureModeLabel = evalFailureModeLabel(failureMode);
+  const failureModeDescription = evalFailureModeDescription(failureMode);
   const expected = expectedSummary(assertions);
   const canEdit = canEditEvalResult(result.testCaseId);
   const spans = sortEvalSpans(
@@ -561,6 +566,15 @@ function ResultDetailSheet({
             )}
           </div>
 
+          {failureModeLabel && failureModeDescription && (
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <h4 className="text-sm font-medium">{failureModeLabel}</h4>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {failureModeDescription}
+              </p>
+            </div>
+          )}
+
           {result.input && (
             <div>
               <h4 className="text-sm font-medium mb-1">Input</h4>
@@ -606,7 +620,15 @@ function ResultDetailSheet({
                     typeof evaluator.value === "number"
                       ? evaluator.value
                       : null;
-                  const passed = score !== null && score >= 0.7;
+                  const displayStatus = evaluatorDisplayStatus(evaluator);
+                  const badgeLabel =
+                    score !== null ? score.toFixed(2) : displayStatus;
+                  const badgeVariant =
+                    displayStatus === "pass"
+                      ? "default"
+                      : displayStatus === "skipped"
+                        ? "secondary"
+                        : "destructive";
                   return (
                     <div
                       key={`${evaluator.evaluator_id ?? evaluator.evaluatorId ?? index}`}
@@ -626,10 +648,10 @@ function ResultDetailSheet({
                           )}
                         </div>
                         <Badge
-                          variant={passed ? "default" : "destructive"}
+                          variant={badgeVariant}
                           className="shrink-0 tabular-nums"
                         >
-                          {score !== null ? score.toFixed(2) : "error"}
+                          {badgeLabel}
                         </Badge>
                       </div>
                       {evaluator.explanation && (
