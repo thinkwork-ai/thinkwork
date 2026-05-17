@@ -188,9 +188,9 @@ describe("Slack events handler", () => {
         },
       ],
     });
-    expect(
-      deps.materializeSlackFiles.mock.invocationCallOrder[0],
-    ).toBeLessThan(deps.enqueueTask.mock.invocationCallOrder[0]!);
+    expect(deps.materializeSlackFiles.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.enqueueTask.mock.invocationCallOrder[0]!,
+    );
     expect(deps.slackApi.postMessage).toHaveBeenCalledWith({
       token: "xoxb-token",
       channel: "C123",
@@ -409,6 +409,90 @@ describe("Slack events handler", () => {
     expect(deps.materializeSlackFiles).toHaveBeenCalledWith(
       expect.objectContaining({
         fileRefs: [inheritedFile],
+      }),
+    );
+  });
+
+  it("keeps inherited binary Slack files on the Computer task", async () => {
+    const deps = makeDeps({
+      slackApi: {
+        fetchThreadMessages: vi.fn(async () => [
+          {
+            user: "U123",
+            botId: null,
+            ts: "1710000000.000000",
+            text: "quarterly statement",
+            files: [
+              {
+                id: "F-XLSX",
+                name: "financials.xlsx",
+                mimetype:
+                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                urlPrivate: "https://files.slack.com/files-pri/F-XLSX",
+                urlPrivateDownload:
+                  "https://files.slack.com/files-pri/F-XLSX/download",
+                permalink:
+                  "https://example.slack.com/files/U123/F-XLSX/financials.xlsx",
+                sizeBytes: 4096,
+              },
+            ],
+          },
+          {
+            user: "U123",
+            botId: null,
+            ts: "1710000001.000000",
+            text: "Run financial analysis",
+          },
+        ]),
+        postMessage: vi.fn(async () => ({
+          ok: true,
+          ts: "1710000002.000000",
+        })),
+        sendLinkPrompt: vi.fn(async () => {}),
+      },
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    await dispatch(
+      makeArgs({
+        type: "event_callback",
+        team_id: "T123",
+        event_id: "EvThreadBinaryFile",
+        event: {
+          type: "message",
+          channel_type: "im",
+          team: "T123",
+          user: "U123",
+          channel: "D123",
+          text: "Run financial analysis",
+          ts: "1710000001.000000",
+          thread_ts: "1710000000.000000",
+        },
+      }),
+    );
+
+    expect(deps.enqueueTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskInput: expect.objectContaining({
+          fileRefs: [
+            expect.objectContaining({
+              id: "F-XLSX",
+              name: "financials.xlsx",
+              mimetype:
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(deps.materializeSlackFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileRefs: [
+          expect.objectContaining({
+            id: "F-XLSX",
+            name: "financials.xlsx",
+          }),
+        ],
       }),
     );
   });

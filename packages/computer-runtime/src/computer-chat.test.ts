@@ -69,6 +69,69 @@ describe("Computer chat system prompt", () => {
     expect(prompt).toContain("# Hybrid Agentic ETL");
   });
 
+  it("adds extracted binary attachment content to the system prompt", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        attachments: [
+          {
+            attachmentId: "attachment-1",
+            name: "financials.xlsx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            sizeBytes: 4096,
+            readable: true,
+            extractionKind: "xlsx",
+            contentText: "Sheet: Statement\nRow 2: A2=Revenue | B2=12345",
+          },
+          {
+            attachmentId: "attachment-2",
+            name: "board-statement.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 2048,
+            readable: true,
+            extractionKind: "pdf",
+            contentText: "Board revenue was 12345",
+          },
+        ],
+      },
+      root,
+    );
+
+    expect(prompt).toContain("financials.xlsx");
+    expect(prompt).toContain("Extracted XLSX content:");
+    expect(prompt).toContain("B2=12345");
+    expect(prompt).toContain("board-statement.pdf");
+    expect(prompt).toContain("Extracted PDF content:");
+    expect(prompt).toContain("Board revenue was 12345");
+  });
+
+  it("keeps unsupported binary attachments visible with a reason", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        attachments: [
+          {
+            attachmentId: "attachment-1",
+            name: "archive.zip",
+            mimeType: "application/zip",
+            sizeBytes: 1024,
+            readable: false,
+            reason: "unsupported_mime_type",
+          },
+        ],
+      },
+      root,
+    );
+
+    expect(prompt).toContain("archive.zip");
+    expect(prompt).toContain(
+      "Content is not available inline (unsupported_mime_type).",
+    );
+  });
+
   it("adds requester memory overlay to the system prompt", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
     const prompt = await buildSystemPrompt(

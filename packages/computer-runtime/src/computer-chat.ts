@@ -131,10 +131,14 @@ function buildAttachmentPrompt(
     );
     if (attachment.readable && attachment.contentText) {
       const truncated = attachment.truncated
-        ? "\n\n[attachment text truncated]"
+        ? "\n\n[attachment content truncated]"
         : "";
+      const label =
+        attachment.extractionKind && attachment.extractionKind !== "text"
+          ? `  Extracted ${attachment.extractionKind.toUpperCase()} content:`
+          : "  Content:";
       lines.push(
-        `  Content:\n${fenced(`${attachment.contentText}${truncated}`)}`,
+        `${label}\n${fenced(`${attachment.contentText}${truncated}`)}`,
       );
     } else {
       lines.push(

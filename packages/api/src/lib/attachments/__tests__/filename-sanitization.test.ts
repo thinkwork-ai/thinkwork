@@ -22,6 +22,10 @@ describe("sanitizeAttachmentFilename", () => {
 			expect(sanitizeAttachmentFilename("notes.txt").ok).toBe(true);
 		});
 
+		it("accepts PDF documents used by Slack file review", () => {
+			expect(sanitizeAttachmentFilename("board-statement.pdf").ok).toBe(true);
+		});
+
 		it("normalizes mixed-case extensions to allow-list comparison", () => {
 			const r = sanitizeAttachmentFilename("FINANCIALS.XLSX");
 			expect(r.ok).toBe(true);

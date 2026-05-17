@@ -351,6 +351,8 @@ function extensionForMime(mimeType: string | null): string {
 			return ".md";
 		case "text/plain":
 			return ".txt";
+		case "application/pdf":
+			return ".pdf";
 		default:
 			return ".txt";
 	}
