@@ -21,3 +21,18 @@
 .tw-shimmer-char {
   animation: tw-shimmer-character 1.68s ease-in-out infinite;
 }
+
+/* Streamdown's built-in code block wraps the highlighted body in a second
+   rounded card and an empty-when-unspecified language header. Inside our
+   prose host, collapse the chrome to the single inner card. */
+.ai-response [data-streamdown="code-block"] {
+  margin-block: 0.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  min-width: 0;
+}
+.ai-response [data-streamdown="code-block-header"] {
+  display: none;
+}
