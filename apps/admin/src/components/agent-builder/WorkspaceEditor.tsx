@@ -9,6 +9,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -141,6 +151,9 @@ export function WorkspaceEditor({
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderPath, setNewFolderPath] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<
+    { path: string; isFolder: boolean } | null
+  >(null);
   const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const loadRequestId = useRef(0);
@@ -515,6 +528,9 @@ export function WorkspaceEditor({
                 }
                 onNewFile={openNewFileDialog}
                 onNewFolder={openNewFolderDialog}
+                onDelete={(path, isFolder) =>
+                  setDeleteConfirmTarget({ path, isFolder })
+                }
               />
             </div>
           </div>
@@ -629,6 +645,22 @@ export function WorkspaceEditor({
         </DialogContent>
       </Dialog>
 
+      <DeleteConfirmDialog
+        target={deleteConfirmTarget}
+        files={files}
+        deleting={
+          deleteConfirmTarget !== null &&
+          deletingPath === deleteConfirmTarget.path
+        }
+        onCancel={() => setDeleteConfirmTarget(null)}
+        onConfirm={async () => {
+          if (!deleteConfirmTarget) return;
+          const { path, isFolder } = deleteConfirmTarget;
+          await handleDeletePath(path, isFolder);
+          setDeleteConfirmTarget(null);
+        }}
+      />
+
       {acceptDialogPath && agentId && (
         <AcceptTemplateUpdateDialog
           open={Boolean(acceptDialogPath)}
@@ -644,5 +676,80 @@ export function WorkspaceEditor({
         />
       )}
     </>
+  );
+}
+
+interface DeleteConfirmDialogProps {
+  target: { path: string; isFolder: boolean } | null;
+  files: string[];
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function DeleteConfirmDialog({
+  target,
+  files,
+  deleting,
+  onCancel,
+  onConfirm,
+}: DeleteConfirmDialogProps) {
+  const open = target !== null;
+  const folderFileCount =
+    target?.isFolder
+      ? files.filter(
+          (file) => file === target.path || file.startsWith(`${target.path}/`),
+        ).length
+      : 0;
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !deleting) onCancel();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {target?.isFolder ? "Delete folder?" : "Delete file?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {target?.isFolder ? (
+              <>
+                Delete <code className="font-mono">{target.path}/</code> and all{" "}
+                {folderFileCount} file{folderFileCount === 1 ? "" : "s"} inside
+                it. This cannot be undone.
+              </>
+            ) : target ? (
+              <>
+                Delete <code className="font-mono">{target.path}</code>. This
+                cannot be undone.
+              </>
+            ) : null}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+            disabled={deleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Delete"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

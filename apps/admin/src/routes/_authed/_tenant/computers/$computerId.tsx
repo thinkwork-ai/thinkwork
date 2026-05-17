@@ -142,7 +142,11 @@ function ComputerDetailPage() {
 
   return (
     <PageLayout
-      contentClassName="space-y-4"
+      // Workspace tab fills the viewport (tree + editor own their own
+      // scroll); other tabs keep the default stacked-panels rhythm.
+      contentClassName={
+        tab === "workspace" ? "flex flex-col pb-4" : "space-y-4"
+      }
       header={
         <div className="space-y-3">
           <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
@@ -391,14 +395,14 @@ function ComputerDashboardTab({
 
 function ComputerWorkspaceTab({ computerId }: { computerId: string }) {
   const target = useMemo(() => ({ computerId }), [computerId]);
-  // Pin to viewport height so the editor's internal scrollback handles
-  // overflow, not the outer page. Matches the Terminal tab fix shipped
-  // earlier today. Plan 2026-05-13-005 U8.
+  // Fill the parent (PageLayout content area is flex-column when the tab
+  // is `workspace`), so the editor's own scrollback handles overflow and
+  // no whitespace sits below the editor border.
   return (
     <WorkspaceEditor
       target={target}
       mode="computer"
-      className="h-[calc(100vh-220px)] min-h-[420px]"
+      className="h-full min-h-[420px]"
     />
   );
 }

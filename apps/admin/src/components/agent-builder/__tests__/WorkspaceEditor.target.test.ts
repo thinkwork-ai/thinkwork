@@ -66,4 +66,18 @@ describe("workspace editor target capabilities", () => {
       /"New Skill"|"New Runbook Skill"|"Add from catalog"|"Add Runbook Skill"|"Bootstrap"|"Add Sub-agent"|"Snippets"|"Import bundle"|"Add docs\/ folder"|"Add procedures\/ folder"|"Add templates\/ folder"|"Add memory\/ folder"/,
     );
   });
+
+  it("routes context-menu deletes through an AlertDialog confirmation", () => {
+    const editorSource = readFileSync(
+      new URL("../WorkspaceEditor.tsx", import.meta.url),
+      "utf8",
+    );
+    // FolderTree's onDelete must populate deleteConfirmTarget rather than
+    // calling handleDeletePath directly, so the AlertDialog gates every
+    // context-menu delete.
+    expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
+    expect(editorSource).toMatch(/setDeleteConfirmTarget\(\{ path, isFolder \}\)/);
+    expect(editorSource).toMatch(/AlertDialogTitle/);
+    expect(editorSource).toMatch(/DeleteConfirmDialog/);
+  });
 });

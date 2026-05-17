@@ -4,6 +4,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -152,6 +153,7 @@ export interface FolderTreeProps {
   onAcceptUpdate: (path: string) => void;
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
+  onDelete: (path: string, isFolder: boolean) => void;
 }
 
 export function FolderTree(props: FolderTreeProps) {
@@ -214,14 +216,17 @@ function FolderTreeItem({
   onAcceptUpdate,
   onNewFile,
   onNewFolder,
+  onDelete,
 }: FolderTreeProps & {
   node: TreeNode;
 }) {
   if (node.isFolder) {
     // Synthetic agents/ group is a virtual UI grouping, not a real folder —
     // its path is __synthetic__/sub-agents which can't host files. Treat
-    // creates from its context menu as workspace-root creates.
+    // creates from its context menu as workspace-root creates, and don't
+    // offer Delete on the grouping or on routed-but-empty entries.
     const contextParent = node.synthetic ? "" : node.path;
+    const canDelete = !node.synthetic && !node.missing;
 
     return (
       <ContextMenu>
@@ -240,6 +245,7 @@ function FolderTreeItem({
                 onAcceptUpdate={onAcceptUpdate}
                 onNewFile={onNewFile}
                 onNewFolder={onNewFolder}
+                onDelete={onDelete}
                 nodes={[]}
               />
             ))}
@@ -261,21 +267,28 @@ function FolderTreeItem({
           <ContextMenuItem onSelect={() => onNewFolder(contextParent)}>
             New Folder
           </ContextMenuItem>
+          {canDelete ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => onDelete(node.path, true)}
+              >
+                Delete
+              </ContextMenuItem>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
     );
   }
 
-  // File row. Only renders custom children (including FileTreeActions) when
-  // the file shows an inherited-template Review affordance; otherwise we let
-  // the AI Elements primitive render the default file row.
+  // File row. Wrap in a ContextMenu so right-click offers Delete. The
+  // primitive renders the default file row unless we need a Review
+  // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
 
-  if (!updateAvailable) {
-    return <FileTreeFile path={node.path} name={node.name} />;
-  }
-
-  return (
+  const fileRow = updateAvailable ? (
     <FileTreeFile path={node.path} name={node.name}>
       <span className="size-4 shrink-0" />
       <FileGlyph />
@@ -298,6 +311,22 @@ function FolderTreeItem({
         </Button>
       </FileTreeActions>
     </FileTreeFile>
+  ) : (
+    <FileTreeFile path={node.path} name={node.name} />
+  );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{fileRow}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          variant="destructive"
+          onSelect={() => onDelete(node.path, false)}
+        >
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
