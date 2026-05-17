@@ -749,6 +749,53 @@ Adds a comment to the inbox item without deciding on it. Content from positional
 
 ---
 
+## member
+
+List and manage tenant members (users + agents with access to a tenant). Calls the same `inviteMember` / `updateTenantMember` / `removeTenantMember` mutations the admin UI uses.
+
+```bash
+thinkwork member <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `members`.
+
+### member list
+
+```bash
+thinkwork member list [--principal-type USER|AGENT] [--role <r>]
+```
+
+- Returns id / type / principal / role / status for every member.
+- Both filters are client-side post-query (the server returns the full list).
+
+### member invite
+
+```bash
+thinkwork member invite [email] [--role member|admin|owner] [--name <n>]
+```
+
+- TTY without email → prompts.
+- `--role` defaults to `member`.
+- Sends an invite email and creates the Cognito user via the existing `inviteMember` resolver.
+
+### member update
+
+```bash
+thinkwork member update <memberId> [--role <r>] [--status active|suspended]
+```
+
+Only flags you pass become part of the update input. Requires at least one of `--role`, `--status`.
+
+### member remove
+
+```bash
+thinkwork member remove <memberId> [--yes]
+```
+
+Removes the membership. The underlying Cognito user is **not** deleted. Prompts for confirmation in a TTY; refuses in non-interactive sessions without `--yes`.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -756,7 +803,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
+| 2 — Agents & workspace | ✅ [`member`](#member) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`team`](#team), [`kb`](#kb) next |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
@@ -800,15 +847,6 @@ Tenant (workspace) CRUD + settings.
 thinkwork tenant list | get <idOrSlug> | create [name] [--slug] [--plan] [--issue-prefix]
 thinkwork tenant update <id> [--name] [--plan] [--issue-prefix]
 thinkwork tenant settings get|set [--default-model] [--monthly-budget-usd] [--max-agents] [--auto-close-after-days] [--feature key=value]
-```
-
-### member
-
-```bash
-thinkwork member list [--principal-type] [--role]
-thinkwork member invite [email] [--role] [--name]
-thinkwork member update <id> [--role] [--status]
-thinkwork member remove <id> [--yes]
 ```
 
 ### team
