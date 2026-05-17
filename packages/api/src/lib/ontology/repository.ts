@@ -14,6 +14,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
 import {
+  enqueueOntologyReprocessJob,
+  invokeOntologyReprocessJob,
+  markOntologyReprocessInvokeFailed,
+} from "./reprocess.js";
+import {
   toOntologyChangeSet,
   toOntologyEntityType,
   toOntologyExternalMapping,
@@ -338,7 +343,7 @@ export async function approveOntologyChangeSet(args: {
   db?: DbLike;
 }) {
   const db = args.db ?? defaultDb;
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(ontologyChangeSets)
@@ -404,7 +409,7 @@ export async function approveOntologyChangeSet(args: {
     if (approvedItemIds.length > 0) {
       await tx
         .update(ontologyChangeSetItems)
-        .set({ status: "applied", updated_at: now })
+        .set({ status: "approved", updated_at: now })
         .where(
           and(
             eq(ontologyChangeSetItems.tenant_id, args.tenantId),
@@ -434,19 +439,12 @@ export async function approveOntologyChangeSet(args: {
       })
       .where(eq(ontologyChangeSets.id, current.id));
 
-    await tx.insert(ontologyReprocessJobs).values({
-      tenant_id: args.tenantId,
-      change_set_id: current.id,
-      ontology_version_id: version.id,
-      dedupe_key: `ontology:${args.tenantId}:${current.id}:${version.id}`,
-      status: "pending",
-      input: {
-        changeSetId: current.id,
-        ontologyVersionId: version.id,
-        approvedItemIds,
-      },
-      impact: {},
-      metrics: {},
+    const reprocess = await enqueueOntologyReprocessJob({
+      tenantId: args.tenantId,
+      changeSetId: current.id,
+      ontologyVersionId: version.id,
+      approvedItemIds,
+      db: tx as unknown as DbLike,
     });
 
     await recordOntologyActivity({
@@ -458,15 +456,30 @@ export async function approveOntologyChangeSet(args: {
       metadata: {
         ontologyVersionId: version.id,
         approvedItemCount: approvedItemIds.length,
+        reprocessJobId: reprocess.job.id,
+        reprocessJobInserted: reprocess.inserted,
       },
     });
 
-    return loadOntologyChangeSet({
+    const changeSet = await loadOntologyChangeSet({
       tenantId: args.tenantId,
       changeSetId: current.id,
       db: tx as unknown as DbLike,
     });
+    return { changeSet, reprocessJobId: reprocess.job.id };
   });
+  if (result?.reprocessJobId) {
+    try {
+      await invokeOntologyReprocessJob({ jobId: result.reprocessJobId });
+    } catch (err) {
+      await markOntologyReprocessInvokeFailed({
+        jobId: result.reprocessJobId,
+        error: err instanceof Error ? err.message : String(err),
+        db,
+      });
+    }
+  }
+  return result.changeSet;
 }
 
 export async function rejectOntologyChangeSet(args: {
