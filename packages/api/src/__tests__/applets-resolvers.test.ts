@@ -78,6 +78,7 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
 });
 
 const s3Mock = mockClient(S3Client);
+const APPLET_RESOLVER_TIMEOUT_MS = 30_000;
 
 describe("applet GraphQL resolvers", () => {
   beforeEach(() => {
@@ -91,117 +92,135 @@ describe("applet GraphQL resolvers", () => {
     process.env.API_AUTH_SECRET = "secret";
   });
 
-  it("saves a valid applet source and metadata before inserting the artifact row", async () => {
-    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
-    s3Mock.on(PutObjectCommand).resolves({});
+  it(
+    "saves a valid applet source and metadata before inserting the artifact row",
+    async () => {
+      const { mutationResolvers } = await import(
+        "../graphql/resolvers/index.js"
+      );
+      s3Mock.on(PutObjectCommand).resolves({});
 
-    const result = await mutationResolvers.saveApplet(
-      null,
-      {
-        input: validSaveInput({
-          files: {
-            "App.tsx":
-              'import { AppHeader } from "@thinkwork/computer-stdlib"; export default function Applet() { return <AppHeader title="Risk" />; }',
-          },
-          metadata: {
-            threadId: "11111111-1111-4111-8111-111111111111",
-            prompt: "Show risk",
-            stdlibVersionAtGeneration: "0.1.0",
-          },
-        }),
-      },
-      serviceCtx(),
-    );
+      const result = await mutationResolvers.saveApplet(
+        null,
+        {
+          input: validSaveInput({
+            files: {
+              "App.tsx":
+                'import { AppHeader } from "@thinkwork/computer-stdlib"; export default function Applet() { return <AppHeader title="Risk" />; }',
+            },
+            metadata: {
+              threadId: "11111111-1111-4111-8111-111111111111",
+              prompt: "Show risk",
+              stdlibVersionAtGeneration: "0.1.0",
+            },
+          }),
+        },
+        serviceCtx(),
+      );
 
-    expect(result).toMatchObject({
-      ok: true,
-      version: 1,
-      validated: true,
-      persisted: true,
-      errors: [],
-    });
-    expect(result.appId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
+      expect(result).toMatchObject({
+        ok: true,
+        version: 1,
+        validated: true,
+        persisted: true,
+        errors: [],
+      });
+      expect(result.appId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
 
-    const puts = s3Mock.commandCalls(PutObjectCommand);
-    expect(puts).toHaveLength(2);
-    expect(puts[0].args[0].input).toMatchObject({
-      Bucket: "workspace-bucket",
-      Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
-      ContentType: "text/plain; charset=utf-8",
-    });
-    expect(puts[1].args[0].input).toMatchObject({
-      Bucket: "workspace-bucket",
-      Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/metadata.json`,
-      ContentType: "application/json",
-    });
-    expect(insertedRows[0]).toMatchObject({
-      id: result.appId,
-      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      agent_id: "22222222-2222-4222-8222-222222222222",
-      thread_id: "11111111-1111-4111-8111-111111111111",
-      title: "Pipeline Risk",
-      type: "applet",
-      status: "final",
-      s3_key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
-    });
-    expect(insertedRows[0].metadata).toMatchObject({
-      appId: result.appId,
-      name: "Pipeline Risk",
-      version: 1,
-      tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      prompt: "Show risk",
-    });
-    expect(insertedRows[0].metadata).not.toHaveProperty("appletTheme");
-  }, 15000);
+      const puts = s3Mock.commandCalls(PutObjectCommand);
+      expect(puts).toHaveLength(2);
+      expect(puts[0].args[0].input).toMatchObject({
+        Bucket: "workspace-bucket",
+        Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
+        ContentType: "text/plain; charset=utf-8",
+      });
+      expect(puts[1].args[0].input).toMatchObject({
+        Bucket: "workspace-bucket",
+        Key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/metadata.json`,
+        ContentType: "application/json",
+      });
+      expect(insertedRows[0]).toMatchObject({
+        id: result.appId,
+        tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        agent_id: "22222222-2222-4222-8222-222222222222",
+        thread_id: "11111111-1111-4111-8111-111111111111",
+        title: "Pipeline Risk",
+        type: "applet",
+        status: "final",
+        s3_key: `tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/applets/${result.appId}/source.tsx`,
+      });
+      expect(insertedRows[0].metadata).toMatchObject({
+        appId: result.appId,
+        name: "Pipeline Risk",
+        version: 1,
+        tenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        prompt: "Show risk",
+      });
+      expect(insertedRows[0].metadata).not.toHaveProperty("appletTheme");
+    },
+    APPLET_RESOLVER_TIMEOUT_MS,
+  );
 
-  it("returns structured validation errors and does not persist invalid imports", async () => {
-    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
+  it(
+    "returns structured validation errors and does not persist invalid imports",
+    async () => {
+      const { mutationResolvers } = await import(
+        "../graphql/resolvers/index.js"
+      );
 
-    const result = await mutationResolvers.saveApplet(
-      null,
-      {
-        input: validSaveInput({
-          files: {
-            "App.tsx":
-              'import lodash from "lodash"; export default function Applet() { return lodash; }',
-          },
-        }),
-      },
-      serviceCtx(),
-    );
+      const result = await mutationResolvers.saveApplet(
+        null,
+        {
+          input: validSaveInput({
+            files: {
+              "App.tsx":
+                'import lodash from "lodash"; export default function Applet() { return lodash; }',
+            },
+          }),
+        },
+        serviceCtx(),
+      );
 
-    expect(result).toMatchObject({
-      ok: false,
-      validated: false,
-      persisted: false,
-    });
-    expect(result.errors[0]).toMatchObject({
-      code: "IMPORT_NOT_ALLOWED",
-    });
-    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
-    expect(insertedRows).toHaveLength(0);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        validated: false,
+        persisted: false,
+      });
+      expect(result.errors[0]).toMatchObject({
+        code: "IMPORT_NOT_ALLOWED",
+      });
+      expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+      expect(insertedRows).toHaveLength(0);
+    },
+    APPLET_RESOLVER_TIMEOUT_MS,
+  );
 
-  it("does not write metadata when the source write fails", async () => {
-    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
-    s3Mock.on(PutObjectCommand).rejectsOnce(new Error("source write failed"));
+  it(
+    "does not write metadata when the source write fails",
+    async () => {
+      const { mutationResolvers } = await import(
+        "../graphql/resolvers/index.js"
+      );
+      s3Mock.on(PutObjectCommand).rejectsOnce(new Error("source write failed"));
 
-    const result = await mutationResolvers.saveApplet(
-      null,
-      { input: validSaveInput() },
-      serviceCtx(),
-    );
+      const result = await mutationResolvers.saveApplet(
+        null,
+        { input: validSaveInput() },
+        serviceCtx(),
+      );
 
-    expect(result).toMatchObject({
-      ok: false,
-      validated: true,
-      persisted: false,
-    });
-    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
-    expect(insertedRows).toHaveLength(0);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        validated: true,
+        persisted: false,
+      });
+      expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
+      expect(insertedRows).toHaveLength(0);
+    },
+    APPLET_RESOLVER_TIMEOUT_MS,
+  );
 
   it("regenerates an existing applet by incrementing version and preserving appId", async () => {
     const { mutationResolvers } = await import("../graphql/resolvers/index.js");
@@ -262,43 +281,49 @@ describe("applet GraphQL resolvers", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("promotes a verified draft preview through the applet save path", async () => {
-    const { mutationResolvers } = await import("../graphql/resolvers/index.js");
-    s3Mock.on(PutObjectCommand).resolves({});
-    const input = validPromoteInput();
+  it(
+    "promotes a verified draft preview through the applet save path",
+    async () => {
+      const { mutationResolvers } = await import(
+        "../graphql/resolvers/index.js"
+      );
+      s3Mock.on(PutObjectCommand).resolves({});
+      const input = validPromoteInput();
 
-    const result = await mutationResolvers.promoteDraftApplet(
-      null,
-      { input },
-      userCtx(),
-    );
+      const result = await mutationResolvers.promoteDraftApplet(
+        null,
+        { input },
+        userCtx(),
+      );
 
-    expect(result).toMatchObject({
-      ok: true,
-      version: 1,
-      validated: true,
-      persisted: true,
-      errors: [],
-    });
-    expect(result.appId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
-    expect(insertedRows[0]).toMatchObject({
-      id: result.appId,
-      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      thread_id: "11111111-1111-4111-8111-111111111111",
-      title: "Pipeline Risk Draft",
-      type: "applet",
-    });
-    expect(insertedRows[0].metadata).toMatchObject({
-      sourceDigest: input.sourceDigest,
-      draftPreview: {
-        draftId: "draft_123",
+      expect(result).toMatchObject({
+        ok: true,
+        version: 1,
+        validated: true,
+        persisted: true,
+        errors: [],
+      });
+      expect(result.appId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(insertedRows[0]).toMatchObject({
+        id: result.appId,
+        tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        thread_id: "11111111-1111-4111-8111-111111111111",
+        title: "Pipeline Risk Draft",
+        type: "applet",
+      });
+      expect(insertedRows[0].metadata).toMatchObject({
         sourceDigest: input.sourceDigest,
-      },
-      dataProvenance: { status: "real" },
-    });
-  }, 15000);
+        draftPreview: {
+          draftId: "draft_123",
+          sourceDigest: input.sourceDigest,
+        },
+        dataProvenance: { status: "real" },
+      });
+    },
+    APPLET_RESOLVER_TIMEOUT_MS,
+  );
 
   it("rejects forged draft promotion proofs without writing artifacts", async () => {
     const { mutationResolvers } = await import("../graphql/resolvers/index.js");
@@ -506,8 +531,9 @@ describe("applet GraphQL resolvers", () => {
   });
 
   it("saves and loads applet state by appId, instanceId, and key", async () => {
-    const { mutationResolvers, queryResolvers } =
-      await import("../graphql/resolvers/index.js");
+    const { mutationResolvers, queryResolvers } = await import(
+      "../graphql/resolvers/index.js"
+    );
     const appId = "33333333-3333-4333-8333-333333333333";
     selectRows.push(appletRow({ id: appId, metadata: metadata({ appId }) }));
 

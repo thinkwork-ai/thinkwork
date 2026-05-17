@@ -47,6 +47,10 @@ import {
   ensureEvalAgentForTemplate,
   resolveEvalTemplateId,
 } from "../lib/evals/eval-agent-provisioning.js";
+import {
+  hasConnectorTriggerDefinition,
+  prepareConnectorTriggerDefinition,
+} from "../lib/computers/connector-trigger-routing.js";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 
@@ -329,6 +333,10 @@ async function listScheduledJobs(
     conditions.push(eq(scheduledJobs.routine_id, params.routine_id));
   if (params.trigger_type)
     conditions.push(eq(scheduledJobs.trigger_type, params.trigger_type));
+  if (params.connection_id)
+    conditions.push(
+      sql`${scheduledJobs.config}->'connectorTrigger'->>'connectionId' = ${params.connection_id}`,
+    );
   if (params.enabled !== undefined)
     conditions.push(eq(scheduledJobs.enabled, params.enabled === "true"));
 
@@ -399,21 +407,48 @@ async function createScheduledJob(
     createdByType === "user"
       ? creatorUserId
       : (body.created_by_id as string) || null;
+  const config =
+    body.config &&
+    typeof body.config === "object" &&
+    !Array.isArray(body.config)
+      ? (body.config as Record<string, unknown>)
+      : null;
+  let triggerType = String(body.trigger_type);
+  let normalizedComputerId = computerId;
+  let scheduleType = (body.schedule_type as string) || null;
+  let normalizedConfig = config;
+  if (triggerType === "event" && hasConnectorTriggerDefinition(config)) {
+    try {
+      const connectorTrigger = await prepareConnectorTriggerDefinition({
+        tenantId,
+        requesterUserId: createdByType === "user" ? createdById : null,
+        computerId,
+        config,
+      });
+      triggerType = connectorTrigger.triggerType;
+      normalizedComputerId = connectorTrigger.computerId;
+      scheduleType = connectorTrigger.scheduleType;
+      normalizedConfig = connectorTrigger.config;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return error(message, 400);
+    }
+  }
 
   const [row] = await db
     .insert(scheduledJobs)
     .values({
       tenant_id: tenantId,
-      trigger_type: body.trigger_type as string,
+      trigger_type: triggerType,
       agent_id: (body.agent_id as string) || null,
-      computer_id: computerId,
+      computer_id: normalizedComputerId,
       routine_id: (body.routine_id as string) || null,
       team_id: (body.team_id as string) || null,
       name: body.name as string,
       description: (body.description as string) || null,
       prompt: (body.prompt as string) || null,
-      config: (body.config as Record<string, unknown>) || null,
-      schedule_type: (body.schedule_type as string) || null,
+      config: normalizedConfig,
+      schedule_type: scheduleType,
       schedule_expression: (body.schedule_expression as string) || null,
       timezone: (body.timezone as string) || "UTC",
       enabled: true,

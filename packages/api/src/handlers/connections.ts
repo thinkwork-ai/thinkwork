@@ -10,8 +10,8 @@
  */
 
 import type {
-	APIGatewayProxyEventV2,
-	APIGatewayProxyStructuredResultV2,
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { eq, and, sql } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
@@ -21,309 +21,350 @@ import { handleCors, json, error, notFound } from "../lib/response.js";
 
 // Accept either Bearer API_AUTH_SECRET (internal) or x-api-key (from app-manager)
 import {
-	SecretsManagerClient,
-	DeleteSecretCommand,
-	ResourceNotFoundException,
+  SecretsManagerClient,
+  DeleteSecretCommand,
+  ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 
-const { connections, connectProviders, credentials } = schema;
+const { connections, connectProviders, credentials, scheduledJobs } = schema;
 
 const STAGE = process.env.STAGE || "dev";
 const sm = new SecretsManagerClient({
-	region: process.env.AWS_REGION || "us-east-1",
+  region: process.env.AWS_REGION || "us-east-1",
 });
 
 function parsePath(rawPath: string) {
-	const segments = rawPath
-		.replace(/^\/api\/connections\/?/, "")
-		.split("/")
-		.filter(Boolean);
-	return { id: segments[0] || null, sub: segments[1] || null };
+  const segments = rawPath
+    .replace(/^\/api\/connections\/?/, "")
+    .split("/")
+    .filter(Boolean);
+  return { id: segments[0] || null, sub: segments[1] || null };
 }
 
 function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
-	if (!event.body) return {};
-	try {
-		return JSON.parse(event.body);
-	} catch {
-		return {};
-	}
+  if (!event.body) return {};
+  try {
+    return JSON.parse(event.body);
+  } catch {
+    return {};
+  }
 }
 
 export async function handler(
-	event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+  if (event.requestContext.http.method === "OPTIONS")
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+      },
+      body: "",
+    };
 
-	const tenantHeader = event.headers["x-tenant-id"];
-	if (!tenantHeader) return error("Missing x-tenant-id header");
+  const tenantHeader = event.headers["x-tenant-id"];
+  if (!tenantHeader) return error("Missing x-tenant-id header");
 
-	const userId = event.headers["x-principal-id"] || "";
-	const method = event.requestContext.http.method;
-	const { id, sub } = parsePath(event.rawPath);
+  const userId = event.headers["x-principal-id"] || "";
+  const method = event.requestContext.http.method;
+  const { id, sub } = parsePath(event.rawPath);
 
-	// requireTenantMembership accepts Cognito JWT, API_AUTH_SECRET (bearer),
-	// or x-api-key; apikey path bypasses membership, Cognito path requires
-	// active (tenant_members) row in the requested role.
-	const verdict = await requireTenantMembership(event, tenantHeader, {
-		requiredRoles: method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
-	});
-	if (!verdict.ok) return error(verdict.reason, verdict.status);
-	const tenantId = verdict.tenantId;
+  // requireTenantMembership accepts Cognito JWT, API_AUTH_SECRET (bearer),
+  // or x-api-key; apikey path bypasses membership, Cognito path requires
+  // active (tenant_members) row in the requested role.
+  const verdict = await requireTenantMembership(event, tenantHeader, {
+    requiredRoles:
+      method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+  });
+  if (!verdict.ok) return error(verdict.reason, verdict.status);
+  const tenantId = verdict.tenantId;
+  const requesterUserId = verdict.userId || userId;
 
-	try {
-
-		switch (method) {
-			case "GET":
-				return id
-					? getConnection(tenantId, id)
-					: listConnections(tenantId, userId);
-			case "POST":
-				if (id) return error("POST to /api/connections/:id not supported", 405);
-				if (!userId) return error("Missing x-principal-id header");
-				return createConnection(tenantId, userId, event);
-			case "PUT":
-				if (!id) return error("Missing connection ID");
-				return updateConnection(tenantId, id, event);
-			case "DELETE":
-				if (!id) return error("Missing connection ID");
-				return deleteConnection(tenantId, id);
-			default:
-				return error(`Unsupported method: ${method}`, 405);
-		}
-	} catch (err) {
-		console.error("[connections] Error:", err);
-		return error("Internal server error", 500);
-	}
+  try {
+    switch (method) {
+      case "GET":
+        if (id && sub === "computer-triggers") {
+          return listConnectionComputerTriggers(tenantId, requesterUserId, id);
+        }
+        return id
+          ? getConnection(tenantId, id)
+          : listConnections(tenantId, requesterUserId);
+      case "POST":
+        if (id) return error("POST to /api/connections/:id not supported", 405);
+        if (!requesterUserId) return error("Missing x-principal-id header");
+        return createConnection(tenantId, requesterUserId, event);
+      case "PUT":
+        if (!id) return error("Missing connection ID");
+        return updateConnection(tenantId, id, event);
+      case "DELETE":
+        if (!id) return error("Missing connection ID");
+        return deleteConnection(tenantId, id);
+      default:
+        return error(`Unsupported method: ${method}`, 405);
+    }
+  } catch (err) {
+    console.error("[connections] Error:", err);
+    return error("Internal server error", 500);
+  }
 }
 
 async function listConnections(
-	tenantId: string,
-	userId: string,
+  tenantId: string,
+  userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const rows = await db
-		.select({
-			id: connections.id,
-			tenant_id: connections.tenant_id,
-			user_id: connections.user_id,
-			provider_id: connections.provider_id,
-			status: connections.status,
-			external_id: connections.external_id,
-			metadata: connections.metadata,
-			connected_at: connections.connected_at,
-			created_at: connections.created_at,
-			updated_at: connections.updated_at,
-			provider_name: connectProviders.name,
-			provider_display_name: connectProviders.display_name,
-			provider_type: connectProviders.provider_type,
-		})
-		.from(connections)
-		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
-		.where(
-			userId
-				? and(
-						eq(connections.tenant_id, tenantId),
-						eq(connections.user_id, userId),
-					)
-				: eq(connections.tenant_id, tenantId),
-		);
+  const rows = await db
+    .select({
+      id: connections.id,
+      tenant_id: connections.tenant_id,
+      user_id: connections.user_id,
+      provider_id: connections.provider_id,
+      status: connections.status,
+      external_id: connections.external_id,
+      metadata: connections.metadata,
+      connected_at: connections.connected_at,
+      created_at: connections.created_at,
+      updated_at: connections.updated_at,
+      provider_name: connectProviders.name,
+      provider_display_name: connectProviders.display_name,
+      provider_type: connectProviders.provider_type,
+    })
+    .from(connections)
+    .innerJoin(
+      connectProviders,
+      eq(connections.provider_id, connectProviders.id),
+    )
+    .where(
+      userId
+        ? and(
+            eq(connections.tenant_id, tenantId),
+            eq(connections.user_id, userId),
+          )
+        : eq(connections.tenant_id, tenantId),
+    );
 
-	return json(rows);
+  return json(rows);
 }
 
 async function getConnection(
-	tenantId: string,
-	id: string,
+  tenantId: string,
+  id: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const [row] = await db
-		.select({
-			id: connections.id,
-			tenant_id: connections.tenant_id,
-			user_id: connections.user_id,
-			provider_id: connections.provider_id,
-			status: connections.status,
-			external_id: connections.external_id,
-			metadata: connections.metadata,
-			connected_at: connections.connected_at,
-			created_at: connections.created_at,
-			updated_at: connections.updated_at,
-			provider_name: connectProviders.name,
-			provider_display_name: connectProviders.display_name,
-			provider_type: connectProviders.provider_type,
-		})
-		.from(connections)
-		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
-		.where(
-			and(eq(connections.id, id), eq(connections.tenant_id, tenantId)),
-		);
+  const [row] = await db
+    .select({
+      id: connections.id,
+      tenant_id: connections.tenant_id,
+      user_id: connections.user_id,
+      provider_id: connections.provider_id,
+      status: connections.status,
+      external_id: connections.external_id,
+      metadata: connections.metadata,
+      connected_at: connections.connected_at,
+      created_at: connections.created_at,
+      updated_at: connections.updated_at,
+      provider_name: connectProviders.name,
+      provider_display_name: connectProviders.display_name,
+      provider_type: connectProviders.provider_type,
+    })
+    .from(connections)
+    .innerJoin(
+      connectProviders,
+      eq(connections.provider_id, connectProviders.id),
+    )
+    .where(and(eq(connections.id, id), eq(connections.tenant_id, tenantId)));
 
-	if (!row) return notFound("Connection not found");
-	return json(row);
+  if (!row) return notFound("Connection not found");
+  return json(row);
+}
+
+async function listConnectionComputerTriggers(
+  tenantId: string,
+  userId: string,
+  connectionId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const connectionConditions = [
+    eq(connections.id, connectionId),
+    eq(connections.tenant_id, tenantId),
+  ];
+  if (userId) connectionConditions.push(eq(connections.user_id, userId));
+
+  const [connection] = await db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(and(...connectionConditions));
+  if (!connection) return notFound("Connection not found");
+
+  const rows = await db
+    .select()
+    .from(scheduledJobs)
+    .where(
+      and(
+        eq(scheduledJobs.tenant_id, tenantId),
+        eq(scheduledJobs.trigger_type, "event"),
+        sql`${scheduledJobs.config}->'connectorTrigger'->>'connectionId' = ${connectionId}`,
+      ),
+    );
+
+  return json(rows);
 }
 
 async function createConnection(
-	tenantId: string,
-	userId: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  userId: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = parseBody(event);
-	const providerName =
-		typeof body.providerName === "string" ? body.providerName : "";
-	if (!providerName) return error("Missing providerName");
+  const body = parseBody(event);
+  const providerName =
+    typeof body.providerName === "string" ? body.providerName : "";
+  if (!providerName) return error("Missing providerName");
 
-	const externalId =
-		typeof body.external_id === "string" ? body.external_id : null;
-	const metadataInput =
-		body.metadata && typeof body.metadata === "object"
-			? (body.metadata as Record<string, unknown>)
-			: {};
+  const externalId =
+    typeof body.external_id === "string" ? body.external_id : null;
+  const metadataInput =
+    body.metadata && typeof body.metadata === "object"
+      ? (body.metadata as Record<string, unknown>)
+      : {};
 
-	const [provider] = await db
-		.select({ id: connectProviders.id })
-		.from(connectProviders)
-		.where(eq(connectProviders.name, providerName));
-	if (!provider) return notFound(`Unknown provider: ${providerName}`);
+  const [provider] = await db
+    .select({ id: connectProviders.id })
+    .from(connectProviders)
+    .where(eq(connectProviders.name, providerName));
+  if (!provider) return notFound(`Unknown provider: ${providerName}`);
 
-	// Idempotent upsert on (tenant_id, user_id, provider_id). If a row
-	// already exists, JSONB-merge the new metadata into it and flip it
-	// back to active — users self-registering again should be a no-op,
-	// not a duplicate row.
-	const [existing] = await db
-		.select({ id: connections.id })
-		.from(connections)
-		.where(
-			and(
-				eq(connections.tenant_id, tenantId),
-				eq(connections.user_id, userId),
-				eq(connections.provider_id, provider.id),
-			),
-		);
+  // Idempotent upsert on (tenant_id, user_id, provider_id). If a row
+  // already exists, JSONB-merge the new metadata into it and flip it
+  // back to active — users self-registering again should be a no-op,
+  // not a duplicate row.
+  const [existing] = await db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(
+      and(
+        eq(connections.tenant_id, tenantId),
+        eq(connections.user_id, userId),
+        eq(connections.provider_id, provider.id),
+      ),
+    );
 
-	if (existing) {
-		const metadataJson = JSON.stringify(metadataInput);
-		const [updated] = await db
-			.update(connections)
-			.set({
-				status: "active",
-				external_id: externalId ?? undefined,
-				metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
-				connected_at: new Date(),
-				disconnected_at: null,
-				updated_at: new Date(),
-			})
-			.where(eq(connections.id, existing.id))
-			.returning();
-		return json(updated);
-	}
+  if (existing) {
+    const metadataJson = JSON.stringify(metadataInput);
+    const [updated] = await db
+      .update(connections)
+      .set({
+        status: "active",
+        external_id: externalId ?? undefined,
+        metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
+        connected_at: new Date(),
+        disconnected_at: null,
+        updated_at: new Date(),
+      })
+      .where(eq(connections.id, existing.id))
+      .returning();
+    return json(updated);
+  }
 
-	const [inserted] = await db
-		.insert(connections)
-		.values({
-			tenant_id: tenantId,
-			user_id: userId,
-			provider_id: provider.id,
-			status: "active",
-			external_id: externalId,
-			metadata: metadataInput,
-			connected_at: new Date(),
-		})
-		.returning();
-	return json(inserted, 201);
+  const [inserted] = await db
+    .insert(connections)
+    .values({
+      tenant_id: tenantId,
+      user_id: userId,
+      provider_id: provider.id,
+      status: "active",
+      external_id: externalId,
+      metadata: metadataInput,
+      connected_at: new Date(),
+    })
+    .returning();
+  return json(inserted, 201);
 }
 
 async function updateConnection(
-	tenantId: string,
-	id: string,
-	event: APIGatewayProxyEventV2,
+  tenantId: string,
+  id: string,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = parseBody(event);
+  const body = parseBody(event);
 
-	// Build update fields
-	const updates: Record<string, unknown> = {
-		updated_at: new Date(),
-	};
+  // Build update fields
+  const updates: Record<string, unknown> = {
+    updated_at: new Date(),
+  };
 
-	if (body.status && typeof body.status === "string") {
-		updates.status = body.status;
-	}
-	if (body.external_id && typeof body.external_id === "string") {
-		updates.external_id = body.external_id;
-	}
+  if (body.status && typeof body.status === "string") {
+    updates.status = body.status;
+  }
+  if (body.external_id && typeof body.external_id === "string") {
+    updates.external_id = body.external_id;
+  }
 
-	// JSONB merge on metadata — critical for cursor updates
-	if (body.metadata && typeof body.metadata === "object") {
-		const metadataJson = JSON.stringify(body.metadata);
-		const [updated] = await db
-			.update(connections)
-			.set({
-				...updates,
-				metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
-			})
-			.where(
-				and(eq(connections.id, id), eq(connections.tenant_id, tenantId)),
-			)
-			.returning();
+  // JSONB merge on metadata — critical for cursor updates
+  if (body.metadata && typeof body.metadata === "object") {
+    const metadataJson = JSON.stringify(body.metadata);
+    const [updated] = await db
+      .update(connections)
+      .set({
+        ...updates,
+        metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
+      })
+      .where(and(eq(connections.id, id), eq(connections.tenant_id, tenantId)))
+      .returning();
 
-		if (!updated) return notFound("Connection not found");
-		return json(updated);
-	}
+    if (!updated) return notFound("Connection not found");
+    return json(updated);
+  }
 
-	const [updated] = await db
-		.update(connections)
-		.set(updates)
-		.where(
-			and(eq(connections.id, id), eq(connections.tenant_id, tenantId)),
-		)
-		.returning();
+  const [updated] = await db
+    .update(connections)
+    .set(updates)
+    .where(and(eq(connections.id, id), eq(connections.tenant_id, tenantId)))
+    .returning();
 
-	if (!updated) return notFound("Connection not found");
-	return json(updated);
+  if (!updated) return notFound("Connection not found");
+  return json(updated);
 }
 
 async function deleteConnection(
-	tenantId: string,
-	id: string,
+  tenantId: string,
+  id: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	// Soft-delete: set status to inactive
-	const [updated] = await db
-		.update(connections)
-		.set({
-			status: "inactive",
-			disconnected_at: new Date(),
-			updated_at: new Date(),
-		})
-		.where(
-			and(eq(connections.id, id), eq(connections.tenant_id, tenantId)),
-		)
-		.returning();
+  // Soft-delete: set status to inactive
+  const [updated] = await db
+    .update(connections)
+    .set({
+      status: "inactive",
+      disconnected_at: new Date(),
+      updated_at: new Date(),
+    })
+    .where(and(eq(connections.id, id), eq(connections.tenant_id, tenantId)))
+    .returning();
 
-	if (!updated) return notFound("Connection not found");
+  if (!updated) return notFound("Connection not found");
 
-	// Delete Secrets Manager secret
-	const secretId = `thinkwork/${STAGE}/oauth/${id}`;
-	try {
-		await sm.send(
-			new DeleteSecretCommand({
-				SecretId: secretId,
-				ForceDeleteWithoutRecovery: true,
-			}),
-		);
-	} catch (err) {
-		if (!(err instanceof ResourceNotFoundException)) {
-			console.error(`[connections] Failed to delete secret ${secretId}:`, err);
-		}
-	}
+  // Delete Secrets Manager secret
+  const secretId = `thinkwork/${STAGE}/oauth/${id}`;
+  try {
+    await sm.send(
+      new DeleteSecretCommand({
+        SecretId: secretId,
+        ForceDeleteWithoutRecovery: true,
+      }),
+    );
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) {
+      console.error(`[connections] Failed to delete secret ${secretId}:`, err);
+    }
+  }
 
-	// Delete credentials rows
-	await db
-		.delete(credentials)
-		.where(
-			and(
-				eq(credentials.connection_id, id),
-				eq(credentials.tenant_id, tenantId),
-			),
-		);
+  // Delete credentials rows
+  await db
+    .delete(credentials)
+    .where(
+      and(
+        eq(credentials.connection_id, id),
+        eq(credentials.tenant_id, tenantId),
+      ),
+    );
 
-	return json({ ok: true, id });
+  return json({ ok: true, id });
 }
-

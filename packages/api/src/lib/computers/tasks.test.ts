@@ -81,6 +81,8 @@ describe("Computer task helpers", () => {
       requesterUserId: "user-1",
       contextClass: "user",
       runbookRunId: null,
+      credentialSubject: null,
+      event: null,
       surfaceContext: {
         source: "chat_message",
         triggerId: null,
@@ -104,6 +106,8 @@ describe("Computer task helpers", () => {
       requesterUserId: null,
       contextClass: "system",
       runbookRunId: "run-1",
+      credentialSubject: null,
+      event: null,
       surfaceContext: {
         source: "runbook",
         triggerId: null,
@@ -121,6 +125,83 @@ describe("Computer task helpers", () => {
         actorType: "user",
       }),
     ).toThrow("requesterUserId is required");
+  });
+
+  it("preserves personal connector event attribution in thread turns", () => {
+    expect(
+      normalizeTaskInput("thread_turn", {
+        threadId: "thread-1",
+        messageId: "message-1",
+        source: "personal_connector_event",
+        actorType: "user",
+        actorId: "user-1",
+        requesterUserId: "user-1",
+        contextClass: "personal_connector_event",
+        triggerId: "trigger-1",
+        triggerType: "event",
+        credentialSubject: {
+          type: "user",
+          userId: "user-1",
+          connectionId: "connection-1",
+          provider: "google-gmail",
+        },
+        event: {
+          provider: "google-gmail",
+          eventType: "message.created",
+          eventId: "event-1",
+        },
+        surfaceContext: {
+          provider: "google-gmail",
+          eventType: "message.created",
+          connectionId: "connection-1",
+        },
+      }),
+    ).toEqual({
+      threadId: "thread-1",
+      messageId: "message-1",
+      source: "personal_connector_event",
+      actorType: "user",
+      actorId: "user-1",
+      requesterUserId: "user-1",
+      contextClass: "personal_connector_event",
+      runbookRunId: null,
+      credentialSubject: {
+        type: "user",
+        userId: "user-1",
+        connectionId: "connection-1",
+        provider: "google-gmail",
+      },
+      event: {
+        provider: "google-gmail",
+        eventType: "message.created",
+        eventId: "event-1",
+      },
+      surfaceContext: {
+        source: "personal_connector_event",
+        triggerId: "trigger-1",
+        triggerType: "event",
+        scheduleName: null,
+        provider: "google-gmail",
+        eventType: "message.created",
+        connectionId: "connection-1",
+      },
+    });
+  });
+
+  it("rejects connector credential subjects for a different requester", () => {
+    expect(() =>
+      normalizeTaskInput("thread_turn", {
+        threadId: "thread-1",
+        messageId: "message-1",
+        actorType: "user",
+        actorId: "user-1",
+        requesterUserId: "user-1",
+        credentialSubject: {
+          type: "user",
+          userId: "user-2",
+        },
+      }),
+    ).toThrow("credentialSubject.userId must match requesterUserId");
   });
 
   it("normalizes Slack-originated thread turn input with the canonical envelope", () => {
