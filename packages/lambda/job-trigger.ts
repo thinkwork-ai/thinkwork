@@ -56,7 +56,7 @@ interface JobTriggerEvent {
 
 type ScheduledComputerTarget = {
   id: string;
-  ownerUserId: string;
+  ownerUserId: string | null;
   migratedAgentId: string | null;
 };
 
@@ -435,6 +435,13 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       });
 
       if (computer) {
+        if (!computer.ownerUserId) {
+          console.warn(
+            `[job-trigger] Computer ${computer.id} has no owner_user_id; skipping legacy owner-scoped scheduled job ${triggerId}`,
+          );
+          return;
+        }
+
         const result = await ensureThreadForWork({
           tenantId,
           computerId: computer.id,

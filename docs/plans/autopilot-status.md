@@ -1,10 +1,44 @@
 ---
 title: "Autopilot status ledger"
-date: 2026-05-16
-status: complete
+date: 2026-05-17
+status: active
 ---
 
 # Autopilot Status Ledger
+
+## Current Run: Shared Computers Product Reframe
+
+Plan: `docs/plans/2026-05-17-001-feat-shared-computers-reframe-plan.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 Schema and migration for shared Computers and assignments
+- Active branch: `codex/shared-computers-u1-schema`
+- Active worktree: `.Codex/worktrees/shared-computers-u1-schema`
+- Started: 2026-05-17
+- PR: [#1322](https://github.com/thinkwork-ai/thinkwork/pull/1322)
+- CI: passed after rerunning the migration drift precheck
+
+### Progress Log
+
+| Date       | Unit | Branch                             | PR                                                           | Status    | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                                                                                                                                                        |
+| ---------- | ---- | ---------------------------------- | ------------------------------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-17 | U1   | `codex/shared-computers-u1-schema` | [#1322](https://github.com/thinkwork-ai/thinkwork/pull/1322) | CI passed | `pnpm schema:build`; GraphQL codegen for admin/mobile/CLI; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0097_shared_computers.sql`; `pnpm --filter @thinkwork/api typecheck`; focused API compatibility tests; `pnpm --filter @thinkwork/lambda typecheck`; focused Lambda test; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter @thinkwork/admin build`; `pnpm --filter @thinkwork/mobile test`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present test`; `git diff --check`; GitHub checks | Created isolated worktree from `origin/main`, copied the approved plan/brainstorm docs into the branch, added shared Computer schema/assignment migration, regenerated GraphQL clients, and added nullable-owner compatibility guards for legacy owner-scoped runtime paths. |
+
+### CI / Merge Log
+
+- Opened [#1322](https://github.com/thinkwork-ai/thinkwork/pull/1322).
+- First CI run passed `cla`, `lint`, `verify`, `typecheck`, and `test`; `Migration Drift Precheck (dev)` failed because `0097_shared_computers.sql` had not yet been applied to dev.
+- Applied `packages/database-pg/drizzle/0097_shared_computers.sql` to dev and verified the scoped drift reporter returned all markers present.
+- Reran the failed migration drift precheck; it passed.
+
+### Blockers
+
+- None.
+
+---
 
 ## Current Run: ThinkWork Slack Workspace App
 

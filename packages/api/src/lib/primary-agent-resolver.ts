@@ -48,10 +48,19 @@ export class ComputerNotFoundError extends Error {
   }
 }
 
+export class ComputerOwnerRequiredError extends Error {
+  constructor(public computerId: string) {
+    super(
+      `Computer ${computerId} has no owner_user_id; set primary_agent_id or migrated_from_agent_id before using legacy owner-based primary agent resolution.`,
+    );
+    this.name = "ComputerOwnerRequiredError";
+  }
+}
+
 export interface ComputerRow {
   id: string;
   tenant_id: string;
-  owner_user_id: string;
+  owner_user_id: string | null;
   template_id: string;
   primary_agent_id: string | null;
   migrated_from_agent_id: string | null;
@@ -113,6 +122,9 @@ export async function resolveComputerPrimaryAgentId(
   }
   if (computer.migrated_from_agent_id) {
     return computer.migrated_from_agent_id;
+  }
+  if (!computer.owner_user_id) {
+    throw new ComputerOwnerRequiredError(computerId);
   }
   const candidates = await deps.findCandidateAgentIds({
     tenantId: computer.tenant_id,
