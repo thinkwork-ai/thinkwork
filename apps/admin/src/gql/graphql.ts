@@ -912,6 +912,16 @@ export type Computer = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type ComputerAccessUser = {
+  __typename?: 'ComputerAccessUser';
+  accessSource: ComputerAssignmentAccessSource;
+  directAssignment?: Maybe<ComputerAssignment>;
+  teamAssignments: Array<ComputerAssignment>;
+  teams: Array<Team>;
+  user: User;
+  userId: Scalars['ID']['output'];
+};
+
 export type ComputerAssignment = {
   __typename?: 'ComputerAssignment';
   assignedBy?: Maybe<User>;
@@ -930,10 +940,23 @@ export type ComputerAssignment = {
   userId?: Maybe<Scalars['ID']['output']>;
 };
 
+export enum ComputerAssignmentAccessSource {
+  Both = 'BOTH',
+  Direct = 'DIRECT',
+  Team = 'TEAM'
+}
+
 export enum ComputerAssignmentSubjectType {
   Team = 'TEAM',
   User = 'USER'
 }
+
+export type ComputerAssignmentTargetInput = {
+  role?: InputMaybe<Scalars['String']['input']>;
+  subjectType: ComputerAssignmentSubjectType;
+  teamId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
+};
 
 export enum ComputerDesiredRuntimeStatus {
   Running = 'RUNNING',
@@ -2096,7 +2119,9 @@ export type Mutation = {
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   /** Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
   setAgentSkills: Array<AgentSkill>;
+  setComputerAssignments: Array<ComputerAssignment>;
   setRoutineTrigger: RoutineTrigger;
+  setUserComputerAssignments: Array<ComputerAssignment>;
   startEvalRun: EvalRun;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -2869,9 +2894,19 @@ export type MutationSetAgentSkillsArgs = {
 };
 
 
+export type MutationSetComputerAssignmentsArgs = {
+  input: SetComputerAssignmentsInput;
+};
+
+
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetUserComputerAssignmentsArgs = {
+  input: SetUserComputerAssignmentsInput;
 };
 
 
@@ -3216,6 +3251,7 @@ export type Query = {
   applets: AppletConnection;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
+  assignedComputers: Array<Computer>;
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
@@ -3264,6 +3300,8 @@ export type Query = {
   complianceTenants: Array<Scalars['ID']['output']>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   computer?: Maybe<Computer>;
+  computerAccessUsers: Array<ComputerAccessUser>;
+  computerAssignments: Array<ComputerAssignment>;
   computerEvents: Array<ComputerEvent>;
   computerTasks: Array<ComputerTask>;
   /**
@@ -3385,6 +3423,7 @@ export type Query = {
   turnInvocationLogs: Array<ModelInvocation>;
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
+  userComputerAssignments: Array<UserComputerAssignment>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   webhooks: Array<Webhook>;
@@ -3634,6 +3673,16 @@ export type QueryCompositionFeedbackSummaryArgs = {
 
 export type QueryComputerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryComputerAccessUsersArgs = {
+  computerId: Scalars['ID']['input'];
+};
+
+
+export type QueryComputerAssignmentsArgs = {
+  computerId: Scalars['ID']['input'];
 };
 
 
@@ -4132,6 +4181,11 @@ export type QueryUnreadThreadCountArgs = {
 
 export type QueryUserArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryUserComputerAssignmentsArgs = {
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -4703,6 +4757,17 @@ export type SendMessageInput = {
   threadId: Scalars['ID']['input'];
   toolCalls?: InputMaybe<Scalars['AWSJSON']['input']>;
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
+};
+
+export type SetComputerAssignmentsInput = {
+  assignments: Array<ComputerAssignmentTargetInput>;
+  computerId: Scalars['ID']['input'];
+};
+
+export type SetUserComputerAssignmentsInput = {
+  computerIds: Array<Scalars['ID']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['ID']['input'];
 };
 
 export type SkillCatalogItem = {
@@ -5636,6 +5701,16 @@ export type User = {
   profile?: Maybe<UserProfile>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type UserComputerAssignment = {
+  __typename?: 'UserComputerAssignment';
+  accessSource: ComputerAssignmentAccessSource;
+  computer: Computer;
+  computerId: Scalars['ID']['output'];
+  directAssignment?: Maybe<ComputerAssignment>;
+  teamAssignments: Array<ComputerAssignment>;
+  teams: Array<Team>;
 };
 
 export type UserProfile = {

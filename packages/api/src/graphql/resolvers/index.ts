@@ -45,6 +45,7 @@ import {
   quickActionMutations,
 } from "./quick-actions/index.js";
 import {
+  computerAssignmentTypeResolvers,
   computerQueries,
   computerMutations,
   computerTypeResolvers,
@@ -136,4 +137,5 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
   Computer: computerTypeResolvers,
+  ComputerAssignment: computerAssignmentTypeResolvers,
 };
