@@ -29,7 +29,12 @@ export interface AdminExtensionDefinition {
   id: string;
   label: string;
   description?: string;
-  navGroup?: "main" | "managed-harness" | "integrations" | "manage";
+  navGroup?:
+    | "main"
+    | "agentic-os"
+    | "managed-harness"
+    | "integrations"
+    | "manage";
   breadcrumbs?: AdminExtensionBreadcrumb[];
   proxyBasePath?: string;
   icon?: ComponentType<{ className?: string }>;

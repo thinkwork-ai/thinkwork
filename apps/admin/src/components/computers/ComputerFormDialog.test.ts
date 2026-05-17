@@ -1,13 +1,29 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ComputerAssignmentSubjectType } from "@/gql/graphql";
 import { buildComputerAssignmentTargets } from "@/lib/computer-assignment-utils";
 import { parseBudgetDollarsToCents } from "./ComputerFormDialog";
 
+const dialogSource = readFileSync(
+  new URL("./ComputerFormDialog.tsx", import.meta.url),
+  "utf8",
+);
+
+describe("ComputerFormDialog access UI", () => {
+  it("offers user assignment without showing Teams", () => {
+    expect(dialogSource).toContain("Initial Access");
+    expect(dialogSource).toContain("TenantMembersListQuery");
+    expect(dialogSource).not.toContain("TeamsListQuery");
+    expect(dialogSource).not.toContain("selectedTeamIds");
+    expect(dialogSource).toContain(
+      "buildComputerAssignmentTargets(selectedUserIds, [])",
+    );
+  });
+});
+
 describe("buildComputerAssignmentTargets", () => {
-  it("builds direct user and Team assignment targets for new shared Computers", () => {
-    expect(
-      buildComputerAssignmentTargets(["user-1", "user-2"], ["team-1"]),
-    ).toEqual([
+  it("builds direct user assignment targets for new shared Computers", () => {
+    expect(buildComputerAssignmentTargets(["user-1", "user-2"], [])).toEqual([
       {
         subjectType: ComputerAssignmentSubjectType.User,
         userId: "user-1",
@@ -16,11 +32,6 @@ describe("buildComputerAssignmentTargets", () => {
       {
         subjectType: ComputerAssignmentSubjectType.User,
         userId: "user-2",
-        role: "member",
-      },
-      {
-        subjectType: ComputerAssignmentSubjectType.Team,
-        teamId: "team-1",
         role: "member",
       },
     ]);

@@ -278,7 +278,7 @@ function ComputersPage() {
         <EmptyState
           icon={Monitor}
           title="No Computers yet"
-          description="Create a shared Computer and assign access to people or Teams."
+          description="Create a shared Computer and assign access to people."
           action={{
             label: "New Computer",
             onClick: () => setCreateOpen(true),

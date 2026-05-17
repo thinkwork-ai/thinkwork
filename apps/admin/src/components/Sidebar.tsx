@@ -197,10 +197,21 @@ export function AppSidebar() {
 
   const extensions = getAdminExtensions();
   const extensionItemsFor = (
-    group: "main" | "managed-harness" | "integrations" | "manage",
+    group:
+      | "main"
+      | "agentic-os"
+      | "managed-harness"
+      | "integrations"
+      | "manage",
   ): NavItem[] =>
     extensions
-      .filter((extension) => (extension.navGroup ?? "integrations") === group)
+      .filter((extension) => {
+        const navGroup = extension.navGroup ?? "integrations";
+        return (
+          navGroup === group ||
+          (group === "agentic-os" && navGroup === "managed-harness")
+        );
+      })
       .map((extension) => ({
         to: `/extensions/${extension.id}`,
         icon: extension.icon ?? Puzzle,
@@ -209,12 +220,6 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    {
-      to: "/computers",
-      icon: Monitor,
-      label: "Computers",
-      badge: computerCount,
-    },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -252,11 +257,17 @@ export function AppSidebar() {
   ];
 
   const agentsItems: NavItem[] = [
+    {
+      to: "/computers",
+      icon: Monitor,
+      label: "Computers",
+      badge: computerCount,
+    },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
-    ...extensionItemsFor("managed-harness"),
+    ...extensionItemsFor("agentic-os"),
   ];
 
   // Billing is intentionally hidden — flip BILLING_VISIBLE back on when ready.
@@ -318,7 +329,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel>Managed Harness</SidebarGroupLabel>
+          <SidebarGroupLabel>Agentic OS</SidebarGroupLabel>
           <SidebarGroupContent>
             <NavItems items={agentsItems} />
           </SidebarGroupContent>
