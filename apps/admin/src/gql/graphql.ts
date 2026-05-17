@@ -6619,6 +6619,7 @@ export type ComputersListQuery = {
     templateId: string;
     name: string;
     slug: string;
+    scope: ComputerScope;
     status: ComputerStatus;
     desiredRuntimeStatus: ComputerDesiredRuntimeStatus;
     runtimeStatus: ComputerRuntimeStatus;
@@ -6672,6 +6673,7 @@ export type ComputerDetailQuery = {
     templateId: string;
     name: string;
     slug: string;
+    scope: ComputerScope;
     status: ComputerStatus;
     desiredRuntimeStatus: ComputerDesiredRuntimeStatus;
     runtimeStatus: ComputerRuntimeStatus;
@@ -6742,6 +6744,7 @@ export type CreateComputerMutation = {
     id: string;
     name: string;
     slug: string;
+    scope: ComputerScope;
     status: ComputerStatus;
     desiredRuntimeStatus: ComputerDesiredRuntimeStatus;
     runtimeStatus: ComputerRuntimeStatus;
@@ -6778,6 +6781,151 @@ export type UpdateComputerMutation = {
     budgetPausedReason?: string | null;
     updatedAt: any;
   };
+};
+
+export type ComputerAssignmentsQueryVariables = Exact<{
+  computerId: Scalars["ID"]["input"];
+}>;
+
+export type ComputerAssignmentsQuery = {
+  __typename?: "Query";
+  computerAssignments: Array<{
+    __typename?: "ComputerAssignment";
+    id: string;
+    subjectType: ComputerAssignmentSubjectType;
+    userId?: string | null;
+    teamId?: string | null;
+    role: string;
+    createdAt: any;
+    user?: {
+      __typename?: "User";
+      id: string;
+      name?: string | null;
+      email: string;
+    } | null;
+    team?: {
+      __typename?: "Team";
+      id: string;
+      name: string;
+      status: string;
+    } | null;
+  }>;
+};
+
+export type ComputerAccessUsersQueryVariables = Exact<{
+  computerId: Scalars["ID"]["input"];
+}>;
+
+export type ComputerAccessUsersQuery = {
+  __typename?: "Query";
+  computerAccessUsers: Array<{
+    __typename?: "ComputerAccessUser";
+    userId: string;
+    accessSource: ComputerAssignmentAccessSource;
+    user: {
+      __typename?: "User";
+      id: string;
+      name?: string | null;
+      email: string;
+    };
+    directAssignment?: {
+      __typename?: "ComputerAssignment";
+      id: string;
+      role: string;
+    } | null;
+    teams: Array<{
+      __typename?: "Team";
+      id: string;
+      name: string;
+      status: string;
+    }>;
+    teamAssignments: Array<{
+      __typename?: "ComputerAssignment";
+      id: string;
+      teamId?: string | null;
+      role: string;
+    }>;
+  }>;
+};
+
+export type UserComputerAssignmentsQueryVariables = Exact<{
+  userId: Scalars["ID"]["input"];
+}>;
+
+export type UserComputerAssignmentsQuery = {
+  __typename?: "Query";
+  userComputerAssignments: Array<{
+    __typename?: "UserComputerAssignment";
+    computerId: string;
+    accessSource: ComputerAssignmentAccessSource;
+    computer: {
+      __typename?: "Computer";
+      id: string;
+      name: string;
+      slug: string;
+      scope: ComputerScope;
+      status: ComputerStatus;
+      runtimeStatus: ComputerRuntimeStatus;
+      template?: {
+        __typename?: "AgentTemplate";
+        id: string;
+        name: string;
+      } | null;
+    };
+    directAssignment?: {
+      __typename?: "ComputerAssignment";
+      id: string;
+      role: string;
+    } | null;
+    teams: Array<{
+      __typename?: "Team";
+      id: string;
+      name: string;
+      status: string;
+    }>;
+    teamAssignments: Array<{
+      __typename?: "ComputerAssignment";
+      id: string;
+      teamId?: string | null;
+      role: string;
+    }>;
+  }>;
+};
+
+export type SetComputerAssignmentsMutationVariables = Exact<{
+  input: SetComputerAssignmentsInput;
+}>;
+
+export type SetComputerAssignmentsMutation = {
+  __typename?: "Mutation";
+  setComputerAssignments: Array<{
+    __typename?: "ComputerAssignment";
+    id: string;
+    computerId: string;
+    subjectType: ComputerAssignmentSubjectType;
+    userId?: string | null;
+    teamId?: string | null;
+    role: string;
+    updatedAt: any;
+  }>;
+};
+
+export type SetUserComputerAssignmentsMutationVariables = Exact<{
+  input: SetUserComputerAssignmentsInput;
+}>;
+
+export type SetUserComputerAssignmentsMutation = {
+  __typename?: "Mutation";
+  setUserComputerAssignments: Array<{
+    __typename?: "ComputerAssignment";
+    id: string;
+    computerId: string;
+    subjectType: ComputerAssignmentSubjectType;
+    userId?: string | null;
+    teamId?: string | null;
+    role: string;
+    updatedAt: any;
+  }>;
 };
 
 export type EnqueueComputerTaskMutationVariables = Exact<{
@@ -11784,6 +11932,7 @@ export const ComputersListDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "scope" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
                 {
                   kind: "Field",
@@ -11930,6 +12079,7 @@ export const ComputerDetailDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "scope" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
                 {
                   kind: "Field",
@@ -12091,6 +12241,7 @@ export const CreateComputerDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "scope" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
                 {
                   kind: "Field",
@@ -12232,6 +12383,451 @@ export const UpdateComputerDocument = {
 } as unknown as DocumentNode<
   UpdateComputerMutation,
   UpdateComputerMutationVariables
+>;
+export const ComputerAssignmentsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "ComputerAssignments" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "computerId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "computerAssignments" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "computerId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "computerId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "subjectType" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "user" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "email" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "teamId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "team" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "role" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ComputerAssignmentsQuery,
+  ComputerAssignmentsQueryVariables
+>;
+export const ComputerAccessUsersDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "ComputerAccessUsers" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "computerId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "computerAccessUsers" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "computerId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "computerId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "user" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "email" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "accessSource" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "directAssignment" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "role" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "teams" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "teamAssignments" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "teamId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "role" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ComputerAccessUsersQuery,
+  ComputerAccessUsersQueryVariables
+>;
+export const UserComputerAssignmentsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "UserComputerAssignments" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "userComputerAssignments" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "computerId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "computer" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "scope" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "runtimeStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "template" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "name" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "accessSource" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "directAssignment" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "role" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "teams" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "teamAssignments" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "teamId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "role" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UserComputerAssignmentsQuery,
+  UserComputerAssignmentsQueryVariables
+>;
+export const SetComputerAssignmentsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SetComputerAssignments" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "SetComputerAssignmentsInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setComputerAssignments" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "computerId" } },
+                { kind: "Field", name: { kind: "Name", value: "subjectType" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "teamId" } },
+                { kind: "Field", name: { kind: "Name", value: "role" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SetComputerAssignmentsMutation,
+  SetComputerAssignmentsMutationVariables
+>;
+export const SetUserComputerAssignmentsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SetUserComputerAssignments" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "SetUserComputerAssignmentsInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setUserComputerAssignments" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "computerId" } },
+                { kind: "Field", name: { kind: "Name", value: "subjectType" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "teamId" } },
+                { kind: "Field", name: { kind: "Name", value: "role" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SetUserComputerAssignmentsMutation,
+  SetUserComputerAssignmentsMutationVariables
 >;
 export const EnqueueComputerTaskDocument = {
   kind: "Document",
