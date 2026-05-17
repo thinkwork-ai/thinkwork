@@ -5,9 +5,14 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
+  auditOutbox: {},
+  COMPLIANCE_ACTOR_TYPES: ["user", "system"],
+  COMPLIANCE_EVENT_TYPES: ["attachment.received"],
   computerEvents: {},
   computerTasks: {},
+  messages: {},
   slackWorkspaces: {},
+  threadAttachments: {},
   users: {},
 }));
 
@@ -129,6 +134,7 @@ function makeHarness() {
     const task = tasks.find((item) => item.id === input.taskId);
     if (task) task.taskInput = input.taskInput;
   });
+  const materializeSlackFiles = vi.fn(async () => []);
   const resolveSlackThread = vi.fn(async (input: any) => ({
     threadId: `thread:${input.envelope.slackTeamId}:${input.envelope.channelId}`,
     messageId: `message:${input.envelope.eventId}`,
@@ -187,6 +193,7 @@ function makeHarness() {
     enqueueTask,
     loadLinkedComputer,
     updateTaskInput,
+    materializeSlackFiles,
     resolveSlackThread,
     slackEventsApi,
     slackDispatchApi,
@@ -333,6 +340,7 @@ describe("Slack origin acceptance examples", () => {
       loadLinkedComputer: harness.loadLinkedComputer,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
     });
@@ -375,6 +383,7 @@ describe("Slack origin acceptance examples", () => {
       loadLinkedComputer: harness.loadLinkedComputer,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
     });
@@ -468,6 +477,7 @@ describe("Slack origin acceptance examples", () => {
       loadLinkedComputer: harness.loadLinkedComputer,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
     });
@@ -508,6 +518,7 @@ describe("Slack origin acceptance examples", () => {
       loadLinkedComputer: harness.loadLinkedComputer,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
     });
@@ -540,6 +551,7 @@ describe("Slack origin acceptance examples", () => {
       loadLinkedComputer: harness.loadLinkedComputer,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
+      materializeSlackFiles: harness.materializeSlackFiles,
       slackApi: harness.slackEventsApi,
       metrics: harness.metrics,
     });

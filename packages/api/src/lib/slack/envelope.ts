@@ -13,7 +13,9 @@ export interface SlackFileRef {
   name: string | null;
   mimetype: string | null;
   urlPrivate: string | null;
+  urlPrivateDownload: string | null;
   permalink: string | null;
+  sizeBytes: number | null;
 }
 
 export interface SlackThreadContextMessage {
@@ -77,7 +79,9 @@ export interface SlackEventFile {
   name?: unknown;
   mimetype?: unknown;
   url_private?: unknown;
+  url_private_download?: unknown;
   permalink?: unknown;
+  size?: unknown;
 }
 
 export interface SlackMessageLike {
@@ -113,10 +117,21 @@ export function slackFileRefs(files: unknown): SlackFileRef[] {
         name: optionalSlackString(item.name),
         mimetype: optionalSlackString(item.mimetype),
         urlPrivate: optionalSlackString(item.url_private),
+        urlPrivateDownload: optionalSlackString(item.url_private_download),
         permalink: optionalSlackString(item.permalink),
+        sizeBytes: optionalSlackNumber(item.size),
       };
     })
     .filter((file): file is SlackFileRef => file !== null);
+}
+
+function optionalSlackNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 export function summarizeSlackThreadContext(

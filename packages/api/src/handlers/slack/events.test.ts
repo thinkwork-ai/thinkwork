@@ -47,6 +47,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   }));
   const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
   const updateTaskInput = vi.fn(async () => {});
+  const materializeSlackFiles = vi.fn(async () => []);
   const resolveSlackThread = vi.fn(async () => ({
     threadId: "thread-1",
     messageId: "message-1",
@@ -68,6 +69,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     loadLinkedComputer,
     updateTaskInput,
     resolveSlackThread,
+    materializeSlackFiles,
     slackApi,
     metrics,
     ...overrides,
@@ -156,7 +158,9 @@ describe("Slack events handler", () => {
               name: "brief.pdf",
               mimetype: "application/pdf",
               urlPrivate: "https://files.slack.com/files-pri/F123",
+              urlPrivateDownload: null,
               permalink: null,
+              sizeBytes: null,
             },
           ],
           slack: expect.objectContaining({
@@ -166,6 +170,27 @@ describe("Slack events handler", () => {
         }),
       }),
     );
+    expect(deps.materializeSlackFiles).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      uploadedBy: "user-1",
+      botToken: "xoxb-token",
+      fileRefs: [
+        {
+          id: "F123",
+          name: "brief.pdf",
+          mimetype: "application/pdf",
+          urlPrivate: "https://files.slack.com/files-pri/F123",
+          urlPrivateDownload: null,
+          permalink: null,
+          sizeBytes: null,
+        },
+      ],
+    });
+    expect(
+      deps.materializeSlackFiles.mock.invocationCallOrder[0],
+    ).toBeLessThan(deps.enqueueTask.mock.invocationCallOrder[0]!);
     expect(deps.slackApi.postMessage).toHaveBeenCalledWith({
       token: "xoxb-token",
       channel: "C123",
@@ -220,6 +245,82 @@ describe("Slack events handler", () => {
           channelType: "im",
           channelId: "D123",
         }),
+      }),
+    );
+  });
+
+  it("accepts human Slack file-share direct messages and materializes the attached files", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    await dispatch(
+      makeArgs({
+        type: "event_callback",
+        team_id: "T123",
+        event_id: "EvFile",
+        event: {
+          type: "message",
+          subtype: "file_share",
+          channel_type: "im",
+          team: "T123",
+          user: "U123",
+          channel: "D123",
+          text: "summarize this file",
+          ts: "1710000001.000000",
+          files: [
+            {
+              id: "FMD",
+              name: "agentic-etl-architecture-v5.md",
+              mimetype: "text/markdown",
+              url_private: "https://files.slack.com/files-pri/FMD",
+              url_private_download:
+                "https://files.slack.com/files-pri/FMD/download",
+              size: 1234,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(deps.enqueueTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskInput: expect.objectContaining({
+          channelType: "im",
+          channelId: "D123",
+          fileRefs: [
+            {
+              id: "FMD",
+              name: "agentic-etl-architecture-v5.md",
+              mimetype: "text/markdown",
+              urlPrivate: "https://files.slack.com/files-pri/FMD",
+              urlPrivateDownload:
+                "https://files.slack.com/files-pri/FMD/download",
+              permalink: null,
+              sizeBytes: 1234,
+            },
+          ],
+        }),
+      }),
+    );
+    expect(deps.materializeSlackFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        uploadedBy: "user-1",
+        botToken: "xoxb-token",
+        fileRefs: [
+          {
+            id: "FMD",
+            name: "agentic-etl-architecture-v5.md",
+            mimetype: "text/markdown",
+            urlPrivate: "https://files.slack.com/files-pri/FMD",
+            urlPrivateDownload:
+              "https://files.slack.com/files-pri/FMD/download",
+            permalink: null,
+            sizeBytes: 1234,
+          },
+        ],
       }),
     );
   });

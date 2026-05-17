@@ -69,6 +69,8 @@ const ALLOWED_DECLARED_MIME_TYPES = new Set([
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
 	"application/vnd.ms-excel", // .xls
 	"text/csv",
+	"text/markdown",
+	"text/plain",
 	"application/csv", // some browsers
 	"application/octet-stream", // tolerated — magic-byte sniff at finalize is the real gate
 ]);
