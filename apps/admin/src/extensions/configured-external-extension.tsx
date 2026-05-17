@@ -899,6 +899,7 @@ function readNavGroup(value: unknown) {
   const candidate = readTrimmed(value);
   if (
     candidate === "main" ||
+    candidate === "agentic-os" ||
     candidate === "managed-harness" ||
     candidate === "integrations" ||
     candidate === "manage"

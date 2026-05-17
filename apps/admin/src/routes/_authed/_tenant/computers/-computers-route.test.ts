@@ -10,6 +10,7 @@ describe("Computers admin routes", () => {
   const commandPaletteSource = readSource(
     "../../../../components/CommandPalette.tsx",
   );
+  const mainSource = readSource("../../../../main.tsx");
   const listRouteSource = readSource("./index.tsx");
   const detailRouteSource = readSource("./$computerId.tsx");
   const queriesSource = readSource("../../../../lib/graphql-queries.ts");
@@ -19,6 +20,36 @@ describe("Computers admin routes", () => {
     expect(sidebarSource).toContain('to: "/computers"');
     expect(commandPaletteSource).toContain('label: "Computers"');
     expect(commandPaletteSource).toContain('to: "/computers"');
+  });
+
+  it("places Computers first under Agentic OS instead of the top work group", () => {
+    expect(sidebarSource).toContain("<SidebarGroupLabel>Agentic OS");
+    expect(sidebarSource).not.toContain("<SidebarGroupLabel>Managed Harness");
+    const workItemsStart = sidebarSource.indexOf(
+      "const workItems: NavItem[] = [",
+    );
+    const automationsItemsStart = sidebarSource.indexOf(
+      "const automationsItems: NavItem[] = [",
+    );
+    const agentsItemsStart = sidebarSource.indexOf(
+      "const agentsItems: NavItem[] = [",
+    );
+    const workItemsSource = sidebarSource.slice(
+      workItemsStart,
+      automationsItemsStart,
+    );
+    const agentsItemsSource = sidebarSource.slice(agentsItemsStart);
+
+    expect(agentsItemsSource).toMatch(/=\s*\[\s*\{\s*to: "\/computers"/);
+    expect(workItemsSource).toContain('label: "Dashboard"');
+    expect(workItemsSource).toContain('label: "Threads"');
+    expect(workItemsSource).not.toContain('to: "/computers"');
+  });
+
+  it("does not register the Symphony extension at admin startup", () => {
+    expect(mainSource).not.toContain(
+      "./extensions/configured-external-extension",
+    );
   });
 
   it("renders a Computer list that links to detail pages", () => {
@@ -51,8 +82,8 @@ describe("Computers admin routes", () => {
     expect(detailRouteSource).toContain("ComputerStatusPanel");
     expect(detailRouteSource).toContain("ComputerDashboardMetrics");
     expect(detailRouteSource).toContain("ComputerRuntimePanel");
-    expect(detailRouteSource).toContain("ComputerAssignmentsPanel");
     expect(detailRouteSource).toContain("ComputerAccessUsersTable");
+    expect(detailRouteSource).not.toContain("ComputerAssignmentsPanel");
     expect(detailRouteSource).toContain("Identity");
     // Panels removed by plan U2 must not have crept back in.
     expect(detailRouteSource).not.toContain("ComputerDashboardActivity");
@@ -100,7 +131,6 @@ describe("Computers admin routes", () => {
   it("retires the queries that backed the deleted panels (plan U2)", () => {
     expect(queriesSource).toContain("query ComputersList");
     expect(queriesSource).toContain("query ComputerDetail");
-    expect(queriesSource).toContain("query ComputerAssignments");
     expect(queriesSource).toContain("query ComputerAccessUsers");
     expect(queriesSource).toContain("query UserComputerAssignments");
     expect(queriesSource).toContain("mutation SetComputerAssignments");

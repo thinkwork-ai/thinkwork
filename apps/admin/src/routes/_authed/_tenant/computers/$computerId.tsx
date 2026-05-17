@@ -36,7 +36,6 @@ import { ComputerStatusPanel } from "./-components/ComputerStatusPanel";
 import { ComputerRuntimePanel } from "./-components/ComputerRuntimePanel";
 import { ComputerDashboardMetrics } from "./-components/ComputerDashboardMetrics";
 import { ComputerIdentityEditPanel } from "./-components/ComputerIdentityEditPanel";
-import { ComputerAssignmentsPanel } from "./-components/ComputerAssignmentsPanel";
 import { ComputerAccessUsersTable } from "./-components/ComputerAccessUsersTable";
 import { ComputerTerminal } from "./-components/ComputerTerminal";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
@@ -263,14 +262,11 @@ function ComputerDetailPage() {
             computer={computer}
             onUpdated={() => reexecute({ requestPolicy: "network-only" })}
           />
-          <ComputerAssignmentsPanel
-            computerId={computer.id}
-            tenantId={computer.tenantId}
-            onUpdated={() => setAccessRefreshKey((value) => value + 1)}
-          />
           <ComputerAccessUsersTable
             computerId={computer.id}
+            tenantId={computer.tenantId}
             refreshKey={accessRefreshKey}
+            onUpdated={() => setAccessRefreshKey((value) => value + 1)}
           />
           <ComputerRuntimePanel computer={computer} />
         </div>

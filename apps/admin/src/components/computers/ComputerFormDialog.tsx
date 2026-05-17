@@ -43,7 +43,6 @@ import {
   ComputerTemplatesListQuery,
   CreateComputerMutation,
   SetComputerAssignmentsMutation,
-  TeamsListQuery,
   TenantMembersListQuery,
 } from "@/lib/graphql-queries";
 import { buildComputerAssignmentTargets } from "@/lib/computer-assignment-utils";
@@ -71,7 +70,6 @@ export interface ComputerFormDialogProps {
   initial?: Partial<ComputerFormValues>;
   initialAccess?: {
     userIds?: string[];
-    teamIds?: string[];
   };
   /** Called after a successful create with the new Computer's id. */
   onCreated?: (computerId: string) => void;
@@ -86,7 +84,6 @@ export function ComputerFormDialog({
 }: ComputerFormDialogProps) {
   const { tenantId } = useTenant();
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
 
   const [{ fetching: creating }, createComputer] = useMutation(
     CreateComputerMutation,
@@ -100,23 +97,16 @@ export function ComputerFormDialog({
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
-  const [teamsResult] = useQuery({
-    query: TeamsListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId || !open,
-  });
   const [templatesResult] = useQuery({
     query: ComputerTemplatesListQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
 
-  const queriesFetching =
-    membersResult.fetching || teamsResult.fetching || templatesResult.fetching;
+  const queriesFetching = membersResult.fetching || templatesResult.fetching;
   const queriesReady =
     !queriesFetching &&
     membersResult.data != null &&
-    teamsResult.data != null &&
     templatesResult.data != null;
 
   const users = useMemo(
@@ -131,7 +121,6 @@ export function ComputerFormDialog({
         })),
     [membersResult.data],
   );
-  const teams = teamsResult.data?.teams ?? [];
   const computerTemplates = templatesResult.data?.computerTemplates ?? [];
 
   const form = useForm<ComputerFormValues>({
@@ -147,7 +136,6 @@ export function ComputerFormDialog({
         ...initial,
       });
       setSelectedUserIds(initialAccess?.userIds ?? []);
-      setSelectedTeamIds(initialAccess?.teamIds ?? []);
     }
     wasOpenRef.current = open;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,10 +182,7 @@ export function ComputerFormDialog({
       const created = result.data?.createComputer;
       if (!created) return;
 
-      const assignments = buildComputerAssignmentTargets(
-        selectedUserIds,
-        selectedTeamIds,
-      );
+      const assignments = buildComputerAssignmentTargets(selectedUserIds, []);
       if (assignments.length > 0) {
         const assignmentResult = await setAssignments({
           input: {
@@ -341,33 +326,17 @@ export function ComputerFormDialog({
                     Initial Access
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {selectedUserIds.length} users · {selectedTeamIds.length}{" "}
-                    Teams
+                    {selectedUserIds.length} users
                   </span>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <AssignmentChecklist
-                    title="Users"
-                    emptyLabel="No users"
-                    items={users}
-                    selectedIds={selectedUserIds}
-                    onToggle={(id, checked) =>
-                      toggleSelection(setSelectedUserIds, id, checked)
-                    }
-                  />
-                  <AssignmentChecklist
-                    title="Teams"
-                    emptyLabel="No Teams"
-                    items={teams.map((team) => ({
-                      id: team.id,
-                      name: team.name,
-                    }))}
-                    selectedIds={selectedTeamIds}
-                    onToggle={(id, checked) =>
-                      toggleSelection(setSelectedTeamIds, id, checked)
-                    }
-                  />
-                </div>
+                <AssignmentChecklist
+                  emptyLabel="No users"
+                  items={users}
+                  selectedIds={selectedUserIds}
+                  onToggle={(id, checked) =>
+                    toggleSelection(setSelectedUserIds, id, checked)
+                  }
+                />
               </div>
 
               {rootError && (
@@ -404,51 +373,44 @@ export function ComputerFormDialog({
 }
 
 function AssignmentChecklist({
-  title,
   emptyLabel,
   items,
   selectedIds,
   onToggle,
 }: {
-  title: string;
   emptyLabel: string;
   items: { id: string; name: string; email?: string }[];
   selectedIds: string[];
   onToggle: (id: string, checked: boolean) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
-        {items.length === 0 ? (
-          <div className="px-2 py-3 text-xs text-muted-foreground">
-            {emptyLabel}
-          </div>
-        ) : (
-          items.map((item) => (
-            <label
-              key={item.id}
-              className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-            >
-              <Checkbox
-                checked={selectedIds.includes(item.id)}
-                onCheckedChange={(checked) =>
-                  onToggle(item.id, checked === true)
-                }
-                className="mt-0.5"
-              />
-              <span className="min-w-0">
-                <span className="block truncate">{item.name}</span>
-                {item.email && item.email !== item.name ? (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {item.email}
-                  </span>
-                ) : null}
-              </span>
-            </label>
-          ))
-        )}
-      </div>
+    <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
+      {items.length === 0 ? (
+        <div className="px-2 py-3 text-xs text-muted-foreground">
+          {emptyLabel}
+        </div>
+      ) : (
+        items.map((item) => (
+          <label
+            key={item.id}
+            className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+          >
+            <Checkbox
+              checked={selectedIds.includes(item.id)}
+              onCheckedChange={(checked) => onToggle(item.id, checked === true)}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className="block truncate">{item.name}</span>
+              {item.email && item.email !== item.name ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {item.email}
+                </span>
+              ) : null}
+            </span>
+          </label>
+        ))
+      )}
     </div>
   );
 }
