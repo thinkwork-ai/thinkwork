@@ -79,6 +79,7 @@ export function buildEvalAgentCorePayload(input: {
     trace_id: input.sessionId,
     message: input.message,
     messages_history: [],
+    eval_mode: true,
     use_memory: false,
     tenant_slug: runtimeConfig.tenantSlug || undefined,
     instance_id: runtimeConfig.agentSlug || undefined,
@@ -94,8 +95,8 @@ export function buildEvalAgentCorePayload(input: {
     hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
     web_search_config: runtimeConfig.webSearchConfig,
     send_email_config: runtimeConfig.sendEmailConfig || undefined,
-    context_engine_enabled: runtimeConfig.contextEngineEnabled || undefined,
-    context_engine_config: runtimeConfig.contextEngineConfig,
+    context_engine_enabled: false,
+    context_engine_config: undefined,
     runtime_type: runtimeConfig.runtimeType,
     model: evalModelId(input.model),
     max_tokens: evalMaxTokens(),
@@ -106,16 +107,12 @@ export function buildEvalAgentCorePayload(input: {
     knowledge_bases: runtimeConfig.knowledgeBasesConfig,
     trigger_channel: "eval",
     guardrail_config: runtimeConfig.guardrailConfig || undefined,
-    mcp_configs:
-      runtimeConfig.mcpConfigs.length > 0
-        ? runtimeConfig.mcpConfigs
-        : undefined,
+    mcp_configs: undefined,
     blocked_tools:
       runtimeConfig.blockedTools.length > 0
         ? runtimeConfig.blockedTools
         : undefined,
-    browser_automation_enabled:
-      runtimeConfig.browserAutomationEnabled || undefined,
+    browser_automation_enabled: false,
   };
 }
 
