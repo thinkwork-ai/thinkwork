@@ -19,6 +19,7 @@ import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedTenantRouteImport } from "./routes/_authed/_tenant";
 import { Route as AuthedTenantSettingsRouteImport } from "./routes/_authed/_tenant/settings";
 import { Route as AuthedTenantOrgRouteImport } from "./routes/_authed/_tenant/org";
+import { Route as AuthedTenantOntologyRouteImport } from "./routes/_authed/_tenant/ontology";
 import { Route as AuthedTenantKnowledgeRouteImport } from "./routes/_authed/_tenant/knowledge";
 import { Route as AuthedTenantDashboardRouteImport } from "./routes/_authed/_tenant/dashboard";
 import { Route as AuthedTenantCapabilitiesRouteImport } from "./routes/_authed/_tenant/capabilities";
@@ -153,6 +154,11 @@ const AuthedTenantSettingsRoute = AuthedTenantSettingsRouteImport.update({
 const AuthedTenantOrgRoute = AuthedTenantOrgRouteImport.update({
   id: "/org",
   path: "/org",
+  getParentRoute: () => AuthedTenantRoute,
+} as any);
+const AuthedTenantOntologyRoute = AuthedTenantOntologyRouteImport.update({
+  id: "/ontology",
+  path: "/ontology",
   getParentRoute: () => AuthedTenantRoute,
 } as any);
 const AuthedTenantKnowledgeRoute = AuthedTenantKnowledgeRouteImport.update({
@@ -682,6 +688,7 @@ export interface FileRoutesByFullPath {
   "/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
   "/dashboard": typeof AuthedTenantDashboardRoute;
   "/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
+  "/ontology": typeof AuthedTenantOntologyRoute;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
   "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
@@ -775,6 +782,7 @@ export interface FileRoutesByTo {
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/billing": typeof AuthedTenantBillingRoute;
   "/dashboard": typeof AuthedTenantDashboardRoute;
+  "/ontology": typeof AuthedTenantOntologyRoute;
   "/org": typeof AuthedTenantOrgRoute;
   "/settings": typeof AuthedTenantSettingsRoute;
   "/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
@@ -875,6 +883,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/capabilities": typeof AuthedTenantCapabilitiesRouteWithChildren;
   "/_authed/_tenant/dashboard": typeof AuthedTenantDashboardRoute;
   "/_authed/_tenant/knowledge": typeof AuthedTenantKnowledgeRouteWithChildren;
+  "/_authed/_tenant/ontology": typeof AuthedTenantOntologyRoute;
   "/_authed/_tenant/org": typeof AuthedTenantOrgRoute;
   "/_authed/_tenant/settings": typeof AuthedTenantSettingsRoute;
   "/_authed/_tenant/agent-templates/defaults": typeof AuthedTenantAgentTemplatesDefaultsRoute;
@@ -974,6 +983,7 @@ export interface FileRouteTypes {
     | "/capabilities"
     | "/dashboard"
     | "/knowledge"
+    | "/ontology"
     | "/org"
     | "/settings"
     | "/agent-templates/defaults"
@@ -1067,6 +1077,7 @@ export interface FileRouteTypes {
     | "/onboarding/welcome"
     | "/billing"
     | "/dashboard"
+    | "/ontology"
     | "/org"
     | "/settings"
     | "/agent-templates/defaults"
@@ -1166,6 +1177,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/capabilities"
     | "/_authed/_tenant/dashboard"
     | "/_authed/_tenant/knowledge"
+    | "/_authed/_tenant/ontology"
     | "/_authed/_tenant/org"
     | "/_authed/_tenant/settings"
     | "/_authed/_tenant/agent-templates/defaults"
@@ -1331,6 +1343,13 @@ declare module "@tanstack/react-router" {
       path: "/org";
       fullPath: "/org";
       preLoaderRoute: typeof AuthedTenantOrgRouteImport;
+      parentRoute: typeof AuthedTenantRoute;
+    };
+    "/_authed/_tenant/ontology": {
+      id: "/_authed/_tenant/ontology";
+      path: "/ontology";
+      fullPath: "/ontology";
+      preLoaderRoute: typeof AuthedTenantOntologyRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/knowledge": {
@@ -2064,6 +2083,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren;
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute;
   AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren;
+  AuthedTenantOntologyRoute: typeof AuthedTenantOntologyRoute;
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute;
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute;
   AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute;
@@ -2136,6 +2156,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantCapabilitiesRoute: AuthedTenantCapabilitiesRouteWithChildren,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantKnowledgeRoute: AuthedTenantKnowledgeRouteWithChildren,
+  AuthedTenantOntologyRoute: AuthedTenantOntologyRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
   AuthedTenantAgentTemplatesDefaultsRoute:
