@@ -581,7 +581,7 @@ function TranscriptMessage({ message }: { message: TaskThreadMessage }) {
         className={
           isUser
             ? "rounded-2xl bg-muted/70 px-5 py-3 text-base leading-7 text-foreground"
-            : "grid w-full gap-3 overflow-visible"
+            : "grid w-full grid-cols-[minmax(0,1fr)] gap-3 overflow-visible"
         }
       >
         {isUser ? (
