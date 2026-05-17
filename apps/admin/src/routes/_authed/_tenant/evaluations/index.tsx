@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useSubscription, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
@@ -331,11 +331,25 @@ function EvaluationsPage() {
     },
   );
 
-  if (!tenantId) return <PageSkeleton />;
-
   const s = summary.data?.evalSummary;
   const items = runs.data?.evalRuns?.items ?? [];
   const points = series.data?.evalTimeSeries ?? [];
+  const hasActiveRun = items.some((run) =>
+    ["pending", "running"].includes(String(run.status).toLowerCase()),
+  );
+
+  useEffect(() => {
+    if (!hasActiveRun) return;
+
+    const interval = window.setInterval(() => {
+      refetchSummary({ requestPolicy: "network-only" });
+      refetchRuns({ requestPolicy: "network-only" });
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [hasActiveRun, refetchRuns, refetchSummary]);
+
+  if (!tenantId) return <PageSkeleton />;
 
   return (
     <PageLayout
