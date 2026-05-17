@@ -1,7 +1,7 @@
 ---
 title: "feat: Shared Computers product reframe"
 type: feat
-status: active
+status: completed
 date: 2026-05-17
 origin: docs/brainstorms/2026-05-17-shared-computers-product-reframe-requirements.md
 ---
