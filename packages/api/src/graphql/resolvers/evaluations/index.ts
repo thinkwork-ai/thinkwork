@@ -142,9 +142,17 @@ function resultToGraphql(
 export function placeholderStatusForEvalRun(runStatus: string) {
   if (runStatus === "pending") return "pending";
   if (runStatus === "running") return "running";
-  if (runStatus === "cancelled") return "cancelled";
-  if (runStatus === "failed") return "failed";
   return "waiting";
+}
+
+export function shouldIncludePlannedEvalRows(runStatus: string): boolean {
+  return runStatus === "pending" || runStatus === "running";
+}
+
+export function excludesComputerSurfacePlaceholders(
+  run: Pick<typeof evalRuns.$inferSelect, "computer_id">,
+): boolean {
+  return !run.computer_id;
 }
 
 function plannedResultToGraphql(
@@ -395,6 +403,11 @@ const evalRunResults = async (
   if (run.categories.length > 0) {
     caseConditions.push(inArray(evalTestCases.category, run.categories));
   }
+  if (excludesComputerSurfacePlaceholders(run)) {
+    caseConditions.push(
+      sql`not (${evalTestCases.tags} @> ARRAY['surface:computer']::text[])`,
+    );
+  }
 
   const testCases = await db
     .select({
@@ -408,15 +421,29 @@ const evalRunResults = async (
     .where(and(...caseConditions))
     .orderBy(asc(evalTestCases.category), asc(evalTestCases.name));
 
-  const plannedRows = testCases.map((testCase) => {
+  const shouldIncludePlaceholders = shouldIncludePlannedEvalRows(run.status);
+  const plannedTestCaseIds = new Set(testCases.map((testCase) => testCase.id));
+  const plannedRows = testCases.flatMap((testCase) => {
     const actual = actualByTestCaseId.get(testCase.id);
-    return actual ?? plannedResultToGraphql(run, testCase);
+    if (actual) return [actual];
+    return shouldIncludePlaceholders
+      ? [plannedResultToGraphql(run, testCase)]
+      : [];
   });
   const resultRowsWithoutTestCase = actualRows.filter(
     (result) => !result.testCaseId,
   );
+  const actualRowsOutsidePlannedSet = actualRows.filter(
+    (result) =>
+      typeof result.testCaseId === "string" &&
+      !plannedTestCaseIds.has(result.testCaseId),
+  );
 
-  return [...resultRowsWithoutTestCase, ...plannedRows];
+  return [
+    ...resultRowsWithoutTestCase,
+    ...actualRowsOutsidePlannedSet,
+    ...plannedRows,
+  ];
 };
 
 export const evalResultSpans = async (
