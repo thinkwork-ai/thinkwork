@@ -40,6 +40,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -70,7 +71,11 @@ export const Route = createFileRoute("/_authed/_tenant/evaluations/$runId")({
 });
 
 const EVAL_RESULT_SHEET_WIDTH_CLASS =
-  "data-[side=right]:w-[min(750px,calc(100vw-2rem))] data-[side=right]:max-w-none";
+  "data-[side=right]:max-w-none";
+const EVAL_RESULT_SHEET_STYLE = {
+  width: "min(750px, calc(100vw - 2rem))",
+  maxWidth: "none",
+};
 
 interface EvalResultRow {
   id: string;
@@ -508,6 +513,7 @@ function ResultDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className={`${EVAL_RESULT_SHEET_WIDTH_CLASS} overflow-y-auto`}
+        style={EVAL_RESULT_SHEET_STYLE}
       >
         <SheetHeader className="px-6 pt-6 pr-14">
           <div className="flex items-start justify-between gap-3">
@@ -731,6 +737,9 @@ function EditEvalTestCaseSheet({
   onSaved: () => void;
 }) {
   const [actions, setActions] = useState<ReactNode>(null);
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
   const [tc] = useQuery({
     query: EvalTestCaseQuery,
     variables: { id: testCaseId ?? "" },
@@ -744,6 +753,7 @@ function EditEvalTestCaseSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className={cn(EVAL_RESULT_SHEET_WIDTH_CLASS, "overflow-y-auto")}
+        style={EVAL_RESULT_SHEET_STYLE}
       >
         <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
           <div className="flex items-start justify-between gap-3">
@@ -754,6 +764,10 @@ function EditEvalTestCaseSheet({
               <div className="flex shrink-0 items-center gap-2">{actions}</div>
             )}
           </div>
+          <SheetDescription className="sr-only">
+            Edit the evaluation test case associated with the selected run
+            result.
+          </SheetDescription>
         </SheetHeader>
         <div className="px-6 pb-6">
           {tc.fetching && !initial ? (
@@ -767,7 +781,7 @@ function EditEvalTestCaseSheet({
               initial={initial}
               isEdit
               onActions={setActions}
-              onCancel={() => onOpenChange(false)}
+              onCancel={handleCancel}
               onSaved={onSaved}
             />
           )}

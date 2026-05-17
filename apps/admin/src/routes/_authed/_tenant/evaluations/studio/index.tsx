@@ -84,7 +84,6 @@ function EvalStudioPage() {
   const [, deleteCase] = useMutation(DeleteEvalTestCaseMutation);
   const [seedState, seedCases] = useMutation(SeedEvalTestCasesMutation);
 
-  if (!tenantId) return <PageSkeleton />;
   const items = (cases.data?.evalTestCases ?? []) as EvalStudioTestCaseRow[];
   const categories = useMemo(() => evalStudioCategories(items), [items]);
   const filteredItems = useMemo(
@@ -183,6 +182,8 @@ function EvalStudioPage() {
     ],
     [deleteCase, refetch],
   );
+
+  if (!tenantId) return <PageSkeleton />;
 
   return (
     <PageLayout

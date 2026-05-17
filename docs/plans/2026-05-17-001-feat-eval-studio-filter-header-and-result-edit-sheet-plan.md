@@ -1,7 +1,7 @@
 ---
 title: "feat: Improve Eval Studio filters and result editing access"
 type: feat
-status: active
+status: completed
 date: 2026-05-17
 ---
 
