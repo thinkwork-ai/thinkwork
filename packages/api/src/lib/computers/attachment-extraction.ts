@@ -1,6 +1,5 @@
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
-import { PDFParse } from "pdf-parse";
 
 import {
   validateOoxmlSafety,
@@ -243,6 +242,7 @@ async function extractPdf(body: Buffer): Promise<AttachmentExtractionResult> {
     };
   }
 
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: body });
   try {
     const result = await parser.getText();

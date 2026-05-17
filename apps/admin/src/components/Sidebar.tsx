@@ -115,7 +115,10 @@ export function AppSidebar() {
     variables: { tenantId: tenantId! },
     pause: !tenantId,
   });
-  const computerCount = computersResult.data?.computers?.length ?? 0;
+  const computerCount =
+    computersResult.data?.computers?.filter(
+      (computer) => computer.status !== "ARCHIVED",
+    ).length ?? 0;
 
   const [threadsResult] = useQuery({
     query: ThreadsPagedQuery,
