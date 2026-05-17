@@ -33,6 +33,7 @@ enum ThreadChannel {
   API
   TASK
   CONNECTOR
+  SLACK
 }
 
 type Thread {

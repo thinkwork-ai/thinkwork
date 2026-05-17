@@ -140,7 +140,17 @@ describe("threadToCamel", () => {
 	});
 
 	it("uppercases every persisted channel enum field", () => {
-		for (const channel of ["chat", "email", "schedule", "manual", "webhook", "api", "task", "connector"]) {
+		for (const channel of [
+			"chat",
+			"email",
+			"schedule",
+			"manual",
+			"webhook",
+			"api",
+			"task",
+			"connector",
+			"slack",
+		]) {
 			const result = threadToCamel({ channel });
 			expect(result.channel).toBe(channel.toUpperCase());
 		}

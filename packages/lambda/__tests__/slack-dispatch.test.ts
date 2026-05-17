@@ -11,6 +11,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 vi.mock("@thinkwork/database-pg/schema", () => ({
   computerEvents: {},
   computerTasks: {},
+  messages: {},
   slackWorkspaces: {},
   users: {},
 }));
@@ -27,7 +28,10 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
   GetSecretValueCommand: vi.fn(),
 }));
 
-import { dispatchSlackCompletions } from "../slack-dispatch.js";
+import {
+  dispatchSlackCompletions,
+  slackDispatchResponseText,
+} from "../slack-dispatch.js";
 
 function pending(overrides: Record<string, unknown> = {}) {
   return {
@@ -135,6 +139,43 @@ describe("slack dispatch", () => {
       expect.objectContaining({ mode: "chat_update", degraded: false }),
     );
     expect(metrics.dispatchSuccess).toHaveBeenCalledWith("app_mention");
+  });
+
+  it("uses loaded assistant message content when task output only stores responseMessageId", () => {
+    expect(
+      slackDispatchResponseText(
+        { responseMessageId: "message-1" },
+        "The Eiffel Tower is 330 meters tall.",
+      ),
+    ).toBe("The Eiffel Tower is 330 meters tall.");
+  });
+
+  it("delivers the resolved assistant message content", async () => {
+    const store = makeStore([
+      pending({
+        response: "The Eiffel Tower is 330 meters tall.",
+      }),
+    ]);
+    const slackApi = makeSlackApi();
+
+    await dispatchSlackCompletions(
+      {},
+      { store, slackApi, getBotToken: async () => "xoxb-token" },
+    );
+
+    expect(slackApi.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "The Eiffel Tower is 330 meters tall.",
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            type: "section",
+            text: expect.objectContaining({
+              text: "The Eiffel Tower is 330 meters tall.",
+            }),
+          }),
+        ]),
+      }),
+    );
   });
 
   it("uses response_url for slash command completions and includes promote button", async () => {
