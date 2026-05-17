@@ -31,6 +31,12 @@ enum ComputerAssignmentSubjectType {
   TEAM
 }
 
+enum ComputerAssignmentAccessSource {
+  DIRECT
+  TEAM
+  BOTH
+}
+
 enum ComputerTaskStatus {
   PENDING
   RUNNING
@@ -108,6 +114,24 @@ type ComputerAssignment {
   updatedAt: AWSDateTime!
 }
 
+type ComputerAccessUser {
+  userId: ID!
+  user: User!
+  accessSource: ComputerAssignmentAccessSource!
+  directAssignment: ComputerAssignment
+  teamAssignments: [ComputerAssignment!]!
+  teams: [Team!]!
+}
+
+type UserComputerAssignment {
+  computerId: ID!
+  computer: Computer!
+  accessSource: ComputerAssignmentAccessSource!
+  directAssignment: ComputerAssignment
+  teamAssignments: [ComputerAssignment!]!
+  teams: [Team!]!
+}
+
 type ComputerTask {
   id: ID!
   tenantId: ID!
@@ -149,6 +173,24 @@ input CreateComputerInput {
   migrationMetadata: AWSJSON
 }
 
+input ComputerAssignmentTargetInput {
+  subjectType: ComputerAssignmentSubjectType!
+  userId: ID
+  teamId: ID
+  role: String
+}
+
+input SetComputerAssignmentsInput {
+  computerId: ID!
+  assignments: [ComputerAssignmentTargetInput!]!
+}
+
+input SetUserComputerAssignmentsInput {
+  userId: ID!
+  computerIds: [ID!]!
+  role: String
+}
+
 input UpdateComputerInput {
   name: String
   slug: String
@@ -176,8 +218,12 @@ input EnqueueComputerTaskInput {
 
 extend type Query {
   myComputer: Computer
+  assignedComputers: [Computer!]!
   computers(tenantId: ID!, status: ComputerStatus): [Computer!]!
   computer(id: ID!): Computer
+  computerAssignments(computerId: ID!): [ComputerAssignment!]!
+  computerAccessUsers(computerId: ID!): [ComputerAccessUser!]!
+  userComputerAssignments(userId: ID!): [UserComputerAssignment!]!
   computerTasks(
     computerId: ID!
     threadId: ID
@@ -190,5 +236,11 @@ extend type Query {
 extend type Mutation {
   createComputer(input: CreateComputerInput!): Computer!
   updateComputer(id: ID!, input: UpdateComputerInput!): Computer!
+  setComputerAssignments(
+    input: SetComputerAssignmentsInput!
+  ): [ComputerAssignment!]!
+  setUserComputerAssignments(
+    input: SetUserComputerAssignmentsInput!
+  ): [ComputerAssignment!]!
   enqueueComputerTask(input: EnqueueComputerTaskInput!): ComputerTask!
 }

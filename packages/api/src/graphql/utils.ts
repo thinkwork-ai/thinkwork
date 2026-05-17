@@ -89,6 +89,7 @@ import {
   agentTemplates,
   agentVersions,
   computers,
+  computerAssignments,
   computerTasks,
   computerEvents,
   computerSnapshots,
@@ -183,6 +184,7 @@ export {
   agentTemplates,
   agentVersions,
   computers,
+  computerAssignments,
   computerTasks,
   computerEvents,
   computerSnapshots,
@@ -790,7 +792,12 @@ export function computerToCamel(
   obj: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = snakeToCamel(obj);
-  for (const field of ["status", "desiredRuntimeStatus", "runtimeStatus"]) {
+  for (const field of [
+    "scope",
+    "status",
+    "desiredRuntimeStatus",
+    "runtimeStatus",
+  ]) {
     if (typeof result[field] === "string") {
       result[field] = (result[field] as string).toUpperCase();
     }

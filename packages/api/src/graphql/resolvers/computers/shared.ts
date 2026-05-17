@@ -8,10 +8,14 @@ import {
   ne,
   or,
   computers,
+  computerAssignments,
+  teamUsers,
   agents,
   agentTemplates,
   users,
+  teams,
   computerToCamel,
+  snakeToCamel,
   generateSlug,
 } from "../../utils.js";
 import { requireTenantAdmin, requireTenantMember } from "../core/authz.js";
@@ -19,10 +23,11 @@ import { resolveCaller } from "../core/resolve-auth-user.js";
 
 export type CreateComputerCoreInput = {
   tenantId: string;
-  ownerUserId: string;
+  ownerUserId?: string | null;
   templateId: string;
   name: string;
   slug?: string | null;
+  scope?: string | null;
   runtimeConfig?: unknown;
   budgetMonthlyCents?: number | null;
   migratedFromAgentId?: string | null;
@@ -51,21 +56,29 @@ export type CreateComputerCoreInput = {
 export async function createComputerCore(
   input: CreateComputerCoreInput,
 ): Promise<typeof computers.$inferSelect> {
-  await requireTenantUser(input.tenantId, input.ownerUserId);
+  const scope = parseComputerScope(input.scope) ?? "shared";
+  if (input.ownerUserId) {
+    await requireTenantUser(input.tenantId, input.ownerUserId);
+    await assertNoActiveComputer(input.tenantId, input.ownerUserId);
+  } else if (scope !== "shared") {
+    throw new GraphQLError("Historical personal Computers require an owner", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
   await requireComputerTemplate(input.tenantId, input.templateId);
   if (input.migratedFromAgentId) {
     await requireTenantAgent(input.tenantId, input.migratedFromAgentId);
   }
-  await assertNoActiveComputer(input.tenantId, input.ownerUserId);
 
   const [row] = await db
     .insert(computers)
     .values({
       tenant_id: input.tenantId,
-      owner_user_id: input.ownerUserId,
+      owner_user_id: input.ownerUserId ?? null,
       template_id: input.templateId,
       name: input.name,
       slug: input.slug ?? generateSlug(),
+      scope,
       runtime_config:
         input.runtimeConfig === undefined
           ? undefined
@@ -99,6 +112,10 @@ export function parseRuntimeStatus(value: unknown): string | undefined {
     "failed",
     "unknown",
   ]);
+}
+
+export function parseComputerScope(value: unknown): string | undefined {
+  return parseEnum(value, ["shared", "historical_personal"]);
 }
 
 export function parseJsonInput(value: unknown): unknown {
@@ -164,6 +181,21 @@ export async function requireTenantUser(
   }
 }
 
+export async function requireTenantTeam(
+  tenantId: string,
+  teamId: string,
+): Promise<void> {
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.tenant_id, tenantId)));
+  if (!team) {
+    throw new GraphQLError("Team not found in tenant", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+}
+
 export async function requireTenantAgent(
   tenantId: string,
   agentId: string,
@@ -207,11 +239,89 @@ export async function requireComputerReadAccess(
   await requireTenantMember(ctx, row.tenant_id);
   const caller = await resolveCaller(ctx);
   if (caller.userId === row.owner_user_id) return;
+  if (
+    caller.userId &&
+    (await hasComputerAssignmentAccess({
+      tenantId: row.tenant_id,
+      computerId: row.id,
+      userId: caller.userId,
+    }))
+  ) {
+    return;
+  }
   await requireTenantAdmin(ctx, row.tenant_id);
 }
 
 export function toGraphqlComputer(row: Record<string, unknown>) {
   return computerToCamel(row);
+}
+
+export function toGraphqlComputerAssignment(row: Record<string, unknown>) {
+  const result = snakeToCamel(row);
+  if (typeof result.subjectType === "string") {
+    result.subjectType = (result.subjectType as string).toUpperCase();
+  }
+  return result;
+}
+
+export async function loadComputerOrThrow(computerId: string) {
+  const [row] = await db
+    .select()
+    .from(computers)
+    .where(eq(computers.id, computerId))
+    .limit(1);
+  if (!row) {
+    throw new GraphQLError("Computer not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  return row;
+}
+
+export async function hasComputerAssignmentAccess(input: {
+  tenantId: string;
+  computerId: string;
+  userId: string;
+}): Promise<boolean> {
+  const [direct] = await db
+    .select({ id: computerAssignments.id })
+    .from(computerAssignments)
+    .where(
+      and(
+        eq(computerAssignments.tenant_id, input.tenantId),
+        eq(computerAssignments.computer_id, input.computerId),
+        eq(computerAssignments.subject_type, "user"),
+        eq(computerAssignments.user_id, input.userId),
+      ),
+    )
+    .limit(1);
+  if (direct) return true;
+
+  const [team] = await db
+    .select({ id: computerAssignments.id })
+    .from(computerAssignments)
+    .innerJoin(teamUsers, eq(teamUsers.team_id, computerAssignments.team_id))
+    .where(
+      and(
+        eq(computerAssignments.tenant_id, input.tenantId),
+        eq(computerAssignments.computer_id, input.computerId),
+        eq(computerAssignments.subject_type, "team"),
+        eq(teamUsers.tenant_id, input.tenantId),
+        eq(teamUsers.user_id, input.userId),
+      ),
+    )
+    .limit(1);
+  return Boolean(team);
+}
+
+export function accessSource(input: { direct: boolean; team: boolean }) {
+  if (input.direct && input.team) return "BOTH";
+  if (input.team) return "TEAM";
+  return "DIRECT";
+}
+
+export function parseAssignmentSubjectType(value: unknown) {
+  return parseEnum(value, ["user", "team"]);
 }
 
 function parseEnum(value: unknown, allowed: string[]): string | undefined {
