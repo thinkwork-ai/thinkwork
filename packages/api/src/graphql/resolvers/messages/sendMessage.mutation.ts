@@ -1,4 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
+import { GraphQLError } from "graphql";
 import { db, eq, messages, threads, messageToCamel } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
@@ -23,6 +24,7 @@ export const sendMessage = async (
     .select({
       tenant_id: threads.tenant_id,
       computer_id: threads.computer_id,
+      user_id: threads.user_id,
       title: threads.title,
       status: threads.status,
     })
@@ -32,6 +34,16 @@ export const sendMessage = async (
 
   const isUserMessage = i.role.toLowerCase() === "user";
   if (isUserMessage && thread.computer_id && senderType === "user") {
+    if (!senderId) {
+      throw new GraphQLError("Requester user identity required", {
+        extensions: { code: "UNAUTHENTICATED" },
+      });
+    }
+    if (thread.user_id && thread.user_id !== senderId) {
+      throw new GraphQLError("Thread does not belong to requester", {
+        extensions: { code: "FORBIDDEN" },
+      });
+    }
     await resolveThreadComputer({
       tenantId: thread.tenant_id,
       requesterUserId: senderId,
@@ -71,6 +83,17 @@ export const sendMessage = async (
     await db
       .update(threads)
       .set({ title: autoTitle })
+      .where(eq(threads.id, i.threadId));
+  }
+  if (
+    isUserMessage &&
+    thread.computer_id &&
+    senderType === "user" &&
+    !thread.user_id
+  ) {
+    await db
+      .update(threads)
+      .set({ user_id: senderId })
       .where(eq(threads.id, i.threadId));
   }
 

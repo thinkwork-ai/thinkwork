@@ -20,7 +20,7 @@
  *
  * Computer identity can be supplied with SMOKE_TENANT_ID, SMOKE_COMPUTER_ID,
  * and SMOKE_USER_ID. If omitted, the script uses the most recently updated
- * Computer with an owner user in the target database.
+ * shared Computer with a direct user assignment in the target database.
  *
  * By default this reads apps/computer/.env when present. Override with
  * COMPUTER_ENV_FILE=/path/to/env, or set COMPUTER_ENV_FILE=none to skip.
@@ -325,10 +325,16 @@ function resolveComputerIdentity(source) {
   }
 
   const row = psql(`
-    select c.tenant_id::text || '|' || c.id::text || '|' || c.owner_user_id::text
+    select c.tenant_id::text || '|' || c.id::text || '|' || ca.user_id::text
     from computers c
-    where c.owner_user_id is not null
-    order by c.updated_at desc nulls last, c.created_at desc
+    join computer_assignments ca
+      on ca.tenant_id = c.tenant_id
+     and ca.computer_id = c.id
+     and ca.subject_type = 'user'
+     and ca.user_id is not null
+    where c.scope = 'shared'
+      and c.status <> 'archived'
+    order by c.updated_at desc nulls last, c.created_at desc, ca.created_at asc
     limit 1
   `);
   const [tenantId, computerId, userId] = row.split("|");

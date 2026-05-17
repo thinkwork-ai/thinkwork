@@ -45,4 +45,5 @@ export VITE_GRAPHQL_URL="$APPSYNC_API_URL"
 export VITE_GRAPHQL_WS_URL="$APPSYNC_REALTIME_URL"
 export VITE_GRAPHQL_API_KEY="$APPSYNC_API_KEY"
 
+node scripts/smoke/computer-shared-multi-user-smoke.mjs
 node scripts/smoke/computer-thread-streaming-smoke.mjs

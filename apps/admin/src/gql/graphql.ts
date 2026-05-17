@@ -5571,6 +5571,7 @@ export type Thread = {
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+  userId?: Maybe<Scalars['ID']['output']>;
 };
 
 

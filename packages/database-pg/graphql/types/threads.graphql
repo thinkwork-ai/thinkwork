@@ -41,6 +41,7 @@ type Thread {
   tenantId: ID!
   agentId: ID
   computerId: ID
+  userId: ID
   agent: Agent
   messages(limit: Int, cursor: String): MessageConnection!
   number: Int!

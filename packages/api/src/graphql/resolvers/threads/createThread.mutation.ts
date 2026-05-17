@@ -1,4 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
+import { GraphQLError } from "graphql";
 import {
   db,
   eq,
@@ -40,6 +41,11 @@ export const createThread = async (
     createdByType === "user"
       ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.createdById)
       : i.createdById;
+  if (createdByType === "user" && !createdById) {
+    throw new GraphQLError("Requester user identity required", {
+      extensions: { code: "UNAUTHENTICATED" },
+    });
+  }
   const threadComputer = await resolveThreadComputer({
     tenantId: i.tenantId,
     ownerUserId: createdByType === "user" ? createdById : null,
@@ -103,10 +109,7 @@ export const createThread = async (
         tenant_id: i.tenantId,
         agent_id: threadComputer ? null : i.agentId,
         computer_id: threadComputer?.id,
-        user_id:
-          createdByType === "user"
-            ? createdById
-            : threadComputer?.owner_user_id,
+        user_id: createdByType === "user" ? createdById : undefined,
         number: nextNumber,
         identifier,
         title: effectiveTitle,

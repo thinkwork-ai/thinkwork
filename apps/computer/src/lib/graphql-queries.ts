@@ -28,6 +28,7 @@ export const ComputerThreadsQuery = gql`
   query ComputerThreads($tenantId: ID!, $computerId: ID!, $limit: Int) {
     threads(tenantId: $tenantId, computerId: $computerId, limit: $limit) {
       id
+      userId
       number
       identifier
       title
@@ -62,6 +63,7 @@ export const ThreadsPagedQuery = gql`
     ) {
       items {
         id
+        userId
         number
         identifier
         title
@@ -94,6 +96,7 @@ export const ComputerThreadQuery = gql`
   query ComputerThread($id: ID!, $messageLimit: Int) {
     thread(id: $id) {
       id
+      userId
       number
       identifier
       title
