@@ -10,7 +10,7 @@ origin: docs/brainstorms/2026-05-17-shared-computers-product-reframe-requirement
 
 ## Overview
 
-Reframe ThinkWork Computers from one-per-user personal assistants into tenant-managed shared work capabilities. Users route requests to assigned Computers such as Finance Computer, Sales Computer, or Admin Computer; the runtime attaches the invoking user's requester context and memory to each request without making the Computer personal.
+Reframe ThinkWork Computers from one-per-user personal assistants into tenant-managed shared work capabilities. Users route requests to assigned Computers such as Finance Computer, Sales Computer, or Admin Computer; the runtime attaches the invoking user's requester context and memory to each request without making the Computer personal. Personal connectors such as Gmail and Google Calendar remain user-owned credential/event sources, but their triggers route into assigned shared Computers rather than a private "My Computer."
 
 This plan intentionally supersedes the personal-Computer assumptions in `docs/brainstorms/2026-05-06-thinkwork-computer-product-reframe-requirements.md` and requires the May 16 Slack workspace app plan to be rewritten around shared Computers before Slack work proceeds.
 
@@ -21,6 +21,8 @@ This plan intentionally supersedes the personal-Computer assumptions in `docs/br
 The current implementation encodes "one active Computer per user" in schema, GraphQL, app queries, authz, runtime config, thread routing, runbooks, scheduled jobs, and docs. That model risks recreating personal-assistant noise: many lightly maintained AI personalities speaking in Slack instead of a small governed roster of shared AI coworkers.
 
 The origin document chooses shared-only v1. A Computer becomes a managed work capability; users access assigned Computers; personalization arrives through per-request requester memory/context; public Slack replies identify the shared Computer and requester rather than a private assistant.
+
+The connector concern is the main place where the personal-Computer model had real utility: individual Gmail/Calendar accounts naturally emit user-scoped events. The reframe keeps that useful primitive but names it separately. A user-owned connector can trigger a shared Computer task when policy allows it; the selected Computer is the shared capability, the connector owner is the requester/credential subject, and the task envelope records both identities explicitly.
 
 ---
 
@@ -44,10 +46,13 @@ The origin document chooses shared-only v1. A Computer becomes a managed work ca
 - R16. v1 does not keep a private "My Computer" product surface.
 - R17. Existing personal Computer state is migrated, archived, or remapped without silently orphaning state.
 - R18. Docs, navigation, and Slack behavior stop teaching one human equals one Computer.
+- R19. User-owned connectors such as Gmail and Google Calendar may trigger assigned shared Computers without creating personal Computer identities.
+- R20. Connector-triggered work records the selected Computer, connector owner, requester user, credential subject, trigger source, and event metadata as distinct fields.
+- R21. Connector-triggered work fails closed when the connector owner is not assigned to the target Computer, the OAuth credential is unavailable, or the trigger policy does not allow the event.
 
-**Origin actors:** A1 end user, A2 tenant operator, A3 shared Computer, A4 requester context layer, A5 Slack workspace participant, A6 planner/implementer
-**Origin flows:** F1 assigned shared Computer request, F2 shared Computer in Slack, F3 central capability management, F4 personal context overlay
-**Origin acceptance examples:** AE1 assigned chooser, AE2 no-assignment fail-closed, AE3 Slack attribution and audit, AE4 personal memory isolation, AE5 central capability update, AE6 migration away from personal Computers
+**Origin actors:** A1 end user, A2 tenant operator, A3 shared Computer, A4 requester context layer, A5 Slack workspace participant, A6 planner/implementer, A7 user-owned connector event source
+**Origin flows:** F1 assigned shared Computer request, F2 shared Computer in Slack, F3 central capability management, F4 personal context overlay, F5 personal connector trigger routed to shared Computer
+**Origin acceptance examples:** AE1 assigned chooser, AE2 no-assignment fail-closed, AE3 Slack attribution and audit, AE4 personal memory isolation, AE5 central capability update, AE6 migration away from personal Computers, AE7 Gmail/Calendar connector trigger routes to shared Computer with requester attribution
 
 ---
 
@@ -61,6 +66,8 @@ The origin document chooses shared-only v1. A Computer becomes a managed work ca
 - Fully automatic routing that chooses a Computer without the user naming or selecting one.
 - Organization-wide conversational memory learned passively from Slack channels.
 - Slack Connect and external-org shared-channel handling.
+- Shared mailbox/service-account connector triggers, such as `finance@company.com`, unless a future unit explicitly adds tenant-owned credential subjects.
+- Admin-forced enablement of every user's personal connector triggers without per-user consent or a tenant policy primitive.
 
 ### Outside this product's identity
 
@@ -89,6 +96,9 @@ The origin document chooses shared-only v1. A Computer becomes a managed work ca
 - `packages/database-pg/src/schema/teams.ts` already provides `teams` and `team_users`, a good v1 assignment substrate for role/group-based Computer access.
 - `apps/computer/src/lib/graphql-queries.ts`, `apps/mobile/lib/graphql-queries.ts`, and `apps/admin/src/lib/graphql-queries.ts` all use `myComputer` / `ownerUserId` and need generated-client updates.
 - `packages/api/src/handlers/mcp-context-engine.ts` already has `scope: personal | team | auto` and split memory/query tools; requester-memory injection should use this family of abstractions rather than raw Hindsight calls wherever possible.
+- `packages/api/src/lib/oauth-token.ts` already resolves active connections by exact `(tenantId, userId, providerName)`; personal connector triggers must build on that shape and avoid default-agent/personal-Computer fallbacks.
+- `packages/database-pg/src/schema/scheduled-jobs.ts` already treats `trigger_type = event` and nullable schedule fields as non-timer work, a useful substrate for connector-trigger definitions if provider watch state can fit in `config`.
+- `packages/api/src/handlers/connections.ts`, `apps/mobile/components/credentials/IntegrationsSection.tsx`, and `apps/mobile/lib/hooks/use-connections.ts` already model per-user connector ownership; shared Computers should consume these connections as credential subjects rather than replacing them with Computer-owned credentials.
 
 ### Institutional Learnings
 
@@ -109,6 +119,7 @@ The origin document chooses shared-only v1. A Computer becomes a managed work ca
 - **Keep historical owner data, remove active owner invariant:** Make the runtime/product contract shared-first while preserving nullable/historical owner fields for migration traceability and read-only archives. Do not keep owner as the active access model.
 - **Requester identity is mandatory for user-originated work:** Any user-originated task must carry a requester user id. Per-user OAuth and memory lookup use that requester, never an arbitrary Computer owner.
 - **Shared Computer context and requester context are separate inputs:** Shared Computer configuration, runbooks, workspace, and shared memory stay tied to the Computer. Personal preferences and Hindsight/user memory are a scoped request overlay.
+- **Personal connector triggers target shared Computers:** A user's Gmail/Calendar connection remains personal and consented by that user. Trigger rules route events from that connection to one assigned shared Computer, with requester and credential subject set to the connector owner. The Computer does not own or absorb the connector.
 - **No automatic routing v1:** Users choose or name a Computer. This avoids hidden misrouting and keeps Slack legible.
 - **Slack plan rewrite before Slack build:** The existing May 16 Slack plan is structurally personal-Computer-shaped and should be rewritten after core contracts land.
 
@@ -121,6 +132,7 @@ The origin document chooses shared-only v1. A Computer becomes a managed work ca
 - **Assignment model:** v1 uses direct user assignments plus Team assignments; Teams model role/group membership for Sales, Finance, Admin, and Engineering.
 - **Personal workspace migration:** v1 preserves existing personal Computer workspaces as read-only historical state and does not auto-copy files into shared Computers.
 - **Requester credential source:** user-originated shared Computer tasks resolve personal OAuth credentials from the requester, not from the Computer.
+- **Personal connector trigger model:** v1 uses Option A: user-owned connector event triggers route to assigned shared Computers. Gmail/Calendar event watches are personal credential sources; the task target remains a shared Computer.
 - **Slack target selection:** v1 should support explicit naming/selection (`/thinkwork finance ...`, message-action modal picker, App Home default), not automatic routing.
 
 ### Deferred to Implementation
@@ -144,6 +156,9 @@ flowchart LR
   Access --> Computer["Shared Computer"]
   User --> RequesterContext["Requester context overlay"]
   Slack["Slack/app/thread context"] --> Envelope["Task envelope"]
+  Connector["User-owned connector event"] --> Trigger["Connector trigger rule"]
+  Trigger --> Access
+  Connector --> Envelope
   Computer --> Envelope
   RequesterContext --> Envelope
   Envelope --> Runtime["Computer runtime"]
@@ -152,7 +167,7 @@ flowchart LR
   Reply --> Attribution["Shared Computer + requester attribution"]
 ```
 
-The central invariant: `computer_id` answers "which shared capability did the work?" and `requester_user_id` answers "who asked and whose personal context/credentials may be used for this request?"
+The central invariant: `computer_id` answers "which shared capability did the work?" and `requester_user_id` answers "who asked and whose personal context/credentials may be used for this request?" For connector-triggered work, the connector owner is also the initial `credential_subject_user_id`; later service/shared connector subjects must be represented explicitly rather than inferred from the Computer.
 
 ---
 
@@ -345,7 +360,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 **Goal:** Attach invoking-user memory/preferences per request while preserving shared Computer memory boundaries and auditability.
 
-**Requirements:** R12, R13, R14, R15, AE4
+**Requirements:** R12, R13, R14, R15, R20, AE4, AE7
 
 **Dependencies:** U3
 
@@ -362,12 +377,13 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 **Approach:**
 
-- Add a request-context assembler that accepts tenant id, requester user id, Computer id, prompt, and source surface.
+- Add a request-context assembler that accepts tenant id, requester user id, Computer id, prompt, source surface, and optional credential subject/event context.
 - Use the normalized memory/context services to retrieve requester-relevant memory under the requester's user scope.
 - Return structured context with provenance and context class, not a raw text blob that hides source and privacy boundaries.
 - Keep shared Computer context and requester memory as separate sections in the assembled prompt/runtime payload.
 - Do not write requester memory into shared Computer memory by default.
 - Add provider/status metadata so operators can see whether personal memory participated, was skipped, or failed.
+- For connector-triggered requests, keep event metadata and credential subject provenance separate from retrieved personal memory so a Gmail/Calendar event does not become shared Computer memory by accident.
 
 **Execution note:** Test-first around privacy boundaries: it should be hard to accidentally include another user's memory.
 
@@ -386,11 +402,72 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 - Error path: requester from another tenant cannot be used to query memory.
 - Privacy path: a second assigned user invoking the same Computer cannot receive the first user's personal memory.
 - Operator visibility: context assembly result includes provider status and context class for audit.
+- Connector path: a Gmail-triggered request for Eric can include Eric-scoped memory and connector event metadata, but another assigned user invoking the same Computer cannot see that memory or event payload.
 
 **Verification:**
 
 - Runtime payloads can include requester context with provenance.
 - Tests prove personal context stays request-scoped and user-scoped.
+
+---
+
+- U4A. **Personal connector triggers routed to shared Computers**
+
+**Goal:** Preserve the useful personal-connector behavior from the old personal-Computer model by letting user-owned Gmail/Calendar events target assigned shared Computers with explicit requester and credential-subject attribution.
+
+**Requirements:** R3, R7, R11, R12, R15, R19, R20, R21, AE4, AE7
+
+**Dependencies:** U2, U3, U4
+
+**Files:**
+
+- Modify: `packages/database-pg/src/schema/scheduled-jobs.ts`
+- Modify: `packages/database-pg/graphql/types/scheduled-jobs.graphql`
+- Modify: `packages/api/src/graphql/resolvers/triggers/createScheduledJob.mutation.ts`
+- Modify: `packages/api/src/graphql/resolvers/triggers/scheduledJobs.query.ts`
+- Modify: `packages/api/src/lib/oauth-token.ts`
+- Modify: `packages/api/src/handlers/connections.ts`
+- Create: `packages/api/src/lib/computers/connector-trigger-routing.ts`
+- Create: `packages/api/src/lib/computers/connector-trigger-routing.test.ts`
+- Test: `packages/api/src/graphql/resolvers/triggers/connector-computer-trigger.test.ts`
+- Test: `packages/api/src/handlers/connections.connector-trigger.test.ts`
+
+**Approach:**
+
+- Model a personal connector trigger as a trigger definition whose credential subject is a user-owned connection and whose target is a shared Computer.
+- Prefer extending the existing `scheduled_jobs` event-trigger shape and `config` payload before adding a new table; add schema only if provider watch state, dedupe keys, or trigger ownership cannot be represented safely.
+- Store trigger configuration with explicit `computerId`, `connectionId`, `provider`, `eventType`, requester/credential subject, and selected event filters. Do not store a personal Computer id or owner-derived default target.
+- At trigger creation, require the authenticated user to own the selected connection and be assigned to the target Computer. Admin-created templates may preselect Computers, but user-owned connector activation must still bind an explicit user connection.
+- At event ingestion, resolve the connection by exact tenant/user/provider and verify the connector owner still has invoke access to the target Computer before enqueueing work.
+- Enqueue shared Computer tasks with `contextClass = personal_connector_event`, `requesterUserId = connection.user_id`, `credentialSubjectUserId = connection.user_id`, and provider event metadata in `surfaceContext`.
+- Fail closed when access, OAuth token resolution, provider watch state, or dedupe validation is missing. Record a skipped/audit event rather than falling back to a historical owner or arbitrary tenant user.
+- Keep provider-specific watch mechanics narrow: the routing contract should support Gmail and Google Calendar first, while letting future provider handlers reuse the same Computer/requester/credential envelope.
+
+**Execution note:** Test-first around authorization and credential subject resolution. This unit exists specifically to prevent personal connector support from reintroducing personal Computers through a side door.
+
+**Patterns to follow:**
+
+- Exact per-user OAuth resolution in `packages/api/src/lib/oauth-token.ts`
+- Non-timer `event` trigger shape in `packages/database-pg/src/schema/scheduled-jobs.ts`
+- Connector ownership patterns in `packages/api/src/handlers/connections.ts`
+- U3 task envelope tests around requester identity and fail-closed credential lookup
+
+**Test scenarios:**
+
+- Covers AE7. Eric connects Gmail, enables a new-email trigger to Sales Computer, and an inbound email enqueues a Sales Computer task with Eric as requester and credential subject.
+- Happy path: Google Calendar event trigger routes to Admin Computer when the connector owner is assigned to that Computer.
+- Happy path: an assigned user can have multiple connector triggers targeting different assigned Computers.
+- Edge case: a user can disable a trigger without disconnecting the underlying Gmail/Calendar connection.
+- Error path: user cannot create a connector trigger targeting a Computer they are not assigned to.
+- Error path: event ingestion drops/skips work if the connector owner lost access to the target Computer after trigger creation.
+- Error path: event ingestion never falls back to `ownerUserId`, `defaultAgentId`, or another same-tenant user's connection.
+- Privacy path: event metadata and personal memory remain requester-scoped and are not written into shared Computer memory.
+- Audit path: skipped and enqueued events include Computer id, requester user id, credential subject, provider, event type, and context class.
+
+**Verification:**
+
+- Gmail/Calendar connector triggers can target assigned shared Computers without any `myComputer` dependency.
+- Focused tests prove trigger creation and event ingestion enforce assignment and exact credential-subject resolution.
 
 ---
 
@@ -522,7 +599,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 **Requirements:** R6, R7, R8, R10, R11, R12, R15, R18, F2, AE3
 
-**Dependencies:** U2, U3, U4
+**Dependencies:** U2, U3, U4, U4A
 
 **Files:**
 
@@ -573,7 +650,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 **Requirements:** R16, R17, R18, AE6
 
-**Dependencies:** U1, U2, U5, U6, U7
+**Dependencies:** U1, U2, U4A, U5, U6, U7
 
 **Files:**
 
@@ -622,7 +699,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 ## System-Wide Impact
 
-- **Interaction graph:** Thread creation, message send, scheduled jobs, runbooks, runtime task claim, OAuth token resolution, memory recall, Slack ingress, AppSync chunks, and admin/mobile/computer clients all touch Computer identity.
+- **Interaction graph:** Thread creation, message send, scheduled jobs, connector event triggers, runbooks, runtime task claim, OAuth token resolution, memory recall, Slack ingress, AppSync chunks, and admin/mobile/computer clients all touch Computer identity.
 - **Error propagation:** Assignment failures must surface as access/assignment errors, not missing Computer or silent fallback to a personal Computer.
 - **State lifecycle risks:** Historical personal Computers, workspaces, schedules, and threads need read-only preservation during migration. Shared Computers must not accidentally absorb private requester memory.
 - **API surface parity:** GraphQL schema, generated clients, REST runtime endpoints, Slack payloads, and Python Strands callbacks all need the same Computer/requester split.
@@ -633,15 +710,16 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 ## Risks & Dependencies
 
-| Risk                                                            | Mitigation                                                                                                                              |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Migration breaks existing personal Computer state               | Preserve historical rows and read-only access first; defer automatic workspace promotion.                                               |
-| Per-user OAuth resolves to wrong requester                      | Require explicit requester identity; never fall back to arbitrary same-tenant user; add tests from prior OAuth binding failure pattern. |
-| Shared Computer leaks one user's memory to another              | Keep requester memory as a scoped overlay with provenance; test cross-user isolation.                                                   |
-| Apps regress because `myComputer` was used for tenant discovery | Replace tenant discovery with membership/assigned Computers and cover Google-federated invited-user tests.                              |
-| Slack plan continues with personal-Computer assumptions         | Make Slack rebase a required unit before Slack implementation proceeds.                                                                 |
-| Assignment model grows too complex                              | Use direct user + Team only in v1; defer HRIS/SCIM role sync and automatic routing.                                                     |
-| GraphQL breaking changes ripple across generated clients        | Phase changes so schema, API, and client codegen land together.                                                                         |
+| Risk                                                            | Mitigation                                                                                                                                                                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migration breaks existing personal Computer state               | Preserve historical rows and read-only access first; defer automatic workspace promotion.                                                                                                |
+| Per-user OAuth resolves to wrong requester                      | Require explicit requester identity; never fall back to arbitrary same-tenant user; add tests from prior OAuth binding failure pattern.                                                  |
+| Personal connector triggers recreate personal Computers         | Model connectors as user-owned credential/event sources that target assigned shared Computers; task envelopes record requester and credential subject separately from Computer identity. |
+| Shared Computer leaks one user's memory to another              | Keep requester memory as a scoped overlay with provenance; test cross-user isolation.                                                                                                    |
+| Apps regress because `myComputer` was used for tenant discovery | Replace tenant discovery with membership/assigned Computers and cover Google-federated invited-user tests.                                                                               |
+| Slack plan continues with personal-Computer assumptions         | Make Slack rebase a required unit before Slack implementation proceeds.                                                                                                                  |
+| Assignment model grows too complex                              | Use direct user + Team only in v1; defer HRIS/SCIM role sync and automatic routing.                                                                                                      |
+| GraphQL breaking changes ripple across generated clients        | Phase changes so schema, API, and client codegen land together.                                                                                                                          |
 
 ---
 
@@ -656,6 +734,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 
 - U3. Thread, task, and runtime envelope with requester identity
 - U4. Requester context and personal memory overlay
+- U4A. Personal connector triggers routed to shared Computers
 
 ### Phase C: User and operator surfaces
 
@@ -674,6 +753,7 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 - Update public/product docs before customer-facing Slack demos so the product story is shared Computers from the first conversation.
 - Migration release notes should explain that personal Computer state is preserved historically but new work routes to shared Computers.
 - Add operator guidance for creating first Computers: Finance, Sales, Admin, Engineering, plus assignment via Teams.
+- Add connector guidance explaining that Gmail/Calendar remain personal connections and can trigger assigned shared Computers without creating personal Computers.
 - Add audit/compliance documentation explaining requester context classes and personal-memory boundaries.
 - Any hand-rolled migration must include correct drift markers and be applied to dev before merge.
 
@@ -689,6 +769,9 @@ The central invariant: `computer_id` answers "which shared capability did the wo
 - Related code: `packages/api/src/graphql/resolvers/computers/shared.ts`
 - Related code: `packages/api/src/lib/computers/thread-cutover.ts`
 - Related code: `packages/api/src/lib/computers/runtime-api.ts`
+- Related code: `packages/api/src/lib/oauth-token.ts`
+- Related code: `packages/api/src/handlers/connections.ts`
+- Related code: `packages/database-pg/src/schema/scheduled-jobs.ts`
 - Institutional learning: [docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md](docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md)
 - Institutional learning: [docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md](docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md)
 - External reference: [Every, "We Gave Every Employee an AI Agent. Here's What We're Doing Differently Now"](https://every.to/source-code/we-gave-every-employee-an-ai-agent-here-s-what-we-re-doing-differently-now)
