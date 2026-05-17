@@ -1,0 +1,287 @@
+enum OntologyLifecycleStatus {
+  PROPOSED
+  APPROVED
+  DEPRECATED
+  REJECTED
+}
+
+enum OntologyMappingKind {
+  EXACT
+  CLOSE
+  BROAD
+  NARROW
+  RELATED
+}
+
+enum OntologyChangeSetStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum OntologyChangeItemType {
+  ENTITY_TYPE
+  RELATIONSHIP_TYPE
+  FACET_TEMPLATE
+  EXTERNAL_MAPPING
+}
+
+enum OntologyChangeAction {
+  CREATE
+  UPDATE
+  DEPRECATE
+  REJECT
+}
+
+enum OntologyJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+type OntologyVersion {
+  id: ID!
+  tenantId: ID!
+  versionNumber: Int!
+  status: String!
+  sourceChangeSetId: ID
+  activatedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type OntologyEntityType {
+  id: ID!
+  tenantId: ID!
+  versionId: ID
+  slug: String!
+  name: String!
+  description: String
+  broadType: String!
+  aliases: [String!]!
+  propertiesSchema: AWSJSON!
+  guidanceNotes: String
+  lifecycleStatus: OntologyLifecycleStatus!
+  approvedAt: AWSDateTime
+  deprecatedAt: AWSDateTime
+  rejectedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  facetTemplates: [OntologyFacetTemplate!]!
+  externalMappings: [OntologyExternalMapping!]!
+}
+
+type OntologyRelationshipType {
+  id: ID!
+  tenantId: ID!
+  versionId: ID
+  slug: String!
+  name: String!
+  description: String
+  inverseName: String
+  sourceEntityTypeId: ID
+  targetEntityTypeId: ID
+  sourceTypeSlugs: [String!]!
+  targetTypeSlugs: [String!]!
+  aliases: [String!]!
+  guidanceNotes: String
+  lifecycleStatus: OntologyLifecycleStatus!
+  approvedAt: AWSDateTime
+  deprecatedAt: AWSDateTime
+  rejectedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  externalMappings: [OntologyExternalMapping!]!
+}
+
+type OntologyFacetTemplate {
+  id: ID!
+  tenantId: ID!
+  entityTypeId: ID!
+  slug: String!
+  heading: String!
+  facetType: String!
+  position: Int!
+  sourcePriority: AWSJSON!
+  prompt: String
+  guidanceNotes: String
+  lifecycleStatus: OntologyLifecycleStatus!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type OntologyExternalMapping {
+  id: ID!
+  tenantId: ID!
+  subjectKind: String!
+  subjectId: ID!
+  mappingKind: OntologyMappingKind!
+  vocabulary: String!
+  externalUri: String!
+  externalLabel: String
+  notes: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type OntologyChangeSet {
+  id: ID!
+  tenantId: ID!
+  title: String!
+  summary: String
+  status: OntologyChangeSetStatus!
+  confidence: Float
+  observedFrequency: Int!
+  expectedImpact: AWSJSON!
+  proposedBy: String!
+  proposedByUserId: ID
+  approvedByUserId: ID
+  approvedAt: AWSDateTime
+  rejectedByUserId: ID
+  rejectedAt: AWSDateTime
+  appliedVersionId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  items: [OntologyChangeSetItem!]!
+  evidenceExamples: [OntologyEvidenceExample!]!
+}
+
+type OntologyChangeSetItem {
+  id: ID!
+  tenantId: ID!
+  changeSetId: ID!
+  itemType: OntologyChangeItemType!
+  action: OntologyChangeAction!
+  status: OntologyChangeSetStatus!
+  targetKind: String
+  targetSlug: String
+  title: String!
+  description: String
+  proposedValue: AWSJSON!
+  editedValue: AWSJSON
+  confidence: Float
+  position: Int!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  evidenceExamples: [OntologyEvidenceExample!]!
+}
+
+type OntologyEvidenceExample {
+  id: ID!
+  tenantId: ID!
+  changeSetId: ID!
+  itemId: ID
+  sourceKind: String!
+  sourceRef: String
+  sourceLabel: String
+  quote: String!
+  metadata: AWSJSON!
+  observedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type OntologySuggestionScanJob {
+  id: ID!
+  tenantId: ID!
+  status: OntologyJobStatus!
+  trigger: String!
+  dedupeKey: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  error: String
+  result: AWSJSON!
+  metrics: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type OntologyReprocessJob {
+  id: ID!
+  tenantId: ID!
+  changeSetId: ID
+  ontologyVersionId: ID
+  dedupeKey: String
+  status: OntologyJobStatus!
+  attempt: Int!
+  claimedAt: AWSDateTime
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  input: AWSJSON!
+  impact: AWSJSON!
+  metrics: AWSJSON!
+  error: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type OntologyDefinitions {
+  tenantId: ID!
+  activeVersion: OntologyVersion
+  entityTypes: [OntologyEntityType!]!
+  relationshipTypes: [OntologyRelationshipType!]!
+  facetTemplates: [OntologyFacetTemplate!]!
+  externalMappings: [OntologyExternalMapping!]!
+}
+
+input StartOntologySuggestionScanInput {
+  tenantId: ID!
+  trigger: String = "manual"
+  dedupeKey: String
+}
+
+input UpdateOntologyChangeSetItemInput {
+  id: ID!
+  status: OntologyChangeSetStatus
+  editedValue: AWSJSON
+}
+
+input UpdateOntologyChangeSetInput {
+  tenantId: ID!
+  changeSetId: ID!
+  title: String
+  summary: String
+  status: OntologyChangeSetStatus
+  items: [UpdateOntologyChangeSetItemInput!]
+}
+
+input ApproveOntologyChangeSetInput {
+  tenantId: ID!
+  changeSetId: ID!
+}
+
+input RejectOntologyChangeSetInput {
+  tenantId: ID!
+  changeSetId: ID!
+  reason: String
+}
+
+extend type Query {
+  ontologyDefinitions(tenantId: ID!): OntologyDefinitions!
+  ontologyChangeSets(
+    tenantId: ID!
+    status: OntologyChangeSetStatus
+  ): [OntologyChangeSet!]!
+  ontologySuggestionScanJob(
+    tenantId: ID!
+    jobId: ID!
+  ): OntologySuggestionScanJob
+  ontologyReprocessJob(tenantId: ID!, jobId: ID!): OntologyReprocessJob
+}
+
+extend type Mutation {
+  startOntologySuggestionScan(
+    input: StartOntologySuggestionScanInput!
+  ): OntologySuggestionScanJob!
+  updateOntologyChangeSet(
+    input: UpdateOntologyChangeSetInput!
+  ): OntologyChangeSet!
+  approveOntologyChangeSet(
+    input: ApproveOntologyChangeSetInput!
+  ): OntologyChangeSet!
+  rejectOntologyChangeSet(
+    input: RejectOntologyChangeSetInput!
+  ): OntologyChangeSet!
+}
