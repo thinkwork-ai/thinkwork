@@ -184,7 +184,9 @@ describe("Slack interactivity handler", () => {
               name: "brief.pdf",
               mimetype: "application/pdf",
               urlPrivate: "https://files.slack.com/files-pri/F123",
+              urlPrivateDownload: null,
               permalink: null,
+              sizeBytes: null,
             },
           ],
           slack: expect.objectContaining({

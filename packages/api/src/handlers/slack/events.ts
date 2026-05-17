@@ -17,6 +17,10 @@ import {
 } from "../../lib/slack/linked-computer.js";
 import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 import {
+  materializeSlackFilesAsThreadAttachments,
+  type MaterializedSlackAttachment,
+} from "../../lib/slack/file-attachments.js";
+import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
 } from "../../lib/slack/thread-mapping.js";
@@ -93,6 +97,14 @@ export interface SlackEventsDeps {
     actorId: string;
     envelope: ReturnType<typeof buildSlackThreadTurnInput>;
   }) => Promise<SlackThreadMappingResult>;
+  materializeSlackFiles?: (input: {
+    tenantId: string;
+    threadId: string;
+    messageId: string;
+    uploadedBy: string;
+    botToken: string;
+    fileRefs: ReturnType<typeof buildSlackThreadTurnInput>["fileRefs"];
+  }) => Promise<MaterializedSlackAttachment[]>;
   metrics?: Pick<SlackMetrics, "dedupeHit">;
 }
 
@@ -121,6 +133,8 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     ((input) => defaultUpdateTaskInput(input, dbClient));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
+  const materializeSlackFiles =
+    deps.materializeSlackFiles ?? materializeSlackFilesAsThreadAttachments;
   const metrics = deps.metrics ?? slackMetrics;
 
   return async function dispatchSlackEvent(
@@ -140,7 +154,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     const slackTeamId = requiredString(
       body.team_id ?? event.team ?? args.workspace.slackTeamId,
     );
-    const channelType = classifySlackEvent(event);
+    const channelType = classifySlackEvent(event, args.workspace.botUserId);
     if (!channelType) {
       return json({ ok: true, ignored: true, reason: "unsupported_event" });
     }
@@ -184,6 +198,14 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       computerId: link.computerId,
       actorId: link.userId,
       envelope: taskInput,
+    });
+    await safeMaterializeSlackFiles(materializeSlackFiles, {
+      tenantId: args.workspace.tenantId,
+      threadId: mapping.threadId,
+      messageId: mapping.messageId,
+      uploadedBy: link.userId,
+      botToken: args.botToken,
+      fileRefs: taskInput.fileRefs,
     });
     const mappedTaskInput = withSlackThreadMapping(taskInput, mapping);
 
@@ -240,11 +262,38 @@ function extractTeamId(rawBodyText: string): string | null {
 
 function classifySlackEvent(
   event: SlackEventBody,
+  botUserId: string,
 ): "app_mention" | "im" | null {
-  if (event.bot_id || event.subtype) return null;
+  if (event.bot_id) return null;
+  if (event.subtype && event.subtype !== "file_share") return null;
   if (event.type === "app_mention") return "app_mention";
   if (event.type === "message" && event.channel_type === "im") return "im";
+  if (
+    event.type === "message" &&
+    event.subtype === "file_share" &&
+    typeof event.text === "string" &&
+    event.text.includes(`<@${botUserId}>`)
+  ) {
+    return "app_mention";
+  }
   return null;
+}
+
+async function safeMaterializeSlackFiles(
+  materializeSlackFiles: NonNullable<SlackEventsDeps["materializeSlackFiles"]>,
+  input: Parameters<
+    NonNullable<SlackEventsDeps["materializeSlackFiles"]>
+  >[0],
+): Promise<void> {
+  if (input.fileRefs.length === 0) return;
+  try {
+    await materializeSlackFiles(input);
+  } catch (err) {
+    console.warn("[slack:events] failed to materialize Slack files", {
+      err: err instanceof Error ? err.message : String(err),
+      fileCount: input.fileRefs.length,
+    });
+  }
 }
 
 async function defaultUpdateTaskInput(

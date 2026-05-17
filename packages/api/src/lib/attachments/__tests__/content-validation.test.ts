@@ -47,6 +47,21 @@ describe("verifyMagicBytes", () => {
 		if (!result.ok) expect(result.reason).toBe("buffer_too_short");
 	});
 
+	it("accepts Markdown and text files with printable ASCII prefixes", () => {
+		expect(verifyMagicBytes(Buffer.from("# Spec\n\nHello"), ".md").ok).toBe(
+			true,
+		);
+		expect(verifyMagicBytes(Buffer.from("Plain notes"), ".txt").ok).toBe(
+			true,
+		);
+	});
+
+	it("rejects Markdown with a binary prefix", () => {
+		const result = verifyMagicBytes(Buffer.from([0xff, 0xfe, 0x00]), ".md");
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.reason).toBe("magic_byte_mismatch");
+	});
+
 	it("rejects unsupported extension", () => {
 		const result = verifyMagicBytes(Buffer.from([0x00]), ".pdf");
 		expect(result.ok).toBe(false);

@@ -16,8 +16,9 @@
  *    (already covers path-escape, entry-count, decompressed-size, and
  *    symlink defenses) and adds OOXML-specific entry rejections.
  *
- * `.xls` (legacy binary) and `.csv` skip the OOXML scan — they aren't
- * zip containers. Magic-byte verification still applies.
+ * `.xls` (legacy binary), `.csv`, and plain-text documents skip the
+ * OOXML scan — they aren't zip containers. Magic-byte verification
+ * still applies.
  */
 
 import { inspectZipBuffer } from "../plugin-zip-safety.js";
@@ -35,10 +36,16 @@ const MAGIC_BYTES: Record<string, ReadonlyArray<readonly number[]>> = {
 	".xlsx": [[0x50, 0x4b, 0x03, 0x04]],
 	// Legacy binary Excel: CFBF magic.
 	".xls": [[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]],
-	// CSV is text — no single magic-byte sequence. We accept anything
+	// Text files have no single magic-byte sequence. We accept anything
 	// whose first bytes are printable-ASCII / common BOMs and leave
 	// stronger validation to the consumer.
 	".csv": [
+		[0xef, 0xbb, 0xbf], // UTF-8 BOM
+	],
+	".md": [
+		[0xef, 0xbb, 0xbf], // UTF-8 BOM
+	],
+	".txt": [
 		[0xef, 0xbb, 0xbf], // UTF-8 BOM
 	],
 };
@@ -59,7 +66,7 @@ export type MagicByteResult = MagicByteFailure | MagicByteSuccess;
  * Verify the first N bytes of `buffer` match one of the magic-byte
  * sequences registered for `declaredExtension` (lowercase, leading `.`).
  *
- * `.csv` is special-cased: most CSV files have no magic prefix, so we
+ * Text formats are special-cased: most have no magic prefix, so we
  * accept any buffer whose first 4 bytes are printable ASCII or one of
  * the registered BOMs. Other extensions require an exact prefix match.
  */
@@ -72,8 +79,8 @@ export function verifyMagicBytes(
 	if (!expectedPrefixes) {
 		return { ok: false, reason: "unsupported_extension" };
 	}
-	if (ext === ".csv") {
-		// CSV — accept the registered BOM OR printable-ASCII prefix.
+	if (TEXT_EXTENSIONS.has(ext)) {
+		// Text — accept the registered BOM OR printable-ASCII prefix.
 		if (buffer.length === 0) {
 			return { ok: false, reason: "buffer_too_short" };
 		}
@@ -100,6 +107,8 @@ export function verifyMagicBytes(
 	}
 	return { ok: false, reason: "magic_byte_mismatch", expectedFor: ext };
 }
+
+const TEXT_EXTENSIONS = new Set([".csv", ".md", ".txt"]);
 
 function matchesPrefix(buffer: Buffer, prefix: readonly number[]): boolean {
 	if (buffer.length < prefix.length) return false;

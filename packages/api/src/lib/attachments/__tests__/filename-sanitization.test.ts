@@ -17,6 +17,11 @@ describe("sanitizeAttachmentFilename", () => {
 			expect(sanitizeAttachmentFilename("export.csv").ok).toBe(true);
 		});
 
+		it("accepts safe text documents used by Slack file review", () => {
+			expect(sanitizeAttachmentFilename("architecture.md").ok).toBe(true);
+			expect(sanitizeAttachmentFilename("notes.txt").ok).toBe(true);
+		});
+
 		it("normalizes mixed-case extensions to allow-list comparison", () => {
 			const r = sanitizeAttachmentFilename("FINANCIALS.XLSX");
 			expect(r.ok).toBe(true);

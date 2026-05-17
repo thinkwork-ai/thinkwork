@@ -113,6 +113,20 @@ describe("POST /api/threads/{threadId}/attachments/presign", () => {
 		expect(typeof body.expiresAt).toBe("string");
 	});
 
+	it("accepts Markdown attachments for document review turns", async () => {
+		const res = await handler(
+			event({
+				name: "architecture.md",
+				mimeType: "text/markdown",
+				sizeBytes: 5_000,
+			}),
+		);
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body ?? "{}");
+		expect(body.name).toBe("architecture.md");
+		expect(body.stagingKey).toContain("/architecture.md");
+	});
+
 	it("returns 404 (identical shape) when caller's tenant doesn't own the thread", async () => {
 		// The DB query is tenant-pinned, so a thread in a different tenant
 		// returns no rows.

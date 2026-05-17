@@ -16,6 +16,8 @@ describe("Slack event envelope helpers", () => {
           name: "brief.pdf",
           mimetype: "application/pdf",
           url_private: "https://files.slack.com/files-pri/F123",
+          url_private_download: "https://files.slack.com/files-pri/F123/download",
+          size: "42",
         },
         { name: "missing-id.txt" },
       ]),
@@ -25,7 +27,9 @@ describe("Slack event envelope helpers", () => {
         name: "brief.pdf",
         mimetype: "application/pdf",
         urlPrivate: "https://files.slack.com/files-pri/F123",
+        urlPrivateDownload: "https://files.slack.com/files-pri/F123/download",
         permalink: null,
+        sizeBytes: 42,
       },
     ]);
   });

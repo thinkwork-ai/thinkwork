@@ -265,3 +265,35 @@ Target branch: `main`
 ## Blockers
 
 None.
+
+---
+
+# Slack File Attachment Hotfix - 2026-05-17
+
+## Status
+
+- Branch: `codex/slack-file-attachments`
+- Started: `2026-05-17T12:32:34Z`
+- Root cause:
+  - Slack file uploads arrive as human `message` events with `subtype: "file_share"`, but `slack-events` ignored all subtyped messages.
+  - Slack file refs were preserved in task metadata, but they were never downloaded into ThinkWork `thread_attachments` or linked through `messages.metadata.attachments`, so the Computer runtime had no staged files to read.
+- Implemented:
+  - Accept human Slack `file_share` DMs and bot-mentioned channel file shares as Slack turns.
+  - Download Slack files with the bot token, validate safe attachment types, store them under the existing tenant/thread attachment S3 prefix, insert `thread_attachments`, and link attachment IDs onto the user message metadata before dispatch.
+  - Extend attachment validation to safe text documents (`.md`, `.txt`) in addition to the existing Excel/CSV support so Slack document review works for uploaded Markdown files.
+
+## Verification Log
+
+- `pnpm install` - passed.
+- Targeted API tests for Slack events, Slack envelope parsing, Slack file materialization, attachment validation, and Slack acceptance examples - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `pnpm --filter @thinkwork/api build` - passed.
+
+## CI / PR
+
+- Pending: commit, PR, CI, merge, and deployed Slack smoke verification.
+
+## Blockers
+
+None.
