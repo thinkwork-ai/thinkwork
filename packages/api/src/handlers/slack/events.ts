@@ -435,7 +435,7 @@ function thinkworkSlackBrand(): { username: string; iconUrl: string } {
     username: process.env.THINKWORK_SLACK_USERNAME?.trim() || "ThinkWork",
     iconUrl:
       process.env.THINKWORK_SLACK_ICON_URL?.trim() ||
-      "https://admin.thinkwork.ai/logo.png",
+      "https://admin.thinkwork.ai/slack-icon.png",
   };
 }
 

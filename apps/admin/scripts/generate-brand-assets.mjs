@@ -9,6 +9,7 @@
 //   apps/admin/public/favicon.png  — 256x256, width-fill, browser-downscaled
 //   apps/admin/public/logo.png     — non-square rect at brain aspect for
 //                                    inline UI use (sidebar + sign-in card)
+//   apps/admin/public/slack-icon.png — 512x512 opaque dark tile for Slack
 //
 // Uses the sharp already installed in docs/node_modules.
 // Run from the repo root:
@@ -33,11 +34,13 @@ const repoRoot = path.resolve(scriptDir, "../../..");
 const sharp = require(path.join(repoRoot, "docs/node_modules/sharp"));
 
 const BRAND = "#38bdf8";
+const SLACK_ICON_BG = "#0b0f14";
 const STROKE_ATTRS = `stroke="${BRAND}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"`;
 
 const publicDir = path.join(repoRoot, "apps/admin/public");
 const faviconOut = path.join(publicDir, "favicon.png");
 const logoOut = path.join(publicDir, "logo.png");
+const slackIconOut = path.join(publicDir, "slack-icon.png");
 
 async function renderPng(svg, outPath) {
   await sharp(Buffer.from(svg))
@@ -47,6 +50,24 @@ async function renderPng(svg, outPath) {
 }
 
 const [, , vbW, vbH] = BRAIN_VIEWBOX.split(" ").map(Number);
+
+function squareBrainSvg(size, widthFillRatio, bg) {
+  const brainAspect = vbW / vbH;
+  const brainW = Math.round(size * widthFillRatio);
+  const brainH = Math.round(brainW / brainAspect);
+  const offsetX = Math.round((size - brainW) / 2);
+  const offsetY = Math.round((size - brainH) / 2);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect width="${size}" height="${size}" fill="${bg}"/>
+  <svg x="${offsetX}" y="${offsetY}" width="${brainW}" height="${brainH}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
+    <g transform="${BRAIN_GROUP_TRANSFORM}">
+      <path d="${BRAIN_PATH_D}" ${STROKE_ATTRS} />
+    </g>
+  </svg>
+</svg>`;
+}
 
 // ---------------------------------------------------------------------------
 // Favicon (256x256) — width-based fill, matches www/docs/mobile style
@@ -81,3 +102,10 @@ const logoSvg = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
 </svg>`;
 await renderPng(logoSvg, logoOut);
+
+// ---------------------------------------------------------------------------
+// Slack app icon (512x512) — opaque dark square so Slack does not render the
+// transparent logo against a white tile in dark-mode conversations.
+// ---------------------------------------------------------------------------
+
+await renderPng(squareBrainSvg(512, 0.82, SLACK_ICON_BG), slackIconOut);

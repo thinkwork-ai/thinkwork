@@ -141,7 +141,8 @@ interface SlackDispatchMetrics {
 const db = getDb();
 const secretCache = new Map<string, string>();
 let smClient: SecretsManagerClient | null = null;
-const DEFAULT_THINKWORK_SLACK_ICON_URL = "https://admin.thinkwork.ai/logo.png";
+const DEFAULT_THINKWORK_SLACK_ICON_URL =
+  "https://admin.thinkwork.ai/slack-icon.png";
 
 export async function handler(event: SlackDispatchEvent = {}): Promise<{
   ok: boolean;
