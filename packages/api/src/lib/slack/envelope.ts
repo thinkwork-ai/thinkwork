@@ -23,6 +23,7 @@ export interface SlackThreadContextMessage {
   botId: string | null;
   ts: string;
   text: string;
+  files?: SlackFileRef[];
 }
 
 export type SlackChannelType = "channel" | "group" | "im" | "mpim" | "slash";
@@ -143,7 +144,10 @@ export function summarizeSlackThreadContext(
   let remaining = maxChars;
   const out: SlackThreadContextMessage[] = [];
   for (const message of cappedMessages) {
-    if (remaining <= 0) break;
+    if (remaining <= 0) {
+      if ((message.files ?? []).length > 0) out.push({ ...message, text: "" });
+      continue;
+    }
     const text = message.text.slice(0, remaining);
     remaining -= text.length;
     out.push({ ...message, text });
@@ -167,7 +171,12 @@ export function buildSlackThreadTurnInput(input: {
   const channelId = requiredSlackString(input.channelId);
   const slackTeamId = requiredSlackString(input.slackTeamId);
   const slackUserId = requiredSlackString(input.slackUserId);
-  const fileRefs = slackFileRefs(input.event.files);
+  const sourceFileRefs = slackFileRefs(input.event.files);
+  const threadContext = input.threadContext ?? [];
+  const fileRefs = mergeSlackFileRefs(
+    sourceFileRefs,
+    ...threadContext.map((message) => message.files ?? []),
+  );
   const triggerSurface =
     input.channelType === "im" ? "message_im" : "app_mention";
   const rootThreadTs = optionalSlackString(input.event.thread_ts);
@@ -178,7 +187,7 @@ export function buildSlackThreadTurnInput(input: {
     channel: channelId,
     team: slackTeamId,
     permalink: input.permalink || null,
-    files: fileRefs,
+    files: sourceFileRefs,
   };
   const slack = buildSlackTaskEnvelope({
     slackTeamId,
@@ -190,7 +199,7 @@ export function buildSlackThreadTurnInput(input: {
     responseUrl: null,
     triggerSurface,
     sourceMessage,
-    threadContext: input.threadContext ?? [],
+    threadContext,
     fileRefs,
     placeholderTs: null,
     modalViewId: null,
@@ -217,6 +226,16 @@ export function buildSlackThreadTurnInput(input: {
     slackWorkspaceRowId: input.slackWorkspaceRowId ?? null,
     slack,
   };
+}
+
+export function mergeSlackFileRefs(...groups: SlackFileRef[][]): SlackFileRef[] {
+  const byId = new Map<string, SlackFileRef>();
+  for (const group of groups) {
+    for (const file of group) {
+      if (!byId.has(file.id)) byId.set(file.id, file);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 export function buildSlackSlashCommandInput(input: {

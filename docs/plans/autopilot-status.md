@@ -299,7 +299,43 @@ None.
   - `test`
   - `typecheck`
   - `verify`
-- Pending: squash merge, branch cleanup, and deployed Slack smoke verification.
+- Squash merged [#1320](https://github.com/thinkwork-ai/thinkwork/pull/1320) as `190e2299d1f8086b9364357d4746c5b9df595e5c`; Deploy run `25991215749` passed.
+- Live smoke confirmed Slack file-share tasks now enqueue, but follow-up testing exposed a second gap: replies like "Can you review this file?" need to inherit files uploaded earlier in the Slack thread.
+
+# Slack Thread File Context Hotfix - 2026-05-17
+
+## Status
+
+- Branch: `codex/slack-thread-file-context`
+- Started: `2026-05-17T13:00:00Z`
+- Root cause:
+  - Slack `conversations.replies` returns file metadata for earlier messages in the thread, but `slack-events` reduced thread context to `{ user, botId, ts, text }` and discarded `files`.
+  - `buildSlackThreadTurnInput` only considered files attached to the exact triggering Slack event, so a reply such as "Can you review this file?" had no `fileRefs` even when the file was visible earlier in the Slack thread.
+- Implemented:
+  - Preserve parsed Slack file refs on `SlackThreadContextMessage`.
+  - Merge current-message file refs with prior Slack thread-context file refs, deduped by Slack file id, before materializing ThinkWork attachments.
+  - Keep file-bearing Slack thread-context messages even when long thread text exceeds the summary budget, so attachment metadata is not dropped by summarization.
+
+## Verification Log
+
+- `pnpm install` - passed.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/slack/envelope.test.ts src/handlers/slack/events.test.ts test/integration/slack-acceptance.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/api test` - passed.
+- `bash scripts/build-lambdas.sh slack-events` - passed.
+- `git diff --check` - passed.
+- `pnpm exec prettier --check ...` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+
+## CI / PR
+
+- Opened [#1321](https://github.com/thinkwork-ai/thinkwork/pull/1321).
+- GitHub PR checks on [#1321](https://github.com/thinkwork-ai/thinkwork/pull/1321) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
+- Pending: squash merge, deploy, and live Slack smoke.
 
 ## Blockers
 
