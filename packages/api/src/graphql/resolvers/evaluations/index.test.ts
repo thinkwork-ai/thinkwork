@@ -30,18 +30,32 @@ vi.mock("../../../lib/agentcore-spans.js", () => ({
 }));
 
 import {
+  excludesComputerSurfacePlaceholders,
   evalResultSpans,
   placeholderStatusForEvalRun,
+  shouldIncludePlannedEvalRows,
   withLiveProgress,
 } from "./index.js";
 
 describe("placeholderStatusForEvalRun", () => {
-  it("keeps planned eval rows visible with the parent run state", () => {
+  it("keeps planned eval rows visible only while the parent run is active", () => {
     expect(placeholderStatusForEvalRun("pending")).toBe("pending");
     expect(placeholderStatusForEvalRun("running")).toBe("running");
-    expect(placeholderStatusForEvalRun("cancelled")).toBe("cancelled");
-    expect(placeholderStatusForEvalRun("failed")).toBe("failed");
     expect(placeholderStatusForEvalRun("completed")).toBe("waiting");
+    expect(shouldIncludePlannedEvalRows("pending")).toBe(true);
+    expect(shouldIncludePlannedEvalRows("running")).toBe(true);
+    expect(shouldIncludePlannedEvalRows("completed")).toBe(false);
+    expect(shouldIncludePlannedEvalRows("failed")).toBe(false);
+    expect(shouldIncludePlannedEvalRows("cancelled")).toBe(false);
+  });
+
+  it("matches direct AgentCore planning to the runner's Computer-surface exclusion", () => {
+    expect(excludesComputerSurfacePlaceholders({ computer_id: null })).toBe(
+      true,
+    );
+    expect(
+      excludesComputerSurfacePlaceholders({ computer_id: "computer-1" }),
+    ).toBe(false);
   });
 });
 
