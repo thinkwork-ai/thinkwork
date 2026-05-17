@@ -202,7 +202,7 @@ locals {
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
-    "graphql-http" = merge(local.slack_handler_env, {
+    "graphql-http" = {
       ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
       ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
       AWS_ACCOUNT_ID              = var.account_id
@@ -232,7 +232,7 @@ locals {
       # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    })
+    }
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
