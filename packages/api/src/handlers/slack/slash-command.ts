@@ -5,11 +5,12 @@ import {
   slackLinkRequiredResponse,
 } from "../../lib/slack/attribution.js";
 import { buildSlackSlashCommandInput } from "../../lib/slack/envelope.js";
-import {
-  loadLinkedSlackComputer,
-  type SlackLinkedComputer,
-} from "../../lib/slack/linked-computer.js";
 import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
+import {
+  resolveSlackSharedComputerTarget,
+  slackTargetingGuidance,
+  type SlackComputerTargetResult,
+} from "../../lib/slack/shared-computer-targeting.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
@@ -34,11 +35,12 @@ export interface SlashCommandForm {
 
 export interface SlashCommandDeps {
   enqueueTask?: EnqueueTask;
-  loadLinkedComputer?: (input: {
+  resolveTarget?: (input: {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
-  }) => Promise<SlackLinkedComputer | null>;
+    text: string;
+  }) => Promise<SlackComputerTargetResult>;
   resolveSlackThread?: (input: {
     tenantId: string;
     computerId: string;
@@ -50,8 +52,8 @@ export interface SlashCommandDeps {
 
 export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
   const enqueueTask = deps.enqueueTask ?? enqueueComputerTask;
-  const loadLinkedComputer =
-    deps.loadLinkedComputer ?? ((input) => loadLinkedSlackComputer(input));
+  const resolveTarget =
+    deps.resolveTarget ?? ((input) => resolveSlackSharedComputerTarget(input));
   const resolveSlackThread =
     deps.resolveSlackThread ?? ((input) => resolveOrCreateSlackThread(input));
   const metrics = deps.metrics ?? slackMetrics;
@@ -64,38 +66,55 @@ export function createSlackSlashCommandDispatcher(deps: SlashCommandDeps = {}) {
       return json(slashCommandUsageResponse());
     }
 
-    const link = await loadLinkedComputer({
+    const targetResult = await resolveTarget({
       tenantId: args.workspace.tenantId,
       slackTeamId: form.teamId,
       slackUserId: form.userId,
+      text: form.text,
     });
-    if (!link) {
-      return json(slackLinkRequiredResponse());
+    if (targetResult.status !== "resolved") {
+      if (targetResult.status === "unlinked") {
+        return json(slackLinkRequiredResponse());
+      }
+      return json({
+        response_type: "ephemeral",
+        text: slackTargetingGuidance(targetResult),
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: slackTargetingGuidance(targetResult),
+            },
+          },
+        ],
+      });
     }
+    const target = targetResult.target;
 
     const taskInput = buildSlackSlashCommandInput({
       slackTeamId: form.teamId,
       slackUserId: form.userId,
       slackWorkspaceRowId: args.workspace.id,
       channelId: form.channelId,
-      text: form.text,
+      text: target.prompt,
       responseUrl: form.responseUrl,
       triggerId: form.triggerId,
-      actorId: link.userId,
+      actorId: target.userId,
     });
     const mapping = await resolveSlackThread({
       tenantId: args.workspace.tenantId,
-      computerId: link.computerId,
-      actorId: link.userId,
+      computerId: target.computerId,
+      actorId: target.userId,
       envelope: taskInput,
     });
     const task = await enqueueTask({
       tenantId: args.workspace.tenantId,
-      computerId: link.computerId,
+      computerId: target.computerId,
       taskType: "thread_turn",
       taskInput: withSlackThreadMapping(taskInput, mapping),
       idempotencyKey: taskInput.eventId,
-      createdByUserId: link.userId,
+      createdByUserId: target.userId,
     });
     if ((task as { wasCreated?: boolean }).wasCreated === false) {
       metrics.dedupeHit({ surface: "slash_command" });

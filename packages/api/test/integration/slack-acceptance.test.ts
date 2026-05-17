@@ -9,6 +9,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   COMPLIANCE_ACTOR_TYPES: ["user", "system"],
   COMPLIANCE_EVENT_TYPES: ["attachment.received"],
   computerEvents: {},
+  computers: {},
   computerTasks: {},
   messages: {},
   slackWorkspaces: {},
@@ -71,7 +72,8 @@ function makeHarness() {
         userId: "user-a",
         slackUserName: "Alice",
         computerId: "computer-a",
-        computerName: "Alice's Computer",
+        computerName: "Finance Computer",
+        computerSlug: "finance-computer",
       },
     ],
     [
@@ -80,7 +82,8 @@ function makeHarness() {
         userId: "user-b",
         slackUserName: "Bob",
         computerId: "computer-b",
-        computerName: "Bob's Computer",
+        computerName: "Sales Computer",
+        computerSlug: "sales-computer",
       },
     ],
     [
@@ -89,7 +92,8 @@ function makeHarness() {
         userId: "user-a",
         slackUserName: "Alice",
         computerId: "computer-a",
-        computerName: "Alice's Computer",
+        computerName: "Finance Computer",
+        computerSlug: "finance-computer",
       },
     ],
   ]);
@@ -129,6 +133,20 @@ function makeHarness() {
   });
   const loadLinkedComputer = vi.fn(async (input: any) => {
     return links.get(`${input.slackTeamId}:${input.slackUserId}`) ?? null;
+  });
+  const resolveTarget = vi.fn(async (input: any) => {
+    const link = links.get(`${input.slackTeamId}:${input.slackUserId}`);
+    if (!link) return { status: "unlinked" as const };
+    return {
+      status: "resolved" as const,
+      target: {
+        ...link,
+        prompt: String(input.text ?? "")
+          .replace(/^finance\s+/i, "")
+          .trim(),
+        targetToken: "finance",
+      },
+    };
   });
   const updateTaskInput = vi.fn(async (input: any) => {
     const task = tasks.find((item) => item.id === input.taskId);
@@ -192,6 +210,7 @@ function makeHarness() {
     threadMessages,
     enqueueTask,
     loadLinkedComputer,
+    resolveTarget,
     updateTaskInput,
     materializeSlackFiles,
     resolveSlackThread,
@@ -223,7 +242,7 @@ function appMentionPayload(overrides: Record<string, unknown> = {}) {
       team: "T-W1",
       user: "U-A",
       channel: "C-finance",
-      text: "<@B-TW> summarize revenue",
+      text: "<@B-TW> finance summarize revenue",
       ts: "1710000001.000000",
       ...overrides,
     },
@@ -253,7 +272,7 @@ function slashArgs(workspace: SlackWorkspaceContext, overrides = {}) {
     team_id: workspace.slackTeamId,
     user_id: "U-A",
     channel_id: "C-finance",
-    text: "what was Q3 revenue?",
+    text: "finance what was Q3 revenue?",
     response_url: "https://hooks.slack.com/commands/response",
     trigger_id: "trigger-slash",
     ...overrides,
@@ -306,7 +325,10 @@ async function replayCompletedTask(
       {
         type: "context",
         elements: [
-          { type: "mrkdwn", text: "Routed via @ThinkWork · Alice's Computer" },
+          {
+            type: "mrkdwn",
+            text: "Routed via @ThinkWork · Finance Computer · requested by Alice",
+          },
         ],
       },
     ],
@@ -351,7 +373,7 @@ async function replayCompletedTask(
 }
 
 describe("Slack origin acceptance examples", () => {
-  it("covers AE1: linked @mentions route to the invoking user's Computer and render as that user", async () => {
+  it("covers AE1: linked @mentions route to the selected shared Computer and requester", async () => {
     const harness = makeHarness();
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
@@ -411,7 +433,8 @@ describe("Slack origin acceptance examples", () => {
       userId: "user-a",
       slackUserName: "Alice",
       computerId: "computer-a",
-      computerName: "Alice's Computer",
+      computerName: "Finance Computer",
+      computerSlug: "finance-computer",
     });
     await dispatch(
       eventArgs(WORKSPACE_W1, {
@@ -434,7 +457,7 @@ describe("Slack origin acceptance examples", () => {
     const harness = makeHarness();
     const slash = createSlackSlashCommandDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       resolveSlackThread: harness.resolveSlackThread,
       metrics: harness.metrics,
     });
@@ -541,7 +564,8 @@ describe("Slack origin acceptance examples", () => {
             id: "F-md",
             name: "agentic-etl-architecture-v5.md",
             mimetype: "text/plain",
-            urlPrivate: "https://files.slack.com/agentic-etl-architecture-v5.md",
+            urlPrivate:
+              "https://files.slack.com/agentic-etl-architecture-v5.md",
             urlPrivateDownload:
               "https://files.slack.com/download/agentic-etl-architecture-v5.md",
             permalink: "https://example.slack.com/files/F-md",
@@ -644,7 +668,7 @@ describe("Slack origin acceptance examples", () => {
     });
     const slash = createSlackSlashCommandDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       resolveSlackThread: harness.resolveSlackThread,
       metrics: harness.metrics,
     });

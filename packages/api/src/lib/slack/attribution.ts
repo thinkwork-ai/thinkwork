@@ -33,13 +33,13 @@ export function slashCommandQueuedResponse(
 export function slashCommandUsageResponse(): SlackBlockKitResponse {
   return {
     response_type: "ephemeral",
-    text: "Usage: /thinkwork <prompt>",
+    text: "Usage: /thinkwork <computer> <prompt>",
     blocks: [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "Usage: `/thinkwork <prompt>`",
+          text: "Usage: `/thinkwork finance summarize this thread`",
         },
       },
     ],
@@ -90,12 +90,13 @@ export function publicSlackResponseBlocks(
 }
 
 export interface SlackComputerAttribution {
+  computerName?: string;
   displayName: string;
   avatarUrl: string | null;
 }
 
 export function slackComputerUsername(displayName: string): string {
-  return `${normalizeSlackDisplayName(displayName)}'s Computer`;
+  return normalizeSlackDisplayName(displayName);
 }
 
 export function slackComputerFooter(displayName: string): string {
@@ -109,7 +110,7 @@ export function slackComputerResponseText(
 ): string {
   const body = text.trim() || "ThinkWork response";
   if (!options.degraded) return body;
-  return `*${slackComputerUsername(attribution.displayName)}:*\n${body}`;
+  return `*${slackComputerUsername(attribution.computerName ?? attribution.displayName)}:*\n${body}`;
 }
 
 export function slackComputerResponseBlocks(
@@ -130,7 +131,9 @@ export function slackComputerResponseBlocks(
       elements: [
         {
           type: "mrkdwn",
-          text: slackComputerFooter(attribution.displayName),
+          text: slackComputerFooter(
+            attribution.computerName ?? attribution.displayName,
+          ),
         },
       ],
     },

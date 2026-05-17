@@ -21,7 +21,8 @@ const LINKED_COMPUTER = {
   userId: "user-1",
   slackUserName: "Eric",
   computerId: "computer-1",
-  computerName: "Eric's Computer",
+  computerName: "Finance Computer",
+  computerSlug: "finance-computer",
 };
 
 function makeArgs(payload: unknown) {
@@ -45,7 +46,14 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     idempotencyKey: input.idempotencyKey,
     wasCreated: true,
   }));
-  const loadLinkedComputer = vi.fn(async () => LINKED_COMPUTER);
+  const loadLinkedComputer = vi.fn(async (input: any) => ({
+    ...LINKED_COMPUTER,
+    prompt: String(input.text ?? "")
+      .replace(/^<@B123>\s*/i, "")
+      .replace(/^finance\s+/i, "")
+      .trim(),
+    targetToken: null,
+  }));
   const updateTaskInput = vi.fn(async () => {});
   const materializeSlackFiles = vi.fn(async () => []);
   const resolveSlackThread = vi.fn(async () => ({
@@ -121,11 +129,15 @@ describe("Slack events handler", () => {
     const res = await dispatch(makeArgs(appMentionPayload()));
 
     expect(res.statusCode).toBe(200);
-    expect(deps.loadLinkedComputer).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      slackTeamId: "T123",
-      slackUserId: "U123",
-    });
+    expect(deps.loadLinkedComputer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        slackTeamId: "T123",
+        slackUserId: "U123",
+        text: "<@B123> help",
+        botUserId: "B123",
+      }),
+    );
     expect(deps.slackApi.fetchThreadMessages).toHaveBeenCalledWith({
       token: "xoxb-token",
       channel: "C123",
@@ -148,7 +160,7 @@ describe("Slack events handler", () => {
           triggerSurface: "app_mention",
           channelId: "C123",
           threadTs: "1710000001.000000",
-          sourceMessage: expect.objectContaining({ text: "<@B123> help" }),
+          sourceMessage: expect.objectContaining({ text: "help" }),
           threadContext: expect.arrayContaining([
             expect.objectContaining({ text: "Earlier" }),
           ]),

@@ -26,7 +26,7 @@ Slack emits CloudWatch Embedded Metric Format records in the `ThinkWork/Slack` n
 
 1. Confirm the dispatcher still posted the response. `slack.dispatch.success` should increase for the same window.
 2. Check Slack app installed scopes in the affected workspace. Missing or rejected `chat:write.customize` is the expected cause.
-3. If the customer intentionally removed the scope, no incident is required. The fallback is by design: bot identity, `<user>'s Computer` prefix, and attribution footer.
+3. If the customer intentionally removed the scope, no incident is required. The fallback is by design: bot identity, shared Computer body prefix when needed, and attribution footer.
 4. If the scope should be present, ask the workspace admin to reinstall or reauthorize the Slack app with optional identity customization enabled.
 5. Watch the metric after reinstall. It should return to zero for new messages.
 
