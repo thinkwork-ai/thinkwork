@@ -299,7 +299,10 @@ async function runTenantSettingsSet(
     input.autoCloseThreadMinutes = Math.round(Number.parseFloat(opts.autoCloseAfterDays) * 60 * 24);
   }
   const features = parseFeatureFlags(opts.feature);
-  if (features !== undefined) input.features = features;
+  // `features` is GraphQL type AWSJSON — a string-encoded JSON value. The
+  // server's updateTenantSettings resolver calls JSON.parse on this; passing
+  // a raw object surfaces as a masked "Unexpected error" from GraphQL Yoga.
+  if (features !== undefined) input.features = JSON.stringify(features);
 
   if (Object.keys(input).length === 0) {
     printError(

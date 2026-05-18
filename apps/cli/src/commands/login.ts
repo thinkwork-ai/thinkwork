@@ -410,8 +410,7 @@ export function registerLoginCommand(program: Command): void {
     )
     .option(
       "--profile <name>",
-      "AWS profile name to configure (used when entering new keys or SSO)",
-      "thinkwork",
+      "AWS profile name to configure (used when entering new keys or SSO). Defaults to \"thinkwork\" only on the AWS-credentials branch; the Cognito branch leaves AWS_PROFILE alone.",
     )
     .option("--sso", "Skip the picker and go straight to SSO login")
     .option("--keys", "Skip the picker and go straight to access-key entry")
@@ -514,22 +513,30 @@ Registered callback URL:
           return;
         }
 
-        // AWS-profile branch (unchanged).
-        printHeader("login", opts.profile);
+        // AWS-profile branch. --profile defaults to "thinkwork" ONLY here
+        // — the Cognito --stage branch above leaves AWS_PROFILE alone so
+        // the user's shell AWS_PROFILE / global -p flag drives any AWS
+        // calls (or, more typically, the Cognito branch doesn't touch AWS
+        // at all). Pre-Phase-0 the default lived on the option definition,
+        // which silently overrode shell AWS_PROFILE on `thinkwork login
+        // --stage <s>` and broke the stack-login UX for non-thinkwork
+        // profile users.
+        const targetProfile = opts.profile ?? "thinkwork";
+        printHeader("login", targetProfile);
 
         const awsOk = await ensureAwsCli();
         if (!awsOk) process.exit(1);
 
         if (opts.sso) {
-          if (!runSsoLogin(opts.profile)) process.exit(1);
-          process.env.AWS_PROFILE = opts.profile;
-          finalizeAws(opts.profile, "SSO");
+          if (!runSsoLogin(targetProfile)) process.exit(1);
+          process.env.AWS_PROFILE = targetProfile;
+          finalizeAws(targetProfile, "SSO");
           return;
         }
         if (opts.keys) {
-          if (!(await runKeyEntry(opts.profile))) process.exit(1);
-          process.env.AWS_PROFILE = opts.profile;
-          finalizeAws(opts.profile, "access keys");
+          if (!(await runKeyEntry(targetProfile))) process.exit(1);
+          process.env.AWS_PROFILE = targetProfile;
+          finalizeAws(targetProfile, "access keys");
           return;
         }
 
@@ -541,9 +548,9 @@ Registered callback URL:
           console.log(
             chalk.dim("  Falling through to access-key entry for a new profile."),
           );
-          if (!(await runKeyEntry(opts.profile))) process.exit(1);
-          process.env.AWS_PROFILE = opts.profile;
-          finalizeAws(opts.profile, "access keys");
+          if (!(await runKeyEntry(targetProfile))) process.exit(1);
+          process.env.AWS_PROFILE = targetProfile;
+          finalizeAws(targetProfile, "access keys");
           return;
         }
 
@@ -555,16 +562,16 @@ Registered callback URL:
         }
 
         if (choice.kind === "keys") {
-          if (!(await runKeyEntry(opts.profile))) process.exit(1);
-          process.env.AWS_PROFILE = opts.profile;
-          finalizeAws(opts.profile, "access keys");
+          if (!(await runKeyEntry(targetProfile))) process.exit(1);
+          process.env.AWS_PROFILE = targetProfile;
+          finalizeAws(targetProfile, "access keys");
           return;
         }
 
         if (choice.kind === "sso") {
-          if (!runSsoLogin(opts.profile)) process.exit(1);
-          process.env.AWS_PROFILE = opts.profile;
-          finalizeAws(opts.profile, "SSO");
+          if (!runSsoLogin(targetProfile)) process.exit(1);
+          process.env.AWS_PROFILE = targetProfile;
+          finalizeAws(targetProfile, "SSO");
           return;
         }
 
