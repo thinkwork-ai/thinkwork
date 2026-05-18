@@ -106,6 +106,21 @@ const RunScheduledJobDoc = graphql(`
   }
 `);
 
+const UpdateScheduledJobDoc = graphql(`
+  mutation CliUpdateScheduledJob($id: ID!, $input: UpdateScheduledJobInput!) {
+    updateScheduledJob(id: $id, input: $input) {
+      id
+      name
+      enabled
+      scheduleType
+      scheduleExpression
+      timezone
+      nextRunAt
+      updatedAt
+    }
+  }
+`);
+
 const SchedJobTenantBySlugDoc = graphql(`
   query CliSchedJobTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -339,6 +354,69 @@ async function runSchedDelete(id: string, opts: DeleteOptions): Promise<void> {
   }
 }
 
+interface UpdateOptions extends SchedCliOptions {
+  schedule?: string;
+  timezone?: string;
+  payload?: string;
+  enable?: boolean;
+  disable?: boolean;
+  name?: string;
+  description?: string;
+  prompt?: string;
+}
+
+async function runSchedUpdate(
+  id: string,
+  opts: UpdateOptions,
+): Promise<void> {
+  const ctx = await resolveSchedContext(opts);
+  const input: Record<string, unknown> = {};
+  if (opts.name !== undefined) input.name = opts.name;
+  if (opts.description !== undefined) input.description = opts.description;
+  if (opts.prompt !== undefined) input.prompt = opts.prompt;
+  if (opts.schedule !== undefined) {
+    input.scheduleExpression = opts.schedule;
+    input.scheduleType = opts.schedule.trim().startsWith("cron(")
+      ? "cron"
+      : "rate";
+  }
+  if (opts.timezone !== undefined) input.timezone = opts.timezone;
+  if (opts.payload !== undefined) {
+    try {
+      input.config = JSON.stringify(JSON.parse(opts.payload));
+    } catch (err) {
+      printError(`--payload is not valid JSON: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+  if (opts.enable && opts.disable) {
+    printError("--enable and --disable are mutually exclusive.");
+    process.exit(1);
+  }
+  if (opts.enable) input.enabled = true;
+  if (opts.disable) input.enabled = false;
+
+  if (Object.keys(input).length === 0) {
+    printError(
+      "Nothing to update. Pass at least one of --schedule, --timezone, --payload, --enable/--disable, --name, --description, --prompt.",
+    );
+    process.exit(1);
+  }
+
+  const data = await gqlMutate(ctx.client, UpdateScheduledJobDoc, {
+    id,
+    input,
+  });
+  if (isJsonMode()) {
+    printJson(data.updateScheduledJob);
+    return;
+  }
+  const job = data.updateScheduledJob;
+  printSuccess(
+    `Updated scheduled job ${job.id} — ${job.name} (${job.scheduleExpression}, ${job.timezone}, ${job.enabled ? "enabled" : "disabled"}).`,
+  );
+}
+
 interface RunOptions extends SchedCliOptions {
   wait?: boolean;
 }
@@ -428,15 +506,20 @@ Examples:
 
   job
     .command("update <id>")
-    .description("Update a scheduled job. (API surface pending — currently a no-op.)")
+    .description(
+      "Update a scheduled job. Changes the EventBridge schedule when --schedule / --timezone / --enable / --disable are passed; partial-update otherwise.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--schedule <expr>")
+    .option("--schedule <expr>", "EventBridge schedule (cron(…) or rate(…))")
     .option("--timezone <tz>")
-    .option("--payload <json>")
-    .option("--enable")
-    .option("--disable")
-    .action(() => notYetImplementedAtApi("update"));
+    .option("--payload <json>", "Payload to pass to the agent/routine")
+    .option("--enable", "Re-enable a paused job")
+    .option("--disable", "Pause without deleting")
+    .option("--name <text>")
+    .option("--description <text>")
+    .option("--prompt <text>")
+    .action(runSchedUpdate);
 
   job
     .command("delete <id>")

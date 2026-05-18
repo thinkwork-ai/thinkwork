@@ -253,8 +253,13 @@ describe("stub registration (taxonomy smoke test)", () => {
     // verbs scaffolded ahead of the server-side resolver use the
     // `notYetImplementedAtApi(verb)` pattern — same exit code 2, but with
     // a domain-specific error rather than the original generic stub.
+    //
+    // The scheduled-job verbs are all wired (delete/run/update). The
+    // remaining stubbed verbs live under `webhook` (test) and `skill`
+    // (install/upgrade/create/update/delete). When `webhook test` ships,
+    // flip this representative to one of the skill verbs.
     const program = new Command();
-    registerScheduledJobCommand(program);
+    registerWebhookCommand(program);
 
     const logSpy = vi
       .spyOn(console, "log")
@@ -265,10 +270,8 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     program.exitOverride();
 
-    // `scheduled-job update` is still server-side stubbed; `delete` was
-    // wired to a real resolver in the PR that added deleteScheduledJob.
     await program
-      .parseAsync(["node", "thinkwork", "scheduled-job", "update", "sj-fake"])
+      .parseAsync(["node", "thinkwork", "webhook", "test", "wh-fake"])
       .catch(() => undefined);
 
     expect(exitSpy).toHaveBeenCalledWith(2);

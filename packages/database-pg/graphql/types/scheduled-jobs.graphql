@@ -70,6 +70,26 @@ type DeleteScheduledJobResult {
 }
 
 """
+Partial-update input for `updateScheduledJob`. Any field set updates that
+column on the scheduled_jobs row. Changing `scheduleExpression`,
+`scheduleType`, `timezone`, or `enabled` propagates to AWS EventBridge
+via the job-schedule-manager Lambda (re-creates the underlying schedule
+when the expression changes; toggles state when only `enabled` changes).
+`config` is sent as an object — the resolver passes it through to the
+Lambda which JSON-serializes for the DB column.
+"""
+input UpdateScheduledJobInput {
+  name: String
+  description: String
+  prompt: String
+  config: AWSJSON
+  scheduleType: String
+  scheduleExpression: String
+  timezone: String
+  enabled: Boolean
+}
+
+"""
 Result of `runScheduledJob`. Synchronously invokes the job-trigger
 Lambda with the same payload AWS Scheduler would have sent at the
 next firing — effectively "run now". `dispatched` is true when the
@@ -87,6 +107,7 @@ type RunScheduledJobResult {
 
 extend type Mutation {
   createScheduledJob(input: CreateScheduledJobInput!): ScheduledJob!
+  updateScheduledJob(id: ID!, input: UpdateScheduledJobInput!): ScheduledJob!
   deleteScheduledJob(id: ID!): DeleteScheduledJobResult!
   runScheduledJob(id: ID!): RunScheduledJobResult!
 }
