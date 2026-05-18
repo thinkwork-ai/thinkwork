@@ -10,21 +10,29 @@ import { mobileMemorySearch } from "./mobileMemorySearch.query.js";
 import { mobileWikiSearch } from "./mobileWikiSearch.query.js";
 import { recentWikiPages } from "./recentWikiPages.query.js";
 import { deleteMobileMemoryCapture } from "./deleteMobileMemoryCapture.mutation.js";
+import {
+  threadIdleLearningRunQuery,
+  threadIdleLearningRunsQuery,
+} from "./threadIdleLearningRuns.query.js";
+import { rollbackThreadIdleLearningRun } from "./rollbackThreadIdleLearningRun.mutation.js";
 
 export const memoryQueries = {
-	memoryRecords,
-	memorySearch,
-	memoryGraph,
-	memorySystemConfig,
-	mobileMemoryCaptures,
-	mobileMemorySearch,
-	mobileWikiSearch,
-	recentWikiPages,
+  memoryRecords,
+  memorySearch,
+  memoryGraph,
+  memorySystemConfig,
+  mobileMemoryCaptures,
+  mobileMemorySearch,
+  mobileWikiSearch,
+  recentWikiPages,
+  threadIdleLearningRuns: threadIdleLearningRunsQuery,
+  threadIdleLearningRun: threadIdleLearningRunQuery,
 };
 
 export const memoryMutations = {
-	deleteMemoryRecord,
-	updateMemoryRecord,
-	captureMobileMemory,
-	deleteMobileMemoryCapture,
+  deleteMemoryRecord,
+  updateMemoryRecord,
+  captureMobileMemory,
+  deleteMobileMemoryCapture,
+  rollbackThreadIdleLearningRun,
 };

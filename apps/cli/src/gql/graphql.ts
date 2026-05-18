@@ -2096,6 +2096,7 @@ export type Mutation = {
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
+  rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runBrainPageEnrichment: BrainEnrichmentProposal;
   saveApplet: SaveAppletPayload;
@@ -2837,6 +2838,13 @@ export type MutationRevokeAgentApiKeyArgs = {
 export type MutationRollbackAgentVersionArgs = {
   agentId: Scalars['ID']['input'];
   versionId: Scalars['ID']['input'];
+};
+
+
+export type MutationRollbackThreadIdleLearningRunArgs = {
+  runId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -3679,6 +3687,8 @@ export type Query = {
   tenantToolInventory: TenantToolInventory;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
+  threadIdleLearningRun?: Maybe<ThreadIdleLearningRun>;
+  threadIdleLearningRuns: Array<ThreadIdleLearningRun>;
   threadLabels: Array<ThreadLabel>;
   threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
@@ -4394,6 +4404,21 @@ export type QueryThreadArgs = {
 export type QueryThreadByNumberArgs = {
   number: Scalars['Int']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadIdleLearningRunArgs = {
+  runId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryThreadIdleLearningRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -5608,6 +5633,44 @@ export type ThreadDependency = {
   id: Scalars['ID']['output'];
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
+};
+
+export type ThreadIdleLearningChangedFile = {
+  __typename?: 'ThreadIdleLearningChangedFile';
+  afterBytes?: Maybe<Scalars['Int']['output']>;
+  afterHash?: Maybe<Scalars['String']['output']>;
+  beforeBytes?: Maybe<Scalars['Int']['output']>;
+  beforeHash?: Maybe<Scalars['String']['output']>;
+  hindsightDocumentId?: Maybe<Scalars['String']['output']>;
+  hindsightStatus?: Maybe<Scalars['String']['output']>;
+  key?: Maybe<Scalars['String']['output']>;
+  path: Scalars['String']['output'];
+  snapshotKey?: Maybe<Scalars['String']['output']>;
+};
+
+export type ThreadIdleLearningRun = {
+  __typename?: 'ThreadIdleLearningRun';
+  activitySequence: Scalars['Int']['output'];
+  budget?: Maybe<Scalars['AWSJSON']['output']>;
+  canRollback: Scalars['Boolean']['output'];
+  candidateSummary?: Maybe<Scalars['AWSJSON']['output']>;
+  changedFiles: Array<ThreadIdleLearningChangedFile>;
+  computerId?: Maybe<Scalars['ID']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  error?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  reportMarkdown?: Maybe<Scalars['String']['output']>;
+  reportS3Key?: Maybe<Scalars['String']['output']>;
+  requesterUserId?: Maybe<Scalars['ID']['output']>;
+  scheduledFor?: Maybe<Scalars['AWSDateTime']['output']>;
+  scheduledJobId?: Maybe<Scalars['ID']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
 };
 
 export type ThreadLabel = {

@@ -90,16 +90,91 @@ type MemorySystemConfig {
   hindsightEnabled: Boolean!
 }
 
+type ThreadIdleLearningChangedFile {
+  path: String!
+  key: String
+  beforeHash: String
+  afterHash: String
+  beforeBytes: Int
+  afterBytes: Int
+  snapshotKey: String
+  hindsightDocumentId: String
+  hindsightStatus: String
+}
+
+type ThreadIdleLearningRun {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  computerId: ID
+  requesterUserId: ID
+  scheduledJobId: ID
+  activitySequence: Int!
+  scheduledFor: AWSDateTime
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  status: String!
+  changedFiles: [ThreadIdleLearningChangedFile!]!
+  candidateSummary: AWSJSON
+  reportS3Key: String
+  reportMarkdown: String
+  error: String
+  budget: AWSJSON
+  metadata: AWSJSON
+  canRollback: Boolean!
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
 extend type Query {
-  memoryRecords(tenantId: ID, userId: ID, assistantId: ID, namespace: String!): [MemoryRecord!]!
-  memorySearch(tenantId: ID, userId: ID, assistantId: ID, query: String!, strategy: MemoryStrategy, limit: Int): MemorySearchResult!
+  memoryRecords(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    namespace: String!
+  ): [MemoryRecord!]!
+  memorySearch(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    query: String!
+    strategy: MemoryStrategy
+    limit: Int
+  ): MemorySearchResult!
   memoryGraph(tenantId: ID, userId: ID, assistantId: ID): MemoryGraph!
   memorySystemConfig: MemorySystemConfig!
+  threadIdleLearningRuns(
+    tenantId: ID
+    userId: ID
+    threadId: ID
+    limit: Int = 25
+  ): [ThreadIdleLearningRun!]!
+  threadIdleLearningRun(
+    tenantId: ID
+    userId: ID
+    runId: ID!
+  ): ThreadIdleLearningRun
 }
 
 extend type Mutation {
-  deleteMemoryRecord(tenantId: ID, userId: ID, assistantId: ID, memoryRecordId: ID!): Boolean!
-  updateMemoryRecord(tenantId: ID, userId: ID, assistantId: ID, memoryRecordId: ID!, content: String!): Boolean!
+  deleteMemoryRecord(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    memoryRecordId: ID!
+  ): Boolean!
+  updateMemoryRecord(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    memoryRecordId: ID!
+    content: String!
+  ): Boolean!
+  rollbackThreadIdleLearningRun(
+    tenantId: ID
+    userId: ID
+    runId: ID!
+  ): ThreadIdleLearningRun!
   captureMobileMemory(
     tenantId: ID
     userId: ID
@@ -136,7 +211,12 @@ type MobileMemoryCapture {
 }
 
 extend type Query {
-  mobileMemoryCaptures(tenantId: ID, userId: ID, agentId: ID, limit: Int = 50): [MobileMemoryCapture!]!
+  mobileMemoryCaptures(
+    tenantId: ID
+    userId: ID
+    agentId: ID
+    limit: Int = 50
+  ): [MobileMemoryCapture!]!
   """
   Free-text search across the full Hindsight bank for the given user.
   Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
@@ -145,7 +225,13 @@ extend type Query {
   search is meant to answer "what does this user know?", including chat-
   derived observations.
   """
-  mobileMemorySearch(tenantId: ID, userId: ID, agentId: ID, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
+  mobileMemorySearch(
+    tenantId: ID
+    userId: ID
+    agentId: ID
+    query: String!
+    limit: Int = 20
+  ): [MobileMemoryCapture!]!
 
   """
   Ranked wiki-page search for mobile. Runs a Postgres full-text query
@@ -160,7 +246,13 @@ extend type Query {
   retained for wire-format compatibility and is always [] on this path —
   pages match their own compiled text, not source memory units.
   """
-  mobileWikiSearch(tenantId: ID, userId: ID, agentId: ID, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
+  mobileWikiSearch(
+    tenantId: ID
+    userId: ID
+    agentId: ID
+    query: String!
+    limit: Int = 20
+  ): [MobileWikiSearchResult!]!
 
   """
   Newest compiled wiki pages for the given user, ordered by
@@ -168,7 +260,12 @@ extend type Query {
   been recompiled yet). Intended as the default Memories-tab feed so
   the user sees fresh pages before they type a search query.
   """
-  recentWikiPages(tenantId: ID, userId: ID, agentId: ID, limit: Int = 50): [WikiPage!]!
+  recentWikiPages(
+    tenantId: ID
+    userId: ID
+    agentId: ID
+    limit: Int = 50
+  ): [WikiPage!]!
 }
 
 type MobileWikiSearchResult {
@@ -188,5 +285,10 @@ type MobileWikiSearchResult {
 }
 
 extend type Mutation {
-  deleteMobileMemoryCapture(tenantId: ID, userId: ID, agentId: ID, captureId: ID!): Boolean!
+  deleteMobileMemoryCapture(
+    tenantId: ID
+    userId: ID
+    agentId: ID
+    captureId: ID!
+  ): Boolean!
 }

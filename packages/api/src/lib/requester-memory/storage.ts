@@ -161,6 +161,28 @@ export async function writeIdleLearningReport(input: {
   };
 }
 
+export async function readIdleLearningReport(input: {
+  tenantId: string;
+  userId: string;
+  runId: string;
+}): Promise<string | null> {
+  const key = requesterMemoryKey({
+    tenantId: input.tenantId,
+    userId: input.userId,
+    path: idleLearningReportPath(input.runId),
+    kind: "internal",
+  });
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({ Bucket: workspaceBucket(), Key: key }),
+    );
+    return (await response.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (isNoSuchKey(err)) return null;
+    throw err;
+  }
+}
+
 export async function restoreRequesterMemorySnapshot(input: {
   tenantId: string;
   userId: string;

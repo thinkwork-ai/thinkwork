@@ -2329,6 +2329,46 @@ export const MemorySystemConfigQuery = graphql(`
   }
 `);
 
+export const ThreadIdleLearningRunsQuery = graphql(`
+  query ThreadIdleLearningRuns($userId: ID!, $limit: Int) {
+    threadIdleLearningRuns(userId: $userId, limit: $limit) {
+      id
+      threadId
+      computerId
+      requesterUserId
+      status
+      startedAt
+      finishedAt
+      reportS3Key
+      error
+      canRollback
+      changedFiles {
+        path
+        beforeHash
+        afterHash
+        snapshotKey
+        hindsightDocumentId
+        hindsightStatus
+      }
+    }
+  }
+`);
+
+export const RollbackThreadIdleLearningRunMutation = graphql(`
+  mutation RollbackThreadIdleLearningRun($userId: ID!, $runId: ID!) {
+    rollbackThreadIdleLearningRun(userId: $userId, runId: $runId) {
+      id
+      status
+      error
+      canRollback
+      changedFiles {
+        path
+        hindsightStatus
+      }
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Business Ontology
 // ---------------------------------------------------------------------------

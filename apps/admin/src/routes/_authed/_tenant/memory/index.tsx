@@ -8,7 +8,15 @@ import {
 } from "@tanstack/react-router";
 import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Trash2, Brain, Search, X, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  Brain,
+  Search,
+  X,
+  ArrowLeft,
+  RotateCcw,
+} from "lucide-react";
 import {
   AgentsListQuery,
   TenantMembersListQuery,
@@ -17,8 +25,14 @@ import {
   MemorySystemConfigQuery,
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
+  ThreadIdleLearningRunsQuery,
+  RollbackThreadIdleLearningRunMutation,
 } from "@/lib/graphql-queries";
-import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@thinkwork/graph";
+import {
+  MemoryGraph,
+  type MemoryGraphHandle,
+  type MemoryGraphNode,
+} from "@thinkwork/graph";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -72,7 +86,9 @@ export const Route = createFileRoute("/_authed/_tenant/memory/")({
   validateSearch: (
     search: Record<string, unknown>,
   ): { agent?: string; view?: MemoryView } => ({
-    ...(typeof search.agent === "string" && search.agent ? { agent: search.agent } : {}),
+    ...(typeof search.agent === "string" && search.agent
+      ? { agent: search.agent }
+      : {}),
     ...(isMemoryView(search.view) ? { view: search.view } : {}),
   }),
 });
@@ -88,7 +104,8 @@ type MemoryPageProps = {
 function parseMemoryTopics(text: string): { topic: string; content: string }[] {
   // Match closed tags: <topic name="X">content</topic>
   // AND unclosed tags: <topic name="X">content (rest of string or until next <topic)
-  const regex = /<topic\s+name="([^"]*)">\s*([\s\S]*?)(?:<\/topic>|(?=<topic\s)|$)/g;
+  const regex =
+    /<topic\s+name="([^"]*)">\s*([\s\S]*?)(?:<\/topic>|(?=<topic\s)|$)/g;
   const sections: { topic: string; content: string }[] = [];
   let lastIndex = 0;
   let match;
@@ -106,7 +123,10 @@ function parseMemoryTopics(text: string): { topic: string; content: string }[] {
 
 /** Strip topic XML tags for plain text display */
 function stripTopicTags(text: string): string {
-  return text.replace(/<\/?topic[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/<\/?topic[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Render parsed memory sections */
@@ -117,9 +137,13 @@ function MemoryContent({ text }: { text: string }) {
       {sections.map((s, i) => (
         <div key={i}>
           {s.topic && (
-            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.topic}</p>
+            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wider mb-1">
+              {s.topic}
+            </p>
           )}
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{s.content}</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {s.content}
+          </p>
         </div>
       ))}
     </div>
@@ -157,6 +181,17 @@ type UserScope = {
   agentIds: string[];
 };
 
+type IdleLearningRunRow = {
+  id: string;
+  threadId: string;
+  status: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  error?: string | null;
+  canRollback: boolean;
+  changedFiles: Array<{ path: string; hindsightStatus?: string | null }>;
+};
+
 function agentUserId(agent: any): string | null {
   return agent.humanPairId ?? agent.humanPair?.id ?? null;
 }
@@ -180,6 +215,118 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
   return <Badge className={`${colors} font-normal text-xs`}>{label}</Badge>;
 }
 
+function IdleLearningRunsPanel({
+  runs,
+  fetching,
+  rollingBackRunId,
+  onRollback,
+}: {
+  runs: IdleLearningRunRow[];
+  fetching: boolean;
+  rollingBackRunId: string | null;
+  onRollback: (runId: string) => void;
+}) {
+  if (fetching) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading learning runs...
+      </div>
+    );
+  }
+  if (runs.length === 0) return null;
+
+  return (
+    <div className="shrink-0 rounded-md border border-border">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Idle learning runs
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Latest automatic requester-memory updates for this user.
+          </p>
+        </div>
+      </div>
+      <div className="divide-y divide-border">
+        {runs.map((run) => (
+          <div
+            key={run.id}
+            className="flex flex-wrap items-center gap-3 px-3 py-2 text-xs"
+          >
+            <Badge variant="outline" className="font-normal">
+              {run.status}
+            </Badge>
+            <span className="text-muted-foreground">
+              {run.finishedAt || run.startedAt
+                ? new Date(run.finishedAt ?? run.startedAt!).toLocaleString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    },
+                  )
+                : "Not started"}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {run.changedFiles.length > 0
+                ? run.changedFiles.map((file) => file.path).join(", ")
+                : run.error || "No memory file changes"}
+            </span>
+            {run.threadId && (
+              <Link
+                to="/threads/$threadId"
+                params={{ threadId: run.threadId }}
+                className="text-sky-400 hover:text-sky-300 hover:underline"
+              >
+                Thread
+              </Link>
+            )}
+            {run.canRollback && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={rollingBackRunId === run.id}
+                  >
+                    {rollingBackRunId === run.id ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Roll back
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Roll back memory changes?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This restores the requester memory files from the
+                      snapshots captured before this idle-learning run and
+                      re-syncs the markdown memory document.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onRollback(run.id)}>
+                      Roll back
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function MemoryPage({
   routeBase = "/memory",
@@ -216,15 +363,33 @@ export function MemoryPage({
     [updateFilters, view],
   );
   const setView = useCallback(
-    (nextView: MemoryView) => updateFilters({ agent: selectedAgentId, view: nextView }),
+    (nextView: MemoryView) =>
+      updateFilters({ agent: selectedAgentId, view: nextView }),
     [updateFilters, selectedAgentId],
   );
 
   // Graph node detail sheet
   const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
-  const [graphNodeEdges, setGraphNodeEdges] = useState<{ label: string; targetLabel: string; targetType: string; targetId: string }[]>([]);
+  const [graphNodeEdges, setGraphNodeEdges] = useState<
+    {
+      label: string;
+      targetLabel: string;
+      targetType: string;
+      targetId: string;
+    }[]
+  >([]);
   const [graphSheetOpen, setGraphSheetOpen] = useState(false);
-  const [graphNodeHistory, setGraphNodeHistory] = useState<{ node: MemoryGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] }[]>([]);
+  const [graphNodeHistory, setGraphNodeHistory] = useState<
+    {
+      node: MemoryGraphNode;
+      edges: {
+        label: string;
+        targetLabel: string;
+        targetType: string;
+        targetId: string;
+      }[];
+    }[]
+  >([]);
 
   // Detect which memory backends are wired up at runtime. The Knowledge
   // Graph view is only meaningful when Hindsight is deployed, so hide the
@@ -237,7 +402,9 @@ export function MemoryPage({
   // ?view=graph the effect below sees `false` during load and strips the
   // param from the URL before the real value arrives.
   const hindsightConfigLoaded = memorySystemConfigResult.data !== undefined;
-  const hindsightEnabled = memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ?? false;
+  const hindsightEnabled =
+    memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ??
+    false;
 
   // If Hindsight is disabled mid-session (e.g. after a deploy), force the
   // view back to memories so we never render an empty graph.
@@ -259,8 +426,11 @@ export function MemoryPage({
   });
 
   const agents = useMemo(
-    () => [...(agentsResult.data?.agents ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
-    [agentsResult.data]
+    () =>
+      [...(agentsResult.data?.agents ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    [agentsResult.data],
   );
   const memberScopes = useMemo<UserScope[]>(() => {
     const members = membersResult.data?.tenantMembers ?? [];
@@ -307,13 +477,19 @@ export function MemoryPage({
 
   const isAllAgents = selectedAgentId === "all";
   const selectedScope = userScopes.find(
-    (scope) => scope.userId === selectedAgentId || scope.agentIds.includes(selectedAgentId),
+    (scope) =>
+      scope.userId === selectedAgentId ||
+      scope.agentIds.includes(selectedAgentId),
   );
-  const selectedScopeId = isAllAgents ? "all" : (selectedScope?.userId ?? selectedAgentId);
-  const effectiveUserId = isAllAgents ? userScopes[0]?.userId : selectedScope?.userId;
+  const selectedScopeId = isAllAgents
+    ? "all"
+    : (selectedScope?.userId ?? selectedAgentId);
+  const effectiveUserId = isAllAgents
+    ? userScopes[0]?.userId
+    : selectedScope?.userId;
   const effectiveUserIds = useMemo(
-    () => isAllAgents ? userScopes.map((scope) => scope.userId) : [],
-    [isAllAgents, userScopes]
+    () => (isAllAgents ? userScopes.map((scope) => scope.userId) : []),
+    [isAllAgents, userScopes],
   );
 
   const namespace = "all";
@@ -326,6 +502,11 @@ export function MemoryPage({
     query: MemoryRecordsQuery,
     variables: { userId: effectiveUserId ?? "", namespace },
     pause: !!activeSearch || isAllAgents || !effectiveUserId,
+  });
+  const [idleRunsResult, refetchIdleRuns] = useQuery({
+    query: ThreadIdleLearningRunsQuery,
+    variables: { userId: effectiveUserId ?? "", limit: 8 },
+    pause: isAllAgents || !effectiveUserId,
   });
 
   // Multi-user fan-out
@@ -368,7 +549,9 @@ export function MemoryPage({
   }, [isAllAgents, activeSearch, fetchAllAgentRecords]);
 
   // Search mode
-  const searchUserId = isAllAgents ? (userScopes[0]?.userId ?? "") : (effectiveUserId ?? "");
+  const searchUserId = isAllAgents
+    ? (userScopes[0]?.userId ?? "")
+    : (effectiveUserId ?? "");
   const [searchResult] = useQuery({
     query: MemorySearchQuery,
     variables: {
@@ -381,12 +564,16 @@ export function MemoryPage({
 
   const [, deleteMemory] = useMutation(DeleteMemoryRecordMutation);
   const [, updateMemory] = useMutation(UpdateMemoryRecordMutation);
+  const [, rollbackIdleRun] = useMutation(
+    RollbackThreadIdleLearningRunMutation,
+  );
   const [selectedRecord, setSelectedRecord] = useState<MemoryRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [rollingBackRunId, setRollingBackRunId] = useState<string | null>(null);
 
   useBreadcrumbs(breadcrumbs);
 
@@ -398,10 +585,16 @@ export function MemoryPage({
     updatedAt: r.updatedAt ?? null,
     strategyId: r.strategyId ?? null,
     namespace: r.namespace ?? null,
-    strategy: r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
+    strategy:
+      r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
     score: r.score ?? null,
     agentSlug: r.userSlug ?? r.agentSlug ?? r.namespace ?? null,
-    agentName: r.__userLabel ?? userLabelsBySlug[r.userSlug ?? r.agentSlug ?? r.namespace ?? ""] ?? r.userSlug ?? r.agentSlug ?? "",
+    agentName:
+      r.__userLabel ??
+      userLabelsBySlug[r.userSlug ?? r.agentSlug ?? r.namespace ?? ""] ??
+      r.userSlug ??
+      r.agentSlug ??
+      "",
     factType: r.factType ?? null,
     confidence: r.confidence ?? null,
     eventDate: r.eventDate ?? null,
@@ -444,7 +637,11 @@ export function MemoryPage({
       accessorKey: "agentName",
       header: "User",
       size: 100,
-      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.agentName}</span>,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-xs">
+          {row.original.agentName}
+        </span>
+      ),
     },
     {
       accessorKey: "factType",
@@ -456,7 +653,9 @@ export function MemoryPage({
       accessorKey: "text",
       header: "Memory",
       cell: ({ row }) => (
-        <span className="truncate block">{stripTopicTags(row.original.text)}</span>
+        <span className="truncate block">
+          {stripTopicTags(row.original.text)}
+        </span>
       ),
     },
   ];
@@ -494,13 +693,29 @@ export function MemoryPage({
     if (!selectedRecord) return;
     setDeleting(true);
     try {
-      await deleteMemory({ userId: selectedRecord.userId, memoryRecordId: selectedRecord.memoryRecordId });
+      await deleteMemory({
+        userId: selectedRecord.userId,
+        memoryRecordId: selectedRecord.memoryRecordId,
+      });
       setSheetOpen(false);
       setSelectedRecord(null);
       if (isAllAgents) fetchAllAgentRecords();
       else refetchMemory({ requestPolicy: "network-only" });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleRollbackIdleRun = async (runId: string) => {
+    if (!effectiveUserId) return;
+    setRollingBackRunId(runId);
+    try {
+      await rollbackIdleRun({ userId: effectiveUserId, runId });
+      refetchIdleRuns({ requestPolicy: "network-only" });
+      if (isAllAgents) fetchAllAgentRecords();
+      else refetchMemory({ requestPolicy: "network-only" });
+    } finally {
+      setRollingBackRunId(null);
     }
   };
 
@@ -538,7 +753,10 @@ export function MemoryPage({
           />
           {searchQuery && (
             <button
-              onClick={() => { setSearchQuery(""); setActiveSearch(""); }}
+              onClick={() => {
+                setSearchQuery("");
+                setActiveSearch("");
+              }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
@@ -594,28 +812,45 @@ export function MemoryPage({
               }}
             />
           </div>
-        ) : isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <Brain className="h-12 w-12 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {activeSearch
-                ? "No memories match your search."
-                : "No memories yet."}
-            </p>
-          </div>
         ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            onRowClick={handleRowClick}
-            scrollable
-            pageSize={25}
-            tableClassName="table-fixed"
-          />
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            {!isAllAgents && (
+              <IdleLearningRunsPanel
+                runs={
+                  (idleRunsResult.data?.threadIdleLearningRuns ??
+                    []) as IdleLearningRunRow[]
+                }
+                fetching={idleRunsResult.fetching && !idleRunsResult.data}
+                rollingBackRunId={rollingBackRunId}
+                onRollback={handleRollbackIdleRun}
+              />
+            )}
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <Brain className="h-12 w-12 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">
+                  {activeSearch
+                    ? "No memories match your search."
+                    : "No memories yet."}
+                </p>
+              </div>
+            ) : (
+              <div className="min-h-0 flex-1">
+                <DataTable
+                  columns={columns}
+                  data={rows}
+                  onRowClick={handleRowClick}
+                  scrollable
+                  pageSize={25}
+                  tableClassName="table-fixed"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -628,7 +863,9 @@ export function MemoryPage({
                 <SheetTitle>Memory Detail</SheetTitle>
                 <SheetDescription>
                   {selectedRecord?.createdAt
-                    ? `Created ${new Date(selectedRecord.createdAt).toLocaleDateString("en-US", {
+                    ? `Created ${new Date(
+                        selectedRecord.createdAt,
+                      ).toLocaleDateString("en-US", {
                         month: "long",
                         day: "numeric",
                         year: "numeric",
@@ -639,7 +876,11 @@ export function MemoryPage({
                 </SheetDescription>
               </div>
               {!editing && hindsightEnabled && (
-                <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                >
                   Edit
                 </Button>
               )}
@@ -657,27 +898,48 @@ export function MemoryPage({
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="outline" size="sm" disabled={deleting}>
-                        {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+                        {deleting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        )}
                         Delete
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete memory?</AlertDialogTitle>
-                        <AlertDialogDescription>This memory will be permanently removed.</AlertDialogDescription>
+                        <AlertDialogDescription>
+                          This memory will be permanently removed.
+                        </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                        <AlertDialogAction onClick={handleDelete}>
+                          Delete
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                   <div className="flex-1" />
-                  <Button variant="outline" size="sm" onClick={() => { setEditValue(selectedRecord?.text ?? ""); setEditing(false); }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditValue(selectedRecord?.text ?? "");
+                      setEditing(false);
+                    }}
+                  >
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleSave} disabled={saving || editValue === selectedRecord?.text}>
-                    {saving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={saving || editValue === selectedRecord?.text}
+                  >
+                    {saving && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    )}
                     Save
                   </Button>
                 </div>
@@ -686,8 +948,12 @@ export function MemoryPage({
               <div className="space-y-4">
                 {selectedRecord?.factType && (
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{selectedRecord.factType}</p>
-                    <StrategyBadge strategy={selectedRecord?.strategy ?? null} />
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                      {selectedRecord.factType}
+                    </p>
+                    <StrategyBadge
+                      strategy={selectedRecord?.strategy ?? null}
+                    />
                   </div>
                 )}
                 <MemoryContent text={selectedRecord?.text ?? ""} />
@@ -704,8 +970,8 @@ export function MemoryPage({
 
                 {!hindsightEnabled && (
                   <p className="text-xs text-muted-foreground">
-                    AgentCore memory records are immutable in this deployment. To change a fact,
-                    create a new memory instead.
+                    AgentCore memory records are immutable in this deployment.
+                    To change a fact, create a new memory instead.
                   </p>
                 )}
 
@@ -713,32 +979,47 @@ export function MemoryPage({
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     {selectedRecord?.agentName && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Agent</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Agent
+                        </p>
                         <p className="mt-0.5">{selectedRecord.agentName}</p>
                       </div>
                     )}
                     {selectedRecord?.confidence != null && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Confidence</p>
-                        <p className="mt-0.5">{(selectedRecord.confidence * 100).toFixed(0)}%</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Confidence
+                        </p>
+                        <p className="mt-0.5">
+                          {(selectedRecord.confidence * 100).toFixed(0)}%
+                        </p>
                       </div>
                     )}
-                    {selectedRecord?.accessCount != null && selectedRecord.accessCount > 0 && (
-                      <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Access Count</p>
-                        <p className="mt-0.5">{selectedRecord.accessCount}</p>
-                      </div>
-                    )}
+                    {selectedRecord?.accessCount != null &&
+                      selectedRecord.accessCount > 0 && (
+                        <div>
+                          <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                            Access Count
+                          </p>
+                          <p className="mt-0.5">{selectedRecord.accessCount}</p>
+                        </div>
+                      )}
                     {selectedRecord?.proofCount != null && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Proof Count</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Proof Count
+                        </p>
                         <p className="mt-0.5">{selectedRecord.proofCount}</p>
                       </div>
                     )}
                     {selectedRecord?.context && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Context</p>
-                        <p className="mt-0.5 truncate">{selectedRecord.context}</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Context
+                        </p>
+                        <p className="mt-0.5 truncate">
+                          {selectedRecord.context}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -747,26 +1028,66 @@ export function MemoryPage({
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     {selectedRecord?.eventDate && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Event Date</p>
-                        <p className="mt-0.5">{new Date(selectedRecord.eventDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Event Date
+                        </p>
+                        <p className="mt-0.5">
+                          {new Date(
+                            selectedRecord.eventDate,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
                       </div>
                     )}
                     {selectedRecord?.mentionedAt && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Mentioned At</p>
-                        <p className="mt-0.5">{new Date(selectedRecord.mentionedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Mentioned At
+                        </p>
+                        <p className="mt-0.5">
+                          {new Date(
+                            selectedRecord.mentionedAt,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
                       </div>
                     )}
                     {selectedRecord?.occurredStart && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Occurred Start</p>
-                        <p className="mt-0.5">{new Date(selectedRecord.occurredStart).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Occurred Start
+                        </p>
+                        <p className="mt-0.5">
+                          {new Date(
+                            selectedRecord.occurredStart,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
                       </div>
                     )}
                     {selectedRecord?.occurredEnd && (
                       <div>
-                        <p className="text-muted-foreground uppercase tracking-wider font-medium">Occurred End</p>
-                        <p className="mt-0.5">{new Date(selectedRecord.occurredEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                          Occurred End
+                        </p>
+                        <p className="mt-0.5">
+                          {new Date(
+                            selectedRecord.occurredEnd,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -774,10 +1095,18 @@ export function MemoryPage({
                   {/* Tags */}
                   {selectedRecord?.tags && selectedRecord.tags.length > 0 && (
                     <div className="text-xs">
-                      <p className="text-muted-foreground uppercase tracking-wider font-medium mb-1">Tags</p>
+                      <p className="text-muted-foreground uppercase tracking-wider font-medium mb-1">
+                        Tags
+                      </p>
                       <div className="flex flex-wrap gap-1">
                         {selectedRecord.tags.map((t) => (
-                          <Badge key={t} variant="outline" className="font-normal text-xs">{t}</Badge>
+                          <Badge
+                            key={t}
+                            variant="outline"
+                            className="font-normal text-xs"
+                          >
+                            {t}
+                          </Badge>
                         ))}
                       </div>
                     </div>
@@ -816,8 +1145,8 @@ export function MemoryPage({
                 }`}
               >
                 {graphNode?.nodeType === "memory"
-                  ? graphNode?.strategy ?? "memory"
-                  : graphNode?.entityType ?? "entity"}
+                  ? (graphNode?.strategy ?? "memory")
+                  : (graphNode?.entityType ?? "entity")}
               </Badge>
             </SheetTitle>
             <SheetDescription>
@@ -842,10 +1171,12 @@ export function MemoryPage({
               </Link>
             )}
 
-{graphNodeEdges.length > 0 && (
+            {graphNodeEdges.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  {graphNode?.nodeType === "memory" ? "Mentions" : "Mentioned by"}
+                  {graphNode?.nodeType === "memory"
+                    ? "Mentions"
+                    : "Mentioned by"}
                 </h4>
                 <div className="space-y-2">
                   {graphNodeEdges.map((edge, i) => (
@@ -853,9 +1184,14 @@ export function MemoryPage({
                       key={i}
                       className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => {
-                        const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                        const result = graphRef.current?.getNodeWithEdges(
+                          edge.targetId,
+                        );
                         if (result && graphNode) {
-                          setGraphNodeHistory((h) => [...h, { node: graphNode, edges: graphNodeEdges }]);
+                          setGraphNodeHistory((h) => [
+                            ...h,
+                            { node: graphNode, edges: graphNodeEdges },
+                          ]);
                           setGraphNode(result.node);
                           setGraphNodeEdges(result.edges);
                         }
@@ -872,9 +1208,13 @@ export function MemoryPage({
                         {edge.targetType === "memory" ? "Memory" : "Entity"}
                       </Badge>
                       <div className="min-w-0">
-                        <p className="font-medium text-foreground truncate">{stripTopicTags(edge.targetLabel)}</p>
+                        <p className="font-medium text-foreground truncate">
+                          {stripTopicTags(edge.targetLabel)}
+                        </p>
                         {edge.label && (
-                          <p className="text-xs text-muted-foreground">{edge.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {edge.label}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -891,16 +1231,18 @@ export function MemoryPage({
           </div>
         </SheetContent>
       </Sheet>
-
     </div>
   );
 }
 
 function inferStrategy(strategyId: string, namespace: string): string {
   if (strategyId.includes("semantic")) return "semantic";
-  if (strategyId.includes("summary") || strategyId.includes("Summar")) return "summaries";
-  if (strategyId.includes("Preference") || strategyId.includes("preference")) return "preferences";
-  if (strategyId.includes("Episode") || strategyId.includes("episode")) return "episodes";
+  if (strategyId.includes("summary") || strategyId.includes("Summar"))
+    return "summaries";
+  if (strategyId.includes("Preference") || strategyId.includes("preference"))
+    return "preferences";
+  if (strategyId.includes("Episode") || strategyId.includes("episode"))
+    return "episodes";
   if (namespace.startsWith("assistant_")) return "semantic";
   if (namespace.startsWith("preferences_")) return "preferences";
   if (namespace.startsWith("session_")) return "summaries";

@@ -8,6 +8,7 @@ import { mockClient } from "aws-sdk-client-mock";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   readRequesterMemoryFile,
+  readIdleLearningReport,
   requesterMemoryKey,
   requesterMemorySnapshotKey,
   restoreRequesterMemorySnapshot,
@@ -179,6 +180,24 @@ describe("requester memory storage", () => {
       path: "memory/reports/thread-idle/run-1.md",
       key: "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
       bytes: 8,
+    });
+  });
+
+  it("reads idle-learning reports from the internal requester memory prefix", async () => {
+    s3Mock.on(GetObjectCommand).resolves(s3Body("# Report"));
+
+    const report = await readIdleLearningReport({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      runId: "run-1",
+    });
+
+    expect(report).toBe("# Report");
+    expect(
+      s3Mock.commandCalls(GetObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "workspace-bucket",
+      Key: "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
     });
   });
 });
