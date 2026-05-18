@@ -49,22 +49,27 @@ export function WorkspacesTable({
       accessorKey: "slackTeamName",
       header: "Workspace",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">
-            {row.original.slackTeamName || row.original.slackTeamId}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.slackTeamId}
-          </div>
-        </div>
+        <span className="block truncate font-medium">
+          {row.original.slackTeamName || row.original.slackTeamId}
+        </span>
       ),
       size: 260,
+    },
+    {
+      accessorKey: "slackTeamId",
+      header: "Workspace ID",
+      cell: ({ row }) => (
+        <span className="block truncate text-xs text-muted-foreground">
+          {row.original.slackTeamId}
+        </span>
+      ),
+      size: 160,
     },
     {
       accessorKey: "botUserId",
       header: "Bot User",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
+        <span className="block truncate text-xs text-muted-foreground">
           {row.original.botUserId}
         </span>
       ),
