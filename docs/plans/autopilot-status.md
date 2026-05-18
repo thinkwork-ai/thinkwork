@@ -647,7 +647,7 @@ None.
 
 ## CI / PR
 
-- Not opened yet.
+- Opened [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404).
 
 ## Blockers
 
