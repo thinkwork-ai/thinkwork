@@ -28,7 +28,11 @@ import { select, Separator } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAwsIdentity } from "../aws.js";
 import { listAwsProfiles, type AwsProfile } from "../aws-profiles.js";
-import { saveCliConfig, saveStageSession } from "../cli-config.js";
+import {
+  loadStageSession,
+  saveCliConfig,
+  saveStageSession,
+} from "../cli-config.js";
 import { ensureAwsCli } from "../prerequisites.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { validateStage } from "../config.js";
@@ -38,8 +42,8 @@ import {
   decodeIdToken,
   CLI_LOOPBACK_PORT,
 } from "../cognito-oauth.js";
-import { getApiEndpoint } from "../aws-discovery.js";
-import { isCancellation } from "../lib/interactive.js";
+import { getApiEndpoint, listDeployedStages } from "../aws-discovery.js";
+import { isCancellation, isInteractive } from "../lib/interactive.js";
 
 function ask(prompt: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -193,7 +197,10 @@ function runSsoLogin(targetProfile: string): boolean {
   }
 }
 
-function finalizeAws(profile: string, mode: string): void {
+function finalizeAws(
+  profile: string,
+  mode: string,
+): { account: string; region: string } {
   const identity = getAwsIdentity();
   if (!identity) {
     printError(
@@ -217,13 +224,85 @@ function finalizeAws(profile: string, mode: string): void {
       `  Override per-command with --profile <other>, or unset with \`rm ~/.thinkwork/config.json\`.`,
     ),
   );
+  return identity;
+}
+
+/**
+ * After the AWS-credentials branch succeeds, offer to also sign in to the
+ * API for a deployed stage. Most users want both — they ran
+ * `thinkwork login` to be ready to use the CLI, not to memorize that
+ * "AWS login" and "API login" are two separate verbs.
+ *
+ * Non-interactive callers (CI, piped stdin) get the original "Next:" hint
+ * instead of an unanswerable prompt. Stages that already have a cached
+ * session don't trigger the prompt — they're already logged in.
+ */
+async function offerApiLoginChain(opts: {
+  region: string;
+  port: number;
+  noBrowser: boolean;
+}): Promise<void> {
+  const stages = listDeployedStages(opts.region);
+  const candidates = stages.filter(
+    (stage) => loadStageSession(stage) === null,
+  );
+
+  if (candidates.length === 0 || !isInteractive()) {
+    console.log("");
+    console.log(
+      `  ${chalk.bold("Next:")} run ${chalk.cyan("thinkwork login --stage <stage>")} if you also need`,
+    );
+    console.log(
+      `        an API session (required for ${chalk.cyan("eval")}, ${chalk.cyan("agent")}, ${chalk.cyan("thread")}, etc.).`,
+    );
+    return;
+  }
+
   console.log("");
-  console.log(
-    `  ${chalk.bold("Next:")} run ${chalk.cyan("thinkwork login --stage <stage>")} if you also need`,
-  );
-  console.log(
-    `        an API session (required for ${chalk.cyan("eval")}, ${chalk.cyan("agent")}, ${chalk.cyan("thread")}, etc.).`,
-  );
+  let chosen: string | null;
+  if (candidates.length === 1) {
+    const stage = candidates[0];
+    const answer = await select({
+      message: `Also sign in to the API for stage "${stage}"? (required for eval / agent / thread)`,
+      choices: [
+        { name: `Yes — sign in to ${stage}`, value: stage },
+        { name: "No — skip", value: null as unknown as string },
+      ],
+    });
+    chosen = answer ?? null;
+  } else {
+    const skip = "__skip__";
+    const answer = await select({
+      message: "Also sign in to an API stage now?",
+      choices: [
+        ...candidates.map((stage) => ({
+          name: `Yes — ${stage}`,
+          value: stage,
+        })),
+        new Separator(),
+        { name: "Skip", value: skip },
+      ],
+    });
+    chosen = answer === skip ? null : answer;
+  }
+
+  if (!chosen) {
+    console.log("");
+    console.log(
+      chalk.dim(
+        `  Skipped. Run ${chalk.cyan("thinkwork login --stage <stage>")} later for an API session.`,
+      ),
+    );
+    return;
+  }
+
+  console.log("");
+  await doCognitoLogin({
+    stage: chosen,
+    region: opts.region,
+    port: opts.port,
+    noBrowser: opts.noBrowser,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +485,7 @@ export function registerLoginCommand(program: Command): void {
   program
     .command("login")
     .description(
-      "Sign in. Without --stage: configure AWS credentials (for deploy / destroy). With --stage <s>: sign in to that stack's Cognito / API and cache a session for API-backed commands.",
+      "Sign in. Without --stage: configure AWS credentials AND offer to sign in to a deployed stack's API (the natural one-step UX). With --stage <s>: go straight to that stack's Cognito / API login and cache a session for API-backed commands.",
     )
     .option(
       "--profile <name>",
@@ -527,16 +606,25 @@ Registered callback URL:
         const awsOk = await ensureAwsCli();
         if (!awsOk) process.exit(1);
 
+        const port = Number.parseInt(opts.port, 10);
+        if (!Number.isFinite(port) || port < 1 || port > 65535) {
+          printError(`Invalid --port value: "${opts.port}".`);
+          process.exit(1);
+        }
+        const chainOpts = { port, noBrowser: opts.browser === false };
+
         if (opts.sso) {
           if (!runSsoLogin(targetProfile)) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          finalizeAws(targetProfile, "SSO");
+          const { region } = finalizeAws(targetProfile, "SSO");
+          await offerApiLoginChain({ region, ...chainOpts });
           return;
         }
         if (opts.keys) {
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          finalizeAws(targetProfile, "access keys");
+          const { region } = finalizeAws(targetProfile, "access keys");
+          await offerApiLoginChain({ region, ...chainOpts });
           return;
         }
 
@@ -550,7 +638,8 @@ Registered callback URL:
           );
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          finalizeAws(targetProfile, "access keys");
+          const { region } = finalizeAws(targetProfile, "access keys");
+          await offerApiLoginChain({ region, ...chainOpts });
           return;
         }
 
@@ -564,14 +653,16 @@ Registered callback URL:
         if (choice.kind === "keys") {
           if (!(await runKeyEntry(targetProfile))) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          finalizeAws(targetProfile, "access keys");
+          const { region } = finalizeAws(targetProfile, "access keys");
+          await offerApiLoginChain({ region, ...chainOpts });
           return;
         }
 
         if (choice.kind === "sso") {
           if (!runSsoLogin(targetProfile)) process.exit(1);
           process.env.AWS_PROFILE = targetProfile;
-          finalizeAws(targetProfile, "SSO");
+          const { region } = finalizeAws(targetProfile, "SSO");
+          await offerApiLoginChain({ region, ...chainOpts });
           return;
         }
 
@@ -586,7 +677,8 @@ Registered callback URL:
           process.exit(1);
         }
         process.env.AWS_PROFILE = picked;
-        finalizeAws(picked, "existing profile");
+        const { region } = finalizeAws(picked, "existing profile");
+        await offerApiLoginChain({ region, ...chainOpts });
       },
     );
 }
