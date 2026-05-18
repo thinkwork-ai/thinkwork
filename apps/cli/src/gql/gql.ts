@@ -121,6 +121,7 @@ type Documents = {
     "\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n": typeof types.CliScheduledJobsDocument,
     "\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliScheduledJobDocument,
     "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n": typeof types.CliCreateScheduledJobDocument,
+    "\n  mutation CliDeleteScheduledJob($id: ID!) {\n    deleteScheduledJob(id: $id) {\n      id\n      ok\n    }\n  }\n": typeof types.CliDeleteScheduledJobDocument,
     "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSchedJobTenantBySlugDocument,
     "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": typeof types.CliSkillCatalogDocument,
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSkillTenantBySlugDocument,
@@ -295,6 +296,7 @@ const documents: Documents = {
     "\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n": types.CliScheduledJobsDocument,
     "\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliScheduledJobDocument,
     "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n": types.CliCreateScheduledJobDocument,
+    "\n  mutation CliDeleteScheduledJob($id: ID!) {\n    deleteScheduledJob(id: $id) {\n      id\n      ok\n    }\n  }\n": types.CliDeleteScheduledJobDocument,
     "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSchedJobTenantBySlugDocument,
     "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": types.CliSkillCatalogDocument,
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSkillTenantBySlugDocument,
@@ -804,6 +806,10 @@ export function graphql(source: "\n  query CliScheduledJob($id: ID!) {\n    sche
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteScheduledJob($id: ID!) {\n    deleteScheduledJob(id: $id) {\n      id\n      ok\n    }\n  }\n"): (typeof documents)["\n  mutation CliDeleteScheduledJob($id: ID!) {\n    deleteScheduledJob(id: $id) {\n      id\n      ok\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

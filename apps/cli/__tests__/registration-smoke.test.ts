@@ -265,8 +265,10 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     program.exitOverride();
 
+    // `scheduled-job update` is still server-side stubbed; `delete` was
+    // wired to a real resolver in the PR that added deleteScheduledJob.
     await program
-      .parseAsync(["node", "thinkwork", "scheduled-job", "delete", "sj-fake"])
+      .parseAsync(["node", "thinkwork", "scheduled-job", "update", "sj-fake"])
       .catch(() => undefined);
 
     expect(exitSpy).toHaveBeenCalledWith(2);
