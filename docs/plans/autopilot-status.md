@@ -20,14 +20,14 @@ Target branch: `main`
 - Active branch: `codex/enterprise-release-artifacts-u1`
 - Active worktree: `.Codex/worktrees/enterprise-release-artifacts-u1`
 - Started: 2026-05-18 11:37 CDT
-- PR: pending
+- PR: [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391)
 - CI: pending
 
 ### Progress Log
 
-| Date       | Unit | Branch                                  | PR      | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                            | Notes                                                                                                                                           |
-| ---------- | ---- | --------------------------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | pending | In progress | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check` | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
+| Date       | Unit | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                            | Notes                                                                                                                                           |
+| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI pending | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check` | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
 
 ### CI / Merge Log
 
@@ -36,6 +36,7 @@ Target branch: `main`
 - 2026-05-18 11:38 CDT: Created worktree `.Codex/worktrees/enterprise-release-artifacts-u1` on branch `codex/enterprise-release-artifacts-u1` from `origin/main`.
 - 2026-05-18 11:45 CDT: Implemented release manifest generation, static/release asset helpers, Lambda artifact manifest generation, release workflow deployable artifact publishing, and CLI Terraform bundle cleanup.
 - 2026-05-18 11:47 CDT: Local verification passed: release manifest tests, shell syntax checks, CLI build, single Lambda build smoke, workspace typecheck/lint, full `pnpm test`, Prettier check for touched files, release workflow YAML parse, and `git diff --check`.
+- 2026-05-18 11:49 CDT: Opened [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) for U1.
 
 ### Blockers
 
