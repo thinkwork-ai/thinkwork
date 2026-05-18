@@ -161,7 +161,7 @@ fi
 echo ""
 echo "── Phase B · safe mutation round-trips ───────────────────────"
 echo "  (uses the api-key auto-fallback bearer; paths that require Cognito"
-echo "   user identity or tenant-admin role are validated separately in Phase D)"
+echo "   user identity stay gated and are exercised in Phase C)"
 
 # Tenant-wide CRUD that the api-key bearer is permitted to do.
 SUFFIX=$(date +%s)
@@ -178,10 +178,25 @@ if [ -n "${NEW_LBL:-}" ]; then
     "$CLI label delete $NEW_LBL --yes --stage $STAGE --tenant $TENANT --json | jq -e '.deleted == true' >/dev/null"
 fi
 
+# Phase B2: tenant-admin mutations that the new `service` auth type (PR #1381)
+# now admits via bearer. These used to live in Phase C as "gate fires"
+# assertions; they're positive happy-path now.
+if [ -n "${AGT_ID:-}" ]; then
+  step "agent capabilities set (service-auth) → web-search disabled" \
+    "$CLI agent capabilities set $AGT_ID --capability web-search --disabled --stage $STAGE --tenant $TENANT --json | jq -e '.capability == \"web-search\" and .enabled == false' >/dev/null"
+
+  step "agent capabilities set (service-auth) → restore web-search" \
+    "$CLI agent capabilities set $AGT_ID --capability web-search --enabled --stage $STAGE --tenant $TENANT --json | jq -e '.capability == \"web-search\" and .enabled == true' >/dev/null"
+fi
+
+step "tenant settings set (service-auth) → feature flag round-trip" \
+  "$CLI tenant settings set $TENANT --feature e2e_test_$SUFFIX=true --stage $STAGE --json | jq -e '.id != null' >/dev/null"
+
 echo ""
-echo "── Phase C · auth-gated mutations: assert the gates fire ─────"
-echo "  (api-key auto-fallback bearer is intentionally limited;"
-echo "   these should fail with specific server-side auth errors)"
+echo "── Phase C · auth-gated mutations that stay gated ─────────────"
+echo "  (createThread / sendMessage stay Cognito-required by design —"
+echo "   service callers cannot ghost-write as a user. memoryRecords"
+echo "   + performance queries still need a declared user identity.)"
 
 # Helper: assert the command fails with the expected error message in stderr.
 assert_fails_with() {
@@ -212,24 +227,12 @@ assert_fails_with "thread create requires user identity" \
   "Requester user identity required" \
   "$CLI thread create 'e2e-blocked-$SUFFIX' --stage $STAGE --tenant $TENANT --json"
 
-if [ -n "${AGT_ID:-}" ]; then
-  assert_fails_with "agent capabilities set requires admin" \
-    "Tenant admin role required" \
-    "$CLI agent capabilities set $AGT_ID --capability web-search --disabled --stage $STAGE --tenant $TENANT --json"
-fi
-
-# tenant settings set returns "Unexpected error." today (server-side message is
-# poor — tracked as a follow-up bug). Treat as auth-gate-fires either way.
-assert_fails_with "tenant settings set is auth-gated" \
-  "Tenant admin role required|Unexpected error" \
-  "$CLI tenant settings set $TENANT --feature e2e_test_$SUFFIX=true --stage $STAGE --json"
-
-assert_fails_with "memory list is auth-gated for api-key callers" \
-  "Tenant admin role required|Unexpected error" \
+assert_fails_with "memory list requires a user scope (bearer-only callers blocked)" \
+  "User context required|Tenant admin role required|Unexpected error" \
   "$CLI memory list --stage $STAGE --tenant $TENANT --json"
 
-assert_fails_with "performance agents is auth-gated for api-key callers" \
-  "Tenant admin role required|Unexpected error" \
+assert_fails_with "performance agents requires a user scope (bearer-only callers blocked)" \
+  "User context required|Tenant admin role required|Unexpected error" \
   "$CLI performance agents --stage $STAGE --tenant $TENANT --json"
 
 echo ""
