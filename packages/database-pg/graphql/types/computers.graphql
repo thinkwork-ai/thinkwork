@@ -162,7 +162,6 @@ type ComputerEvent {
 
 input CreateComputerInput {
   tenantId: ID!
-  ownerUserId: ID
   templateId: ID!
   name: String!
   slug: String

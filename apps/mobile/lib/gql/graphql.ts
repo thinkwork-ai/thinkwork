@@ -92,16 +92,6 @@ export type AddTenantMemberInput = {
   idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
   principalId: Scalars["ID"]["input"];
   principalType: Scalars["String"]["input"];
-  /**
-   * When true, the admin is opting this member in to Computer
-   * auto-provisioning. The server fires `provisionComputerForMember`
-   * after the membership insert. Default false — members are mobile-only
-   * / no-Computer unless explicitly opted in. Admins can always provision
-   * later via the Person-page CTA on /people/$humanId. Independent of
-   * the one-active-Computer-per-user invariant, which the server still
-   * enforces via `assertNoActiveComputer`.
-   */
-  provisionComputer?: InputMaybe<Scalars["Boolean"]["input"]>;
   role?: InputMaybe<Scalars["String"]["input"]>;
 };
 
@@ -1229,7 +1219,6 @@ export type CreateComputerInput = {
   migratedFromAgentId?: InputMaybe<Scalars["ID"]["input"]>;
   migrationMetadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   name: Scalars["String"]["input"];
-  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   scope?: InputMaybe<ComputerScope>;
   slug?: InputMaybe<Scalars["String"]["input"]>;
@@ -1694,13 +1683,6 @@ export type InviteMemberInput = {
   /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
   idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
-  /**
-   * When true, the admin is opting this invitee in to Computer
-   * auto-provisioning at member-creation time. Default false — invitees
-   * are mobile-only / no-Computer unless explicitly opted in. Admins can
-   * always provision later via the Person-page CTA on /people/$humanId.
-   */
-  provisionComputer?: InputMaybe<Scalars["Boolean"]["input"]>;
   role?: InputMaybe<Scalars["String"]["input"]>;
 };
 

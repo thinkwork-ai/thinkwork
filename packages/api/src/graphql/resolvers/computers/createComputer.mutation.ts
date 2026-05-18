@@ -13,7 +13,7 @@ export async function createComputer(
   const callerUserId = await resolveCallerUserId(ctx);
   const row = await createComputerCore({
     tenantId: input.tenantId,
-    ownerUserId: input.ownerUserId,
+    ownerUserId: null,
     templateId: input.templateId,
     name: input.name,
     slug: input.slug,

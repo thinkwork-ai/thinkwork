@@ -1,13 +1,10 @@
 -- creates: public.view_thinkwork_computer_default_template_seeded
 --
--- U1 (R3/R10) — Seed the platform-default Computer template that
--- `provisionComputerForMember` resolves by slug when auto-provisioning a
--- newly-added tenant member. Tenant-id NULL = platform-wide; every tenant
--- can resolve it because `requireComputerTemplate` accepts NULL-tenant rows.
+-- Seed the platform-default Computer template used by the shared Computer
+-- creation dialog. Tenant-id NULL = platform-wide; every tenant can resolve it
+-- because `requireComputerTemplate` accepts NULL-tenant rows.
 --
 -- See docs/plans/2026-05-11-003-feat-computer-admin-crud-plan.md (U1).
--- The brainstorm's R3 says auto-provision must work day-one with zero admin
--- configuration; this seed makes that true on a fresh tenant.
 --
 -- The marker view exists solely to give scripts/db-migrate-manual.sh
 -- something to verify — the drift reporter cannot probe for data rows. The

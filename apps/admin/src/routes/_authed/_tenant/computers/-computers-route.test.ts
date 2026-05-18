@@ -46,8 +46,10 @@ describe("Computers admin routes", () => {
     expect(workItemsSource).not.toContain('to: "/computers"');
   });
 
-  it("counts only non-archived Computers in the sidebar badge", () => {
-    expect(sidebarSource).toContain('computer.status !== "ARCHIVED"');
+  it("does not show a Computers count badge in the sidebar", () => {
+    expect(sidebarSource).not.toContain("ComputersListQuery");
+    expect(sidebarSource).not.toContain('computer.status !== "ARCHIVED"');
+    expect(sidebarSource).not.toContain("computerCount");
   });
 
   it("does not register the Symphony extension at admin startup", () => {

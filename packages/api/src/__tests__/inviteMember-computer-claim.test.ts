@@ -73,7 +73,7 @@ vi.mock("../graphql/utils.js", () => {
 // eslint-disable-next-line import/first
 import { inviteMember } from "../graphql/resolvers/core/inviteMember.mutation.js";
 
-describe("inviteMember computer onboarding claim", () => {
+describe("inviteMember onboarding claim", () => {
   beforeEach(() => {
     cognitoSendMock.mockReset();
     insertCalls.length = 0;
