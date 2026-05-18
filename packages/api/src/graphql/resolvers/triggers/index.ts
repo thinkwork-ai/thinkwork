@@ -11,6 +11,7 @@ import { deleteRoutineTrigger } from "./deleteRoutineTrigger.mutation.js";
 import { cancelThreadTurn } from "./cancelThreadTurn.mutation.js";
 import { createWakeupRequest } from "./createWakeupRequest.mutation.js";
 import { createScheduledJob } from "./createScheduledJob.mutation.js";
+import { deleteScheduledJob } from "./deleteScheduledJob.mutation.js";
 import { queuedWakeups } from "./queuedWakeups.query.js";
 
 // Phase B U7: createRoutine, updateRoutine, and triggerRoutineRun moved
@@ -20,4 +21,4 @@ import { queuedWakeups } from "./queuedWakeups.query.js";
 // RoutineStep types — admin (D U14) + mobile (this PR) both query
 // routineExecutions now.
 export const triggerQueries = { routines, routine, threadTurns, threadTurn, threadTurnEvents, scheduledJobs, scheduledJob, queuedWakeups };
-export const triggerMutations = { deleteRoutine, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob };
+export const triggerMutations = { deleteRoutine, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob, deleteScheduledJob };

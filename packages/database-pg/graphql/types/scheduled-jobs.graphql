@@ -57,6 +57,19 @@ extend type Query {
   scheduledJob(id: ID!): ScheduledJob
 }
 
+"""
+Result of `deleteScheduledJob`. `id` echoes the row that was removed;
+`ok` is false when no row matched (already deleted, or tenant mismatch).
+The EventBridge schedule, when one existed, is removed by the
+job-schedule-manager Lambda first; if that side-effect fails the
+resolver throws so the DB row is preserved and the caller can retry.
+"""
+type DeleteScheduledJobResult {
+  id: ID!
+  ok: Boolean!
+}
+
 extend type Mutation {
   createScheduledJob(input: CreateScheduledJobInput!): ScheduledJob!
+  deleteScheduledJob(id: ID!): DeleteScheduledJobResult!
 }

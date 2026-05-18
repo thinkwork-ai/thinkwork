@@ -86,6 +86,15 @@ const CreateScheduledJobDoc = graphql(`
   }
 `);
 
+const DeleteScheduledJobDoc = graphql(`
+  mutation CliDeleteScheduledJob($id: ID!) {
+    deleteScheduledJob(id: $id) {
+      id
+      ok
+    }
+  }
+`);
+
 const SchedJobTenantBySlugDoc = graphql(`
   query CliSchedJobTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -281,6 +290,44 @@ async function runSchedCreate(
   );
 }
 
+interface DeleteOptions extends SchedCliOptions {
+  yes?: boolean;
+}
+
+async function runSchedDelete(id: string, opts: DeleteOptions): Promise<void> {
+  const ctx = await resolveSchedContext(opts);
+  if (!opts.yes) {
+    if (!isInteractive()) {
+      printError(
+        "Refusing to delete without --yes in non-interactive mode (CI / piped stdin).",
+      );
+      process.exit(1);
+    }
+    requireTty("confirmation");
+    const answer = await promptOrExit(() =>
+      input({
+        message: `Delete scheduled job ${id}? Type "delete" to confirm:`,
+      }),
+    );
+    if (answer.trim() !== "delete") {
+      console.log("  Cancelled.");
+      return;
+    }
+  }
+  const data = await gqlMutate(ctx.client, DeleteScheduledJobDoc, { id });
+  if (isJsonMode()) {
+    printJson(data.deleteScheduledJob);
+    return;
+  }
+  if (data.deleteScheduledJob.ok) {
+    printSuccess(`Deleted scheduled job ${data.deleteScheduledJob.id}.`);
+  } else {
+    console.log(
+      `  Scheduled job ${id} was already deleted (no row matched).`,
+    );
+  }
+}
+
 function notYetImplementedAtApi(verb: string): never {
   printError(
     `\`scheduled-job ${verb}\` is not yet implemented at the GraphQL API.\n` +
@@ -352,11 +399,13 @@ Examples:
 
   job
     .command("delete <id>")
-    .description("Delete a scheduled job. (API surface pending.)")
+    .description(
+      "Delete a scheduled job. Deprovisions the EventBridge schedule first, then removes the row.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
-    .action(() => notYetImplementedAtApi("delete"));
+    .action(runSchedDelete);
 
   job
     .command("run <id>")
