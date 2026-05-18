@@ -132,6 +132,7 @@ type OntologyDefinitionsData =
   OntologyDefinitionsQueryData["ontologyDefinitions"];
 type EntityTypeRow = OntologyDefinitionsData["entityTypes"][number];
 type RelationshipTypeRow = OntologyDefinitionsData["relationshipTypes"][number];
+type ExternalMappingRow = OntologyDefinitionsData["externalMappings"][number];
 
 type ParseResult =
   | { ok: true; value: JsonValue }
@@ -421,6 +422,57 @@ const relationshipColumns: ColumnDef<RelationshipTypeRow>[] = [
       </span>
     ),
     size: 220,
+  },
+];
+
+const mappingColumns: ColumnDef<ExternalMappingRow>[] = [
+  {
+    accessorKey: "externalLabel",
+    header: "Subject",
+    cell: ({ row }) => (
+      <span className="block truncate font-medium">
+        {row.original.externalLabel ?? row.original.subjectId}
+      </span>
+    ),
+    size: 260,
+  },
+  {
+    accessorKey: "subjectKind",
+    header: "Type",
+    cell: ({ row }) => (
+      <Badge variant="secondary" className="max-w-full truncate font-mono">
+        {row.original.subjectKind}
+      </Badge>
+    ),
+    size: 160,
+  },
+  {
+    accessorKey: "vocabulary",
+    header: "Vocabulary",
+    cell: ({ row }) => (
+      <span className="block truncate text-sm">{row.original.vocabulary}</span>
+    ),
+    size: 180,
+  },
+  {
+    accessorKey: "mappingKind",
+    header: "Match",
+    cell: ({ row }) => (
+      <Badge variant="outline" className="max-w-full truncate">
+        {compactLabel(row.original.mappingKind)}
+      </Badge>
+    ),
+    size: 140,
+  },
+  {
+    accessorKey: "externalUri",
+    header: "URI",
+    cell: ({ row }) => (
+      <span className="block truncate font-mono text-xs text-muted-foreground">
+        {row.original.externalUri}
+      </span>
+    ),
+    size: 420,
   },
 ];
 
@@ -945,50 +997,24 @@ function MappingsPanel({
     );
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">
           External Vocabulary Mappings
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-hidden rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/60 text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Subject</th>
-                <th className="px-3 py-2 text-left font-medium">Vocabulary</th>
-                <th className="px-3 py-2 text-left font-medium">Match</th>
-                <th className="px-3 py-2 text-left font-medium">URI</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {mappings.map((mapping) => (
-                <tr key={mapping.id}>
-                  <td className="px-3 py-2">
-                    <div className="font-medium">
-                      {mapping.externalLabel ?? mapping.subjectId}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {mapping.subjectKind}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">{mapping.vocabulary}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant="outline">
-                      {compactLabel(mapping.mappingKind)}
-                    </Badge>
-                  </td>
-                  <td className="max-w-xs truncate px-3 py-2 font-mono text-xs">
-                    {mapping.externalUri}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Schema.org and industry vocabulary links approved for ontology
+          definitions.
+        </p>
+      </div>
+      <DataTable
+        columns={mappingColumns}
+        data={mappings}
+        pageSize={0}
+        tableClassName="table-fixed"
+        allowHorizontalScroll={false}
+      />
+    </div>
   );
 }
 
@@ -1527,7 +1553,6 @@ function ReprocessPanel({
 export function OntologyStudioPage() {
   const { tenantId } = useTenant();
   useBreadcrumbs([
-    { label: "Manage", href: "/settings" },
     { label: "Ontology" },
   ]);
 
@@ -1876,7 +1901,7 @@ export function OntologyStudioPage() {
     <PageLayout
       header={
         <PageHeader
-          title="Ontology Studio"
+          title="Ontology"
           actions={
             <>
               {reviewableCount > 0 && (
