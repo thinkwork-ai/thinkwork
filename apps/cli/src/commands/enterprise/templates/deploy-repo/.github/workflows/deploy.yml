@@ -6,11 +6,25 @@ on:
     inputs:
       stage:
         description: "Deployment stage"
+        type: string
+        required: true
+        default: dev
+      component:
+        description: "Deployment component"
         type: choice
         required: true
+        default: all
         options:
-          - dev
-          - prod
+          - all
+          - foundation
+          - artifacts
+          - overlays
+          - smokes
+      run_smokes:
+        description: "Run post-deploy smoke checks"
+        type: boolean
+        required: true
+        default: true
 
 permissions:
   contents: read
@@ -27,10 +41,19 @@ jobs:
     environment: ${{ github.event.inputs.stage }}
     env:
       STAGE: ${{ github.event.inputs.stage }}
+      COMPONENT: ${{ github.event.inputs.component }}
+      RUN_SMOKES: ${{ github.event.inputs.run_smokes }}
+      RELEASE_DIR: /tmp/thinkwork-release
+      RELEASE_MANIFEST: /tmp/thinkwork-release/thinkwork-release.json
+      DEPLOY_SUMMARY_JSON: /tmp/thinkwork-release/deploy-summary.json
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Read pinned ThinkWork release
         id: lock
@@ -39,11 +62,27 @@ jobs:
           set -euo pipefail
           test -f thinkwork.lock
           test -f customer/deployment.json
+          test -f "terraform/backend-${STAGE}.hcl"
+          test -f "terraform/stages/${STAGE}.tfvars"
+          jq -e --arg stage "$STAGE" '.stages[$stage]' customer/deployment.json >/dev/null
+          mkdir -p "$RELEASE_DIR"
           echo "release=$(jq -r '.thinkwork.release' thinkwork.lock)" >> "$GITHUB_OUTPUT"
           echo "manifest_url=$(jq -r '.thinkwork.manifestUrl' thinkwork.lock)" >> "$GITHUB_OUTPUT"
           echo "manifest_sha256=$(jq -r '.thinkwork.manifestSha256' thinkwork.lock)" >> "$GITHUB_OUTPUT"
           echo "artifact_bucket=$(jq -r '.artifacts.bucket' thinkwork.lock)" >> "$GITHUB_OUTPUT"
           echo "lambda_prefix=$(jq -r '.artifacts.lambdaPrefix' thinkwork.lock)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch and verify release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "${{ steps.lock.outputs.manifest_url }}" -o "$RELEASE_MANIFEST"
+          if [ "${{ steps.lock.outputs.manifest_sha256 }}" != "CHANGE_ME" ]; then
+            echo "${{ steps.lock.outputs.manifest_sha256 }}  $RELEASE_MANIFEST" | sha256sum -c -
+          fi
+          node scripts/apply-release.mjs validate-manifest \
+            --manifest "$RELEASE_MANIFEST" \
+            --expected-release "${{ steps.lock.outputs.release }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -52,31 +91,41 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: thinkwork-${{ github.event.inputs.stage }}-${{ github.run_id }}
 
-      - name: Fetch release manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL "${{ steps.lock.outputs.manifest_url }}" -o /tmp/thinkwork-release.json
-          if [ "${{ steps.lock.outputs.manifest_sha256 }}" != "CHANGE_ME" ]; then
-            echo "${{ steps.lock.outputs.manifest_sha256 }}  /tmp/thinkwork-release.json" | sha256sum -c -
-          fi
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
-      - name: Upload release Lambda artifacts
+      - name: Prepare release artifacts
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
         shell: bash
         run: |
           set -euo pipefail
-          jq -r '.artifacts[] | select(.type == "lambda") | [.url, .name] | @tsv' /tmp/thinkwork-release.json |
-            while IFS=$'\t' read -r url name; do
-              curl -fsSL "$url" -o "/tmp/$name"
-              aws s3 cp "/tmp/$name" "s3://${{ steps.lock.outputs.artifact_bucket }}/${{ steps.lock.outputs.lambda_prefix }}/$name"
-            done
+          node scripts/apply-release.mjs prepare \
+            --manifest "$RELEASE_MANIFEST" \
+            --work-dir "$RELEASE_DIR" \
+            --artifact-bucket "${{ steps.lock.outputs.artifact_bucket }}" \
+            --lambda-prefix "${{ steps.lock.outputs.lambda_prefix }}"
 
       - name: Terraform init
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
         working-directory: terraform
         shell: bash
         run: terraform init -backend-config="backend-${STAGE}.hcl"
 
+      - name: Select Terraform workspace
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
+        working-directory: terraform
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "foundation" ]; then
+            terraform workspace select "$STAGE" || terraform workspace new "$STAGE"
+          else
+            terraform workspace select "$STAGE"
+          fi
+
       - name: Terraform apply
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' }}
         working-directory: terraform
         shell: bash
         env:
@@ -84,15 +133,100 @@ jobs:
           TF_VAR_api_auth_secret: ${{ secrets.TF_VAR_API_AUTH_SECRET }}
         run: |
           set -euo pipefail
-          terraform workspace select "$STAGE" || terraform workspace new "$STAGE"
           terraform apply \
             -var-file="stages/${STAGE}.tfvars" \
             -var="lambda_artifact_bucket=${{ steps.lock.outputs.artifact_bucket }}" \
             -var="lambda_artifact_prefix=${{ steps.lock.outputs.lambda_prefix }}" \
             -auto-approve
 
-      - name: Record overlay contract
+      - name: Copy runtime images into customer ECR
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
         shell: bash
         run: |
           set -euo pipefail
-          jq -e --arg stage "$STAGE" '.stages[$stage]' customer/deployment.json
+          ECR_REPOSITORY_URL="$(terraform -chdir=terraform output -raw ecr_repository_url)"
+          aws ecr get-login-password --region "${{ vars.AWS_REGION }}" | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%/*}"
+          node scripts/apply-release.mjs copy-runtime-images \
+            --manifest "$RELEASE_MANIFEST" \
+            --work-dir "$RELEASE_DIR" \
+            --stage "$STAGE" \
+            --ecr-repository-url "$ECR_REPOSITORY_URL"
+
+      - name: Update AgentCore runtimes
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-release.mjs update-agentcore-runtimes \
+            --work-dir "$RELEASE_DIR" \
+            --stage "$STAGE" \
+            --region "${{ vars.AWS_REGION }}"
+
+      - name: Sync static site bundles
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-release.mjs sync-static \
+            --manifest "$RELEASE_MANIFEST" \
+            --work-dir "$RELEASE_DIR" \
+            --terraform-dir terraform
+
+      - name: Apply customer overlay contract
+        if: ${{ github.event.inputs.component == 'all' || github.event.inputs.component == 'overlays' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-release.mjs record-overlay \
+            --stage "$STAGE" \
+            --deployment customer/deployment.json \
+            --work-dir "$RELEASE_DIR"
+
+      - name: Run smoke checks
+        if: ${{ github.event.inputs.run_smokes == 'true' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'smokes') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/smoke.mjs \
+            --stage "$STAGE" \
+            --terraform-dir terraform \
+            --summary "$RELEASE_DIR/smoke-summary.json"
+
+      - name: Write deploy summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-release.mjs write-summary \
+            --manifest "$RELEASE_MANIFEST" \
+            --work-dir "$RELEASE_DIR" \
+            --terraform-dir terraform \
+            --stage "$STAGE" \
+            --component "$COMPONENT" \
+            --output "$DEPLOY_SUMMARY_JSON"
+          cat "$DEPLOY_SUMMARY_JSON"
+          {
+            echo "## ThinkWork deploy summary"
+            echo
+            jq -r '
+              "- Stage: " + .stage,
+              "- Release: " + .release.version,
+              "- Component: " + .component,
+              "- API: " + (.outputs.api_endpoint // "n/a"),
+              "- Admin: " + (.outputs.admin_url // "n/a"),
+              "- Computer: " + (.outputs.computer_url // "n/a"),
+              "- Runtime images copied: " + ((.runtimeImages // []) | length | tostring),
+              "- Overlay status: " + (.overlay.status // "not-run"),
+              "- Smoke status: " + (.smokes.status // "not-run")
+            ' "$DEPLOY_SUMMARY_JSON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thinkwork-deploy-${{ github.event.inputs.stage }}-${{ github.run_id }}
+          path: |
+            /tmp/thinkwork-release/*.json
+            /tmp/thinkwork-release/runtime-images.json
+            /tmp/thinkwork-release/overlay-report.json
+            /tmp/thinkwork-release/smoke-summary.json
