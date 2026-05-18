@@ -25,6 +25,179 @@ jobs:
       - run: pnpm test
       - run: pnpm lint
 
+  # ── Build deployable release artifacts ──────────────────────────
+  build-deploy-artifacts:
+    name: Build deployable artifacts
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Release metadata
+        id: release
+        run: |
+          OWNER="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "asset_base_url=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "agentcore_repository=ghcr.io/${OWNER}/thinkwork-agentcore" >> "$GITHUB_OUTPUT"
+          echo "computer_runtime_repository=ghcr.io/${OWNER}/thinkwork-computer-runtime" >> "$GITHUB_OUTPUT"
+
+      - name: Build Lambda zips
+        run: |
+          bash scripts/build-lambdas.sh
+          mkdir -p dist/release/lambdas
+          cp dist/lambdas/*.zip dist/release/lambdas/
+          cp dist/lambdas/lambdas-manifest.json dist/release/lambdas/
+
+      - name: Build static sites
+        run: |
+          pnpm --filter @thinkwork/admin build
+          pnpm --filter @thinkwork/computer build
+          pnpm --filter @thinkwork/docs build
+          bash scripts/release/package-static-assets.sh dist/release/static
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Compute build timestamp
+        id: build_time
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push AgentCore Strands amd64
+        id: strands-amd64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-strands/agent-container/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-strands-amd64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-strands-amd64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=release-strands-amd64
+          cache-to: type=gha,scope=release-strands-amd64,mode=max
+          provenance: false
+
+      - name: Build and push AgentCore Strands arm64
+        id: strands-arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-strands/agent-container/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-strands-arm64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-strands-arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=release-strands-arm64
+          cache-to: type=gha,scope=release-strands-arm64,mode=max
+          provenance: false
+
+      - name: Build and push AgentCore Flue amd64
+        id: flue-amd64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-flue/agent-container/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-flue-amd64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-flue-amd64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=release-flue-amd64
+          cache-to: type=gha,scope=release-flue-amd64,mode=max
+          provenance: false
+
+      - name: Build and push AgentCore Flue arm64
+        id: flue-arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-flue/agent-container/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-flue-arm64
+            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-flue-arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=release-flue-arm64
+          cache-to: type=gha,scope=release-flue-arm64,mode=max
+          provenance: false
+
+      - name: Build Computer runtime TypeScript
+        run: pnpm --filter @thinkwork/computer-runtime build
+
+      - name: Build and push Computer runtime arm64
+        id: computer-runtime-arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/computer-runtime
+          file: packages/computer-runtime/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.release.outputs.computer_runtime_repository }}:${{ github.ref_name }}-arm64
+            ${{ steps.release.outputs.computer_runtime_repository }}:${{ github.sha }}-arm64
+          cache-from: type=gha,scope=release-computer-runtime-arm64
+          cache-to: type=gha,scope=release-computer-runtime-arm64,mode=max
+          provenance: false
+
+      - name: Build release manifest
+        run: |
+          AGENTCORE_REPOSITORY="${{ steps.release.outputs.agentcore_repository }}"
+          COMPUTER_RUNTIME_REPOSITORY="${{ steps.release.outputs.computer_runtime_repository }}"
+          pnpm exec tsx scripts/release/build-release-manifest.ts \
+            --version "${{ steps.release.outputs.version }}" \
+            --commit "${GITHUB_SHA}" \
+            --artifact-root dist/release \
+            --base-url "${{ steps.release.outputs.asset_base_url }}" \
+            --lambda-dir dist/release/lambdas \
+            --artifact "name=admin,type=static-site,path=dist/release/static/admin.tar.gz" \
+            --artifact "name=computer,type=static-site,path=dist/release/static/computer.tar.gz" \
+            --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
+            --image "name=agentcore-strands-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-amd64,digest=${{ steps.strands-amd64.outputs.digest }},architecture=amd64" \
+            --image "name=agentcore-strands-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-arm64,digest=${{ steps.strands-arm64.outputs.digest }},architecture=arm64" \
+            --image "name=agentcore-flue-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-flue-amd64,digest=${{ steps.flue-amd64.outputs.digest }},architecture=amd64" \
+            --image "name=agentcore-flue-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-flue-arm64,digest=${{ steps.flue-arm64.outputs.digest }},architecture=arm64" \
+            --image "name=computer-runtime-arm64,repository=${COMPUTER_RUNTIME_REPOSITORY},tag=${GITHUB_REF_NAME}-arm64,digest=${{ steps.computer-runtime-arm64.outputs.digest }},architecture=arm64"
+
+      - name: Upload deployable release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinkwork-release-assets
+          path: |
+            dist/release/thinkwork-release.json
+            dist/release/lambdas/*.zip
+            dist/release/static/*.tar.gz
+          retention-days: 7
+
   # ── Publish CLI to npm ──────────────────────────────────────────
   publish-npm:
     name: Publish to npm
@@ -112,8 +285,8 @@ jobs:
   # ── Create GitHub Release ───────────────────────────────────────
   github-release:
     name: GitHub Release
-    needs: [publish-npm, publish-homebrew]
-    if: always() && needs.publish-npm.result == 'success'
+    needs: [publish-npm, publish-homebrew, build-deploy-artifacts]
+    if: always() && needs.publish-npm.result == 'success' && needs.build-deploy-artifacts.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -145,8 +318,19 @@ jobs:
           echo "brew install thinkwork-ai/tap/thinkwork" >> notes.md
           echo '```' >> notes.md
 
+      - name: Download deployable release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: thinkwork-release-assets
+          path: dist/release
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           body_path: notes.md
           generate_release_notes: false
+
+      - name: Publish deployable release assets
+        run: bash scripts/release/publish-release-assets.sh "$GITHUB_REF_NAME" dist/release
+        env:
+          GH_TOKEN: ${{ github.token }}

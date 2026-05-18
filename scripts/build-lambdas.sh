@@ -560,6 +560,48 @@ done
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+node --input-type=module - "$DIST" "$DIST/lambdas-manifest.json" <<'NODE'
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { readdir, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const [dist, output] = process.argv.slice(2);
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+const zipNames = (await readdir(dist))
+  .filter((name) => name.endsWith(".zip"))
+  .sort((left, right) => left.localeCompare(right));
+
+const artifacts = [];
+for (const fileName of zipNames) {
+  const filePath = path.join(dist, fileName);
+  const fileStat = await stat(filePath);
+  artifacts.push({
+    handler: fileName.replace(/\.zip$/, ""),
+    fileName,
+    sha256: await sha256File(filePath),
+    sizeBytes: fileStat.size,
+  });
+}
+
+await writeFile(
+  output,
+  `${JSON.stringify({ schemaVersion: 1, artifacts }, null, 2)}\n`,
+  "utf8",
+);
+NODE
+
 echo ""
 echo "Done — $(ls "$DIST"/*.zip 2>/dev/null | wc -l | tr -d ' ') artifacts built"
 ls -lh "$DIST"/*.zip 2>/dev/null | awk '{print "  " $5 "\t" $NF}'
+echo "  manifest	$DIST/lambdas-manifest.json"
