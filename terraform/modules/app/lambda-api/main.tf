@@ -535,15 +535,25 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # decision. Calls SendTaskSuccess/SendTaskFailure on the SFN
         # task token; idempotent on already-consumed tokens.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-resume",
-        # thread-idle-memory-learning: job-trigger invokes this
-        # RequestResponse after a 15-minute requester-thread idle timer
-        # passes its stale guard.
-        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-thread-idle-memory-learning",
         # workspace-files-efs: workspace-files invokes this (RequestResponse)
         # for Computer-target list/get to bypass the computer_tasks queue
         # and read EFS directly. Standalone resource below.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs",
       ]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_thread_idle_memory_learning_invoke" {
+  name = "thread-idle-memory-learning-invoke"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-thread-idle-memory-learning"
     }]
   })
 }
