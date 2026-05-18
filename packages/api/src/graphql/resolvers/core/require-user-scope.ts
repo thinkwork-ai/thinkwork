@@ -42,19 +42,22 @@ export async function requireMemoryUserScope(
     args.tenantId ?? caller.tenantId ?? ctx.auth.tenantId ?? null;
   if (!tenantId) throw new UserScopeAuthError("Tenant context required");
 
+  const hasServiceSecret =
+    ctx.auth.authType === "apikey" || ctx.auth.authType === "service";
+
   if (args.userId) {
     if (caller.tenantId && caller.tenantId !== tenantId) {
       throw new UserScopeAuthError("Access denied: tenant mismatch");
     }
     if (
-      ctx.auth.authType !== "apikey" &&
+      !hasServiceSecret &&
       caller.userId &&
       caller.userId !== args.userId &&
       !(args.allowTenantAdmin && (await isTenantAdmin(caller.userId, tenantId)))
     ) {
       throw new UserScopeAuthError("Access denied: user mismatch");
     }
-    if (!caller.userId && ctx.auth.authType !== "apikey") {
+    if (!caller.userId && !hasServiceSecret) {
       throw new UserScopeAuthError("User context required");
     }
     return { tenantId, userId: args.userId };

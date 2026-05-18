@@ -6,7 +6,7 @@ import {
   agentCapabilities,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export async function setAgentCapabilities(
   _parent: any,
@@ -21,7 +21,11 @@ export async function setAgentCapabilities(
     .from(agents)
     .where(eq(agents.id, args.agentId));
   if (!agent) throw new Error("Agent not found");
-  await requireTenantAdmin(ctx, agent.tenant_id);
+  await requireAdminOrServiceCaller(
+    ctx,
+    agent.tenant_id,
+    "set_agent_capabilities",
+  );
 
   // Delete existing and replace
   await db

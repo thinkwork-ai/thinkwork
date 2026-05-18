@@ -14,7 +14,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
 
 export const threadsPaged_query = async (
   _parent: any,
@@ -23,7 +23,7 @@ export const threadsPaged_query = async (
 ) => {
   const authType = ctx.auth?.authType;
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = authType === "apikey";
+  let isTenantAdminCaller = hasServiceSecret(ctx);
   if (authType === "cognito") {
     const callerTenantId = await resolveCallerTenantId(ctx);
     if (!callerTenantId || callerTenantId !== args.tenantId) {

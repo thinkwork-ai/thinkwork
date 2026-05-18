@@ -152,6 +152,8 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 
 vi.mock("../core/authz.js", () => ({
 	requireTenantMember,
+	hasServiceSecret: (ctx: any) =>
+		ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
 import { deleteThread } from "./deleteThread.mutation.js";

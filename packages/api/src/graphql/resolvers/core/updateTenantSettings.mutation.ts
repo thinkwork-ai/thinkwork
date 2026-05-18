@@ -4,8 +4,10 @@ import {
 	tenantSettings,
 	snakeToCamel,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "./authz.js";
 
 export const updateTenantSettings = async (_parent: any, args: any, ctx: GraphQLContext) => {
+	await requireAdminOrServiceCaller(ctx, args.tenantId, "update_tenant_settings");
 	const i = args.input;
 	const updates: Record<string, unknown> = { updated_at: new Date() };
 	if (i.defaultModel !== undefined) updates.default_model = i.defaultModel;

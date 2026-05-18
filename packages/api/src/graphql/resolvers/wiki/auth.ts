@@ -1,4 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
+import { hasServiceSecret } from "../core/authz.js";
 import {
 	requireMemoryUserScope,
 	UserScopeAuthError,
@@ -32,7 +33,7 @@ export async function assertCanAdminWikiScope(
 	ctx: GraphQLContext,
 	args: { tenantId?: string | null; userId?: string | null; ownerId?: string | null },
 ): Promise<{ tenantId: string; userId: string }> {
-	if (ctx.auth.authType !== "apikey") {
+	if (!hasServiceSecret(ctx)) {
 		throw new WikiAuthError("Admin-only: requires internal API key credential");
 	}
 	return assertCanReadWikiScope(ctx, args);

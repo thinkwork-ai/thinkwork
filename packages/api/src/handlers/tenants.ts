@@ -129,8 +129,9 @@ export async function handler(
 // ---------------------------------------------------------------------------
 // Tenant listing — powers the CLI tenant picker + admin SPA tenant switcher
 //
-// Apikey callers (CLI/CI with the shared service secret) see every tenant so
-// the tenant-picker keeps working for ops. Cognito callers are filtered to
+// Service-secret callers (CLI/CI with the shared service secret — both
+// apikey-with-identity and bare-bearer service) see every tenant so the
+// tenant-picker keeps working for ops. Cognito callers are filtered to
 // tenants where they have an active tenant_members row — preventing a
 // signed-in user from enumerating every tenant in the deployment.
 // ---------------------------------------------------------------------------
@@ -138,7 +139,7 @@ export async function handler(
 async function listTenants(
 	auth: import("../lib/cognito-auth.js").AuthResult,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (auth.authType === "apikey") {
+	if (auth.authType === "apikey" || auth.authType === "service") {
 		const rows = await db
 			.select({
 				id: tenants.id,

@@ -281,6 +281,8 @@ vi.mock("../../src/graphql/resolvers/computers/shared.js", () => ({
 
 vi.mock("../../src/graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mocks.requireTenantAdmin,
+  hasServiceSecret: (ctx: any) =>
+    ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
 import { threads_query } from "../../src/graphql/resolvers/threads/threads.query.js";

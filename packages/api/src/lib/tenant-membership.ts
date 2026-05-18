@@ -108,9 +108,11 @@ export async function requireTenantMembership(
 
   // Platform-credential path: shared service secret is trusted
   // infrastructure. Preserves CI/CLI bootstrap workflows (no member-
-  // ship row required). Do not log or echo the principal id here —
-  // apikey principal headers are unverified self-assertions.
-  if (auth.authType === "apikey") {
+  // ship row required). Both apikey (declared identity) and service
+  // (bearer-only) callers hold the secret; admit both. Do not log or
+  // echo the principal id here — apikey principal headers are
+  // unverified self-assertions.
+  if (auth.authType === "apikey" || auth.authType === "service") {
     return { ok: true, auth, tenantId, userId: null, role: null };
   }
 

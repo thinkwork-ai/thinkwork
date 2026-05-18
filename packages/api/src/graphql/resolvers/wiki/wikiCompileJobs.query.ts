@@ -15,6 +15,7 @@ import type { GraphQLContext } from "../../context.js";
 import { listCompileJobsForScope } from "../../../lib/wiki/repository.js";
 import { assertCanAdminWikiScope, WikiAuthError } from "./auth.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import { hasServiceSecret } from "../core/authz.js";
 
 interface WikiCompileJobsArgs {
 	tenantId: string;
@@ -49,7 +50,7 @@ export const wikiCompileJobs = async (
 		if (callerTenantId !== args.tenantId) {
 			throw new WikiAuthError("Access denied: tenant mismatch");
 		}
-		if (ctx.auth.authType !== "apikey") {
+		if (!hasServiceSecret(ctx)) {
 			throw new WikiAuthError(
 				"Admin-only: requires internal API key credential",
 			);

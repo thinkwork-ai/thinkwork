@@ -16,13 +16,17 @@ import { db, eq, users } from "../../utils.js";
 export async function resolveCallerFromAuth(
 	auth: AuthResult,
 ): Promise<{ userId: string | null; tenantId: string | null }> {
-	// Service-to-service (apikey) callers — e.g., the agentcore-runtime
-	// container calling /api/workspaces/files during bootstrap (Unit 7) —
-	// have no user principal but DO carry an x-tenant-id header. The
-	// shared service secret is the trust boundary; anything holding it is
-	// trusted infrastructure. Honor the header-supplied tenantId so
-	// downstream DB queries scope correctly.
-	if (auth.authType === "apikey") {
+	// Service-secret callers — both `apikey` (declared identity, e.g. the
+	// thinkwork-admin skill) and `service` (bearer-only, e.g. the CLI or
+	// the agentcore-runtime container calling /api/workspaces/files
+	// during bootstrap Unit 7) — have no DB-verified user principal but
+	// DO carry an x-tenant-id header. The shared service secret is the
+	// trust boundary; anything holding it is trusted infrastructure.
+	// Honor the header-supplied tenantId so downstream DB queries scope
+	// correctly. principalId is null for service callers (the header was
+	// absent); apikey callers may have a header-asserted principalId
+	// here — note it is unverified.
+	if (auth.authType === "apikey" || auth.authType === "service") {
 		return { userId: auth.principalId, tenantId: auth.tenantId };
 	}
 	if (auth.authType !== "cognito") {

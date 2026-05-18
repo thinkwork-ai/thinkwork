@@ -14,7 +14,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireTenantAdmin, hasServiceSecret } from "../core/authz.js";
 import { requireComputerReadAccess } from "../computers/shared.js";
 
 export const threads_query = async (
@@ -23,7 +23,7 @@ export const threads_query = async (
   ctx: GraphQLContext,
 ) => {
   let callerUserId: string | null = null;
-  let isTenantAdminCaller = ctx.auth.authType === "apikey";
+  let isTenantAdminCaller = hasServiceSecret(ctx);
 
   // Cross-tenant gate. The caller-supplied args.tenantId must match the
   // caller's authoritative tenant. Without this, a Cognito user with a
@@ -68,7 +68,7 @@ export const threads_query = async (
   //     This matches admin's Computer detail surfaces (apps/admin's
   //     /computers/$id route) where operators read threads on Computers
   //     they don't personally own.
-  if (args.computerId && ctx.auth.authType !== "apikey") {
+  if (args.computerId && !hasServiceSecret(ctx)) {
     const [computerRow] = await db
       .select()
       .from(computers)

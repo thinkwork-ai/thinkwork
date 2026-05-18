@@ -10,7 +10,7 @@ import {
   agentTemplates,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { validateAgentSkillPermissions } from "../../../lib/skills/permissions-subset.js";
 
 export async function setAgentSkills(
@@ -51,7 +51,7 @@ export async function setAgentSkills(
     .from(agents)
     .where(eq(agents.id, args.agentId));
   if (!agent) throw new Error("Agent not found");
-  await requireTenantAdmin(ctx, agent.tenant_id);
+  await requireAdminOrServiceCaller(ctx, agent.tenant_id, "set_agent_skills");
 
   // U11: AGENTS.md is now the canonical authoring surface for skill set
   // membership; derive-agent-skills.ts is the single writer. This mutation

@@ -110,6 +110,8 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  hasServiceSecret: (ctx: any) =>
+    ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
 import { threadsPaged_query } from "./threadsPaged.query.js";

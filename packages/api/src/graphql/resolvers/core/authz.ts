@@ -54,6 +54,22 @@ function unauthenticated(message: string): GraphQLError {
 }
 
 /**
+ * True when the request authenticated via the shared service secret —
+ * regardless of whether the caller declared an identity (`apikey`) or
+ * arrived bearer-only (`service`). Both classes hold the same secret;
+ * use this when the intent is "secret-holder detection" rather than
+ * "declared-identity detection".
+ *
+ * Use the raw `authType === "apikey"` / `=== "service"` check only when
+ * the code path genuinely depends on whether identity headers are
+ * present (e.g., x-agent-id self-edit guards, x-principal-id role
+ * lookups).
+ */
+export function hasServiceSecret(ctx: GraphQLContext): boolean {
+  return ctx.auth.authType === "apikey" || ctx.auth.authType === "service";
+}
+
+/**
  * Ensures the caller is an `owner` or `admin` of `tenantId`. Returns the
  * caller's role on success. Throws a `FORBIDDEN` GraphQLError otherwise.
  *
@@ -218,6 +234,47 @@ export async function requireAdminOrApiKeyCaller(
       throw forbidden("Invoker lacks admin role on target tenant");
     }
     await requireAgentAllowsOperation(ctx, operationName, dbOrTx);
+    return;
+  }
+  throw unauthenticated("Unsupported authentication type");
+}
+
+/**
+ * Tenant-admin gate that ALSO accepts bare service-secret callers.
+ *
+ * Three acceptance branches:
+ *   1. `cognito` — delegate to `requireTenantAdmin` (existing behavior;
+ *      preserves admin SPA / mobile / `thinkwork login` semantics).
+ *   2. `service` — bearer-only caller (CLI / Strands runtime back-channel
+ *      / scheduled jobs). The bearer IS the credential; allow tenant-
+ *      scoped operations against `tenantId` without further identity
+ *      check. NOT for mutations that stamp a specific user identity onto
+ *      the row — those stay Cognito-required so service callers can't
+ *      ghost-write as a user.
+ *   3. `apikey` — declared-identity caller (thinkwork-admin skill path).
+ *      Verify the asserted invoker has owner/admin on the target tenant
+ *      AND that the calling agent has the named operation in its
+ *      per-agent allowlist. Delegates to `requireAdminOrApiKeyCaller`.
+ *
+ * `operationName` is forwarded to the apikey branch for allowlist
+ * checking. The service branch ignores it because there's no agent to
+ * check against — the bearer secret is the gate.
+ */
+export async function requireAdminOrServiceCaller(
+  ctx: GraphQLContext,
+  tenantId: string,
+  operationName: string,
+  dbOrTx: DbOrTx = defaultDb,
+): Promise<void> {
+  if (ctx.auth.authType === "cognito") {
+    await requireTenantAdmin(ctx, tenantId, dbOrTx);
+    return;
+  }
+  if (ctx.auth.authType === "service") {
+    return;
+  }
+  if (ctx.auth.authType === "apikey") {
+    await requireAdminOrApiKeyCaller(ctx, tenantId, operationName, dbOrTx);
     return;
   }
   throw unauthenticated("Unsupported authentication type");

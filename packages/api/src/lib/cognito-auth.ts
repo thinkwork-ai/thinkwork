@@ -38,10 +38,27 @@ export interface AuthResult {
 	principalId: string | null;
 	tenantId: string | null;
 	email: string | null;
-	authType: "cognito" | "apikey";
 	/**
-	 * Agent id asserted by the caller for service-auth (apikey) requests
-	 * via `x-agent-id` header. Always null for cognito JWT callers.
+	 * Three auth classes share the request pipeline:
+	 *  - `cognito` — Cognito JWT (admin SPA, mobile, `thinkwork login`).
+	 *  - `apikey`  — shared service secret + asserted caller identity. The
+	 *    caller declares which user (`x-principal-id`) and/or agent
+	 *    (`x-agent-id`) the request acts on behalf of; admin-skill gates
+	 *    verify those claims independently. This is the impersonation
+	 *    path used by the thinkwork-admin skill.
+	 *  - `service` — shared service secret with NO declared user or
+	 *    agent. The bearer IS the credential. This is the CLI / Strands
+	 *    runtime / scheduled-job back-channel path. Tenant scope comes
+	 *    from `x-tenant-id` when present; otherwise it's a tenant-less
+	 *    platform call. Admin-only mutations may opt in via
+	 *    `requireAdminOrServiceCaller`; mutations that stamp a specific
+	 *    user/agent identity onto the row stay Cognito-required so
+	 *    services can't ghost-write as a user.
+	 */
+	authType: "cognito" | "apikey" | "service";
+	/**
+	 * Agent id asserted by the caller for apikey requests via
+	 * `x-agent-id` header. Always null for cognito and service callers.
 	 * Mutations that allow agent self-edits (e.g., `updateAgent` with
 	 * service auth, `updateUserProfile`) compare this against the target
 	 * id/pair and reject the request if they don't match — keeps the
@@ -119,20 +136,35 @@ export async function authenticate(headers: Record<string, string | undefined>):
 }
 
 /**
- * Shared shape for the two apikey acceptance paths. Apikey auth has no JWT
- * to pull an email from, but operator-gated mutations (updateTenantPolicy,
- * sandbox fixture setup) still need to know which human is driving the
- * service call. Callers pass `x-principal-email` alongside the key;
- * downstream resolvers check it against their own allowlist (e.g.
- * THINKWORK_PLATFORM_OPERATOR_EMAILS). No email header ⇒ no operator-gated
- * mutation runs.
+ * Shared shape for the two shared-secret acceptance paths. Both branches
+ * authenticate via the service secret; what distinguishes them is whether
+ * the caller has declared a user/agent identity to act on behalf of:
+ *
+ *   - `apikey`  — caller asserted `x-principal-id` and/or `x-agent-id`.
+ *     This is the impersonation path (thinkwork-admin skill). Operator-
+ *     gated mutations cross-check the asserted identity against the
+ *     tenant role table and (for admin-skill ops) the per-agent skill
+ *     allowlist.
+ *   - `service` — bearer-only. No declared user, no declared agent. The
+ *     bearer IS the credential. Used by the CLI, the Strands runtime
+ *     calling back via API, and scheduled jobs. Tenant scope arrives via
+ *     `x-tenant-id` when present.
+ *
+ * `x-principal-email` is still surfaced for both branches so operator-
+ * gated mutations (updateTenantPolicy, sandbox fixture setup) can match
+ * it against their own allowlist (e.g. THINKWORK_PLATFORM_OPERATOR_EMAILS).
+ * No email header ⇒ no operator-gated mutation runs.
  */
 function apikeyAuthResult(headers: Record<string, string | undefined>): AuthResult {
+	const principalId = headers["x-principal-id"] || null;
+	const agentId = headers["x-agent-id"] || null;
+	const authType: AuthResult["authType"] =
+		principalId || agentId ? "apikey" : "service";
 	return {
-		principalId: headers["x-principal-id"] || null,
+		principalId,
 		tenantId: headers["x-tenant-id"] || null,
 		email: headers["x-principal-email"] || null,
-		authType: "apikey",
-		agentId: headers["x-agent-id"] || null,
+		authType,
+		agentId,
 	};
 }

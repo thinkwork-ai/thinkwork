@@ -70,6 +70,12 @@ vi.mock("../graphql/utils.js", () => ({
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  // setAgentSkills now calls requireAdminOrServiceCaller; delegate to the
+  // existing requireTenantAdmin mock so pass/fail expectations carry over.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
+  hasServiceSecret: (ctx: any) =>
+    ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
 vi.mock("../lib/workspace-map-generator.js", () => ({

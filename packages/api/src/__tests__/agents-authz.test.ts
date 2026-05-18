@@ -114,6 +114,13 @@ vi.mock("../lib/compliance/emit.js", () => ({
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  // Phase-1 service-auth split: setAgentCapabilities + setAgentSkills now
+  // route through requireAdminOrServiceCaller. Delegate to the same mock
+  // so existing pass/fail expectations carry over.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
+  hasServiceSecret: (ctx: any) =>
+    ctx?.auth?.authType === "apikey" || ctx?.auth?.authType === "service",
 }));
 
 // Unit 8b wired `resolveCallerUserId` + `runWithIdempotency` into
