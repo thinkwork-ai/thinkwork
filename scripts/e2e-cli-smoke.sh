@@ -192,6 +192,26 @@ fi
 step "tenant settings set (service-auth) → feature flag round-trip" \
   "$CLI tenant settings set $TENANT --feature e2e_test_$SUFFIX=true --stage $STAGE --json | jq -e '.id != null' >/dev/null"
 
+# Phase B3: admin-write resolvers that PR #1390 broadened from
+# requireTenantAdmin (Cognito-only) → requireAdminOrServiceCaller. Each
+# is a create + cleanup round-trip so the smoke leaves no residue.
+
+step_capture NEW_TEAM "team create (service-auth) → returns id" \
+  "$CLI team create 'e2e-team-$SUFFIX' --description 'smoke' --stage $STAGE --tenant $TENANT --json | jq -er '.id // empty'"
+
+if [ -n "${NEW_TEAM:-}" ]; then
+  step "team delete (service-auth) → cleanup" \
+    "$CLI team delete $NEW_TEAM --yes --stage $STAGE --tenant $TENANT --json | jq -e '.id == \"$NEW_TEAM\"' >/dev/null"
+fi
+
+step_capture NEW_TPL "template create (service-auth) → returns id" \
+  "$CLI template create 'e2e-template-$SUFFIX' --description 'smoke' --stage $STAGE --tenant $TENANT --json | jq -er '.id // empty'"
+
+if [ -n "${NEW_TPL:-}" ]; then
+  step "template delete (service-auth) → cleanup" \
+    "$CLI template delete $NEW_TPL --yes --stage $STAGE --tenant $TENANT --json | jq -e '.deleted == true' >/dev/null"
+fi
+
 echo ""
 echo "── Phase C · auth-gated mutations that stay gated ─────────────"
 echo "  (createThread / sendMessage stay Cognito-required by design —"
