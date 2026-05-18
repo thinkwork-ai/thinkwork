@@ -1,10 +1,49 @@
 ---
 title: "Autopilot status ledger"
-date: 2026-05-17
-status: completed
+date: 2026-05-18
+status: in_progress
 ---
 
 # Autopilot Status Ledger
+
+## Current Run: Requester Idle Memory Learning
+
+Plan: `docs/plans/2026-05-18-001-feat-requester-idle-memory-learning-plan.md`
+
+Requirements: `docs/brainstorms/2026-05-18-requester-idle-memory-learning-requirements.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: Slice A (`U1`-`U3`) - idle-learning schema, activity reset, scheduler fire path, and inert worker shell
+- Active branch: `codex/requester-idle-memory-learning`
+- Active worktree: `.Codex/worktrees/requester-idle-memory-learning`
+- Started: 2026-05-18
+- PR: [#1382](https://github.com/thinkwork-ai/thinkwork/pull/1382)
+- CI: failed `Migration Drift Precheck (dev)` because `packages/database-pg/drizzle/0099_thread_idle_learning.sql` had not yet been applied to dev; dev migration has been applied and scoped drift verification now passes locally
+
+### Progress Log
+
+| Date       | Unit  | Branch                                 | PR                                                           | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                        | Notes                                                                                                                                                                                                                                 |
+| ---------- | ----- | -------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | Slice A (`U1`-`U3`) | `codex/requester-idle-memory-learning` | [#1382](https://github.com/thinkwork-ai/thinkwork/pull/1382) | CI rerun pending | `pnpm --filter @thinkwork/api test -- scheduled-jobs.computer-id.test.ts thread-idle-memory-learning.test.ts activity.test.ts thread-attachments-finalize.test.ts`; `pnpm --filter @thinkwork/lambda test -- job-trigger.skill-run.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/lambda typecheck`; `pnpm --filter @thinkwork/database-pg typecheck`; `bash scripts/build-lambdas.sh job-trigger`; `bash scripts/build-lambdas.sh thread-idle-memory-learning`; `terraform fmt terraform/modules/app/lambda-api/handlers.tf terraform/modules/app/lambda-api/main.tf`; `git diff --check`; `psql ... -f packages/database-pg/drizzle/0099_thread_idle_learning.sql` against dev; `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0099_thread_idle_learning.sql` | Grouped U1-U3 per plan's recommended Slice A because schema, activity scheduling, and stale/no-op fire path are tightly coupled and feature-flagged off by default. Opened draft PR #1382. |
+
+### CI / Merge Log
+
+- Started Slice A in `.Codex/worktrees/requester-idle-memory-learning` on branch `codex/requester-idle-memory-learning`.
+- Implemented the idle-learning state/run schema, internal scheduled-job filtering, feature-flagged Thread activity scheduling helper, activity hooks for user messages/assistant responses/finalized attachments, `job-trigger` stale guard, and an inert `thread-idle-memory-learning` worker shell.
+- Opened draft [#1382](https://github.com/thinkwork-ai/thinkwork/pull/1382).
+- First CI run passed `cla`, `lint`, `verify`, `typecheck`, and `test`; `Migration Drift Precheck (dev)` failed because `0099_thread_idle_learning.sql` markers are missing from dev.
+- First local dev migration attempt failed before connecting because AWS CLI region was unset; reran with `AWS_REGION=us-east-1` and `AWS_DEFAULT_REGION=us-east-1`.
+- Applied `packages/database-pg/drizzle/0099_thread_idle_learning.sql` to dev and verified the scoped drift reporter returned all markers present.
+- Preparing a status-doc push and rerun of the failed migration drift check.
+
+### Blockers
+
+- None at this time. The current CI failure is expected for a new hand-rolled migration and is being handled through the repo's dev migration precheck workflow.
+
+---
 
 ## Current Run: Business Ontology Change Sets
 
