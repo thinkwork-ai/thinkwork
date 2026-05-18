@@ -13,6 +13,7 @@ import { registerOutputsCommand } from "../src/commands/outputs.js";
 import { registerBootstrapCommand } from "../src/commands/bootstrap.js";
 import { registerConfigCommand } from "../src/commands/config.js";
 import { registerInitCommand } from "../src/commands/init.js";
+import { registerEnterpriseCommand } from "../src/commands/enterprise.js";
 
 /**
  * Regression guard for the interactive-fallback contract.
@@ -82,6 +83,7 @@ function registerEverything(): Command {
   registerBootstrapCommand(program);
   registerConfigCommand(program);
   registerInitCommand(program);
+  registerEnterpriseCommand(program);
   return program;
 }
 
