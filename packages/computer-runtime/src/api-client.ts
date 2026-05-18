@@ -22,6 +22,7 @@ export type GoogleCalendarUpcomingInput = {
 export type ThreadTurnContext = {
   taskId: string;
   source: string;
+  computerScope?: string | null;
   requester?: {
     userId?: string | null;
     actorType?: string | null;
@@ -29,6 +30,7 @@ export type ThreadTurnContext = {
     contextClass?: string | null;
   };
   surfaceContext?: Record<string, unknown> | null;
+  requesterContextOverlay?: string | null;
   requesterContext?: {
     contextClass: string;
     computerId: string;

@@ -133,3 +133,28 @@ def test_build_system_prompt_injects_pack_after_system_files(monkeypatch, tmp_pa
     assert len(injected) == 1
     assert getattr(injected[0], "tenant_id", None) == "tenant-1"
     assert getattr(injected[0], "user_id", None) == "user-1"
+
+
+def test_build_system_prompt_can_suppress_workspace_user_md(monkeypatch, tmp_path):
+    _reset_server_pack_state()
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "USER.md").write_text("Workspace user profile", encoding="utf-8")
+    (workspace_dir / "AGENTS.md").write_text("Workspace map", encoding="utf-8")
+
+    monkeypatch.setattr(server, "WORKSPACE_DIR", str(workspace_dir))
+
+    prompt = server._build_system_prompt(suppress_user_md=True)
+
+    assert "Workspace map" in prompt
+    assert "Workspace user profile" not in prompt
+
+
+def test_format_requester_context_overlay_wraps_text():
+    overlay = server._format_requester_context_overlay("Requester prefers concise notes.")
+
+    assert overlay == (
+        "<requester_context_overlay>\n"
+        "Requester prefers concise notes.\n"
+        "</requester_context_overlay>"
+    )

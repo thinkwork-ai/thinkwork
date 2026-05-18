@@ -75,9 +75,15 @@ export async function buildSystemPrompt(
 ): Promise<string> {
   const basePrompt =
     context.systemPrompt || buildDefaultSystemPrompt(context, workspaceRoot);
-  const requesterPrompt = buildRequesterContextPrompt(context.requesterContext);
+  const requesterPrompt = context.requesterContextOverlay
+    ? ""
+    : buildRequesterContextPrompt(context.requesterContext);
   const attachmentPrompt = buildAttachmentPrompt(context.attachments ?? []);
-  const workspacePrompt = await readWorkspaceSystemPrompt(workspaceRoot);
+  const workspacePrompt = await readWorkspaceSystemPrompt(
+    workspaceRoot,
+    undefined,
+    { suppressUserMd: context.computerScope === "shared" },
+  );
   return [basePrompt, requesterPrompt, attachmentPrompt, workspacePrompt]
     .filter(Boolean)
     .join("\n\n---\n\n");
