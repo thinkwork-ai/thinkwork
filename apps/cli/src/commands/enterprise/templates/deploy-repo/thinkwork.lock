@@ -1,0 +1,17 @@
+{
+  "_comment": "thinkwork-managed: enterprise-deploy-template",
+  "schemaVersion": 1,
+  "customerSlug": "{{CUSTOMER_SLUG}}",
+  "thinkwork": {
+    "release": "{{RELEASE_VERSION}}",
+    "manifestUrl": "{{RELEASE_MANIFEST_URL}}",
+    "manifestSha256": "{{RELEASE_MANIFEST_SHA256}}",
+    "terraformModuleVersion": "{{TERRAFORM_MODULE_VERSION}}",
+    "overlaySchemaVersion": 1
+  },
+  "artifacts": {
+    "bucket": "{{ARTIFACT_BUCKET}}",
+    "lambdaPrefix": "{{LAMBDA_ARTIFACT_PREFIX}}"
+  }
+}
+

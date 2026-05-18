@@ -1,0 +1,23 @@
+{
+  "_comment": "thinkwork-managed: enterprise-deploy-template",
+  "schemaVersion": 1,
+  "customerSlug": "{{CUSTOMER_SLUG}}",
+  "stages": {
+    "dev": {
+      "tenantSlug": "{{CUSTOMER_SLUG}}-dev",
+      "evalPacks": [],
+      "seedPacks": [],
+      "skillPacks": [],
+      "workspaceDefaultPacks": [],
+      "branding": null
+    },
+    "prod": {
+      "tenantSlug": "{{CUSTOMER_SLUG}}",
+      "evalPacks": [],
+      "seedPacks": [],
+      "skillPacks": [],
+      "workspaceDefaultPacks": [],
+      "branding": null
+    }
+  }
+}

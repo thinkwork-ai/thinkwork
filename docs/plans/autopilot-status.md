@@ -16,11 +16,11 @@ Target branch: `main`
 
 ### Current Unit
 
-- Active unit: U2 - Teach Terraform to Consume Remote Release Artifacts
-- Active branch: `codex/enterprise-remote-artifacts-u2`
-- Active worktree: `.Codex/worktrees/enterprise-remote-artifacts-u2`
-- Started: 2026-05-18 12:04 CDT
-- PR: [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393)
+- Active unit: U3 - Define the Customer Deployment Repo and Overlay Contract
+- Active branch: `codex/enterprise-deploy-template-u3`
+- Active worktree: `.Codex/worktrees/enterprise-deploy-template-u3`
+- Started: 2026-05-18 12:24 CDT
+- PR: pending
 - CI: pending
 
 ### Progress Log
@@ -28,7 +28,8 @@ Target branch: `main`
 | Date       | Unit | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                           |
 | ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI passed  | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check`; GitHub checks | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
-| 2026-05-18 | U2   | `codex/enterprise-remote-artifacts-u2`  | [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) | Local pass | `pnpm --filter thinkwork-cli test -- terraform-enterprise-artifact-fixture.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `terraform -chdir=terraform/examples/greenfield init -backend=false`; `terraform -chdir=terraform/examples/greenfield validate`; `terraform fmt -check ...`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `git diff --check`                                                  | Started Terraform remote release artifact support from merged U1.                                                                               |
+| 2026-05-18 | U2   | `codex/enterprise-remote-artifacts-u2`  | [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) | CI passed  | `pnpm --filter thinkwork-cli test -- terraform-enterprise-artifact-fixture.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `terraform -chdir=terraform/examples/greenfield init -backend=false`; `terraform -chdir=terraform/examples/greenfield validate`; `terraform fmt -check ...`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `git diff --check`; GitHub checks                                   | Remote release artifact support merged as `01355dbc6fc3e20cfd6a4289c6f3fc784fecf8dd`.                                                           |
+| 2026-05-18 | U3   | `codex/enterprise-deploy-template-u3`   | pending                                                      | Local pass | `pnpm --filter thinkwork-cli test -- enterprise-template.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; rendered workflow YAML parse; rendered Terraform fmt check; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `terraform fmt -check ...`; `git diff --check`                                                             | Built deterministic customer deployment repo template and overlay contract from merged U2.                                                      |
 
 ### CI / Merge Log
 
@@ -45,6 +46,11 @@ Target branch: `main`
 - 2026-05-18 12:13 CDT: Manual review replaced diagnostic-only Terraform checks with `terraform_data` lifecycle preconditions so invalid Lambda artifact configuration hard-fails planning.
 - 2026-05-18 12:16 CDT: Local verification passed for U2: focused CLI artifact fixture test, greenfield Terraform validation, Terraform fmt check, workspace typecheck/lint, full `pnpm test`, and `git diff --check`.
 - 2026-05-18 12:18 CDT: Opened [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) for U2.
+- 2026-05-18 12:23 CDT: Required GitHub checks for [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) passed: `cla`, `verify`, `lint`, `typecheck`, and `test`.
+- 2026-05-18 12:23 CDT: Squash merged [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) as `01355dbc6fc3e20cfd6a4289c6f3fc784fecf8dd`; remote branch was deleted, local branch/worktree removed, and `main` fast-forwarded.
+- 2026-05-18 12:24 CDT: Started U3 in `.Codex/worktrees/enterprise-deploy-template-u3` on branch `codex/enterprise-deploy-template-u3`.
+- 2026-05-18 12:31 CDT: Implemented the CLI-bundled customer deployment repo template, overlay contract files, deterministic renderer, package bundling for enterprise templates, and template fixture tests.
+- 2026-05-18 12:34 CDT: Local verification passed for U3: focused CLI template/no-required-options tests, CLI typecheck/build, rendered workflow YAML parse, rendered Terraform fmt check, workspace typecheck/lint, full `pnpm test`, Prettier check, Terraform template fmt check, and `git diff --check`.
 
 ### Blockers
 

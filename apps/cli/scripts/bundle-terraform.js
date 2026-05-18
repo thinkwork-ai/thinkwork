@@ -48,3 +48,13 @@ if (existsSync(schemaPath)) {
 }
 
 console.log("✓ Terraform modules bundled into dist/terraform/");
+
+const enterpriseTemplatesSrc = resolve(cliRoot, "src/commands/enterprise/templates");
+const enterpriseTemplatesDst = resolve(cliRoot, "dist/commands/enterprise/templates");
+
+if (existsSync(enterpriseTemplatesSrc)) {
+  rmSync(enterpriseTemplatesDst, { recursive: true, force: true });
+  mkdirSync(dirname(enterpriseTemplatesDst), { recursive: true });
+  cpSync(enterpriseTemplatesSrc, enterpriseTemplatesDst, { recursive: true });
+  console.log("✓ Enterprise deployment templates bundled into dist/commands/enterprise/templates/");
+}
