@@ -1,0 +1,80 @@
+{
+  "_metadata": {
+    "major_version": 2,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "ThinkWork Dev",
+    "description": "Invoke your ThinkWork Computer from Slack.",
+    "long_description": "ThinkWork connects Slack to your tenant-scoped Computer so linked users can mention the bot, send direct messages, run slash commands, and use message shortcuts. Slack messages are verified, routed through the linked ThinkWork user and Computer, and answered back in Slack with explicit attribution.",
+    "background_color": "#111827"
+  },
+  "features": {
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "bot_user": {
+      "display_name": "ThinkWork",
+      "always_online": false
+    },
+    "shortcuts": [
+      {
+        "name": "Ask ThinkWork",
+        "type": "message",
+        "callback_id": "thinkwork_message_action",
+        "description": "Ask your ThinkWork Computer to work from this message."
+      }
+    ],
+    "slash_commands": [
+      {
+        "command": "/thinkwork",
+        "url": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/slack/slash-command",
+        "description": "Ask your ThinkWork Computer from Slack.",
+        "usage_hint": "summarize this thread",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/slack/oauth/install",
+      "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/api/oauth/callback"
+    ],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "chat:write.customize",
+        "commands",
+        "files:read",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "users:read",
+        "users:read.email"
+      ],
+      "user": ["identity.basic", "identity.email", "identity.team"]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/slack/events",
+      "bot_events": ["app_mention", "message.im"]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/slack/interactivity"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
