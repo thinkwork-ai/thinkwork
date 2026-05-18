@@ -11,6 +11,7 @@ import {
   renderCandidateAppendSection,
   renderDurableMemoryAppendSection,
   renderIdleLearningReport,
+  renderThreadJournalAppendSection,
 } from "./markdown.js";
 import {
   syncRequesterMemoryToHindsight,
@@ -159,6 +160,31 @@ export async function runRequesterIdleMemoryLearning(
     staged,
   });
   const changedFiles: ChangedRequesterMemoryFile[] = [];
+  const workingPath = workingFilePath(input.scheduledFor);
+  const existingWorkingMemory = await readRequesterMemoryFile({
+    tenantId: input.tenantId,
+    userId: input.requesterUserId,
+    path: workingPath,
+  });
+  const journalSection = renderThreadJournalAppendSection({
+    runId: input.runId,
+    threadId: input.threadId,
+    scheduledFor: input.scheduledFor,
+    thread,
+    messages: transcript,
+    attachmentCount: attachments.length,
+  });
+  const workingWriteResult = await writeRequesterMemoryFileWithSnapshot({
+    tenantId: input.tenantId,
+    userId: input.requesterUserId,
+    runId: input.runId,
+    path: workingPath,
+    content: appendMarkdownSection(existingWorkingMemory, journalSection),
+  });
+  changedFiles.push({
+    ...stripPreviousContent(workingWriteResult),
+    evidenceMessageIds: transcript.map((message) => message.id),
+  });
 
   if (staged.length > 0) {
     const candidatePath = candidateFilePath(input.scheduledFor);
@@ -528,6 +554,13 @@ function candidateFilePath(scheduledFor: string): string {
     ? new Date().toISOString().slice(0, 10)
     : new Date(scheduledFor).toISOString().slice(0, 10);
   return `memory/candidates/${date}.md`;
+}
+
+function workingFilePath(scheduledFor: string): string {
+  const date = Number.isNaN(Date.parse(scheduledFor))
+    ? new Date().toISOString().slice(0, 10)
+    : new Date(scheduledFor).toISOString().slice(0, 10);
+  return `memory/working/${date}.md`;
 }
 
 function truncateCandidateText(text: string): string {

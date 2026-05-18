@@ -129,6 +129,12 @@ describe("requester idle memory learner", () => {
         Key: "tenants/tenant-1/users/user-1/memory/MEMORY.md",
       })
       .resolves(s3Body("# Memory\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
     s3Mock.on(PutObjectCommand).resolves({});
     const syncHindsight = vi.fn().mockResolvedValue({
       status: "success",
@@ -161,13 +167,14 @@ describe("requester idle memory learner", () => {
         "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
       budget: {
         llmCalls: 0,
-        memoryWrites: 1,
+        memoryWrites: 2,
         reportWrites: 1,
       },
     });
-    expect(result.changedFiles).toHaveLength(1);
-    expect(result.changedFiles[0].path).toBe("memory/MEMORY.md");
-    expect(result.changedFiles[0]).toMatchObject({
+    expect(result.changedFiles).toHaveLength(2);
+    expect(result.changedFiles[0].path).toBe("memory/working/2026-05-18.md");
+    expect(result.changedFiles[1].path).toBe("memory/MEMORY.md");
+    expect(result.changedFiles[1]).toMatchObject({
       evidenceMessageIds: ["msg-1"],
       hindsightDocumentId: "requester_memory:user-1:memory/MEMORY.md",
       hindsightStatus: "upserted",
@@ -177,27 +184,36 @@ describe("requester idle memory learner", () => {
       userId: "user-1",
       runId: "run-1",
       threadId: "thread-1",
-      changedFiles: [expect.objectContaining({ path: "memory/MEMORY.md" })],
+      changedFiles: [
+        expect.objectContaining({ path: "memory/working/2026-05-18.md" }),
+        expect.objectContaining({ path: "memory/MEMORY.md" }),
+      ],
     });
 
     const putCalls = s3Mock.commandCalls(PutObjectCommand);
-    expect(putCalls).toHaveLength(3);
+    expect(putCalls).toHaveLength(4);
     expect(putCalls[0].args[0].input.Key).toBe(
-      "tenants/tenant-1/users/user-1/memory/.snapshots/run-1/memory%2FMEMORY.md.md",
+      "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
     );
-    expect(putCalls[1].args[0].input.Key).toBe(
-      "tenants/tenant-1/users/user-1/memory/MEMORY.md",
-    );
-    expect(String(putCalls[1].args[0].input.Body)).toContain(
+    expect(String(putCalls[0].args[0].input.Body)).toContain(
       "Remember that I prefer Conventional Commit summaries.",
     );
+    expect(putCalls[1].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/.snapshots/run-1/memory%2FMEMORY.md.md",
+    );
     expect(putCalls[2].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/MEMORY.md",
+    );
+    expect(String(putCalls[2].args[0].input.Body)).toContain(
+      "Remember that I prefer Conventional Commit summaries.",
+    );
+    expect(putCalls[3].args[0].input.Key).toBe(
       "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
     );
-    expect(String(putCalls[2].args[0].input.Body)).toContain(
+    expect(String(putCalls[3].args[0].input.Body)).toContain(
       '"durablePromotionEnabled": true',
     );
-    expect(String(putCalls[2].args[0].input.Body)).toContain(
+    expect(String(putCalls[3].args[0].input.Body)).toContain(
       '"hindsightSync": {',
     );
   });
@@ -237,6 +253,12 @@ describe("requester idle memory learner", () => {
     s3Mock
       .on(GetObjectCommand, {
         Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
         Key: "tenants/tenant-1/users/user-1/memory/candidates/2026-05-18.md",
       })
       .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
@@ -257,15 +279,112 @@ describe("requester idle memory learner", () => {
       staged: 1,
       durablePromotionEnabled: true,
     });
-    expect(result.changedFiles[0].path).toBe("memory/candidates/2026-05-18.md");
+    expect(result.changedFiles.map((file) => file.path)).toEqual([
+      "memory/working/2026-05-18.md",
+      "memory/candidates/2026-05-18.md",
+    ]);
     expect(syncHindsight).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       userId: "user-1",
       runId: "run-1",
       threadId: "thread-1",
       changedFiles: [
+        expect.objectContaining({ path: "memory/working/2026-05-18.md" }),
         expect.objectContaining({ path: "memory/candidates/2026-05-18.md" }),
       ],
     });
+  });
+
+  it("writes a working thread journal when no durable candidates are extracted", async () => {
+    const db = makeDb([
+      [
+        {
+          id: "thread-1",
+          title: "CRM lookup",
+          status: "open",
+          priority: "medium",
+          type: "task",
+          channel: "manual",
+          metadata: null,
+        },
+      ],
+      [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "What are the last 5 opportunities from the CRM?",
+          senderType: "user",
+          senderId: "user-1",
+          metadata: null,
+          createdAt: new Date("2026-05-18T17:00:00.000Z"),
+        },
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Here are the 5 most recent opportunities.",
+          senderType: "assistant",
+          senderId: null,
+          metadata: null,
+          createdAt: new Date("2026-05-18T17:01:00.000Z"),
+        },
+      ],
+      [],
+    ]);
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/MEMORY.md",
+      })
+      .resolves(s3Body("# Memory\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
+    s3Mock.on(PutObjectCommand).resolves({});
+    const syncHindsight = vi.fn().mockResolvedValue({
+      status: "success",
+      files: [
+        {
+          path: "memory/working/2026-05-18.md",
+          documentId: "requester_memory:user-1:memory/working/2026-05-18.md",
+          status: "upserted",
+        },
+      ],
+    });
+
+    const result = await runRequesterIdleMemoryLearning(baseInput, {
+      db,
+      syncHindsight,
+    });
+
+    expect(result.status).toBe("changed");
+    expect(result.candidateSummary).toMatchObject({
+      extracted: 0,
+      accepted: 0,
+      promoted: 0,
+      staged: 0,
+    });
+    expect(result.changedFiles).toHaveLength(1);
+    expect(result.changedFiles[0]).toMatchObject({
+      path: "memory/working/2026-05-18.md",
+      evidenceMessageIds: ["msg-1", "msg-2"],
+      hindsightDocumentId:
+        "requester_memory:user-1:memory/working/2026-05-18.md",
+      hindsightStatus: "upserted",
+    });
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(2);
+    expect(putCalls[0].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+    );
+    expect(String(putCalls[0].args[0].input.Body)).toContain("CRM lookup");
+    expect(String(putCalls[0].args[0].input.Body)).toContain(
+      "What are the last 5 opportunities from the CRM?",
+    );
+    expect(putCalls[1].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
+    );
   });
 });

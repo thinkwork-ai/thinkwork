@@ -65,6 +65,56 @@ export function renderDurableMemoryAppendSection(input: {
   return lines.join("\n");
 }
 
+export function renderThreadJournalAppendSection(input: {
+  runId: string;
+  threadId: string;
+  scheduledFor: string;
+  thread: {
+    title: string;
+    status: string;
+    priority: string;
+    type: string;
+    channel: string;
+  } | null;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string | null;
+  }>;
+  attachmentCount: number;
+}): string {
+  const userMessages = input.messages.filter(
+    (message) => message.role === "user",
+  );
+  const assistantMessages = input.messages.filter(
+    (message) => message.role === "assistant",
+  );
+  const lines = [
+    `## Thread ${input.threadId}`,
+    "",
+    `- Run: ${input.runId}`,
+    `- Captured at: ${input.scheduledFor}`,
+    `- Title: ${input.thread?.title?.trim() || "Untitled thread"}`,
+    `- Type: ${input.thread?.type ?? "unknown"}`,
+    `- Channel: ${input.thread?.channel ?? "unknown"}`,
+    `- Status: ${input.thread?.status ?? "unknown"}`,
+    `- Priority: ${input.thread?.priority ?? "unknown"}`,
+    `- Messages: ${input.messages.length}`,
+    `- Attachments: ${input.attachmentCount}`,
+    "",
+    "### Requester Messages",
+    "",
+    ...renderMessagePreviewLines(userMessages),
+    "",
+    "### Assistant Responses",
+    "",
+    ...renderMessagePreviewLines(assistantMessages),
+    "",
+  ];
+
+  return lines.join("\n");
+}
+
 export function renderIdleLearningReport(input: {
   runId: string;
   tenantId: string;
@@ -132,6 +182,20 @@ function renderRejectedLines(rejected: RejectedLearningCandidate[]): string[] {
     (candidate) =>
       `- [${candidate.reason}] message=${candidate.evidenceMessageId} hash=${shortHash(candidate.text)}`,
   );
+}
+
+function renderMessagePreviewLines(
+  messages: Array<{ id: string; content: string | null }>,
+): string[] {
+  if (messages.length === 0) return ["- None"];
+  return messages.slice(0, 12).map((message) => {
+    const preview = previewText(message.content);
+    return `- ${message.id}: ${preview || "(empty)"}`;
+  });
+}
+
+function previewText(content: string | null): string {
+  return (content ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
 function shortHash(text: string): string {
