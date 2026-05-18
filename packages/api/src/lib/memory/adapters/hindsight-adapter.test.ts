@@ -173,6 +173,7 @@ describe("HindsightAdapter legacy user bank reads", () => {
       `https://hindsight.example/v1/default/banks/user_${USER_ID}/memories`,
     );
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      async: true,
       items: [
         {
           content: "# Durable requester memory",
