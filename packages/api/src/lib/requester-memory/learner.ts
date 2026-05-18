@@ -9,8 +9,14 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   appendMarkdownSection,
   renderCandidateAppendSection,
+  renderDurableMemoryAppendSection,
   renderIdleLearningReport,
 } from "./markdown.js";
+import {
+  syncRequesterMemoryToHindsight,
+  type RequesterMemoryHindsightSyncResult,
+  type SyncRequesterMemoryToHindsightInput,
+} from "./hindsight-sync.js";
 import {
   classifyMemoryCandidateSafety,
   type MemoryCandidateRejectReason,
@@ -53,8 +59,10 @@ export type LearningCandidateSummary = {
   extracted: number;
   accepted: number;
   rejected: number;
+  promoted: number;
+  staged: number;
   categories: Partial<Record<LearningCandidateCategory, number>>;
-  durablePromotionEnabled: false;
+  durablePromotionEnabled: boolean;
 };
 
 export type ThreadIdleMemoryLearningWorkerInput = {
@@ -82,6 +90,9 @@ export type ThreadIdleMemoryLearningWorkerResult = {
 
 type LearnerDeps = {
   db?: Database;
+  syncHindsight?: (
+    input: SyncRequesterMemoryToHindsightInput,
+  ) => Promise<RequesterMemoryHindsightSyncResult>;
 };
 
 type TranscriptMessage = {
@@ -130,14 +141,26 @@ export async function runRequesterIdleMemoryLearning(
 
   const { accepted, rejected, extractedCount } =
     extractLearningCandidates(transcript);
-  const candidateSummary = summarizeCandidates(
+  const promotable = rehydratePromotableCandidates(accepted, transcript);
+  const promoted = promotable.filter(
+    (candidate) => !currentMemory?.includes(candidate.text),
+  );
+  const staged = accepted.filter(
+    (candidate) =>
+      !promotable.some(
+        (promotedCandidate) => promotedCandidate.hash === candidate.hash,
+      ),
+  );
+  const candidateSummary = summarizeCandidates({
     accepted,
     rejected,
     extractedCount,
-  );
+    promoted,
+    staged,
+  });
   const changedFiles: ChangedRequesterMemoryFile[] = [];
 
-  if (accepted.length > 0) {
+  if (staged.length > 0) {
     const candidatePath = candidateFilePath(input.scheduledFor);
     const existingCandidates = await readRequesterMemoryFile({
       tenantId: input.tenantId,
@@ -148,7 +171,7 @@ export async function runRequesterIdleMemoryLearning(
       runId: input.runId,
       threadId: input.threadId,
       scheduledFor: input.scheduledFor,
-      candidates: accepted,
+      candidates: staged,
     });
     const writeResult = await writeRequesterMemoryFileWithSnapshot({
       tenantId: input.tenantId,
@@ -157,8 +180,42 @@ export async function runRequesterIdleMemoryLearning(
       path: candidatePath,
       content: appendMarkdownSection(existingCandidates, section),
     });
-    changedFiles.push(stripPreviousContent(writeResult));
+    changedFiles.push({
+      ...stripPreviousContent(writeResult),
+      evidenceMessageIds: uniqueMessageIds(staged),
+    });
   }
+
+  if (promoted.length > 0) {
+    const section = renderDurableMemoryAppendSection({
+      runId: input.runId,
+      threadId: input.threadId,
+      scheduledFor: input.scheduledFor,
+      candidates: promoted,
+    });
+    const writeResult = await writeRequesterMemoryFileWithSnapshot({
+      tenantId: input.tenantId,
+      userId: input.requesterUserId,
+      runId: input.runId,
+      path: "memory/MEMORY.md",
+      content: appendMarkdownSection(currentMemory, section),
+    });
+    changedFiles.push({
+      ...stripPreviousContent(writeResult),
+      evidenceMessageIds: uniqueMessageIds(promoted),
+    });
+  }
+
+  const hindsightSync = await (
+    deps.syncHindsight ?? syncRequesterMemoryToHindsight
+  )({
+    tenantId: input.tenantId,
+    userId: input.requesterUserId,
+    runId: input.runId,
+    threadId: input.threadId,
+    changedFiles,
+  });
+  annotateChangedFilesWithHindsight(changedFiles, hindsightSync);
 
   const reportMarkdown = renderIdleLearningReport({
     runId: input.runId,
@@ -175,6 +232,7 @@ export async function runRequesterIdleMemoryLearning(
     changedPaths: changedFiles.map((file) => file.path),
     transcriptMessageCount: transcript.length,
     attachmentCount: attachments.length,
+    hindsightSync,
   });
   const report = await writeIdleLearningReport({
     tenantId: input.tenantId,
@@ -190,16 +248,18 @@ export async function runRequesterIdleMemoryLearning(
     candidateSummary,
     reportS3Key: report.key,
     budget: {
-      mode: "deterministic_slice_b",
+      mode: "deterministic_slice_c",
       llmCalls: 0,
       memoryWrites: changedFiles.length,
       reportWrites: 1,
+      hindsightStatus: hindsightSync.status,
     },
     metadata: {
       runId: input.runId,
       scheduledJobId: input.scheduledJobId,
       activitySequence: input.activitySequence,
-      durablePromotionEnabled: false,
+      durablePromotionEnabled: true,
+      hindsightSync,
       currentMemoryBytes: currentMemory
         ? Buffer.byteLength(currentMemory, "utf8")
         : 0,
@@ -398,6 +458,10 @@ function scoreStatement(
   let score = 0.45;
   if (/\b(?:remember|for future|keep in mind)\b/i.test(statement))
     score += 0.25;
+  if (
+    /\b(?:i prefer|my preference|i like|call me|my name is)\b/i.test(statement)
+  )
+    score += 0.2;
   if (category === "correction" || category === "decision") score += 0.2;
   if (/\b(?:always|never|default|prefer|usually)\b/i.test(statement))
     score += 0.1;
@@ -405,22 +469,58 @@ function scoreStatement(
   return Math.max(0.1, Math.min(0.95, score));
 }
 
-function summarizeCandidates(
-  accepted: LearningCandidate[],
-  rejected: RejectedLearningCandidate[],
-  extractedCount: number,
-): LearningCandidateSummary {
+function summarizeCandidates(input: {
+  accepted: LearningCandidate[];
+  rejected: RejectedLearningCandidate[];
+  extractedCount: number;
+  promoted: LearningCandidate[];
+  staged: LearningCandidate[];
+}): LearningCandidateSummary {
   const categories: Partial<Record<LearningCandidateCategory, number>> = {};
-  for (const candidate of accepted) {
+  for (const candidate of input.accepted) {
     categories[candidate.category] = (categories[candidate.category] ?? 0) + 1;
   }
   return {
-    extracted: extractedCount,
-    accepted: accepted.length,
-    rejected: rejected.length,
+    extracted: input.extractedCount,
+    accepted: input.accepted.length,
+    rejected: input.rejected.length,
+    promoted: input.promoted.length,
+    staged: input.staged.length,
     categories,
-    durablePromotionEnabled: false,
+    durablePromotionEnabled: true,
   };
+}
+
+function rehydratePromotableCandidates(
+  candidates: LearningCandidate[],
+  transcript: TranscriptMessage[],
+): LearningCandidate[] {
+  const messagesById = new Map(
+    transcript.map((message) => [message.id, message]),
+  );
+  return candidates.filter((candidate) => {
+    if (!shouldPromoteCandidate(candidate)) return false;
+    return candidate.evidenceMessageIds.every((messageId) => {
+      const source = messagesById.get(messageId)?.content ?? "";
+      return source.includes(candidate.text);
+    });
+  });
+}
+
+function shouldPromoteCandidate(candidate: LearningCandidate): boolean {
+  if (
+    candidate.category === "negative_signal" ||
+    candidate.category === "project"
+  ) {
+    return candidate.score >= 0.85;
+  }
+  if (
+    candidate.category === "correction" ||
+    candidate.category === "decision"
+  ) {
+    return candidate.score >= 0.6;
+  }
+  return candidate.score >= 0.7;
 }
 
 function candidateFilePath(scheduledFor: string): string {
@@ -450,4 +550,24 @@ function stripPreviousContent(
 ): ChangedRequesterMemoryFile {
   const { previousContent: _previousContent, ...rest } = result;
   return rest;
+}
+
+function uniqueMessageIds(candidates: LearningCandidate[]): string[] {
+  return [
+    ...new Set(candidates.flatMap((candidate) => candidate.evidenceMessageIds)),
+  ];
+}
+
+function annotateChangedFilesWithHindsight(
+  changedFiles: ChangedRequesterMemoryFile[],
+  hindsightSync: RequesterMemoryHindsightSyncResult,
+): void {
+  for (const syncFile of hindsightSync.files) {
+    const changedFile = changedFiles.find(
+      (file) => file.path === syncFile.path,
+    );
+    if (!changedFile) continue;
+    changedFile.hindsightDocumentId = syncFile.documentId;
+    changedFile.hindsightStatus = syncFile.status;
+  }
 }

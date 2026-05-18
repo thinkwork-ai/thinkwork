@@ -4,6 +4,7 @@ import type {
   LearningCandidateSummary,
   RejectedLearningCandidate,
 } from "./learner.js";
+import type { RequesterMemoryHindsightSyncResult } from "./hindsight-sync.js";
 
 export function renderCandidateAppendSection(input: {
   runId: string;
@@ -39,6 +40,31 @@ export function appendMarkdownSection(
   return `${base}\n\n${section.trimEnd()}\n`;
 }
 
+export function renderDurableMemoryAppendSection(input: {
+  runId: string;
+  threadId: string;
+  scheduledFor: string;
+  candidates: LearningCandidate[];
+}): string {
+  const lines = [
+    `## Learned from thread ${input.threadId}`,
+    "",
+    `- Run: ${input.runId}`,
+    `- Learned at: ${input.scheduledFor}`,
+    "",
+  ];
+
+  for (const candidate of input.candidates) {
+    lines.push(
+      `- [${candidate.category}] ${candidate.text}`,
+      `  Evidence: ${candidate.evidenceMessageIds.join(", ")}; score=${candidate.score.toFixed(2)}; hash=${candidate.hash}`,
+    );
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
 export function renderIdleLearningReport(input: {
   runId: string;
   tenantId: string;
@@ -54,6 +80,7 @@ export function renderIdleLearningReport(input: {
   changedPaths: string[];
   transcriptMessageCount: number;
   attachmentCount: number;
+  hindsightSync?: RequesterMemoryHindsightSyncResult;
 }): string {
   const reportJson = {
     runId: input.runId,
@@ -68,6 +95,7 @@ export function renderIdleLearningReport(input: {
     changedPaths: input.changedPaths,
     transcriptMessageCount: input.transcriptMessageCount,
     attachmentCount: input.attachmentCount,
+    hindsightSync: input.hindsightSync ?? null,
   };
 
   return [

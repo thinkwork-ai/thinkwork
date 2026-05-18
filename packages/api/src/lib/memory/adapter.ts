@@ -24,6 +24,7 @@ import type {
 	RetainDailyMemoryRequest,
 	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
+	UpsertMarkdownMemoryDocumentRequest,
 } from "./types.js";
 
 export interface MemoryAdapter {
@@ -48,6 +49,10 @@ export interface MemoryAdapter {
 	retainConversation?(request: RetainConversationRequest): Promise<void>;
 
 	retainDailyMemory?(request: RetainDailyMemoryRequest): Promise<void>;
+
+	upsertMarkdownMemoryDocument?(
+		request: UpsertMarkdownMemoryDocumentRequest,
+	): Promise<void>;
 
 	inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 

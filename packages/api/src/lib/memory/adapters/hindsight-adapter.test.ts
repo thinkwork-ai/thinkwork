@@ -142,6 +142,58 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("upserts requester memory markdown as a stable replaceable document", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example/",
+    });
+    await adapter.upsertMarkdownMemoryDocument({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      path: "memory/MEMORY.md",
+      content: "# Durable requester memory",
+      documentId: `requester_memory:${USER_ID}:memory/MEMORY.md`,
+      context: "thinkwork_requester_memory",
+      metadata: {
+        runId: "run-1",
+        threadId: "thread-1",
+        beforeHash: "old",
+        afterHash: "new",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/memories`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      items: [
+        {
+          content: "# Durable requester memory",
+          document_id: `requester_memory:${USER_ID}:memory/MEMORY.md`,
+          update_mode: "replace",
+          context: "thinkwork_requester_memory",
+          metadata: {
+            tenantId: TENANT_ID,
+            userId: USER_ID,
+            path: "memory/MEMORY.md",
+            source: "requester_memory_markdown",
+            runId: "run-1",
+            threadId: "thread-1",
+            beforeHash: "old",
+            afterHash: "new",
+          },
+        },
+      ],
+    });
+  });
+
   it("lists memories from the new user bank and paired legacy agent bank", async () => {
     executeMock
       .mockResolvedValueOnce({
