@@ -94,6 +94,27 @@ const RegenerateWebhookTokenDoc = graphql(`
   }
 `);
 
+const WebhookDeliveriesDoc = graphql(`
+  query CliWebhookDeliveries($webhookId: ID!, $limit: Int) {
+    webhookDeliveries(webhookId: $webhookId, limit: $limit) {
+      id
+      providerName
+      providerEventId
+      normalizedKind
+      receivedAt
+      signatureStatus
+      resolutionStatus
+      statusCode
+      durationMs
+      threadId
+      threadCreated
+      retryCount
+      isReplay
+      errorMessage
+    }
+  }
+`);
+
 const WebhookTenantBySlugDoc = graphql(`
   query CliWebhookTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -370,6 +391,58 @@ async function runWebhookRotate(id: string, opts: DeleteOptions): Promise<void> 
   console.log(`    ${wh.token}`);
 }
 
+interface DeliveriesOptions extends WebhookCliOptions {
+  limit?: string;
+}
+
+async function runWebhookDeliveries(
+  id: string,
+  opts: DeliveriesOptions,
+): Promise<void> {
+  const ctx = await resolveWebhookContext(opts);
+  const limit = Math.min(
+    Math.max(Number.parseInt(opts.limit ?? "25", 10) || 25, 1),
+    500,
+  );
+  const data = await gqlQuery(ctx.client, WebhookDeliveriesDoc, {
+    webhookId: id,
+    limit,
+  });
+  const rows = data.webhookDeliveries;
+  if (isJsonMode()) {
+    printJson({ items: rows });
+    return;
+  }
+  if (rows.length === 0) {
+    logStderr(`No deliveries recorded for webhook ${id}.`);
+    return;
+  }
+  printTable(
+    rows.map((r) => ({
+      received: r.receivedAt ?? "",
+      provider: r.providerName ?? "—",
+      event: r.normalizedKind ?? r.providerEventId ?? "—",
+      sig: r.signatureStatus,
+      resolution: r.resolutionStatus,
+      status: r.statusCode != null ? String(r.statusCode) : "—",
+      durMs: r.durationMs != null ? String(r.durationMs) : "—",
+      retry: r.retryCount != null ? String(r.retryCount) : "—",
+      thread: r.threadId ?? "—",
+    })),
+    [
+      { key: "received", header: "Received" },
+      { key: "provider", header: "Provider" },
+      { key: "event", header: "Event" },
+      { key: "sig", header: "Sig" },
+      { key: "resolution", header: "Resolution" },
+      { key: "status", header: "Status" },
+      { key: "durMs", header: "Dur(ms)" },
+      { key: "retry", header: "Retry" },
+      { key: "thread", header: "Thread" },
+    ],
+  );
+}
+
 function notYetImplementedAtApi(verb: string): never {
   printError(
     `\`webhook ${verb}\` is not yet implemented at the GraphQL API.\n` +
@@ -459,9 +532,11 @@ Examples:
 
   wh
     .command("deliveries <id>")
-    .description("Show recent delivery attempts. (API surface pending.)")
+    .description(
+      "Show recent delivery attempts for a webhook (newest first). Default 25, max 500.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--limit <n>", "Max rows", "25")
-    .action(() => notYetImplementedAtApi("deliveries"));
+    .option("--limit <n>", "Max rows (1-500)", "25")
+    .action(runWebhookDeliveries);
 }

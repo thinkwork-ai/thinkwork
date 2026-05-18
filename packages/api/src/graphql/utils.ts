@@ -81,6 +81,7 @@ import {
   // Webhooks (PRD-19)
   webhooks,
   webhookIdempotency,
+  webhookDeliveries,
   // Quick Actions
   userQuickActions,
   // Recipes (PRD-26)
@@ -179,6 +180,7 @@ export {
   artifacts,
   webhooks,
   webhookIdempotency,
+  webhookDeliveries,
   userQuickActions,
   recipes,
   agentTemplates,

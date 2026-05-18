@@ -45,9 +45,49 @@ input UpdateWebhookInput {
   rateLimit: Int
 }
 
+"""
+A single inbound webhook request as recorded by `POST /webhooks/{token}`.
+Rows are PII-bearing (provider task titles, customer names, comment
+text in `bodyPreview`); 90-day retention is enforced by a cleanup
+Lambda. The GraphQL surface here intentionally redacts nothing — the
+endpoint is admin-tier via `requireAdminOrServiceCaller`.
+"""
+type WebhookDelivery {
+  id: ID!
+  webhookId: ID
+  tenantId: ID
+  targetType: String
+  providerName: String
+  providerEventId: String
+  externalTaskId: String
+  providerUserId: String
+  normalizedKind: String
+  receivedAt: AWSDateTime!
+  sourceIp: String
+  bodyPreview: String
+  bodySha256: String
+  bodySizeBytes: Int
+  signatureStatus: String!
+  resolutionStatus: String!
+  threadId: ID
+  threadCreated: Boolean
+  statusCode: Int
+  errorMessage: String
+  durationMs: Int
+  retryCount: Int!
+  isReplay: Boolean!
+  createdAt: AWSDateTime!
+}
+
 extend type Query {
   webhooks(tenantId: ID!, targetType: String, enabled: Boolean, limit: Int): [Webhook!]!
   webhook(id: ID!): Webhook
+  """
+  List recent webhook deliveries for one webhook. Tenant-scoped via the
+  webhook's row (cross-tenant ids return empty). Newest first. Hard
+  cap of 500 rows; default 50.
+  """
+  webhookDeliveries(webhookId: ID!, limit: Int): [WebhookDelivery!]!
 }
 
 extend type Mutation {
