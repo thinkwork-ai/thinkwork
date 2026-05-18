@@ -14,6 +14,11 @@ const {
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  // Mutation migration: admin-write resolvers now call
+  // requireAdminOrServiceCaller; delegate to the same mock so existing
+  // role-gate expectations carry over unchanged.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({

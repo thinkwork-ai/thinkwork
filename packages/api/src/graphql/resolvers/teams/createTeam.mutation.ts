@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, teams, snakeToCamel, generateSlug } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 
@@ -10,7 +10,7 @@ export const createTeam = async (
   ctx: GraphQLContext,
 ) => {
   const i = args.input;
-  await requireTenantAdmin(ctx, i.tenantId);
+  await requireAdminOrServiceCaller(ctx, i.tenantId, "create_team");
 
   // Apikey callers (thinkwork-admin) set principalId directly; cognito
   // callers go through the users-lookup path. Null → runWithIdempotency

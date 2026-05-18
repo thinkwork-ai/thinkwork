@@ -20,7 +20,7 @@ import {
 	threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const delegateThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const { threadId, assigneeId, reason, agentId } = args.input;
@@ -41,7 +41,7 @@ export const delegateThread = async (_parent: any, args: any, ctx: GraphQLContex
 
 	if (!threadRow) throw new Error("Thread not found");
 
-	await requireTenantAdmin(ctx, threadRow.tenant_id);
+	await requireAdminOrServiceCaller(ctx, threadRow.tenant_id, "delegate_thread");
 
 	// Ensure the delegated-to assignee agent belongs to the same tenant as
 	// the thread. Prevents cross-tenant handoff via arg-supplied ID.

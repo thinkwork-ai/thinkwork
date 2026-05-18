@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { createComputerCore, toGraphqlComputer } from "./shared.js";
 
@@ -9,7 +9,7 @@ export async function createComputer(
   ctx: GraphQLContext,
 ) {
   const input = args.input;
-  await requireTenantAdmin(ctx, input.tenantId);
+  await requireAdminOrServiceCaller(ctx, input.tenantId, "create_computer");
   const callerUserId = await resolveCallerUserId(ctx);
   const row = await createComputerCore({
     tenantId: input.tenantId,

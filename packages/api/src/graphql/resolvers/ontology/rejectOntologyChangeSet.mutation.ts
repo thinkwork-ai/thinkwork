@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { rejectOntologyChangeSet } from "../../../lib/ontology/repository.js";
 
@@ -10,7 +10,7 @@ export const rejectOntologyChangeSetMutation = async (
   },
   ctx: GraphQLContext,
 ) => {
-  await requireTenantAdmin(ctx, args.input.tenantId);
+  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "reject_ontology_change_set");
   const actorUserId = await resolveCallerUserId(ctx);
   return rejectOntologyChangeSet({
     tenantId: args.input.tenantId,

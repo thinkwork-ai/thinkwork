@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, computerAssignments } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   loadComputerOrThrow,
@@ -24,7 +24,7 @@ export async function setComputerAssignments(
   ctx: GraphQLContext,
 ) {
   const computer = await loadComputerOrThrow(args.input.computerId);
-  await requireTenantAdmin(ctx, computer.tenant_id);
+  await requireAdminOrServiceCaller(ctx, computer.tenant_id, "set_computer_assignments");
   const assignedByUserId = await resolveCallerUserId(ctx);
 
   const values: (typeof computerAssignments.$inferInsert)[] = [];

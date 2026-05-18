@@ -100,6 +100,11 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
   requireNotFromAdminSkill: mockRequireNotFromAdminSkill,
+  // Mutation migration: admin-write resolvers now call
+  // requireAdminOrServiceCaller; delegate to the same mock so existing
+  // role-gate expectations carry over unchanged.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
 }));
 
 // Unit 8c wired runWithIdempotency into createAgentTemplate. Stub the

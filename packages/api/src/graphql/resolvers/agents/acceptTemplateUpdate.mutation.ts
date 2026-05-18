@@ -34,7 +34,7 @@ import {
   sql,
   tenants,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertWorkspacePinPath,
   computeSha256,
@@ -199,7 +199,7 @@ export async function acceptTemplateUpdate(
     });
   }
 
-  await requireTenantAdmin(ctx, agent.tenant_id);
+  await requireAdminOrServiceCaller(ctx, agent.tenant_id, "accept_template_update");
 
   const [tenant] = await db
     .select({ slug: tenants.slug })

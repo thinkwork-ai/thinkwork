@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { updateOntologyEntityType } from "../../../lib/ontology/repository.js";
 import { lifecycleStatusFromGraphQL } from "./coercion.js";
@@ -22,7 +22,7 @@ export const updateOntologyEntityTypeMutation = async (
   args: UpdateOntologyEntityTypeArgs,
   ctx: GraphQLContext,
 ) => {
-  await requireTenantAdmin(ctx, args.input.tenantId);
+  await requireAdminOrServiceCaller(ctx, args.input.tenantId, "update_ontology_entity_type");
   const actorUserId = await resolveCallerUserId(ctx);
   return updateOntologyEntityType({
     actorUserId,

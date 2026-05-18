@@ -22,7 +22,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { agents, agentTemplates, db, eq, and, tenants } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   computeSha256,
   readTemplateBaseWithFallback,
@@ -53,7 +53,7 @@ export async function acceptTemplateUpdateBulk(
     );
   }
 
-  await requireTenantAdmin(ctx, tenantId);
+  await requireAdminOrServiceCaller(ctx, tenantId, "accept_template_update_bulk");
 
   // Template must exist AND belong to the caller's tenant. 404 on
   // mismatch rather than FORBIDDEN so we don't leak the existence of

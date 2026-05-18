@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, computers, sql } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   parseComputerStatus,
   parseDesiredRuntimeStatus,
@@ -26,7 +26,7 @@ export async function updateComputer(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantAdmin(ctx, existing.tenant_id);
+  await requireAdminOrServiceCaller(ctx, existing.tenant_id, "update_computer");
 
   const input = args.input;
   const set: Record<string, unknown> = { updated_at: sql`now()` };
