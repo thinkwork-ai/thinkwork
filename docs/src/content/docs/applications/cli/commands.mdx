@@ -950,6 +950,51 @@ Both invoke their respective mutations server-side (`syncTemplateToAgent` / `syn
 
 ---
 
+## tenant
+
+Tenant (workspace) lifecycle — create, rename, configure plan and per-tenant settings (default model, monthly budget, agent cap, auto-close, feature flags).
+
+```bash
+thinkwork tenant <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage` and the global `--json`. Alias: `tenants`. **Note:** `list` and `get` use the `@thinkwork/admin-ops` REST client; `create`, `update`, and `settings get`/`set` use GraphQL via the standard CLI client. Mixed substrate is intentional pending admin-ops parity.
+
+### tenant list / get
+
+```bash
+thinkwork tenant list
+thinkwork tenant get <idOrSlug>
+```
+
+`list` returns every tenant the caller can see (REST). `get` accepts either a UUID or slug.
+
+### tenant create / update
+
+```bash
+thinkwork tenant create [name] [--slug <slug>] [--plan <plan>] [--issue-prefix <prefix>]
+thinkwork tenant update <id> [--name <n>] [--plan <plan>] [--issue-prefix <prefix>]
+```
+
+- `create` prompts for `name` in a TTY when omitted. `--slug` is generated from name when absent (lowercased, hyphenated, ≤48 chars).
+- `--plan` defaults to `team` on create.
+- `--issue-prefix` is the tenant-scoped thread-number prefix (e.g. `ACME`). On create, it's applied via a follow-up `updateTenant` since the create input doesn't accept it.
+- `update` is partial — only flags passed are sent.
+
+### tenant settings get / set
+
+```bash
+thinkwork tenant settings get [tenant]
+thinkwork tenant settings set [tenant] [--default-model <id>] [--monthly-budget-usd <n>] [--max-agents <n>] [--auto-close-after-days <n>] [--feature <key=value>...]
+```
+
+- `[tenant]` is optional; defaults to the session's tenant. Pass a slug to target a different tenant.
+- `--monthly-budget-usd` converts to `budgetMonthlyCents` (× 100).
+- `--auto-close-after-days` converts to `autoCloseThreadMinutes` (× 60 × 24).
+- `--feature key=value` is repeatable. Values are auto-parsed: `true`/`false` → bool, integers → number, otherwise string. Example: `--feature hindsight=true --feature beta_tool=false`.
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -957,7 +1002,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template) shipped · [`tenant`](#tenant), [`agent`](#agent) next |
+| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant) shipped · [`agent`](#agent) next |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
@@ -979,16 +1024,6 @@ thinkwork agent api-key create <id> --name <n> [--expires]
 thinkwork agent api-key list <id> | revoke <keyId>
 thinkwork agent email enable <id> [--local-part] | disable <id> | allowlist <id> <senders...>
 thinkwork agent version list <id> | rollback <id> <versionId>
-```
-
-### tenant
-
-Tenant (workspace) CRUD + settings.
-
-```bash
-thinkwork tenant list | get <idOrSlug> | create [name] [--slug] [--plan] [--issue-prefix]
-thinkwork tenant update <id> [--name] [--plan] [--issue-prefix]
-thinkwork tenant settings get|set [--default-model] [--monthly-budget-usd] [--max-agents] [--auto-close-after-days] [--feature key=value]
 ```
 
 ### routine
