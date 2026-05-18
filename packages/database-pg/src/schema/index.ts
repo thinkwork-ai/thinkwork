@@ -24,6 +24,7 @@ export * from "./heartbeats";
 export * from "./runtime";
 export * from "./cost-events";
 export * from "./scheduled-jobs";
+export * from "./thread-idle-learning";
 export * from "./knowledge-bases";
 export * from "./email-channel";
 export * from "./thread-dependencies";

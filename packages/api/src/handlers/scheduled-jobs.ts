@@ -53,6 +53,30 @@ import {
 } from "../lib/computers/connector-trigger-routing.js";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
+const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
+
+function isInternalScheduledJob(row: {
+  trigger_type?: string | null;
+  config?: unknown;
+}): boolean {
+  if (row.trigger_type === THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE)
+    return true;
+  const config = row.config;
+  return (
+    !!config &&
+    typeof config === "object" &&
+    !Array.isArray(config) &&
+    (config as Record<string, unknown>).internal === true
+  );
+}
+
+function isInternalScheduledJobBody(body: Record<string, unknown>): boolean {
+  return isInternalScheduledJob({
+    trigger_type:
+      typeof body.trigger_type === "string" ? body.trigger_type : undefined,
+    config: body.config,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Job Schedule Manager — invoke to create/update/delete EventBridge schedules
@@ -184,7 +208,12 @@ async function checkMembership(
   event: APIGatewayProxyEventV2,
   method: string,
 ): Promise<
-  | { ok: true; tenantId: string; userId: string | null }
+  | {
+      ok: true;
+      tenantId: string;
+      userId: string | null;
+      role: TenantMemberRole | null;
+    }
   | { ok: false; response: APIGatewayProxyStructuredResultV2 }
 > {
   const tenantHeader = event.headers["x-tenant-id"];
@@ -198,7 +227,12 @@ async function checkMembership(
   });
   if (!verdict.ok)
     return { ok: false, response: error(verdict.reason, verdict.status) };
-  return { ok: true, tenantId: verdict.tenantId, userId: verdict.userId };
+  return {
+    ok: true,
+    tenantId: verdict.tenantId,
+    userId: verdict.userId,
+    role: verdict.role,
+  };
 }
 
 export async function handler(
@@ -257,7 +291,8 @@ export async function handler(
       }
       const check = await checkMembership(event, method);
       if (!check.ok) return check.response;
-      if (method === "GET") return listScheduledJobs(event, check.tenantId);
+      if (method === "GET")
+        return listScheduledJobs(event, check.tenantId, check.role);
       return createScheduledJob(event, check.tenantId, check.userId);
     }
 
@@ -321,10 +356,19 @@ export async function handler(
 async function listScheduledJobs(
   event: APIGatewayProxyEventV2,
   tenantId: string,
+  role: TenantMemberRole | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const conditions = [eq(scheduledJobs.tenant_id, tenantId)];
 
   const params = event.queryStringParameters || {};
+  const includeInternal =
+    params.include_internal === "true" &&
+    (role === "owner" || role === "admin" || role === null);
+  if (!includeInternal) {
+    conditions.push(
+      sql`COALESCE(${scheduledJobs.config}->>'internal', 'false') <> 'true' AND ${scheduledJobs.trigger_type} <> ${THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE}`,
+    );
+  }
   if (params.agent_id)
     conditions.push(eq(scheduledJobs.agent_id, params.agent_id));
   if (params.computer_id)
@@ -378,6 +422,12 @@ async function createScheduledJob(
 
   if (!body.name || !body.trigger_type) {
     return error("name and trigger_type are required");
+  }
+  if (isInternalScheduledJobBody(body)) {
+    return error(
+      "Internal scheduled jobs cannot be created through this API",
+      403,
+    );
   }
 
   const computerId = (body.computer_id as string) || null;
@@ -505,6 +555,23 @@ async function updateScheduledJob(
     return error("Invalid JSON body");
   }
 
+  const [existing] = await db
+    .select()
+    .from(scheduledJobs)
+    .where(
+      and(eq(scheduledJobs.id, id), eq(scheduledJobs.tenant_id, tenantId)),
+    );
+  if (!existing) return notFound("Trigger not found");
+  if (isInternalScheduledJob(existing)) {
+    return error(
+      "Internal scheduled jobs cannot be updated through this API",
+      403,
+    );
+  }
+  if (isInternalScheduledJobBody(body)) {
+    return error("Scheduled jobs cannot be converted to internal jobs", 403);
+  }
+
   // Note: computer_id is intentionally read-only on update for v1 — re-parenting
   // a scheduled job to a different Computer isn't a supported flow. agent_id is
   // also unset here because the runtime-firing key is fixed at create-time.
@@ -573,6 +640,12 @@ async function deleteScheduledJob(
       and(eq(scheduledJobs.id, id), eq(scheduledJobs.tenant_id, tenantId)),
     );
   if (!existing) return notFound("Trigger not found");
+  if (isInternalScheduledJob(existing)) {
+    return error(
+      "Internal scheduled jobs cannot be deleted through this API",
+      403,
+    );
+  }
 
   // Delete EventBridge schedule
   if (existing.eb_schedule_name) {
@@ -614,6 +687,12 @@ async function fireScheduledJob(
       ),
     );
   if (!trig) return notFound("Trigger not found");
+  if (isInternalScheduledJob(trig)) {
+    return error(
+      "Internal scheduled jobs cannot be fired through this API",
+      403,
+    );
+  }
 
   const isAgentTrigger = trig.trigger_type.startsWith("agent_");
   const isEvalTrigger = trig.trigger_type === "eval_scheduled";

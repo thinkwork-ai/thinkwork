@@ -141,6 +141,20 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "tenant_settings.tenant_id",
     features: "tenant_settings.features",
   },
+  threadIdleLearningState: {
+    id: "thread_idle_learning_state.id",
+    tenant_id: "thread_idle_learning_state.tenant_id",
+    thread_id: "thread_idle_learning_state.thread_id",
+    computer_id: "thread_idle_learning_state.computer_id",
+    requester_user_id: "thread_idle_learning_state.requester_user_id",
+    activity_sequence: "thread_idle_learning_state.activity_sequence",
+    last_activity_at: "thread_idle_learning_state.last_activity_at",
+    scheduled_for: "thread_idle_learning_state.scheduled_for",
+    scheduled_job_id: "thread_idle_learning_state.scheduled_job_id",
+  },
+  threadIdleLearningRuns: {
+    id: "thread_idle_learning_runs.id",
+  },
   threadTurns: { id: "thread_turns.id" },
   users: {
     id: "users.id",
@@ -216,6 +230,8 @@ const pushAgentSkillEnablement = (enabled: boolean | null): void => {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
+  process.env.THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME =
+    "thinkwork-dev-api-thread-idle-memory-learning";
   process.env.ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME =
     "thinkwork-dev-api-routine-approval-callback";
   process.env.EMAIL_SEND_FUNCTION_NAME = "thinkwork-dev-api-email-send";
@@ -703,5 +719,123 @@ describe("job-trigger Computer scheduled thread turns", () => {
 
     expect(mockEnsureThreadForWork).not.toHaveBeenCalled();
     expect(mockInsertValues).not.toHaveBeenCalled();
+  });
+});
+
+describe("job-trigger thread_idle_memory_learning", () => {
+  const idleConfig = {
+    internal: true,
+    threadId: "thread-1",
+    computerId: "computer-1",
+    requesterUserId: "user-1",
+    activitySequence: 7,
+    scheduledFor: "2026-05-18T17:15:00.000Z",
+    lastActivityAt: "2026-05-18T17:00:00.000Z",
+  };
+
+  it("invokes the worker when the idle snapshot is still current", async () => {
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          name: "Idle learner",
+          config: idleConfig,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "state-1",
+          tenantId: "T1",
+          threadId: "thread-1",
+          computerId: "computer-1",
+          requesterUserId: "user-1",
+          activitySequence: 7,
+          lastActivityAt: new Date("2026-05-18T17:00:00.000Z"),
+          scheduledFor: new Date("2026-05-18T17:15:00.000Z"),
+        },
+      ]);
+    mockInsert.mockReturnValueOnce([{ id: "run-1" }]);
+    mockLambdaSend.mockResolvedValueOnce({
+      StatusCode: 200,
+      Payload: new TextEncoder().encode(
+        JSON.stringify({ ok: true, status: "no_change" }),
+      ),
+    });
+
+    await handler({
+      triggerId: "job-idle-1",
+      triggerType: "thread_idle_memory_learning",
+      tenantId: "T1",
+    });
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "T1",
+        thread_id: "thread-1",
+        computer_id: "computer-1",
+        requester_user_id: "user-1",
+        scheduled_job_id: "job-idle-1",
+        activity_sequence: 7,
+        status: "running",
+      }),
+    );
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+    const command = mockLambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const payload = JSON.parse(new TextDecoder().decode(command.input.Payload));
+    expect(payload).toMatchObject({
+      runId: "run-1",
+      tenantId: "T1",
+      threadId: "thread-1",
+      computerId: "computer-1",
+      requesterUserId: "user-1",
+      scheduledJobId: "job-idle-1",
+      activitySequence: 7,
+    });
+  });
+
+  it("records a stale no-op when newer thread activity has superseded the fired timer", async () => {
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          name: "Idle learner",
+          config: idleConfig,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "state-1",
+          tenantId: "T1",
+          threadId: "thread-1",
+          computerId: "computer-1",
+          requesterUserId: "user-1",
+          activitySequence: 8,
+          lastActivityAt: new Date("2026-05-18T17:05:00.000Z"),
+          scheduledFor: new Date("2026-05-18T17:20:00.000Z"),
+        },
+      ]);
+
+    await handler({
+      triggerId: "job-idle-1",
+      triggerType: "thread_idle_memory_learning",
+      tenantId: "T1",
+    });
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: "T1",
+        thread_id: "thread-1",
+        scheduled_job_id: "job-idle-1",
+        activity_sequence: 7,
+        status: "stale_noop",
+        metadata: expect.objectContaining({
+          currentActivitySequence: 8,
+          expectedActivitySequence: 7,
+        }),
+      }),
+    );
+    expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 });
