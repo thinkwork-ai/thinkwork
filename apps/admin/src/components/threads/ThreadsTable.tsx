@@ -176,7 +176,7 @@ export function ThreadsTable({
               <span className="ml-auto hidden shrink-0 items-center sm:flex">
                 {thread.computerId ? (
                   <span
-                    className="flex w-[220px] shrink-0 flex-col items-end justify-center gap-0.5 px-2 py-1"
+                    className="flex w-[170px] shrink-0 items-center justify-end px-2 py-1"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -189,12 +189,6 @@ export function ThreadsTable({
                     >
                       {threadComputerLabel(thread)}
                     </Badge>
-                    <span
-                      className="max-w-full truncate text-[11px] leading-none text-muted-foreground"
-                      title={threadUserLabel(thread)}
-                    >
-                      {threadUserLabel(thread)}
-                    </span>
                   </span>
                 ) : (
                   <Popover
@@ -280,6 +274,12 @@ export function ThreadsTable({
                     </PopoverContent>
                   </Popover>
                 )}
+                <span
+                  className="w-[140px] shrink-0 truncate px-2 text-right text-xs text-muted-foreground"
+                  title={threadUserLabel(thread)}
+                >
+                  {thread.computerId ? threadUserLabel(thread) : "—"}
+                </span>
                 <span className="w-[70px] text-right text-xs text-muted-foreground">
                   {relativeTime(thread.lastActivityAt || thread.updatedAt)}
                 </span>

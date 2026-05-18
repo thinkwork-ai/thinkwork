@@ -862,11 +862,6 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
             <Identity
               name={userDisplayName(thread)}
               avatarUrl={thread.user?.image}
-              subtitle={
-                thread.user?.name
-                  ? (thread.user?.email ?? undefined)
-                  : undefined
-              }
               size="sm"
             />
           </PropRow>
