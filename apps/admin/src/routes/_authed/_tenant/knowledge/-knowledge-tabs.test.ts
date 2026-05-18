@@ -9,6 +9,7 @@ describe("currentKnowledgeTab", () => {
 
   it("selects the matching child tab", () => {
     expect(currentKnowledgeTab("/knowledge/wiki")).toBe("wiki");
+    expect(currentKnowledgeTab("/knowledge/user")).toBe("user");
     expect(currentKnowledgeTab("/knowledge/knowledge-bases")).toBe(
       "knowledge-bases",
     );
@@ -19,7 +20,8 @@ describe("currentKnowledgeTab", () => {
 
   it("uses Memory product labels for visible tabs", () => {
     expect(KNOWLEDGE_TABS.map((tab) => tab.label)).toEqual([
-      "Brain",
+      "Memory",
+      "User",
       "Pages",
       "KBs",
       "Search",

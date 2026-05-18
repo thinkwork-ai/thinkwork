@@ -100,6 +100,11 @@ describe("ensureMigratedComputerWorkspaceSeeded", () => {
                 Size: 8,
               },
               {
+                Key: "tenants/tenant-slug/agents/source-agent/workspace/USER.md",
+                ETag: '"etag-user"',
+                Size: 10,
+              },
+              {
                 Key: "tenants/tenant-slug/agents/source-agent/workspace/manifest.json",
                 Size: 2,
               },

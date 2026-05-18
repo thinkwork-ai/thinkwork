@@ -83,7 +83,11 @@ export async function handler(event: Payload): Promise<Response> {
     return { ok: false, status: 400, error: "Invalid payload" };
   }
   if (!UUID_RE.test(event.tenantId) || !UUID_RE.test(event.computerId)) {
-    return { ok: false, status: 400, error: "tenantId/computerId must be UUIDs" };
+    return {
+      ok: false,
+      status: 400,
+      error: "tenantId/computerId must be UUIDs",
+    };
   }
   const computerRoot = path.join(
     EFS_ROOT,
@@ -126,6 +130,7 @@ async function handleList(
     (p) =>
       p !== "manifest.json" &&
       p !== "_defaults_version" &&
+      !isComputerUserMdPath(p) &&
       !isBuiltinToolWorkspacePath(p),
   );
 
@@ -170,6 +175,10 @@ async function handleGet(
   computerRoot: string,
   relPath: string,
 ): Promise<Response> {
+  if (isComputerUserMdPath(relPath)) {
+    return { ok: true, content: null, source: "computer", sha256: "" };
+  }
+
   const abs = safeJoin(computerRoot, relPath);
   if (!abs) {
     return { ok: false, status: 400, error: "Invalid path" };
@@ -184,10 +193,7 @@ async function handleGet(
  * non-regular files are skipped (the access point chroot keeps them inside
  * the tenant slice, but defense-in-depth: don't follow symlinks here).
  */
-async function listRecursive(
-  root: string,
-  prefix: string,
-): Promise<string[]> {
+async function listRecursive(root: string, prefix: string): Promise<string[]> {
   const dir = prefix ? path.join(root, prefix) : root;
   let entries: import("node:fs").Dirent[];
   try {
@@ -249,4 +255,8 @@ function isNotFound(err: unknown): boolean {
     "code" in err &&
     (err as { code?: unknown }).code === "ENOENT"
   );
+}
+
+function isComputerUserMdPath(path: string): boolean {
+  return path.replace(/^\/+/, "") === "USER.md";
 }

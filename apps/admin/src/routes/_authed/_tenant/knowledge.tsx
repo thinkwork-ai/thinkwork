@@ -13,6 +13,7 @@ export const Route = createFileRoute("/_authed/_tenant/knowledge")({
 
 export type KnowledgeTab =
   | "memory"
+  | "user"
   | "wiki"
   | "knowledge-bases"
   | "context-engine";
@@ -21,12 +22,14 @@ export const KNOWLEDGE_TABS: {
   value: KnowledgeTab;
   to:
     | "/knowledge/memory"
+    | "/knowledge/user"
     | "/knowledge/wiki"
     | "/knowledge/knowledge-bases"
     | "/knowledge/context-engine";
   label: string;
 }[] = [
-  { value: "memory", to: "/knowledge/memory", label: "Brain" },
+  { value: "memory", to: "/knowledge/memory", label: "Memory" },
+  { value: "user", to: "/knowledge/user", label: "User" },
   { value: "wiki", to: "/knowledge/wiki", label: "Pages" },
   {
     value: "knowledge-bases",
@@ -37,6 +40,7 @@ export const KNOWLEDGE_TABS: {
 ];
 
 export function currentKnowledgeTab(pathname: string): KnowledgeTab {
+  if (pathname.startsWith("/knowledge/user")) return "user";
   if (pathname.startsWith("/knowledge/wiki")) return "wiki";
   if (pathname.startsWith("/knowledge/knowledge-bases")) {
     return "knowledge-bases";

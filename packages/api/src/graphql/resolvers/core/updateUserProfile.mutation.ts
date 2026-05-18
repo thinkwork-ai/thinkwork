@@ -10,6 +10,7 @@ import {
   users,
 } from "../../utils.js";
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
+import { writeUserContextMdForUser } from "../../../lib/user-context-md-writer.js";
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCaller } from "./resolve-auth-user.js";
 
@@ -172,6 +173,24 @@ export const updateUserProfile = async (
     }
 
     if (affectsUserMd) {
+      if (target.tenant_id) {
+        try {
+          await writeUserContextMdForUser(tx, target.tenant_id, args.userId);
+          console.log(
+            `[updateUserProfile] user_context_md_write tenantId=${target.tenant_id} userId=${args.userId} success=true`,
+          );
+        } catch (err) {
+          const errorCategory =
+            (err as { code?: string } | null)?.code ||
+            (err as { name?: string } | null)?.name ||
+            "unknown";
+          console.warn(
+            `[updateUserProfile] user_context_md_write tenantId=${target.tenant_id} userId=${args.userId} success=false errorCategory=${errorCategory}`,
+          );
+          throw err;
+        }
+      }
+
       const pairedAgents = await tx
         .select({ id: agents.id, tenant_id: agents.tenant_id })
         .from(agents)

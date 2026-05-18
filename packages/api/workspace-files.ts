@@ -7,10 +7,10 @@
  *
  * Request shape (Unit 5):
  *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
- *     agentId?: string, templateId?: string, computerId?: string, defaults?: true,
+ *     agentId?: string, templateId?: string, computerId?: string, userId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
- *   Exactly one of agentId / templateId / computerId / defaults:true
+ *   Exactly one of agentId / templateId / computerId / userId / defaults:true
  *   identifies the target surface. Tenant identity is derived from the
  *   caller's JWT via `resolveCallerFromAuth` — the handler NEVER trusts a
  *   tenantSlug body field. Requests that still include one are rejected
@@ -165,6 +165,19 @@ function defaultsPrefix(tenantSlug: string): string {
   return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
 }
 
+function userContextKey(
+  userId: string,
+  tenantId: string,
+  path: string,
+): string {
+  const clean = path.replace(/^\/+/, "");
+  return `tenants/${tenantId}/users/${userId}/${clean}`;
+}
+
+function userContextPrefix(userId: string, tenantId: string): string {
+  return `tenants/${tenantId}/users/${userId}/`;
+}
+
 // ---------------------------------------------------------------------------
 // Target resolution
 // ---------------------------------------------------------------------------
@@ -199,7 +212,20 @@ interface ComputerTarget {
   tenantId: string;
 }
 
-type Target = AgentTarget | TemplateTarget | DefaultsTarget | ComputerTarget;
+interface UserContextTarget {
+  kind: "user";
+  tenantId: string;
+  userId: string;
+  prefix: string;
+  key: (path: string) => string;
+}
+
+type Target =
+  | AgentTarget
+  | TemplateTarget
+  | DefaultsTarget
+  | ComputerTarget
+  | UserContextTarget;
 
 async function resolveAgentTarget(
   tenantId: string,
@@ -301,6 +327,33 @@ async function resolveComputerTarget(
   };
 }
 
+async function resolveUserContextTarget(
+  tenantId: string,
+  userId: string,
+): Promise<UserContextTarget | null> {
+  const [member] = await db
+    .select({
+      principalId: tenantMembers.principal_id,
+      principalType: tenantMembers.principal_type,
+    })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenant_id, tenantId),
+        eq(tenantMembers.principal_id, userId),
+      ),
+    )
+    .limit(1);
+  if (!member || member.principalType.toLowerCase() !== "user") return null;
+  return {
+    kind: "user",
+    tenantId,
+    userId,
+    prefix: userContextPrefix(userId, tenantId),
+    key: (path) => userContextKey(userId, tenantId, path),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Authz — REST analogue of requireTenantAdmin (mirrors plugin-upload.ts)
 // ---------------------------------------------------------------------------
@@ -351,8 +404,8 @@ async function handleGet(
   if (target.kind === "computer") {
     return await handleComputerGet(target, path);
   }
-  // Per docs/plans/2026-04-27-003: every target tier (agent / template /
-  // defaults) reads its own prefix directly. No overlay walk, no
+  // Per docs/plans/2026-04-27-003: every S3 target tier (agent / template /
+  // defaults / user context) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
   // source of truth.
   try {
@@ -387,7 +440,7 @@ async function handleList(
   if (target.kind === "computer") {
     return await handleComputerList(target, includeContent);
   }
-  // Per docs/plans/2026-04-27-003: every tier reads its own prefix
+  // Per docs/plans/2026-04-27-003: every S3 tier reads its own prefix
   // directly. The agent prefix IS the agent's workspace — no overlay,
   // no fallback, no `agent-override` vs `template` source labels.
   // Operational artifacts (manifest.json, _defaults_version) are
@@ -398,6 +451,7 @@ async function handleList(
     (p) =>
       p !== "manifest.json" &&
       p !== "_defaults_version" &&
+      (target.kind !== "user" || p === "USER.md" || p.startsWith("memory/")) &&
       !isBuiltinToolWorkspacePath(p),
   );
 
@@ -470,13 +524,25 @@ async function handleComputerList(
   if (!result.ok) {
     return json(result.status, { ok: false, error: result.error });
   }
-  return json(200, { ok: true, files: result.files });
+  return json(200, {
+    ok: true,
+    files: result.files.filter((file) => !isComputerUserMdPath(file.path)),
+  });
 }
 
 async function handleComputerGet(
   target: ComputerTarget,
   path: string,
 ): Promise<APIGatewayProxyResult> {
+  if (isComputerUserMdPath(path)) {
+    return json(200, {
+      ok: true,
+      content: null,
+      source: "computer",
+      sha256: "",
+    });
+  }
+
   const result = await invokeWorkspaceFilesEfs({
     action: "get",
     tenantId: target.tenantId,
@@ -499,6 +565,14 @@ async function handleComputerPut(
   path: string,
   content: string,
 ): Promise<APIGatewayProxyResult> {
+  if (isComputerUserMdPath(path)) {
+    return json(403, {
+      ok: false,
+      error:
+        "USER.md is user context now. Edit it from Knowledge > User instead of the Computer workspace.",
+    });
+  }
+
   await runComputerWorkspaceTask(target, "workspace_file_write", {
     path,
     content,
@@ -510,8 +584,20 @@ async function handleComputerDelete(
   target: ComputerTarget,
   path: string,
 ): Promise<APIGatewayProxyResult> {
+  if (isComputerUserMdPath(path)) {
+    return json(403, {
+      ok: false,
+      error:
+        "USER.md is user context now. Edit it from Knowledge > User instead of the Computer workspace.",
+    });
+  }
+
   await runComputerWorkspaceTask(target, "workspace_file_delete", { path });
   return json(200, { ok: true });
+}
+
+function isComputerUserMdPath(path: string): boolean {
+  return path.replace(/^\/+/, "") === "USER.md";
 }
 
 const COMPUTER_WORKSPACE_TASK_TIMEOUT_MS = 12_000;
@@ -755,7 +841,6 @@ function isGovernanceFilePath(cleanPath: string): boolean {
   return false;
 }
 
-
 function isProtectedOrchestrationWritePath(path: string): boolean {
   return (
     path.startsWith("work/inbox/") ||
@@ -793,6 +878,18 @@ async function handlePut(
 
   if (target.kind === "computer") {
     return await handleComputerPut(target, cleanPath, content);
+  }
+
+  if (target.kind === "user") {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+        Body: content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+    return json(200, { ok: true });
   }
 
   if (target.kind === "agent" && isProtectedOrchestrationWritePath(cleanPath)) {
@@ -982,7 +1079,9 @@ async function handlePut(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[workspace-files] governance template PUT failed: ${message}`);
+      console.error(
+        `[workspace-files] governance template PUT failed: ${message}`,
+      );
       return json(500, {
         ok: false,
         error: `Governance template edit could not be safely audited: ${message}`,
@@ -1313,6 +1412,7 @@ interface RequestBody {
   agentId?: string;
   templateId?: string;
   computerId?: string;
+  userId?: string;
   defaults?: boolean;
   path?: string;
   content?: string;
@@ -1368,7 +1468,7 @@ export async function handler(
     return json(400, {
       ok: false,
       error:
-        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, or defaults: true. Tenant is derived from the caller's token.",
+        "tenantSlug / instanceId are no longer accepted — send agentId, templateId, computerId, userId, or defaults: true. Tenant is derived from the caller's token.",
     });
   }
 
@@ -1386,12 +1486,13 @@ export async function handler(
     (body.agentId ? 1 : 0) +
     (body.templateId ? 1 : 0) +
     (body.computerId ? 1 : 0) +
+    (body.userId ? 1 : 0) +
     (body.defaults ? 1 : 0);
   if (targetCount !== 1) {
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, computerId, defaults is required",
+        "Exactly one of agentId, templateId, computerId, userId, defaults is required",
     });
   }
 
@@ -1402,6 +1503,8 @@ export async function handler(
     target = await resolveTemplateTarget(tenantId, body.templateId);
   } else if (body.computerId) {
     target = await resolveComputerTarget(tenantId, body.computerId);
+  } else if (body.userId) {
+    target = await resolveUserContextTarget(tenantId, body.userId);
   } else if (body.defaults) {
     target = await resolveDefaultsTarget(tenantId);
   }
@@ -1530,6 +1633,7 @@ async function listPrefix(prefix: string): Promise<string[]> {
     );
     for (const obj of resp.Contents ?? []) {
       if (!obj.Key) continue;
+      if (!obj.Key.startsWith(prefix)) continue;
       const rel = obj.Key.slice(prefix.length);
       if (!rel) continue;
       if (rel === "manifest.json") continue;

@@ -15,44 +15,46 @@
 import { AlertCircle, Circle } from "lucide-react";
 
 export type ComposeSource =
-	| "agent-override"
-	| "agent-override-pinned"
-	| "template"
-	| "template-pinned"
-	| "defaults";
+  | "agent-override"
+  | "agent-override-pinned"
+  | "template"
+  | "template-pinned"
+  | "computer"
+  | "user"
+  | "defaults";
 
 export interface WorkspaceFileBadgeProps {
-	source: ComposeSource;
-	updateAvailable?: boolean;
+  source: ComposeSource;
+  updateAvailable?: boolean;
 }
 
 export function WorkspaceFileBadge({
-	source,
-	updateAvailable,
+  source,
+  updateAvailable,
 }: WorkspaceFileBadgeProps) {
-	if (updateAvailable) {
-		return (
-			<AlertCircle
-				className="h-3.5 w-3.5 shrink-0 text-amber-500"
-				aria-label="Template update available"
-			>
-				<title>Template update available</title>
-			</AlertCircle>
-		);
-	}
+  if (updateAvailable) {
+    return (
+      <AlertCircle
+        className="h-3.5 w-3.5 shrink-0 text-amber-500"
+        aria-label="Template update available"
+      >
+        <title>Template update available</title>
+      </AlertCircle>
+    );
+  }
 
-	if (source === "agent-override" || source === "agent-override-pinned") {
-		return (
-			<Circle
-				className="h-2 w-2 shrink-0 text-purple-500 fill-current"
-				aria-label="Overridden"
-			>
-				<title>Overridden — agent-scoped edit</title>
-			</Circle>
-		);
-	}
+  if (source === "agent-override" || source === "agent-override-pinned") {
+    return (
+      <Circle
+        className="h-2 w-2 shrink-0 text-purple-500 fill-current"
+        aria-label="Overridden"
+      >
+        <title>Overridden — agent-scoped edit</title>
+      </Circle>
+    );
+  }
 
-	// Template / defaults inheritance — render nothing. Clean state is
-	// the common case; only non-default state earns a marker.
-	return null;
+  // Template / defaults inheritance — render nothing. Clean state is
+  // the common case; only non-default state earns a marker.
+  return null;
 }

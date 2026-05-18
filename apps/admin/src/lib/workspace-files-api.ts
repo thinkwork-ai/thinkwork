@@ -15,6 +15,7 @@ export type Target =
   | { agentId: string }
   | { templateId: string }
   | { computerId: string }
+  | { userId: string }
   | { defaults: true };
 
 export type ComposeSource =
@@ -23,6 +24,7 @@ export type ComposeSource =
   | "template"
   | "template-pinned"
   | "computer"
+  | "user"
   | "defaults";
 
 export interface WorkspaceFileMeta {

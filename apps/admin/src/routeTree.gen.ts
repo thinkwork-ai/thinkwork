@@ -55,6 +55,7 @@ import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from "./r
 import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from "./routes/_authed/_tenant/routines/$routineId";
 import { Route as AuthedTenantPeopleHumanIdRouteImport } from "./routes/_authed/_tenant/people/$humanId";
 import { Route as AuthedTenantKnowledgeWikiRouteImport } from "./routes/_authed/_tenant/knowledge/wiki";
+import { Route as AuthedTenantKnowledgeUserRouteImport } from "./routes/_authed/_tenant/knowledge/user";
 import { Route as AuthedTenantKnowledgeMemoryRouteImport } from "./routes/_authed/_tenant/knowledge/memory";
 import { Route as AuthedTenantKnowledgeKnowledgeBasesRouteImport } from "./routes/_authed/_tenant/knowledge/knowledge-bases";
 import { Route as AuthedTenantKnowledgeContextEngineRouteImport } from "./routes/_authed/_tenant/knowledge/context-engine";
@@ -359,6 +360,12 @@ const AuthedTenantKnowledgeWikiRoute =
   AuthedTenantKnowledgeWikiRouteImport.update({
     id: "/wiki",
     path: "/wiki",
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
+  } as any);
+const AuthedTenantKnowledgeUserRoute =
+  AuthedTenantKnowledgeUserRouteImport.update({
+    id: "/user",
+    path: "/user",
     getParentRoute: () => AuthedTenantKnowledgeRoute,
   } as any);
 const AuthedTenantKnowledgeMemoryRoute =
@@ -709,6 +716,7 @@ export interface FileRoutesByFullPath {
   "/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
   "/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
   "/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/knowledge/user": typeof AuthedTenantKnowledgeUserRoute;
   "/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
   "/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
   "/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
@@ -803,6 +811,7 @@ export interface FileRoutesByTo {
   "/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
   "/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
   "/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/knowledge/user": typeof AuthedTenantKnowledgeUserRoute;
   "/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
   "/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
   "/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
@@ -904,6 +913,7 @@ export interface FileRoutesById {
   "/_authed/_tenant/knowledge/context-engine": typeof AuthedTenantKnowledgeContextEngineRoute;
   "/_authed/_tenant/knowledge/knowledge-bases": typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
   "/_authed/_tenant/knowledge/memory": typeof AuthedTenantKnowledgeMemoryRoute;
+  "/_authed/_tenant/knowledge/user": typeof AuthedTenantKnowledgeUserRoute;
   "/_authed/_tenant/knowledge/wiki": typeof AuthedTenantKnowledgeWikiRoute;
   "/_authed/_tenant/people/$humanId": typeof AuthedTenantPeopleHumanIdRoute;
   "/_authed/_tenant/routines/$routineId": typeof AuthedTenantRoutinesRoutineIdRoute;
@@ -1004,6 +1014,7 @@ export interface FileRouteTypes {
     | "/knowledge/context-engine"
     | "/knowledge/knowledge-bases"
     | "/knowledge/memory"
+    | "/knowledge/user"
     | "/knowledge/wiki"
     | "/people/$humanId"
     | "/routines/$routineId"
@@ -1098,6 +1109,7 @@ export interface FileRouteTypes {
     | "/knowledge/context-engine"
     | "/knowledge/knowledge-bases"
     | "/knowledge/memory"
+    | "/knowledge/user"
     | "/knowledge/wiki"
     | "/people/$humanId"
     | "/routines/$routineId"
@@ -1198,6 +1210,7 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/knowledge/context-engine"
     | "/_authed/_tenant/knowledge/knowledge-bases"
     | "/_authed/_tenant/knowledge/memory"
+    | "/_authed/_tenant/knowledge/user"
     | "/_authed/_tenant/knowledge/wiki"
     | "/_authed/_tenant/people/$humanId"
     | "/_authed/_tenant/routines/$routineId"
@@ -1595,6 +1608,13 @@ declare module "@tanstack/react-router" {
       path: "/wiki";
       fullPath: "/knowledge/wiki";
       preLoaderRoute: typeof AuthedTenantKnowledgeWikiRouteImport;
+      parentRoute: typeof AuthedTenantKnowledgeRoute;
+    };
+    "/_authed/_tenant/knowledge/user": {
+      id: "/_authed/_tenant/knowledge/user";
+      path: "/user";
+      fullPath: "/knowledge/user";
+      preLoaderRoute: typeof AuthedTenantKnowledgeUserRouteImport;
       parentRoute: typeof AuthedTenantKnowledgeRoute;
     };
     "/_authed/_tenant/knowledge/memory": {
@@ -2057,6 +2077,7 @@ interface AuthedTenantKnowledgeRouteChildren {
   AuthedTenantKnowledgeContextEngineRoute: typeof AuthedTenantKnowledgeContextEngineRoute;
   AuthedTenantKnowledgeKnowledgeBasesRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren;
   AuthedTenantKnowledgeMemoryRoute: typeof AuthedTenantKnowledgeMemoryRoute;
+  AuthedTenantKnowledgeUserRoute: typeof AuthedTenantKnowledgeUserRoute;
   AuthedTenantKnowledgeWikiRoute: typeof AuthedTenantKnowledgeWikiRoute;
   AuthedTenantKnowledgeIndexRoute: typeof AuthedTenantKnowledgeIndexRoute;
 }
@@ -2067,6 +2088,7 @@ const AuthedTenantKnowledgeRouteChildren: AuthedTenantKnowledgeRouteChildren = {
   AuthedTenantKnowledgeKnowledgeBasesRoute:
     AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren,
   AuthedTenantKnowledgeMemoryRoute: AuthedTenantKnowledgeMemoryRoute,
+  AuthedTenantKnowledgeUserRoute: AuthedTenantKnowledgeUserRoute,
   AuthedTenantKnowledgeWikiRoute: AuthedTenantKnowledgeWikiRoute,
   AuthedTenantKnowledgeIndexRoute: AuthedTenantKnowledgeIndexRoute,
 };
