@@ -70,6 +70,15 @@ type Documents = {
     "\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n": typeof types.CliAddTeamUserDocument,
     "\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n": typeof types.CliRemoveTeamUserDocument,
     "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n": typeof types.CliTeamTenantBySlugDocument,
+    "\n  query CliAgentTemplates($tenantId: ID!) {\n    agentTemplates(tenantId: $tenantId) {\n      id\n      name\n      slug\n      category\n      runtime\n      templateKind\n      model\n      isPublished\n      createdAt\n    }\n  }\n": typeof types.CliAgentTemplatesDocument,
+    "\n  query CliAgentTemplate($id: ID!) {\n    agentTemplate(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      category\n      icon\n      runtime\n      templateKind\n      model\n      guardrailId\n      isPublished\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliAgentTemplateDocument,
+    "\n  mutation CliCreateAgentTemplate($input: CreateAgentTemplateInput!) {\n    createAgentTemplate(input: $input) {\n      id\n      name\n      slug\n      isPublished\n    }\n  }\n": typeof types.CliCreateAgentTemplateDocument,
+    "\n  mutation CliUpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {\n    updateAgentTemplate(id: $id, input: $input) {\n      id\n      name\n      slug\n      model\n      description\n    }\n  }\n": typeof types.CliUpdateAgentTemplateDocument,
+    "\n  mutation CliDeleteAgentTemplate($id: ID!) {\n    deleteAgentTemplate(id: $id)\n  }\n": typeof types.CliDeleteAgentTemplateDocument,
+    "\n  mutation CliSyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      status\n    }\n  }\n": typeof types.CliSyncTemplateToAgentDocument,
+    "\n  mutation CliSyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": typeof types.CliSyncTemplateToAllAgentsDocument,
+    "\n  query CliAgentForClone($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      role\n      systemPrompt\n      runtime\n      agentTemplate {\n        id\n        model\n      }\n    }\n  }\n": typeof types.CliAgentForCloneDocument,
+    "\n  query CliTemplateTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliTemplateTenantBySlugDocument,
     "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": typeof types.CliThreadsDocument,
     "\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliThreadByIdDocument,
     "\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliThreadByNumberDocument,
@@ -148,6 +157,15 @@ const documents: Documents = {
     "\n  mutation CliAddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {\n    addTeamUser(teamId: $teamId, input: $input) {\n      id\n      userId\n      role\n    }\n  }\n": types.CliAddTeamUserDocument,
     "\n  mutation CliRemoveTeamUser($teamId: ID!, $userId: ID!) {\n    removeTeamUser(teamId: $teamId, userId: $userId)\n  }\n": types.CliRemoveTeamUserDocument,
     "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n": types.CliTeamTenantBySlugDocument,
+    "\n  query CliAgentTemplates($tenantId: ID!) {\n    agentTemplates(tenantId: $tenantId) {\n      id\n      name\n      slug\n      category\n      runtime\n      templateKind\n      model\n      isPublished\n      createdAt\n    }\n  }\n": types.CliAgentTemplatesDocument,
+    "\n  query CliAgentTemplate($id: ID!) {\n    agentTemplate(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      category\n      icon\n      runtime\n      templateKind\n      model\n      guardrailId\n      isPublished\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliAgentTemplateDocument,
+    "\n  mutation CliCreateAgentTemplate($input: CreateAgentTemplateInput!) {\n    createAgentTemplate(input: $input) {\n      id\n      name\n      slug\n      isPublished\n    }\n  }\n": types.CliCreateAgentTemplateDocument,
+    "\n  mutation CliUpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {\n    updateAgentTemplate(id: $id, input: $input) {\n      id\n      name\n      slug\n      model\n      description\n    }\n  }\n": types.CliUpdateAgentTemplateDocument,
+    "\n  mutation CliDeleteAgentTemplate($id: ID!) {\n    deleteAgentTemplate(id: $id)\n  }\n": types.CliDeleteAgentTemplateDocument,
+    "\n  mutation CliSyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      status\n    }\n  }\n": types.CliSyncTemplateToAgentDocument,
+    "\n  mutation CliSyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": types.CliSyncTemplateToAllAgentsDocument,
+    "\n  query CliAgentForClone($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      role\n      systemPrompt\n      runtime\n      agentTemplate {\n        id\n        model\n      }\n    }\n  }\n": types.CliAgentForCloneDocument,
+    "\n  query CliTemplateTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliTemplateTenantBySlugDocument,
     "\n  query CliThreads(\n    $tenantId: ID!\n    $status: ThreadStatus\n    $channel: ThreadChannel\n    $agentId: ID\n    $assigneeId: ID\n    $search: String\n    $limit: Int\n  ) {\n    threads(\n      tenantId: $tenantId\n      status: $status\n      channel: $channel\n      agentId: $agentId\n      assigneeId: $assigneeId\n      search: $search\n      limit: $limit\n    ) {\n      id\n      number\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      lastActivityAt\n      archivedAt\n      createdAt\n    }\n  }\n": types.CliThreadsDocument,
     "\n  query CliThreadById($id: ID!) {\n    thread(id: $id) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliThreadByIdDocument,
     "\n  query CliThreadByNumber($tenantId: ID!, $number: Int!) {\n    threadByNumber(tenantId: $tenantId, number: $number) {\n      id\n      number\n      identifier\n      title\n      status\n      channel\n      assigneeType\n      assigneeId\n      agentId\n      reporterId\n      billingCode\n      labels\n      dueAt\n      startedAt\n      completedAt\n      archivedAt\n      lastActivityAt\n      lastResponsePreview\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliThreadByNumberDocument,
@@ -408,6 +426,42 @@ export function graphql(source: "\n  mutation CliRemoveTeamUser($teamId: ID!, $u
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n"): (typeof documents)["\n  query CliTeamTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentTemplates($tenantId: ID!) {\n    agentTemplates(tenantId: $tenantId) {\n      id\n      name\n      slug\n      category\n      runtime\n      templateKind\n      model\n      isPublished\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliAgentTemplates($tenantId: ID!) {\n    agentTemplates(tenantId: $tenantId) {\n      id\n      name\n      slug\n      category\n      runtime\n      templateKind\n      model\n      isPublished\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentTemplate($id: ID!) {\n    agentTemplate(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      category\n      icon\n      runtime\n      templateKind\n      model\n      guardrailId\n      isPublished\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliAgentTemplate($id: ID!) {\n    agentTemplate(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      category\n      icon\n      runtime\n      templateKind\n      model\n      guardrailId\n      isPublished\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateAgentTemplate($input: CreateAgentTemplateInput!) {\n    createAgentTemplate(input: $input) {\n      id\n      name\n      slug\n      isPublished\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateAgentTemplate($input: CreateAgentTemplateInput!) {\n    createAgentTemplate(input: $input) {\n      id\n      name\n      slug\n      isPublished\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {\n    updateAgentTemplate(id: $id, input: $input) {\n      id\n      name\n      slug\n      model\n      description\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {\n    updateAgentTemplate(id: $id, input: $input) {\n      id\n      name\n      slug\n      model\n      description\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteAgentTemplate($id: ID!) {\n    deleteAgentTemplate(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteAgentTemplate($id: ID!) {\n    deleteAgentTemplate(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliSyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n"): (typeof documents)["\n  mutation CliSyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentForClone($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      role\n      systemPrompt\n      runtime\n      agentTemplate {\n        id\n        model\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliAgentForClone($id: ID!) {\n    agent(id: $id) {\n      id\n      name\n      role\n      systemPrompt\n      runtime\n      agentTemplate {\n        id\n        model\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliTemplateTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliTemplateTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
