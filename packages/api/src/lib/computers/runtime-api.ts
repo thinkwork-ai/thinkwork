@@ -28,6 +28,7 @@ import {
 } from "../runbooks/runs.js";
 import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
 import { assembleRequesterContext } from "./requester-context.js";
+import { recordThreadActivityForIdleLearning } from "../thread-idle-learning/activity.js";
 import {
   attachmentDownloadByteLimit,
   detectAttachmentKind,
@@ -862,6 +863,32 @@ export async function recordThreadTurnResponse(input: {
       artifactSaveMissing,
     },
   });
+
+  const requesterUserId =
+    payload.requesterUserId ?? task.created_by_user_id ?? null;
+  if (requesterUserId) {
+    const idleLearning = await recordThreadActivityForIdleLearning({
+      tenantId: input.tenantId,
+      computerId: input.computerId,
+      threadId: thread.id,
+      requesterUserId,
+      source: "assistant_response",
+    });
+    if (!idleLearning.ok) {
+      await appendComputerTaskEvent({
+        tenantId: input.tenantId,
+        computerId: input.computerId,
+        taskId: input.taskId,
+        eventType: "idle_memory_learning_schedule_failed",
+        level: "warn",
+        payload: {
+          threadId: thread.id,
+          requesterUserId,
+          error: idleLearning.error,
+        },
+      });
+    }
+  }
 
   if (payload.runbookRunId) {
     const runbookOutput = {

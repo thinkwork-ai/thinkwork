@@ -120,6 +120,8 @@ beforeEach(() => {
   mocks.requireTenantMembership.mockResolvedValue({
     ok: true,
     tenantId: TENANT_ID,
+    userId: "user-1",
+    role: "admin",
   });
   mocks.listSelect.mockResolvedValue([]);
   mocks.computersSelectByIdLookup.mockResolvedValue([]);
@@ -171,6 +173,17 @@ describe("scheduled-jobs handler — computer_id filter (GET /api/scheduled-jobs
 
   it("omits computer_id condition when not provided (backward-compat)", async () => {
     const response = await handler(event({ method: "GET" }));
+    expect(response.statusCode).toBe(200);
+    expect(mocks.listSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows internal jobs only when explicitly requested", async () => {
+    const response = await handler(
+      event({
+        method: "GET",
+        queryStringParameters: { include_internal: "true" },
+      }),
+    );
     expect(response.statusCode).toBe(200);
     expect(mocks.listSelect).toHaveBeenCalledTimes(1);
   });
@@ -250,6 +263,21 @@ describe("scheduled-jobs handler — POST tenant validation for computer_id", ()
     expect(insertedValues.computer_id).toBeNull();
   });
 
+  it("rejects user-created internal idle-learning schedules", async () => {
+    const response = await handler(
+      event({
+        method: "POST",
+        body: {
+          name: "Idle memory",
+          trigger_type: "thread_idle_memory_learning",
+          config: { internal: true },
+        },
+      }),
+    );
+    expect(response.statusCode).toBe(403);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
   it("normalizes connector event triggers without provisioning EventBridge", async () => {
     mocks.computersSelectByIdLookup.mockResolvedValueOnce([
       { tenant_id: TENANT_ID },
@@ -259,6 +287,7 @@ describe("scheduled-jobs handler — POST tenant validation for computer_id", ()
       ok: true,
       tenantId: TENANT_ID,
       userId: "user-1",
+      role: "admin",
     });
 
     const response = await handler(
@@ -322,5 +351,24 @@ describe("scheduled-jobs handler — PUT does not re-parent computer_id", () => 
     >;
     expect(updateValues).not.toHaveProperty("computer_id");
     expect(updateValues.name).toBe("Edited");
+  });
+
+  it("rejects updates to internal idle-learning schedules", async () => {
+    mocks.getById.mockResolvedValueOnce([
+      {
+        ...JOB_ROW,
+        trigger_type: "thread_idle_memory_learning",
+        config: { internal: true },
+      },
+    ]);
+    const response = await handler(
+      event({
+        method: "PUT",
+        path: "/api/scheduled-jobs/11111111-1111-1111-1111-111111111111",
+        body: { name: "Edited" },
+      }),
+    );
+    expect(response.statusCode).toBe(403);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

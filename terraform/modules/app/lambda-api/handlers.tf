@@ -253,12 +253,13 @@ locals {
     # the routine-approval-callback function name in the SFN execution
     # input so the inbox_approval recipe can fanout to it on .waitForTaskToken.
     "job-trigger" = {
-      AWS_ACCOUNT_ID                          = var.account_id
-      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
-      EMAIL_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-email-send"
-      ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
-      ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
-      SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
+      AWS_ACCOUNT_ID                            = var.account_id
+      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME   = "thinkwork-${var.stage}-api-routine-approval-callback"
+      EMAIL_SEND_FUNCTION_NAME                  = "thinkwork-${var.stage}-api-email-send"
+      ROUTINE_TASK_PYTHON_FUNCTION_NAME         = "thinkwork-${var.stage}-api-routine-task-python"
+      ADMIN_OPS_MCP_FUNCTION_NAME               = "thinkwork-${var.stage}-api-admin-ops-mcp"
+      SLACK_SEND_FUNCTION_NAME                  = "thinkwork-${var.stage}-api-slack-send"
+      THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME = "thinkwork-${var.stage}-api-thread-idle-memory-learning"
     }
     # Phase 3 U4 Compliance outbox drainer.
     # Connects to Aurora as the compliance_drainer role (provisioned in
@@ -307,6 +308,7 @@ resource "aws_lambda_function" "handler" {
     "budgets",
     "guardrails",
     "scheduled-jobs",
+    "thread-idle-memory-learning",
     "job-schedule-manager",
     "job-trigger",
     "routine-task-weather-email",

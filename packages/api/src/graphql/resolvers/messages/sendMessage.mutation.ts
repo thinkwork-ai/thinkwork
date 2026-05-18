@@ -8,6 +8,7 @@ import {
   resolveThreadComputer,
   routeRunbookForComputerMessage,
 } from "../../../lib/computers/thread-cutover.js";
+import { recordThreadActivityForIdleLearning } from "../../../lib/thread-idle-learning/activity.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -95,6 +96,30 @@ export const sendMessage = async (
       .update(threads)
       .set({ user_id: senderId })
       .where(eq(threads.id, i.threadId));
+  }
+
+  if (thread.computer_id) {
+    const requesterUserId =
+      isUserMessage && senderType === "user" ? senderId : thread.user_id;
+    if (requesterUserId) {
+      try {
+        const idleLearning = await recordThreadActivityForIdleLearning({
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          computerId: thread.computer_id,
+          requesterUserId,
+          source: isUserMessage ? "user_message" : "assistant_response",
+        });
+        if (!idleLearning.ok) {
+          console.warn(
+            "[sendMessage] idle-memory schedule failed:",
+            idleLearning.error,
+          );
+        }
+      } catch (err) {
+        console.warn("[sendMessage] idle-memory schedule failed:", err);
+      }
+    }
   }
 
   // Only bump updated_at and notify for non-user messages (agent responses).

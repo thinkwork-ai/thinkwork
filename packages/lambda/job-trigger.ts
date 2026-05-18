@@ -28,6 +28,8 @@ import {
   scheduledJobs,
   skillRuns,
   tenantSettings,
+  threadIdleLearningRuns,
+  threadIdleLearningState,
   threadTurns,
   users,
 } from "@thinkwork/database-pg/schema";
@@ -44,7 +46,8 @@ const _SFN_CLIENT = new SFNClient({
 interface JobTriggerEvent {
   triggerId: string;
   // agent_heartbeat | agent_reminder | agent_scheduled | routine_schedule |
-  // routine_one_time | eval_scheduled | skill_run (Unit 6) | manual | webhook | event
+  // routine_one_time | eval_scheduled | skill_run (Unit 6) |
+  // thread_idle_memory_learning | manual | webhook | event
   triggerType: string;
   tenantId: string;
   agentId?: string;
@@ -58,6 +61,29 @@ type ScheduledComputerTarget = {
   id: string;
   ownerUserId: string | null;
   migratedAgentId: string | null;
+};
+
+const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
+
+type ThreadIdleMemoryLearningConfig = {
+  internal?: boolean;
+  threadId?: string;
+  computerId?: string;
+  requesterUserId?: string;
+  activitySequence?: number;
+  scheduledFor?: string;
+  lastActivityAt?: string;
+};
+
+type ThreadIdleMemoryLearningWorkerResult = {
+  ok?: boolean;
+  status?: string;
+  changedFiles?: string[];
+  candidateSummary?: unknown;
+  reportS3Key?: string | null;
+  error?: string;
+  budget?: unknown;
+  metadata?: unknown;
 };
 
 async function resolveDefaultEvalTemplateId(
@@ -388,6 +414,77 @@ async function enqueueScheduledComputerThreadTurn(input: {
   return task ?? null;
 }
 
+function parseThreadIdleMemoryLearningConfig(
+  config: unknown,
+): ThreadIdleMemoryLearningConfig {
+  if (!config || typeof config !== "object") return {};
+  return config as ThreadIdleMemoryLearningConfig;
+}
+
+function parseWorkerPayload(
+  payload: Uint8Array | undefined,
+): ThreadIdleMemoryLearningWorkerResult {
+  if (!payload || payload.length === 0)
+    return { ok: true, status: "no_change" };
+  const text = new TextDecoder().decode(payload);
+  if (!text.trim()) return { ok: true, status: "no_change" };
+  try {
+    const parsed = JSON.parse(text) as ThreadIdleMemoryLearningWorkerResult;
+    return parsed;
+  } catch (err) {
+    return {
+      ok: false,
+      status: "failed",
+      error: `worker returned malformed JSON: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+async function invokeThreadIdleMemoryLearningWorker(input: {
+  runId: string;
+  tenantId: string;
+  threadId: string;
+  computerId: string;
+  requesterUserId: string;
+  scheduledJobId: string;
+  activitySequence: number;
+  scheduledFor: string;
+  lastActivityAt: string;
+}): Promise<ThreadIdleMemoryLearningWorkerResult> {
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const lambda = new LambdaClient({});
+  const fnName = runtimeFunctionName(
+    "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
+    "thread-idle-memory-learning",
+  );
+  const response = await lambda.send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(JSON.stringify(input)),
+    }),
+  );
+
+  if (response.FunctionError) {
+    return {
+      ok: false,
+      status: "failed",
+      error: `worker function error: ${response.FunctionError}`,
+    };
+  }
+  if (typeof response.StatusCode === "number" && response.StatusCode >= 400) {
+    return {
+      ok: false,
+      status: "failed",
+      error: `worker invoke returned ${response.StatusCode}`,
+    };
+  }
+
+  return parseWorkerPayload(response.Payload);
+}
+
 export async function handler(event: JobTriggerEvent): Promise<void> {
   const {
     triggerId,
@@ -432,7 +529,155 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
 
     const isAgentJob = triggerType.startsWith("agent_");
 
-    if (isAgentJob && agentId) {
+    if (triggerType === THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE) {
+      const cfg = parseThreadIdleMemoryLearningConfig(job?.config);
+      const [state] = await db
+        .select({
+          id: threadIdleLearningState.id,
+          tenantId: threadIdleLearningState.tenant_id,
+          threadId: threadIdleLearningState.thread_id,
+          computerId: threadIdleLearningState.computer_id,
+          requesterUserId: threadIdleLearningState.requester_user_id,
+          activitySequence: threadIdleLearningState.activity_sequence,
+          lastActivityAt: threadIdleLearningState.last_activity_at,
+          scheduledFor: threadIdleLearningState.scheduled_for,
+        })
+        .from(threadIdleLearningState)
+        .where(
+          and(
+            eq(threadIdleLearningState.tenant_id, tenantId),
+            eq(threadIdleLearningState.scheduled_job_id, triggerId),
+          ),
+        )
+        .limit(1);
+
+      if (
+        !state ||
+        !cfg.threadId ||
+        !cfg.computerId ||
+        !cfg.requesterUserId ||
+        typeof cfg.activitySequence !== "number" ||
+        !cfg.scheduledFor ||
+        !cfg.lastActivityAt
+      ) {
+        console.warn(
+          `[job-trigger] thread_idle_memory_learning ${triggerId} missing state/config; skipping`,
+        );
+      } else {
+        const scheduledFor = new Date(cfg.scheduledFor);
+        const configLastActivityAt = new Date(cfg.lastActivityAt);
+        const isFreshSnapshot =
+          state.threadId === cfg.threadId &&
+          state.computerId === cfg.computerId &&
+          state.requesterUserId === cfg.requesterUserId &&
+          state.activitySequence === cfg.activitySequence &&
+          state.lastActivityAt.getTime() === configLastActivityAt.getTime();
+
+        if (!isFreshSnapshot) {
+          await db.insert(threadIdleLearningRuns).values({
+            tenant_id: tenantId,
+            thread_id: cfg.threadId,
+            computer_id: cfg.computerId,
+            requester_user_id: cfg.requesterUserId,
+            scheduled_job_id: triggerId,
+            activity_sequence: cfg.activitySequence,
+            scheduled_for: scheduledFor,
+            finished_at: new Date(),
+            status: "stale_noop",
+            metadata: {
+              reason: "activity_sequence_changed",
+              currentActivitySequence: state.activitySequence,
+              expectedActivitySequence: cfg.activitySequence,
+            },
+          });
+          console.log(
+            `[job-trigger] thread_idle_memory_learning ${triggerId} stale snapshot; no-op`,
+          );
+        } else {
+          const [run] = await db
+            .insert(threadIdleLearningRuns)
+            .values({
+              tenant_id: tenantId,
+              thread_id: state.threadId,
+              computer_id: state.computerId,
+              requester_user_id: state.requesterUserId,
+              scheduled_job_id: triggerId,
+              activity_sequence: state.activitySequence,
+              scheduled_for: scheduledFor,
+              status: "running",
+            })
+            .returning({ id: threadIdleLearningRuns.id });
+
+          if (!run) {
+            console.warn(
+              `[job-trigger] thread_idle_memory_learning ${triggerId} failed to create run`,
+            );
+          } else {
+            await db
+              .update(threadIdleLearningState)
+              .set({
+                status: "running",
+                last_run_id: run.id,
+                updated_at: new Date(),
+              })
+              .where(eq(threadIdleLearningState.id, state.id));
+
+            let workerResult: ThreadIdleMemoryLearningWorkerResult;
+            try {
+              workerResult = await invokeThreadIdleMemoryLearningWorker({
+                runId: run.id,
+                tenantId,
+                threadId: state.threadId,
+                computerId: state.computerId!,
+                requesterUserId: state.requesterUserId!,
+                scheduledJobId: triggerId,
+                activitySequence: state.activitySequence,
+                scheduledFor: scheduledFor.toISOString(),
+                lastActivityAt: state.lastActivityAt.toISOString(),
+              });
+            } catch (err) {
+              workerResult = {
+                ok: false,
+                status: "failed",
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
+            const finalStatus =
+              workerResult.ok === false
+                ? "failed"
+                : workerResult.status === "changed"
+                  ? "changed"
+                  : "no_change";
+            const finishedAt = new Date();
+            await db
+              .update(threadIdleLearningRuns)
+              .set({
+                status: finalStatus,
+                finished_at: finishedAt,
+                changed_files: workerResult.changedFiles ?? [],
+                candidate_summary: workerResult.candidateSummary ?? null,
+                report_s3_key: workerResult.reportS3Key ?? null,
+                error: workerResult.error ?? null,
+                budget: workerResult.budget ?? null,
+                metadata: workerResult.metadata ?? null,
+                updated_at: finishedAt,
+              })
+              .where(eq(threadIdleLearningRuns.id, run.id));
+            await db
+              .update(threadIdleLearningState)
+              .set({
+                status: finalStatus,
+                last_run_id: run.id,
+                updated_at: finishedAt,
+              })
+              .where(eq(threadIdleLearningState.id, state.id));
+            console.log(
+              `[job-trigger] thread_idle_memory_learning ${triggerId} completed run ${run.id} status=${finalStatus}`,
+            );
+          }
+        }
+      }
+    } else if (isAgentJob && agentId) {
       const jobTitle = job?.name || `Scheduled job ${triggerId.slice(0, 8)}`;
       const isUserScheduled =
         job?.created_by_type === "user" && !!job?.created_by_id;

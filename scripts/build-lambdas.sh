@@ -162,6 +162,9 @@ build_handler "job-schedule-manager" \
 build_handler "scheduled-jobs" \
   "$REPO_ROOT/packages/api/src/handlers/scheduled-jobs.ts"
 
+build_handler "thread-idle-memory-learning" \
+  "$REPO_ROOT/packages/api/src/handlers/thread-idle-memory-learning.ts"
+
 build_handler "connector-poller" \
   "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"
 

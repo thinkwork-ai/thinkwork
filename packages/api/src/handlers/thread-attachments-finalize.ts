@@ -58,6 +58,7 @@ import {
 import { threads, threadAttachments } from "@thinkwork/database-pg/schema";
 import { emitAuditEvent } from "../lib/compliance/emit.js";
 import { sanitizeAttachmentFilename } from "../lib/attachments/filename-sanitization.js";
+import { recordThreadActivityForIdleLearning } from "../lib/thread-idle-learning/activity.js";
 import {
 	validateOoxmlSafety,
 	verifyMagicBytes,
@@ -141,7 +142,12 @@ export async function handler(
 
 	// Tenant-pin the thread.
 	const [thread] = await db
-		.select({ id: threads.id, tenant_id: threads.tenant_id })
+		.select({
+			id: threads.id,
+			tenant_id: threads.tenant_id,
+			computer_id: threads.computer_id,
+			user_id: threads.user_id,
+		})
 		.from(threads)
 		.where(and(eq(threads.id, threadId), eq(threads.tenant_id, tenantId)));
 	if (!thread) {
@@ -271,6 +277,25 @@ export async function handler(
 
 		return row;
 	});
+
+	if (thread.computer_id) {
+		const requesterUserId = userId ?? thread.user_id;
+		if (requesterUserId) {
+			const idleLearning = await recordThreadActivityForIdleLearning({
+				tenantId,
+				threadId,
+				computerId: thread.computer_id,
+				requesterUserId,
+				source: "attachment_finalized",
+			});
+			if (!idleLearning.ok) {
+				console.warn(
+					"[thread-attachments-finalize] idle-memory schedule failed:",
+					idleLearning.error,
+				);
+			}
+		}
+	}
 
 	return json(
 		{
