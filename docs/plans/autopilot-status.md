@@ -20,8 +20,8 @@ Target branch: `main`
 - Active branch: `codex/enterprise-bootstrap-u4`
 - Active worktree: `.Codex/worktrees/enterprise-bootstrap-u4`
 - Started: 2026-05-18 12:38 CDT
-- PR: pending
-- CI: not started
+- PR: [#1396](https://github.com/thinkwork-ai/thinkwork/pull/1396)
+- CI: pending
 
 ### Progress Log
 
@@ -30,7 +30,7 @@ Target branch: `main`
 | 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI passed  | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check`; GitHub checks | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work.                                                                |
 | 2026-05-18 | U2   | `codex/enterprise-remote-artifacts-u2`  | [#1393](https://github.com/thinkwork-ai/thinkwork/pull/1393) | CI passed  | `pnpm --filter thinkwork-cli test -- terraform-enterprise-artifact-fixture.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `terraform -chdir=terraform/examples/greenfield init -backend=false`; `terraform -chdir=terraform/examples/greenfield validate`; `terraform fmt -check ...`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `git diff --check`; GitHub checks                                   | Remote release artifact support merged as `01355dbc6fc3e20cfd6a4289c6f3fc784fecf8dd`.                                                                                                                          |
 | 2026-05-18 | U3   | `codex/enterprise-deploy-template-u3`   | [#1394](https://github.com/thinkwork-ai/thinkwork/pull/1394) | CI passed  | `pnpm --filter thinkwork-cli test -- enterprise-template.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; rendered workflow YAML parse; rendered Terraform fmt check; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `terraform fmt -check ...`; `git diff --check`; GitHub checks                                              | Built deterministic customer deployment repo template and overlay contract from merged U2. Squash merged as `71fb94f006c3af60fc9858cf48f2424f34d5d4e2`.                                                        |
-| 2026-05-18 | U4   | `codex/enterprise-bootstrap-u4`         | pending                                                      | Local pass | `pnpm --filter thinkwork-cli test -- enterprise-bootstrap.test.ts enterprise-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `git diff --check`                                                                                                                    | Added the enterprise bootstrap command group, AWS/GitHub adapter seam, deployment metadata registry, OIDC trust policy generation, inline CI deploy policy generation, and dry-run/mutation planning coverage. |
+| 2026-05-18 | U4   | `codex/enterprise-bootstrap-u4`         | [#1396](https://github.com/thinkwork-ai/thinkwork/pull/1396) | Local pass | `pnpm --filter thinkwork-cli test -- enterprise-bootstrap.test.ts enterprise-registration.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm --filter thinkwork-cli build`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `git diff --check`                                                                                                                    | Added the enterprise bootstrap command group, AWS/GitHub adapter seam, deployment metadata registry, OIDC trust policy generation, inline CI deploy policy generation, and dry-run/mutation planning coverage. |
 
 ### CI / Merge Log
 
@@ -58,6 +58,7 @@ Target branch: `main`
 - 2026-05-18 12:39 CDT: Started U4 in `.Codex/worktrees/enterprise-bootstrap-u4` on branch `codex/enterprise-bootstrap-u4`.
 - 2026-05-18 12:53 CDT: Implemented `thinkwork enterprise bootstrap`, deterministic bootstrap planning, AWS/GitHub mockable adapters, local metadata recording, OIDC trust policy generation, inline deploy policy generation, GitHub Environment/variable setup, secret follow-up reporting, and command registration coverage. Focused CLI tests and CLI typecheck passed.
 - 2026-05-18 12:56 CDT: U4 local verification passed: focused enterprise CLI tests, CLI typecheck/build, workspace typecheck/lint, full `pnpm test`, touched-file Prettier check, and `git diff --check`.
+- 2026-05-18 12:59 CDT: Opened [#1396](https://github.com/thinkwork-ai/thinkwork/pull/1396) for U4.
 
 ### Blockers
 
