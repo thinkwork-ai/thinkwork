@@ -53,6 +53,12 @@ describe("ThreadsTable shared component", () => {
     expect(source).toContain("Unknown User");
   });
 
+  it("renders Computer and User attribution as separate single-line columns", () => {
+    expect(source).toContain('w-[170px]');
+    expect(source).toContain('w-[140px]');
+    expect(source).not.toContain("flex-col items-end");
+  });
+
   it("keeps a single scope toggle for future divergence", () => {
     expect(source).toContain('scope?: "tenant" | "computer"');
   });
