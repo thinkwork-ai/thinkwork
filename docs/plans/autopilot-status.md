@@ -648,6 +648,12 @@ None.
 ## CI / PR
 
 - Opened [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404).
+- GitHub PR checks on [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404) passed:
+  - `cla`
+  - `lint`
+  - `test`
+  - `typecheck`
+  - `verify`
 
 ## Blockers
 
