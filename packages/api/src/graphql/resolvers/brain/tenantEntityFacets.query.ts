@@ -5,7 +5,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { toTenantEntitySection } from "./mappers.js";
 
 export const tenantEntityFacets = async (
@@ -19,7 +19,7 @@ export const tenantEntityFacets = async (
 		.where(eq(tenantEntityPages.id, args.pageId))
 		.limit(1);
 	if (!page) return { edges: [], pageInfo: { hasNextPage: false, endCursor: null } };
-	await requireTenantAdmin(ctx, page.tenantId);
+	await requireAdminOrServiceCaller(ctx, page.tenantId, "tenant_entity_facets");
 	const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
 	const rows = await db
 		.select()

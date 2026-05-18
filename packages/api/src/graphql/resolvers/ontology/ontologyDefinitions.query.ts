@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { listOntologyDefinitions } from "../../../lib/ontology/repository.js";
 
 export const ontologyDefinitions = async (
@@ -7,6 +7,6 @@ export const ontologyDefinitions = async (
   args: { tenantId: string },
   ctx: GraphQLContext,
 ) => {
-  await requireTenantAdmin(ctx, args.tenantId);
+  await requireAdminOrServiceCaller(ctx, args.tenantId, "ontology_definitions");
   return listOntologyDefinitions({ tenantId: args.tenantId });
 };

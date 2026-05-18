@@ -15,7 +15,10 @@ import {
   type ClassifyChainStore,
   type WorkspaceReviewKind,
 } from "../../../lib/workspace-events/classify-review.js";
-import { requireTenantAdmin, requireTenantMember } from "../core/authz.js";
+import {
+  requireAdminOrServiceCaller,
+  requireTenantMember,
+} from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 50;
@@ -58,7 +61,7 @@ export async function agentWorkspaceReviews(
   if (args.responsibleUserId) {
     const callerUserId = await resolveCallerUserId(ctx);
     if (args.responsibleUserId !== callerUserId) {
-      await requireTenantAdmin(ctx, args.tenantId);
+      await requireAdminOrServiceCaller(ctx, args.tenantId, "agent_workspace_reviews");
     }
   }
 

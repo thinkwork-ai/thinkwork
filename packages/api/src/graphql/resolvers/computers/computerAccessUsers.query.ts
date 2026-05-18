@@ -9,7 +9,7 @@ import {
   computerAssignments,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   accessSource,
   loadComputerOrThrow,
@@ -29,7 +29,7 @@ export async function computerAccessUsers(
   ctx: GraphQLContext,
 ) {
   const computer = await loadComputerOrThrow(args.computerId);
-  await requireTenantAdmin(ctx, computer.tenant_id);
+  await requireAdminOrServiceCaller(ctx, computer.tenant_id, "computer_access_users");
 
   const byUser = new Map<string, AccessRow>();
 

@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { loadOntologySuggestionScanJob } from "../../../lib/ontology/repository.js";
 
 export const ontologySuggestionScanJob = async (
@@ -7,7 +7,7 @@ export const ontologySuggestionScanJob = async (
   args: { tenantId: string; jobId: string },
   ctx: GraphQLContext,
 ) => {
-  await requireTenantAdmin(ctx, args.tenantId);
+  await requireAdminOrServiceCaller(ctx, args.tenantId, "ontology_suggestion_scan_job");
   return loadOntologySuggestionScanJob({
     tenantId: args.tenantId,
     jobId: args.jobId,

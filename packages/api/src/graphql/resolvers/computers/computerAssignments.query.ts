@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, computerAssignments as assignments } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { loadComputerOrThrow, toGraphqlComputerAssignment } from "./shared.js";
 
 export async function computerAssignments(
@@ -9,7 +9,7 @@ export async function computerAssignments(
   ctx: GraphQLContext,
 ) {
   const computer = await loadComputerOrThrow(args.computerId);
-  await requireTenantAdmin(ctx, computer.tenant_id);
+  await requireAdminOrServiceCaller(ctx, computer.tenant_id, "computer_assignments");
 
   const rows = await db
     .select()
