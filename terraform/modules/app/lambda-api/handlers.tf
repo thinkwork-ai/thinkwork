@@ -51,15 +51,12 @@ locals {
     # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
     # invocation against the right runtime — pre-U3 the flue path was
     # dead because the env var was never wired here.
-    AGENTCORE_RUNTIME_SSM_STRANDS          = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-    AGENTCORE_RUNTIME_SSM_FLUE             = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
-    WORKSPACE_BUCKET                       = var.bucket_name
-    HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
-    MEMORY_ENGINE                          = var.memory_engine
-    REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
-    REQUESTER_MEMORY_DREAMING_ENABLED      = tostring(var.requester_memory_dreaming_enabled)
-    REQUESTER_MEMORY_DREAMING_MODEL_ID     = var.requester_memory_dreaming_model_id
+    AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+    AGENTCORE_RUNTIME_SSM_FLUE    = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
+    WORKSPACE_BUCKET              = var.bucket_name
+    HINDSIGHT_ENDPOINT            = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID           = var.agentcore_memory_id
+    MEMORY_ENGINE                 = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
@@ -190,6 +187,16 @@ locals {
     # handler and pushed ~70 Lambdas over quota.
     "computer-manager"            = local.computer_runtime_control_env
     "computer-runtime-reconciler" = local.computer_runtime_control_env
+    "computer-runtime" = {
+      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
+    }
+    "thread-attachments-finalize" = {
+      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
+    }
+    "requester-memory-dreaming" = {
+      REQUESTER_MEMORY_DREAMING_ENABLED  = tostring(var.requester_memory_dreaming_enabled)
+      REQUESTER_MEMORY_DREAMING_MODEL_ID = var.requester_memory_dreaming_model_id
+    }
     "mcp-context-engine" = {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
@@ -224,6 +231,7 @@ locals {
       ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
       ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
       SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
+      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED  = tostring(var.requester_idle_memory_learning_enabled)
       # Phase 3 U10 — compliance read resolvers (complianceEvents,
       # complianceEvent, complianceEventByHash) connect to Aurora as
       # the compliance_reader role. The existing lambda_secrets policy

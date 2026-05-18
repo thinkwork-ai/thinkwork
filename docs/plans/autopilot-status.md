@@ -654,6 +654,9 @@ None.
   - `test`
   - `typecheck`
   - `verify`
+- Squash merged [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404) as `5f73e60e16efda91c655493dc859c5bf1be88d8e`.
+- Deploy run `26056853159` failed in Terraform Apply because adding requester memory environment variables to the shared Lambda `common_env` pushed `graphql-http` over AWS Lambda's 4 KB environment-variable limit.
+- Hotfix branch: `codex/requester-memory-env-hotfix`.
 
 ## Blockers
 
