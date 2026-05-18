@@ -1,0 +1,149 @@
+---
+title: Customer Overlay Contract
+description: The customer/deployment.json schema and pack layout used by enterprise deployment repositories.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Customer overlays are the customization layer for an enterprise deployment
+repo. They are applied after the stack is deployed and before smoke checks run.
+The overlay path is intentionally idempotent: reapplying the same repo should
+skip unchanged evals and overwrite workspace files with the same content.
+
+## Contract File
+
+`customer/deployment.json` declares the customer slug and the overlay packs for
+each stage:
+
+```json
+{
+  "schemaVersion": 1,
+  "customerSlug": "acme",
+  "stages": {
+    "dev": {
+      "tenantSlug": "acme-dev",
+      "defaultAgentTemplateSlug": "default",
+      "evalPacks": ["support"],
+      "seedPacks": ["starter"],
+      "skillPacks": ["support-skill"],
+      "workspaceDefaultPacks": ["default-guardrails"],
+      "branding": null
+    }
+  }
+}
+```
+
+Pack names must be lowercase letters, numbers, dots, underscores, or hyphens.
+Stage names follow the normal ThinkWork stage rules.
+
+## Eval Packs
+
+Eval packs live at `customer/evals/<pack>.json` and are JSON arrays:
+
+```json
+[
+  {
+    "name": "Answers with policy context",
+    "category": "support-quality",
+    "query": "How should we handle a refund?",
+    "assertions": [{ "type": "contains", "value": "policy" }],
+    "agentcoreEvaluatorIds": ["Builtin.Helpfulness"],
+    "tags": ["support"]
+  }
+]
+```
+
+If a test case does not specify `agentTemplateId`, the overlay command pins it
+to the stage's `defaultAgentTemplateSlug`. Customer evals receive overlay tags
+such as `source:customer-overlay`, `customer-overlay:pack:<pack>`, and
+`customer-overlay:key:<pack>/<case>`. Built-in starter evals keep the
+`yaml-seed` source.
+
+## Skill Packs
+
+Skill packs live under `customer/skills/<pack>/` and must include `SKILL.md`.
+They are written into the target template workspace under
+`skills/<pack>/...`.
+
+```text
+customer/skills/support-skill/
+  SKILL.md
+  scripts/
+    lookup-policy.ts
+```
+
+Built-in tools such as web search or code sandbox are not skill files. Configure
+those through the Admin template configuration or tenant tool settings.
+
+## Workspace Defaults
+
+Workspace default packs live under `customer/workspace-defaults/<pack>/` and
+write their files directly into the target template workspace:
+
+```text
+customer/workspace-defaults/default-guardrails/
+  GUARDRAILS.md
+  MEMORY_GUIDE.md
+```
+
+Use this for customer-specific policies, memory instructions, and template
+defaults that should travel with the deployment repo.
+
+## Seed Packs
+
+Seed packs live at `customer/seeds/<pack>.json`. The overlay command validates
+and reports them as customer-owned data. Do not put secrets in these files.
+
+<Aside type="caution">
+  Customer secrets belong in GitHub Environment secrets, AWS Secrets Manager, or
+  SSM Parameter Store. They must never be committed into `customer/` packs,
+  `terraform/stages/*.tfvars`, or runbook files.
+</Aside>
+
+## Branding Assets
+
+Branding assets live under `customer/branding/` and are referenced from
+`customer/deployment.json`. The generated deploy workflow syncs static bundles
+from the pinned ThinkWork release; customer brand assets stay in the deployment
+repo and should be reviewed like any other customer content.
+
+## CLI Validation
+
+Validate without mutation:
+
+```bash
+thinkwork enterprise overlay plan . --stage dev --json
+thinkwork enterprise overlay apply . --stage dev --dry-run --json
+```
+
+Apply after deploy:
+
+```bash
+thinkwork enterprise overlay apply . \
+  --stage dev \
+  --region us-east-1 \
+  --tenant acme-dev \
+  --json
+```
+
+The JSON result includes inserted, updated, and skipped eval counts, workspace
+file counts, validated seed packs, and branding status. CI stores this as
+`overlay-report.json` so the deploy summary can show exactly what changed.
+
+## Failure Modes
+
+| Failure                                          | Fix                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `customer/deployment.json does not define stage` | Add the stage entry or dispatch the workflow for a configured stage.           |
+| `Eval pack must be a JSON array`                 | Replace the pack with an array of test-case objects.                           |
+| `Skill pack must include SKILL.md`               | Add `SKILL.md` at the root of the pack.                                        |
+| Workspace file PUT fails                         | Confirm API auth, tenant slug, and target template slug, then re-run overlays. |
+
+## Related Pages
+
+- [Enterprise Deployment Repo](/deploy/enterprise-deployment-repo/) — the
+  recommended enterprise deployment path
+- [Agent Templates](/applications/admin/agent-templates/) — where overlay files
+  land
+- [Evaluations](/applications/admin/evaluations/) — how applied evals are
+  managed after import

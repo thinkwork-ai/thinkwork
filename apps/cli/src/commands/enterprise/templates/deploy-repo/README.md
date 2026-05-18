@@ -23,6 +23,8 @@ artifacts, and customer-specific work lives under `customer/`.
 3. Add required environment secrets, including `TF_VAR_db_password` and
    `TF_VAR_api_auth_secret`.
 4. Dispatch `.github/workflows/deploy.yml` for the target stage.
+5. Use `docs/runbook.md` for release upgrades, overlay-only changes,
+   rollback, and break-glass guidance.
 
 ## Customer Overlay
 

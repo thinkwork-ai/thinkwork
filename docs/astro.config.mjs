@@ -227,11 +227,19 @@ export default defineConfig({
               label: "Deploy",
               collapsed: true,
               items: [
+                {
+                  label: "Enterprise Deployment Repo",
+                  slug: "deploy/enterprise-deployment-repo",
+                },
                 { label: "Greenfield AWS", slug: "deploy/greenfield" },
                 { label: "BYO Infrastructure", slug: "deploy/byo" },
                 {
                   label: "Configuration Reference",
                   slug: "deploy/configuration",
+                },
+                {
+                  label: "Customer Overlay Contract",
+                  slug: "deploy/customer-overlay-contract",
                 },
                 {
                   label: "Evaluation Seed Cleanup",
