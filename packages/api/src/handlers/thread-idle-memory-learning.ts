@@ -1,10 +1,8 @@
-/**
- * Requester idle memory learning worker.
- *
- * Slice A intentionally stops short of writing requester memory. The scheduler
- * and stale-guard path can now run end-to-end, while the worker returns a
- * durable no-op result until the OpenClaw-inspired learner is implemented.
- */
+import {
+  runRequesterIdleMemoryLearning,
+  type LearningCandidateSummary,
+} from "../lib/requester-memory/learner.js";
+import type { ChangedRequesterMemoryFile } from "../lib/requester-memory/storage.js";
 
 type ThreadIdleMemoryLearningEvent = {
   runId?: string;
@@ -20,9 +18,10 @@ type ThreadIdleMemoryLearningEvent = {
 
 type ThreadIdleMemoryLearningResult = {
   ok: boolean;
-  status: "no_change" | "failed";
-  changedFiles: string[];
-  candidateSummary?: Record<string, unknown>;
+  status: "changed" | "no_change" | "failed";
+  changedFiles: ChangedRequesterMemoryFile[];
+  candidateSummary?: LearningCandidateSummary;
+  reportS3Key?: string | null;
   error?: string;
   budget?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -55,23 +54,15 @@ export async function handler(
     };
   }
 
-  return {
-    ok: true,
-    status: "no_change",
-    changedFiles: [],
-    candidateSummary: {
-      reason: "worker_shell",
-      note: "Idle-learning scheduling is wired; memory synthesis ships in the learner slice.",
-    },
-    budget: {
-      mode: "inert",
-      llmCalls: 0,
-      memoryWrites: 0,
-    },
-    metadata: {
-      runId: event.runId,
-      scheduledJobId: event.scheduledJobId,
-      activitySequence: event.activitySequence,
-    },
-  };
+  return runRequesterIdleMemoryLearning({
+    runId: event.runId!,
+    tenantId: event.tenantId!,
+    threadId: event.threadId!,
+    computerId: event.computerId!,
+    requesterUserId: event.requesterUserId!,
+    scheduledJobId: event.scheduledJobId!,
+    activitySequence: event.activitySequence!,
+    scheduledFor: event.scheduledFor!,
+    lastActivityAt: event.lastActivityAt!,
+  });
 }

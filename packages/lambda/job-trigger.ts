@@ -78,7 +78,7 @@ type ThreadIdleMemoryLearningConfig = {
 type ThreadIdleMemoryLearningWorkerResult = {
   ok?: boolean;
   status?: string;
-  changedFiles?: string[];
+  changedFiles?: unknown[];
   candidateSummary?: unknown;
   reportS3Key?: string | null;
   error?: string;
