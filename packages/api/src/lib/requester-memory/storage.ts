@@ -22,6 +22,9 @@ export type ChangedRequesterMemoryFile = {
   beforeBytes: number;
   afterBytes: number;
   snapshotKey: string | null;
+  evidenceMessageIds?: string[];
+  hindsightDocumentId?: string;
+  hindsightStatus?: string;
 };
 
 export type WriteRequesterMemoryFileInput = {

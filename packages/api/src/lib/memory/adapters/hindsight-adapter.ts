@@ -32,6 +32,7 @@ import type {
   RetainDailyMemoryRequest,
   RetainTurnRequest,
   ThinkWorkMemoryRecord,
+  UpsertMarkdownMemoryDocumentRequest,
 } from "../types.js";
 
 export type HindsightAdapterOptions = {
@@ -313,6 +314,32 @@ export class HindsightAdapter implements MemoryAdapter {
     await this.postItems(bankId, [item], "retainDailyMemory");
     console.log(
       `[hindsight-adapter] retainDailyMemory ok bank=${bankId.slice(0, 18)} date=${req.date} bytes=${content.length}`,
+    );
+  }
+
+  async upsertMarkdownMemoryDocument(
+    req: UpsertMarkdownMemoryDocumentRequest,
+  ): Promise<void> {
+    const content = req.content.trim();
+    if (!content) return;
+
+    const bankId = await this.resolveBankId(req.ownerId);
+    const item = {
+      content,
+      document_id: req.documentId,
+      update_mode: "replace",
+      context: req.context,
+      metadata: toHindsightMetadata({
+        ...(req.metadata || {}),
+        tenantId: req.tenantId,
+        userId: req.ownerId,
+        path: req.path,
+        source: "requester_memory_markdown",
+      }),
+    };
+    await this.postItems(bankId, [item], "upsertMarkdownMemoryDocument");
+    console.log(
+      `[hindsight-adapter] upsertMarkdownMemoryDocument ok bank=${bankId.slice(0, 18)} document=${req.documentId.slice(0, 64)} bytes=${content.length}`,
     );
   }
 

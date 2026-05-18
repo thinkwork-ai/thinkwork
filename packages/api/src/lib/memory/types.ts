@@ -164,6 +164,14 @@ export type RetainDailyMemoryRequest = MemoryOwnerRef & {
   metadata?: Record<string, unknown>;
 };
 
+export type UpsertMarkdownMemoryDocumentRequest = MemoryOwnerRef & {
+  path: string;
+  content: string;
+  documentId: string;
+  context: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type InspectRequest = MemoryOwnerRef & {
   kinds?: MemoryRecordKind[];
   cursor?: string;
