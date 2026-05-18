@@ -69,7 +69,24 @@ type DeleteScheduledJobResult {
   ok: Boolean!
 }
 
+"""
+Result of `runScheduledJob`. Synchronously invokes the job-trigger
+Lambda with the same payload AWS Scheduler would have sent at the
+next firing — effectively "run now". `dispatched` is true when the
+Lambda accepted the invocation; downstream side effects (thread turn,
+routine execution, eval run) happen asynchronously and aren't part of
+this result. `statusCode` echoes the Lambda's response code so
+operators can distinguish accept (200/202) vs throttle / error.
+"""
+type RunScheduledJobResult {
+  id: ID!
+  dispatched: Boolean!
+  statusCode: Int
+  errorMessage: String
+}
+
 extend type Mutation {
   createScheduledJob(input: CreateScheduledJobInput!): ScheduledJob!
   deleteScheduledJob(id: ID!): DeleteScheduledJobResult!
+  runScheduledJob(id: ID!): RunScheduledJobResult!
 }

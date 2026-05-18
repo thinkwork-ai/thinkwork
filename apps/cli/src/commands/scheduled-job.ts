@@ -95,6 +95,17 @@ const DeleteScheduledJobDoc = graphql(`
   }
 `);
 
+const RunScheduledJobDoc = graphql(`
+  mutation CliRunScheduledJob($id: ID!) {
+    runScheduledJob(id: $id) {
+      id
+      dispatched
+      statusCode
+      errorMessage
+    }
+  }
+`);
+
 const SchedJobTenantBySlugDoc = graphql(`
   query CliSchedJobTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -328,11 +339,41 @@ async function runSchedDelete(id: string, opts: DeleteOptions): Promise<void> {
   }
 }
 
+interface RunOptions extends SchedCliOptions {
+  wait?: boolean;
+}
+
+async function runSchedRun(id: string, opts: RunOptions): Promise<void> {
+  const ctx = await resolveSchedContext(opts);
+  const data = await gqlMutate(ctx.client, RunScheduledJobDoc, { id });
+  const result = data.runScheduledJob;
+  if (isJsonMode()) {
+    printJson(result);
+    if (!result.dispatched) process.exit(1);
+    return;
+  }
+  if (result.dispatched) {
+    printSuccess(
+      `Dispatched scheduled job ${result.id} (status ${result.statusCode ?? "—"}). Downstream side effects run asynchronously.`,
+    );
+    if (opts.wait) {
+      console.log(
+        `  --wait is not yet implemented on the API side; check ${result.id}'s last_run_at via \`scheduled-job get\`.`,
+      );
+    }
+  } else {
+    printError(
+      `Dispatch failed: ${result.errorMessage ?? "unknown reason"} (status ${result.statusCode ?? "—"}).`,
+    );
+    process.exit(1);
+  }
+}
+
 function notYetImplementedAtApi(verb: string): never {
   printError(
     `\`scheduled-job ${verb}\` is not yet implemented at the GraphQL API.\n` +
-      "  The server only exposes scheduledJobs / scheduledJob / createScheduledJob today.\n" +
-      "  Use the admin UI for update/delete/run operations; CLI parity is tracked as a Phase-3 follow-up.",
+      "  The server exposes list / get / create / delete / run; update is the remaining Phase-3 stub.\n" +
+      "  Use the admin UI for update operations; CLI parity is tracked as a Phase-3 follow-up.",
   );
   process.exit(2);
 }
@@ -409,9 +450,11 @@ Examples:
 
   job
     .command("run <id>")
-    .description("Trigger a scheduled job immediately. (API surface pending.)")
+    .description(
+      "Fire a scheduled job once, immediately. Bypasses the EventBridge schedule; downstream side effects (thread turn, routine run) remain async.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--wait", "Block until the run completes")
-    .action(() => notYetImplementedAtApi("run"));
+    .option("--wait", "(not yet supported server-side; reserved for future)")
+    .action(runSchedRun);
 }
