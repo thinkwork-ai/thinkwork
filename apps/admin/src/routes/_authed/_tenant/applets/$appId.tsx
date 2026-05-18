@@ -6,7 +6,14 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { AdminAppletPreview } from "@/components/applets/AdminAppletPreview";
 import { Button } from "@/components/ui/button";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { AdminAppletQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
@@ -73,45 +80,75 @@ function AppletDetailPage() {
         </PageHeader>
       }
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="min-w-0 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Code2 className="h-4 w-4 text-primary" />
+      <Tabs defaultValue="app" className="min-h-0 gap-4">
+        <TabsList className="mx-auto">
+          <TabsTrigger value="app" className="px-6">
+            App
+          </TabsTrigger>
+          <TabsTrigger value="source" className="px-6">
             Source
-          </div>
-          <pre className="max-h-[calc(100vh-16rem)] overflow-auto rounded-md border bg-muted/30 p-4 text-xs leading-relaxed">
-            <code>{payload.source}</code>
-          </pre>
-        </section>
+          </TabsTrigger>
+          <TabsTrigger value="config" className="px-6">
+            Config
+          </TabsTrigger>
+        </TabsList>
 
-        <aside className="min-w-0 space-y-4">
-          <section className="space-y-2 rounded-md border p-4">
-            <h2 className="text-sm font-semibold">Provenance</h2>
-            <dl className="grid gap-2 text-sm">
-              <Detail label="App ID" value={applet.appId} />
-              <Detail label="Version" value={`v${applet.version}`} />
-              <Detail
-                label="Generated"
-                value={relativeTime(applet.generatedAt)}
-              />
-              <Detail label="Thread" value={applet.threadId ?? "None"} />
-              <Detail label="Agent" value={applet.artifact.agentId ?? "None"} />
-              <Detail label="Model" value={applet.modelId ?? "Unknown"} />
-              <Detail label="Stdlib" value={applet.stdlibVersionAtGeneration} />
-            </dl>
-          </section>
+        <TabsContent value="app" className="min-h-0">
+          <AdminAppletPreview
+            source={payload.source ?? ""}
+            version={applet.version ?? 1}
+            title={applet.name}
+          />
+        </TabsContent>
 
-          <section className="space-y-2 rounded-md border p-4">
+        <TabsContent value="source" className="min-h-0">
+          <section className="min-w-0 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Braces className="h-4 w-4 text-primary" />
-              Metadata
+              <Code2 className="h-4 w-4 text-primary" />
+              Source
             </div>
-            <pre className="max-h-96 overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
-              <code>{formatJson(payload.metadata)}</code>
+            <pre className="max-h-[calc(100vh-16rem)] overflow-auto rounded-md border bg-muted/30 p-4 text-xs leading-relaxed">
+              <code>{payload.source}</code>
             </pre>
           </section>
-        </aside>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="config" className="min-h-0">
+          <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <section className="space-y-2 rounded-md border p-4">
+              <h2 className="text-sm font-semibold">Provenance</h2>
+              <dl className="grid gap-2 text-sm">
+                <Detail label="App ID" value={applet.appId} />
+                <Detail label="Version" value={`v${applet.version}`} />
+                <Detail
+                  label="Generated"
+                  value={relativeTime(applet.generatedAt)}
+                />
+                <Detail label="Thread" value={applet.threadId ?? "None"} />
+                <Detail
+                  label="Agent"
+                  value={applet.artifact.agentId ?? "None"}
+                />
+                <Detail label="Model" value={applet.modelId ?? "Unknown"} />
+                <Detail
+                  label="Stdlib"
+                  value={applet.stdlibVersionAtGeneration}
+                />
+              </dl>
+            </section>
+
+            <section className="min-w-0 space-y-2 rounded-md border p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Braces className="h-4 w-4 text-primary" />
+                Metadata
+              </div>
+              <pre className="max-h-[calc(100vh-20rem)] overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
+                <code>{formatJson(payload.metadata)}</code>
+              </pre>
+            </section>
+          </div>
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 }

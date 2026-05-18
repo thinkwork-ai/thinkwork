@@ -166,10 +166,12 @@ export const WebPreviewUrl = ({
 };
 
 export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
+  children?: ReactNode;
   loading?: ReactNode;
 };
 
 export const WebPreviewBody = ({
+  children,
   className,
   loading,
   src,
@@ -178,14 +180,18 @@ export const WebPreviewBody = ({
   const { url } = useWebPreview();
 
   return (
-    <div className="flex-1">
-      <iframe
-        className={cn("size-full", className)}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-        src={(src ?? url) || undefined}
-        title="Preview"
-        {...props}
-      />
+    <div className="min-h-0 flex-1">
+      {children ? (
+        <div className={cn("size-full", className)}>{children}</div>
+      ) : (
+        <iframe
+          className={cn("size-full", className)}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+          src={(src ?? url) || undefined}
+          title="Preview"
+          {...props}
+        />
+      )}
       {loading}
     </div>
   );

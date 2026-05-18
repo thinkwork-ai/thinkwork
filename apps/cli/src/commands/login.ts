@@ -217,6 +217,13 @@ function finalizeAws(profile: string, mode: string): void {
       `  Override per-command with --profile <other>, or unset with \`rm ~/.thinkwork/config.json\`.`,
     ),
   );
+  console.log("");
+  console.log(
+    `  ${chalk.bold("Next:")} run ${chalk.cyan("thinkwork login --stage <stage>")} if you also need`,
+  );
+  console.log(
+    `        an API session (required for ${chalk.cyan("eval")}, ${chalk.cyan("agent")}, ${chalk.cyan("thread")}, etc.).`,
+  );
 }
 
 // ---------------------------------------------------------------------------

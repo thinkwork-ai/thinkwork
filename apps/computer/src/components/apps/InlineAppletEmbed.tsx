@@ -8,6 +8,10 @@ import {
   useAppletInstanceId,
 } from "@/applets/mount";
 import {
+  WebPreview,
+  WebPreviewBody,
+} from "@/components/ai-elements/web-preview";
+import {
   resolveGeneratedAppRuntimeMode,
   type AppletPayload,
 } from "@/lib/app-artifacts";
@@ -65,14 +69,21 @@ export function InlineAppletEmbed({
       data-testid="inline-applet-embed"
       style={{ minHeight: height }}
     >
-      <AppletMount
-        appId={appId}
-        instanceId={instanceId}
-        source={source}
-        version={version}
-        hideRefreshControl
-        fitContentHeight
-      />
+      <WebPreview
+        className="overflow-visible rounded-none border-0 bg-background"
+        data-testid="inline-applet-web-preview"
+      >
+        <WebPreviewBody className="overflow-visible">
+          <AppletMount
+            appId={appId}
+            instanceId={instanceId}
+            source={source}
+            version={version}
+            hideRefreshControl
+            fitContentHeight
+          />
+        </WebPreviewBody>
+      </WebPreview>
     </div>
   );
 }

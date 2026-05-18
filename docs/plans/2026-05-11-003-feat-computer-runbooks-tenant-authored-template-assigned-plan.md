@@ -1,13 +1,16 @@
 ---
 title: "feat: Tenant-authored, template-assigned Computer Runbooks"
 type: feat
-status: active
+status: superseded
 date: 2026-05-11
 origin: docs/brainstorms/2026-05-11-computer-runbooks-tenant-authored-template-assigned-requirements.md
 supersedes: docs/plans/2026-05-10-003-feat-computer-runbooks-foundation-plan.md
+superseded_by: docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md
 ---
 
 # feat: Tenant-authored, template-assigned Computer Runbooks
+
+> Superseded on 2026-05-12 by `docs/plans/2026-05-12-001-refactor-computer-runbooks-as-agent-skills-plan.md`. The M:N template-assignment table and proprietary tenant runbook source format are withdrawn; runbooks are now planned as standard Agent Skills installed into Computer template workspaces.
 
 ## Overview
 

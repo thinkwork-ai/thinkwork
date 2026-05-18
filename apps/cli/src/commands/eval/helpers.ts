@@ -3,7 +3,7 @@ import { loadStageSession } from "../../cli-config.js";
 import { resolveStage } from "../../lib/resolve-stage.js";
 import { getGqlClient } from "../../lib/gql-client.js";
 import { gqlQuery } from "../../lib/gql-client.js";
-import { printError } from "../../ui.js";
+import { printError, printMissingApiSessionError } from "../../ui.js";
 import { TenantBySlugDoc } from "./gql.js";
 
 export interface EvalCliOptions {
@@ -68,9 +68,7 @@ export async function resolveEvalContext(opts: EvalCliOptions): Promise<EvalCliC
     }
   }
 
-  printError(
-    `No tenant resolved for stage "${stage}". Pass --tenant <slug>, set THINKWORK_TENANT, or run \`thinkwork login --stage ${stage}\`.`,
-  );
+  printMissingApiSessionError(stage, session !== null);
   process.exit(1);
 }
 

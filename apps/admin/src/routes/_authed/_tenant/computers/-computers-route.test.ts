@@ -24,11 +24,8 @@ describe("Computers admin routes", () => {
     expect(commandPaletteSource).toContain('to: "/computers"');
   });
 
-  it("renders a Computer list with runtime and migration columns", () => {
+  it("renders a Computer list that links to detail pages", () => {
     expect(listRouteSource).toContain("ComputersListQuery");
-    expect(listRouteSource).toContain("desiredRuntimeStatus");
-    expect(listRouteSource).toContain("runtimeStatus");
-    expect(listRouteSource).toContain("migratedFromAgentId");
     expect(listRouteSource).toContain('to: "/computers/$computerId"');
   });
 

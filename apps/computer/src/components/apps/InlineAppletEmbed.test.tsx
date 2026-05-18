@@ -98,6 +98,7 @@ describe("InlineAppletEmbed", () => {
     expect(embed.getAttribute("style")).not.toContain("max-height");
     expect(embed.className).toContain("overflow-visible");
     expect(embed.className).not.toContain("overflow-auto");
+    expect(await screen.findByTestId("inline-applet-web-preview")).toBeTruthy();
     expect(await screen.findByTestId("applet-iframe-host")).toBeTruthy();
   });
 

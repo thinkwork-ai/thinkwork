@@ -33,8 +33,14 @@ describe("Apps admin routes", () => {
   it("keeps the route read-only and source/metadata focused", () => {
     expect(listRouteSource).toContain("Filter by user ID");
     expect(listRouteSource).toContain('to: "/applets/$appId"');
+    expect(detailRouteSource).toContain("AdminAppletPreview");
+    expect(detailRouteSource).toContain('TabsTrigger value="app"');
+    expect(detailRouteSource).toContain('TabsTrigger value="source"');
+    expect(detailRouteSource).toContain('TabsTrigger value="config"');
     expect(detailRouteSource).toContain("payload.source");
     expect(detailRouteSource).toContain("formatJson(payload.metadata)");
+    expect(detailRouteSource).not.toContain("src={appUrl}");
+    expect(detailRouteSource).not.toContain("liveArtifactUrl");
     expect(detailRouteSource).not.toContain("useMutation");
     expect(detailRouteSource).not.toContain("saveApplet");
     expect(detailRouteSource).not.toContain("regenerateApplet");
