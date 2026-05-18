@@ -21,8 +21,18 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AgentsListQuery, ThreadsListQuery, ThreadTurnsQuery, ThreadDetailQuery } from "@/lib/graphql-queries";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AgentsListQuery,
+  ThreadsListQuery,
+  ThreadTurnsQuery,
+  ThreadDetailQuery,
+} from "@/lib/graphql-queries";
 import { cn, relativeTime, formatUsd } from "@/lib/utils";
 import { useCostData } from "@/hooks/useCostData";
 import { useCostStore } from "@/stores/cost-store";
@@ -57,7 +67,8 @@ function DashboardPage() {
 
   const handleActivityClick = useCallback((item: ActivityItem) => {
     if (item.sourceType === "thread") setViewingThread(item);
-    else if (item.sourceType === "ticket_turn" && item.runData) setViewingRun(item.runData);
+    else if (item.sourceType === "ticket_turn" && item.runData)
+      setViewingRun(item.runData);
   }, []);
 
   const [agentsResult] = useQuery({
@@ -103,25 +114,52 @@ function DashboardPage() {
   const agents = agentsResult.data?.agents ?? [];
   const threads = threadsResult.data?.threads ?? [];
 
-  const onlineAgents = agents.filter((a: any) => a.status === "IDLE" || a.status === "BUSY");
-  const openThreads = threads.filter((t: any) => t.status !== "DONE" && t.status !== "CANCELLED");
+  const onlineAgents = agents.filter(
+    (a: any) => a.status === "IDLE" || a.status === "BUSY",
+  );
+  const openThreads = threads.filter(
+    (t: any) => t.status !== "DONE" && t.status !== "CANCELLED",
+  );
 
-  const activitySlice = allActivityItems.slice(activityPage * PAGE_SIZE, (activityPage + 1) * PAGE_SIZE);
+  const activitySlice = allActivityItems.slice(
+    activityPage * PAGE_SIZE,
+    (activityPage + 1) * PAGE_SIZE,
+  );
   const activityTotalPages = Math.ceil(allActivityItems.length / PAGE_SIZE);
 
-  const threadSlice = threads.slice(threadPage * PAGE_SIZE, (threadPage + 1) * PAGE_SIZE);
+  const threadSlice = threads.slice(
+    threadPage * PAGE_SIZE,
+    (threadPage + 1) * PAGE_SIZE,
+  );
   const threadTotalPages = Math.ceil(threads.length / PAGE_SIZE);
 
   return (
     <PageLayout
-      header={<PageHeader title="Dashboard" description="Overview of your workspace" />}
+      header={
+        <PageHeader
+          title="Dashboard"
+          description="Overview of your workspace"
+        />
+      }
     >
       <div className="space-y-6">
         {/* Metrics */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
-          <MetricCard label="Agents Online" value={`${onlineAgents.length} / ${agents.length}`} href="/agents" />
-          <MetricCard label="Open Threads" value={openThreads.length} href="/threads" />
-          <MetricCard label="Recent Activity" value={allActivityItems.length} href="/analytics" />
+          <MetricCard
+            label="Agents Online"
+            value={`${onlineAgents.length} / ${agents.length}`}
+            href="/agents"
+          />
+          <MetricCard
+            label="Open Threads"
+            value={openThreads.length}
+            href="/threads"
+          />
+          <MetricCard
+            label="Recent Activity"
+            value={allActivityItems.length}
+            href="/analytics"
+          />
           <SpendMetric />
           <CostPerEventMetric />
         </div>
@@ -131,14 +169,21 @@ function DashboardPage() {
           {/* Activity */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide">Recent Activity</h3>
-              <Link to="/analytics" className="text-xs text-muted-foreground hover:text-foreground">
+              <h3 className="text-sm font-semibold uppercase tracking-wide">
+                Recent Activity
+              </h3>
+              <Link
+                to="/analytics"
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
                 View all
               </Link>
             </div>
             <div className="rounded-md border border-border overflow-hidden">
               {allActivityItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">No activity yet</p>
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  No activity yet
+                </p>
               ) : (
                 activitySlice.map((item) => (
                   <button
@@ -147,15 +192,33 @@ function DashboardPage() {
                     className="flex w-full items-center gap-2.5 px-3 py-2.5 border-b border-border last:border-b-0 hover:bg-accent/50 transition-colors text-left"
                     onClick={() => handleActivityClick(item)}
                   >
-                    <Badge variant="secondary" className={cn("text-xs gap-1 shrink-0", TYPE_COLORS[item.type])}>
-                      {item.type === "chat" && <MessageSquare className="h-3 w-3" />}
-                      {item.type === "thread" && <MessagesSquare className="h-3 w-3" />}
-                      {item.type === "scheduled" && <CalendarClock className="h-3 w-3" />}
-                      {item.type === "webhook" && <Webhook className="h-3 w-3" />}
-                      {(item.type === "routine" || item.type === "task") && <Bot className="h-3 w-3" />}
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-xs gap-1 shrink-0",
+                        TYPE_COLORS[item.type],
+                      )}
+                    >
+                      {item.type === "chat" && (
+                        <MessageSquare className="h-3 w-3" />
+                      )}
+                      {item.type === "thread" && (
+                        <MessagesSquare className="h-3 w-3" />
+                      )}
+                      {item.type === "scheduled" && (
+                        <CalendarClock className="h-3 w-3" />
+                      )}
+                      {item.type === "webhook" && (
+                        <Webhook className="h-3 w-3" />
+                      )}
+                      {(item.type === "routine" || item.type === "task") && (
+                        <Bot className="h-3 w-3" />
+                      )}
                       {TYPE_LABELS[item.type]}
                     </Badge>
-                    <span className="text-sm font-medium truncate min-w-0 flex-1">{item.title}</span>
+                    <span className="text-sm font-medium truncate min-w-0 flex-1">
+                      {item.title}
+                    </span>
                     <span className="text-xs text-muted-foreground shrink-0">
                       {relativeTime(new Date(item.timestamp).toISOString())}
                     </span>
@@ -164,36 +227,55 @@ function DashboardPage() {
               )}
             </div>
             {activityTotalPages > 1 && (
-              <Pager page={activityPage} totalPages={activityTotalPages} onPageChange={setActivityPage} />
+              <Pager
+                page={activityPage}
+                totalPages={activityTotalPages}
+                onPageChange={setActivityPage}
+              />
             )}
           </div>
 
           {/* Threads */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide">Recent Threads</h3>
-              <Link to="/threads" className="text-xs text-muted-foreground hover:text-foreground">
+              <h3 className="text-sm font-semibold uppercase tracking-wide">
+                Recent Threads
+              </h3>
+              <Link
+                to="/threads"
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
                 View all
               </Link>
             </div>
             <div className="rounded-md border border-border overflow-hidden">
               {threads.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">No threads yet</p>
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  No threads yet
+                </p>
               ) : (
-                (threadSlice as any[]).map(( thread: any) => (
+                (threadSlice as any[]).map((thread: any) => (
                   <Link
                     key={thread.id}
                     to="/threads/$threadId"
                     params={{ threadId: thread.id }}
                     className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border last:border-b-0 hover:bg-accent/50 transition-colors"
                   >
-                    <StatusBadge status={thread.status.toLowerCase()} size="sm" />
+                    <StatusBadge
+                      status={thread.status.toLowerCase()}
+                      size="sm"
+                    />
                     <span className="text-sm font-medium truncate min-w-0 flex-1">
-                      <span className="text-muted-foreground mr-1.5">#{thread.number}</span>
+                      <span className="text-muted-foreground mr-1.5">
+                        #{thread.number}
+                      </span>
                       {thread.title}
                     </span>
                     {thread.agent && (
-                      <Badge variant="secondary" className="text-xs gap-1 shrink-0 bg-muted text-muted-foreground">
+                      <Badge
+                        variant="secondary"
+                        className="text-xs gap-1 shrink-0 bg-muted text-muted-foreground"
+                      >
                         <Bot className="h-3 w-3" />
                         {thread.agent.name}
                       </Badge>
@@ -206,15 +288,32 @@ function DashboardPage() {
               )}
             </div>
             {threadTotalPages > 1 && (
-              <Pager page={threadPage} totalPages={threadTotalPages} onPageChange={setThreadPage} />
+              <Pager
+                page={threadPage}
+                totalPages={threadTotalPages}
+                onPageChange={setThreadPage}
+              />
             )}
           </div>
         </div>
       </div>
 
       {/* Activity detail dialogs */}
-      <RunDetailDialog run={viewingRun} open={!!viewingRun} onOpenChange={(o) => { if (!o) setViewingRun(null); }} />
-      <ThreadDetailDialog item={viewingThread} open={!!viewingThread} onOpenChange={(o) => { if (!o) setViewingThread(null); }} navigate={navigate} />
+      <RunDetailDialog
+        run={viewingRun}
+        open={!!viewingRun}
+        onOpenChange={(o) => {
+          if (!o) setViewingRun(null);
+        }}
+      />
+      <ThreadDetailDialog
+        item={viewingThread}
+        open={!!viewingThread}
+        onOpenChange={(o) => {
+          if (!o) setViewingThread(null);
+        }}
+        navigate={navigate}
+      />
     </PageLayout>
   );
 }
@@ -223,15 +322,35 @@ function DashboardPage() {
 // Pager
 // ---------------------------------------------------------------------------
 
-function Pager({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) {
+function Pager({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+}) {
   return (
     <div className="flex items-center justify-between text-xs text-muted-foreground">
-      <span>Page {page + 1} of {totalPages}</span>
+      <span>
+        Page {page + 1} of {totalPages}
+      </span>
       <div className="flex gap-1">
-        <Button variant="ghost" size="icon-xs" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          disabled={page === 0}
+          onClick={() => onPageChange(page - 1)}
+        >
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="icon-xs" disabled={page >= totalPages - 1} onClick={() => onPageChange(page + 1)}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          disabled={page >= totalPages - 1}
+          onClick={() => onPageChange(page + 1)}
+        >
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -271,16 +390,32 @@ function CostPerEventMetric() {
 // Activity detail dialogs (same as activity page)
 // ---------------------------------------------------------------------------
 
-function RunDetailDialog({ run, open, onOpenChange }: { run: any | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+function RunDetailDialog({
+  run,
+  open,
+  onOpenChange,
+}: {
+  run: any | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   if (!run) return null;
   const parseJson = (v: unknown): any => {
     if (!v) return null;
-    if (typeof v === "string") { try { return parseJson(JSON.parse(v)); } catch { return null; } }
+    if (typeof v === "string") {
+      try {
+        return parseJson(JSON.parse(v));
+      } catch {
+        return null;
+      }
+    }
     return v;
   };
   const resultJson = parseJson(run.resultJson);
   const usageJson = parseJson(run.usageJson);
-  const rawResponse = (resultJson?.response ?? resultJson?.result) as string | undefined;
+  const rawResponse = (resultJson?.response ?? resultJson?.result) as
+    | string
+    | undefined;
   const responseText = rawResponse?.replace(/```[\w]*\n?/g, "");
   const durationMs = usageJson?.duration_ms as number | undefined;
 
@@ -290,31 +425,69 @@ function RunDetailDialog({ run, open, onOpenChange }: { run: any | null; open: b
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Run Details
-            <Badge variant="secondary" className={cn("text-xs capitalize", STATUS_COLORS[run.status?.toLowerCase()] ?? "")}>
+            <Badge
+              variant="secondary"
+              className={cn(
+                "text-xs capitalize",
+                STATUS_COLORS[run.status?.toLowerCase()] ?? "",
+              )}
+            >
               {run.status?.toLowerCase()}
             </Badge>
-            {durationMs != null && <span className="text-xs text-muted-foreground">{(durationMs / 1000).toFixed(1)}s</span>}
+            {durationMs != null && (
+              <span className="text-xs text-muted-foreground">
+                {(durationMs / 1000).toFixed(1)}s
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-3">
-            {run.triggerName && <div><span className="text-muted-foreground">Trigger</span><p className="font-medium">{run.triggerName}</p></div>}
-            <div><span className="text-muted-foreground">Source</span><p className="capitalize">{(run.invocationSource ?? "").replace(/_/g, " ")}</p></div>
-            <div><span className="text-muted-foreground">Started</span><p>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "Queued"}</p></div>
-            <div><span className="text-muted-foreground">Finished</span><p>{run.finishedAt ? new Date(run.finishedAt).toLocaleString() : "..."}</p></div>
+            {run.triggerName && (
+              <div>
+                <span className="text-muted-foreground">Trigger</span>
+                <p className="font-medium">{run.triggerName}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-muted-foreground">Source</span>
+              <p className="capitalize">
+                {(run.invocationSource ?? "").replace(/_/g, " ")}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Started</span>
+              <p>
+                {run.startedAt
+                  ? new Date(run.startedAt).toLocaleString()
+                  : "Queued"}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Finished</span>
+              <p>
+                {run.finishedAt
+                  ? new Date(run.finishedAt).toLocaleString()
+                  : "..."}
+              </p>
+            </div>
           </div>
           {responseText && (
             <div>
               <span className="text-muted-foreground text-xs">Response</span>
               <div className="mt-1 bg-muted/50 rounded-md p-3 text-sm prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseText}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {responseText}
+                </ReactMarkdown>
               </div>
             </div>
           )}
           {run.error && (
             <div>
               <span className="text-muted-foreground text-xs">Error</span>
-              <pre className="mt-1 whitespace-pre-wrap text-destructive bg-destructive/5 rounded-md p-3 text-sm">{run.error}</pre>
+              <pre className="mt-1 whitespace-pre-wrap text-destructive bg-destructive/5 rounded-md p-3 text-sm">
+                {run.error}
+              </pre>
             </div>
           )}
         </div>
@@ -323,7 +496,17 @@ function RunDetailDialog({ run, open, onOpenChange }: { run: any | null; open: b
   );
 }
 
-function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: ActivityItem | null; open: boolean; onOpenChange: (open: boolean) => void; navigate: ReturnType<typeof useNavigate> }) {
+function ThreadDetailDialog({
+  item,
+  open,
+  onOpenChange,
+  navigate,
+}: {
+  item: ActivityItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
   const [result] = useQuery({
     query: ThreadDetailQuery,
     variables: { id: item?.sourceId ?? "" },
@@ -341,20 +524,37 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
             <MessagesSquare className="h-4 w-4 shrink-0 text-rose-500" />
             <span className="truncate">{item?.title ?? "Thread"}</span>
             {item && (
-              <Badge variant="secondary" className={cn("text-xs capitalize shrink-0", STATUS_COLORS[item.status] ?? "bg-muted text-muted-foreground")}>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "text-xs capitalize shrink-0",
+                  STATUS_COLORS[item.status] ??
+                    "bg-muted text-muted-foreground",
+                )}
+              >
                 {item.status.replace(/_/g, " ")}
               </Badge>
             )}
           </DialogTitle>
         </DialogHeader>
-        {result.fetching && <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>}
+        {result.fetching && (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            Loading...
+          </p>
+        )}
         {thread && (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               {thread.computerId ? (
                 <div>
-                  <span className="text-muted-foreground text-xs">Computer</span>
-                  <p>Computer-owned</p>
+                  <span className="text-muted-foreground text-xs">
+                    Computer
+                  </span>
+                  <p>{thread.computer?.name ?? "Unknown Computer"}</p>
+                  <span className="text-muted-foreground text-xs">User</span>
+                  <p>
+                    {thread.user?.name ?? thread.user?.email ?? "Unknown User"}
+                  </p>
                 </div>
               ) : thread.agent ? (
                 <div>
@@ -362,13 +562,29 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
                   <p>{thread.agent.name}</p>
                 </div>
               ) : null}
-              {thread.createdAt && <div><span className="text-muted-foreground text-xs">Created</span><p>{new Date(thread.createdAt).toLocaleString()}</p></div>}
+              {thread.createdAt && (
+                <div>
+                  <span className="text-muted-foreground text-xs">Created</span>
+                  <p>{new Date(thread.createdAt).toLocaleString()}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
         <Separator />
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { onOpenChange(false); navigate({ to: "/threads/$threadId", params: { threadId: item!.sourceId } }); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              onOpenChange(false);
+              navigate({
+                to: "/threads/$threadId",
+                params: { threadId: item!.sourceId },
+              });
+            }}
+          >
             <ExternalLink className="h-3.5 w-3.5" /> Open thread
           </Button>
         </div>

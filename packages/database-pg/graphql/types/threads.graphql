@@ -43,6 +43,8 @@ type Thread {
   computerId: ID
   userId: ID
   agent: Agent
+  computer: Computer
+  user: User
   messages(limit: Int, cursor: String): MessageConnection!
   number: Int!
   identifier: String

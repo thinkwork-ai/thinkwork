@@ -5558,6 +5558,7 @@ export type Thread = {
   checkoutVersion: Scalars['Int']['output'];
   closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  computer?: Maybe<Computer>;
   computerId?: Maybe<Scalars['ID']['output']>;
   costSummary?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
@@ -5583,6 +5584,7 @@ export type Thread = {
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+  user?: Maybe<User>;
   userId?: Maybe<Scalars['ID']['output']>;
 };
 

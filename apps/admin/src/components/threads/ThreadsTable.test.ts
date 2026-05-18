@@ -40,9 +40,17 @@ describe("ThreadsTable shared component", () => {
   it("renders the assignee picker for non-Computer-owned threads", () => {
     expect(source).toContain("thread.computerId ? (");
     expect(source).toContain('Badge variant="outline"');
-    expect(source).toContain("Computer-owned");
+    expect(source).toContain("threadComputerLabel(thread)");
+    expect(source).toContain("threadUserLabel(thread)");
     expect(source).toContain("assigneePickerIssueId");
     expect(source).toContain("Popover");
+  });
+
+  it("exports attribution label helpers for shared Computer rows", () => {
+    expect(source).toContain("export function threadComputerLabel");
+    expect(source).toContain("export function threadUserLabel");
+    expect(source).toContain("Unknown Computer");
+    expect(source).toContain("Unknown User");
   });
 
   it("keeps a single scope toggle for future divergence", () => {
