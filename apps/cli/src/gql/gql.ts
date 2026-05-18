@@ -38,6 +38,15 @@ type Documents = {
     "\n  mutation CliInboxCancel($id: ID!) {\n    cancelInboxItem(id: $id) {\n      id\n      status\n    }\n  }\n": typeof types.CliInboxCancelDocument,
     "\n  mutation CliInboxAddComment($input: AddInboxItemCommentInput!) {\n    addInboxItemComment(input: $input) {\n      id\n      inboxItemId\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": typeof types.CliInboxAddCommentDocument,
     "\n  query CliInboxTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliInboxTenantBySlugDocument,
+    "\n  query CliKnowledgeBases($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      slug\n      embeddingModel\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n    }\n  }\n": typeof types.CliKnowledgeBasesDocument,
+    "\n  query CliKnowledgeBase($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliKnowledgeBaseDocument,
+    "\n  mutation CliCreateKB($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n    }\n  }\n": typeof types.CliCreateKbDocument,
+    "\n  mutation CliUpdateKB($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n    }\n  }\n": typeof types.CliUpdateKbDocument,
+    "\n  mutation CliDeleteKB($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n": typeof types.CliDeleteKbDocument,
+    "\n  mutation CliSyncKB($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n      lastSyncAt\n    }\n  }\n": typeof types.CliSyncKbDocument,
+    "\n  query CliAgentKBs($agentId: ID!) {\n    agent(id: $agentId) {\n      id\n      knowledgeBases {\n        knowledgeBaseId\n        enabled\n        searchConfig\n      }\n    }\n  }\n": typeof types.CliAgentKBsDocument,
+    "\n  mutation CliSetAgentKBs(\n    $agentId: ID!\n    $knowledgeBases: [AgentKnowledgeBaseInput!]!\n  ) {\n    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {\n      id\n      knowledgeBaseId\n      enabled\n    }\n  }\n": typeof types.CliSetAgentKBsDocument,
+    "\n  query CliKBTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliKbTenantBySlugDocument,
     "\n  query CliLabelList($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n      description\n      createdAt\n    }\n  }\n": typeof types.CliLabelListDocument,
     "\n  mutation CliLabelCreate($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n      description\n    }\n  }\n": typeof types.CliLabelCreateDocument,
     "\n  mutation CliLabelUpdate($id: ID!, $input: UpdateThreadLabelInput!) {\n    updateThreadLabel(id: $id, input: $input) {\n      id\n      name\n      color\n      description\n    }\n  }\n": typeof types.CliLabelUpdateDocument,
@@ -107,6 +116,15 @@ const documents: Documents = {
     "\n  mutation CliInboxCancel($id: ID!) {\n    cancelInboxItem(id: $id) {\n      id\n      status\n    }\n  }\n": types.CliInboxCancelDocument,
     "\n  mutation CliInboxAddComment($input: AddInboxItemCommentInput!) {\n    addInboxItemComment(input: $input) {\n      id\n      inboxItemId\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": types.CliInboxAddCommentDocument,
     "\n  query CliInboxTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliInboxTenantBySlugDocument,
+    "\n  query CliKnowledgeBases($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      slug\n      embeddingModel\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n    }\n  }\n": types.CliKnowledgeBasesDocument,
+    "\n  query CliKnowledgeBase($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliKnowledgeBaseDocument,
+    "\n  mutation CliCreateKB($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n    }\n  }\n": types.CliCreateKbDocument,
+    "\n  mutation CliUpdateKB($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n    }\n  }\n": types.CliUpdateKbDocument,
+    "\n  mutation CliDeleteKB($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n": types.CliDeleteKbDocument,
+    "\n  mutation CliSyncKB($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n      lastSyncAt\n    }\n  }\n": types.CliSyncKbDocument,
+    "\n  query CliAgentKBs($agentId: ID!) {\n    agent(id: $agentId) {\n      id\n      knowledgeBases {\n        knowledgeBaseId\n        enabled\n        searchConfig\n      }\n    }\n  }\n": types.CliAgentKBsDocument,
+    "\n  mutation CliSetAgentKBs(\n    $agentId: ID!\n    $knowledgeBases: [AgentKnowledgeBaseInput!]!\n  ) {\n    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {\n      id\n      knowledgeBaseId\n      enabled\n    }\n  }\n": types.CliSetAgentKBsDocument,
+    "\n  query CliKBTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliKbTenantBySlugDocument,
     "\n  query CliLabelList($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n      description\n      createdAt\n    }\n  }\n": types.CliLabelListDocument,
     "\n  mutation CliLabelCreate($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n      description\n    }\n  }\n": types.CliLabelCreateDocument,
     "\n  mutation CliLabelUpdate($id: ID!, $input: UpdateThreadLabelInput!) {\n    updateThreadLabel(id: $id, input: $input) {\n      id\n      name\n      color\n      description\n    }\n  }\n": types.CliLabelUpdateDocument,
@@ -262,6 +280,42 @@ export function graphql(source: "\n  mutation CliInboxAddComment($input: AddInbo
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliInboxTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"): (typeof documents)["\n  query CliInboxTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliKnowledgeBases($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      slug\n      embeddingModel\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n    }\n  }\n"): (typeof documents)["\n  query CliKnowledgeBases($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      slug\n      embeddingModel\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliKnowledgeBase($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliKnowledgeBase($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateKB($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateKB($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateKB($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateKB($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteKB($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteKB($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSyncKB($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n      lastSyncAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliSyncKB($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n      lastSyncAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliAgentKBs($agentId: ID!) {\n    agent(id: $agentId) {\n      id\n      knowledgeBases {\n        knowledgeBaseId\n        enabled\n        searchConfig\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliAgentKBs($agentId: ID!) {\n    agent(id: $agentId) {\n      id\n      knowledgeBases {\n        knowledgeBaseId\n        enabled\n        searchConfig\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSetAgentKBs(\n    $agentId: ID!\n    $knowledgeBases: [AgentKnowledgeBaseInput!]!\n  ) {\n    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {\n      id\n      knowledgeBaseId\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliSetAgentKBs(\n    $agentId: ID!\n    $knowledgeBases: [AgentKnowledgeBaseInput!]!\n  ) {\n    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {\n      id\n      knowledgeBaseId\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliKBTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliKBTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
