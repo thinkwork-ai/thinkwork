@@ -2,8 +2,9 @@ name: Verify
 
 # Manual + scheduled verification of the deployed dev stack. Split out
 # of deploy.yml so push-to-main does not create dev threads or run
-# smokes implicitly. Trigger via `gh workflow run verify.yml -f run_smokes=true`
-# or wait for the nightly drift-check.
+# smokes implicitly. Trigger smokes deliberately via
+# `gh workflow run verify.yml -f run_smokes=true`, or run the workflow
+# with the default input for the nightly-style drift-only verification.
 
 on:
   workflow_dispatch:
@@ -11,7 +12,7 @@ on:
       run_smokes:
         description: "Run the four smoke jobs against dev"
         type: boolean
-        default: true
+        default: false
   schedule:
     # 06:00 UTC daily — drift-check only; smokes do not run on schedule.
     - cron: "0 6 * * *"
