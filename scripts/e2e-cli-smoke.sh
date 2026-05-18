@@ -96,6 +96,21 @@ step "label list" "$CLI label list --stage $STAGE --tenant $TENANT --json | jq -
 
 step "inbox list" "$CLI inbox list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
 
+# Phase 3 read-only smoke
+step "turn list" "$CLI turn list --stage $STAGE --tenant $TENANT --limit 3 --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "wakeup list" "$CLI wakeup list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "scheduled-job list" "$CLI scheduled-job list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "webhook list" "$CLI webhook list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "routine list" "$CLI routine list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "skill catalog" "$CLI skill catalog --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "skill list" "$CLI skill list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
 # Pick a thread + an agent for deeper checks
 step_capture THR_ID "thread list → pick first thread" \
   "$CLI thread list --stage $STAGE --tenant $TENANT --limit 1 --json | jq -er '.items[0].id // empty'"

@@ -1,108 +1,232 @@
 /**
- * `thinkwork skill ...` — MCP-style skills published in the catalog plus
- * tenant-installed / custom skills.
+ * `thinkwork skill ...` — skill catalog browse + custom-plugin push.
  *
- * Scaffolded in Phase 0; ships in Phase 3.
+ * - catalog / list: backed by the skillCatalog GraphQL query.
+ * - push: existing REST-based plugin upload flow (Cognito-auth required).
+ * - install/upgrade/create/update/delete: scaffolded but the API doesn't
+ *   currently expose the per-tenant install/upgrade surface — those
+ *   handlers print a clear "API surface pending" error for now.
  */
 
 import { Command } from "commander";
-import { notYetImplemented } from "../lib/stub.js";
+import { graphql } from "../gql/index.js";
+import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { resolveAuth } from "../lib/resolve-auth.js";
 import { getApiEndpoint } from "../aws-discovery.js";
+import { getGqlClient, gqlQuery } from "../lib/gql-client.js";
 import { buildPluginZip, PluginZipError } from "../lib/plugin-zip.js";
 import { pushPluginZip } from "../lib/plugin-push.js";
-import { printError, printSuccess, printWarning } from "../ui.js";
+import { isJsonMode, printJson, printTable } from "../lib/output.js";
+import {
+  printError,
+  printMissingApiSessionError,
+  printSuccess,
+  printWarning,
+} from "../ui.js";
+
+const SkillCatalogDoc = graphql(`
+  query CliSkillCatalog {
+    skillCatalog {
+      id
+      skillId
+      displayName
+      description
+      category
+      icon
+      source
+      enabled
+    }
+  }
+`);
+
+const SkillTenantBySlugDoc = graphql(`
+  query CliSkillTenantBySlug($slug: String!) {
+    tenantBySlug(slug: $slug) {
+      id
+    }
+  }
+`);
+
+interface SkillCliOptions {
+  stage?: string;
+  region?: string;
+  tenant?: string;
+}
+
+async function resolveSkillContext(opts: SkillCliOptions) {
+  const region = opts.region ?? "us-east-1";
+  const stage = await resolveStage({ flag: opts.stage, region });
+  const session = loadStageSession(stage);
+  const { client } = await getGqlClient({ stage, region });
+  // skillCatalog is tenant-scoped at the resolver level via the bearer, so we
+  // don't strictly need a tenantId in the query. But surface the helpful error
+  // if the session is missing AND there's no api-key auto-fallback path.
+  if (!session) {
+    // resolveAuth's api-key fallback will kick in inside gqlQuery, so we don't
+    // pre-exit here. Just return.
+  }
+  return { stage, region, client };
+}
+
+interface CatalogOptions extends SkillCliOptions {
+  search?: string;
+  tag?: string;
+}
+
+async function runSkillCatalog(opts: CatalogOptions): Promise<void> {
+  const ctx = await resolveSkillContext(opts);
+  const data = await gqlQuery(ctx.client, SkillCatalogDoc, {});
+  let items = data.skillCatalog ?? [];
+  if (opts.search) {
+    const q = opts.search.toLowerCase();
+    items = items.filter(
+      (s) =>
+        s.displayName.toLowerCase().includes(q) ||
+        s.skillId.toLowerCase().includes(q) ||
+        (s.description ?? "").toLowerCase().includes(q),
+    );
+  }
+  if (opts.tag) {
+    const tag = opts.tag.toLowerCase();
+    items = items.filter((s) => (s.category ?? "").toLowerCase() === tag);
+  }
+  if (isJsonMode()) {
+    printJson({ items });
+    return;
+  }
+  printTable(
+    items.map((s) => ({
+      skillId: s.skillId,
+      name: s.displayName,
+      category: s.category ?? "—",
+      source: s.source,
+      enabled: s.enabled ? "yes" : "no",
+    })),
+    [
+      { key: "skillId", header: "SKILL ID" },
+      { key: "name", header: "NAME" },
+      { key: "category", header: "CATEGORY" },
+      { key: "source", header: "SOURCE" },
+      { key: "enabled", header: "ENABLED" },
+    ],
+  );
+}
+
+interface ListOptions extends SkillCliOptions {
+  customOnly?: boolean;
+}
+
+async function runSkillList(opts: ListOptions): Promise<void> {
+  const ctx = await resolveSkillContext(opts);
+  const data = await gqlQuery(ctx.client, SkillCatalogDoc, {});
+  let items = data.skillCatalog ?? [];
+  if (opts.customOnly) {
+    items = items.filter((s) => (s.source ?? "").toLowerCase() === "tenant");
+  }
+  if (isJsonMode()) {
+    printJson({ items });
+    return;
+  }
+  printTable(
+    items.map((s) => ({
+      skillId: s.skillId,
+      name: s.displayName,
+      category: s.category ?? "—",
+      source: s.source,
+      enabled: s.enabled ? "yes" : "no",
+    })),
+    [
+      { key: "skillId", header: "SKILL ID" },
+      { key: "name", header: "NAME" },
+      { key: "category", header: "CATEGORY" },
+      { key: "source", header: "SOURCE" },
+      { key: "enabled", header: "ENABLED" },
+    ],
+  );
+}
+
+function notYetImplementedAtApi(verb: string): never {
+  printError(
+    `\`skill ${verb}\` is not yet implemented at the GraphQL API.\n` +
+      "  The current schema exposes skillCatalog (read), per-computer enableSkill/disableSkill,\n" +
+      "  and the REST `skill push` upload path. Tenant-scoped install/upgrade/create/update/delete\n" +
+      "  is tracked as a Phase-3 follow-up. Use `thinkwork skill push <folder>` to upload custom\n" +
+      "  plugins; toggle catalog skills per-agent via `thinkwork agent skills set` for now.",
+  );
+  process.exit(2);
+}
 
 export function registerSkillCommand(program: Command): void {
   const skill = program
     .command("skill")
     .alias("skills")
     .description(
-      "Browse the catalog, install, upgrade, or publish custom skills.",
+      "Browse the skill catalog and push custom skill plugins.",
     );
 
   skill
     .command("catalog")
-    .description("Browse the public skill catalog (not tenant-scoped).")
+    .description("Browse the skill catalog. Client-side filters --search and --tag are applied locally.")
     .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
     .option("--search <q>", "Filter by keyword")
-    .option("--tag <t>", "Filter by tag")
-    .action(() => notYetImplemented("skill catalog", 3));
+    .option("--tag <t>", "Filter by category")
+    .action(runSkillCatalog);
 
   skill
     .command("list")
     .alias("ls")
-    .description("List skills installed / published in the current tenant.")
+    .description("List skills available to the tenant.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--custom-only", "Only show tenant-owned custom skills")
-    .action(() => notYetImplemented("skill list", 3));
+    .option("--custom-only", "Only show tenant-owned custom skills (source=tenant)")
+    .action(runSkillList);
 
   skill
     .command("install <slug>")
-    .description("Install a public skill into the tenant. Idempotent.")
+    .description("Install a public skill. (API surface pending — toggle per-agent via `agent skills set`.)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--version <v>", "Pin to a specific version (default: latest)")
-    .addHelpText(
-      "after",
-      `
-Examples:
-  $ thinkwork skill install web-search
-  $ thinkwork skill install pagerduty --version 1.4.2
-`,
-    )
-    .action(() => notYetImplemented("skill install", 3));
+    .option("--version <v>", "Pin to a specific version")
+    .action(() => notYetImplementedAtApi("install"));
 
   skill
     .command("upgrade <slug>")
-    .description("Upgrade an installed skill to the latest catalog version.")
+    .description("Upgrade an installed skill. (API surface pending.)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("skill upgrade", 3));
+    .action(() => notYetImplementedAtApi("upgrade"));
 
   skill
     .command("create [slug]")
-    .description(
-      "Publish a custom tenant-scoped skill (walkthrough for missing fields in TTY).",
-    )
+    .description("Publish a custom tenant-scoped skill. (Use `skill push <folder>` for now.)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--name <n>")
     .option("--description <text>")
     .option("--manifest-file <path>", "Path to the MCP server manifest JSON")
     .option("--endpoint <url>", "MCP server HTTP/SSE endpoint")
-    .addHelpText(
-      "after",
-      `
-Examples:
-  $ thinkwork skill create my-skill --manifest-file ./skills/my-skill.json
-  $ thinkwork skill create                                   # interactive
-`,
-    )
-    .action(() => notYetImplemented("skill create", 3));
+    .action(() => notYetImplementedAtApi("create"));
 
   skill
     .command("update <slug>")
-    .description("Update a custom skill's manifest, endpoint, or description.")
+    .description("Update a custom skill. (API surface pending.)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--name <n>")
     .option("--description <text>")
     .option("--manifest-file <path>")
     .option("--endpoint <url>")
-    .action(() => notYetImplemented("skill update", 3));
+    .action(() => notYetImplementedAtApi("update"));
 
   skill
     .command("delete <slug>")
-    .description(
-      "Delete a custom skill. Public catalog skills are uninstalled via this too.",
-    )
+    .description("Delete a custom skill. (API surface pending.)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
-    .action(() => notYetImplemented("skill delete", 3));
+    .action(() => notYetImplementedAtApi("delete"));
 
   skill
     .command("push <folder>")
@@ -119,8 +243,8 @@ Examples:
   $ thinkwork skill push ./my-plugin --stage dev
 
 The folder must contain a plugin.json manifest. MCP servers shipped
-inside the plugin will land as 'pending' and need admin approval
-under Capabilities → MCP Servers before agents can invoke them.
+inside the plugin land as 'pending' and need admin approval under
+Capabilities → MCP Servers before agents can invoke them.
 `,
     )
     .action(
@@ -131,7 +255,7 @@ under Capabilities → MCP Servers before agents can invoke them.
 }
 
 // ---------------------------------------------------------------------------
-// `skill push` implementation
+// `skill push` implementation (unchanged from prior scaffold)
 // ---------------------------------------------------------------------------
 
 async function runPushCommand(
@@ -154,8 +278,6 @@ async function runPushCommand(
 
   const auth = await resolveAuth({ stage, region, requireCognito: true });
   if (auth.mode !== "cognito") {
-    // requireCognito:true above already prints + exits for non-Cognito,
-    // but keep a defensive branch for clarity.
     printError(
       `skill push requires a Cognito session. Run \`thinkwork login --stage ${stage}\`.`,
     );
