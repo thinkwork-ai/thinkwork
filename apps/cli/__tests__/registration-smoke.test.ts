@@ -248,44 +248,33 @@ describe("stub registration (taxonomy smoke test)", () => {
     }
   });
 
-  it("every stub action exits with code 2 when invoked", async () => {
+  it("scaffolded-but-API-pending verbs exit with code 2", async () => {
+    // All 25 original commands have implementations now. A handful of
+    // verbs scaffolded ahead of the server-side resolver use the
+    // `notYetImplementedAtApi(verb)` pattern — same exit code 2, but with
+    // a domain-specific error rather than the original generic stub.
     const program = new Command();
-    // A couple of representative stubs from still-unimplemented phases.
-    // (Phase 1, 2, 3 all have real implementations now.)
-    registerMemoryCommand(program);
-    registerRecipeCommand(program);
-    registerDashboardCommand(program);
+    registerScheduledJobCommand(program);
 
-    const stderrSpy = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
+    const logSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => undefined);
     const exitSpy = vi
       .spyOn(process, "exit")
       .mockImplementation(() => undefined as never);
 
-    // Disable Commander's default exit-on-success/help so parseAsync hands
-    // control back to us.
     program.exitOverride();
 
-    // Run one subcommand from each phase.
     await program
-      .parseAsync(["node", "thinkwork", "memory", "list"])
-      .catch(() => undefined);
-    await program
-      .parseAsync(["node", "thinkwork", "recipe", "list"])
-      .catch(() => undefined);
-    await program
-      .parseAsync(["node", "thinkwork", "dashboard"])
+      .parseAsync(["node", "thinkwork", "scheduled-job", "delete", "sj-fake"])
       .catch(() => undefined);
 
-    // Each stub should have called process.exit(2).
     expect(exitSpy).toHaveBeenCalledWith(2);
 
-    const combinedStderr = stderrSpy.mock.calls
-      .map((c) => String(c[0]))
-      .join("");
-    expect(combinedStderr).toContain("not yet implemented");
-    expect(combinedStderr).toContain("apps/cli/README.md#roadmap");
+    const combinedLog = logSpy.mock.calls
+      .map((c) => c.map(String).join(" "))
+      .join("\n");
+    expect(combinedLog).toContain("not yet implemented at the GraphQL API");
 
     vi.restoreAllMocks();
   });

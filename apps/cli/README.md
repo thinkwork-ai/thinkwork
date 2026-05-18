@@ -150,8 +150,8 @@ message and exits with code 2.
 | 1 | Work & approvals | ✅ `thread`, `message`, `label`, `inbox` — **Phase 1 complete** |
 | 2 | Agents & workspace | ✅ `member`, `team`, `kb`, `template`, `tenant`, `agent` — **Phase 2 complete** |
 | 3 | Automation & integrations | ✅ `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` — **Phase 3 complete** (`connector` retired) |
-| 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
-| 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |
+| 4 | Memory & artifacts | ✅ `memory`, `recipe`, `artifact` — **Phase 4 complete** |
+| 5 | Observability & spend | ✅ `cost`, `budget`, `performance`, `trace`, `dashboard` — **Phase 5 complete** |
 
 Each phase ships as one PR. Mid-phase stubs keep `thinkwork --help` complete
 so the full surface is always discoverable; individual commands flip from

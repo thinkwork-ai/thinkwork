@@ -111,6 +111,25 @@ step "skill catalog" "$CLI skill catalog --stage $STAGE --tenant $TENANT --json 
 
 step "skill list" "$CLI skill list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
 
+# Phase 4+5 read-only smoke
+step "recipe list" "$CLI recipe list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "artifact list" "$CLI artifact list --stage $STAGE --tenant $TENANT --limit 3 --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "cost summary" "$CLI cost summary --stage $STAGE --tenant $TENANT --json | jq -e '.totalUsd != null' >/dev/null"
+
+step "cost by-agent" "$CLI cost by-agent --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "cost by-model" "$CLI cost by-model --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "cost series" "$CLI cost series --stage $STAGE --tenant $TENANT --days 7 --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "budget list" "$CLI budget list --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "budget status" "$CLI budget status --stage $STAGE --tenant $TENANT --json | jq -e '.items | type == \"array\"' >/dev/null"
+
+step "dashboard" "$CLI dashboard --stage $STAGE --tenant $TENANT --json | jq -e '.agents.total != null' >/dev/null"
+
 # Pick a thread + an agent for deeper checks
 step_capture THR_ID "thread list → pick first thread" \
   "$CLI thread list --stage $STAGE --tenant $TENANT --limit 1 --json | jq -er '.items[0].id // empty'"
@@ -204,6 +223,14 @@ fi
 assert_fails_with "tenant settings set is auth-gated" \
   "Tenant admin role required|Unexpected error" \
   "$CLI tenant settings set $TENANT --feature e2e_test_$SUFFIX=true --stage $STAGE --json"
+
+assert_fails_with "memory list is auth-gated for api-key callers" \
+  "Tenant admin role required|Unexpected error" \
+  "$CLI memory list --stage $STAGE --tenant $TENANT --json"
+
+assert_fails_with "performance agents is auth-gated for api-key callers" \
+  "Tenant admin role required|Unexpected error" \
+  "$CLI performance agents --stage $STAGE --tenant $TENANT --json"
 
 echo ""
 echo "================================================================"
