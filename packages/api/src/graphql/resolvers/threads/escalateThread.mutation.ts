@@ -21,7 +21,7 @@ import {
 	threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const escalateThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const { threadId, reason, agentId } = args.input;
@@ -45,7 +45,7 @@ export const escalateThread = async (_parent: any, args: any, ctx: GraphQLContex
 
 	if (!threadRow) throw new Error("Thread not found");
 
-	await requireTenantAdmin(ctx, threadRow.tenant_id);
+	await requireAdminOrServiceCaller(ctx, threadRow.tenant_id, "escalate_thread");
 
 	// Look up the escalating agent. Verify existence + tenant BEFORE the
 	// reports_to null check so a cross-tenant agentId surfaces as a

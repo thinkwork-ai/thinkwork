@@ -8,7 +8,7 @@ import {
   slackWorkspaces as slackWorkspacesTable,
 } from "../../utils.js";
 import { deleteSlackBotToken } from "../../../lib/slack/workspace-store.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { slackWorkspaceToGraphql } from "./shared.js";
 
 export async function uninstallSlackWorkspace(
@@ -23,7 +23,7 @@ export async function uninstallSlackWorkspace(
     .limit(1);
   if (!current) throw new Error("Slack workspace not found");
 
-  await requireTenantAdmin(ctx, current.tenant_id);
+  await requireAdminOrServiceCaller(ctx, current.tenant_id, "uninstall_slack_workspace");
 
   const [updated] = await db
     .update(slackWorkspacesTable)

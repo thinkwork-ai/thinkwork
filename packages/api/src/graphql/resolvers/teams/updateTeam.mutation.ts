@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, teams, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const updateTeam = async (
   _parent: any,
@@ -17,7 +17,7 @@ export const updateTeam = async (
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantAdmin(ctx, team.tenant_id);
+  await requireAdminOrServiceCaller(ctx, team.tenant_id, "update_team");
 
   const i = args.input;
   const updates: Record<string, unknown> = { updated_at: new Date() };

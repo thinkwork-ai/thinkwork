@@ -6,7 +6,7 @@ import { validateTemplateContextEngine } from "../../../lib/templates/context-en
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 import { validateTemplateSendEmail } from "../../../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   parseAgentRuntimeInput,
   withGraphqlAgentRuntime,
@@ -30,7 +30,7 @@ export async function updateAgentTemplate(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantAdmin(ctx, template.tenant_id!);
+  await requireAdminOrServiceCaller(ctx, template.tenant_id!, "update_agent_template");
 
   const i = args.input;
 

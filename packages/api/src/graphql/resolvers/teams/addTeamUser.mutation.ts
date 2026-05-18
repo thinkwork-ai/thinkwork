@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, teams, teamUsers, snakeToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const addTeamUser = async (
   _parent: any,
@@ -13,7 +13,7 @@ export const addTeamUser = async (
     .from(teams)
     .where(eq(teams.id, args.teamId));
   if (!team) throw new Error("Team not found");
-  await requireTenantAdmin(ctx, team.tenant_id);
+  await requireAdminOrServiceCaller(ctx, team.tenant_id, "add_team_user");
   const [row] = await db
     .insert(teamUsers)
     .values({

@@ -11,7 +11,7 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agents, agentTemplates } from "../../utils.js";
 import { syncTemplateToAgent } from "./syncTemplateToAgent.mutation.js";
-import { requireTenantAdmin, requireNotFromAdminSkill } from "../core/authz.js";
+import { requireAdminOrServiceCaller, requireNotFromAdminSkill } from "../core/authz.js";
 
 export async function syncTemplateToAllAgents(
   _parent: any,
@@ -34,7 +34,7 @@ export async function syncTemplateToAllAgents(
     .from(agentTemplates)
     .where(eq(agentTemplates.id, templateId));
   if (!template) throw new Error("Agent template not found");
-  await requireTenantAdmin(ctx, template.tenant_id!);
+  await requireAdminOrServiceCaller(ctx, template.tenant_id!, "sync_template_to_all_agents");
 
   const linked = await db
     .select({ id: agents.id, name: agents.name })

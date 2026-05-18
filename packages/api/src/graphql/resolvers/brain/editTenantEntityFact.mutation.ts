@@ -6,7 +6,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { toTenantEntitySection } from "./mappers.js";
 
@@ -29,7 +29,7 @@ export const editTenantEntityFact = async (
 		.where(eq(tenantEntityPageSections.id, args.factId))
 		.limit(1);
 	if (!row) throw new Error("Tenant entity fact not found");
-	await requireTenantAdmin(ctx, row.tenantId);
+	await requireAdminOrServiceCaller(ctx, row.tenantId, "edit_tenant_entity_fact");
 	const [updated] = await db
 		.update(tenantEntityPageSections)
 		.set({ body_md: args.content, updated_at: new Date() })

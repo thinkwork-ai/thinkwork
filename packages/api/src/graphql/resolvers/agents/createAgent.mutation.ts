@@ -10,7 +10,7 @@ import {
   generateSlug,
   invokeJobScheduleManager,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
@@ -27,7 +27,7 @@ export async function createAgent(
   ctx: GraphQLContext,
 ) {
   const i = args.input;
-  await requireTenantAdmin(ctx, i.tenantId);
+  await requireAdminOrServiceCaller(ctx, i.tenantId, "create_agent");
 
   // Resolve the invoker. Apikey callers (thinkwork-admin skill) set
   // principalId directly on ctx.auth; cognito callers go through the

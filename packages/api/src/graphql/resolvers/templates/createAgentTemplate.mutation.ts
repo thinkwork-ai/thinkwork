@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, agentTemplates, templateToCamel } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
@@ -20,7 +20,7 @@ export async function createAgentTemplate(
   ctx: GraphQLContext,
 ) {
   const i = args.input;
-  await requireTenantAdmin(ctx, i.tenantId);
+  await requireAdminOrServiceCaller(ctx, i.tenantId, "create_agent_template");
 
   const invokerUserId =
     ctx.auth.authType === "apikey"

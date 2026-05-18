@@ -6,7 +6,7 @@ import {
   sanitizeSlackInstallReturnUrl,
   slackOAuthRedirectUri,
 } from "../../../lib/slack/oauth-state.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
 interface StartSlackWorkspaceInstallArgs {
@@ -23,7 +23,7 @@ export async function startSlackWorkspaceInstall(
   ctx: GraphQLContext,
 ): Promise<{ authorizeUrl: string; state: string; expiresAt: string }> {
   const tenantId = args.input.tenantId;
-  await requireTenantAdmin(ctx, tenantId);
+  await requireAdminOrServiceCaller(ctx, tenantId, "install_slack_workspace");
   const adminUserId = await resolveCallerUserId(ctx);
   if (!adminUserId) {
     throw new Error("Slack install requires an authenticated admin user");

@@ -34,7 +34,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { snapshotAgent } from "../../../lib/agent-snapshot.js";
 import { overlayTemplateWorkspace } from "../../../lib/workspace-copy.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   mergeTemplateSkillsIntoAgent,
   type MergedSkillRow,
@@ -73,7 +73,7 @@ export async function syncTemplateToAgent(
   // any linked agent. This must run before snapshotAgent (writes) and
   // before any delete/update on agent_skills / agent_knowledge_bases /
   // agent_mcp_servers.
-  await requireTenantAdmin(ctx, agentTemplate.tenant_id!);
+  await requireAdminOrServiceCaller(ctx, agentTemplate.tenant_id!, "sync_template_to_agent");
 
   // 2. Snapshot current state FIRST (enables rollback)
   await snapshotAgent(agentId, "Pre-sync from template", ctx.auth.principalId);

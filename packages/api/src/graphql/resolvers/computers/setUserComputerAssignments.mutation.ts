@@ -9,7 +9,7 @@ import {
   computers,
   computerAssignments,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { toGraphqlComputerAssignment } from "./shared.js";
 
@@ -30,7 +30,7 @@ export async function setUserComputerAssignments(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantAdmin(ctx, user.tenant_id);
+  await requireAdminOrServiceCaller(ctx, user.tenant_id, "set_user_computer_assignments");
   const assignedByUserId = await resolveCallerUserId(ctx);
 
   const computerIds = [...new Set(args.input.computerIds ?? [])];

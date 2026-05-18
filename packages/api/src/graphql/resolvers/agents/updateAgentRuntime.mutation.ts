@@ -8,7 +8,7 @@ import {
   agentToCamel,
   recordActivity,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
 
@@ -31,7 +31,7 @@ export async function updateAgentRuntime(
     });
   }
 
-  await requireTenantAdmin(ctx, current.tenant_id);
+  await requireAdminOrServiceCaller(ctx, current.tenant_id, "update_agent_runtime");
 
   const nextRuntime = parseAgentRuntimeInput(args.runtime);
   const [row] = await db

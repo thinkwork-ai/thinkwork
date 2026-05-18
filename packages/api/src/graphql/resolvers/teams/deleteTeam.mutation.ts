@@ -1,6 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, teams } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const deleteTeam = async (
   _parent: any,
@@ -12,7 +12,7 @@ export const deleteTeam = async (
     .from(teams)
     .where(eq(teams.id, args.id));
   if (!team) return false;
-  await requireTenantAdmin(ctx, team.tenant_id);
+  await requireAdminOrServiceCaller(ctx, team.tenant_id, "delete_team");
 
   const [row] = await db
     .update(teams)
