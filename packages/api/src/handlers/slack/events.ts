@@ -14,9 +14,10 @@ import {
   withSlackThreadMapping,
 } from "../../lib/slack/envelope.js";
 import {
-  loadLinkedSlackComputer,
-  type SlackLinkedComputer,
-} from "../../lib/slack/linked-computer.js";
+  resolveSlackSharedComputerTarget,
+  slackTargetingGuidance,
+  type SlackComputerTargetResult,
+} from "../../lib/slack/shared-computer-targeting.js";
 import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 import {
   materializeSlackFilesAsThreadAttachments,
@@ -82,13 +83,13 @@ export interface SlackEventsDeps {
   dbClient?: DbClient;
   enqueueTask?: EnqueueTask;
   slackApi?: SlackApi;
-  loadLinkedComputer?: (input: {
+  resolveTarget?: (input: {
     tenantId: string;
     slackTeamId: string;
     slackUserId: string;
     text?: string;
     botUserId?: string | null;
-  }) => Promise<SlackLinkedComputer | null>;
+  }) => Promise<SlackComputerTargetResult>;
   updateTaskInput?: (input: {
     tenantId: string;
     computerId: string;
@@ -129,9 +130,14 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   const dbClient = deps.dbClient ?? db;
   const enqueueTask = deps.enqueueTask ?? enqueueComputerTask;
   const slackApi = deps.slackApi ?? defaultSlackApi;
-  const loadLinkedComputer =
-    deps.loadLinkedComputer ??
-    ((input) => loadLinkedSlackComputer(input, dbClient));
+  const resolveTarget =
+    deps.resolveTarget ??
+    ((input) =>
+      resolveSlackSharedComputerTarget({
+        ...input,
+        text: input.text ?? "",
+        allowSingleAssignedFallback: true,
+      }));
   const updateTaskInput =
     deps.updateTaskInput ??
     ((input) => defaultUpdateTaskInput(input, dbClient));
@@ -165,14 +171,14 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
 
     const slackUserId = requiredString(event.user);
     const channelId = requiredString(event.channel);
-    const link = await loadLinkedComputer({
+    const targetResult = await resolveTarget({
       tenantId: args.workspace.tenantId,
       slackTeamId,
       slackUserId,
       text: slackEventText(event),
       botUserId: args.workspace.botUserId,
     });
-    if (!link) {
+    if (targetResult.status === "unlinked") {
       await slackApi.sendLinkPrompt({
         token: args.botToken,
         workspaceTeamId: slackTeamId,
@@ -181,6 +187,20 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       });
       return json({ ok: true, ignored: true, reason: "slack_user_unlinked" });
     }
+    if (targetResult.status !== "resolved") {
+      await safePostTargetingGuidance(slackApi, {
+        token: args.botToken,
+        channel: channelId,
+        threadTs: slackThreadTs(event),
+        text: slackTargetingGuidance(targetResult),
+      });
+      return json({
+        ok: true,
+        ignored: true,
+        reason: `slack_target_${targetResult.status}`,
+      });
+    }
+    const target = targetResult.target;
 
     const threadTs = slackThreadTs(event);
     const threadContext = await safeFetchThreadContext(slackApi, {
@@ -190,7 +210,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     });
     const eventForTask = {
       ...event,
-      text: link.prompt || slackEventText(event),
+      text: target.prompt || slackEventText(event),
     };
     const taskInput = buildSlackThreadTurnInput({
       channelType,
@@ -201,19 +221,19 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       eventId,
       event: eventForTask,
       threadContext,
-      actorId: link.userId,
+      actorId: target.userId,
     });
     const mapping = await resolveSlackThread({
       tenantId: args.workspace.tenantId,
-      computerId: link.computerId,
-      actorId: link.userId,
+      computerId: target.computerId,
+      actorId: target.userId,
       envelope: taskInput,
     });
     await safeMaterializeSlackFiles(materializeSlackFiles, {
       tenantId: args.workspace.tenantId,
       threadId: mapping.threadId,
       messageId: mapping.messageId,
-      uploadedBy: link.userId,
+      uploadedBy: target.userId,
       botToken: args.botToken,
       fileRefs: taskInput.fileRefs,
     });
@@ -221,11 +241,11 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
 
     const task = await enqueueTask({
       tenantId: args.workspace.tenantId,
-      computerId: link.computerId,
+      computerId: target.computerId,
       taskType: "thread_turn",
       taskInput: mappedTaskInput,
       idempotencyKey: eventId,
-      createdByUserId: link.userId,
+      createdByUserId: target.userId,
     });
 
     if ((task as { wasCreated?: boolean }).wasCreated === false) {
@@ -242,7 +262,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       try {
         await updateTaskInput({
           tenantId: args.workspace.tenantId,
-          computerId: link.computerId,
+          computerId: target.computerId,
           taskId: task.id,
           taskInput: {
             ...mappedTaskInput,
@@ -300,6 +320,33 @@ async function safeMaterializeSlackFiles(
     console.warn("[slack:events] failed to materialize Slack files", {
       err: err instanceof Error ? err.message : String(err),
       fileCount: input.fileRefs.length,
+    });
+  }
+}
+
+async function safePostTargetingGuidance(
+  slackApi: SlackApi,
+  input: {
+    token: string;
+    channel: string;
+    threadTs: string;
+    text: string;
+  },
+): Promise<void> {
+  try {
+    const res = await slackApi.postMessage({
+      ...input,
+      blocks: [{ type: "section", text: { type: "mrkdwn", text: input.text } }],
+      ...thinkworkSlackBrand(),
+    });
+    if (!res.ok) {
+      console.warn("[slack:events] targeting guidance post failed", {
+        error: res.error ?? "unknown",
+      });
+    }
+  } catch (err) {
+    console.warn("[slack:events] targeting guidance post failed", {
+      err: err instanceof Error ? err.message : String(err),
     });
   }
 }

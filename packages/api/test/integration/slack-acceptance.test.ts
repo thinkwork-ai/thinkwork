@@ -142,6 +142,7 @@ function makeHarness() {
       target: {
         ...link,
         prompt: String(input.text ?? "")
+          .replace(/^<@B-TW>\s*/i, "")
           .replace(/^finance\s+/i, "")
           .trim(),
         targetToken: "finance",
@@ -377,7 +378,7 @@ describe("Slack origin acceptance examples", () => {
     const harness = makeHarness();
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,
@@ -420,7 +421,7 @@ describe("Slack origin acceptance examples", () => {
     harness.links.delete("T-W1:U-A");
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,
@@ -515,7 +516,7 @@ describe("Slack origin acceptance examples", () => {
     ]);
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,
@@ -581,7 +582,7 @@ describe("Slack origin acceptance examples", () => {
     ]);
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,
@@ -626,7 +627,7 @@ describe("Slack origin acceptance examples", () => {
     const harness = makeHarness();
     const dispatch = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,
@@ -659,7 +660,7 @@ describe("Slack origin acceptance examples", () => {
     const harness = makeHarness();
     const events = createSlackEventsDispatcher({
       enqueueTask: harness.enqueueTask,
-      loadLinkedComputer: harness.loadLinkedComputer,
+      resolveTarget: harness.resolveTarget,
       updateTaskInput: harness.updateTaskInput,
       resolveSlackThread: harness.resolveSlackThread,
       materializeSlackFiles: harness.materializeSlackFiles,

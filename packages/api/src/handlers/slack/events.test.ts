@@ -46,13 +46,16 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     idempotencyKey: input.idempotencyKey,
     wasCreated: true,
   }));
-  const loadLinkedComputer = vi.fn(async (input: any) => ({
-    ...LINKED_COMPUTER,
-    prompt: String(input.text ?? "")
-      .replace(/^<@B123>\s*/i, "")
-      .replace(/^finance\s+/i, "")
-      .trim(),
-    targetToken: null,
+  const resolveTarget = vi.fn(async (input: any) => ({
+    status: "resolved" as const,
+    target: {
+      ...LINKED_COMPUTER,
+      prompt: String(input.text ?? "")
+        .replace(/^<@B123>\s*/i, "")
+        .replace(/^finance\s+/i, "")
+        .trim(),
+      targetToken: null,
+    },
   }));
   const updateTaskInput = vi.fn(async () => {});
   const materializeSlackFiles = vi.fn(async () => []);
@@ -74,7 +77,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   };
   return {
     enqueueTask,
-    loadLinkedComputer,
+    resolveTarget,
     updateTaskInput,
     resolveSlackThread,
     materializeSlackFiles,
@@ -129,7 +132,7 @@ describe("Slack events handler", () => {
     const res = await dispatch(makeArgs(appMentionPayload()));
 
     expect(res.statusCode).toBe(200);
-    expect(deps.loadLinkedComputer).toHaveBeenCalledWith(
+    expect(deps.resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",
         slackTeamId: "T123",
@@ -615,7 +618,7 @@ describe("Slack events handler", () => {
 
   it("prompts unlinked Slack users instead of enqueuing Computer work", async () => {
     const deps = makeDeps({
-      loadLinkedComputer: vi.fn(async () => null),
+      resolveTarget: vi.fn(async () => ({ status: "unlinked" as const })),
     });
     const dispatch = createSlackEventsDispatcher(deps);
 
@@ -632,6 +635,45 @@ describe("Slack events handler", () => {
       slackUserId: "U123",
       channelId: "C123",
     });
+    expect(deps.enqueueTask).not.toHaveBeenCalled();
+  });
+
+  it("posts shared Computer targeting guidance for linked Slack channel users without enqueueing", async () => {
+    const deps = makeDeps({
+      resolveTarget: vi.fn(async () => ({
+        status: "missing_target" as const,
+        requester: { userId: "user-1", slackUserName: "Eric" },
+        options: [
+          {
+            computerId: "computer-1",
+            computerName: "Finance Computer",
+            computerSlug: "finance-computer",
+          },
+        ],
+      })),
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const res = await dispatch(
+      makeArgs(appMentionPayload({ text: "<@B123> summarize this channel" })),
+    );
+
+    expect(JSON.parse(res.body || "{}")).toEqual({
+      ok: true,
+      ignored: true,
+      reason: "slack_target_missing_target",
+    });
+    expect(deps.slackApi.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "xoxb-token",
+        channel: "C123",
+        threadTs: "1710000001.000000",
+        text: expect.stringContaining("Choose a shared Computer first"),
+        username: "ThinkWork",
+        iconUrl: "https://admin.thinkwork.ai/slack-icon.png",
+      }),
+    );
+    expect(deps.slackApi.sendLinkPrompt).not.toHaveBeenCalled();
     expect(deps.enqueueTask).not.toHaveBeenCalled();
   });
 

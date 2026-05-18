@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import JSZip from "jszip";
 import { materializeSlackFilesAsThreadAttachments } from "./file-attachments.js";
 
 describe("materializeSlackFilesAsThreadAttachments", () => {
@@ -180,4 +181,119 @@ describe("materializeSlackFilesAsThreadAttachments", () => {
 		]);
 		expect(s3Client.send).toHaveBeenCalledTimes(1);
 	});
+
+	it("materializes xlsx Slack files so downstream attachment extraction can read them", async () => {
+		const insertedRows: unknown[] = [];
+		const tx: any = {
+			insert: () => ({
+				values: vi.fn(async (rows: unknown[]) => {
+					insertedRows.push(...rows);
+				}),
+			}),
+			select: () => ({
+				from: () => ({
+					where: () => ({
+						limit: vi.fn(async () => [{ metadata: {} }]),
+					}),
+				}),
+			}),
+			update: () => ({
+				set: () => ({ where: vi.fn(async () => undefined) }),
+			}),
+		};
+		const dbClient: any = {
+			transaction: vi.fn(async (cb: (tx: any) => unknown) => cb(tx)),
+		};
+		const s3Client = { send: vi.fn(async () => ({})) };
+		const workbook = await buildXlsxBuffer();
+
+		const result = await materializeSlackFilesAsThreadAttachments(
+			{
+				tenantId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+				threadId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+				messageId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+				uploadedBy: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+				botToken: "xoxb-token",
+				fileRefs: [
+					{
+						id: "F-XLSX",
+						name: "financials.xlsx",
+						mimetype:
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						urlPrivate: "https://files.slack.com/F-XLSX",
+						urlPrivateDownload: "https://files.slack.com/F-XLSX/download",
+						permalink: null,
+						sizeBytes: workbook.length,
+					},
+				],
+			},
+			{
+				bucket: "workspace-bucket",
+				dbClient,
+				s3Client: s3Client as any,
+				createAttachmentId: () => "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+				fetchFile: vi.fn(async () => ({
+					buffer: workbook,
+					contentType:
+						"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+					sizeBytes: workbook.length,
+				})),
+				emitAudit: vi.fn(async () => ({
+					eventId: "audit-1",
+					outboxId: "outbox-1",
+					redactedFields: [],
+				})) as any,
+			},
+		);
+
+		expect(result).toEqual([
+			expect.objectContaining({
+				name: "financials.xlsx",
+				mimeType:
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			}),
+		]);
+		expect(insertedRows).toEqual([
+			expect.objectContaining({
+				name: "financials.xlsx",
+				mime_type:
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			}),
+		]);
+		expect(s3Client.send).toHaveBeenCalledTimes(1);
+	});
 });
+
+async function buildXlsxBuffer(): Promise<Buffer> {
+	const zip = new JSZip();
+	zip.file(
+		"[Content_Types].xml",
+		`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`,
+	);
+	zip.file(
+		"xl/workbook.xml",
+		`<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Financials" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`,
+	);
+	zip.file(
+		"xl/_rels/workbook.xml.rels",
+		`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`,
+	);
+	zip.file(
+		"xl/worksheets/sheet1.xml",
+		`<?xml version="1.0" encoding="UTF-8"?>
+<worksheet><sheetData><row r="1"><c r="A1"><v>42</v></c></row></sheetData></worksheet>`,
+	);
+	return Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+}
