@@ -1047,12 +1047,14 @@ const MessageRow = memo(function MessageRow({
   agentMap,
   defaultAgentName,
   assistantLabel,
+  userLabel,
   onOpenArtifact,
 }: {
   message: ChatMessage;
   agentMap?: Map<string, AgentRef>;
   defaultAgentName?: string | null;
   assistantLabel?: string | null;
+  userLabel?: string | null;
   onOpenArtifact?: (artifact: {
     id: string;
     title: string;
@@ -1065,9 +1067,9 @@ const MessageRow = memo(function MessageRow({
   const isUser = message.role.toLowerCase() === "user";
   const Icon = isUser ? User : Bot;
   const label = isUser
-    ? "User"
-    : (message.senderId ? agentMap?.get(message.senderId)?.name : null) ||
-      assistantLabel ||
+    ? userLabel || "User"
+    : assistantLabel ||
+      (message.senderId ? agentMap?.get(message.senderId)?.name : null) ||
       defaultAgentName ||
       "Agent";
   const content = (message.content || "").trim();
@@ -1185,6 +1187,7 @@ interface ExecutionTraceProps {
   agentMap?: Map<string, AgentRef>;
   defaultAgentName?: string | null;
   assistantLabel?: string | null;
+  userLabel?: string | null;
   onOpenArtifact?: (artifact: {
     id: string;
     title: string;
@@ -1200,6 +1203,7 @@ export function ExecutionTrace({
   agentMap,
   defaultAgentName,
   assistantLabel,
+  userLabel,
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const { user } = useAuth();
@@ -1321,6 +1325,7 @@ export function ExecutionTrace({
                 agentMap={agentMap}
                 defaultAgentName={defaultAgentName}
                 assistantLabel={assistantLabel}
+                userLabel={userLabel}
                 onOpenArtifact={onOpenArtifact}
               />
             ),

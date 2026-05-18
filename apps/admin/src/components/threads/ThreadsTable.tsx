@@ -40,10 +40,22 @@ export type ThreadsTableItem = {
   readonly status: string;
   readonly agentId?: string | null;
   readonly computerId?: string | null;
+  readonly userId?: string | null;
   readonly agent?: {
     readonly id: string;
     readonly name: string;
     readonly avatarUrl?: string | null;
+  } | null;
+  readonly computer?: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug?: string | null;
+  } | null;
+  readonly user?: {
+    readonly id: string;
+    readonly name?: string | null;
+    readonly email?: string | null;
+    readonly image?: string | null;
   } | null;
   readonly assigneeType?: string | null;
   readonly assigneeId?: string | null;
@@ -128,154 +140,167 @@ export function ThreadsTable({
   // (stable via useState) plus the prop callbacks. Without this, every parent
   // render rebuilds the entire column array on the highest-traffic admin page.
   // Matches the useMemo pattern the /threads route used pre-refactor.
-  const columns: ColumnDef<ThreadsTableItem>[] = useMemo(() => [
-    {
-      id: "row",
-      cell: ({ row }) => {
-        const thread = row.original;
-        const inboxStatus = inboxStatusFor(thread);
-        const identifier = thread.identifier ?? `#${thread.number}`;
-        return (
-          <div className="flex h-10 items-center gap-2 overflow-hidden pl-3 pr-3 text-sm sm:gap-3">
-            <span className="flex shrink-0 items-center gap-2">
-              <span
-                className="shrink-0"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-              >
-                <StatusIcon
-                  status={thread.status}
-                  onChange={(s) => onUpdateThread(thread.id, { status: s })}
-                />
-              </span>
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                {identifier}
-              </span>
-              {thread.checkoutRunId && (
-                <Lock className="h-3 w-3 text-yellow-500 shrink-0" />
-              )}
-            </span>
-
-            <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-
-            <span className="ml-auto hidden shrink-0 items-center sm:flex">
-              {thread.computerId ? (
+  const columns: ColumnDef<ThreadsTableItem>[] = useMemo(
+    () => [
+      {
+        id: "row",
+        cell: ({ row }) => {
+          const thread = row.original;
+          const inboxStatus = inboxStatusFor(thread);
+          const identifier = thread.identifier ?? `#${thread.number}`;
+          return (
+            <div className="flex h-10 items-center gap-2 overflow-hidden pl-3 pr-3 text-sm sm:gap-3">
+              <span className="flex shrink-0 items-center gap-2">
                 <span
-                  className="flex w-[160px] shrink-0 items-center justify-center px-2 py-1"
+                  className="shrink-0"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                   }}
                 >
-                  <Badge variant="outline" className="text-xs">
-                    Computer-owned
-                  </Badge>
+                  <StatusIcon
+                    status={thread.status}
+                    onChange={(s) => onUpdateThread(thread.id, { status: s })}
+                  />
                 </span>
-              ) : (
-                <Popover
-                  open={assigneePickerIssueId === thread.id}
-                  onOpenChange={(open) => {
-                    setAssigneePickerIssueId(open ? thread.id : null);
-                    if (!open) setAssigneeSearch("");
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <button
-                      className="flex w-[160px] shrink-0 items-center justify-center rounded-md px-2 py-1 transition-colors hover:bg-accent/50"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      {thread.agent ? (
-                        <Badge variant="outline" className="text-xs">
-                          {thread.agent.name}
-                        </Badge>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
-                            <User className="h-3 w-3" />
-                          </span>
-                          Assignee
-                        </span>
-                      )}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-56 p-1"
-                    align="end"
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDownOutside={() => setAssigneeSearch("")}
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  {identifier}
+                </span>
+                {thread.checkoutRunId && (
+                  <Lock className="h-3 w-3 text-yellow-500 shrink-0" />
+                )}
+              </span>
+
+              <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+
+              <span className="ml-auto hidden shrink-0 items-center sm:flex">
+                {thread.computerId ? (
+                  <span
+                    className="flex w-[220px] shrink-0 flex-col items-end justify-center gap-0.5 px-2 py-1"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
                   >
-                    <input
-                      className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/50"
-                      placeholder="Search agents..."
-                      value={assigneeSearch}
-                      onChange={(e) => setAssigneeSearch(e.target.value)}
-                      autoFocus
-                    />
-                    <div className="max-h-48 overflow-y-auto overscroll-contain">
+                    <Badge
+                      variant="outline"
+                      className="max-w-full truncate text-xs"
+                      title={threadComputerLabel(thread)}
+                    >
+                      {threadComputerLabel(thread)}
+                    </Badge>
+                    <span
+                      className="max-w-full truncate text-[11px] leading-none text-muted-foreground"
+                      title={threadUserLabel(thread)}
+                    >
+                      {threadUserLabel(thread)}
+                    </span>
+                  </span>
+                ) : (
+                  <Popover
+                    open={assigneePickerIssueId === thread.id}
+                    onOpenChange={(open) => {
+                      setAssigneePickerIssueId(open ? thread.id : null);
+                      if (!open) setAssigneeSearch("");
+                    }}
+                  >
+                    <PopoverTrigger asChild>
                       <button
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50",
-                          !thread.agentId && "bg-accent",
-                        )}
+                        className="flex w-[160px] shrink-0 items-center justify-center rounded-md px-2 py-1 transition-colors hover:bg-accent/50"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          assignThread(thread.id, null);
                         }}
                       >
-                        No assignee
+                        {thread.agent ? (
+                          <Badge variant="outline" className="text-xs">
+                            {thread.agent.name}
+                          </Badge>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
+                              <User className="h-3 w-3" />
+                            </span>
+                            Assignee
+                          </span>
+                        )}
                       </button>
-                      {agents
-                        .filter((agent) => {
-                          if (!assigneeSearch.trim()) return true;
-                          return agent.name
-                            .toLowerCase()
-                            .includes(assigneeSearch.toLowerCase());
-                        })
-                        .map((agent) => (
-                          <button
-                            key={agent.id}
-                            className={cn(
-                              "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50",
-                              thread.agentId === agent.id && "bg-accent",
-                            )}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              assignThread(thread.id, agent.id);
-                            }}
-                          >
-                            <span>{agent.name}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              <span className="w-[70px] text-right text-xs text-muted-foreground">
-                {relativeTime(thread.lastActivityAt || thread.updatedAt)}
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-56 p-1"
+                      align="end"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDownOutside={() => setAssigneeSearch("")}
+                    >
+                      <input
+                        className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/50"
+                        placeholder="Search agents..."
+                        value={assigneeSearch}
+                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                        autoFocus
+                      />
+                      <div className="max-h-48 overflow-y-auto overscroll-contain">
+                        <button
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50",
+                            !thread.agentId && "bg-accent",
+                          )}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            assignThread(thread.id, null);
+                          }}
+                        >
+                          No assignee
+                        </button>
+                        {agents
+                          .filter((agent) => {
+                            if (!assigneeSearch.trim()) return true;
+                            return agent.name
+                              .toLowerCase()
+                              .includes(assigneeSearch.toLowerCase());
+                          })
+                          .map((agent) => (
+                            <button
+                              key={agent.id}
+                              className={cn(
+                                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50",
+                                thread.agentId === agent.id && "bg-accent",
+                              )}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                assignThread(thread.id, agent.id);
+                              }}
+                            >
+                              <span>{agent.name}</span>
+                            </button>
+                          ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <span className="w-[70px] text-right text-xs text-muted-foreground">
+                  {relativeTime(thread.lastActivityAt || thread.updatedAt)}
+                </span>
+                <span className="flex w-[20px] items-center justify-center">
+                  <InboxIndicator status={inboxStatus} />
+                </span>
               </span>
-              <span className="flex w-[20px] items-center justify-center">
-                <InboxIndicator status={inboxStatus} />
-              </span>
-            </span>
-          </div>
-        );
+            </div>
+          );
+        },
       },
-    },
-  ], [
-    agents,
-    assigneePickerIssueId,
-    assigneeSearch,
-    inboxStatusFor,
-    onUpdateThread,
-    assignThread,
-  ]);
+    ],
+    [
+      agents,
+      assigneePickerIssueId,
+      assigneeSearch,
+      inboxStatusFor,
+      onUpdateThread,
+      assignThread,
+    ],
+  );
 
   return (
     <DataTable
@@ -336,4 +361,19 @@ export function computeThreadInboxStatus(
     new Date(lastReadAt as string).getTime()
     ? "unread"
     : "read";
+}
+
+export function threadComputerLabel(thread: ThreadsTableItem): string {
+  return (
+    thread.computer?.name ||
+    (thread.computerId ? "Unknown Computer" : "Computer")
+  );
+}
+
+export function threadUserLabel(thread: ThreadsTableItem): string {
+  return (
+    thread.user?.name ||
+    thread.user?.email ||
+    (thread.userId ? "Unknown User" : "Unknown User")
+  );
 }

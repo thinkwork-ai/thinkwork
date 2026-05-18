@@ -708,10 +708,22 @@ export const ThreadsListQuery = graphql(`
       assigneeId
       agentId
       computerId
+      userId
       agent {
         id
         name
         avatarUrl
+      }
+      computer {
+        id
+        name
+        slug
+      }
+      user {
+        id
+        name
+        email
+        image
       }
       checkoutRunId
       channel
@@ -757,10 +769,22 @@ export const ThreadsPagedQuery = gql`
         assigneeId
         agentId
         computerId
+        userId
         agent {
           id
           name
           avatarUrl
+        }
+        computer {
+          id
+          name
+          slug
+        }
+        user {
+          id
+          name
+          email
+          image
         }
         checkoutRunId
         channel
@@ -791,10 +815,22 @@ export const ThreadDetailQuery = graphql(`
       assigneeId
       agentId
       computerId
+      userId
       agent {
         id
         name
         avatarUrl
+      }
+      computer {
+        id
+        name
+        slug
+      }
+      user {
+        id
+        name
+        email
+        image
       }
       channel
       messages(limit: 50) {

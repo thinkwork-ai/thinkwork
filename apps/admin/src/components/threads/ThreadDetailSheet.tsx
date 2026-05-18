@@ -73,7 +73,13 @@ export function ThreadDetailSheet({
   // Auto-scroll to bottom when messages change
   const prevMsgCount = useRef(0);
   const thread = data?.thread as any;
-  const assistantLabel = thread?.computerId ? "Computer" : "Agent";
+  const computerLabel =
+    thread?.computer?.name || (thread?.computerId ? "Unknown Computer" : null);
+  const userLabel =
+    thread?.user?.name ||
+    thread?.user?.email ||
+    (thread?.userId ? "Unknown User" : "User");
+  const assistantLabel = computerLabel || thread?.agent?.name || "Agent";
   const messages = (thread?.messages?.edges ?? [])
     .map((e: any) => e.node)
     .filter((m: any) => {
@@ -123,7 +129,9 @@ export function ThreadDetailSheet({
               {thread.computerId ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Bot className="h-3 w-3" />
-                  Computer-owned
+                  <span className="truncate">{computerLabel}</span>
+                  <span aria-hidden="true">/</span>
+                  <span className="truncate">{userLabel}</span>
                 </div>
               ) : thread.agent ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -165,7 +173,7 @@ export function ThreadDetailSheet({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="text-[10px] font-medium text-muted-foreground">
-                        {isUser ? "User" : assistantLabel}
+                        {isUser ? userLabel : assistantLabel}
                       </span>
                       <span className="text-[10px] text-muted-foreground/60">
                         {relativeTime(msg.createdAt)}

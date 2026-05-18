@@ -109,6 +109,30 @@ function triggerLabel(channel: string | null | undefined): string {
   return TRIGGER_LABELS[lower] ?? channel;
 }
 
+function computerDisplayName(thread: {
+  readonly computerId?: string | null;
+  readonly computer?: { readonly name?: string | null } | null;
+}): string {
+  return (
+    thread.computer?.name ||
+    (thread.computerId ? "Unknown Computer" : "Computer")
+  );
+}
+
+function userDisplayName(thread: {
+  readonly userId?: string | null;
+  readonly user?: {
+    readonly name?: string | null;
+    readonly email?: string | null;
+  } | null;
+}): string {
+  return (
+    thread.user?.name ||
+    thread.user?.email ||
+    (thread.userId ? "Unknown User" : "User")
+  );
+}
+
 function formatTurnCostSummary(
   turnCount: number,
   tokenCount: number,
@@ -321,6 +345,8 @@ function ThreadDetailPage() {
 
   const thread = threadResult.data?.thread;
   const isComputerOwnedThread = Boolean(thread?.computerId);
+  const threadComputerLabel = thread ? computerDisplayName(thread) : "Computer";
+  const threadUserLabel = thread ? userDisplayName(thread) : "User";
   const agents = agentsResult.data?.agents ?? [];
 
   // ---- Derived data ----
@@ -422,9 +448,7 @@ function ThreadDetailPage() {
         reexecuteThread({ requestPolicy: "network-only" });
       }
     } catch (err) {
-      setAttachmentError(
-        err instanceof Error ? err.message : "Upload failed",
-      );
+      setAttachmentError(err instanceof Error ? err.message : "Upload failed");
     }
   };
 
@@ -579,7 +603,10 @@ function ThreadDetailPage() {
               messages={threadMessages}
               agentMap={agentMap}
               defaultAgentName={thread.agent?.name}
-              assistantLabel={isComputerOwnedThread ? "Computer" : undefined}
+              assistantLabel={
+                isComputerOwnedThread ? threadComputerLabel : undefined
+              }
+              userLabel={threadUserLabel}
               onOpenArtifact={openArtifact}
             />
           </div>
@@ -730,6 +757,18 @@ interface ThreadPropertiesProps {
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
     readonly computerId?: string | null;
+    readonly userId?: string | null;
+    readonly computer?: {
+      readonly id: string;
+      readonly name?: string | null;
+      readonly slug?: string | null;
+    } | null;
+    readonly user?: {
+      readonly id: string;
+      readonly name?: string | null;
+      readonly email?: string | null;
+      readonly image?: string | null;
+    } | null;
     readonly agent?: {
       readonly id: string;
       readonly name: string;
@@ -806,11 +845,32 @@ function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
       )}
 
       {thread.computerId ? (
-        <PropRow label="Computer">
-          <Badge variant="outline" className="text-xs">
-            Computer-owned
-          </Badge>
-        </PropRow>
+        <>
+          <PropRow label="Computer">
+            <Link
+              to="/computers/$computerId"
+              params={{ computerId: thread.computerId }}
+              className="flex min-w-0 items-center gap-1 hover:bg-accent rounded-md px-1 -mx-1 transition-colors"
+            >
+              <Badge variant="outline" className="min-w-0 truncate text-xs">
+                {computerDisplayName(thread)}
+              </Badge>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            </Link>
+          </PropRow>
+          <PropRow label="User">
+            <Identity
+              name={userDisplayName(thread)}
+              avatarUrl={thread.user?.image}
+              subtitle={
+                thread.user?.name
+                  ? (thread.user?.email ?? undefined)
+                  : undefined
+              }
+              size="sm"
+            />
+          </PropRow>
+        </>
       ) : thread.agent ? (
         <PropRow label="Agent">
           <Link
