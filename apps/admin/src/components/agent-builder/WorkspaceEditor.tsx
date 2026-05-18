@@ -74,6 +74,7 @@ export type WorkspaceEditorMode =
   | "agent"
   | "template"
   | "computer"
+  | "context"
   | "defaults";
 
 export type WorkspaceEditorAction = "new-file" | "new-folder";
@@ -114,6 +115,7 @@ export function workspaceEditorTargetKey(target: Target): string {
   if ("agentId" in target) return `agent:${target.agentId}`;
   if ("templateId" in target) return `template:${target.templateId}`;
   if ("computerId" in target) return `computer:${target.computerId}`;
+  if ("userId" in target) return `user:${target.userId}`;
   return "defaults";
 }
 
@@ -151,9 +153,10 @@ export function WorkspaceEditor({
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderPath, setNewFolderPath] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
-  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<
-    { path: string; isFolder: boolean } | null
-  >(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    path: string;
+    isFolder: boolean;
+  } | null>(null);
   const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const loadRequestId = useRef(0);
@@ -239,8 +242,11 @@ export function WorkspaceEditor({
   }, [fetchFiles]);
 
   const tree = useMemo(
-    () => buildWorkspaceTree(files, routingRows),
-    [files, routingRows],
+    () =>
+      buildWorkspaceTree(files, routingRows, {
+        reservedRootFolders: mode === "context" ? ["memory"] : undefined,
+      }),
+    [files, mode, routingRows],
   );
 
   const [pinStatusResult, refetchPinStatus] = useQuery({
@@ -493,6 +499,8 @@ export function WorkspaceEditor({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+  const surfaceRootLabel =
+    mode === "context" ? "context root" : "workspace root";
 
   return (
     <>
@@ -539,7 +547,7 @@ export function WorkspaceEditor({
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
                 <Folder className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">
-                  No workspace files yet.
+                  No {mode === "context" ? "context" : "workspace"} files yet.
                 </p>
               </div>
             ) : (
@@ -572,7 +580,7 @@ export function WorkspaceEditor({
           <DialogHeader>
             <DialogTitle>New File</DialogTitle>
             <DialogDescription>
-              Enter the file path relative to workspace root.
+              Enter the file path relative to {surfaceRootLabel}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
@@ -610,7 +618,7 @@ export function WorkspaceEditor({
           <DialogHeader>
             <DialogTitle>New Folder</DialogTitle>
             <DialogDescription>
-              Enter the folder path relative to workspace root.
+              Enter the folder path relative to {surfaceRootLabel}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
@@ -695,12 +703,11 @@ function DeleteConfirmDialog({
   onConfirm,
 }: DeleteConfirmDialogProps) {
   const open = target !== null;
-  const folderFileCount =
-    target?.isFolder
-      ? files.filter(
-          (file) => file === target.path || file.startsWith(`${target.path}/`),
-        ).length
-      : 0;
+  const folderFileCount = target?.isFolder
+    ? files.filter(
+        (file) => file === target.path || file.startsWith(`${target.path}/`),
+      ).length
+    : 0;
 
   return (
     <AlertDialog

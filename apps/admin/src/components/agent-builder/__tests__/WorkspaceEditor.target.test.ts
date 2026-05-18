@@ -17,13 +17,22 @@ describe("workspace editor target capabilities", () => {
     expect(workspaceEditorCapabilities("computer")).toEqual({
       canReviewTemplateUpdates: false,
     });
+    expect(workspaceEditorCapabilities("context")).toEqual({
+      canReviewTemplateUpdates: false,
+    });
     expect(workspaceEditorCapabilities("defaults")).toEqual({
       canReviewTemplateUpdates: false,
     });
   });
 
   it("returns a flat new-file + new-folder action list for every mode", () => {
-    for (const mode of ["agent", "template", "computer", "defaults"] as const) {
+    for (const mode of [
+      "agent",
+      "template",
+      "computer",
+      "context",
+      "defaults",
+    ] as const) {
       expect(workspaceEditorActions(mode)).toEqual(["new-file", "new-folder"]);
     }
   });
@@ -34,6 +43,12 @@ describe("workspace editor target capabilities", () => {
     );
     expect(workspaceEditorTargetKey({ computerId: "computer-marco" })).toBe(
       workspaceEditorTargetKey({ computerId: "computer-marco" }),
+    );
+  });
+
+  it("keys requester context targets by user id", () => {
+    expect(workspaceEditorTargetKey({ userId: "user-eric" })).toBe(
+      "user:user-eric",
     );
   });
 
@@ -76,7 +91,9 @@ describe("workspace editor target capabilities", () => {
     // calling handleDeletePath directly, so the AlertDialog gates every
     // context-menu delete.
     expect(editorSource).toMatch(/onDelete=\{\(path, isFolder\)/);
-    expect(editorSource).toMatch(/setDeleteConfirmTarget\(\{ path, isFolder \}\)/);
+    expect(editorSource).toMatch(
+      /setDeleteConfirmTarget\(\{ path, isFolder \}\)/,
+    );
     expect(editorSource).toMatch(/AlertDialogTitle/);
     expect(editorSource).toMatch(/DeleteConfirmDialog/);
   });

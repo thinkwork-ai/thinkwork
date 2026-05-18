@@ -605,12 +605,6 @@ describe("computer EFS workspace target", () => {
     expect(listRes.statusCode).toBe(200);
     expect(listRes.body.files).toEqual([
       {
-        path: "USER.md",
-        source: "computer",
-        sha256: "",
-        overridden: false,
-      },
-      {
         path: "memory/contacts.md",
         source: "computer",
         sha256: "",
@@ -620,7 +614,9 @@ describe("computer EFS workspace target", () => {
     const listCalls = lambdaMock.commandCalls(InvokeCommand);
     expect(listCalls).toHaveLength(1);
     const listPayload = JSON.parse(
-      new TextDecoder().decode(listCalls[0].args[0].input.Payload as Uint8Array),
+      new TextDecoder().decode(
+        listCalls[0].args[0].input.Payload as Uint8Array,
+      ),
     );
     expect(listPayload).toEqual({
       action: "list",
@@ -643,19 +639,10 @@ describe("computer EFS workspace target", () => {
     expect(getRes.body).toMatchObject({
       ok: true,
       source: "computer",
-      content: "Name: Eric\n",
+      content: null,
     });
     const allCalls = lambdaMock.commandCalls(InvokeCommand);
-    expect(allCalls).toHaveLength(2);
-    const getPayload = JSON.parse(
-      new TextDecoder().decode(allCalls[1].args[0].input.Payload as Uint8Array),
-    );
-    expect(getPayload).toEqual({
-      action: "get",
-      tenantId: TENANT_A,
-      computerId: COMPUTER_ID,
-      path: "USER.md",
-    });
+    expect(allCalls).toHaveLength(1);
     expect(enqueueComputerTaskMock).not.toHaveBeenCalled();
     expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
@@ -696,8 +683,8 @@ describe("computer EFS workspace target", () => {
         event({
           action: "put",
           computerId: COMPUTER_ID,
-          path: "USER.md",
-          content: "Name: Eric Updated\n",
+          path: "memory/notes.md",
+          content: "Shared computer note\n",
         }),
       ),
     );
@@ -708,8 +695,8 @@ describe("computer EFS workspace target", () => {
       expect.objectContaining({
         taskType: "workspace_file_write",
         taskInput: {
-          path: "USER.md",
-          content: "Name: Eric Updated\n",
+          path: "memory/notes.md",
+          content: "Shared computer note\n",
         },
       }),
     );
@@ -722,7 +709,11 @@ describe("computer EFS workspace target", () => {
 
     const deleteRes = await parse(
       await handler(
-        event({ action: "delete", computerId: COMPUTER_ID, path: "USER.md" }),
+        event({
+          action: "delete",
+          computerId: COMPUTER_ID,
+          path: "memory/notes.md",
+        }),
       ),
     );
 
@@ -731,11 +722,145 @@ describe("computer EFS workspace target", () => {
     expect(enqueueComputerTaskMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         taskType: "workspace_file_delete",
-        taskInput: { path: "USER.md" },
+        taskInput: { path: "memory/notes.md" },
       }),
     );
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("blocks USER.md writes and deletes from the Computer workspace", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const putRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          computerId: COMPUTER_ID,
+          path: "USER.md",
+          content: "Name: Eric Updated\n",
+        }),
+      ),
+    );
+
+    expect(putRes.statusCode).toBe(403);
+    expect(putRes.body.error).toContain("USER.md is user context now");
+
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([computerRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const deleteRes = await parse(
+      await handler(
+        event({ action: "delete", computerId: COMPUTER_ID, path: "USER.md" }),
+      ),
+    );
+
+    expect(deleteRes.statusCode).toBe(403);
+    expect(deleteRes.body.error).toContain("USER.md is user context now");
+    expect(enqueueComputerTaskMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("user context workspace target", () => {
+  it("lists and reads requester USER.md and memory files from the tenant/user S3 prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: `tenants/${TENANT_A}/users/${USER_ID}/USER.md` },
+        { Key: `tenants/${TENANT_A}/users/${USER_ID}/knowledge-pack.md` },
+        { Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md` },
+        {
+          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/candidates/2026-05-18.md`,
+        },
+      ],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "test-bucket",
+        Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md`,
+      })
+      .resolves(body("- Prefers concise summaries\n"));
+
+    const listRes = await parse(
+      await handler(event({ action: "list", userId: USER_ID })),
+    );
+
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body.files).toEqual([
+      {
+        path: "USER.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "memory/MEMORY.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "memory/candidates/2026-05-18.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+    ]);
+
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    const getRes = await parse(
+      await handler(
+        event({
+          action: "get",
+          userId: USER_ID,
+          path: "memory/MEMORY.md",
+        }),
+      ),
+    );
+
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.body).toMatchObject({
+      ok: true,
+      source: "user",
+      content: "- Prefers concise summaries\n",
+    });
+    expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("writes requester context files directly to the tenant/user S3 prefix", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          userId: USER_ID,
+          path: "memory/MEMORY.md",
+          content: "- Prefers concise summaries\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true });
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md`,
+      Body: "- Prefers concise summaries\n",
+    });
   });
 });
 

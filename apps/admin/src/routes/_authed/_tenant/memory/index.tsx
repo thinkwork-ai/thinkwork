@@ -743,7 +743,7 @@ export function MemoryPage({
         }
       >
         <div className="relative w-80 max-w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search memories..."
             value={searchQuery}
@@ -764,21 +764,21 @@ export function MemoryPage({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {hindsightEnabled && (
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(v) => v && setView(v as "memories" | "graph")}
-              variant="outline"
-            >
-              <ToggleGroupItem value="memories" className="px-3 text-xs">
-                Table
-              </ToggleGroupItem>
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as MemoryView)}
+            variant="outline"
+          >
+            <ToggleGroupItem value="memories" className="px-3 text-xs">
+              Table
+            </ToggleGroupItem>
+            {hindsightEnabled && (
               <ToggleGroupItem value="graph" className="px-3 text-xs">
                 Graph
               </ToggleGroupItem>
-            </ToggleGroup>
-          )}
+            )}
+          </ToggleGroup>
           <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
             <SelectTrigger className="w-44">
               <SelectValue placeholder="Select user" />

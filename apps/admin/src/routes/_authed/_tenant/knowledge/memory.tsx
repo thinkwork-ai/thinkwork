@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  MemoryPage,
-  Route as LegacyMemoryRoute,
-} from "../memory/index";
+import { MemoryPage, Route as LegacyMemoryRoute } from "../memory/index";
 
 export const Route = createFileRoute("/_authed/_tenant/knowledge/memory")({
   component: KnowledgeMemoryPage,
@@ -16,7 +13,7 @@ function KnowledgeMemoryPage() {
       embedded
       breadcrumbs={[
         { label: "Memory", href: "/knowledge/memory" },
-        { label: "Brain" },
+        { label: "Memory" },
       ]}
     />
   );

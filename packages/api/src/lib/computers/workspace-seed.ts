@@ -325,13 +325,11 @@ async function loadDefaultRunbookSkillTarget(
   return row;
 }
 
-function parseComputerTemplateSkillObjectKey(key: string):
-  | {
-      tenantSlug: string;
-      templateSlug: string;
-      relativePath: string;
-    }
-  | null {
+function parseComputerTemplateSkillObjectKey(key: string): {
+  tenantSlug: string;
+  templateSlug: string;
+  relativePath: string;
+} | null {
   const match = key.match(
     /^tenants\/([^/]+)\/agents\/_catalog\/([^/]+)\/workspace\/(skills\/.+)$/,
   );
@@ -386,6 +384,7 @@ async function listWorkspaceFiles(
         !path ||
         path === "manifest.json" ||
         path === "_defaults_version" ||
+        isComputerWorkspaceExcludedPath(path) ||
         isBuiltinToolWorkspacePath(path)
       ) {
         continue;
@@ -403,6 +402,10 @@ async function listWorkspaceFiles(
   } while (continuationToken);
 
   return files;
+}
+
+function isComputerWorkspaceExcludedPath(path: string): boolean {
+  return path.replace(/^\/+/, "") === "USER.md";
 }
 
 async function readWorkspaceFile(key: string) {

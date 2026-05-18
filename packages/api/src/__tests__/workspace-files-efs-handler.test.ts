@@ -32,12 +32,7 @@ afterAll(() => {
 });
 
 async function setupComputerFiles(files: Record<string, string>) {
-  const computerRoot = path.join(
-    EFS_ROOT,
-    TENANT_ID,
-    "computers",
-    COMPUTER_ID,
-  );
+  const computerRoot = path.join(EFS_ROOT, TENANT_ID, "computers", COMPUTER_ID);
   rmSync(computerRoot, { recursive: true, force: true });
   await mkdir(computerRoot, { recursive: true });
   for (const [rel, content] of Object.entries(files)) {
@@ -61,12 +56,12 @@ describe("workspace-files-efs handler", () => {
     vi.resetModules();
   });
 
-  it("lists files under the per-Computer root, omitting operational artifacts", async () => {
+  it("lists files under the per-Computer root, omitting operational artifacts and USER.md", async () => {
     await setupComputerFiles({
       "USER.md": "Eric\n",
       "memory/notes.md": "hello\n",
       "manifest.json": "{}",
-      "_defaults_version": "1",
+      _defaults_version: "1",
       "skills/web-search/SKILL.md": "builtin tool",
     });
     const handler = await loadHandler();
@@ -78,7 +73,7 @@ describe("workspace-files-efs handler", () => {
     expect(res.ok).toBe(true);
     if (!res.ok || !("files" in res)) throw new Error("expected list response");
     const paths = res.files.map((f) => f.path).sort();
-    expect(paths).toEqual(["USER.md", "memory/notes.md"]);
+    expect(paths).toEqual(["memory/notes.md"]);
     for (const f of res.files) {
       expect(f.source).toBe("computer");
       expect(f.overridden).toBe(false);
@@ -100,7 +95,7 @@ describe("workspace-files-efs handler", () => {
     });
     if (!res.ok || !("files" in res)) throw new Error("expected list response");
     const byPath = Object.fromEntries(res.files.map((f) => [f.path, f]));
-    expect(byPath["USER.md"]?.content).toBe("Name: Eric\n");
+    expect(byPath["USER.md"]).toBeUndefined();
     expect(byPath["memory/contacts.md"]?.content).toBe("Eve\n");
   });
 
@@ -114,7 +109,23 @@ describe("workspace-files-efs handler", () => {
     expect(res).toEqual({ ok: true, files: [] });
   });
 
-  it("get returns content for an existing file", async () => {
+  it("get returns content for an existing non-user file", async () => {
+    await setupComputerFiles({ "memory/notes.md": "Name: Eric\n" });
+    const handler = await loadHandler();
+    const res = await handler({
+      action: "get",
+      tenantId: TENANT_ID,
+      computerId: COMPUTER_ID,
+      path: "memory/notes.md",
+    });
+    expect(res).toMatchObject({
+      ok: true,
+      content: "Name: Eric\n",
+      source: "computer",
+    });
+  });
+
+  it("get returns null for USER.md because requester profile lives in User context", async () => {
     await setupComputerFiles({ "USER.md": "Name: Eric\n" });
     const handler = await loadHandler();
     const res = await handler({
@@ -123,11 +134,7 @@ describe("workspace-files-efs handler", () => {
       computerId: COMPUTER_ID,
       path: "USER.md",
     });
-    expect(res).toMatchObject({
-      ok: true,
-      content: "Name: Eric\n",
-      source: "computer",
-    });
+    expect(res).toMatchObject({ ok: true, content: null, source: "computer" });
   });
 
   it("get returns null content for a missing file", async () => {

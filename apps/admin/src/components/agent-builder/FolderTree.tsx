@@ -39,6 +39,7 @@ const RESERVED_ROOT_FOLDERS = ["memory", "skills"] as const;
 export function buildWorkspaceTree(
   files: string[],
   routingRows: Pick<RoutingRow, "goTo">[] = [],
+  options: { reservedRootFolders?: readonly string[] } = {},
 ): TreeNode[] {
   const root: TreeNode[] = [];
 
@@ -73,7 +74,9 @@ export function buildWorkspaceTree(
   // Ensure reserved root folders (memory/, skills/) always appear in the
   // tree even when no files exist under them yet. Operators need a stable
   // surface to drop into for adding skills / writing memory notes.
-  for (const reserved of RESERVED_ROOT_FOLDERS) {
+  const reservedRootFolders =
+    options.reservedRootFolders ?? RESERVED_ROOT_FOLDERS;
+  for (const reserved of reservedRootFolders) {
     if (!root.some((node) => node.path === reserved)) {
       root.push({
         name: reserved,
