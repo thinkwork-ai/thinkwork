@@ -387,4 +387,101 @@ describe("requester idle memory learner", () => {
       "tenants/tenant-1/users/user-1/memory/reports/thread-idle/run-1.md",
     );
   });
+
+  it("replaces an existing working journal section for the same thread", async () => {
+    const db = makeDb([
+      [
+        {
+          id: "thread-1",
+          title: "Updated CRM lookup",
+          status: "open",
+          priority: "medium",
+          type: "task",
+          channel: "manual",
+          metadata: null,
+        },
+      ],
+      [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "What are the last 5 opportunities from the CRM?",
+          senderType: "user",
+          senderId: "user-1",
+          metadata: null,
+          createdAt: new Date("2026-05-18T17:00:00.000Z"),
+        },
+      ],
+      [],
+    ]);
+    const existingWorkingMemory = [
+      "# Working memory - 2026-05-18",
+      "",
+      "## Thread thread-1",
+      "",
+      "- Run: old-run",
+      "- Title: Stale CRM lookup",
+      "",
+      "### Requester Messages",
+      "",
+      "- old-msg: stale content",
+      "",
+      "## Thread other-thread",
+      "",
+      "- Run: keep-run",
+      "- Title: Keep me",
+      "",
+      "## Thread thread-1",
+      "",
+      "- Run: older-run",
+      "- Title: Even older duplicate",
+      "",
+    ].join("\n");
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/MEMORY.md",
+      })
+      .resolves(s3Body("# Memory\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "workspace-bucket",
+        Key: "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+      })
+      .resolves(s3Body(existingWorkingMemory));
+    s3Mock.on(PutObjectCommand).resolves({});
+    const syncHindsight = vi.fn().mockResolvedValue({
+      status: "success",
+      files: [
+        {
+          path: "memory/working/2026-05-18.md",
+          documentId: "requester_memory:user-1:memory/working/2026-05-18.md",
+          status: "upserted",
+        },
+      ],
+    });
+
+    const result = await runRequesterIdleMemoryLearning(baseInput, {
+      db,
+      syncHindsight,
+    });
+
+    expect(result.status).toBe("changed");
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(3);
+    expect(putCalls[0].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/.snapshots/run-1/memory%2Fworking%2F2026-05-18.md.md",
+    );
+    expect(putCalls[1].args[0].input.Key).toBe(
+      "tenants/tenant-1/users/user-1/memory/working/2026-05-18.md",
+    );
+    const body = String(putCalls[1].args[0].input.Body);
+    expect(body.match(/^## Thread thread-1$/gm)).toHaveLength(1);
+    expect(body).toContain("Updated CRM lookup");
+    expect(body).toContain("What are the last 5 opportunities from the CRM?");
+    expect(body).toContain("## Thread other-thread");
+    expect(body).toContain("Keep me");
+    expect(body).not.toContain("Stale CRM lookup");
+    expect(body).not.toContain("Even older duplicate");
+  });
 });

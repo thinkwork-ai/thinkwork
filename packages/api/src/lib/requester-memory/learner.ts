@@ -12,6 +12,7 @@ import {
   renderDurableMemoryAppendSection,
   renderIdleLearningReport,
   renderThreadJournalAppendSection,
+  upsertThreadJournalSection,
 } from "./markdown.js";
 import {
   syncRequesterMemoryToHindsight,
@@ -179,7 +180,11 @@ export async function runRequesterIdleMemoryLearning(
     userId: input.requesterUserId,
     runId: input.runId,
     path: workingPath,
-    content: appendMarkdownSection(existingWorkingMemory, journalSection),
+    content: upsertThreadJournalSection({
+      existing: existingWorkingMemory,
+      section: journalSection,
+      threadId: input.threadId,
+    }),
   });
   changedFiles.push({
     ...stripPreviousContent(workingWriteResult),
