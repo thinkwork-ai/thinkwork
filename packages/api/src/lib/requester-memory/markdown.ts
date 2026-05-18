@@ -40,6 +40,41 @@ export function appendMarkdownSection(
   return `${base}\n\n${section.trimEnd()}\n`;
 }
 
+export function upsertThreadJournalSection(input: {
+  existing: string | null;
+  section: string;
+  threadId: string;
+}): string {
+  const base = input.existing?.trimEnd();
+  if (!base) return `${input.section.trimEnd()}\n`;
+
+  const heading = `## Thread ${input.threadId}`;
+  const lines = base.split("\n");
+  const nextLines: string[] = [];
+
+  for (let index = 0; index < lines.length; ) {
+    if (lines[index]?.trimEnd() !== heading) {
+      nextLines.push(lines[index] ?? "");
+      index += 1;
+      continue;
+    }
+
+    index += 1;
+    while (
+      index < lines.length &&
+      !/^## Thread\s+/.test(lines[index]?.trimEnd() ?? "")
+    ) {
+      index += 1;
+    }
+  }
+
+  const compacted = nextLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+  return appendMarkdownSection(compacted || null, input.section);
+}
+
 export function renderDurableMemoryAppendSection(input: {
   runId: string;
   threadId: string;
