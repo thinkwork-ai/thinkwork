@@ -149,7 +149,7 @@ message and exits with code 2.
 | **0 (now)** | Foundation | `login` (Cognito + AWS), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
 | 1 | Work & approvals | ✅ `thread`, `message`, `label`, `inbox` — **Phase 1 complete** |
 | 2 | Agents & workspace | ✅ `member`, `team`, `kb`, `template`, `tenant`, `agent` — **Phase 2 complete** |
-| 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill` |
+| 3 | Automation & integrations | ✅ `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `skill` — **Phase 3 complete** (`connector` retired) |
 | 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
 | 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |
 

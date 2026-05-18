@@ -81,6 +81,23 @@ type Documents = {
     "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliMemberTenantBySlugDocument,
     "\n  mutation CliMsgSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": typeof types.CliMsgSendMessageDocument,
     "\n  query CliMsgMessages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        cursor\n        node {\n          id\n          role\n          senderType\n          senderId\n          content\n          tokenCount\n          createdAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": typeof types.CliMsgMessagesDocument,
+    "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": typeof types.CliRoutinesDocument,
+    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": typeof types.CliRoutineDocument,
+    "\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateRoutineDocument,
+    "\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n": typeof types.CliUpdateRoutineDocument,
+    "\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n": typeof types.CliDeleteRoutineDocument,
+    "\n  mutation CliTriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      startedAt\n    }\n  }\n": typeof types.CliTriggerRoutineRunDocument,
+    "\n  query CliRoutineExecutions($routineId: ID!, $status: RoutineExecutionStatus, $limit: Int, $cursor: String) {\n    routineExecutions(routineId: $routineId, status: $status, limit: $limit, cursor: $cursor) {\n      id\n      status\n      startedAt\n      finishedAt\n      errorMessage\n    }\n  }\n": typeof types.CliRoutineExecutionsDocument,
+    "\n  query CliRoutineExecution($id: ID!) {\n    routineExecution(id: $id) {\n      id\n      routineId\n      status\n      startedAt\n      finishedAt\n      errorMessage\n      inputJson\n      outputJson\n    }\n  }\n": typeof types.CliRoutineExecutionDocument,
+    "\n  mutation CliSetRoutineTrigger($routineId: ID!, $input: RoutineTriggerInput!) {\n    setRoutineTrigger(routineId: $routineId, input: $input) {\n      id\n      triggerType\n      enabled\n    }\n  }\n": typeof types.CliSetRoutineTriggerDocument,
+    "\n  mutation CliDeleteRoutineTrigger($id: ID!) {\n    deleteRoutineTrigger(id: $id)\n  }\n": typeof types.CliDeleteRoutineTriggerDocument,
+    "\n  query CliRoutineTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliRoutineTenantBySlugDocument,
+    "\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n": typeof types.CliScheduledJobsDocument,
+    "\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliScheduledJobDocument,
+    "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n": typeof types.CliCreateScheduledJobDocument,
+    "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSchedJobTenantBySlugDocument,
+    "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": typeof types.CliSkillCatalogDocument,
+    "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSkillTenantBySlugDocument,
     "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": typeof types.CliTeamsDocument,
     "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": typeof types.CliTeamDocument,
     "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateTeamDocument,
@@ -120,6 +137,21 @@ type Documents = {
     "\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": typeof types.CliDelegateThreadDocument,
     "\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": typeof types.CliSendMessageDocument,
     "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliThreadTenantBySlugDocument,
+    "\n  query CliThreadTurns(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerId: ID\n    $threadId: ID\n    $status: String\n    $limit: Int\n  ) {\n    threadTurns(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerId: $triggerId\n      threadId: $threadId\n      status: $status\n      limit: $limit\n    ) {\n      id\n      agentId\n      routineId\n      threadId\n      status\n      invocationSource\n      triggerName\n      startedAt\n      finishedAt\n      totalCost\n      error\n    }\n  }\n": typeof types.CliThreadTurnsDocument,
+    "\n  query CliThreadTurn($id: ID!) {\n    threadTurn(id: $id) {\n      id\n      tenantId\n      agentId\n      routineId\n      threadId\n      turnNumber\n      status\n      invocationSource\n      triggerName\n      triggerDetail\n      startedAt\n      finishedAt\n      error\n      errorCode\n      totalCost\n      lastActivityAt\n      retryAttempt\n      externalRunId\n      sessionIdBefore\n      sessionIdAfter\n      createdAt\n    }\n  }\n": typeof types.CliThreadTurnDocument,
+    "\n  query CliThreadTurnEvents($runId: ID!, $limit: Int) {\n    threadTurnEvents(runId: $runId, limit: $limit) {\n      seq\n      eventType\n      stream\n      level\n      message\n      createdAt\n    }\n  }\n": typeof types.CliThreadTurnEventsDocument,
+    "\n  mutation CliCancelThreadTurn($id: ID!) {\n    cancelThreadTurn(id: $id) {\n      id\n      status\n      finishedAt\n    }\n  }\n": typeof types.CliCancelThreadTurnDocument,
+    "\n  query CliTurnTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliTurnTenantBySlugDocument,
+    "\n  query CliQueuedWakeups($tenantId: ID!) {\n    queuedWakeups(tenantId: $tenantId) {\n      id\n      agentId\n      status\n      source\n      triggerDetail\n      reason\n      coalescedCount\n      requestedAt\n      claimedAt\n    }\n  }\n": typeof types.CliQueuedWakeupsDocument,
+    "\n  mutation CliCreateWakeup($input: CreateWakeupRequestInput!) {\n    createWakeupRequest(input: $input) {\n      id\n      agentId\n      status\n      requestedAt\n    }\n  }\n": typeof types.CliCreateWakeupDocument,
+    "\n  query CliWakeupTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliWakeupTenantBySlugDocument,
+    "\n  query CliWebhooks($tenantId: ID!, $targetType: String, $enabled: Boolean, $limit: Int) {\n    webhooks(tenantId: $tenantId, targetType: $targetType, enabled: $enabled, limit: $limit) {\n      id\n      name\n      targetType\n      agentId\n      routineId\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": typeof types.CliWebhooksDocument,
+    "\n  query CliWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      agentId\n      routineId\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.CliWebhookDocument,
+    "\n  mutation CliCreateWebhook($input: CreateWebhookInput!) {\n    createWebhook(input: $input) {\n      id\n      name\n      token\n      targetType\n      enabled\n    }\n  }\n": typeof types.CliCreateWebhookDocument,
+    "\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n": typeof types.CliUpdateWebhookDocument,
+    "\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": typeof types.CliDeleteWebhookDocument,
+    "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": typeof types.CliRegenerateWebhookTokenDocument,
+    "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliWebhookTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": typeof types.CliAllTenantAgentsForWikiDocument,
     "\n  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String) {\n    compileWikiNow(tenantId: $tenantId, ownerId: $ownerId, modelId: $modelId) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n": typeof types.CliCompileWikiNowDocument,
@@ -194,6 +226,23 @@ const documents: Documents = {
     "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliMemberTenantBySlugDocument,
     "\n  mutation CliMsgSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": types.CliMsgSendMessageDocument,
     "\n  query CliMsgMessages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        cursor\n        node {\n          id\n          role\n          senderType\n          senderId\n          content\n          tokenCount\n          createdAt\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": types.CliMsgMessagesDocument,
+    "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n": types.CliRoutinesDocument,
+    "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n": types.CliRoutineDocument,
+    "\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateRoutineDocument,
+    "\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n": types.CliUpdateRoutineDocument,
+    "\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n": types.CliDeleteRoutineDocument,
+    "\n  mutation CliTriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      startedAt\n    }\n  }\n": types.CliTriggerRoutineRunDocument,
+    "\n  query CliRoutineExecutions($routineId: ID!, $status: RoutineExecutionStatus, $limit: Int, $cursor: String) {\n    routineExecutions(routineId: $routineId, status: $status, limit: $limit, cursor: $cursor) {\n      id\n      status\n      startedAt\n      finishedAt\n      errorMessage\n    }\n  }\n": types.CliRoutineExecutionsDocument,
+    "\n  query CliRoutineExecution($id: ID!) {\n    routineExecution(id: $id) {\n      id\n      routineId\n      status\n      startedAt\n      finishedAt\n      errorMessage\n      inputJson\n      outputJson\n    }\n  }\n": types.CliRoutineExecutionDocument,
+    "\n  mutation CliSetRoutineTrigger($routineId: ID!, $input: RoutineTriggerInput!) {\n    setRoutineTrigger(routineId: $routineId, input: $input) {\n      id\n      triggerType\n      enabled\n    }\n  }\n": types.CliSetRoutineTriggerDocument,
+    "\n  mutation CliDeleteRoutineTrigger($id: ID!) {\n    deleteRoutineTrigger(id: $id)\n  }\n": types.CliDeleteRoutineTriggerDocument,
+    "\n  query CliRoutineTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliRoutineTenantBySlugDocument,
+    "\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n": types.CliScheduledJobsDocument,
+    "\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliScheduledJobDocument,
+    "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n": types.CliCreateScheduledJobDocument,
+    "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSchedJobTenantBySlugDocument,
+    "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": types.CliSkillCatalogDocument,
+    "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSkillTenantBySlugDocument,
     "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": types.CliTeamsDocument,
     "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": types.CliTeamDocument,
     "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateTeamDocument,
@@ -233,6 +282,21 @@ const documents: Documents = {
     "\n  mutation CliDelegateThread($input: DelegateThreadInput!) {\n    delegateThread(input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n    }\n  }\n": types.CliDelegateThreadDocument,
     "\n  mutation CliSendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      role\n      content\n      createdAt\n    }\n  }\n": types.CliSendMessageDocument,
     "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliThreadTenantBySlugDocument,
+    "\n  query CliThreadTurns(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerId: ID\n    $threadId: ID\n    $status: String\n    $limit: Int\n  ) {\n    threadTurns(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerId: $triggerId\n      threadId: $threadId\n      status: $status\n      limit: $limit\n    ) {\n      id\n      agentId\n      routineId\n      threadId\n      status\n      invocationSource\n      triggerName\n      startedAt\n      finishedAt\n      totalCost\n      error\n    }\n  }\n": types.CliThreadTurnsDocument,
+    "\n  query CliThreadTurn($id: ID!) {\n    threadTurn(id: $id) {\n      id\n      tenantId\n      agentId\n      routineId\n      threadId\n      turnNumber\n      status\n      invocationSource\n      triggerName\n      triggerDetail\n      startedAt\n      finishedAt\n      error\n      errorCode\n      totalCost\n      lastActivityAt\n      retryAttempt\n      externalRunId\n      sessionIdBefore\n      sessionIdAfter\n      createdAt\n    }\n  }\n": types.CliThreadTurnDocument,
+    "\n  query CliThreadTurnEvents($runId: ID!, $limit: Int) {\n    threadTurnEvents(runId: $runId, limit: $limit) {\n      seq\n      eventType\n      stream\n      level\n      message\n      createdAt\n    }\n  }\n": types.CliThreadTurnEventsDocument,
+    "\n  mutation CliCancelThreadTurn($id: ID!) {\n    cancelThreadTurn(id: $id) {\n      id\n      status\n      finishedAt\n    }\n  }\n": types.CliCancelThreadTurnDocument,
+    "\n  query CliTurnTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliTurnTenantBySlugDocument,
+    "\n  query CliQueuedWakeups($tenantId: ID!) {\n    queuedWakeups(tenantId: $tenantId) {\n      id\n      agentId\n      status\n      source\n      triggerDetail\n      reason\n      coalescedCount\n      requestedAt\n      claimedAt\n    }\n  }\n": types.CliQueuedWakeupsDocument,
+    "\n  mutation CliCreateWakeup($input: CreateWakeupRequestInput!) {\n    createWakeupRequest(input: $input) {\n      id\n      agentId\n      status\n      requestedAt\n    }\n  }\n": types.CliCreateWakeupDocument,
+    "\n  query CliWakeupTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliWakeupTenantBySlugDocument,
+    "\n  query CliWebhooks($tenantId: ID!, $targetType: String, $enabled: Boolean, $limit: Int) {\n    webhooks(tenantId: $tenantId, targetType: $targetType, enabled: $enabled, limit: $limit) {\n      id\n      name\n      targetType\n      agentId\n      routineId\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": types.CliWebhooksDocument,
+    "\n  query CliWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      agentId\n      routineId\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n      updatedAt\n    }\n  }\n": types.CliWebhookDocument,
+    "\n  mutation CliCreateWebhook($input: CreateWebhookInput!) {\n    createWebhook(input: $input) {\n      id\n      name\n      token\n      targetType\n      enabled\n    }\n  }\n": types.CliCreateWebhookDocument,
+    "\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n": types.CliUpdateWebhookDocument,
+    "\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": types.CliDeleteWebhookDocument,
+    "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": types.CliRegenerateWebhookTokenDocument,
+    "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliWebhookTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": types.CliAllTenantAgentsForWikiDocument,
     "\n  mutation CliCompileWikiNow($tenantId: ID!, $ownerId: ID!, $modelId: String) {\n    compileWikiNow(tenantId: $tenantId, ownerId: $ownerId, modelId: $modelId) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n": types.CliCompileWikiNowDocument,
@@ -525,6 +589,74 @@ export function graphql(source: "\n  query CliMsgMessages($threadId: ID!, $limit
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"): (typeof documents)["\n  query CliRoutines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {\n    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {\n      id\n      name\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      lastRunAt\n      nextRunAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"): (typeof documents)["\n  query CliRoutine($id: ID!) {\n    routine(id: $id) {\n      id\n      name\n      description\n      type\n      status\n      engine\n      schedule\n      agentId\n      teamId\n      visibility\n      owningAgentId\n      currentVersion\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n      triggers {\n        id\n        triggerType\n        enabled\n        config\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateRoutine($input: CreateRoutineInput!) {\n    createRoutine(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {\n    updateRoutine(id: $id, input: $input) {\n      id\n      name\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteRoutine($id: ID!) {\n    deleteRoutine(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliTriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      startedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliTriggerRoutineRun($routineId: ID!, $input: AWSJSON) {\n    triggerRoutineRun(routineId: $routineId, input: $input) {\n      id\n      status\n      startedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliRoutineExecutions($routineId: ID!, $status: RoutineExecutionStatus, $limit: Int, $cursor: String) {\n    routineExecutions(routineId: $routineId, status: $status, limit: $limit, cursor: $cursor) {\n      id\n      status\n      startedAt\n      finishedAt\n      errorMessage\n    }\n  }\n"): (typeof documents)["\n  query CliRoutineExecutions($routineId: ID!, $status: RoutineExecutionStatus, $limit: Int, $cursor: String) {\n    routineExecutions(routineId: $routineId, status: $status, limit: $limit, cursor: $cursor) {\n      id\n      status\n      startedAt\n      finishedAt\n      errorMessage\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliRoutineExecution($id: ID!) {\n    routineExecution(id: $id) {\n      id\n      routineId\n      status\n      startedAt\n      finishedAt\n      errorMessage\n      inputJson\n      outputJson\n    }\n  }\n"): (typeof documents)["\n  query CliRoutineExecution($id: ID!) {\n    routineExecution(id: $id) {\n      id\n      routineId\n      status\n      startedAt\n      finishedAt\n      errorMessage\n      inputJson\n      outputJson\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliSetRoutineTrigger($routineId: ID!, $input: RoutineTriggerInput!) {\n    setRoutineTrigger(routineId: $routineId, input: $input) {\n      id\n      triggerType\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliSetRoutineTrigger($routineId: ID!, $input: RoutineTriggerInput!) {\n    setRoutineTrigger(routineId: $routineId, input: $input) {\n      id\n      triggerType\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteRoutineTrigger($id: ID!) {\n    deleteRoutineTrigger(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteRoutineTrigger($id: ID!) {\n    deleteRoutineTrigger(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliRoutineTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliRoutineTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliScheduledJobs(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerType: String\n    $enabled: Boolean\n    $limit: Int\n  ) {\n    scheduledJobs(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerType: $triggerType\n      enabled: $enabled\n      limit: $limit\n    ) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      lastRunAt\n      nextRunAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliScheduledJob($id: ID!) {\n    scheduledJob(id: $id) {\n      id\n      name\n      description\n      triggerType\n      agentId\n      routineId\n      prompt\n      scheduleType\n      scheduleExpression\n      timezone\n      enabled\n      ebScheduleName\n      lastRunAt\n      nextRunAt\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateScheduledJob($input: CreateScheduledJobInput!) {\n    createScheduledJob(input: $input) {\n      id\n      name\n      enabled\n      scheduleExpression\n      timezone\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n"): (typeof documents)["\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -678,6 +810,66 @@ export function graphql(source: "\n  mutation CliSendMessage($input: SendMessage
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"): (typeof documents)["\n  query CliThreadTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadTurns(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerId: ID\n    $threadId: ID\n    $status: String\n    $limit: Int\n  ) {\n    threadTurns(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerId: $triggerId\n      threadId: $threadId\n      status: $status\n      limit: $limit\n    ) {\n      id\n      agentId\n      routineId\n      threadId\n      status\n      invocationSource\n      triggerName\n      startedAt\n      finishedAt\n      totalCost\n      error\n    }\n  }\n"): (typeof documents)["\n  query CliThreadTurns(\n    $tenantId: ID!\n    $agentId: ID\n    $routineId: ID\n    $triggerId: ID\n    $threadId: ID\n    $status: String\n    $limit: Int\n  ) {\n    threadTurns(\n      tenantId: $tenantId\n      agentId: $agentId\n      routineId: $routineId\n      triggerId: $triggerId\n      threadId: $threadId\n      status: $status\n      limit: $limit\n    ) {\n      id\n      agentId\n      routineId\n      threadId\n      status\n      invocationSource\n      triggerName\n      startedAt\n      finishedAt\n      totalCost\n      error\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadTurn($id: ID!) {\n    threadTurn(id: $id) {\n      id\n      tenantId\n      agentId\n      routineId\n      threadId\n      turnNumber\n      status\n      invocationSource\n      triggerName\n      triggerDetail\n      startedAt\n      finishedAt\n      error\n      errorCode\n      totalCost\n      lastActivityAt\n      retryAttempt\n      externalRunId\n      sessionIdBefore\n      sessionIdAfter\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliThreadTurn($id: ID!) {\n    threadTurn(id: $id) {\n      id\n      tenantId\n      agentId\n      routineId\n      threadId\n      turnNumber\n      status\n      invocationSource\n      triggerName\n      triggerDetail\n      startedAt\n      finishedAt\n      error\n      errorCode\n      totalCost\n      lastActivityAt\n      retryAttempt\n      externalRunId\n      sessionIdBefore\n      sessionIdAfter\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliThreadTurnEvents($runId: ID!, $limit: Int) {\n    threadTurnEvents(runId: $runId, limit: $limit) {\n      seq\n      eventType\n      stream\n      level\n      message\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliThreadTurnEvents($runId: ID!, $limit: Int) {\n    threadTurnEvents(runId: $runId, limit: $limit) {\n      seq\n      eventType\n      stream\n      level\n      message\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCancelThreadTurn($id: ID!) {\n    cancelThreadTurn(id: $id) {\n      id\n      status\n      finishedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliCancelThreadTurn($id: ID!) {\n    cancelThreadTurn(id: $id) {\n      id\n      status\n      finishedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliTurnTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliTurnTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliQueuedWakeups($tenantId: ID!) {\n    queuedWakeups(tenantId: $tenantId) {\n      id\n      agentId\n      status\n      source\n      triggerDetail\n      reason\n      coalescedCount\n      requestedAt\n      claimedAt\n    }\n  }\n"): (typeof documents)["\n  query CliQueuedWakeups($tenantId: ID!) {\n    queuedWakeups(tenantId: $tenantId) {\n      id\n      agentId\n      status\n      source\n      triggerDetail\n      reason\n      coalescedCount\n      requestedAt\n      claimedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateWakeup($input: CreateWakeupRequestInput!) {\n    createWakeupRequest(input: $input) {\n      id\n      agentId\n      status\n      requestedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateWakeup($input: CreateWakeupRequestInput!) {\n    createWakeupRequest(input: $input) {\n      id\n      agentId\n      status\n      requestedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliWakeupTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliWakeupTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliWebhooks($tenantId: ID!, $targetType: String, $enabled: Boolean, $limit: Int) {\n    webhooks(tenantId: $tenantId, targetType: $targetType, enabled: $enabled, limit: $limit) {\n      id\n      name\n      targetType\n      agentId\n      routineId\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliWebhooks($tenantId: ID!, $targetType: String, $enabled: Boolean, $limit: Int) {\n    webhooks(tenantId: $tenantId, targetType: $targetType, enabled: $enabled, limit: $limit) {\n      id\n      name\n      targetType\n      agentId\n      routineId\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      agentId\n      routineId\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query CliWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      agentId\n      routineId\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliCreateWebhook($input: CreateWebhookInput!) {\n    createWebhook(input: $input) {\n      id\n      name\n      token\n      targetType\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation CliCreateWebhook($input: CreateWebhookInput!) {\n    createWebhook(input: $input) {\n      id\n      name\n      token\n      targetType\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n"): (typeof documents)["\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n"): (typeof documents)["\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
