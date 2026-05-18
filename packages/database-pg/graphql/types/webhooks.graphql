@@ -95,4 +95,14 @@ extend type Mutation {
   updateWebhook(id: ID!, input: UpdateWebhookInput!): Webhook!
   deleteWebhook(id: ID!): Boolean!
   regenerateWebhookToken(id: ID!): Webhook
+  """
+  Inserts a synthetic delivery row for the webhook so an operator can
+  confirm the config exists and the delivery-log pipeline is reachable.
+  Does NOT trigger any downstream dispatch — the row carries
+  `resolutionStatus: "test"`, so a follow-up
+  `webhookDeliveries(webhookId)` query shows it. For end-to-end
+  reachability checks against the public URL, curl the webhook's
+  token endpoint directly.
+  """
+  testWebhook(id: ID!): WebhookDelivery!
 }

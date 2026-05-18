@@ -115,6 +115,30 @@ const WebhookDeliveriesDoc = graphql(`
   }
 `);
 
+const TestWebhookDoc = graphql(`
+  mutation CliTestWebhook($id: ID!) {
+    testWebhook(id: $id) {
+      id
+      webhookId
+      tenantId
+      receivedAt
+      resolutionStatus
+      signatureStatus
+      statusCode
+      bodyPreview
+    }
+  }
+`);
+
+const WebhookForTestDoc = graphql(`
+  query CliWebhookForTest($id: ID!) {
+    webhook(id: $id) {
+      id
+      token
+    }
+  }
+`);
+
 const WebhookTenantBySlugDoc = graphql(`
   query CliWebhookTenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {
@@ -443,6 +467,48 @@ async function runWebhookDeliveries(
   );
 }
 
+interface TestOptions extends WebhookCliOptions {}
+
+async function runWebhookTest(id: string, _opts: TestOptions): Promise<void> {
+  const ctx = await resolveWebhookContext(_opts);
+  const data = await gqlMutate(ctx.client, TestWebhookDoc, { id });
+  const delivery = data.testWebhook;
+
+  // Best-effort fetch of the public URL so we can suggest an honest
+  // "curl this for end-to-end reachability". Failure is non-fatal.
+  let curlHint: string | null = null;
+  try {
+    const tokenData = await gqlQuery(ctx.client, WebhookForTestDoc, { id });
+    if (tokenData.webhook?.token) {
+      // Reconstruct the public URL pattern from the resolved stage's
+      // API endpoint (api-client knows it).
+      const { resolveApiConfig } = await import("../api-client.js");
+      const api = resolveApiConfig(ctx.stage);
+      if (api?.apiUrl) {
+        const base = api.apiUrl.replace(/\/$/, "");
+        curlHint = `${base}/webhooks/${tokenData.webhook.token}`;
+      }
+    }
+  } catch {
+    // Ignore — the test row was recorded; reachability hint is bonus.
+  }
+
+  if (isJsonMode()) {
+    printJson({ delivery, publicUrl: curlHint });
+    return;
+  }
+  printSuccess(
+    `Recorded synthetic delivery ${delivery.id} (resolution=${delivery.resolutionStatus}).`,
+  );
+  if (curlHint) {
+    console.log("");
+    console.log("  For end-to-end reachability check, curl the public URL:");
+    console.log(
+      `    curl -X POST -H 'content-type: application/json' \\\n      -d '{"hello":"world"}' \\\n      ${curlHint}`,
+    );
+  }
+}
+
 function notYetImplementedAtApi(verb: string): never {
   printError(
     `\`webhook ${verb}\` is not yet implemented at the GraphQL API.\n` +
@@ -516,11 +582,12 @@ Examples:
 
   wh
     .command("test <id>")
-    .description("Send a synthetic payload to the webhook. (API surface pending.)")
+    .description(
+      "Record a synthetic test delivery row for the webhook (visible via `webhook deliveries`). Does NOT trigger downstream dispatch; prints a curl one-liner for end-to-end reachability against the public URL.",
+    )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--payload <json>")
-    .action(() => notYetImplementedAtApi("test"));
+    .action(runWebhookTest);
 
   wh
     .command("rotate <id>")
