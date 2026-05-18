@@ -14,7 +14,7 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlMutate, gqlQuery } from "../lib/gql-client.js";
 import { isInteractive, promptOrExit, requireTty } from "../lib/interactive.js";
 import { isJsonMode, printJson, printTable } from "../lib/output.js";
-import { printError, printMissingApiSessionError, printSuccess } from "../ui.js";
+import { printError, printSuccess } from "../ui.js";
 
 const SendMessageDoc = graphql(`
   mutation CliMsgSendMessage($input: SendMessageInput!) {
@@ -71,13 +71,10 @@ async function resolveMessageContext(opts: MessageCliOptions) {
   const region = opts.region ?? "us-east-1";
   const stage = await resolveStage({ flag: opts.stage, region });
   const session = loadStageSession(stage);
+  // Auto-fallback to api-key via tfvars/Lambda env if no session — getGqlClient
+  // handles this through resolveAuth(). Session is only needed for the
+  // `--as-agent` enforcement in `message send`.
   const { client } = await getGqlClient({ stage, region });
-
-  if (!session) {
-    printMissingApiSessionError(stage, false);
-    process.exit(1);
-  }
-
   return { stage, region, client, session };
 }
 
@@ -100,9 +97,10 @@ async function runMessageSend(
 ): Promise<void> {
   const ctx = await resolveMessageContext(opts);
 
-  // --as-agent requires api-key session (the bearer must already authenticate
-  // as the agent). Cognito sessions error out with a clear message.
-  if (opts.asAgent && ctx.session.kind !== "api-key") {
+  // --as-agent requires an api-key session — the bearer authenticates as the
+  // agent. Cognito sessions error out with a clear message. Auto-fallback
+  // api-key (no cached session) is also acceptable.
+  if (opts.asAgent && ctx.session && ctx.session.kind !== "api-key") {
     printError(
       "--as-agent <id> requires an api-key session. Run `thinkwork login --stage <s> --api-key <secret> --tenant <slug>`.",
     );
@@ -125,9 +123,13 @@ async function runMessageSend(
   }
 
   const role = opts.asAgent ? MessageRole.Assistant : MessageRole.User;
-  const senderType = opts.asAgent ? "agent" : ctx.session.kind === "cognito" ? "user" : null;
+  const senderType = opts.asAgent
+    ? "agent"
+    : ctx.session?.kind === "cognito"
+      ? "user"
+      : null;
   const senderId =
-    opts.asAgent ?? (ctx.session.kind === "cognito" ? ctx.session.principalId : null);
+    opts.asAgent ?? (ctx.session?.kind === "cognito" ? ctx.session.principalId : null);
 
   const data = await gqlMutate(ctx.client, SendMessageDoc, {
     input: {
