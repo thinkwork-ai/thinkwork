@@ -255,8 +255,9 @@ export function AppSidebar() {
       label: "Computers",
     },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
-    { to: "/knowledge", icon: Brain, label: "Memory" },
     { to: "/capabilities", icon: Puzzle, label: "Skills and Tools" },
+    { to: "/knowledge", icon: Brain, label: "Memory" },
+    { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     ...extensionItemsFor("agentic-os"),
   ];
@@ -266,7 +267,6 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/applets", icon: AppWindow, label: "Artifacts" },
-    { to: "/ontology", icon: Network, label: "Ontology" },
     { to: "/people", icon: Users, label: "People" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
