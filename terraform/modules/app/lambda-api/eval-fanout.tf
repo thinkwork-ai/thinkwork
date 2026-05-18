@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 
 resource "aws_sqs_queue" "eval_fanout_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-eval-fanout-dlq.fifo"
   fifo_queue                = true
   message_retention_seconds = 1209600 # 14 days
@@ -19,7 +19,7 @@ resource "aws_sqs_queue" "eval_fanout_dlq" {
 }
 
 resource "aws_sqs_queue" "eval_fanout" {
-  count                       = local.use_local_zips ? 1 : 0
+  count                       = local.deploy_lambda_handlers ? 1 : 0
   name                        = "thinkwork-${var.stage}-eval-fanout.fifo"
   fifo_queue                  = true
   content_based_deduplication = true
@@ -38,7 +38,7 @@ resource "aws_sqs_queue" "eval_fanout" {
 }
 
 resource "aws_iam_role_policy" "eval_fanout_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "eval-fanout-send"
   role  = aws_iam_role.lambda.id
 
@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "eval_fanout_send" {
 }
 
 resource "aws_iam_role_policy" "eval_worker_sqs" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "eval-worker-sqs"
   role  = aws_iam_role.lambda.id
 
@@ -86,7 +86,7 @@ resource "aws_iam_role_policy" "eval_worker_sqs" {
 }
 
 resource "aws_lambda_event_source_mapping" "eval_fanout" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   event_source_arn        = aws_sqs_queue.eval_fanout[0].arn
   function_name           = aws_lambda_function.handler["eval-worker"].function_name
@@ -100,7 +100,7 @@ resource "aws_lambda_event_source_mapping" "eval_fanout" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "eval_worker" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   function_name                = aws_lambda_function.handler["eval-worker"].function_name
   maximum_event_age_in_seconds = 3600
@@ -108,7 +108,7 @@ resource "aws_lambda_function_event_invoke_config" "eval_worker" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "eval_fanout_dlq_depth" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-eval-fanout-dlq-depth"
   alarm_description   = "Eval fan-out DLQ has messages — eval-worker crashed before recording a case result; operator must inspect."

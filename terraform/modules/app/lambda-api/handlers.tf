@@ -2,13 +2,13 @@
 # Real Lambda Handlers
 #
 # Each handler is bundled by scripts/build-lambdas.sh into dist/lambdas/<name>.zip.
-# Terraform references them via var.lambda_zips_dir (local path) for dev deploys,
-# or via S3 (lambda_artifact_bucket) for production.
+# Terraform references them via var.lambda_zips_dir (local path) for source
+# checkout deploys, or via S3 (lambda_artifact_bucket) for release deploys.
 ################################################################################
 
 locals {
   use_local_zips        = var.lambda_zips_dir != ""
-  eval_fanout_queue_url = local.use_local_zips ? aws_sqs_queue.eval_fanout[0].url : ""
+  eval_fanout_queue_url = local.deploy_lambda_handlers ? aws_sqs_queue.eval_fanout[0].url : ""
   runtime               = "nodejs20.x"
 
   # Common environment variables shared by all API handlers
@@ -273,11 +273,11 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: creates a Lambda function from a local zip
+# Helper: creates Lambda functions from a local zip directory or release S3 keys
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "handler" {
-  for_each = local.use_local_zips ? toset([
+  for_each = local.deploy_lambda_handlers ? toset([
     "graphql-http",
     "chat-agent-invoke",
     "wakeup-processor",
@@ -503,8 +503,10 @@ resource "aws_lambda_function" "handler" {
   timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
-  filename         = "${var.lambda_zips_dir}/${each.key}.zip"
-  source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
+  filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
+  source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
+  s3_bucket        = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
+  s3_key           = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/${each.key}.zip" : null
 
   # Per-handler reserved concurrency. compliance-outbox-drainer is a
   # single-writer (per-tenant hash chain integrity depends on it — two
@@ -544,7 +546,7 @@ resource "aws_lambda_function" "handler" {
 # infrastructure-level belt-and-suspenders.
 
 resource "aws_sqs_queue" "wiki_compile_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-wiki-compile-dlq"
   message_retention_seconds = 1209600 # 14 days
 
@@ -554,7 +556,7 @@ resource "aws_sqs_queue" "wiki_compile_dlq" {
 }
 
 resource "aws_iam_role_policy" "wiki_compile_dlq_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "thinkwork-${var.stage}-wiki-compile-dlq-send"
   role  = aws_iam_role.lambda.id
 
@@ -569,7 +571,7 @@ resource "aws_iam_role_policy" "wiki_compile_dlq_send" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["wiki-compile"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -585,7 +587,7 @@ resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
 # retries so duplicate scan invocations do not create duplicate review
 # proposals; the scan job row is the retry/observability surface.
 resource "aws_sqs_queue" "ontology_scan_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-ontology-scan-dlq"
   message_retention_seconds = 1209600 # 14 days
 
@@ -595,7 +597,7 @@ resource "aws_sqs_queue" "ontology_scan_dlq" {
 }
 
 resource "aws_iam_role_policy" "ontology_scan_dlq_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "thinkwork-${var.stage}-ontology-scan-dlq-send"
   role  = aws_iam_role.lambda.id
 
@@ -610,7 +612,7 @@ resource "aws_iam_role_policy" "ontology_scan_dlq_send" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["ontology-scan"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -625,7 +627,7 @@ resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
 # Ontology reprocess jobs are row-ledger driven and explicitly claim work.
 # Disable AWS async retries to keep failure/retry state in ontology.reprocess_jobs.
 resource "aws_sqs_queue" "ontology_reprocess_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-ontology-reprocess-dlq"
   message_retention_seconds = 1209600 # 14 days
 
@@ -635,7 +637,7 @@ resource "aws_sqs_queue" "ontology_reprocess_dlq" {
 }
 
 resource "aws_iam_role_policy" "ontology_reprocess_dlq_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "thinkwork-${var.stage}-ontology-reprocess-dlq-send"
   role  = aws_iam_role.lambda.id
 
@@ -650,7 +652,7 @@ resource "aws_iam_role_policy" "ontology_reprocess_dlq_send" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "ontology_reprocess" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["ontology-reprocess"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -671,7 +673,7 @@ resource "aws_lambda_function_event_invoke_config" "ontology_reprocess" {
 # failures. SFN is the canonical retry path; Lambda async retries are
 # off. Per project_async_retry_idempotency_lessons.
 resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["routine-approval-callback"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -687,7 +689,7 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
 # is NOT idempotent — retries multiply LLM cost. Per
 # project_async_retry_idempotency_lessons.
 resource "aws_lambda_function_event_invoke_config" "memory_retain" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["memory-retain"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -704,7 +706,7 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
 # ---------------------------------------------------------------------------
 
 resource "aws_sqs_queue" "compliance_drainer_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-compliance-drainer-dlq"
   message_retention_seconds = 1209600 # 14 days
 
@@ -714,7 +716,7 @@ resource "aws_sqs_queue" "compliance_drainer_dlq" {
 }
 
 resource "aws_iam_role_policy" "compliance_drainer_dlq_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "compliance-drainer-dlq-send"
   role  = aws_iam_role.lambda.id
 
@@ -729,7 +731,7 @@ resource "aws_iam_role_policy" "compliance_drainer_dlq_send" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "compliance_outbox_drainer" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["compliance-outbox-drainer"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -746,7 +748,7 @@ resource "aws_lambda_function_event_invoke_config" "compliance_outbox_drainer" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "compliance_outbox_drainer" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-compliance-outbox-drainer"
   group_name          = "default"
@@ -769,7 +771,7 @@ resource "aws_scheduler_schedule" "compliance_outbox_drainer" {
 
 locals {
   # Map of route_key → handler name for API Gateway
-  api_routes = local.use_local_zips ? {
+  api_routes = local.deploy_lambda_handlers ? {
     # GraphQL — the main API entry point
     "POST /graphql" = "graphql-http"
     "GET /graphql"  = "graphql-http"
@@ -1065,7 +1067,7 @@ resource "aws_apigatewayv2_route" "handler" {
 }
 
 resource "aws_lambda_permission" "handler_apigw" {
-  for_each = local.use_local_zips ? toset(distinct(values(local.api_routes))) : toset([])
+  for_each = local.deploy_lambda_handlers ? toset(distinct(values(local.api_routes))) : toset([])
 
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
@@ -1079,7 +1081,7 @@ resource "aws_lambda_permission" "handler_apigw" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "wakeup_processor" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-wakeup-processor"
   group_name          = "default"
@@ -1101,7 +1103,7 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-webhook-deliveries-cleanup"
   group_name          = "default"
@@ -1126,7 +1128,7 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "plugin_staging_sweeper" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-plugin-staging-sweeper"
   group_name          = "default"
@@ -1151,7 +1153,7 @@ resource "aws_scheduler_schedule" "plugin_staging_sweeper" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "mcp_approval_sweeper" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-mcp-approval-sweeper"
   group_name          = "default"
@@ -1177,7 +1179,7 @@ resource "aws_scheduler_schedule" "mcp_approval_sweeper" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "skill_runs_reconciler" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-skill-runs-reconciler"
   group_name          = "default"
@@ -1202,7 +1204,7 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "eval_runs_reconciler" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-eval-runs-reconciler"
   group_name          = "default"
@@ -1226,7 +1228,7 @@ resource "aws_scheduler_schedule" "eval_runs_reconciler" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "stall_monitor" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-stall-monitor"
   group_name          = "default"
@@ -1251,7 +1253,7 @@ resource "aws_scheduler_schedule" "stall_monitor" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "computer_runtime_reconciler" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-computer-runtime-reconciler"
   group_name          = "default"
@@ -1269,7 +1271,7 @@ resource "aws_scheduler_schedule" "computer_runtime_reconciler" {
 }
 
 resource "aws_scheduler_schedule" "slack_dispatch" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-slack-dispatch"
   group_name          = "default"
@@ -1292,7 +1294,7 @@ resource "aws_scheduler_schedule" "slack_dispatch" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "wiki_compile_drainer" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-wiki-compile-drainer"
   group_name          = "default"
@@ -1310,7 +1312,7 @@ resource "aws_scheduler_schedule" "wiki_compile_drainer" {
 }
 
 resource "aws_scheduler_schedule" "wiki_lint" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-wiki-lint"
   group_name          = "default"
@@ -1328,7 +1330,7 @@ resource "aws_scheduler_schedule" "wiki_lint" {
 }
 
 resource "aws_scheduler_schedule" "wiki_export" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-wiki-export"
   group_name          = "default"
@@ -1428,13 +1430,13 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
       # Includes every for_each handler PLUS the standalone Phase 3 U8a
       # anchor Lambda (which is intentionally outside the for_each set
       # because it uses the U7 IAM role, not the shared aws_iam_role.lambda).
-      # Splat (`[*]`) expansion handles count=0 cleanly when local.use_local_zips
-      # is false; an indexed reference (`[0].arn`) would throw on graph eval.
+      # Splat (`[*]`) expansion handles count=0 cleanly when handlers are
+      # disabled; an indexed reference (`[0].arn`) would throw on graph eval.
       # Phase 3 U8b — watchdog moved to standalone resource; its ARN must
       # be added to the splat list explicitly (SEC-U8B-005). The splat
-      # `[*].arn` form handles count = 0 cleanly when local.use_local_zips
-      # is false; an indexed `[0].arn` would throw on graph eval.
-      Resource = local.use_local_zips ? concat(
+      # `[*].arn` form handles count = 0 cleanly when handlers are disabled;
+      # an indexed `[0].arn` would throw on graph eval.
+      Resource = local.deploy_lambda_handlers ? concat(
         [for k, v in aws_lambda_function.handler : v.arn],
         aws_lambda_function.compliance_anchor[*].arn,
         aws_lambda_function.compliance_anchor_watchdog[*].arn,
@@ -1476,7 +1478,7 @@ resource "aws_ssm_parameter" "google_places_api_key" {
 }
 
 resource "aws_ssm_parameter" "lambda_arns" {
-  for_each = local.use_local_zips ? {
+  for_each = local.deploy_lambda_handlers ? {
     "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn
     "kb-manager-fn-arn"           = aws_lambda_function.handler["knowledge-base-manager"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
@@ -1508,7 +1510,7 @@ resource "aws_ssm_parameter" "lambda_arns" {
 # ===========================================================================
 
 resource "aws_lambda_function" "compliance_anchor" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   function_name                  = "thinkwork-${var.stage}-api-compliance-anchor"
   role                           = var.compliance_anchor_lambda_role_arn
@@ -1516,8 +1518,10 @@ resource "aws_lambda_function" "compliance_anchor" {
   runtime                        = local.runtime
   timeout                        = 60
   memory_size                    = 1024
-  filename                       = "${var.lambda_zips_dir}/compliance-anchor.zip"
-  source_code_hash               = filebase64sha256("${var.lambda_zips_dir}/compliance-anchor.zip")
+  filename                       = local.use_local_zips ? "${var.lambda_zips_dir}/compliance-anchor.zip" : null
+  source_code_hash               = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/compliance-anchor.zip") : null
+  s3_bucket                      = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
+  s3_key                         = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/compliance-anchor.zip" : null
   reserved_concurrent_executions = 1
 
   environment {
@@ -1538,14 +1542,14 @@ resource "aws_lambda_function" "compliance_anchor" {
 }
 
 resource "aws_sqs_queue" "compliance_anchor_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-compliance-anchor-dlq"
   message_retention_seconds = 1209600 # 14 days, matches the drainer DLQ
   sqs_managed_sse_enabled   = true
 }
 
 resource "aws_iam_role_policy" "compliance_anchor_dlq_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "compliance-anchor-dlq-send"
   # Attached to the U7 anchor role (which the standalone anchor Lambda assumes).
   role = var.compliance_anchor_lambda_role_name
@@ -1561,7 +1565,7 @@ resource "aws_iam_role_policy" "compliance_anchor_dlq_send" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "compliance_anchor" {
-  count                        = local.use_local_zips ? 1 : 0
+  count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.compliance_anchor[0].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
@@ -1589,7 +1593,7 @@ resource "aws_lambda_function_event_invoke_config" "compliance_anchor" {
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "compliance_anchor_watchdog" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   function_name    = "thinkwork-${var.stage}-api-compliance-anchor-watchdog"
   role             = var.compliance_anchor_watchdog_role_arn
@@ -1597,8 +1601,10 @@ resource "aws_lambda_function" "compliance_anchor_watchdog" {
   runtime          = local.runtime
   timeout          = 30
   memory_size      = 512
-  filename         = "${var.lambda_zips_dir}/compliance-anchor-watchdog.zip"
-  source_code_hash = filebase64sha256("${var.lambda_zips_dir}/compliance-anchor-watchdog.zip")
+  filename         = local.use_local_zips ? "${var.lambda_zips_dir}/compliance-anchor-watchdog.zip" : null
+  source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/compliance-anchor-watchdog.zip") : null
+  s3_bucket        = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
+  s3_key           = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/compliance-anchor-watchdog.zip" : null
 
   environment {
     variables = {
@@ -1620,7 +1626,7 @@ resource "aws_lambda_function" "compliance_anchor_watchdog" {
 # ---------------------------------------------------------------------------
 
 resource "aws_scheduler_schedule" "compliance_anchor" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-compliance-anchor"
   group_name          = "default"
@@ -1642,7 +1648,7 @@ resource "aws_scheduler_schedule" "compliance_anchor" {
 }
 
 resource "aws_scheduler_schedule" "compliance_anchor_watchdog" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   name                = "thinkwork-${var.stage}-compliance-anchor-watchdog"
   group_name          = "default"
@@ -1685,7 +1691,7 @@ resource "aws_scheduler_schedule" "compliance_anchor_watchdog" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "compliance_anchor_gap" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-compliance-anchor-gap"
   alarm_description   = "Anchor cadence gap exceeded threshold. LIVE in U8b — fires on >=1 ComplianceAnchorGap=1 OR missing metric (means watchdog broken)."
@@ -1705,7 +1711,7 @@ resource "aws_cloudwatch_metric_alarm" "compliance_anchor_gap" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "compliance_anchor_watchdog_heartbeat_missing" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-compliance-anchor-watchdog-heartbeat-missing"
   alarm_description   = "Watchdog heartbeat metric is missing. LIVE in U8b — born with treat_missing_data = notBreaching to absorb deploy-time gaps; promote to breaching in a follow-up after first soak."
@@ -1748,7 +1754,7 @@ resource "aws_cloudwatch_metric_alarm" "compliance_anchor_watchdog_heartbeat_mis
 # ---------------------------------------------------------------------------
 
 resource "aws_sqs_queue" "compliance_exports_dlq" {
-  count                     = local.use_local_zips ? 1 : 0
+  count                     = local.deploy_lambda_handlers ? 1 : 0
   name                      = "thinkwork-${var.stage}-compliance-exports-dlq"
   message_retention_seconds = 1209600 # 14 days
   sqs_managed_sse_enabled   = true
@@ -1759,7 +1765,7 @@ resource "aws_sqs_queue" "compliance_exports_dlq" {
 }
 
 resource "aws_sqs_queue" "compliance_exports" {
-  count                      = local.use_local_zips ? 1 : 0
+  count                      = local.deploy_lambda_handlers ? 1 : 0
   name                       = "thinkwork-${var.stage}-compliance-exports"
   visibility_timeout_seconds = 900   # matches Lambda 15-min timeout
   message_retention_seconds  = 86400 # 1 day; DLQ holds longer-stuck messages
@@ -1779,7 +1785,7 @@ resource "aws_sqs_queue" "compliance_exports" {
 # from the createComplianceExport mutation. Attached to the shared
 # lambda role (which graphql-http assumes); scope is queue-specific.
 resource "aws_iam_role_policy" "compliance_exports_send" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "compliance-exports-send"
   role  = aws_iam_role.lambda.id
 
@@ -1795,7 +1801,7 @@ resource "aws_iam_role_policy" "compliance_exports_send" {
 
 # Runner role's SQS receive grants — only the runner consumes the queue.
 resource "aws_iam_role_policy" "compliance_exports_runner_sqs" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
   name  = "compliance-exports-runner-sqs"
   role  = var.compliance_exports_runner_role_name
 
@@ -1824,7 +1830,7 @@ resource "aws_iam_role_policy" "compliance_exports_runner_sqs" {
 }
 
 resource "aws_lambda_function" "compliance_export_runner" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   function_name                  = "thinkwork-${var.stage}-api-compliance-export-runner"
   role                           = var.compliance_exports_runner_role_arn
@@ -1832,8 +1838,10 @@ resource "aws_lambda_function" "compliance_export_runner" {
   runtime                        = local.runtime
   timeout                        = 900
   memory_size                    = 1024
-  filename                       = "${var.lambda_zips_dir}/compliance-export-runner.zip"
-  source_code_hash               = filebase64sha256("${var.lambda_zips_dir}/compliance-export-runner.zip")
+  filename                       = local.use_local_zips ? "${var.lambda_zips_dir}/compliance-export-runner.zip" : null
+  source_code_hash               = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/compliance-export-runner.zip") : null
+  s3_bucket                      = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
+  s3_key                         = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/compliance-export-runner.zip" : null
   reserved_concurrent_executions = 2
 
   environment {
@@ -1866,7 +1874,7 @@ resource "aws_lambda_function" "compliance_export_runner" {
 # newer aws provider version than this codebase currently pins, and the
 # function-level reservation gives the equivalent ceiling at v1 scale.
 resource "aws_lambda_event_source_mapping" "compliance_exports" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   event_source_arn        = aws_sqs_queue.compliance_exports[0].arn
   function_name           = aws_lambda_function.compliance_export_runner[0].function_name
@@ -1876,7 +1884,7 @@ resource "aws_lambda_event_source_mapping" "compliance_exports" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "compliance_exports_dlq_depth" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   alarm_name          = "thinkwork-${var.stage}-compliance-exports-dlq-depth"
   alarm_description   = "Compliance exports DLQ has messages — runner Lambda crashed (or is inert pre-U11.U3); operator must inspect."
@@ -1921,7 +1929,7 @@ resource "aws_cloudwatch_metric_alarm" "compliance_exports_dlq_depth" {
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "workspace_files_efs" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   function_name = "thinkwork-${var.stage}-api-workspace-files-efs"
   role          = aws_iam_role.lambda.arn
@@ -1930,8 +1938,10 @@ resource "aws_lambda_function" "workspace_files_efs" {
   timeout       = 30
   memory_size   = 512
 
-  filename         = "${var.lambda_zips_dir}/workspace-files-efs.zip"
-  source_code_hash = filebase64sha256("${var.lambda_zips_dir}/workspace-files-efs.zip")
+  filename         = local.use_local_zips ? "${var.lambda_zips_dir}/workspace-files-efs.zip" : null
+  source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/workspace-files-efs.zip") : null
+  s3_bucket        = local.use_remote_lambda_artifacts ? var.lambda_artifact_bucket : null
+  s3_key           = local.use_remote_lambda_artifacts ? "${local.lambda_artifact_prefix}/workspace-files-efs.zip" : null
 
   vpc_config {
     subnet_ids         = var.computer_runtime_subnet_ids
@@ -1962,7 +1972,7 @@ resource "aws_lambda_function" "workspace_files_efs" {
 # VPC. AWSLambdaVPCAccessExecutionRole gives Create/Describe/DeleteNetwork
 # Interface — minimum scope for VPC Lambdas.
 resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  count = local.use_local_zips ? 1 : 0
+  count = local.deploy_lambda_handlers ? 1 : 0
 
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"

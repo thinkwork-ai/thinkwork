@@ -30,6 +30,18 @@ db_password = "CHANGE_ME_strong_password_here"
 # Pre-signup Lambda (optional — leave empty if not using custom pre-signup logic)
 # pre_signup_lambda_zip = "./lambdas/pre-signup.zip"
 
+# Lambda artifacts:
+# - Source checkout deploys can set lambda_zips_dir after `pnpm build:lambdas`.
+# - Enterprise deployment repos should upload release zips to their
+#   customer-owned artifact bucket and set lambda_artifact_bucket/prefix.
+# - Set require_lambda_artifacts=true in generated enterprise stage files so
+#   Terraform fails before creating placeholder-only API handlers.
+#
+# lambda_zips_dir = "../../dist/lambdas"
+# lambda_artifact_bucket   = "customer-thinkwork-release-artifacts"
+# lambda_artifact_prefix   = "releases/v1.2.3/lambdas"
+# require_lambda_artifacts = true
+
 # Google Places API key (optional — leave empty to run compile pipeline
 # without live place-hierarchy enrichment; records fall back to
 # metadata-only rows and no country/city backing pages are auto-created).

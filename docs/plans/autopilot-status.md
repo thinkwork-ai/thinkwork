@@ -16,18 +16,19 @@ Target branch: `main`
 
 ### Current Unit
 
-- Active unit: U1 - Publish Coordinated ThinkWork Release Artifacts
-- Active branch: `codex/enterprise-release-artifacts-u1`
-- Active worktree: `.Codex/worktrees/enterprise-release-artifacts-u1`
-- Started: 2026-05-18 11:37 CDT
-- PR: [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391)
-- CI: passed
+- Active unit: U2 - Teach Terraform to Consume Remote Release Artifacts
+- Active branch: `codex/enterprise-remote-artifacts-u2`
+- Active worktree: `.Codex/worktrees/enterprise-remote-artifacts-u2`
+- Started: 2026-05-18 12:04 CDT
+- PR: pending
+- CI: pending
 
 ### Progress Log
 
-| Date       | Unit | Branch                                  | PR                                                           | Status    | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                           |
-| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI passed | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check`; GitHub checks | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
+| Date       | Unit | Branch                                  | PR                                                           | Status     | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                           |
+| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI passed  | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check`; GitHub checks | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
+| 2026-05-18 | U2   | `codex/enterprise-remote-artifacts-u2`  | pending                                                      | Local pass | `pnpm --filter thinkwork-cli test -- terraform-enterprise-artifact-fixture.test.ts no-required-options.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `terraform -chdir=terraform/examples/greenfield init -backend=false`; `terraform -chdir=terraform/examples/greenfield validate`; `terraform fmt -check ...`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `git diff --check`                                                  | Started Terraform remote release artifact support from merged U1.                                                                               |
 
 ### CI / Merge Log
 
@@ -38,6 +39,11 @@ Target branch: `main`
 - 2026-05-18 11:47 CDT: Local verification passed: release manifest tests, shell syntax checks, CLI build, single Lambda build smoke, workspace typecheck/lint, full `pnpm test`, Prettier check for touched files, release workflow YAML parse, and `git diff --check`.
 - 2026-05-18 11:49 CDT: Opened [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) for U1.
 - 2026-05-18 11:55 CDT: Required GitHub checks for [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) passed: `cla`, `verify`, `lint`, `typecheck`, and `test`.
+- 2026-05-18 12:03 CDT: Squash merged [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) as `7a1d5bf90c36f2c3a7208e2b604099d92e8943d3`; deleted the remote/local branch and worktree, then fast-forwarded `main`.
+- 2026-05-18 12:04 CDT: Started U2 in `.Codex/worktrees/enterprise-remote-artifacts-u2` on branch `codex/enterprise-remote-artifacts-u2`.
+- 2026-05-18 12:08 CDT: Implemented remote S3 Lambda artifact mode, mutually exclusive local/S3 validation, artifact-required validation for generated enterprise repos, composite/greenfield pass-through variables, and structural CLI tests. Focused tests and Terraform greenfield validation passed.
+- 2026-05-18 12:13 CDT: Manual review replaced diagnostic-only Terraform checks with `terraform_data` lifecycle preconditions so invalid Lambda artifact configuration hard-fails planning.
+- 2026-05-18 12:16 CDT: Local verification passed for U2: focused CLI artifact fixture test, greenfield Terraform validation, Terraform fmt check, workspace typecheck/lint, full `pnpm test`, and `git diff --check`.
 
 ### Blockers
 

@@ -1,5 +1,5 @@
 locals {
-  workspace_event_enabled = var.enable_workspace_orchestration && local.use_local_zips
+  workspace_event_enabled = var.enable_workspace_orchestration && local.deploy_lambda_handlers
   # EventBridge rejects the more precise per-folder S3 wildcard rules as too
   # complex. Keep broad workspace/catalog families in separate rules and let the
   # dispatcher keep the canonical allowlist in code.

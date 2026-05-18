@@ -28,24 +28,29 @@ output "lambda_role_name" {
   value       = aws_iam_role.lambda.name
 }
 
+output "lambda_artifact_mode" {
+  description = "Resolved Lambda artifact source mode: local, s3, or placeholder."
+  value       = local.lambda_artifact_mode
+}
+
 output "memory_retain_fn_name" {
   description = "Memory-retain Lambda function name. Strands runtime invokes this directly to push conversational turns into the active memory engine."
-  value       = local.use_local_zips ? aws_lambda_function.handler["memory-retain"].function_name : ""
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].function_name : ""
 }
 
 output "memory_retain_fn_arn" {
   description = "Memory-retain Lambda ARN. Used to grant lambda:InvokeFunction to the agentcore-runtime role."
-  value       = local.use_local_zips ? aws_lambda_function.handler["memory-retain"].arn : ""
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
 
 output "email_inbound_fn_arn" {
   description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
-  value       = local.use_local_zips ? aws_lambda_function.handler["email-inbound"].arn : ""
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].arn : ""
 }
 
 output "email_inbound_fn_name" {
   description = "email-inbound Lambda function name. Used by the SES module for lambda:InvokeFunction permissions."
-  value       = local.use_local_zips ? aws_lambda_function.handler["email-inbound"].function_name : ""
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].function_name : ""
 }
 
 # ---------------------------------------------------------------------------
