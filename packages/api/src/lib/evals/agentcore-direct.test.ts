@@ -67,12 +67,12 @@ describe("direct AgentCore eval payload", () => {
       agentId: "agent-1",
       sessionId: "session-1",
       message: "hello",
-      model: "moonshotai.kimi-k2.5",
+      model: "us.anthropic.claude-haiku-4-5",
       systemPrompt: "Case prompt",
       runtimeConfig,
     });
 
-    expect(payload.model).toBe("moonshotai.kimi-k2.5");
+    expect(payload.model).toBe("us.anthropic.claude-haiku-4-5");
     expect(payload.system_prompt).toBe("Case prompt");
   });
 });

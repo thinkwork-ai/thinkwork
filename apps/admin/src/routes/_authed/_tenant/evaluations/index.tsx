@@ -27,6 +27,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { MetricCard } from "@/components/MetricCard";
+import { ModelSelect } from "@/components/agents/ModelSelect";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -473,6 +474,7 @@ function RunEvaluationButton({
 }) {
   const [open, setOpen] = useState(false);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_EVAL_MODEL_ID);
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
@@ -488,7 +490,7 @@ function RunEvaluationButton({
       const res = await startEvalRun({
         tenantId,
         input: {
-          model: DEFAULT_EVAL_MODEL_ID,
+          model: selectedModel,
           // Empty selection = "All Categories" (run everything).
           categories: selectedCats.length > 0 ? selectedCats : null,
         },
@@ -521,9 +523,11 @@ function RunEvaluationButton({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Model</Label>
-            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-              Kimi K2.5
-            </div>
+            <ModelSelect
+              value={selectedModel}
+              onValueChange={setSelectedModel}
+              className="w-full"
+            />
           </div>
 
           <div className="flex flex-col gap-2">
@@ -555,7 +559,7 @@ function RunEvaluationButton({
           >
             Cancel
           </Button>
-          <Button onClick={handleStart} disabled={submitting}>
+          <Button onClick={handleStart} disabled={submitting || !selectedModel}>
             {submitting ? "Starting…" : "Start Evaluation"}
           </Button>
         </DialogFooter>
