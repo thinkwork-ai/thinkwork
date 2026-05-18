@@ -337,7 +337,9 @@ export class HindsightAdapter implements MemoryAdapter {
         source: "requester_memory_markdown",
       }),
     };
-    await this.postItems(bankId, [item], "upsertMarkdownMemoryDocument");
+    await this.postItems(bankId, [item], "upsertMarkdownMemoryDocument", {
+      async: true,
+    });
     console.log(
       `[hindsight-adapter] upsertMarkdownMemoryDocument ok bank=${bankId.slice(0, 18)} document=${req.documentId.slice(0, 64)} bytes=${content.length}`,
     );
@@ -629,6 +631,7 @@ export class HindsightAdapter implements MemoryAdapter {
     bankId: string,
     items: Array<Record<string, unknown>>,
     action: string,
+    opts: { async?: boolean } = {},
   ): Promise<void> {
     try {
       const resp = await fetch(
@@ -636,7 +639,10 @@ export class HindsightAdapter implements MemoryAdapter {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items }),
+          body: JSON.stringify({
+            items,
+            ...(opts.async ? { async: true } : {}),
+          }),
           signal: AbortSignal.timeout(this.timeoutMs),
         },
       );
