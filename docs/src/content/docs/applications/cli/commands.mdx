@@ -847,6 +847,58 @@ Manage the team's user roster. Same idempotency semantics as the agent verbs.
 
 ---
 
+## kb
+
+Knowledge bases (Bedrock-backed RAG stores) and the agent-attachment side. Each KB has an embedding model, chunking config, and a sync lifecycle; attached KBs are queried by agents at run-time for grounded retrieval.
+
+```bash
+thinkwork kb <subcommand> [args] [options]
+```
+
+All subcommands accept `-s/--stage`, `-t/--tenant`, and the global `--json`. Alias: `knowledge-base`.
+
+### kb list / get
+
+```bash
+thinkwork kb list
+thinkwork kb get <id>
+```
+
+`list` is a tenant table with status + sync indicators. `get` returns the full KB record (embedding model, chunking, sync history, error message).
+
+### kb create / update / delete
+
+```bash
+thinkwork kb create [name] [--s3-uri <uri>] [--description <t>] [--embedding-model <id>]
+thinkwork kb update <id> [--name <n>] [--description <t>]
+thinkwork kb delete <id> [--yes]
+```
+
+- `create` prompts for `name` in a TTY when omitted.
+- `--s3-uri` is currently a no-op flag — set the source in the admin UI after create. The flag is reserved for forward compatibility.
+- `--embedding-model` accepts any Bedrock embedding model ID; defaults are tenant-level.
+- `update` only changes metadata; source changes still require re-create.
+- `delete` honors `-y/--yes`; the prompt warns that embeddings + index will be destroyed.
+
+### kb sync
+
+```bash
+thinkwork kb sync <id> [--wait]
+```
+
+Re-embeds from the configured source. Idempotent. `--wait` is currently a no-op; poll `kb get` until `lastSyncStatus` is terminal.
+
+### kb attach / detach
+
+```bash
+thinkwork kb attach <kbId> --agent <id> [--config <json>]
+thinkwork kb detach <kbId> --agent <id>
+```
+
+Both verbs use the bulk `setAgentKnowledgeBases` mutation under the hood as a read-modify-write — the CLI reads the agent's current attachments, adds or removes this KB, and replaces the full set. `--config <json>` parses as `searchConfig` (e.g. `{"topK":5,"scoreThreshold":0.7}`).
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
@@ -854,7 +906,7 @@ The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` sh
 | Phase | Commands |
 |-------|----------|
 | 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`kb`](#kb) next |
+| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb) shipped · [`agent`](#agent), [`template`](#template), [`tenant`](#tenant) next |
 | 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) |
 | 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
 | 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
@@ -898,16 +950,6 @@ Tenant (workspace) CRUD + settings.
 thinkwork tenant list | get <idOrSlug> | create [name] [--slug] [--plan] [--issue-prefix]
 thinkwork tenant update <id> [--name] [--plan] [--issue-prefix]
 thinkwork tenant settings get|set [--default-model] [--monthly-budget-usd] [--max-agents] [--auto-close-after-days] [--feature key=value]
-```
-
-### kb
-
-Knowledge bases (Bedrock-backed RAG) and agent attachments.
-
-```bash
-thinkwork kb list | get <id> | create [name] [--s3-uri] [--embedding-model]
-thinkwork kb update <id> | delete <id> | sync <id> [--wait]
-thinkwork kb attach|detach <kbId> --agent <id> [--config <json>]
 ```
 
 ### routine
