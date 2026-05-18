@@ -1,12 +1,33 @@
 /**
  * `thinkwork agent ...` — agent lifecycle, capabilities, skills, budgets,
- * API keys, email addresses, and version history.
- *
- * Scaffolded in Phase 0; ships in Phase 2.
+ * API keys, email addresses, and version history. Implementations land
+ * in apps/cli/src/commands/agent/.
  */
 
 import { Command } from "commander";
-import { notYetImplemented } from "../lib/stub.js";
+import {
+  runAgentCreate,
+  runAgentDelete,
+  runAgentGet,
+  runAgentList,
+  runAgentStatus,
+  runAgentUnpause,
+  runAgentUpdate,
+} from "./agent/root.js";
+import { runAgentCapabilitiesSet } from "./agent/capabilities.js";
+import { runAgentSkillsSet } from "./agent/skills.js";
+import { runAgentBudgetClear, runAgentBudgetSet } from "./agent/budget.js";
+import {
+  runAgentApiKeyCreate,
+  runAgentApiKeyList,
+  runAgentApiKeyRevoke,
+} from "./agent/api-key.js";
+import {
+  runAgentEmailAllowlist,
+  runAgentEmailDisable,
+  runAgentEmailEnable,
+} from "./agent/email.js";
+import { runAgentVersionList, runAgentVersionRollback } from "./agent/version.js";
 
 export function registerAgentCommand(program: Command): void {
   const agent = program
@@ -28,55 +49,46 @@ export function registerAgentCommand(program: Command): void {
       "after",
       `
 Examples:
-  # Agents you're paired with
   $ thinkwork agent list
-
-  # Tenant-wide (admin only)
   $ thinkwork agent list --all
-
-  # Offline agents only, as JSON
   $ thinkwork agent list --status OFFLINE --json
 `,
     )
-    .action(() => notYetImplemented("agent list", 2));
+    .action(runAgentList);
 
   agent
     .command("get <id>")
     .description("Fetch one agent with its skills, capabilities, budget, and recent activity.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent get", 2));
+    .action(runAgentGet);
 
   agent
     .command("create [name]")
     .description("Create a new agent. Prompts walkthrough for missing fields in TTY.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--template <id>", "Clone from an existing template (strongly recommended)")
+    .option("--template <id>", "Clone from an existing template (REQUIRED)")
     .option("--role <role>", "Role description shown to users")
     .option("--type <type>", "TEAM_AGENT | SUB_AGENT | HUMAN_PAIR")
     .option("--parent <agentId>", "Parent agent (for SUB_AGENT)")
     .option("--reports-to <agentId>", "Reporting manager (for org-chart display)")
     .option("--system-prompt <text>", "Raw system-prompt override (use with care)")
     .option("--system-prompt-file <path>", "Load the system prompt from a file")
-    .option("--model <id>", "Model ID override (see `thinkwork config models`)")
+    .option("--model <id>", "Model ID override (carried in runtimeConfig.model)")
     .addHelpText(
       "after",
       `
 Examples:
-  # Fully interactive
-  $ thinkwork agent create
-
-  # From a template (recommended)
+  # From a template (required)
   $ thinkwork agent create "Ops Analyst" --template tpl-ops-analyst
 
-  # Scripted, raw system prompt
-  $ thinkwork agent create "Bot" --role "on-call summarizer" \\
-      --type TEAM_AGENT --model claude-sonnet-4-6 \\
-      --system-prompt-file prompts/bot.md
+  # With overrides
+  $ thinkwork agent create "Bot" --template tpl-base --role "on-call summarizer" \\
+      --type TEAM_AGENT --system-prompt-file prompts/bot.md
 `,
     )
-    .action(() => notYetImplemented("agent create", 2));
+    .action(runAgentCreate);
 
   agent
     .command("update <id>")
@@ -91,7 +103,7 @@ Examples:
     .option("--system-prompt <text>")
     .option("--system-prompt-file <path>")
     .option("--model <id>")
-    .action(() => notYetImplemented("agent update", 2));
+    .action(runAgentUpdate);
 
   agent
     .command("delete <id>")
@@ -99,11 +111,11 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
-    .action(() => notYetImplemented("agent delete", 2));
+    .action(runAgentDelete);
 
   agent
     .command("status <id> <status>")
-    .description("Manually set agent status. Useful to pause/resume.")
+    .description("Manually set agent status (IDLE | BUSY | OFFLINE | ERROR).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -114,38 +126,34 @@ Examples:
   $ thinkwork agent status agt-ops OFFLINE
 `,
     )
-    .action(() => notYetImplemented("agent status", 2));
+    .action(runAgentStatus);
 
   agent
     .command("unpause <id>")
-    .description("Resume an agent paused by a budget policy trigger.")
+    .description("Resume an agent paused by a budget policy trigger (sets status: IDLE).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent unpause", 2));
+    .action(runAgentUnpause);
 
   // ----- Capabilities -------------------------------------------------------
-
   const capabilities = agent
     .command("capabilities")
     .alias("cap")
     .description("Toggle built-in capabilities (email inbox, web search, etc.).");
-
   capabilities
     .command("set <agentId>")
-    .description("Enable/disable capabilities on an agent.")
+    .description("Enable/disable capabilities on an agent (read-modify-write the full list).")
     .option("--capability <name>", "Capability name (email, web-search, file-upload, …)")
-    .option("--enabled", "Enable (default if flag present)")
+    .option("--enabled", "Enable")
     .option("--disabled", "Disable")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent capabilities set", 2));
+    .action(runAgentCapabilitiesSet);
 
   // ----- Skills -------------------------------------------------------------
-
   const skills = agent
     .command("skills")
     .description("Attach or configure MCP-backed skills on an agent.");
-
   skills
     .command("set <agentId>")
     .description("Enable/disable/configure a skill for an agent.")
@@ -153,17 +161,15 @@ Examples:
     .option("--enabled", "Enable")
     .option("--disabled", "Disable")
     .option("--config <json>", "Inline JSON config for the skill")
-    .option("--rate-limit <rps>", "Rate limit in requests/sec")
+    .option("--rate-limit <rpm>", "Rate limit in requests/min")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent skills set", 2));
+    .action(runAgentSkillsSet);
 
   // ----- Budget -------------------------------------------------------------
-
   const budget = agent
     .command("budget")
     .description("Per-agent spend caps — pause or alert when exceeded.");
-
   budget
     .command("set <agentId>")
     .description("Set or update an agent's budget policy.")
@@ -172,33 +178,29 @@ Examples:
     .option("--action <a>", "PAUSE | ALERT", "PAUSE")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent budget set", 2));
-
+    .action(runAgentBudgetSet);
   budget
     .command("clear <agentId>")
     .description("Remove an agent's budget policy (falls back to tenant-wide).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent budget clear", 2));
+    .action(runAgentBudgetClear);
 
   // ----- API keys -----------------------------------------------------------
-
   const apiKey = agent
     .command("api-key")
     .description("Agent API keys — service-to-service credentials tied to one agent.");
-
   apiKey
     .command("list <agentId>")
     .description("List API keys for an agent (metadata only; plaintext shown on create).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent api-key list", 2));
-
+    .action(runAgentApiKeyList);
   apiKey
     .command("create <agentId>")
     .description("Generate a new API key. The plaintext is printed once — save it.")
     .option("--name <n>", "Human label for the key (e.g. 'GitHub Actions')")
-    .option("--expires <iso>", "Expiration (ISO-8601). Omit for no expiry.")
+    .option("--expires <iso>", "Expiration (currently a no-op; AgentApiKey has no expiry field)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .addHelpText(
@@ -206,40 +208,35 @@ Examples:
       `
 Examples:
   $ thinkwork agent api-key create agt-ops --name "GitHub Actions"
-  $ thinkwork agent api-key create agt-ops --name "nightly" --expires 2026-12-31T00:00:00Z --json
+  $ thinkwork agent api-key create agt-ops --name "nightly" --json
 `,
     )
-    .action(() => notYetImplemented("agent api-key create", 2));
-
+    .action(runAgentApiKeyCreate);
   apiKey
     .command("revoke <keyId>")
     .description("Revoke an API key. Subsequent calls return 401.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
-    .action(() => notYetImplemented("agent api-key revoke", 2));
+    .action(runAgentApiKeyRevoke);
 
   // ----- Email --------------------------------------------------------------
-
   const email = agent
     .command("email")
     .description("Inbound email addresses — let an agent receive email + optionally reply.");
-
   email
     .command("enable <agentId>")
-    .description("Enable inbound email for an agent.")
+    .description("Enable inbound email for an agent. With --local-part, also claims a vanity address.")
     .option("--local-part <x>", "Custom localpart (e.g. ops@)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent email enable", 2));
-
+    .action(runAgentEmailEnable);
   email
     .command("disable <agentId>")
-    .description("Disable inbound email for an agent.")
+    .description("Disable inbound email for an agent (releases vanity address if claimed).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("agent email disable", 2));
-
+    .action(runAgentEmailDisable);
   email
     .command("allowlist <agentId> <senders...>")
     .description("Replace the allowlist of sender email addresses for an agent.")
@@ -252,27 +249,24 @@ Examples:
   $ thinkwork agent email allowlist agt-ops oncall@example.com pagerduty@example.com
 `,
     )
-    .action(() => notYetImplemented("agent email allowlist", 2));
+    .action(runAgentEmailAllowlist);
 
   // ----- Versions -----------------------------------------------------------
-
   const version = agent
     .command("version")
     .description("Agent configuration version history.");
-
   version
     .command("list <agentId>")
-    .description("List version snapshots of an agent's config (prompt, model, skills, …).")
+    .description("List version snapshots of an agent's config.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--limit <n>", "Max versions", "20")
-    .action(() => notYetImplemented("agent version list", 2));
-
+    .action(runAgentVersionList);
   version
     .command("rollback <agentId> <versionId>")
     .description("Restore an agent to a prior version. Creates a new version pointing at the old config.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
-    .action(() => notYetImplemented("agent version rollback", 2));
+    .action(runAgentVersionRollback);
 }

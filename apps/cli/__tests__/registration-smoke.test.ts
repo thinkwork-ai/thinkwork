@@ -251,9 +251,9 @@ describe("stub registration (taxonomy smoke test)", () => {
   it("every stub action exits with code 2 when invoked", async () => {
     const program = new Command();
     // A couple of representative stubs from still-unimplemented phases.
-    // (Phase 1 thread/message/label/inbox now have real implementations.)
-    registerAgentCommand(program);
-    registerTemplateCommand(program);
+    // (Phase 1 + Phase 2 all have real implementations now.)
+    registerRoutineCommand(program);
+    registerMemoryCommand(program);
     registerDashboardCommand(program);
 
     const stderrSpy = vi
@@ -269,10 +269,10 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     // Run one subcommand from each phase.
     await program
-      .parseAsync(["node", "thinkwork", "agent", "list"])
+      .parseAsync(["node", "thinkwork", "routine", "list"])
       .catch(() => undefined);
     await program
-      .parseAsync(["node", "thinkwork", "template", "list"])
+      .parseAsync(["node", "thinkwork", "memory", "list"])
       .catch(() => undefined);
     await program
       .parseAsync(["node", "thinkwork", "dashboard"])
