@@ -125,7 +125,9 @@ export async function recordThreadActivityForIdleLearning(
 }
 
 export function isRequesterIdleMemoryLearningEnabled(): boolean {
-  return process.env.REQUESTER_IDLE_MEMORY_LEARNING_ENABLED === "true";
+  const configured = process.env.REQUESTER_IDLE_MEMORY_LEARNING_ENABLED;
+  if (configured === undefined || configured.trim() === "") return true;
+  return ["1", "true", "yes", "on"].includes(configured.trim().toLowerCase());
 }
 
 export function eventBridgeAtExpression(date: Date): string {

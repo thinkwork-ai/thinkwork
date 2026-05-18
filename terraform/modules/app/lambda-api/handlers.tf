@@ -231,7 +231,8 @@ locals {
       ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
       ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
       SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
-      REQUESTER_IDLE_MEMORY_LEARNING_ENABLED  = tostring(var.requester_idle_memory_learning_enabled)
+      # requester idle memory learning defaults on in API code so this
+      # env-heavy Lambda can stay below AWS's 4 KB environment limit.
       # Phase 3 U10 — compliance read resolvers (complianceEvents,
       # complianceEvent, complianceEventByHash) connect to Aurora as
       # the compliance_reader role. The existing lambda_secrets policy

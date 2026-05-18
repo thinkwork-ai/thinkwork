@@ -617,6 +617,17 @@ None.
 
 ## Status
 
+- Merged [#1404](https://github.com/thinkwork-ai/thinkwork/pull/1404) as `5f73e60e16efda91c655493dc859c5bf1be88d8e`.
+- Merged [#1405](https://github.com/thinkwork-ai/thinkwork/pull/1405) as `d700680e970e0fb2fc2927ab1a520e0aae529494`.
+- Deploy run `26056853159` failed during Terraform Apply because adding requester memory feature flags to every API Lambda pushed `graphql-http` over AWS Lambda's 4 KB environment-variable limit.
+- Deploy run `26057554393` failed during Terraform Apply because the remaining `REQUESTER_IDLE_MEMORY_LEARNING_ENABLED` key on `graphql-http` was still enough to exceed the same limit.
+- Current hotfix branch: `codex/requester-memory-env-compact`.
+- Current fix: idle-learning scheduling now defaults on unless explicitly disabled, and `graphql-http` no longer carries the requester idle-learning env var.
+
+# Requester Memory Dreaming - 2026-05-18
+
+## Status
+
 - Branch: `codex/requester-memory-dreaming`
 - Started: `2026-05-18T19:18:00Z`
 - Plan: `docs/plans/2026-05-18-002-feat-requester-memory-dreaming-plan.md`
