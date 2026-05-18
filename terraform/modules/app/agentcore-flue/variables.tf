@@ -78,6 +78,12 @@ variable "memory_engine" {
   }
 }
 
+variable "requester_idle_memory_learning_enabled" {
+  description = "When true, requester memory learning runs through the API idle/dreaming pipeline instead of runtime retain-on-every-turn."
+  type        = bool
+  default     = false
+}
+
 variable "db_cluster_arn" {
   description = "Aurora DB cluster ARN. Injected as DB_CLUSTER_ARN so AuroraSessionStore (plan §005 U4) can target the cluster via the RDS Data API. The cluster's IAM resource scope (thinkwork-<stage>-db-* in agentcore-flue's role policy) covers any cluster-id suffix."
   type        = string

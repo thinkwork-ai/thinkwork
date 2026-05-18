@@ -51,12 +51,15 @@ locals {
     # via `loadRuntimeId(runtimeType)` to start a Bedrock-control-plane
     # invocation against the right runtime — pre-U3 the flue path was
     # dead because the env var was never wired here.
-    AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-    AGENTCORE_RUNTIME_SSM_FLUE    = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
-    WORKSPACE_BUCKET              = var.bucket_name
-    HINDSIGHT_ENDPOINT            = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID           = var.agentcore_memory_id
-    MEMORY_ENGINE                 = var.memory_engine
+    AGENTCORE_RUNTIME_SSM_STRANDS          = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
+    AGENTCORE_RUNTIME_SSM_FLUE             = "/thinkwork/${var.stage}/agentcore/runtime-id-flue"
+    WORKSPACE_BUCKET                       = var.bucket_name
+    HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
+    MEMORY_ENGINE                          = var.memory_engine
+    REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
+    REQUESTER_MEMORY_DREAMING_ENABLED      = tostring(var.requester_memory_dreaming_enabled)
+    REQUESTER_MEMORY_DREAMING_MODEL_ID     = var.requester_memory_dreaming_model_id
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
@@ -309,6 +312,7 @@ resource "aws_lambda_function" "handler" {
     "guardrails",
     "scheduled-jobs",
     "thread-idle-memory-learning",
+    "requester-memory-dreaming",
     "job-schedule-manager",
     "job-trigger",
     "routine-task-weather-email",
@@ -500,8 +504,8 @@ resource "aws_lambda_function" "handler" {
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1141,6 +1145,28 @@ resource "aws_scheduler_schedule" "plugin_staging_sweeper" {
 
   target {
     arn      = aws_lambda_function.handler["plugin-staging-sweeper"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Requester memory dreaming — broad per-user memory compaction/reflection sweep
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "requester_memory_dreaming" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-requester-memory-dreaming"
+  group_name          = "default"
+  schedule_expression = var.requester_memory_dreaming_schedule_expression
+  state               = var.requester_memory_dreaming_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["requester-memory-dreaming"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

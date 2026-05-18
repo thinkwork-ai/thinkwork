@@ -322,45 +322,49 @@ module "api" {
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
-  lambda_zips_dir                     = var.lambda_zips_dir
-  api_auth_secret                     = var.api_auth_secret
-  db_password                         = var.db_password
-  agentcore_function_name             = module.agentcore.agentcore_function_name
-  agentcore_flue_function_name        = module.agentcore_flue.agentcore_flue_function_name
-  agentcore_function_arn              = module.agentcore.agentcore_function_arn
-  agentcore_flue_function_arn         = module.agentcore_flue.agentcore_flue_function_arn
-  hindsight_endpoint                  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id                 = module.agentcore_memory.memory_id
-  memory_engine                       = local.resolved_memory_engine
-  admin_url                           = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
-  docs_url                            = "https://${module.docs_site.distribution_domain}"
-  www_url                             = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
-  stripe_price_ids_json               = var.stripe_price_ids_json
-  appsync_realtime_url                = module.appsync.graphql_realtime_url
-  ecr_repository_url                  = module.agentcore.ecr_repository_url
-  job_scheduler_role_arn              = module.job_triggers.job_scheduler_role_arn
-  routines_execution_role_arn         = module.routines_stepfunctions.execution_role_arn
-  routines_log_group_arn              = module.routines_stepfunctions.log_group_arn
-  agentcore_code_interpreter_id       = var.agentcore_code_interpreter_id
-  wiki_compile_model_id               = var.wiki_compile_model_id
-  company_brain_source_agent_model_id = var.company_brain_source_agent_model_id
-  wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
-  google_places_api_key               = var.google_places_api_key
-  enable_workspace_orchestration      = var.enable_workspace_orchestration
-  computer_runtime_cluster_name       = module.computer_runtime.cluster_name
-  computer_runtime_cluster_arn        = module.computer_runtime.cluster_arn
-  computer_runtime_efs_file_system_id = module.computer_runtime.efs_file_system_id
-  computer_runtime_subnet_ids         = module.computer_runtime.task_subnet_ids
-  computer_runtime_assign_public_ip   = module.computer_runtime.assign_public_ip
-  computer_runtime_task_sg_id         = module.computer_runtime.task_security_group_id
-  computer_runtime_execution_role_arn = module.computer_runtime.execution_role_arn
-  computer_runtime_task_role_arn      = module.computer_runtime.task_role_arn
-  computer_runtime_log_group_name     = module.computer_runtime.log_group_name
-  computer_runtime_repository_url     = module.computer_runtime.repository_url
-  computer_runtime_default_cpu        = module.computer_runtime.default_cpu
-  computer_runtime_default_memory     = module.computer_runtime.default_memory
-  computer_runtime_manager_policy_arn = module.computer_runtime.manager_policy_arn
+  lambda_zips_dir                               = var.lambda_zips_dir
+  api_auth_secret                               = var.api_auth_secret
+  db_password                                   = var.db_password
+  agentcore_function_name                       = module.agentcore.agentcore_function_name
+  agentcore_flue_function_name                  = module.agentcore_flue.agentcore_flue_function_name
+  agentcore_function_arn                        = module.agentcore.agentcore_function_arn
+  agentcore_flue_function_arn                   = module.agentcore_flue.agentcore_flue_function_arn
+  hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id                           = module.agentcore_memory.memory_id
+  memory_engine                                 = local.resolved_memory_engine
+  admin_url                                     = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
+  docs_url                                      = "https://${module.docs_site.distribution_domain}"
+  www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
+  stripe_price_ids_json                         = var.stripe_price_ids_json
+  appsync_realtime_url                          = module.appsync.graphql_realtime_url
+  ecr_repository_url                            = module.agentcore.ecr_repository_url
+  job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
+  routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
+  routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn
+  agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
+  wiki_compile_model_id                         = var.wiki_compile_model_id
+  company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
+  wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
+  google_places_api_key                         = var.google_places_api_key
+  enable_workspace_orchestration                = var.enable_workspace_orchestration
+  requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
+  requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
+  requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
+  requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
+  computer_runtime_cluster_name                 = module.computer_runtime.cluster_name
+  computer_runtime_cluster_arn                  = module.computer_runtime.cluster_arn
+  computer_runtime_efs_file_system_id           = module.computer_runtime.efs_file_system_id
+  computer_runtime_subnet_ids                   = module.computer_runtime.task_subnet_ids
+  computer_runtime_assign_public_ip             = module.computer_runtime.assign_public_ip
+  computer_runtime_task_sg_id                   = module.computer_runtime.task_security_group_id
+  computer_runtime_execution_role_arn           = module.computer_runtime.execution_role_arn
+  computer_runtime_task_role_arn                = module.computer_runtime.task_role_arn
+  computer_runtime_log_group_name               = module.computer_runtime.log_group_name
+  computer_runtime_repository_url               = module.computer_runtime.repository_url
+  computer_runtime_default_cpu                  = module.computer_runtime.default_cpu
+  computer_runtime_default_memory               = module.computer_runtime.default_memory
+  computer_runtime_manager_policy_arn           = module.computer_runtime.manager_policy_arn
 
   # workspace-files-efs sidecar: VPC-attached Lambda that reads any Computer's
   # workspace files directly off the shared EFS (bypasses the
@@ -407,9 +411,10 @@ module "agentcore" {
   region      = var.region
   bucket_name = module.s3.bucket_name
 
-  hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id = module.agentcore_memory.memory_id
-  memory_engine       = local.resolved_memory_engine
+  hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id                    = module.agentcore_memory.memory_id
+  memory_engine                          = local.resolved_memory_engine
+  requester_idle_memory_learning_enabled = var.requester_idle_memory_learning_enabled
 
   # Threaded through so the container's run_skill_dispatch can POST
   # terminal state back to /api/skills/complete. The lambda-api module
@@ -440,9 +445,10 @@ module "agentcore_flue" {
   ecr_repository_url = module.agentcore.ecr_repository_url
   async_dlq_arn      = module.agentcore.agentcore_async_dlq_arn
 
-  hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id = module.agentcore_memory.memory_id
-  memory_engine       = local.resolved_memory_engine
+  hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id                    = module.agentcore_memory.memory_id
+  memory_engine                          = local.resolved_memory_engine
+  requester_idle_memory_learning_enabled = var.requester_idle_memory_learning_enabled
 
   api_endpoint    = module.api.api_endpoint
   api_auth_secret = var.api_auth_secret

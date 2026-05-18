@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -12,7 +13,7 @@ const MAX_MEMORY_FILE_BYTES = 256 * 1024;
 
 const s3 = new S3Client({});
 
-export type RequesterMemoryPathKind = "memory" | "internal";
+export type RequesterMemoryPathKind = "memory" | "source" | "internal";
 
 export type ChangedRequesterMemoryFile = {
   path: string;
@@ -25,6 +26,13 @@ export type ChangedRequesterMemoryFile = {
   evidenceMessageIds?: string[];
   hindsightDocumentId?: string;
   hindsightStatus?: string;
+};
+
+export type RequesterMemoryFileSummary = {
+  path: string;
+  key: string;
+  size?: number;
+  lastModified?: Date;
 };
 
 export type WriteRequesterMemoryFileInput = {
@@ -50,6 +58,10 @@ export function requesterMemoryKey(input: {
   const path = normalizeRequesterMemoryPath(input.path);
   if (input.kind === "internal") {
     assertInternalRequesterMemoryPath(path);
+  } else if (input.kind === "source") {
+    if (!isRequesterMemorySourcePath(path)) {
+      throw new Error(`requester memory source path is not readable: ${path}`);
+    }
   } else {
     assertPublicRequesterMemoryPath(path);
   }
@@ -79,10 +91,102 @@ export function idleLearningReportPath(runId: string): string {
   return `memory/reports/thread-idle/${runId}.md`;
 }
 
+export function dreamingReportPath(
+  phase: "light" | "rem" | "deep",
+  date: string,
+): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error("dreaming report date must be YYYY-MM-DD");
+  }
+  return `memory/dreaming/${phase}/${date}.md`;
+}
+
+export function dreamingStatePath(name: string): string {
+  if (
+    !name.endsWith(".json") ||
+    !SAFE_ID_RE.test(name.replace(/\.json$/, ""))
+  ) {
+    throw new Error("dreaming state name must be a safe .json filename");
+  }
+  return `memory/.dreams/${name}`;
+}
+
+export async function listRequesterMemoryFiles(input: {
+  tenantId: string;
+  userId: string;
+  includeInternal?: boolean;
+}): Promise<RequesterMemoryFileSummary[]> {
+  assertSafeId(input.tenantId, "tenantId");
+  assertSafeId(input.userId, "userId");
+  const userPrefix = `tenants/${input.tenantId}/users/${input.userId}/`;
+  const prefix = `${userPrefix}memory/`;
+  const files: RequesterMemoryFileSummary[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: workspaceBucket(),
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const object of response.Contents ?? []) {
+      if (!object.Key || object.Key.endsWith("/")) continue;
+      const path = object.Key.slice(userPrefix.length);
+      if (
+        input.includeInternal ||
+        path === "memory/DREAMS.md" ||
+        isRequesterMemorySourcePath(path) ||
+        isRequesterMemoryGeneratedPublicPath(path)
+      ) {
+        files.push({
+          path,
+          key: object.Key,
+          size: object.Size,
+          lastModified: object.LastModified,
+        });
+      }
+    }
+    continuationToken = response.NextContinuationToken;
+  } while (continuationToken);
+
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 export async function readRequesterMemoryFile(input: {
   tenantId: string;
   userId: string;
   path: string;
+}): Promise<string | null> {
+  return readRequesterMemoryObject({ ...input, kind: "memory" });
+}
+
+export async function readRequesterMemorySourceFile(input: {
+  tenantId: string;
+  userId: string;
+  path: string;
+}): Promise<string | null> {
+  const path = normalizeRequesterMemoryPath(input.path);
+  if (!isRequesterMemorySourcePath(path)) {
+    throw new Error(`requester memory source path is not readable: ${path}`);
+  }
+  return readRequesterMemoryObject({ ...input, path, kind: "source" });
+}
+
+export async function readRequesterMemoryInternalFile(input: {
+  tenantId: string;
+  userId: string;
+  path: string;
+}): Promise<string | null> {
+  return readRequesterMemoryObject({ ...input, kind: "internal" });
+}
+
+async function readRequesterMemoryObject(input: {
+  tenantId: string;
+  userId: string;
+  path: string;
+  kind: RequesterMemoryPathKind;
 }): Promise<string | null> {
   const key = requesterMemoryKey(input);
   try {
@@ -161,6 +265,29 @@ export async function writeIdleLearningReport(input: {
   };
 }
 
+export async function writeRequesterMemoryInternalFile(input: {
+  tenantId: string;
+  userId: string;
+  path: string;
+  content: string;
+}): Promise<{ path: string; key: string; hash: string; bytes: number }> {
+  assertContentBudget(input.content);
+  const path = normalizeRequesterMemoryPath(input.path);
+  const key = requesterMemoryKey({
+    tenantId: input.tenantId,
+    userId: input.userId,
+    path,
+    kind: "internal",
+  });
+  await putTextObject(key, input.content);
+  return {
+    path,
+    key,
+    hash: sha256(input.content),
+    bytes: Buffer.byteLength(input.content, "utf8"),
+  };
+}
+
 export async function readIdleLearningReport(input: {
   tenantId: string;
   userId: string;
@@ -231,7 +358,10 @@ export function normalizeRequesterMemoryPath(path: string): string {
 
 function assertPublicRequesterMemoryPath(path: string): void {
   const normalized = normalizeRequesterMemoryPath(path);
-  if (normalized === "memory/MEMORY.md") return;
+  if (normalized === "memory/MEMORY.md" || normalized === "memory/DREAMS.md") {
+    return;
+  }
+  if (isRequesterMemoryGeneratedPublicPath(normalized)) return;
   const [root, collection, filename, extra] = normalized.split("/");
   if (
     root === "memory" &&
@@ -247,9 +377,43 @@ function assertPublicRequesterMemoryPath(path: string): void {
   );
 }
 
+export function isRequesterMemorySourcePath(path: string): boolean {
+  const normalized = normalizeRequesterMemoryPath(path);
+  if (!normalized.startsWith("memory/") || !normalized.endsWith(".md")) {
+    return false;
+  }
+  const parts = normalized.split("/");
+  if (parts.some((part) => part.startsWith("."))) return false;
+  if (parts[1] === "reports" || parts[1] === "dreaming") return false;
+  if (normalized === "memory/DREAMS.md") return false;
+  return true;
+}
+
+export function isRequesterMemoryGeneratedPublicPath(path: string): boolean {
+  const normalized = normalizeRequesterMemoryPath(path);
+  const [root, collection, phase, filename, extra] = normalized.split("/");
+  return (
+    root === "memory" &&
+    collection === "dreaming" &&
+    (phase === "light" || phase === "rem" || phase === "deep") &&
+    !!filename &&
+    !extra &&
+    DATE_PATH_RE.test(filename)
+  );
+}
+
 function assertInternalRequesterMemoryPath(path: string): void {
   const normalized = normalizeRequesterMemoryPath(path);
   const parts = normalized.split("/");
+  if (
+    parts.length === 3 &&
+    parts[0] === "memory" &&
+    parts[1] === ".dreams" &&
+    SAFE_ID_RE.test(parts[2].replace(/\.json$/, "")) &&
+    parts[2].endsWith(".json")
+  ) {
+    return;
+  }
   if (
     parts.length === 4 &&
     parts[0] === "memory" &&

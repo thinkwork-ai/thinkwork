@@ -404,6 +404,12 @@ async function handleGet(
   if (target.kind === "computer") {
     return await handleComputerGet(target, path);
   }
+  if (target.kind === "user" && !isVisibleUserContextPath(path)) {
+    return json(403, {
+      ok: false,
+      error: "User context path is not editable from this surface.",
+    });
+  }
   // Per docs/plans/2026-04-27-003: every S3 target tier (agent / template /
   // defaults / user context) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
@@ -451,7 +457,7 @@ async function handleList(
     (p) =>
       p !== "manifest.json" &&
       p !== "_defaults_version" &&
-      (target.kind !== "user" || p === "USER.md" || p.startsWith("memory/")) &&
+      (target.kind !== "user" || isVisibleUserContextPath(p)) &&
       !isBuiltinToolWorkspacePath(p),
   );
 
@@ -598,6 +604,15 @@ async function handleComputerDelete(
 
 function isComputerUserMdPath(path: string): boolean {
   return path.replace(/^\/+/, "") === "USER.md";
+}
+
+function isVisibleUserContextPath(path: string): boolean {
+  const clean = path.replace(/^\/+/, "");
+  if (clean === "USER.md") return true;
+  if (!clean.startsWith("memory/")) return false;
+  if (clean.startsWith("memory/.") || clean.includes("/.")) return false;
+  if (clean.startsWith("memory/reports/")) return false;
+  return true;
 }
 
 const COMPUTER_WORKSPACE_TASK_TIMEOUT_MS = 12_000;
@@ -881,6 +896,12 @@ async function handlePut(
   }
 
   if (target.kind === "user") {
+    if (!isVisibleUserContextPath(cleanPath)) {
+      return json(403, {
+        ok: false,
+        error: "User context path is not editable from this surface.",
+      });
+    }
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket(),
@@ -1229,6 +1250,12 @@ async function handleDelete(
   const { target, tenantId } = deps;
   if (target.kind === "computer") {
     return await handleComputerDelete(target, path);
+  }
+  if (target.kind === "user" && !isVisibleUserContextPath(path)) {
+    return json(403, {
+      ok: false,
+      error: "User context path is not editable from this surface.",
+    });
   }
   await s3.send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
