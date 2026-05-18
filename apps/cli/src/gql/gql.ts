@@ -180,6 +180,7 @@ type Documents = {
     "\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n": typeof types.CliUpdateWebhookDocument,
     "\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": typeof types.CliDeleteWebhookDocument,
     "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": typeof types.CliRegenerateWebhookTokenDocument,
+    "\n  query CliWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      providerName\n      providerEventId\n      normalizedKind\n      receivedAt\n      signatureStatus\n      resolutionStatus\n      statusCode\n      durationMs\n      threadId\n      threadCreated\n      retryCount\n      isReplay\n      errorMessage\n    }\n  }\n": typeof types.CliWebhookDeliveriesDocument,
     "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliWebhookTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": typeof types.CliAllTenantAgentsForWikiDocument,
@@ -355,6 +356,7 @@ const documents: Documents = {
     "\n  mutation CliUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      targetType\n      enabled\n      rateLimit\n    }\n  }\n": types.CliUpdateWebhookDocument,
     "\n  mutation CliDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": types.CliDeleteWebhookDocument,
     "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": types.CliRegenerateWebhookTokenDocument,
+    "\n  query CliWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      providerName\n      providerEventId\n      normalizedKind\n      receivedAt\n      signatureStatus\n      resolutionStatus\n      statusCode\n      durationMs\n      threadId\n      threadCreated\n      retryCount\n      isReplay\n      errorMessage\n    }\n  }\n": types.CliWebhookDeliveriesDocument,
     "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliWebhookTenantBySlugDocument,
     "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliWikiTenantBySlugDocument,
     "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    allTenantAgents(tenantId: $tenantId, includeSystem: false, includeSubAgents: false) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": types.CliAllTenantAgentsForWikiDocument,
@@ -1042,6 +1044,10 @@ export function graphql(source: "\n  mutation CliDeleteWebhook($id: ID!) {\n    
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation CliRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CliWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      providerName\n      providerEventId\n      normalizedKind\n      receivedAt\n      signatureStatus\n      resolutionStatus\n      statusCode\n      durationMs\n      threadId\n      threadCreated\n      retryCount\n      isReplay\n      errorMessage\n    }\n  }\n"): (typeof documents)["\n  query CliWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      providerName\n      providerEventId\n      normalizedKind\n      receivedAt\n      signatureStatus\n      resolutionStatus\n      statusCode\n      durationMs\n      threadId\n      threadCreated\n      retryCount\n      isReplay\n      errorMessage\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
