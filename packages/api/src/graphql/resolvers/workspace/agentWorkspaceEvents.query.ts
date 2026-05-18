@@ -8,7 +8,7 @@ import {
   eq,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 200;
@@ -27,7 +27,7 @@ export async function agentWorkspaceEvents_(
     .where(eq(agentWorkspaceRuns.id, args.runId))
     .limit(1);
   if (!run) return [];
-  await requireTenantAdmin(ctx, run.tenant_id);
+  await requireAdminOrServiceCaller(ctx, run.tenant_id, "agent_workspace_events");
 
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const rows = await db

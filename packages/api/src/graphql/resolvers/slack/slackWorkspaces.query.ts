@@ -5,7 +5,7 @@ import {
   eq,
   slackWorkspaces as slackWorkspacesTable,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { slackWorkspaceToGraphql } from "./shared.js";
 
 export async function slackWorkspaces(
@@ -13,7 +13,7 @@ export async function slackWorkspaces(
   args: { tenantId: string },
   ctx: GraphQLContext,
 ): Promise<Record<string, unknown>[]> {
-  await requireTenantAdmin(ctx, args.tenantId);
+  await requireAdminOrServiceCaller(ctx, args.tenantId, "slack_workspaces");
   const rows = await db
     .select()
     .from(slackWorkspacesTable)

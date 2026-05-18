@@ -15,6 +15,10 @@ vi.mock("../../utils.js", () => ({
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  // Read-only queries here now route through requireAdminOrServiceCaller;
+  // delegate to the same mock so existing role-gate tests carry over.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
 }));
 
 vi.mock("./shared.js", () => ({

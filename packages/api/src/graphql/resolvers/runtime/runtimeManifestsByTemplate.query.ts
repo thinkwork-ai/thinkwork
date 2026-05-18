@@ -19,7 +19,7 @@ import {
   resolvedCapabilityManifests,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 10;
@@ -33,7 +33,7 @@ export async function runtimeManifestsByTemplate(
   const tenantId = await resolveCallerTenantId(ctx);
   if (!tenantId) return [];
 
-  await requireTenantAdmin(ctx, tenantId);
+  await requireAdminOrServiceCaller(ctx, tenantId, "runtime_manifests_by_template");
 
   // Template-tenant ownership check — mirror runtimeManifestsByAgent's
   // pattern so a cross-tenant admin can't enumerate other tenants'

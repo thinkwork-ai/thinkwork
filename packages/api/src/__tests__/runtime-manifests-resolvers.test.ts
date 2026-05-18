@@ -60,6 +60,10 @@ vi.mock("../graphql/utils.js", () => ({
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  // runtime/* queries now route through requireAdminOrServiceCaller; delegate
+  // to the same mock so existing role-gate tests carry over unchanged.
+  requireAdminOrServiceCaller: (ctx: any, tenantId: string) =>
+    mockRequireTenantAdmin(ctx, tenantId),
 }));
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({

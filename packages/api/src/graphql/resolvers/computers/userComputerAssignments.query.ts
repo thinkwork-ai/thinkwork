@@ -12,7 +12,7 @@ import {
   computerAssignments,
   snakeToCamel,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   accessSource,
   toGraphqlComputer,
@@ -41,7 +41,7 @@ export async function userComputerAssignments(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantAdmin(ctx, user.tenant_id);
+  await requireAdminOrServiceCaller(ctx, user.tenant_id, "user_computer_assignments");
 
   const byComputer = new Map<string, AssignmentRow>();
 

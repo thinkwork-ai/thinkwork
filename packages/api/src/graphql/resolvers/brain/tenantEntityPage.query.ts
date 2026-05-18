@@ -5,7 +5,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { toTenantEntityPage } from "./mappers.js";
 
 export const tenantEntityPage = async (
@@ -24,7 +24,7 @@ export const tenantEntityPage = async (
 		)
 		.limit(1);
 	if (!page) return null;
-	await requireTenantAdmin(ctx, page.tenant_id);
+	await requireAdminOrServiceCaller(ctx, page.tenant_id, "tenant_entity_page");
 	const sections = await db
 		.select()
 		.from(tenantEntityPageSections)
