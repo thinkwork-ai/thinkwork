@@ -248,19 +248,20 @@ describe("stub registration (taxonomy smoke test)", () => {
     }
   });
 
-  it("scaffolded-but-API-pending verbs exit with code 2", async () => {
-    // All 25 original commands have implementations now. A handful of
-    // verbs scaffolded ahead of the server-side resolver use the
-    // `notYetImplementedAtApi(verb)` pattern — same exit code 2, but with
-    // a domain-specific error rather than the original generic stub.
-    //
-    // The scheduled-job + webhook verbs are all wired now. The
-    // remaining stubbed verbs live under `skill` (install / upgrade /
-    // create / update / delete). When the skill verbs are retired or
-    // shipped, this assertion should be deleted or flipped.
+  it("retired verbs exit with code 2 and explain the supported alternative", async () => {
+    // All Phase-3 scaffolded verbs are real now. `skill create` and
+    // `skill update` were retired (not shipped) because the underlying
+    // model — tenant-uploaded custom skills — has its real authoring
+    // surface via `skill push <folder>`, not a metadata CRUD. The CLI
+    // still registers the verbs so the help text is complete, but
+    // `.action()` prints a clear "retired — use skill push" message
+    // and exits 2.
     const program = new Command();
     registerSkillCommand(program);
 
+    const errSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const logSpy = vi
       .spyOn(console, "log")
       .mockImplementation(() => undefined);
@@ -271,15 +272,19 @@ describe("stub registration (taxonomy smoke test)", () => {
     program.exitOverride();
 
     await program
-      .parseAsync(["node", "thinkwork", "skill", "install", "fake-slug"])
+      .parseAsync(["node", "thinkwork", "skill", "create", "fake-slug"])
       .catch(() => undefined);
 
     expect(exitSpy).toHaveBeenCalledWith(2);
 
-    const combinedLog = logSpy.mock.calls
+    const combinedLog = [
+      ...errSpy.mock.calls,
+      ...logSpy.mock.calls,
+    ]
       .map((c) => c.map(String).join(" "))
       .join("\n");
-    expect(combinedLog).toContain("not yet implemented at the GraphQL API");
+    expect(combinedLog).toContain("retired");
+    expect(combinedLog).toContain("skill push");
 
     vi.restoreAllMocks();
   });

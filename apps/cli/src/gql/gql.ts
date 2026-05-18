@@ -127,6 +127,8 @@ type Documents = {
     "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSchedJobTenantBySlugDocument,
     "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": typeof types.CliSkillCatalogDocument,
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliSkillTenantBySlugDocument,
+    "\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n": typeof types.CliInstallSkillDocument,
+    "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n": typeof types.CliUninstallSkillDocument,
     "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": typeof types.CliTeamsDocument,
     "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": typeof types.CliTeamDocument,
     "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": typeof types.CliCreateTeamDocument,
@@ -307,6 +309,8 @@ const documents: Documents = {
     "\n  query CliSchedJobTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSchedJobTenantBySlugDocument,
     "\n  query CliSkillCatalog {\n    skillCatalog {\n      id\n      skillId\n      displayName\n      description\n      category\n      icon\n      source\n      enabled\n    }\n  }\n": types.CliSkillCatalogDocument,
     "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": types.CliSkillTenantBySlugDocument,
+    "\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n": types.CliInstallSkillDocument,
+    "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n": types.CliUninstallSkillDocument,
     "\n  query CliTeams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n    }\n  }\n": types.CliTeamsDocument,
     "\n  query CliTeam($id: ID!) {\n    team(id: $id) {\n      id\n      name\n      slug\n      description\n      type\n      status\n      budgetMonthlyCents\n      createdAt\n      updatedAt\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n      }\n    }\n  }\n": types.CliTeamDocument,
     "\n  mutation CliCreateTeam($input: CreateTeamInput!) {\n    createTeam(input: $input) {\n      id\n      name\n      type\n      status\n    }\n  }\n": types.CliCreateTeamDocument,
@@ -840,6 +844,14 @@ export function graphql(source: "\n  query CliSkillCatalog {\n    skillCatalog {
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"): (typeof documents)["\n  query CliSkillTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CliInstallSkill($input: InstallSkillInput!) {\n    installSkill(input: $input) {\n      id\n      tenantId\n      skillId\n      source\n      version\n      catalogVersion\n      enabled\n      installedAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n"): (typeof documents)["\n  mutation CliUninstallSkill($tenantId: ID!, $skillId: String!) {\n    uninstallSkill(tenantId: $tenantId, skillId: $skillId)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

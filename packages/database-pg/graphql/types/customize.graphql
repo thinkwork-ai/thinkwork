@@ -53,6 +53,35 @@ type WorkflowBinding {
   updatedAt: AWSDateTime!
 }
 
+"""
+Tenant-scoped skill installation row (mirrors the `tenant_skills`
+table). Distinct from `SkillCatalogItem` which is the
+display-projection used by the Customize UI — this type carries the
+version + source metadata operators need from the CLI.
+"""
+type TenantSkill {
+  id: ID!
+  tenantId: ID!
+  skillId: String!
+  source: String!
+  version: String
+  catalogVersion: String
+  enabled: Boolean!
+  installedAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input InstallSkillInput {
+  tenantId: ID!
+  skillId: String!
+  """
+  Optional version pin. When omitted, the resolver reads the current
+  version from `skill_catalog`. Re-installing an already-installed
+  skill is an idempotent upsert (used by `skill upgrade` too).
+  """
+  version: String
+}
+
 input EnableSkillInput {
   computerId: ID!
   skillId: String!
@@ -84,4 +113,17 @@ extend type Mutation {
   disableSkill(input: DisableSkillInput!): Boolean!
   enableWorkflow(input: EnableWorkflowInput!): WorkflowBinding!
   disableWorkflow(input: DisableWorkflowInput!): Boolean!
+  """
+  Install a catalog skill into a tenant (upsert into `tenant_skills`).
+  Idempotent: re-running with the same slug bumps the row's
+  `version` + `updated_at`. Used by both `skill install` and `skill
+  upgrade` on the CLI.
+  """
+  installSkill(input: InstallSkillInput!): TenantSkill!
+  """
+  Uninstall a skill from a tenant (delete the `tenant_skills` row).
+  Returns true when a row was deleted, false when no matching install
+  existed (idempotent no-op).
+  """
+  uninstallSkill(tenantId: ID!, skillId: String!): Boolean!
 }
