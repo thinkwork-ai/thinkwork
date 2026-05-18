@@ -3,7 +3,7 @@ title: Commands Reference
 description: All CLI commands with syntax, options, and examples. Deploy side (login/init/plan/deploy/bootstrap/destroy/doctor/status/outputs/config) and API side (login --stage, me, logout, user, mcp, tools, thread, agent, inbox, routine, …).
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 All commands follow the pattern:
 
@@ -15,6 +15,7 @@ The CLI has two command surfaces:
 
 - **Deploy side** — `login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`. Shells out to `terraform` and `aws`. Needs AWS credentials.
 - **API side** — `login --stage`, `me`, `logout`, `user`, `member`, `thread`, `agent`, `inbox`, `routine`, and everything else in the roadmap. Talks to the deployed GraphQL + REST APIs. Needs a Cognito or api-key session.
+- **Enterprise deployment repo side** — `enterprise bootstrap` and `enterprise overlay`. Used once to create a customer-owned deployment repo, then by CI to apply customer overlays after deploy.
 
 Run `thinkwork <any-command> --help` for the definitive, up-to-date flags and examples — every command ships interactive + scripted examples inline.
 
@@ -24,20 +25,20 @@ Run `thinkwork <any-command> --help` for the definitive, up-to-date flags and ex
 
 These are accepted on **every** command:
 
-| Flag | Description |
-|------|-------------|
+| Flag                   | Description                                                           |
+| ---------------------- | --------------------------------------------------------------------- |
 | `-p, --profile <name>` | AWS profile (overrides `$AWS_PROFILE` and the CLI's `defaultProfile`) |
-| `--json` | Emit machine-readable JSON on stdout. Logs/spinners stay on stderr. |
-| `-h, --help` | Print help for the current command |
-| `-v, --version` | Print CLI version (program-level only) |
+| `--json`               | Emit machine-readable JSON on stdout. Logs/spinners stay on stderr.   |
+| `-h, --help`           | Print help for the current command                                    |
+| `-v, --version`        | Print CLI version (program-level only)                                |
 
 API-backed commands additionally accept:
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage to target. Falls back to `$THINKWORK_STAGE`, then the saved `defaultStage`. |
-| `-t, --tenant <slug>` | Tenant slug. Falls back to `$THINKWORK_TENANT`, then the cached session tenant. |
-| `-y, --yes` | Skip confirmation on destructive verbs. |
+| Flag                  | Description                                                                       |
+| --------------------- | --------------------------------------------------------------------------------- |
+| `-s, --stage <name>`  | Stage to target. Falls back to `$THINKWORK_STAGE`, then the saved `defaultStage`. |
+| `-t, --tenant <slug>` | Tenant slug. Falls back to `$THINKWORK_TENANT`, then the cached session tenant.   |
+| `-y, --yes`           | Skip confirmation on destructive verbs.                                           |
 
 ---
 
@@ -52,22 +53,22 @@ thinkwork login --stage <s> [options]
 
 **Without `--stage`** — configure AWS credentials (arrow-key picker over `~/.aws/` profiles, with fall-through to access-key entry or `aws sso login`):
 
-| Flag | Description |
-|------|-------------|
+| Flag               | Description                                         |
+| ------------------ | --------------------------------------------------- |
 | `--profile <name>` | AWS profile to create/update (default: `thinkwork`) |
-| `--sso` | Skip the picker and run `aws sso login` |
-| `--keys` | Skip the picker and prompt for fresh access keys |
+| `--sso`            | Skip the picker and run `aws sso login`             |
+| `--keys`           | Skip the picker and prompt for fresh access keys    |
 
 **With `--stage <s>`** — sign in to the deployed Cognito user pool:
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Deployed stage to sign in to |
-| `-r, --region <region>` | AWS region for the stack (default: `us-east-1`) |
-| `--api-key <secret>` | Non-interactive; skip the browser and store the api_auth_secret as the session |
-| `--tenant <slug>` | Cache this tenant slug on the session (with `--api-key`, or to override `bootstrapUser`'s default) |
-| `--port <number>` | Override the Cognito OAuth loopback port (default: 42010) |
-| `--no-browser` | Print the authorize URL instead of opening a browser (useful over SSH) |
+| Flag                    | Description                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `-s, --stage <name>`    | Deployed stage to sign in to                                                                       |
+| `-r, --region <region>` | AWS region for the stack (default: `us-east-1`)                                                    |
+| `--api-key <secret>`    | Non-interactive; skip the browser and store the api_auth_secret as the session                     |
+| `--tenant <slug>`       | Cache this tenant slug on the session (with `--api-key`, or to override `bootstrapUser`'s default) |
+| `--port <number>`       | Override the Cognito OAuth loopback port (default: 42010)                                          |
+| `--no-browser`          | Print the authorize URL instead of opening a browser (useful over SSH)                             |
 
 **Examples:**
 
@@ -101,10 +102,10 @@ Forget stored stack sessions. Touches only `~/.thinkwork/config.json`; your AWS 
 thinkwork logout [options]
 ```
 
-| Flag | Description |
-|------|-------------|
+| Flag                 | Description                   |
+| -------------------- | ----------------------------- |
 | `-s, --stage <name>` | Stage whose session to forget |
-| `--all` | Forget every stage's session |
+| `--all`              | Forget every stage's session  |
 
 **Examples:**
 
@@ -124,9 +125,9 @@ Print the identity behind the current session. Verifies the session works by rou
 thinkwork me [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage to introspect |
+| Flag                    | Description                       |
+| ----------------------- | --------------------------------- |
+| `-s, --stage <name>`    | Stage to introspect               |
 | `-r, --region <region>` | AWS region (default: `us-east-1`) |
 
 **Examples:**
@@ -147,11 +148,11 @@ Scaffold a new ThinkWork deployment directory.
 thinkwork init -s <stage> [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
-| `-d, --dir <path>` | Target directory (default: `.`) |
-| `--defaults` | Skip interactive prompts, use all defaults |
+| Flag                 | Description                                |
+| -------------------- | ------------------------------------------ |
+| `-s, --stage <name>` | Stage name (required)                      |
+| `-d, --dir <path>`   | Target directory (default: `.`)            |
+| `--defaults`         | Skip interactive prompts, use all defaults |
 
 **Example:**
 
@@ -172,11 +173,11 @@ Preview Terraform changes.
 thinkwork plan -s <stage> [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
+| Flag                     | Description                                            |
+| ------------------------ | ------------------------------------------------------ |
+| `-s, --stage <name>`     | Stage name (required)                                  |
 | `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` (default: `all`) |
-| `-p, --profile <name>` | AWS profile override |
+| `-p, --profile <name>`   | AWS profile override                                   |
 
 **Example:**
 
@@ -195,12 +196,12 @@ Apply the Terraform plan.
 thinkwork deploy -s <stage> [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
+| Flag                     | Description                                            |
+| ------------------------ | ------------------------------------------------------ |
+| `-s, --stage <name>`     | Stage name (required)                                  |
 | `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` (default: `all`) |
-| `-y, --yes` | Skip confirmation (CI) |
-| `-p, --profile <name>` | AWS profile override |
+| `-y, --yes`              | Skip confirmation (CI)                                 |
+| `-p, --profile <name>`   | AWS profile override                                   |
 
 **Examples:**
 
@@ -211,7 +212,8 @@ thinkwork deploy -s dev -c app
 ```
 
 <Aside type="caution">
-`--yes` bypasses the confirmation prompt. Do not use in scripts that run against production without a manual approval gate.
+  `--yes` bypasses the confirmation prompt. Do not use in scripts that run
+  against production without a manual approval gate.
 </Aside>
 
 ---
@@ -224,11 +226,67 @@ Seed workspace defaults, the skill catalog, and per-tenant files for a deployed 
 thinkwork bootstrap -s <stage>
 ```
 
-| Flag | Description |
-|------|-------------|
+| Flag                 | Description           |
+| -------------------- | --------------------- |
 | `-s, --stage <name>` | Stage name (required) |
 
 Idempotent — safe to re-run after every deploy.
+
+---
+
+## enterprise
+
+Commands for the recommended enterprise deployment repository path. See
+[Enterprise Deployment Repo](/deploy/enterprise-deployment-repo/) for the full
+operator guide.
+
+### enterprise bootstrap
+
+Render a customer deployment repository and configure the one-time AWS/GitHub
+bootstrap resources needed for CI deploys.
+
+```bash
+thinkwork enterprise bootstrap [targetDir] [options]
+```
+
+| Flag                    | Description                                                 |
+| ----------------------- | ----------------------------------------------------------- |
+| `--customer <slug>`     | Customer slug used for repo defaults and tenant slugs       |
+| `--repo <owner/name>`   | Customer GitHub deployment repository                       |
+| `--stage <name>`        | Stage to include. Repeat for multiple stages                |
+| `--region <region>`     | AWS region                                                  |
+| `--release-version <v>` | ThinkWork release pin                                       |
+| `--dry-run`             | Validate and print planned work without mutating AWS/GitHub |
+
+Example:
+
+```bash
+thinkwork enterprise bootstrap ./acme-thinkwork-deploy \
+  --customer acme \
+  --repo acme-corp/acme-thinkwork-deploy \
+  --stage dev \
+  --stage prod \
+  --region us-east-1
+```
+
+### enterprise overlay
+
+Validate or apply the customer overlay contract from a deployment repo.
+
+```bash
+thinkwork enterprise overlay plan [repoRoot] --stage <stage> --json
+thinkwork enterprise overlay apply [repoRoot] --stage <stage> --tenant <slug> --json
+```
+
+| Flag                    | Description                                        |
+| ----------------------- | -------------------------------------------------- |
+| `-s, --stage <name>`    | Stage from `customer/deployment.json`              |
+| `-t, --tenant <slug>`   | Tenant slug to target during apply                 |
+| `-r, --region <region>` | AWS region                                         |
+| `--dry-run`             | Validate and print the apply plan without mutation |
+
+CI uses `enterprise overlay apply` after Terraform deploy. A local dry-run is
+safe because it validates the repo contract before any API or AWS mutation.
 
 ---
 
@@ -240,10 +298,10 @@ Check AWS account prerequisites for a Thinkwork deployment (Bedrock access, IAM,
 thinkwork doctor -s <stage>
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
-| `-p, --profile <name>` | AWS profile override |
+| Flag                   | Description           |
+| ---------------------- | --------------------- |
+| `-s, --stage <name>`   | Stage name (required) |
+| `-p, --profile <name>` | AWS profile override  |
 
 ---
 
@@ -255,14 +313,17 @@ Tear down the stack.
 thinkwork destroy -s <stage> [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
+| Flag                     | Description                           |
+| ------------------------ | ------------------------------------- |
+| `-s, --stage <name>`     | Stage name (required)                 |
 | `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` |
-| `-y, --yes` | Skip confirmation |
+| `-y, --yes`              | Skip confirmation                     |
 
 <Aside type="caution">
-`destroy` deletes your Aurora database, all S3 data, and all application infrastructure. Aurora deletion protection is enabled by default — if `protect_aurora = true`, you must disable it in the AWS console before `destroy` will proceed.
+  `destroy` deletes your Aurora database, all S3 data, and all application
+  infrastructure. Aurora deletion protection is enabled by default — if
+  `protect_aurora = true`, you must disable it in the AWS console before
+  `destroy` will proceed.
 </Aside>
 
 ---
@@ -291,9 +352,9 @@ Print Terraform outputs for a deployed stage.
 thinkwork outputs -s <stage> [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Stage name (required) |
+| Flag                     | Description                        |
+| ------------------------ | ---------------------------------- |
+| `-s, --stage <name>`     | Stage name (required)              |
 | `-c, --component <tier>` | Tier to read from (default: `all`) |
 
 Use `--json` to pipe the outputs to jq / terraform / other tools.
@@ -345,13 +406,13 @@ thinkwork user invite [email] [options]
 
 Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member. Prompts interactively for any missing fields.
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stage <name>` | Deployment stage |
-| `--tenant <slug>` | Tenant slug |
-| `--name <name>` | Display name |
-| `--role <role>` | `member` (default), `admin`, or `owner` |
-| `--region <region>` | AWS region (default: `us-east-1`) |
+| Flag                 | Description                             |
+| -------------------- | --------------------------------------- |
+| `-s, --stage <name>` | Deployment stage                        |
+| `--tenant <slug>`    | Tenant slug                             |
+| `--name <name>`      | Display name                            |
+| `--role <role>`      | `member` (default), `admin`, or `owner` |
+| `--region <region>`  | AWS region (default: `us-east-1`)       |
 
 **Examples:**
 
@@ -545,7 +606,7 @@ Accepts either a thread ID (e.g. `thr-abc123` or a UUID) or a tenant-scoped issu
 thinkwork thread create [title] [--assignee <id>] [--due <iso>] [--label <name>...]
 ```
 
-In a TTY with no arguments, prompts for title and assignee. `--label` accepts a repeatable list of label *names* (not IDs); names are resolved against `threadLabels(tenantId:)` before the create and attached via `assignThreadLabel` after.
+In a TTY with no arguments, prompts for title and assignee. `--label` accepts a repeatable list of label _names_ (not IDs); names are resolved against `threadLabels(tenantId:)` before the create and attached via `assignThreadLabel` after.
 
 ### thread update
 
@@ -1092,7 +1153,7 @@ thinkwork agent version rollback <agentId> <versionId> [--yes]
 ```
 
 - `list` is paginated by `--limit` (default 20).
-- `rollback` creates a *new* version pointing at the old config (history is preserved). Honors `-y/--yes`.
+- `rollback` creates a _new_ version pointing at the old config (history is preserved). Honors `-y/--yes`.
 
 ---
 
@@ -1100,13 +1161,13 @@ thinkwork agent version rollback <agentId> <versionId> [--yes]
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
 
-| Phase | Commands |
-|-------|----------|
-| 1 — Work & approvals | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete** |
-| 2 — Agents & workspace | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant), [`agent`](#agent) — **Phase 2 complete** |
+| Phase                         | Commands                                                                                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Work & approvals          | ✅ [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) — **Phase 1 complete**                                                                                                                          |
+| 2 — Agents & workspace        | ✅ [`member`](#member), [`team`](#team), [`kb`](#kb), [`template`](#template), [`tenant`](#tenant), [`agent`](#agent) — **Phase 2 complete**                                                                                        |
 | 3 — Automation & integrations | ✅ [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`skill`](#skill) — **Phase 3 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference. |
-| 4 — Memory & artifacts | ✅ [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) — **Phase 4 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference. |
-| 5 — Observability & spend | ✅ [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) — **Phase 5 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference. |
+| 4 — Memory & artifacts        | ✅ [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) — **Phase 4 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference.                                                                        |
+| 5 — Observability & spend     | ✅ [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) — **Phase 5 complete**. Run `thinkwork <cmd> --help` for the full subcommand reference.                        |
 
 The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
 

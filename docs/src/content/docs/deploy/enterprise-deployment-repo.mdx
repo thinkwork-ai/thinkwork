@@ -1,0 +1,141 @@
+---
+title: Enterprise Deployment Repo
+description: "The recommended enterprise path: bootstrap a customer-owned deployment repository once, then deploy pinned ThinkWork releases through customer CI."
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+For enterprise customers, the recommended deployment model is **not a fork of
+the ThinkWork source repository**. Use a customer-owned deployment repository
+that pins a ThinkWork release, stores customer-specific overlays, and lets
+GitHub Actions deploy into the customer's AWS account through OIDC.
+
+This keeps upstream ThinkWork changes easy to adopt while still giving the
+delivery team a clear place for customer eval packs, workspace defaults, skill
+packs, and deployment approvals.
+
+<Aside type="caution">
+  A full ThinkWork source fork is break-glass debt. Use it only when a customer
+  requires emergency source divergence that cannot be represented as a release
+  bump or customer overlay. Track the fork as temporary debt and upstream the
+  change back into ThinkWork as soon as possible.
+</Aside>
+
+## Deployment Story
+
+The first account setup has one privileged bootstrap step. After that, steady
+state deploys happen through the generated repository's CI workflow.
+
+<Steps>
+
+1. **Confirm customer prerequisites**
+
+   The customer admin should have AWS administrator access for bootstrap,
+   GitHub repository admin access, Bedrock model access in the target region, a
+   domain/DNS decision, and the secret inventory for database, OAuth, and API
+   auth values.
+
+2. **Install the CLI**
+
+   ```bash
+   npm install -g thinkwork-cli
+   thinkwork --version
+   ```
+
+3. **Bootstrap the deployment repo**
+
+   ```bash
+   thinkwork enterprise bootstrap ./acme-thinkwork-deploy \
+     --customer acme \
+     --repo acme-corp/acme-thinkwork-deploy \
+     --stage dev \
+     --stage prod \
+     --region us-east-1
+   ```
+
+   Bootstrap renders the repository, creates or plans AWS state/artifact/OIDC
+   resources, and configures GitHub Environments for the declared stages. Use
+   `--dry-run` first when validating access.
+
+4. **Fill GitHub Environment values**
+
+   Store non-secret values as environment variables and secrets as GitHub
+   Environment secrets. Do not commit `terraform.tfvars`, `.env`, database
+   passwords, OAuth client secrets, or API auth secrets.
+
+5. **Dispatch the deploy workflow**
+
+   From the customer deployment repo, run `.github/workflows/deploy.yml` with a
+   stage, component, and optional smoke flag. The workflow verifies
+   `thinkwork.lock`, downloads the release manifest, uploads Lambda/static
+   artifacts, applies Terraform, updates AgentCore runtimes, applies overlays,
+   and writes a deploy summary artifact.
+
+6. **Apply customer overlays through CI**
+
+   The workflow runs `thinkwork enterprise overlay apply` after the foundation
+   is deployed. Overlay packs live under `customer/` and are validated before
+   mutation.
+
+7. **Upgrade by bumping the lock**
+
+   To adopt a new ThinkWork release, update `thinkwork.lock`, review the release
+   notes, and dispatch the workflow. Customer-specific files stay in the
+   deployment repository.
+
+</Steps>
+
+## First-Account Checklist
+
+| Area          | What to confirm                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AWS access    | Bootstrap user or role can create S3, DynamoDB, IAM OIDC roles, ECR, Lambda, AgentCore, CloudFront, Cognito, Aurora, KMS, and Bedrock resources. |
+| GitHub access | Operator can create repository environments, environment variables, and environment secrets.                                                     |
+| Bedrock       | Required model access is enabled in the target region before first deploy.                                                                       |
+| DNS           | Decide whether the stack uses customer Route53/domain records or CloudFront defaults for the first rehearsal.                                    |
+| Secrets       | Prepare database password, API auth secret, Google OAuth values if enabled, connector credentials, and any provider keys.                        |
+| Approvals     | Production GitHub Environment should require customer approval before Terraform apply.                                                           |
+
+## Repository Layout
+
+| Path                           | Owner              | Purpose                                                                |
+| ------------------------------ | ------------------ | ---------------------------------------------------------------------- |
+| `thinkwork.lock`               | Delivery team      | Pins the ThinkWork release manifest URL and checksum.                  |
+| `.github/workflows/deploy.yml` | ThinkWork template | CI deploy path. Regenerated by bootstrap and updated on release bumps. |
+| `terraform/stages/*.tfvars`    | Customer/delivery  | Non-secret stage configuration.                                        |
+| `terraform/backend-*.hcl`      | Bootstrap          | S3 state backend for each stage.                                       |
+| `customer/deployment.json`     | Customer/delivery  | Declares which overlay packs apply per stage.                          |
+| `customer/evals/`              | Customer/delivery  | Customer eval packs.                                                   |
+| `customer/skills/`             | Customer/delivery  | Workspace skill packs installed onto the target template.              |
+| `customer/workspace-defaults/` | Customer/delivery  | Customer `GUARDRAILS.md`, `MEMORY_GUIDE.md`, and related defaults.     |
+| `customer/seeds/`              | Customer/delivery  | Customer-owned seed payloads validated by the overlay command.         |
+| `customer/branding/`           | Customer/delivery  | Static brand assets referenced by deployment config.                   |
+
+## What Goes Upstream
+
+Put reusable platform behavior, Terraform module changes, runtime fixes,
+schema migrations, built-in tools, and generic eval improvements in the
+ThinkWork source repository. Put customer-specific templates, guardrails,
+skills, datasets, branding, and stage configuration in the deployment repo.
+
+That split is the whole point: customize without forking, then contribute
+general improvements back upstream through normal ThinkWork PRs.
+
+## Day-2 Operations
+
+- Re-run the workflow with `component=all` for normal upgrades.
+- Use `component=overlays` when only customer packs changed.
+- Use `component=smokes` to collect deploy evidence without applying
+  Terraform.
+- Keep workflow summary artifacts as deployment evidence.
+- Rotate secrets in GitHub Environments, AWS Secrets Manager, or SSM Parameter
+  Store. Do not rotate by committing plaintext values.
+
+## Related Pages
+
+- [Customer Overlay Contract](/deploy/customer-overlay-contract/) — overlay
+  schema and pack layout
+- [Configuration Reference](/deploy/configuration/) — Terraform values and
+  secret handling
+- [CLI Commands](/applications/cli/commands/) — `thinkwork enterprise`
+  commands
