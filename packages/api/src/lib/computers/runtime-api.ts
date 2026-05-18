@@ -27,7 +27,10 @@ import {
   failRunbookRunFromThreadTurn,
 } from "../runbooks/runs.js";
 import { resolveMessageAttachmentsForDispatch } from "./thread-cutover.js";
-import { assembleRequesterContext } from "./requester-context.js";
+import {
+  assembleRequesterContext,
+  formatRequesterContextForPrompt,
+} from "./requester-context.js";
 import { recordThreadActivityForIdleLearning } from "../thread-idle-learning/activity.js";
 import {
   attachmentDownloadByteLimit,
@@ -651,10 +654,13 @@ export async function loadThreadTurnContext(input: {
     credentialSubject: payload.credentialSubject,
     event: payload.event,
   });
+  const requesterContextOverlay =
+    formatRequesterContextForPrompt(requesterContext);
 
   return {
     taskId: input.taskId,
     source: payload.source,
+    computerScope: "shared",
     requester: {
       userId: requesterUserId,
       actorType: payload.actorType,
@@ -663,6 +669,7 @@ export async function loadThreadTurnContext(input: {
     },
     surfaceContext: payload.surfaceContext,
     requesterContext,
+    requesterContextOverlay,
     computer: {
       id: computer.id,
       name: computer.name,
@@ -1450,6 +1457,9 @@ function buildComputerThreadSystemPrompt(input: {
   requesterUserId: string | null;
   requesterContext?: Awaited<ReturnType<typeof assembleRequesterContext>>;
 }) {
+  const requesterOverlay = formatRequesterContextForPrompt(
+    input.requesterContext,
+  );
   return [
     `You are ${input.computer.name}, a shared ThinkWork Computer.`,
     "Answer for the requester of this turn, using only requester-scoped context and credentials when they are explicitly provided.",
@@ -1457,7 +1467,12 @@ function buildComputerThreadSystemPrompt(input: {
     `Requester user id: ${input.requesterUserId ?? "unavailable"}.`,
     `Thread: ${input.threadTitle}.`,
     `Workspace root: ${input.computer.live_workspace_root ?? "/workspace"}.`,
-  ].join("\n");
+    requesterOverlay
+      ? `<requester_context_overlay>\n${requesterOverlay}\n</requester_context_overlay>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function threadTurnPayload(input: unknown) {

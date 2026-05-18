@@ -503,6 +503,8 @@ describe("Computer runtime API thread turn execution", () => {
     expect(result).toMatchObject({
       taskId: "task-1",
       source: "chat_message",
+      computerScope: "shared",
+      requesterContextOverlay: "Requester context overlay",
       requesterContext: {
         contextClass: "system",
         requester: { userId: null },
@@ -512,6 +514,8 @@ describe("Computer runtime API thread turn execution", () => {
       message: { id: "message-1", content: "hello computer" },
       model: "model-1",
     });
+    expect(result.systemPrompt).toContain("<requester_context_overlay>");
+    expect(result.systemPrompt).toContain("Requester context overlay");
     expect(mocks.assembleRequesterContext).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",

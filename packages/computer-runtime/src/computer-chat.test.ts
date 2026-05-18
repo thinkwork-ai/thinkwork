@@ -44,6 +44,29 @@ describe("Computer chat system prompt", () => {
     expect(prompt).toContain("Name: Eric");
   });
 
+  it("suppresses workspace USER.md for shared Computer thread turns", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    await writeFile(join(root, "IDENTITY.md"), "Name: Marco\n", {
+      encoding: "utf8",
+    });
+    await writeFile(join(root, "USER.md"), "Name: Workspace Owner\n", {
+      encoding: "utf8",
+    });
+
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        computerScope: "shared",
+      },
+      root,
+    );
+
+    expect(prompt).toContain("# IDENTITY.md");
+    expect(prompt).toContain("Name: Marco");
+    expect(prompt).not.toContain("# USER.md");
+    expect(prompt).not.toContain("Workspace Owner");
+  });
+
   it("adds current-turn attachment content to the system prompt", async () => {
     const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
     const prompt = await buildSystemPrompt(
@@ -181,5 +204,43 @@ describe("Computer chat system prompt", () => {
     expect(prompt).toContain(
       "Launch brief preference: Eric prefers concise launch briefs.",
     );
+  });
+
+  it("does not duplicate requester memory overlay when the API system prompt already has it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tw-computer-"));
+    const prompt = await buildSystemPrompt(
+      {
+        ...context(),
+        systemPrompt:
+          "You are Marco.\n<requester_context_overlay>\nRequester context overlay\n</requester_context_overlay>",
+        requesterContextOverlay: "Requester context overlay",
+        requesterContext: {
+          contextClass: "user",
+          computerId: "computer-1",
+          requester: { userId: "user-eric" },
+          sourceSurface: "chat_message",
+          personalMemory: {
+            status: {
+              providerId: "memory",
+              displayName: "Hindsight Memory",
+              state: "ok",
+              hitCount: 1,
+            },
+            hits: [
+              {
+                id: "memory-1",
+                title: "Launch brief preference",
+                text: "Eric prefers concise launch briefs.",
+                score: 0.9,
+              },
+            ],
+          },
+        },
+      },
+      root,
+    );
+
+    expect(prompt).toContain("<requester_context_overlay>");
+    expect(prompt).not.toContain("Personal memory hits:");
   });
 });

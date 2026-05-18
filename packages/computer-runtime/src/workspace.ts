@@ -29,6 +29,10 @@ export type WorkspacePromptFileReader = (
   filePath: string,
 ) => Promise<string | null>;
 
+export type WorkspaceSystemPromptOptions = {
+  suppressUserMd?: boolean;
+};
+
 export async function ensureWorkspace(root: string): Promise<string> {
   await mkdir(root, { recursive: true });
   const markerPath = join(root, ".thinkwork-computer-health");
@@ -76,7 +80,10 @@ export async function listWorkspaceFiles(root: string): Promise<{
   return { files };
 }
 
-export async function readWorkspaceFile(root: string, input: unknown): Promise<{
+export async function readWorkspaceFile(
+  root: string,
+  input: unknown,
+): Promise<{
   path: string;
   relativePath: string;
   content: string | null;
@@ -121,6 +128,7 @@ export async function deleteWorkspaceFile(
 export async function readWorkspaceSystemPrompt(
   root: string,
   fileReader: WorkspacePromptFileReader = readPromptFile,
+  options: WorkspaceSystemPromptOptions = {},
 ): Promise<string> {
   const parts: string[] = [
     "Workspace files loaded from the Computer's local workspace. Use them as durable identity, user context, operating instructions, and guardrails.",
@@ -128,6 +136,7 @@ export async function readWorkspaceSystemPrompt(
   let filesLoaded = 0;
 
   for (const filename of PROMPT_WORKSPACE_FILES) {
+    if (options.suppressUserMd && filename === "USER.md") continue;
     const content = await fileReader(join(root, filename));
     if (!content) continue;
 

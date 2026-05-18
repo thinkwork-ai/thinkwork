@@ -379,7 +379,10 @@ from workflow_skill_context import format_workflow_skill_context
 
 
 def _build_system_prompt(
-    skills_config: list | None = None, kb_config: list | None = None, profile=None
+    skills_config: list | None = None,
+    kb_config: list | None = None,
+    profile=None,
+    suppress_user_md: bool = False,
 ) -> str:
     """Build system prompt from workspace files + installed skills + KB info.
 
@@ -394,6 +397,8 @@ def _build_system_prompt(
 
         file_paths = expand_file_list(WORKSPACE_DIR, profile.load)
         for rel_path in file_paths:
+            if suppress_user_md and os.path.basename(rel_path) == "USER.md":
+                continue
             filepath = os.path.join(WORKSPACE_DIR, rel_path)
             try:
                 with open(filepath) as f:
@@ -415,6 +420,8 @@ def _build_system_prompt(
             "CONTEXT.md",
             "TOOLS.md",
         ]:
+            if suppress_user_md and filename == "USER.md":
+                continue
             filepath = os.path.join(WORKSPACE_DIR, filename)
             if os.path.isfile(filepath):
                 try:
@@ -2530,6 +2537,17 @@ def _fire_retain_full_thread(
     )
 
 
+def _should_skip_full_thread_retain(*, is_computer_thread_turn: bool) -> bool:
+    if not is_computer_thread_turn:
+        return False
+    return os.environ.get("REQUESTER_IDLE_MEMORY_LEARNING_ENABLED", "").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _audit_response(tenant_id: str, response_text: str, allowed_tools: list) -> None:
     """Scan response for tool usage and log any violations."""
     tool_pattern = (
@@ -2832,7 +2850,20 @@ def _execute_agent_turn(payload: dict) -> dict:
 
         has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
         parent_kb_config = None if has_workspace_map else knowledge_bases_config
-        system_prompt = _build_system_prompt(effective_skills, parent_kb_config, profile=profile)
+        computer_scope = payload.get("computer_scope") or payload.get("computerScope") or ""
+        requester_context_overlay = payload.get("requester_context") or payload.get(
+            "requesterContext"
+        )
+        suppress_user_md = bool(is_computer_thread_turn and computer_scope == "shared")
+        system_prompt = _build_system_prompt(
+            effective_skills,
+            parent_kb_config,
+            profile=profile,
+            suppress_user_md=suppress_user_md,
+        )
+        requester_overlay_block = _format_requester_context_overlay(requester_context_overlay)
+        if requester_overlay_block:
+            system_prompt += "\n\n---\n\n" + requester_overlay_block
         if eval_mode:
             system_prompt += "\n\n---\n\n" + _eval_runtime_prompt(eval_tools_enabled)
 
@@ -3100,6 +3131,21 @@ def _computer_thread_contract(*, thread_id: str, prompt: str) -> str:
     return "\n".join(lines)
 
 
+def _format_requester_context_overlay(value) -> str:
+    if not value:
+        return ""
+    if isinstance(value, str):
+        text = value.strip()
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+        except Exception:
+            text = str(value)
+    if not text:
+        return ""
+    return "<requester_context_overlay>\n" + text + "\n</requester_context_overlay>"
+
+
 class AgentCoreHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: A002
         logger.info(fmt, *args)
@@ -3165,6 +3211,14 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         workspace_tenant_id = payload.get("workspace_tenant_id") or ""
         tenant_slug = payload.get("tenant_slug") or ""
         instance_id = payload.get("instance_id") or ""
+        computer_id = payload.get("computer_id") or payload.get("computerId") or ""
+        computer_task_id = payload.get("computer_task_id") or payload.get("computerTaskId") or ""
+        computer_response_mode = payload.get("computer_response_mode") or payload.get(
+            "computerResponseMode"
+        )
+        is_computer_thread_turn = bool(
+            computer_id and computer_task_id and computer_response_mode != "runbook_step"
+        )
         logger.info(
             "Workspace params: tenant_slug=%s instance_id=%s workspace_tenant_id=%s assistant_id=%s",
             tenant_slug,
@@ -3272,17 +3326,25 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 # in _execute_agent_turn, so sub-agents that run inside
                 # _execute_agent_turn do not see this code path.
                 try:
-                    import api_memory_client
+                    if _should_skip_full_thread_retain(
+                        is_computer_thread_turn=is_computer_thread_turn
+                    ):
+                        logger.info(
+                            "auto-retain skipped thread=%s reason=requester_idle_memory_learning",
+                            ticket_id,
+                        )
+                    else:
+                        import api_memory_client
 
-                    _fire_retain_full_thread(
-                        api_memory_client,
-                        ticket_id=ticket_id,
-                        message=message,
-                        response_text=response_text,
-                        history_payload=payload.get("messages_history"),
-                        tenant_id=tenant_id,
-                        user_id=user_id,
-                    )
+                        _fire_retain_full_thread(
+                            api_memory_client,
+                            ticket_id=ticket_id,
+                            message=message,
+                            response_text=response_text,
+                            history_payload=payload.get("messages_history"),
+                            tenant_id=tenant_id,
+                            user_id=user_id,
+                        )
                 except Exception as retain_err:
                     logger.warning("auto-retain failed thread=%s: %s", ticket_id, retain_err)
 

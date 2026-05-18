@@ -178,3 +178,16 @@ def test_fire_retain_called_exactly_once_per_turn():
 		user_id="user-1",
 	)
 	assert stub.retain_full_thread.call_count == 1
+
+
+def test_should_skip_full_thread_retain_for_computer_thread_when_idle_learning_enabled(monkeypatch):
+	monkeypatch.setenv("REQUESTER_IDLE_MEMORY_LEARNING_ENABLED", "true")
+
+	assert server._should_skip_full_thread_retain(is_computer_thread_turn=True) is True
+	assert server._should_skip_full_thread_retain(is_computer_thread_turn=False) is False
+
+
+def test_should_not_skip_full_thread_retain_when_idle_learning_disabled(monkeypatch):
+	monkeypatch.delenv("REQUESTER_IDLE_MEMORY_LEARNING_ENABLED", raising=False)
+
+	assert server._should_skip_full_thread_retain(is_computer_thread_turn=True) is False
