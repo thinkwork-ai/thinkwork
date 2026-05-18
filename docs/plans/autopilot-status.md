@@ -1,10 +1,49 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-18
-status: completed
+status: active
 ---
 
 # Autopilot Status Ledger
+
+## Current Run: Enterprise Customer Deployment Repo
+
+Plan: `docs/plans/2026-05-18-002-feat-enterprise-deployment-repo-plan.md`
+
+Requirements: `docs/brainstorms/2026-05-18-enterprise-customer-deployment-repo-requirements.md`
+
+Target branch: `main`
+
+### Current Unit
+
+- Active unit: U1 - Publish Coordinated ThinkWork Release Artifacts
+- Active branch: `codex/enterprise-release-artifacts-u1`
+- Active worktree: `.Codex/worktrees/enterprise-release-artifacts-u1`
+- Started: 2026-05-18 11:37 CDT
+- PR: [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391)
+- CI: passed
+
+### Progress Log
+
+| Date       | Unit | Branch                                  | PR                                                           | Status    | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                           |
+| ---------- | ---- | --------------------------------------- | ------------------------------------------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | U1   | `codex/enterprise-release-artifacts-u1` | [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) | CI passed | `pnpm test:release`; `bash -n scripts/release/package-static-assets.sh scripts/release/publish-release-assets.sh scripts/build-lambdas.sh`; `pnpm --filter thinkwork-cli build`; `bash scripts/build-lambdas.sh cognito-pre-signup`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm test`; `pnpm dlx prettier@3.5.3 --check ...`; `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"`; `git diff --check`; GitHub checks | Autopilot started from the approved enterprise deployment repo plan. Created an isolated worktree from `origin/main` for release artifact work. |
+
+### CI / Merge Log
+
+- 2026-05-18 11:37 CDT: Started autopilot run. Read `AGENTS.md`, the enterprise deployment repo plan, and prior deployment/release learnings from `docs/solutions/`.
+- 2026-05-18 11:37 CDT: First implementation unit selected: U1 Publish Coordinated ThinkWork Release Artifacts.
+- 2026-05-18 11:38 CDT: Created worktree `.Codex/worktrees/enterprise-release-artifacts-u1` on branch `codex/enterprise-release-artifacts-u1` from `origin/main`.
+- 2026-05-18 11:45 CDT: Implemented release manifest generation, static/release asset helpers, Lambda artifact manifest generation, release workflow deployable artifact publishing, and CLI Terraform bundle cleanup.
+- 2026-05-18 11:47 CDT: Local verification passed: release manifest tests, shell syntax checks, CLI build, single Lambda build smoke, workspace typecheck/lint, full `pnpm test`, Prettier check for touched files, release workflow YAML parse, and `git diff --check`.
+- 2026-05-18 11:49 CDT: Opened [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) for U1.
+- 2026-05-18 11:55 CDT: Required GitHub checks for [#1391](https://github.com/thinkwork-ai/thinkwork/pull/1391) passed: `cla`, `verify`, `lint`, `typecheck`, and `test`.
+
+### Blockers
+
+- None at this time.
+
+---
 
 ## Current Run: Requester Idle Memory Learning
 

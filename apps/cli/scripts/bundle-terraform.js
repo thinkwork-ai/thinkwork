@@ -4,7 +4,7 @@
  * Called as part of `npm run build`.
  */
 
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,7 @@ if (!existsSync(src)) {
   process.exit(0);
 }
 
+rmSync(dst, { recursive: true, force: true });
 mkdirSync(dst, { recursive: true });
 
 const dirs = ["modules", "examples"];
