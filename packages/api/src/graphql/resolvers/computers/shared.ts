@@ -34,20 +34,16 @@ export type CreateComputerCoreInput = {
   migrationMetadata?: unknown;
   /**
    * The user id to record on `computers.created_by`. Pass `null` (or omit) when
-   * the call site has no caller user — for example, the server-side auto-provision
-   * helper firing inside `bootstrapUser`, where the new user is mid-creation and
-   * the resolver's `ctx.auth` has not yet been resolved to a tenant member.
+   * the call site has no caller user.
    */
   createdBy?: string | null;
 };
 
 /**
  * Insert a Computer after validating ownership, template kind, optional source
- * agent linkage, and the one-active-Computer-per-(tenant, user) invariant. Used
- * by the `createComputer` GraphQL resolver (after its `requireTenantAdmin` gate)
- * AND by the server-side `provisionComputerForMember` helper which fires inside
- * membership-creation paths and must NOT call `requireTenantAdmin` — the new
- * user is not yet tenant-admin-resolvable at the moment auto-provisioning runs.
+ * agent linkage, and the one-active-Computer-per-(tenant, user) invariant for
+ * legacy historical-personal Computers. New admin-created Computers are shared
+ * and reach users through `computer_assignments`.
  *
  * Throws on validation failure or on the `assertNoActiveComputer` conflict.
  * Callers that need idempotency wrap the call and catch the `CONFLICT`

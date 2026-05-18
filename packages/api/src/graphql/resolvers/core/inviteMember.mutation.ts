@@ -15,7 +15,6 @@ import {
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
-import { provisionComputerForMember } from "../../../lib/computers/provision.js";
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
@@ -50,7 +49,7 @@ export const inviteMember = async (
     mutationName: "inviteMember",
     inputs: args.input,
     clientKey: args.input?.idempotencyKey ?? null,
-    fn: () => inviteMemberCore(tenantId, args.input, invokerUserId),
+    fn: () => inviteMemberCore(tenantId, args.input),
   });
 };
 
@@ -60,9 +59,7 @@ async function inviteMemberCore(
     email: string;
     name?: string;
     role?: string;
-    provisionComputer?: boolean;
   },
-  invokerUserId: string | null,
 ) {
   const { email, name, role } = input;
 
@@ -145,29 +142,6 @@ async function inviteMemberCore(
       status: "active",
     })
     .returning();
-
-  // Computer provisioning is opt-in. Admins explicitly check the
-  // "Also provision a Computer" box in the invite dialog when they
-  // want the helper to fire at member-creation time. Default behavior
-  // is mobile-only / no-Computer — admins can provision later via the
-  // Person-page CTA on /people/$humanId. Failure must NOT block the
-  // invite; the helper itself never throws.
-  if (input.provisionComputer === true) {
-    try {
-      await provisionComputerForMember({
-        tenantId,
-        userId: cognitoSub,
-        principalType: "USER",
-        callSite: "inviteMember",
-        adminUserId: invokerUserId,
-      });
-    } catch (err) {
-      console.error(
-        "[inviteMember] unexpected provisioning throw (suppressed):",
-        err,
-      );
-    }
-  }
 
   return snakeToCamel(row);
 }

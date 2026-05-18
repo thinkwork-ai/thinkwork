@@ -56,9 +56,8 @@ describe("createComputer", () => {
       {
         input: {
           tenantId: "tenant-1",
-          ownerUserId: "user-1",
           templateId: "template-1",
-          name: "Eric's Computer",
+          name: "Sales Computer",
           runtimeConfig: '{"mode":"phase-one"}',
           migratedFromAgentId: "agent-1",
         },
@@ -70,9 +69,9 @@ describe("createComputer", () => {
     expect(mockResolveCallerUserId).toHaveBeenCalledTimes(1);
     expect(lastCoreInputRef.value).toMatchObject({
       tenantId: "tenant-1",
-      ownerUserId: "user-1",
+      ownerUserId: null,
       templateId: "template-1",
-      name: "Eric's Computer",
+      name: "Sales Computer",
       runtimeConfig: '{"mode":"phase-one"}',
       migratedFromAgentId: "agent-1",
       createdBy: "operator-1",
@@ -89,9 +88,8 @@ describe("createComputer", () => {
         {
           input: {
             tenantId: "tenant-1",
-            ownerUserId: "user-1",
             templateId: "template-1",
-            name: "Eric's Computer",
+            name: "Sales Computer",
           },
         },
         {} as any,
@@ -117,7 +115,7 @@ describe("createComputer", () => {
 
     expect(lastCoreInputRef.value).toMatchObject({
       tenantId: "tenant-1",
-      ownerUserId: undefined,
+      ownerUserId: null,
       templateId: "template-1",
       name: "Sales Computer",
       scope: "SHARED",
@@ -125,7 +123,7 @@ describe("createComputer", () => {
     });
   });
 
-  it("propagates the conflict thrown by createComputerCore (one-active invariant)", async () => {
+  it("propagates errors thrown by createComputerCore", async () => {
     mockCreateComputerCore.mockRejectedValueOnce(new Error("conflict"));
 
     await expect(
@@ -134,9 +132,8 @@ describe("createComputer", () => {
         {
           input: {
             tenantId: "tenant-1",
-            ownerUserId: "user-1",
             templateId: "template-1",
-            name: "Eric's Computer",
+            name: "Sales Computer",
           },
         },
         {} as any,

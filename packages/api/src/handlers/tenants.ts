@@ -12,10 +12,8 @@ import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
-import { resolveTenantId } from "../lib/tenants.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
-import { provisionComputerForMember } from "../lib/computers/provision.js";
 
 const { tenants, tenantMembers, tenantSettings, users } = schema;
 
@@ -73,7 +71,7 @@ export async function handler(
 		if (inviteMatch && method === "POST") {
 			const verdict = await gate(inviteMatch[1]);
 			if (!verdict.ok) return error(verdict.reason, verdict.status);
-			return inviteMember(verdict.tenantId, event, verdict.userId ?? null);
+			return inviteMember(verdict.tenantId, event);
 		}
 
 		// Routes with /api/tenants/:id/members/:memberId
@@ -97,7 +95,7 @@ export async function handler(
 			if (!verdict.ok) return error(verdict.reason, verdict.status);
 			if (method === "GET") return listMembers(verdict.tenantId);
 			if (method === "POST")
-				return addMember(verdict.tenantId, event, verdict.userId ?? null);
+				return addMember(verdict.tenantId, event);
 			return error("Method not allowed", 405);
 		}
 
@@ -186,7 +184,6 @@ async function listTenants(
 async function inviteMember(
 	tenantId: string,
 	event: APIGatewayProxyEventV2,
-	adminUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (!COGNITO_USER_POOL_ID) {
 		return error("COGNITO_USER_POOL_ID not configured on this Lambda", 500);
@@ -294,29 +291,6 @@ async function inviteMember(
 		})
 		.returning();
 
-	// Computer provisioning is opt-in via `body.provision_computer`
-	// (truthy). Default behavior is mobile-only / no-Computer — admins
-	// can provision later via the Person-page CTA on /people/$humanId
-	// or by re-invoking this endpoint after server config is updated.
-	// Failure must NOT block the invite response; the helper itself
-	// never throws.
-	if (body.provision_computer === true) {
-		try {
-			await provisionComputerForMember({
-				tenantId,
-				userId: cognitoSub,
-				principalType: "USER",
-				callSite: "restInvite",
-				adminUserId,
-			});
-		} catch (err) {
-			console.error(
-				"[tenants.ts:inviteMember] unexpected provisioning throw (suppressed):",
-				err,
-			);
-		}
-	}
-
 	return json(
 		{
 			alreadyMember: false,
@@ -385,7 +359,6 @@ async function listMembers(
 async function addMember(
 	tenantId: string,
 	event: APIGatewayProxyEventV2,
-	adminUserId: string | null,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const body = JSON.parse(event.body || "{}");
 	if (!body.principal_type || !body.principal_id) {
@@ -402,27 +375,6 @@ async function addMember(
 			status: body.status || "active",
 		})
 		.returning();
-
-	// Computer provisioning is opt-in via `body.provision_computer`
-	// (truthy) AND only fires when the new member is active. Default
-	// behavior is mobile-only / no-Computer — admins can provision later
-	// via the Person-page CTA on /people/$humanId.
-	if (body.provision_computer === true && member.status === "active") {
-		try {
-			await provisionComputerForMember({
-				tenantId,
-				userId: body.principal_id,
-				principalType: body.principal_type,
-				callSite: "restAddMember",
-				adminUserId,
-			});
-		} catch (err) {
-			console.error(
-				"[tenants.ts:addMember] unexpected provisioning throw (suppressed):",
-				err,
-			);
-		}
-	}
 
 	return json(member, 201);
 }

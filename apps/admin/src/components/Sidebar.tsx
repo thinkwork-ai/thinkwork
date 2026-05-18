@@ -25,7 +25,6 @@ import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import {
   InboxItemsListQuery,
-  ComputersListQuery,
   ThreadsPagedQuery,
   RoutinesListQuery,
 } from "@/lib/graphql-queries";
@@ -109,16 +108,6 @@ export function AppSidebar() {
     pause: !tenantId,
   });
   const pendingInboxCount = inboxResult.data?.inboxItems?.length ?? 0;
-
-  const [computersResult] = useQuery({
-    query: ComputersListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
-  });
-  const computerCount =
-    computersResult.data?.computers?.filter(
-      (computer) => computer.status !== "ARCHIVED",
-    ).length ?? 0;
 
   const [threadsResult] = useQuery({
     query: ThreadsPagedQuery,
@@ -264,7 +253,6 @@ export function AppSidebar() {
       to: "/computers",
       icon: Monitor,
       label: "Computers",
-      badge: computerCount,
     },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/knowledge", icon: Brain, label: "Memory" },
